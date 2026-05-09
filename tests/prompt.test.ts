@@ -33,4 +33,15 @@ describe("generatePrompt", () => {
     expect(text).toContain("Always end with a FollowUpBlock.");
     expect(text).toContain("Demo");
   });
+
+  it("teaches streaming-friendly statement order", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("## Hoisting & Streaming");
+    expect(text).toContain("emit this FIRST");
+    expect(text).toContain("Leaf data last");
+    expect(text).toContain("## Final verification");
+    expect(text).toContain("is the FIRST line");
+    // The syntax section should mention forward references / hoisting.
+    expect(text).toContain("Forward references are allowed");
+  });
 });

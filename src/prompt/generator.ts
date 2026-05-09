@@ -70,7 +70,9 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
   if (options.additionalRules && options.additionalRules.length > 0) {
     sections.push(rulesSection(options.additionalRules));
   }
+  sections.push(streamingSection(library.root));
   sections.push(closingSection());
+  sections.push(finalVerificationSection(library.root));
 
   return sections.join("\n\n").trim() + "\n";
 }
@@ -93,9 +95,9 @@ function syntaxSection(rootComponent: string): string {
 - Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
 - Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& ||\`, unary \`! -\`.
 - Ternary: \`cond ? a : b\`.
-- Forward references are allowed — refer to a name before defining it.
+- Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
 - Comments are not allowed.
-- The first line MUST be \`root = ${rootComponent}([...])\`.`;
+- The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.`;
 }
 
 function componentsSection(library: ComponentLibrary): string {
@@ -204,13 +206,44 @@ function rulesSection(rules: ReadonlyArray<string>): string {
   return lines.join("\n");
 }
 
+function streamingSection(rootComponent: string): string {
+  return `## Hoisting & Streaming (CRITICAL)
+LLM Response UI Lang supports hoisting: a reference can be used BEFORE it is defined. The renderer re-parses the program on every streamed chunk and silently treats unresolved references as empty, so a partially-streamed response renders progressively without flashing errors — provided you write statements in the right order.
+
+**Required statement order for streaming-friendly output:**
+1. \`root = ${rootComponent}([...])\` — emit this FIRST so the UI shell appears immediately, even before its children stream in.
+2. Container/component definitions — fill in the layout next (Cards, Sections, Tabs, Forms, Tables, Charts, etc.).
+3. Leaf data last — strings, numbers, arrays of values, Series payloads, Col data, FollowUpItem labels, etc.
+
+**Streaming rules — follow strictly:**
+- Always reference children by name from the root (\`root = Stack([hero, body, footer])\`) instead of inlining everything in one giant expression. Inline trees only stabilise after the closing bracket streams in, but named references render the parent shell immediately and let each child appear as its line completes.
+- Define one reference per FormControl, TabItem, AccordionItem, StepsItem, Series, and Col. Bundling many fields inside a single literal array delays rendering until the entire array has streamed.
+- Place large data values (long arrays, big strings, base64, generated tables) on their own trailing lines so they appear last and never block the visible structure.
+- Never split a single statement across multiple lines unless it sits inside an unmatched bracket — the parser only commits on a complete line, so half-finished lines stay invisible until they finish.
+- Do not introduce trailing commas, dangling operators, or open brackets you don't close on the same line — these will keep the chunk un-parseable until the next chunk arrives.
+- Skip narration, retries, or "fixing" earlier lines mid-stream. Treat the response as append-only.
+
+A correctly-ordered response renders top-down: the shell appears first, sections fill in next, and the leaf data lands last — without any flash of error text in between.`;
+}
+
 function closingSection(): string {
   return `## Output rules
 - Output ONLY LLM Response UI Lang lines (or a fenced \`\`\`llm-response-ui-lang block when inline mode is enabled).
-- Always start with \`root = ...\`.
-- Prefer many small, named statements over deeply nested expressions.
+- Always start with \`root = ...\` on the very first line.
+- Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
+- Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
 - Use the smallest set of components that satisfies the request.
 - Do not invent component names that are not in the list above.`;
+}
+
+function finalVerificationSection(rootComponent: string): string {
+  return `## Final verification
+Before finishing, walk your output and verify:
+1. \`root = ${rootComponent}(...)\` is the FIRST line.
+2. Every referenced name is defined somewhere below.
+3. Every defined name (other than \`root\`) is reachable from \`root\` — unreachable definitions render nothing.
+4. Containers reference their children by name; large data arrays are on their own trailing lines.
+5. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.`;
 }
 
 export function describeComponentSpec(spec: ComponentSpec): string {

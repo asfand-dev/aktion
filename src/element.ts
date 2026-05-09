@@ -127,7 +127,12 @@ export class LlmResponseUiLangElement extends HTMLElement {
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === ATTRIBUTE_THEME) this.applyThemeFromAttribute();
-    if (name === ATTRIBUTE_STREAMING) this.scheduleRender();
+    if (name === ATTRIBUTE_STREAMING) {
+      // Refresh the error banner: it is suppressed while streaming so partial
+      // mid-line content does not flash transient parse errors to the user.
+      this.updateErrorBanner();
+      this.scheduleRender();
+    }
     if (name === ATTRIBUTE_RESPONSE) {
       const next = value ?? "";
       if (next !== this.currentResponse) this.setResponse(next);
@@ -264,7 +269,9 @@ export class LlmResponseUiLangElement extends HTMLElement {
     );
     this.updateErrorBanner();
 
-    if (program.errors.length > 0) {
+    // While streaming, the in-flight chunk is almost always mid-token, so
+    // errors are expected and transient. Defer dispatch until streaming ends.
+    if (program.errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: program.errors },
         bubbles: true,
@@ -274,7 +281,12 @@ export class LlmResponseUiLangElement extends HTMLElement {
   }
 
   private updateErrorBanner(): void {
-    if (this.parseErrors.length === 0) {
+    // While the response is still streaming, the in-flight last line is almost
+    // always mid-token and will fail to parse. Suppress the banner entirely so
+    // the user only sees the progressively-revealed UI, not a flicker of
+    // transient errors. Errors are still dispatched via the `error` event for
+    // host apps that want to observe them programmatically.
+    if (this.streaming || this.parseErrors.length === 0) {
       this.errorEl.hidden = true;
       this.errorEl.replaceChildren();
       return;

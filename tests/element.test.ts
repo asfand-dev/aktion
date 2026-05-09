@@ -86,4 +86,57 @@ describe("<llm-response-ui-lang>", () => {
     expect(prompt).toContain("LLM Response UI Lang");
     expect(prompt).toContain("root = Stack(");
   });
+
+  it("hides the parse-error banner while streaming and surfaces errors after", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      appendChunk(text: string): void;
+      streaming: boolean;
+    };
+    el.streaming = true;
+    // A clearly-broken in-flight chunk: the trailing line is mid-token.
+    el.setResponse(`root = Stack([body])\nbody = Card([`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
+    expect(banner.hidden).toBe(true);
+
+    // Streaming completes with a fully-formed program → no errors, no banner.
+    el.appendChunk(`CardHeader("Done")])`);
+    el.streaming = false;
+    for (let i = 0; i < 5; i += 1) await flush();
+    expect(banner.hidden).toBe(true);
+    expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Done");
+
+    // A subsequent broken response with streaming off should surface errors.
+    el.setResponse(`root = Stack([\nbroken = Card([`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    expect(banner.hidden).toBe(false);
+  });
+
+  it("renders a streaming-friendly response progressively without flashing errors", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      appendChunk(text: string): void;
+      streaming: boolean;
+    };
+    el.streaming = true;
+    // Stream root first — children are still undefined and silently render
+    // as empty until their definitions arrive.
+    el.setResponse(`root = Stack([hero, body])`);
+    for (let i = 0; i < 3; i += 1) await flush();
+    expect(el.shadowRoot!.querySelector(".rui-stack")).not.toBeNull();
+    const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
+    expect(banner.hidden).toBe(true);
+
+    el.appendChunk(`\nhero = Card([CardHeader("Streaming UI")])`);
+    for (let i = 0; i < 3; i += 1) await flush();
+    expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Streaming UI");
+    expect(banner.hidden).toBe(true);
+
+    el.appendChunk(`\nbody = Card([CardHeader("Body")])`);
+    el.streaming = false;
+    for (let i = 0; i < 3; i += 1) await flush();
+    expect(el.shadowRoot!.querySelectorAll(".rui-card-title").length).toBe(2);
+    expect(banner.hidden).toBe(true);
+  });
 });
