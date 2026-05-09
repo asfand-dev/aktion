@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Playground · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Playground</h1>
+      <p>
+        Edit the source on the left — the component on the right re-renders on
+        every keystroke. Use this to debug LLM output or to author starter prompts.
+      </p>
+
+      <div class="theme-picker" style="margin-bottom:14px">
+        <label for="playground-theme">Theme</label>
+        <select id="playground-theme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+
+      <div class="playground-layout">
+        <section class="playground-pane">
+          <h3>LLM Response UI Lang</h3>
+          <textarea id="playground-input" class="playground-input" spellcheck="false">root = Stack([greeting, sample, follow])
+greeting = Card([CardHeader("Hello, world", "Edit this text and watch it update")])
+sample = Card([
+  CardHeader("Sample stat"),
+  Stack([
+    StatCard("Active users", "12,540", "up", "+12% vs last week"),
+    StatCard("Revenue", "$48.2k", "flat"),
+    StatCard("Errors", "12", "down", "-32%")
+  ], "row", "m", "stretch", "start", true)
+])
+follow = FollowUpBlock([
+  FollowUpItem("Add a chart"),
+  FollowUpItem("Show an alert")
+], "Try editing")</textarea>
+        </section>
+        <section class="playground-pane">
+          <h3>Preview</h3>
+          <llm-response-ui-lang id="playground-target" theme="light" style="flex:1; overflow:auto;"></llm-response-ui-lang>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

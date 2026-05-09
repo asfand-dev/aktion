@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Examples · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Examples</h1>
+      <p>
+        Each example below renders LLM Response UI Lang inline. Switch to the
+        source tab to see the exact text the component receives. Use the theme
+        picker to test contrast.
+      </p>
+
+      <div class="theme-picker" style="margin-bottom:18px">
+        <label for="theme-picker">Theme</label>
+        <select id="theme-picker">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Chat-style assistant response</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([intro, steps, follow])
+intro = Card([CardHeader("Onboarding plan", "3 steps to set up your workspace")])
+steps = Steps([
+  StepsItem("Invite teammates", "Open the Members tab and send invites."),
+  StepsItem("Connect a data source", "Settings → Integrations → choose a provider."),
+  StepsItem("Pick a starter template", "Seed the workspace with sample content.")
+])
+follow = FollowUpBlock([
+  FollowUpItem("Show invite link"),
+  FollowUpItem("List supported integrations"),
+  FollowUpItem("Open the templates gallery")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Searchable, sortable table (reactive state)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$search = ""
+$sortBy = "stars"
+data = Query("get_repos", {}, {rows: [
+  {name: "ui-lang", stars: 1820, forks: 220},
+  {name: "rich-ui", stars: 940, forks: 80},
+  {name: "ai-toolkit", stars: 2300, forks: 412}
+]})
+filtered = @Filter(data.rows, "name", "contains", $search)
+sorted = @Sort(filtered, $sortBy, "desc")
+searchBox = FormControl("Search", Input("search", "Filter repos...", "text", null, $search))
+sortSelect = FormControl("Sort by", Select("sortBy", [SelectItem("stars","Stars"), SelectItem("forks","Forks")], null, null, $sortBy))
+controls = Stack([searchBox, sortSelect], "row", "m")
+tbl = Table([
+  Col("Name", sorted.name),
+  Col("Stars", sorted.stars, "number"),
+  Col("Forks", sorted.forks, "number")
+])
+empty = TextContent("No results match your search.", "small", "muted")
+view = @Count(filtered) &gt; 0 ? tbl : empty
+root = Stack([Card([CardHeader("Repositories"), controls, view])])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Form with state and a submit action</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$title = ""
+$priority = "medium"
+$lastSaved = "Nothing yet"
+saveBtn = Button("Save", Action([@Set($lastSaved, "" + $title + " (" + $priority + ")"), @Reset($title, $priority)]), "primary")
+form = Form("ticket", saveBtn, [
+  FormControl("Title", Input("title", "Short summary", "text", ["required","minLength:3"], $title)),
+  FormControl("Priority", Select("priority", [SelectItem("low","Low"), SelectItem("medium","Medium"), SelectItem("high","High")], null, null, $priority))
+])
+status = Card([CardHeader("Last saved"), Markdown("`" + $lastSaved + "`")])
+root = Stack([form, status])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Dashboard with KPIs and chart</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([header, kpis, charts, items])
+header = Header("Q3 performance", "Updated nightly")
+kpis = Stack([
+  StatCard("Revenue", "$48,230", "up", "+12% vs Q2"),
+  StatCard("Active users", "12,540", "up", "+8% vs Q2"),
+  StatCard("Churn", "2.1%", "down", "-0.4 pp")
+], "row", "m", "stretch", "start", true)
+charts = Stack([
+  Card([CardHeader("Daily traffic"), LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])]),
+  Card([CardHeader("Plan mix"), PieChart(["Free","Pro","Team"], [240, 95, 32])])
+], "row", "m", "stretch", "start", true)
+items = Card([CardHeader("Top accounts"), Table([
+  Col("Account", ["Acme","Globex","Initech"]),
+  Col("MRR", [4200, 2400, 1850], "currency"),
+  Col("Plan", [Tag("Team",null,"sm","primary"), Tag("Pro",null,"sm","success"), Tag("Free",null,"sm","neutral")])
+])])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Tabs with shared state</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$days = "7"
+filter = FormControl("Range", Select("days", [SelectItem("7","7d"), SelectItem("14","14d"), SelectItem("30","30d")], null, null, $days))
+overview = TabItem("overview", "Overview", [
+  Markdown("Showing data for the last **" + $days + " days**."),
+  LineChart(["d1","d2","d3","d4","d5"], [Series("Events",[400,500,460,520,580])])
+])
+errors = TabItem("errors", "Errors", [
+  Callout("success", "System healthy", "No incidents in the selected range.")
+])
+tabs = Tabs([overview, errors])
+root = Stack([Card([CardHeader("Operations"), filter, tabs])])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Tags, separators, and a code block</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([header, tags, sep, snippet, group])
+header = CardHeader("Release notes", "v1.2 highlights")
+tags = TagBlock(["new", "tabs", "callout", "separator"], "primary", "sm")
+sep = Separator("horizontal")
+snippet = CodeBlock("ts", "import { defineElement } from \"llm-response-ui-lang\";\ndefineElement();")
+group = CheckBoxGroup("notifications", [
+  CheckBoxItem("Product updates", "product", "Major releases & changelogs", true),
+  CheckBoxItem("Security alerts", "security", "Critical fixes", true),
+  CheckBoxItem("Newsletter", "newsletter", "Monthly digest")
+])</code></pre>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "name": "llm-response-ui-lang",
+  "version": "0.1.0",
+  "description": "Framework-agnostic web component for rendering LLM-generated rich UI using LLM Response UI Lang syntax.",
+  "type": "module",
+  "main": "./dist/llm-response-ui-lang.umd.cjs",
+  "module": "./dist/llm-response-ui-lang.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/llm-response-ui-lang.js",
+      "require": "./dist/llm-response-ui-lang.umd.cjs",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./style.css": "./dist/llm-response-ui-lang.css",
+    "./system_prompt.txt": "./dist/system_prompt.txt"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs",
+    "build:lib": "vite build",
+    "build:prompt": "node scripts/emit-prompt.mjs",
+    "build:docs": "node scripts/build-docs.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vite-plugin-dts": "^4.3.0",
+    "vitest": "^2.1.4",
+    "@vitest/web-worker": "^2.1.4",
+    "happy-dom": "^15.7.4"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "web-components",
+    "llm-response-ui-lang",
+    "generative-ui",
+    "rich-ui",
+    "custom-elements"
+  ],
+  "license": "MIT"
+}

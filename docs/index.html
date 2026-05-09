@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Render LLM-generated UI in any framework</h1>
+      <p>
+        <code>&lt;llm-response-ui-lang&gt;</code> is a single web component that turns
+        LLM Response UI Lang text into a rich, interactive UI inside its shadow
+        DOM. It works with any framework — React, Vue, Angular, Svelte, or plain
+        HTML — and ships as a single JavaScript file plus an auto-generated
+        system prompt.
+      </p>
+
+      <div class="cta">
+        <h2>Drop-in CDN install</h2>
+        <p>One script tag and you're rendering generative UI from your LLM.</p>
+        <pre><code>&lt;script type="module" src="https://example.com/llm-response-ui-lang.js"&gt;&lt;/script&gt;
+&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;
+&lt;script&gt;
+  const el = document.querySelector("llm-response-ui-lang");
+  el.setResponse(`root = Stack([greeting])
+greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
+&lt;/script&gt;</code></pre>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>Framework-agnostic</h3>
+          <p>Built on the standard Custom Elements API — works wherever HTML works.</p>
+        </div>
+        <div class="feature">
+          <h3>LLM Response UI Lang</h3>
+          <p>Parser, evaluator, reactive state, queries, mutations, and built-in functions.</p>
+        </div>
+        <div class="feature">
+          <h3>Streaming-first</h3>
+          <p>Use <code>appendChunk()</code> to feed LLM tokens as they arrive.</p>
+        </div>
+        <div class="feature">
+          <h3>Theming</h3>
+          <p>Switch themes via the <code>theme</code> attribute or pass a JSON token map.</p>
+        </div>
+        <div class="feature">
+          <h3>System prompt included</h3>
+          <p>Use the auto-generated <code>system_prompt.txt</code> or call <code>getSystemPrompt()</code>.</p>
+        </div>
+        <div class="feature">
+          <h3>Extensible</h3>
+          <p>Register your own components via <code>registerComponents([...])</code>.</p>
+        </div>
+      </div>
+
+      <h2>Live demo</h2>
+      <p>
+        The component below was rendered from a few lines of LLM Response UI
+        Lang. Use the theme picker to swap palettes — the preview updates
+        instantly.
+      </p>
+
+      <div class="theme-picker" style="margin-bottom:12px">
+        <label for="theme-picker">Theme</label>
+        <select id="theme-picker">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+
+      <div class="example">
+        <div class="example-header">
+          <h3>Welcome card with chart</h3>
+        </div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([welcome, kpis, chart, follow])
+welcome = Card([
+  CardHeader("Hello there", "Generative UI rendered from LLM Response UI Lang"),
+  Markdown("This card was streamed in **plain text** and rendered as a real UI.")
+])
+kpis = Stack([
+  StatCard("Active users", "12,540", "up", "+18% vs last week"),
+  StatCard("Revenue", "$48.2k", "flat", "0% vs last week"),
+  StatCard("Errors", "12", "down", "-32% vs last week")
+], "row", "m", "stretch", "start", true)
+chart = Card([
+  CardHeader("Daily traffic"),
+  LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], [
+    Series("Visits",[120,180,160,210,250,200,230]),
+    Series("Signups",[12,18,15,22,28,21,24])
+  ])
+])
+follow = FollowUpBlock([
+  FollowUpItem("Show conversion funnel"),
+  FollowUpItem("Compare to last month"),
+  FollowUpItem("Send report by email")
+], "Try one of these")</code></pre>
+        </div>
+      </div>
+
+      <h2>Where to next?</h2>
+      <ul>
+        <li><a href="get-started.html">Get started</a> — the 30-second integration guide.</li>
+        <li><a href="language.html">Language reference</a> — full LLM Response UI Lang syntax.</li>
+        <li><a href="components.html">Component reference</a> — every built-in component and its props.</li>
+        <li><a href="examples.html">Examples</a> — copy-paste recipes for forms, dashboards, and chat.</li>
+        <li><a href="playground.html">Playground</a> — try the language live in your browser.</li>
+      </ul>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

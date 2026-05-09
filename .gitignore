@@ -1,0 +1,9 @@
+node_modules
+dist
+site
+*.log
+.DS_Store
+.vite
+.idea
+.vscode
+coverage

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Theming · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Theming</h1>
+      <p>
+        Themes are CSS custom properties applied to the host element. The shadow
+        DOM inherits them, so changing a theme is instant — no re-render required.
+      </p>
+
+      <h2>Built-in themes</h2>
+      <p>Two themes ship out of the box. Pass the name via the <code>theme</code> attribute or call <code>setTheme()</code>.</p>
+<pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;  &lt;!-- crisp default --&gt;
+&lt;llm-response-ui-lang theme="dark"&gt;&lt;/llm-response-ui-lang&gt;   &lt;!-- standard dark --&gt;</code></pre>
+
+      <p>Compare them side-by-side:</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:18px;margin:18px 0;">
+        <llm-response-ui-lang theme="light" data-source-id="src-preview"></llm-response-ui-lang>
+        <llm-response-ui-lang theme="dark" data-source-id="src-preview"></llm-response-ui-lang>
+      </div>
+      <pre id="src-preview" hidden><code>root = Stack([card, kpis, btns])
+card = Card([CardHeader("Theme preview", "Identical content, different palettes")])
+kpis = Stack([
+  StatCard("Active", "1.2k", "up", "+12%"),
+  StatCard("Errors", "8", "down", "-30%")
+], "row", "s", "stretch", "start", true)
+btns = Buttons([
+  Button("Primary"),
+  Button("Secondary", null, "secondary")
+])</code></pre>
+
+      <h2>Custom token map</h2>
+      <p>Pass a JSON token map directly to the <code>theme</code> attribute or via <code>setTheme()</code>:</p>
+<pre><code>const el = document.querySelector("llm-response-ui-lang");
+el.setTheme({
+  colorPrimary: "#16a34a",
+  colorPrimaryHover: "#15803d",
+  colorBg: "#f0fdf4",
+  radiusMd: "14px",
+});</code></pre>
+
+      <h2>All available tokens</h2>
+      <table class="signature-table">
+        <thead><tr><th>Token</th><th>CSS variable</th><th>Default (light)</th></tr></thead>
+        <tbody>
+          <tr><td><code>colorBg</code></td><td><code>--rui-color-bg</code></td><td>#ffffff</td></tr>
+          <tr><td><code>colorBgSubtle</code></td><td><code>--rui-color-bg-subtle</code></td><td>#f8fafc</td></tr>
+          <tr><td><code>colorSurface</code></td><td><code>--rui-color-surface</code></td><td>#ffffff</td></tr>
+          <tr><td><code>colorSurfaceMuted</code></td><td><code>--rui-color-surface-muted</code></td><td>#f1f5f9</td></tr>
+          <tr><td><code>colorBorder</code></td><td><code>--rui-color-border</code></td><td>#e2e8f0</td></tr>
+          <tr><td><code>colorText</code></td><td><code>--rui-color-text</code></td><td>#0f172a</td></tr>
+          <tr><td><code>colorTextMuted</code></td><td><code>--rui-color-text-muted</code></td><td>#475569</td></tr>
+          <tr><td><code>colorPrimary</code></td><td><code>--rui-color-primary</code></td><td>#6366f1</td></tr>
+          <tr><td><code>colorPrimaryText</code></td><td><code>--rui-color-primary-text</code></td><td>#ffffff</td></tr>
+          <tr><td><code>colorSuccess / Warning / Danger / Info</code></td><td><code>--rui-color-{success|warning|danger|info}</code></td><td>—</td></tr>
+          <tr><td><code>radiusSm / Md / Lg</code></td><td><code>--rui-radius-{sm|md|lg}</code></td><td>6px / 10px / 16px</td></tr>
+          <tr><td><code>spacingXs / S / M / L / Xl</code></td><td><code>--rui-spacing-{xs|s|m|l|xl}</code></td><td>4 / 8 / 12 / 20 / 32 px</td></tr>
+          <tr><td><code>chart1 … chart6</code></td><td><code>--rui-chart-{1..6}</code></td><td>palette colors</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <h4>Tip</h4>
+        <p>
+          You can also style the host element from outside (e.g.
+          <code>llm-response-ui-lang { --rui-color-primary: #16a34a; }</code>). The
+          shadow DOM still uses these variables.
+        </p>
+      </div>
+    </main>
+  </div>
+  <script type="module">
+    import "./dist/llm-response-ui-lang.js";
+    const sourceMap = new Map();
+    document.querySelectorAll("[id^='src-']").forEach((node) => {
+      sourceMap.set(node.id, node.textContent.trim());
+    });
+    document.querySelectorAll("llm-response-ui-lang[data-source-id]").forEach((el) => {
+      const text = sourceMap.get(el.getAttribute("data-source-id"));
+      if (text) el.setResponse(text);
+    });
+  </script>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

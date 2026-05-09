@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Get started · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Get started</h1>
+      <p>
+        Three steps: load the bundle, mount the tag, and feed it LLM Response UI
+        Lang text. Everything else (parsing, rendering, state, theming) is
+        handled inside the shadow DOM.
+      </p>
+
+      <h2>1. Add the script tag</h2>
+      <p>
+        Drop a single ES module into any HTML page. The bundle is self-contained —
+        it includes the parser, the runtime, the built-in components, and the
+        styles, so no extra CSS file is required.
+      </p>
+<pre><code>&lt;script type="module" src="https://your-cdn.example.com/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
+
+      <p>
+        For non-module scripts (older bundlers, Webflow, etc.) use the IIFE build:
+      </p>
+<pre><code>&lt;script src="https://your-cdn.example.com/llm-response-ui-lang.iife.js" defer&gt;&lt;/script&gt;</code></pre>
+
+      <h2>2. Place the tag</h2>
+<pre><code>&lt;llm-response-ui-lang id="response" theme="light"&gt;&lt;/llm-response-ui-lang&gt;</code></pre>
+
+      <p>
+        The element renders empty by default. Set its content with one of:
+      </p>
+      <ul>
+        <li><code>el.setResponse(text)</code> — replace the program (one-shot rendering).</li>
+        <li><code>el.appendChunk(text)</code> — append a streaming chunk and re-render.</li>
+        <li><code>el.response = "..."</code> — equivalent to <code>setResponse</code>.</li>
+        <li>Place the source text inside the tag as a fallback (used on connect).</li>
+      </ul>
+
+      <h2>3. Wire up your LLM</h2>
+      <p>
+        Send the system prompt with every request so the model knows the language
+        and the available components. You can either fetch the static
+        <code>system_prompt.txt</code> from your CDN or generate it programmatically.
+      </p>
+
+<pre><code>// Fetch the canned prompt
+const systemPrompt = await fetch("https://your-cdn.example.com/system_prompt.txt").then(r =&gt; r.text());
+
+// or build a prompt from the live library (e.g. with extra rules and tool descriptions)
+const el = document.querySelector("llm-response-ui-lang");
+const prompt = el.getSystemPrompt({
+  preamble: "You are an analytics assistant.",
+  additionalRules: ["Always end with a FollowUpBlock of 2 prompts."],
+  tools: [{ name: "list_orders", description: "Return recent orders.", argsExample: { limit: 10 } }],
+});</code></pre>
+
+      <p>Then stream the assistant response into the element:</p>
+<pre><code>const response = await fetch("/api/chat", {
+  method: "POST",
+  body: JSON.stringify({ system: systemPrompt, messages }),
+});
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+el.streaming = true;
+el.clear();
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  el.appendChunk(decoder.decode(value, { stream: true }));
+}
+el.streaming = false;</code></pre>
+
+      <h2>4. (Optional) Provide tools</h2>
+      <p>
+        LLM Response UI Lang can call <code>Query("tool_name", args)</code> and
+        <code>Mutation("tool_name", args)</code>. Register tools as plain functions on
+        the element so it can fetch fresh data on demand.
+      </p>
+<pre><code>el.setTools({
+  list_orders: async ({ limit }) =&gt; {
+    const res = await fetch(`/api/orders?limit=${limit}`);
+    return res.json();
+  },
+  update_order: async ({ id, status }) =&gt; {
+    await fetch(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    return { ok: true };
+  },
+});</code></pre>
+
+      <h2>5. (Optional) Listen for events</h2>
+      <p>
+        Buttons that call <code>@ToAssistant("...")</code> dispatch an
+        <code>assistant-message</code> event. Wire that to your chat input to keep
+        the conversation flowing.
+      </p>
+<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
+  sendMessageToLLM(event.detail.message);
+});</code></pre>
+
+      <div class="callout">
+        <h4>That's it</h4>
+        <p>
+          You now have an LLM-driven UI runtime that streams components, supports
+          two-way state binding, refreshes data on a schedule, and works in any
+          framework.
+        </p>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

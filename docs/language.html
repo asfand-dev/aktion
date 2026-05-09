@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Language reference · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Language reference</h1>
+      <p>
+        LLM Response UI Lang is a compact, line-oriented language that LLMs use
+        to describe a UI tree. Each statement is a single assignment of an
+        identifier to an expression. The parser is forgiving — invalid lines are
+        dropped and valid lines render immediately.
+      </p>
+
+      <h2>Statements</h2>
+      <table class="signature-table">
+        <thead><tr><th>Kind</th><th>Syntax</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Component assignment</td><td><code>name = Component(args...)</code></td><td><code>card = Card([header])</code></td></tr>
+          <tr><td>State variable</td><td><code>$name = defaultValue</code></td><td><code>$days = "7"</code></td></tr>
+          <tr><td>Query / Mutation</td><td><code>name = Query(...) | Mutation(...)</code></td><td><code>data = Query("get_users", {}, {rows: []})</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Expressions</h2>
+      <table class="signature-table">
+        <thead><tr><th>Type</th><th>Syntax</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>String</td><td><code>"text"</code></td><td><code>"Hello"</code></td></tr>
+          <tr><td>Number</td><td><code>123</code>, <code>-5</code>, <code>12.5</code></td><td><code>42</code></td></tr>
+          <tr><td>Boolean</td><td><code>true</code> / <code>false</code></td><td><code>true</code></td></tr>
+          <tr><td>Null</td><td><code>null</code></td><td></td></tr>
+          <tr><td>Array</td><td><code>[a, b, c]</code></td><td><code>["Mon","Tue"]</code></td></tr>
+          <tr><td>Object</td><td><code>{key: value, ...}</code></td><td><code>{limit: 10}</code></td></tr>
+          <tr><td>Reference</td><td><code>identifier</code></td><td><code>card</code></td></tr>
+          <tr><td>State reference</td><td><code>$name</code></td><td><code>$days</code></td></tr>
+          <tr><td>Member access</td><td><code>obj.field</code></td><td><code>data.rows.title</code> (array pluck)</td></tr>
+          <tr><td>Component call</td><td><code>Component(args)</code></td><td><code>Header("Hi")</code></td></tr>
+          <tr><td>Builtin call</td><td><code>@Builtin(args)</code></td><td><code>@Filter(rows, "name", "contains", $q)</code></td></tr>
+          <tr><td>Ternary</td><td><code>cond ? a : b</code></td><td><code>$open ? form : null</code></td></tr>
+          <tr><td>Binary</td><td><code>a + b</code>, <code>a == b</code>, <code>a &amp;&amp; b</code></td><td><code>"" + $days + " days"</code></td></tr>
+          <tr><td>Unary</td><td><code>!a</code>, <code>-a</code></td><td><code>!$open</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Reactive state</h2>
+      <p>
+        Variables prefixed with <code>$</code> are reactive. Declare them with a
+        literal default. When a state value changes, every expression that read it
+        re-evaluates and the affected components re-render.
+      </p>
+<pre><code>$days = "7"
+$showEdit = false
+filter = Select("days", [SelectItem("7","7d"), SelectItem("30","30d")], null, null, $days)
+data = Query("usage", {days: $days}, {rows: []})</code></pre>
+      <p>
+        Passing a <code>$variable</code> as the value argument of an Input, Select,
+        or Checkbox enables two-way binding: user input updates the variable,
+        which in turn re-runs anything that depends on it.
+      </p>
+
+      <h2>Built-in functions</h2>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Functions</th></tr></thead>
+        <tbody>
+          <tr><td>Aggregation</td><td><code>@Count, @Sum, @Avg, @Min, @Max, @First, @Last</code></td></tr>
+          <tr><td>Numeric</td><td><code>@Round(n, decimals?), @Abs, @Floor, @Ceil</code></td></tr>
+          <tr><td>Filter / sort</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc")</code></td></tr>
+          <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code></td></tr>
+          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url")</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Queries and mutations</h2>
+      <p>
+        <code>Query(toolName, args, defaults, refreshSeconds?)</code> reads data
+        and runs immediately. The <code>defaults</code> argument is rendered while
+        the response is in flight, and the optional <code>refreshSeconds</code>
+        sets up auto-polling. <code>Mutation(toolName, args)</code> only runs when
+        a button or action invokes <code>@Run(ref)</code>.
+      </p>
+<pre><code>$title = ""
+create = Mutation("create_ticket", {title: $title})
+list   = Query("list_tickets", {}, {rows: []})
+btn    = Button("Create", Action([@Run(create), @Run(list), @Reset($title)]))</code></pre>
+
+      <h2>Hoisting and streaming</h2>
+      <p>
+        Forward references are allowed. The renderer puts skeletons in for missing
+        identifiers, then swaps them in as the LLM streams more lines. Always lay
+        out the structure first (<code>root = Stack([a, b, c])</code>) and define
+        the children below — the user sees the shell instantly.
+      </p>
+
+      <h2>Error handling</h2>
+      <p>
+        The parser collects errors per line and continues past invalid input. The
+        renderer logs unknown components and shows an inline placeholder. The
+        element fires an <code>error</code> event with the parse errors so you
+        can surface them in your dev tools.
+      </p>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

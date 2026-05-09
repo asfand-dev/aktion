@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Component reference · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Component reference</h1>
+      <p>
+        Every component below is part of the default library and is enumerated in
+        the generated system prompt. The first argument in each signature is at
+        position <code>0</code> and so on. Optional props end with <code>?</code>.
+      </p>
+
+      <h2>Layout</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>Stack</td><td><code>Stack(children, direction?, gap?, align?, justify?, wrap?)</code></td></tr>
+          <tr><td>Section</td><td><code>Section(children, title?)</code></td></tr>
+          <tr><td>Card</td><td><code>Card(children, variant?)</code></td></tr>
+          <tr><td>CardHeader</td><td><code>CardHeader(title, subtitle?)</code></td></tr>
+          <tr><td>CardBody</td><td><code>CardBody(children)</code></td></tr>
+          <tr><td>CardFooter</td><td><code>CardFooter(children)</code></td></tr>
+          <tr><td>Divider</td><td><code>Divider(label?)</code></td></tr>
+          <tr><td>Separator</td><td><code>Separator(orientation?, decorative?)</code></td></tr>
+          <tr><td>Tabs</td><td><code>Tabs(items, defaultValue?)</code></td></tr>
+          <tr><td>TabItem</td><td><code>TabItem(value, label, children)</code></td></tr>
+          <tr><td>Accordion</td><td><code>Accordion(items)</code></td></tr>
+          <tr><td>AccordionItem</td><td><code>AccordionItem(title, children, open?)</code></td></tr>
+          <tr><td>Modal</td><td><code>Modal(title, open, children)</code></td></tr>
+          <tr><td>Steps</td><td><code>Steps(items)</code></td></tr>
+          <tr><td>StepsItem</td><td><code>StepsItem(title, details?)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Content</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>TextContent</td><td><code>TextContent(value, variant?, color?)</code></td></tr>
+          <tr><td>Header</td><td><code>Header(title, subtitle?)</code></td></tr>
+          <tr><td>Image</td><td><code>Image(src, alt?, caption?)</code></td></tr>
+          <tr><td>Link</td><td><code>Link(label, href, external?)</code></td></tr>
+          <tr><td>Badge</td><td><code>Badge(label, variant?)</code></td></tr>
+          <tr><td>Tag</td><td><code>Tag(label, icon?, size?, variant?)</code></td></tr>
+          <tr><td>TagBlock</td><td><code>TagBlock(tags, variant?, size?)</code></td></tr>
+          <tr><td>Alert</td><td><code>Alert(title, message?, variant?)</code></td></tr>
+          <tr><td>Callout</td><td><code>Callout(variant?, title, description?, icon?)</code></td></tr>
+          <tr><td>CodeBlock</td><td><code>CodeBlock(language?, codeString)</code></td></tr>
+          <tr><td>Skeleton</td><td><code>Skeleton(lines?, height?)</code></td></tr>
+          <tr><td>Markdown</td><td><code>Markdown(content)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Forms</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>Form</td><td><code>Form(id, buttons, fields)</code></td></tr>
+          <tr><td>FormControl</td><td><code>FormControl(label, field, hint?)</code></td></tr>
+          <tr><td>Input</td><td><code>Input(id, placeholder?, type?, validations?, value?)</code></td></tr>
+          <tr><td>TextArea</td><td><code>TextArea(id, placeholder?, rows?, value?)</code></td></tr>
+          <tr><td>Select</td><td><code>Select(id, items, label?, placeholder?, value?)</code></td></tr>
+          <tr><td>SelectItem</td><td><code>SelectItem(value, label)</code></td></tr>
+          <tr><td>Checkbox</td><td><code>Checkbox(id, label, value?)</code></td></tr>
+          <tr><td>CheckBoxGroup</td><td><code>CheckBoxGroup(name, items, value?)</code></td></tr>
+          <tr><td>CheckBoxItem</td><td><code>CheckBoxItem(label, name, description?, defaultChecked?)</code></td></tr>
+          <tr><td>Radio</td><td><code>Radio(id, items, value?)</code></td></tr>
+          <tr><td>Button</td><td><code>Button(label, action?, variant?, type?, size?, disabled?)</code></td></tr>
+          <tr><td>Buttons</td><td><code>Buttons(items, direction?)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Data</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>Table</td><td><code>Table(columns, caption?)</code></td></tr>
+          <tr><td>Col</td><td><code>Col(header, values, format?)</code></td></tr>
+          <tr><td>List</td><td><code>List(items, ordered?)</code></td></tr>
+          <tr><td>ListItem</td><td><code>ListItem(title, description?, icon?)</code></td></tr>
+          <tr><td>StatCard</td><td><code>StatCard(label, value, trend?, delta?)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Charts</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>BarChart</td><td><code>BarChart(labels, series, title?)</code></td></tr>
+          <tr><td>LineChart</td><td><code>LineChart(labels, series, title?)</code></td></tr>
+          <tr><td>PieChart</td><td><code>PieChart(labels, values, title?)</code></td></tr>
+          <tr><td>Series</td><td><code>Series(name, values)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Chat composites</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td>SectionBlock</td><td><code>SectionBlock(title, children, description?)</code></td></tr>
+          <tr><td>ListBlock</td><td><code>ListBlock(items, ordered?)</code></td></tr>
+          <tr><td>FollowUpBlock</td><td><code>FollowUpBlock(items, title?)</code></td></tr>
+          <tr><td>FollowUpItem</td><td><code>FollowUpItem(label, message?)</code></td></tr>
+          <tr><td>ActionLink</td><td><code>ActionLink(label, action)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Adding your own components</h2>
+      <p>
+        Pass <code>ComponentSpec</code> objects to <code>el.registerComponents([...])</code>.
+        Each spec defines the source signature and a renderer that returns a DOM
+        node. The new components show up automatically in the next
+        <code>getSystemPrompt()</code> call.
+      </p>
+<pre><code>const ProductCard = {
+  name: "ProductCard",
+  description: "Product tile with title, price, and CTA.",
+  props: [
+    { name: "title", type: "string" },
+    { name: "price", type: "number" },
+    { name: "cta", type: "Action", optional: true },
+  ],
+  render: (_node, props, helpers) =&gt; {
+    const card = document.createElement("div");
+    card.className = "product";
+    card.textContent = `${props.title} — $${props.price}`;
+    return card;
+  },
+};
+
+el.registerComponents([ProductCard]);</code></pre>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>
