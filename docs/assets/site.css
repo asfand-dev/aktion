@@ -489,7 +489,7 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
 
 .playground-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr);
+  /* grid-template-columns: minmax(300px, 1fr) minmax(300px, 100%); */
   gap: 18px;
   height: calc(100vh - 220px);
 }
