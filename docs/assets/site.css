@@ -23,6 +23,7 @@
   --doc-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
   --doc-gradient-soft: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(236, 72, 153, 0.10));
   --doc-gradient-accent: linear-gradient(120deg, #06b6d4, #6366f1, #ec4899);
+  --doc-sidebar-width: 260px;
 }
 
 * { box-sizing: border-box; }
@@ -48,11 +49,36 @@ a {
 }
 a:hover { color: var(--doc-primary-hover); }
 
+img { max-width: 100%; height: auto; }
+
 .layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: var(--doc-sidebar-width) 1fr;
   min-height: 100vh;
 }
+
+/* Mobile menu toggle: hidden on desktop, shown on small screens via media. */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--doc-border);
+  background: var(--doc-surface);
+  color: var(--doc-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--doc-shadow);
+}
+.menu-toggle:hover { color: var(--doc-primary); }
 
 /* Sidebar */
 .sidebar {
@@ -121,6 +147,7 @@ main {
   padding: 56px 64px 80px;
   max-width: 1040px;
   animation: doc-fade-in 360ms ease;
+  min-width: 0;
 }
 
 main h1 {
@@ -132,6 +159,7 @@ main h1 {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  line-height: 1.15;
 }
 
 main h2 {
@@ -172,6 +200,7 @@ main code {
   padding: 1px 8px;
   border-radius: 6px;
   font-weight: 500;
+  word-break: break-word;
 }
 
 main pre {
@@ -251,6 +280,8 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
   padding: 14px 20px;
   border-bottom: 1px solid var(--doc-border);
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(236, 72, 153, 0.04));
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .example-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -261,6 +292,7 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
   border-bottom: 1px solid var(--doc-border);
   background: var(--doc-surface);
   padding: 6px 10px;
+  overflow-x: auto;
 }
 
 .example-tab {
@@ -273,6 +305,7 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
   color: var(--doc-text-muted);
   font-family: inherit;
   transition: background 150ms ease, color 150ms ease;
+  white-space: nowrap;
 }
 
 .example-tab:hover { color: var(--doc-text); background: rgba(99, 102, 241, 0.06); }
@@ -325,6 +358,7 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
   border: 1px solid var(--doc-border);
   border-radius: 999px;
   box-shadow: var(--doc-shadow);
+  flex-wrap: wrap;
 }
 
 .theme-picker select {
@@ -520,12 +554,21 @@ textarea.playground-input {
   background: #0f172a;
   color: #e2e8f0;
   transition: border-color 150ms ease, box-shadow 150ms ease;
+  min-height: 240px;
 }
 
 textarea.playground-input:focus {
   outline: none;
   border-color: var(--doc-primary);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.20);
+}
+
+/* Tables. The wrapper allows horizontal scroll on narrow screens so the
+   columns never wrap and lose alignment. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 16px 0;
 }
 
 table.signature-table {
@@ -550,13 +593,14 @@ table.signature-table th {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(236, 72, 153, 0.04));
   font-weight: 600;
   color: var(--doc-text);
+  white-space: nowrap;
 }
 
 table.signature-table tbody tr { transition: background 120ms ease; }
 table.signature-table tbody tr:hover { background: rgba(99, 102, 241, 0.04); }
 table.signature-table tbody tr:last-child td { border-bottom: none; }
 
-table.signature-table code { font-size: 12px; }
+table.signature-table code { font-size: 12px; word-break: break-word; }
 
 @keyframes doc-fade-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -573,10 +617,101 @@ table.signature-table code { font-size: 12px; }
   50% { transform: scale(1.05); }
 }
 
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; }
-  main { padding: 28px; }
-  main h1 { font-size: 28px; }
+/* ==========================================================================
+   Responsive layout
+   - Tablet (≤960): tighter padding, single-column playground, fluid headings.
+   - Phone  (≤720): sidebar collapses behind a hamburger toggle, hero/CTA
+     padding shrinks, tables become horizontal-scroll, code wraps softly.
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+  :root { --doc-sidebar-width: 220px; }
+  main { padding: 48px 36px 64px; }
+}
+
+@media (max-width: 960px) {
+  main h1 { font-size: 30px; }
+  main h2 { font-size: 22px; }
+  .cta { padding: 28px 24px; }
   .playground-layout { grid-template-columns: 1fr; height: auto; }
+  .playground-pane { min-height: 320px; }
+}
+
+@media (max-width: 720px) {
+  body { font-size: 14.5px; }
+
+  .menu-toggle { display: inline-flex; }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(82vw, 320px);
+    height: 100vh;
+    z-index: 60;
+    transform: translateX(-105%);
+    transition: transform 220ms ease;
+    box-shadow: 0 10px 40px rgba(15, 23, 42, 0.4);
+    padding: 64px 22px 28px;
+  }
+
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 55;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+
+  .sidebar-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  main {
+    padding: 64px 18px 48px;
+  }
+
+  main h1 { font-size: 26px; }
+  main h2 { font-size: 20px; margin-top: 36px; }
+  main h3 { font-size: 16px; margin-top: 24px; }
+  main pre { padding: 14px 16px; font-size: 12.5px; }
+
+  .cta {
+    padding: 22px 18px;
+    border-radius: var(--doc-radius);
+  }
+
+  .cta pre { padding: 12px 14px; }
+
+  .example { margin: 18px 0; }
+  .example-panel { padding: 14px; }
+  .example-output { padding: 14px; }
+  .example-header { padding: 12px 16px; }
+
+  .feature, .demo-card { padding: 18px; }
+
+  .feature-grid, .demo-grid { gap: 12px; margin: 18px 0; }
+
+  .signature-table th,
+  .signature-table td { padding: 8px 10px; font-size: 12.5px; }
+
+  .signature-table { min-width: 640px; }
+}
+
+@media (max-width: 480px) {
+  main h1 { font-size: 22px; }
+  main h2 { font-size: 18px; }
+  main pre { font-size: 12px; padding: 12px 14px; }
+  .cta { padding: 18px 16px; }
+  .feature h3 { font-size: 14px; }
+  .feature p { font-size: 12.5px; }
 }

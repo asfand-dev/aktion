@@ -5,6 +5,152 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Component reference · llm-response-ui-lang</title>
   <link rel="stylesheet" href="assets/site.css" />
+  <style>
+    /* Component reference uses richer cells than the generic signature-table:
+       a per-prop list with name, type, optional flag, enum values, and a
+       human description. Styles are scoped to this page only. */
+    .component-card {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      box-shadow: var(--doc-shadow);
+      padding: 20px 22px;
+      margin: 14px 0;
+      transition: box-shadow 220ms ease, border-color 220ms ease, transform 220ms ease;
+    }
+    .component-card:hover { box-shadow: var(--doc-shadow-lg); border-color: rgba(99, 102, 241, 0.30); }
+    .component-card-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .component-card-name {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--doc-text);
+    }
+    .component-card-name code {
+      background: rgba(99, 102, 241, 0.10);
+      color: #4338ca;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .component-card-description {
+      margin: 0 0 10px;
+      color: var(--doc-text-muted);
+      font-size: 13.5px;
+    }
+    .component-signature {
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+      color: #e2e8f0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      overflow-x: auto;
+      white-space: pre;
+      margin: 0 0 14px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .prop-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .prop-table th, .prop-table td {
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--doc-border);
+    }
+    .prop-table th {
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      background: rgba(99, 102, 241, 0.04);
+    }
+    .prop-table tr:last-child td { border-bottom: none; }
+    .prop-name { font-family: var(--doc-mono); font-weight: 600; color: var(--doc-text); }
+    .prop-name .optional {
+      color: var(--doc-text-muted);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .prop-type {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      color: var(--doc-primary-hover);
+      background: rgba(99, 102, 241, 0.08);
+      padding: 1px 8px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .prop-enum {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .prop-enum-pill {
+      font-family: var(--doc-mono);
+      font-size: 11.5px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(236, 72, 153, 0.08));
+      color: var(--doc-primary-hover);
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    .prop-description { color: var(--doc-text-muted); font-size: 12.5px; }
+    .group-heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .group-heading-tag {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-primary-hover);
+      background: rgba(99, 102, 241, 0.10);
+      border-radius: 999px;
+      padding: 2px 10px;
+    }
+    .group-notes {
+      font-size: 13px;
+      background: var(--doc-gradient-soft);
+      border: 1px solid rgba(99, 102, 241, 0.18);
+      border-radius: var(--doc-radius);
+      padding: 12px 16px;
+      margin: 8px 0 16px;
+    }
+    .group-notes ul { margin: 0; padding-left: 18px; }
+    .group-notes li { margin: 2px 0; color: var(--doc-text); }
+    .ref-loading {
+      padding: 28px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+      background: var(--doc-surface);
+      border: 1px dashed var(--doc-border);
+      border-radius: var(--doc-radius);
+    }
+
+    @media (max-width: 720px) {
+      .component-card { padding: 16px; }
+      .prop-table th, .prop-table td { padding: 6px 8px; font-size: 12px; }
+      .component-signature { font-size: 11.5px; padding: 10px 12px; }
+    }
+  </style>
 </head>
 <body>
   <div class="layout">
@@ -17,6 +163,7 @@
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
         <span class="nav-section-label">Live demos</span>
@@ -29,105 +176,26 @@
     <main>
       <h1>Component reference</h1>
       <p>
-        Every component below is part of the default library and is enumerated in
-        the generated system prompt. The first argument in each signature is at
-        position <code>0</code> and so on. Optional props end with <code>?</code>.
+        Every component below ships with the default library and is enumerated
+        in the generated system prompt. Each row lists the prop's
+        <strong>name</strong>, <strong>type</strong>, whether it's optional,
+        and — when applicable — the exact <strong>enum values</strong> the
+        prop accepts. Use this as the source of truth when authoring prompts
+        or extending the library.
       </p>
 
-      <h2>Layout</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>Stack</td><td><code>Stack(children, direction?, gap?, align?, justify?, wrap?)</code></td></tr>
-          <tr><td>Section</td><td><code>Section(children, title?)</code></td></tr>
-          <tr><td>Card</td><td><code>Card(children, variant?)</code></td></tr>
-          <tr><td>CardHeader</td><td><code>CardHeader(title, subtitle?)</code></td></tr>
-          <tr><td>CardBody</td><td><code>CardBody(children)</code></td></tr>
-          <tr><td>CardFooter</td><td><code>CardFooter(children)</code></td></tr>
-          <tr><td>Divider</td><td><code>Divider(label?)</code></td></tr>
-          <tr><td>Separator</td><td><code>Separator(orientation?, decorative?)</code></td></tr>
-          <tr><td>Tabs</td><td><code>Tabs(items, defaultValue?)</code></td></tr>
-          <tr><td>TabItem</td><td><code>TabItem(value, label, children)</code></td></tr>
-          <tr><td>Accordion</td><td><code>Accordion(items)</code></td></tr>
-          <tr><td>AccordionItem</td><td><code>AccordionItem(title, children, open?)</code></td></tr>
-          <tr><td>Modal</td><td><code>Modal(title, open, children)</code></td></tr>
-          <tr><td>Steps</td><td><code>Steps(items)</code></td></tr>
-          <tr><td>StepsItem</td><td><code>StepsItem(title, details?)</code></td></tr>
-        </tbody>
-      </table>
+      <div class="callout">
+        <h4>Tip</h4>
+        <p>
+          Props marked <em>optional</em> can be omitted or passed as
+          <code>null</code>. Enum values are case-sensitive and must be passed
+          as quoted strings.
+        </p>
+      </div>
 
-      <h2>Content</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>TextContent</td><td><code>TextContent(value, variant?, color?)</code></td></tr>
-          <tr><td>Header</td><td><code>Header(title, subtitle?)</code></td></tr>
-          <tr><td>Image</td><td><code>Image(src, alt?, caption?)</code></td></tr>
-          <tr><td>Link</td><td><code>Link(label, href, external?)</code></td></tr>
-          <tr><td>Badge</td><td><code>Badge(label, variant?)</code></td></tr>
-          <tr><td>Tag</td><td><code>Tag(label, icon?, size?, variant?)</code></td></tr>
-          <tr><td>TagBlock</td><td><code>TagBlock(tags, variant?, size?)</code></td></tr>
-          <tr><td>Alert</td><td><code>Alert(title, message?, variant?)</code></td></tr>
-          <tr><td>Callout</td><td><code>Callout(variant?, title, description?, icon?)</code></td></tr>
-          <tr><td>CodeBlock</td><td><code>CodeBlock(language?, codeString)</code></td></tr>
-          <tr><td>Skeleton</td><td><code>Skeleton(lines?, height?)</code></td></tr>
-          <tr><td>Markdown</td><td><code>Markdown(content)</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Forms</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>Form</td><td><code>Form(id, buttons, fields)</code></td></tr>
-          <tr><td>FormControl</td><td><code>FormControl(label, field, hint?)</code></td></tr>
-          <tr><td>Input</td><td><code>Input(id, placeholder?, type?, validations?, value?)</code></td></tr>
-          <tr><td>TextArea</td><td><code>TextArea(id, placeholder?, rows?, value?)</code></td></tr>
-          <tr><td>Select</td><td><code>Select(id, items, label?, placeholder?, value?)</code></td></tr>
-          <tr><td>SelectItem</td><td><code>SelectItem(value, label)</code></td></tr>
-          <tr><td>Checkbox</td><td><code>Checkbox(id, label, value?)</code></td></tr>
-          <tr><td>CheckBoxGroup</td><td><code>CheckBoxGroup(name, items, value?)</code></td></tr>
-          <tr><td>CheckBoxItem</td><td><code>CheckBoxItem(label, name, description?, defaultChecked?)</code></td></tr>
-          <tr><td>Radio</td><td><code>Radio(id, items, value?)</code></td></tr>
-          <tr><td>Button</td><td><code>Button(label, action?, variant?, type?, size?, disabled?)</code></td></tr>
-          <tr><td>Buttons</td><td><code>Buttons(items, direction?)</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Data</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>Table</td><td><code>Table(columns, caption?)</code></td></tr>
-          <tr><td>Col</td><td><code>Col(header, values, format?)</code></td></tr>
-          <tr><td>List</td><td><code>List(items, ordered?)</code></td></tr>
-          <tr><td>ListItem</td><td><code>ListItem(title, description?, icon?)</code></td></tr>
-          <tr><td>StatCard</td><td><code>StatCard(label, value, trend?, delta?)</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Charts</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>BarChart</td><td><code>BarChart(labels, series, title?)</code></td></tr>
-          <tr><td>LineChart</td><td><code>LineChart(labels, series, title?)</code></td></tr>
-          <tr><td>PieChart</td><td><code>PieChart(labels, values, title?)</code></td></tr>
-          <tr><td>Series</td><td><code>Series(name, values)</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Chat composites</h2>
-      <table class="signature-table">
-        <thead><tr><th>Component</th><th>Signature</th></tr></thead>
-        <tbody>
-          <tr><td>SectionBlock</td><td><code>SectionBlock(title, children, description?)</code></td></tr>
-          <tr><td>ListBlock</td><td><code>ListBlock(items, ordered?)</code></td></tr>
-          <tr><td>FollowUpBlock</td><td><code>FollowUpBlock(items, title?)</code></td></tr>
-          <tr><td>FollowUpItem</td><td><code>FollowUpItem(label, message?)</code></td></tr>
-          <tr><td>ActionLink</td><td><code>ActionLink(label, action)</code></td></tr>
-        </tbody>
-      </table>
+      <div id="component-reference">
+        <div class="ref-loading">Loading component reference…</div>
+      </div>
 
       <h2>Adding your own components</h2>
       <p>
@@ -142,6 +210,7 @@
   props: [
     { name: "title", type: "string" },
     { name: "price", type: "number" },
+    { name: "variant", type: "string", optional: true, enum: ["default", "featured"] },
     { name: "cta", type: "Action", optional: true },
   ],
   render: (_node, props, helpers) =&gt; {
@@ -155,6 +224,175 @@
 el.registerComponents([ProductCard]);</code></pre>
     </main>
   </div>
+
+  <script type="module">
+    import { defaultLibrary } from "../dist/llm-response-ui-lang.js";
+
+    const root = document.getElementById("component-reference");
+
+    const escape = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    function formatSignature(spec) {
+      const params = spec.props
+        .map((p) => `${p.name}${p.optional ? "?" : ""}: ${formatType(p)}`)
+        .join(", ");
+      return `${spec.name}(${params})`;
+    }
+
+    function formatType(prop) {
+      if (prop.enum && prop.enum.length > 0) {
+        return prop.enum.map((v) => `"${v}"`).join(" | ");
+      }
+      return prop.type;
+    }
+
+    function renderComponentCard(spec) {
+      const card = document.createElement("section");
+      card.className = "component-card";
+
+      const header = document.createElement("div");
+      header.className = "component-card-header";
+      const title = document.createElement("h3");
+      title.className = "component-card-name";
+      title.innerHTML = `<code>${escape(spec.name)}</code>`;
+      header.appendChild(title);
+      card.appendChild(header);
+
+      const description = document.createElement("p");
+      description.className = "component-card-description";
+      description.textContent = spec.description || "";
+      card.appendChild(description);
+
+      const sig = document.createElement("pre");
+      sig.className = "component-signature";
+      sig.textContent = formatSignature(spec);
+      card.appendChild(sig);
+
+      if (spec.props.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "prop-description";
+        empty.textContent = "This component takes no props.";
+        card.appendChild(empty);
+        return card;
+      }
+
+      const tableScroll = document.createElement("div");
+      tableScroll.className = "table-scroll";
+      const table = document.createElement("table");
+      table.className = "prop-table";
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Prop</th>
+            <th>Type</th>
+            <th>Allowed values</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector("tbody");
+
+      for (const prop of spec.props) {
+        const tr = document.createElement("tr");
+
+        const nameTd = document.createElement("td");
+        nameTd.className = "prop-name";
+        nameTd.innerHTML = `${escape(prop.name)}${prop.optional ? ' <span class="optional">(optional)</span>' : ""}`;
+        tr.appendChild(nameTd);
+
+        const typeTd = document.createElement("td");
+        const typeBadge = document.createElement("span");
+        typeBadge.className = "prop-type";
+        typeBadge.textContent = prop.type;
+        typeTd.appendChild(typeBadge);
+        tr.appendChild(typeTd);
+
+        const enumTd = document.createElement("td");
+        if (prop.enum && prop.enum.length > 0) {
+          const wrap = document.createElement("div");
+          wrap.className = "prop-enum";
+          for (const value of prop.enum) {
+            const pill = document.createElement("span");
+            pill.className = "prop-enum-pill";
+            pill.textContent = `"${value}"`;
+            wrap.appendChild(pill);
+          }
+          enumTd.appendChild(wrap);
+        } else {
+          enumTd.innerHTML = `<span class="prop-description">—</span>`;
+        }
+        tr.appendChild(enumTd);
+
+        const descTd = document.createElement("td");
+        descTd.className = "prop-description";
+        descTd.textContent = prop.description || "";
+        tr.appendChild(descTd);
+
+        tbody.appendChild(tr);
+      }
+
+      tableScroll.appendChild(table);
+      card.appendChild(tableScroll);
+      return card;
+    }
+
+    function renderGroup(group, byName, host) {
+      const heading = document.createElement("div");
+      heading.className = "group-heading";
+      const h2 = document.createElement("h2");
+      h2.textContent = group.name;
+      const tag = document.createElement("span");
+      tag.className = "group-heading-tag";
+      tag.textContent = `${group.components.length} components`;
+      heading.appendChild(h2);
+      heading.appendChild(tag);
+      host.appendChild(heading);
+
+      if (group.notes && group.notes.length > 0) {
+        const notes = document.createElement("div");
+        notes.className = "group-notes";
+        const ul = document.createElement("ul");
+        for (const note of group.notes) {
+          const li = document.createElement("li");
+          // Notes already start with "- " in the library, drop the prefix.
+          li.textContent = note.replace(/^\s*-\s*/, "");
+          ul.appendChild(li);
+        }
+        notes.appendChild(ul);
+        host.appendChild(notes);
+      }
+
+      for (const name of group.components) {
+        const spec = byName.get(name);
+        if (!spec) continue;
+        host.appendChild(renderComponentCard(spec));
+      }
+    }
+
+    function render() {
+      const byName = new Map(defaultLibrary.components.map((c) => [c.name, c]));
+      root.replaceChildren();
+
+      const groups = defaultLibrary.componentGroups ?? [
+        { name: "Components", components: defaultLibrary.components.map((c) => c.name) },
+      ];
+      for (const group of groups) renderGroup(group, byName, root);
+
+      // Catch any components not in a group.
+      const grouped = new Set(groups.flatMap((g) => g.components));
+      const ungrouped = defaultLibrary.components.filter((c) => !grouped.has(c.name));
+      if (ungrouped.length > 0) {
+        renderGroup({ name: "Other", components: ungrouped.map((c) => c.name) }, byName, root);
+      }
+    }
+
+    render();
+  </script>
   <script type="module" src="assets/site.js"></script>
 </body>
 </html>

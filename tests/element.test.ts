@@ -193,4 +193,80 @@ describe("<llm-response-ui-lang>", () => {
     expect(el.shadowRoot!.querySelectorAll(".rui-card-title").length).toBe(2);
     expect(banner.hidden).toBe(true);
   });
+
+  // Regression: typing into an Input bound to a $variable used to lose focus
+  // every keystroke because state changes triggered a full re-render which
+  // replaced the input element wholesale. The renderer now snapshots the
+  // active element + selection range and restores it after the swap.
+  it("preserves focus and selection when typing into an Input bound to state", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      streaming: boolean;
+      state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
+    };
+    el.setResponse(`$title = ""\nfield = FormControl("Title", Input("title", "Type here", "text", null, $title))\nroot = Stack([field])`);
+    for (let i = 0; i < 5; i += 1) await flush();
+
+    const shadow = el.shadowRoot!;
+    const input = shadow.getElementById("title") as HTMLInputElement;
+    expect(input).not.toBeNull();
+
+    input.focus();
+    expect(shadow.activeElement).toBe(input);
+
+    // Simulate a keystroke followed by another render tick (the way real
+    // input → state.set → render plays out).
+    input.value = "h";
+    input.setSelectionRange(1, 1);
+    el.state.set("title", "h");
+    for (let i = 0; i < 5; i += 1) await flush();
+
+    const refreshed = shadow.getElementById("title") as HTMLInputElement;
+    expect(refreshed.value).toBe("h");
+    expect(shadow.activeElement).toBe(refreshed);
+    expect(refreshed.selectionStart).toBe(1);
+    expect(refreshed.selectionEnd).toBe(1);
+
+    // A second keystroke should also stay focused on the same element.
+    refreshed.value = "hi";
+    refreshed.setSelectionRange(2, 2);
+    el.state.set("title", "hi");
+    for (let i = 0; i < 5; i += 1) await flush();
+
+    const after = shadow.getElementById("title") as HTMLInputElement;
+    expect(after.value).toBe("hi");
+    expect(shadow.activeElement).toBe(after);
+    expect(after.selectionStart).toBe(2);
+  });
+
+  // The library exposes 4 built-in themes. Setting `theme` should reflect a
+  // matching `data-rui-theme` attribute on the host so theme-specific
+  // overrides (fonts, gradients, animations) can hook in.
+  it("reflects the resolved theme name as data-rui-theme on the host", async () => {
+    const el = create();
+    el.setAttribute("theme", "neon");
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("neon");
+
+    el.setAttribute("theme", "pastel");
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("pastel");
+
+    el.setAttribute("theme", "light");
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("light");
+
+    // Custom JSON map → "custom"
+    el.setAttribute("theme", '{"colorPrimary":"#ff0000"}');
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("custom");
+  });
+
+  it("applies CSS custom properties for built-in themes", () => {
+    const el = create();
+    el.setAttribute("theme", "neon");
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#ec4899");
+    el.setAttribute("theme", "pastel");
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#a78bfa");
+  });
 });

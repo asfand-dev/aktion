@@ -275,8 +275,55 @@ export class LlmResponseUiLangElement extends HTMLElement {
       }
     }
 
+    // Each tick replaces the entire subtree, which would otherwise blur the
+    // user's focused field on every keystroke (since text inputs trigger a
+    // re-render via two-way binding). Snapshot the focus + selection before
+    // the swap and restore it on the matching element afterwards so typing
+    // feels native.
+    const focusSnapshot = this.captureFocus();
     const rendered = this.renderer.render(rootValue);
     this.rootEl.replaceChildren(rendered);
+    this.restoreFocus(focusSnapshot);
+  }
+
+  private captureFocus(): FocusSnapshot | null {
+    const active = this.root.activeElement as HTMLElement | null;
+    if (!active || !this.rootEl.contains(active)) return null;
+    const id = active.id || null;
+    if (!id) return null;
+    const snapshot: FocusSnapshot = { id, tagName: active.tagName };
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+    ) {
+      snapshot.selectionStart = active.selectionStart;
+      snapshot.selectionEnd = active.selectionEnd;
+      snapshot.selectionDirection = active.selectionDirection ?? null;
+    }
+    return snapshot;
+  }
+
+  private restoreFocus(snapshot: FocusSnapshot | null): void {
+    if (!snapshot) return;
+    const target = this.rootEl.querySelector<HTMLElement>(`#${cssEscapeId(snapshot.id)}`);
+    if (!target || target.tagName !== snapshot.tagName) return;
+    target.focus();
+    if (
+      (target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement) &&
+      snapshot.selectionStart != null &&
+      snapshot.selectionEnd != null
+    ) {
+      try {
+        target.setSelectionRange(
+          snapshot.selectionStart,
+          snapshot.selectionEnd,
+          snapshot.selectionDirection ?? "none",
+        );
+      } catch {
+        // Some input types (e.g. number, email) reject setSelectionRange.
+      }
+    }
   }
 
   private replan(): void {
@@ -329,6 +376,26 @@ export class LlmResponseUiLangElement extends HTMLElement {
     }
     this.errorEl.replaceChildren(title, list);
   }
+}
+
+interface FocusSnapshot {
+  id: string;
+  tagName: string;
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+  selectionDirection?: "forward" | "backward" | "none" | null;
+}
+
+/**
+ * Escape an id for use in `document.querySelector('#...')`. CSS.escape exists
+ * in all modern browsers and happy-dom; we fall back to a tiny shim for older
+ * environments so the renderer never blows up while restoring focus.
+ */
+function cssEscapeId(id: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(id);
+  }
+  return id.replace(/([^A-Za-z0-9_-])/g, "\\$1");
 }
 
 /**

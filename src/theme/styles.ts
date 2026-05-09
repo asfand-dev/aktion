@@ -1,6 +1,10 @@
 /**
  * Single CSS bundle for the shadow root. Uses CSS custom properties so that
  * theme switches at the host element propagate without re-rendering.
+ *
+ * Built-in themes additionally hook into `:host([data-rui-theme="..."])`
+ * overrides so that themes can change layout, fonts, animations, etc., not
+ * only color tokens.
  */
 
 export const componentStyles = `
@@ -42,7 +46,7 @@ export const componentStyles = `
 
 * { box-sizing: border-box; }
 button { font-family: inherit; font-size: inherit; cursor: pointer; }
-input, textarea, select, button { color: inherit; }
+input, textarea, select, button { color: inherit; font-family: inherit; }
 
 .rui-root {
   display: flex;
@@ -110,11 +114,11 @@ input, textarea, select, button { color: inherit; }
 .rui-card-title { margin: 0; font-size: 16px; font-weight: 600; }
 .rui-card-subtitle { margin: 0; color: var(--rui-color-text-muted); font-size: 13px; }
 .rui-card-body { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
-.rui-card-footer { display: flex; gap: var(--rui-spacing-s); justify-content: flex-end; }
+.rui-card-footer { display: flex; gap: var(--rui-spacing-s); justify-content: flex-end; flex-wrap: wrap; }
 
 /* Header */
 .rui-header { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
-.rui-header-title { margin: 0; font-size: 22px; font-weight: 700; }
+.rui-header-title { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
 .rui-header-subtitle { margin: 0; color: var(--rui-color-text-muted); font-size: 14px; }
 
 /* Text */
@@ -126,7 +130,7 @@ input, textarea, select, button { color: inherit; }
 .rui-text[data-variant="large"] { font-size: 18px; }
 .rui-text[data-variant="large-heavy"] { font-size: 22px; font-weight: 700; display: block; }
 .rui-text[data-variant="heading"] { font-size: 20px; font-weight: 700; display: block; }
-.rui-text[data-variant="title"] { font-size: 28px; font-weight: 700; display: block; }
+.rui-text[data-variant="title"] { font-size: 28px; font-weight: 700; display: block; line-height: 1.2; }
 .rui-text[data-color="muted"] { color: var(--rui-color-text-muted); }
 .rui-text[data-color="primary"] { color: var(--rui-color-primary); }
 .rui-text[data-color="success"] { color: var(--rui-color-success); }
@@ -135,7 +139,7 @@ input, textarea, select, button { color: inherit; }
 
 /* Image */
 .rui-image { margin: 0; display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
-.rui-image img { max-width: 100%; border-radius: var(--rui-radius-md); display: block; }
+.rui-image img { max-width: 100%; height: auto; border-radius: var(--rui-radius-md); display: block; }
 .rui-image-caption { color: var(--rui-color-text-muted); font-size: 12px; }
 
 /* Link */
@@ -143,6 +147,7 @@ input, textarea, select, button { color: inherit; }
   color: var(--rui-color-primary);
   text-decoration: none;
   font-weight: 500;
+  word-break: break-word;
 }
 .rui-link:hover { text-decoration: underline; }
 
@@ -210,7 +215,7 @@ input, textarea, select, button { color: inherit; }
 }
 
 /* Markdown */
-.rui-markdown { display: flex; flex-direction: column; gap: var(--rui-spacing-s); }
+.rui-markdown { display: flex; flex-direction: column; gap: var(--rui-spacing-s); word-break: break-word; }
 .rui-markdown p { margin: 0; }
 .rui-markdown ul { margin: 0; padding-left: var(--rui-spacing-l); }
 .rui-markdown code {
@@ -391,6 +396,8 @@ input, textarea, select, button { color: inherit; }
   gap: var(--rui-spacing-xs);
   border-bottom: 1px solid var(--rui-color-border);
   flex-wrap: wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .rui-tab-trigger {
   border: none;
@@ -401,6 +408,7 @@ input, textarea, select, button { color: inherit; }
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 150ms ease, border-color 150ms ease;
+  white-space: nowrap;
 }
 .rui-tab-trigger:hover { color: var(--rui-color-text); }
 .rui-tab-trigger[aria-selected="true"] {
@@ -449,6 +457,8 @@ input, textarea, select, button { color: inherit; }
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-m);
+  max-height: calc(100vh - 2 * var(--rui-spacing-l));
+  overflow-y: auto;
 }
 .rui-modal-title { margin: 0; font-size: 18px; }
 
@@ -457,7 +467,13 @@ input, textarea, select, button { color: inherit; }
 .rui-form-control { display: flex; flex-direction: column; gap: 4px; }
 .rui-form-label { font-size: 13px; font-weight: 600; color: var(--rui-color-text); }
 .rui-form-hint { font-size: 12px; color: var(--rui-color-text-muted); margin: 0; }
-.rui-form-actions { display: flex; gap: var(--rui-spacing-s); justify-content: flex-end; margin-top: var(--rui-spacing-s); }
+.rui-form-actions {
+  display: flex;
+  gap: var(--rui-spacing-s);
+  justify-content: flex-end;
+  margin-top: var(--rui-spacing-s);
+  flex-wrap: wrap;
+}
 
 .rui-input, .rui-select, .rui-textarea {
   width: 100%;
@@ -491,7 +507,7 @@ input, textarea, select, button { color: inherit; }
   font-weight: 600;
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 .rui-button:hover:not(:disabled) { background: var(--rui-color-primary-hover); }
 .rui-button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -512,17 +528,21 @@ input, textarea, select, button { color: inherit; }
 .rui-buttons[data-direction="column"] { flex-direction: column; align-items: stretch; }
 .rui-buttons[data-direction="column"] > .rui-button { width: 100%; }
 
-/* Table */
+/* Table — wrapper provides horizontal scroll when columns overflow the
+   viewport so tables stay readable on phones and tablets. */
 .rui-table-wrapper {
   border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
-  overflow: hidden;
   background: var(--rui-color-surface);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 .rui-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  min-width: max-content;
 }
 .rui-table-caption {
   text-align: left;
@@ -534,10 +554,13 @@ input, textarea, select, button { color: inherit; }
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   text-align: left;
   border-bottom: 1px solid var(--rui-color-border);
+  white-space: nowrap;
 }
 .rui-table th {
   background: var(--rui-color-bg-subtle);
   font-weight: 600;
+  position: sticky;
+  top: 0;
 }
 .rui-table td[data-format="number"], .rui-table td[data-format="currency"] {
   text-align: right;
@@ -548,6 +571,7 @@ input, textarea, select, button { color: inherit; }
   text-align: center;
   color: var(--rui-color-text-muted);
   padding: var(--rui-spacing-l) !important;
+  white-space: normal;
 }
 
 /* List */
@@ -562,7 +586,7 @@ input, textarea, select, button { color: inherit; }
   background: var(--rui-color-surface);
 }
 .rui-list-icon { font-size: 20px; }
-.rui-list-text { display: flex; flex-direction: column; gap: 2px; }
+.rui-list-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rui-list-title { font-weight: 600; }
 .rui-list-description { color: var(--rui-color-text-muted); font-size: 13px; }
 
@@ -630,11 +654,226 @@ input, textarea, select, button { color: inherit; }
   font-size: 13px;
   cursor: pointer;
   transition: background 120ms ease;
+  font-family: inherit;
 }
 .rui-follow-up-button:hover { background: var(--rui-color-surface-muted); }
 .rui-action-link {
   color: var(--rui-color-primary);
   cursor: pointer;
   text-decoration: underline;
+}
+
+/* ========================================================================
+   Responsive — phones & small tablets.
+   The library targets phone-first layouts: stacks, table wrappers, and form
+   action rows are most likely to overflow, so we relax their sizing here.
+   ======================================================================== */
+
+@media (max-width: 720px) {
+  :host {
+    font-size: 14px;
+    --rui-spacing-l: 16px;
+    --rui-spacing-xl: 24px;
+  }
+  .rui-card { padding: var(--rui-spacing-m); }
+  .rui-stat-card { padding: var(--rui-spacing-m); min-width: 120px; }
+  .rui-stat-value { font-size: 20px; }
+  .rui-text[data-variant="title"] { font-size: 24px; }
+  .rui-text[data-variant="large-heavy"] { font-size: 18px; }
+  .rui-header-title { font-size: 20px; }
+  .rui-callout, .rui-alert { padding: var(--rui-spacing-s) var(--rui-spacing-m); }
+  .rui-modal { padding: var(--rui-spacing-m); border-radius: var(--rui-radius-md); }
+  .rui-modal-overlay { padding: var(--rui-spacing-s); }
+  .rui-form-actions { justify-content: stretch; }
+  .rui-form-actions .rui-button,
+  .rui-form-actions .rui-buttons { flex: 1 1 auto; }
+  .rui-buttons[data-direction="row"] .rui-button { flex: 1 1 auto; }
+  /* Row stacks collapse to columns on phones unless the author opted into
+     wrapping (a horizontal scroll list, etc.) — wrap=true keeps the row
+     layout because the user explicitly asked for it. */
+  .rui-stack[data-direction="row"]:not([data-wrap="true"]) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 480px) {
+  :host { font-size: 13.5px; }
+  .rui-card { padding: var(--rui-spacing-m); }
+  .rui-card-footer { justify-content: stretch; }
+  .rui-card-footer .rui-button { flex: 1 1 auto; }
+  .rui-tab-trigger { padding: var(--rui-spacing-xs) var(--rui-spacing-s); font-size: 13px; }
+  .rui-stat-card { width: 100%; }
+}
+
+/* ========================================================================
+   Theme-specific overrides.
+   The host carries data-rui-theme so themes can change layout, fonts,
+   shadows, and animations on top of their token map.
+   ======================================================================== */
+
+/* Neon — subtle scanlines on cards, glowing focus rings, animated primary
+   buttons, sharper typography. */
+:host([data-rui-theme="neon"]) {
+  letter-spacing: 0.01em;
+  background:
+    radial-gradient(60vw 60vw at 110% -10%, rgba(236, 72, 153, 0.18), transparent 60%),
+    radial-gradient(50vw 50vw at -10% 110%, rgba(34, 211, 238, 0.18), transparent 60%),
+    var(--rui-color-bg);
+}
+:host([data-rui-theme="neon"]) .rui-card,
+:host([data-rui-theme="neon"]) .rui-stat-card,
+:host([data-rui-theme="neon"]) .rui-callout,
+:host([data-rui-theme="neon"]) .rui-chart {
+  background:
+    linear-gradient(180deg, rgba(236, 72, 153, 0.04), rgba(34, 211, 238, 0.04)),
+    var(--rui-color-surface);
+  border-color: rgba(236, 72, 153, 0.35);
+  box-shadow: var(--rui-shadow-sm);
+  position: relative;
+}
+:host([data-rui-theme="neon"]) .rui-card::before,
+:host([data-rui-theme="neon"]) .rui-stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(transparent 96%, rgba(236, 72, 153, 0.08) 96%);
+  background-size: 100% 4px;
+  opacity: 0.45;
+}
+:host([data-rui-theme="neon"]) .rui-card-title,
+:host([data-rui-theme="neon"]) .rui-section-title,
+:host([data-rui-theme="neon"]) .rui-header-title,
+:host([data-rui-theme="neon"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="neon"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme="neon"]) .rui-text[data-variant="large-heavy"] {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+:host([data-rui-theme="neon"]) .rui-button {
+  background: linear-gradient(135deg, #ec4899, #22d3ee);
+  color: #05060f;
+  border: 1px solid rgba(236, 72, 153, 0.6);
+  box-shadow: 0 0 18px rgba(236, 72, 153, 0.45);
+}
+:host([data-rui-theme="neon"]) .rui-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f472b6, #67e8f9);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.55);
+  transform: translateY(-1px);
+}
+:host([data-rui-theme="neon"]) .rui-button[data-variant="secondary"] {
+  background: rgba(236, 72, 153, 0.08);
+  color: var(--rui-color-text);
+  border-color: rgba(236, 72, 153, 0.45);
+  box-shadow: none;
+}
+:host([data-rui-theme="neon"]) .rui-button[data-variant="ghost"] {
+  background: transparent;
+  border-color: rgba(34, 211, 238, 0.4);
+  color: var(--rui-color-text);
+  box-shadow: none;
+}
+:host([data-rui-theme="neon"]) .rui-input:focus,
+:host([data-rui-theme="neon"]) .rui-textarea:focus,
+:host([data-rui-theme="neon"]) .rui-select:focus {
+  box-shadow: 0 0 0 1px var(--rui-color-primary), 0 0 18px rgba(236, 72, 153, 0.45);
+}
+:host([data-rui-theme="neon"]) .rui-tab-trigger[aria-selected="true"] {
+  text-shadow: 0 0 12px rgba(236, 72, 153, 0.55);
+}
+:host([data-rui-theme="neon"]) .rui-table th {
+  background: rgba(236, 72, 153, 0.08);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+}
+:host([data-rui-theme="neon"]) .rui-follow-up-button {
+  background: rgba(34, 211, 238, 0.06);
+  border-color: rgba(34, 211, 238, 0.4);
+}
+:host([data-rui-theme="neon"]) .rui-follow-up-button:hover {
+  background: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.65);
+  box-shadow: 0 0 18px rgba(236, 72, 153, 0.35);
+}
+
+/* Pastel — friendly, super-rounded everything, soft drop-shadows, cards
+   subtly lift on hover, gentle pop animation when buttons are pressed. */
+:host([data-rui-theme="pastel"]) {
+  background:
+    radial-gradient(80vw 60vw at 100% 0%, rgba(167, 139, 250, 0.18), transparent 60%),
+    radial-gradient(70vw 50vw at 0% 100%, rgba(94, 234, 212, 0.18), transparent 60%),
+    var(--rui-color-bg);
+}
+:host([data-rui-theme="pastel"]) .rui-card,
+:host([data-rui-theme="pastel"]) .rui-stat-card,
+:host([data-rui-theme="pastel"]) .rui-chart,
+:host([data-rui-theme="pastel"]) .rui-callout {
+  border-color: var(--rui-color-border);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+:host([data-rui-theme="pastel"]) .rui-card:hover,
+:host([data-rui-theme="pastel"]) .rui-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme="pastel"]) .rui-card-title,
+:host([data-rui-theme="pastel"]) .rui-section-title,
+:host([data-rui-theme="pastel"]) .rui-header-title,
+:host([data-rui-theme="pastel"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="pastel"]) .rui-text[data-variant="heading"] {
+  font-weight: 700;
+  background: linear-gradient(135deg, #8b5cf6, #f9a8d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:host([data-rui-theme="pastel"]) .rui-button {
+  background: linear-gradient(135deg, #a78bfa, #f9a8d4);
+  border-radius: 999px;
+  padding: 10px 18px;
+  box-shadow: 0 6px 16px rgba(167, 139, 250, 0.28);
+}
+:host([data-rui-theme="pastel"]) .rui-button:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 10px 22px rgba(167, 139, 250, 0.36);
+}
+:host([data-rui-theme="pastel"]) .rui-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+:host([data-rui-theme="pastel"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  box-shadow: 0 2px 8px rgba(167, 139, 250, 0.12);
+}
+:host([data-rui-theme="pastel"]) .rui-button[data-variant="ghost"] {
+  background: transparent;
+  border-color: var(--rui-color-border);
+  color: var(--rui-color-text);
+  box-shadow: none;
+}
+:host([data-rui-theme="pastel"]) .rui-input,
+:host([data-rui-theme="pastel"]) .rui-select,
+:host([data-rui-theme="pastel"]) .rui-textarea {
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+}
+:host([data-rui-theme="pastel"]) .rui-tab-list { border-bottom-color: var(--rui-color-border); }
+:host([data-rui-theme="pastel"]) .rui-tab-trigger[aria-selected="true"] {
+  background: rgba(167, 139, 250, 0.10);
+  border-radius: var(--rui-radius-md) var(--rui-radius-md) 0 0;
+}
+:host([data-rui-theme="pastel"]) .rui-badge[data-variant="primary"] {
+  background: linear-gradient(135deg, #a78bfa, #f9a8d4);
+}
+:host([data-rui-theme="pastel"]) .rui-follow-up-button {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.10), rgba(249, 168, 212, 0.10));
+  border-color: var(--rui-color-border);
+}
+:host([data-rui-theme="pastel"]) .rui-follow-up-button:hover {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.22), rgba(249, 168, 212, 0.22));
+  transform: translateY(-1px);
 }
 `;

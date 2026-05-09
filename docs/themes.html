@@ -5,6 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Theming · llm-response-ui-lang</title>
   <link rel="stylesheet" href="assets/site.css" />
+  <style>
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+      margin: 18px 0 28px;
+    }
+    .theme-card {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      padding: 16px;
+      box-shadow: var(--doc-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .theme-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .theme-card-name {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    .theme-card-tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-primary-hover);
+      background: rgba(99, 102, 241, 0.10);
+      padding: 2px 10px;
+      border-radius: 999px;
+    }
+    .theme-card llm-response-ui-lang {
+      flex: 1;
+      min-height: 220px;
+    }
+  </style>
 </head>
 <body>
   <div class="layout">
@@ -17,6 +60,7 @@
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
         <span class="nav-section-label">Live demos</span>
@@ -30,18 +74,53 @@
       <h1>Theming</h1>
       <p>
         Themes are CSS custom properties applied to the host element. The shadow
-        DOM inherits them, so changing a theme is instant — no re-render required.
+        DOM inherits them, so changing a theme is instant — no re-render
+        required. Built-in themes additionally set
+        <code>data-rui-theme="&lt;name&gt;"</code> on the host so the bundled
+        stylesheet can layer on theme-specific tweaks (fonts, gradients,
+        animations) that go beyond the raw token map.
       </p>
 
       <h2>Built-in themes</h2>
-      <p>Two themes ship out of the box. Pass the name via the <code>theme</code> attribute or call <code>setTheme()</code>.</p>
-<pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;  &lt;!-- crisp default --&gt;
-&lt;llm-response-ui-lang theme="dark"&gt;&lt;/llm-response-ui-lang&gt;   &lt;!-- standard dark --&gt;</code></pre>
+      <p>
+        Four themes ship out of the box. Pass the name via the
+        <code>theme</code> attribute or call <code>setTheme()</code>.
+      </p>
+<pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;   &lt;!-- crisp default --&gt;
+&lt;llm-response-ui-lang theme="dark"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- standard dark    --&gt;
+&lt;llm-response-ui-lang theme="neon"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- cyberpunk glow   --&gt;
+&lt;llm-response-ui-lang theme="pastel"&gt;&lt;/llm-response-ui-lang&gt;  &lt;!-- soft & rounded   --&gt;</code></pre>
 
       <p>Compare them side-by-side:</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:18px;margin:18px 0;">
-        <llm-response-ui-lang theme="light" data-source-id="src-preview"></llm-response-ui-lang>
-        <llm-response-ui-lang theme="dark" data-source-id="src-preview"></llm-response-ui-lang>
+      <div class="theme-grid">
+        <div class="theme-card">
+          <div class="theme-card-header">
+            <span class="theme-card-name">Light</span>
+            <span class="theme-card-tag">Default</span>
+          </div>
+          <llm-response-ui-lang theme="light" data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card">
+          <div class="theme-card-header">
+            <span class="theme-card-name">Dark</span>
+            <span class="theme-card-tag">High contrast</span>
+          </div>
+          <llm-response-ui-lang theme="dark" data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card">
+          <div class="theme-card-header">
+            <span class="theme-card-name">Neon</span>
+            <span class="theme-card-tag">Cyberpunk glow</span>
+          </div>
+          <llm-response-ui-lang theme="neon" data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card">
+          <div class="theme-card-header">
+            <span class="theme-card-name">Pastel</span>
+            <span class="theme-card-tag">Soft & rounded</span>
+          </div>
+          <llm-response-ui-lang theme="pastel" data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
       </div>
       <pre id="src-preview" hidden><code>root = Stack([card, kpis, btns])
 card = Card([CardHeader("Theme preview", "Identical content, different palettes")])
@@ -53,6 +132,12 @@ btns = Buttons([
   Button("Primary"),
   Button("Secondary", null, "secondary")
 ])</code></pre>
+
+      <p>
+        Want to try them on a richer surface? Open the
+        <a href="theme-customization.html">theme customization studio</a> for a
+        live editor that lets you tweak any token and copy the resulting JSON.
+      </p>
 
       <h2>Custom token map</h2>
       <p>Pass a JSON token map directly to the <code>theme</code> attribute or via <code>setTheme()</code>:</p>
@@ -78,6 +163,7 @@ el.setTheme({
           <tr><td><code>colorPrimary</code></td><td><code>--rui-color-primary</code></td><td>#6366f1</td></tr>
           <tr><td><code>colorPrimaryText</code></td><td><code>--rui-color-primary-text</code></td><td>#ffffff</td></tr>
           <tr><td><code>colorSuccess / Warning / Danger / Info</code></td><td><code>--rui-color-{success|warning|danger|info}</code></td><td>—</td></tr>
+          <tr><td><code>fontFamily / fontFamilyMono</code></td><td><code>--rui-font-family / --rui-font-family-mono</code></td><td>system-ui / monospace</td></tr>
           <tr><td><code>radiusSm / Md / Lg</code></td><td><code>--rui-radius-{sm|md|lg}</code></td><td>6px / 10px / 16px</td></tr>
           <tr><td><code>spacingXs / S / M / L / Xl</code></td><td><code>--rui-spacing-{xs|s|m|l|xl}</code></td><td>4 / 8 / 12 / 20 / 32 px</td></tr>
           <tr><td><code>chart1 … chart6</code></td><td><code>--rui-chart-{1..6}</code></td><td>palette colors</td></tr>
@@ -95,7 +181,7 @@ el.setTheme({
     </main>
   </div>
   <script type="module">
-    import "./dist/llm-response-ui-lang.js";
+    import "../dist/llm-response-ui-lang.js";
     const sourceMap = new Map();
     document.querySelectorAll("[id^='src-']").forEach((node) => {
       sourceMap.set(node.id, node.textContent.trim());

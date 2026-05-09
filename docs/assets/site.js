@@ -3,6 +3,8 @@
  *   - Wires up live examples (preview + code tabs)
  *   - Hooks up theme switching
  *   - Powers the playground page
+ *   - Mounts a mobile menu toggle so the sidebar works on phones
+ *   - Wraps any wide tables in a horizontally-scrollable container
  */
 
 // Relative to the page importing site.js. The build script copies dist/ into
@@ -91,8 +93,76 @@ function setupCopyButtons() {
   });
 }
 
+/**
+ * Wrap each .signature-table in a horizontally-scrollable container so
+ * narrow viewports can still read the full row instead of squashing or
+ * wrapping the cell contents. We only wrap if the table isn't already
+ * inside a `.table-scroll` element.
+ */
+function wrapWideTables() {
+  document.querySelectorAll("main table.signature-table").forEach((table) => {
+    if (table.parentElement?.classList.contains("table-scroll")) return;
+    const wrapper = document.createElement("div");
+    wrapper.className = "table-scroll";
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+}
+
+/**
+ * Inject a hamburger toggle and backdrop so the sidebar collapses on mobile.
+ * The toggle is always present in the DOM but hidden on desktop via CSS.
+ */
+function setupMobileMenu() {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar) return;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "menu-toggle";
+  toggle.setAttribute("aria-label", "Toggle navigation menu");
+  toggle.setAttribute("aria-controls", "site-nav");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.innerHTML = "&#9776;";
+  document.body.appendChild(toggle);
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "sidebar-backdrop";
+  document.body.appendChild(backdrop);
+
+  sidebar.id = sidebar.id || "site-nav";
+
+  const close = () => {
+    sidebar.classList.remove("open");
+    backdrop.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = "&#9776;";
+  };
+
+  const open = () => {
+    sidebar.classList.add("open");
+    backdrop.classList.add("open");
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.innerHTML = "&times;";
+  };
+
+  toggle.addEventListener("click", () => {
+    if (sidebar.classList.contains("open")) close(); else open();
+  });
+  backdrop.addEventListener("click", close);
+  sidebar.querySelectorAll("nav a").forEach((a) => a.addEventListener("click", close));
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 720) close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   highlightActiveLink();
+  wrapWideTables();
+  setupMobileMenu();
   setupThemePicker();
   setupExamples();
   setupPlayground();

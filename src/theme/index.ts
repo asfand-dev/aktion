@@ -4,6 +4,8 @@
  * Built-in themes:
  *   - "light"   (default)
  *   - "dark"
+ *   - "neon"    (cyberpunk-inspired, dark with glowing accents)
+ *   - "pastel"  (soft, friendly, light & rounded)
  *
  * Consumers can also pass a JSON object via the `theme` attribute, or call
  * `element.setTheme({...})` to apply a fully custom token map.
@@ -110,9 +112,93 @@ export const darkTheme: ThemeTokens = {
   shadowMd: "0 8px 24px rgba(0, 0, 0, 0.4)",
 };
 
+/**
+ * Neon — cyberpunk-flavoured dark mode. Magenta/cyan glow, sharper corners,
+ * monospace headings, and high-contrast surfaces.
+ */
+export const neonTheme: ThemeTokens = {
+  ...lightTheme,
+  colorBg: "#05060f",
+  colorBgSubtle: "#0a0c1c",
+  colorSurface: "#0d1024",
+  colorSurfaceMuted: "#161a36",
+  colorBorder: "#2a2f6b",
+  colorBorderSubtle: "rgba(236, 72, 153, 0.18)",
+  colorText: "#f5f3ff",
+  colorTextMuted: "#a5b4fc",
+  colorPrimary: "#ec4899",
+  colorPrimaryHover: "#f472b6",
+  colorPrimaryText: "#05060f",
+  colorSuccess: "#34d399",
+  colorWarning: "#fbbf24",
+  colorDanger: "#f87171",
+  colorInfo: "#22d3ee",
+  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontFamilyMono: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  radiusSm: "2px",
+  radiusMd: "4px",
+  radiusLg: "6px",
+  shadowSm: "0 0 0 1px rgba(236, 72, 153, 0.25), 0 0 12px rgba(34, 211, 238, 0.18)",
+  shadowMd: "0 0 0 1px rgba(236, 72, 153, 0.35), 0 0 28px rgba(34, 211, 238, 0.22)",
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "14px",
+  spacingL: "22px",
+  spacingXl: "36px",
+  chart1: "#ec4899",
+  chart2: "#22d3ee",
+  chart3: "#fbbf24",
+  chart4: "#a78bfa",
+  chart5: "#34d399",
+  chart6: "#f472b6",
+};
+
+/**
+ * Pastel — soft, friendly, light and rounded. Larger paddings, big radii,
+ * lavender + mint palette, gentle shadows.
+ */
+export const pastelTheme: ThemeTokens = {
+  ...lightTheme,
+  colorBg: "#fdf6ff",
+  colorBgSubtle: "#fbf2ff",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f4ecff",
+  colorBorder: "#ead8ff",
+  colorBorderSubtle: "rgba(168, 132, 232, 0.18)",
+  colorText: "#3b1f56",
+  colorTextMuted: "#7d6193",
+  colorPrimary: "#a78bfa",
+  colorPrimaryHover: "#8b5cf6",
+  colorPrimaryText: "#ffffff",
+  colorSuccess: "#5eead4",
+  colorWarning: "#fcd34d",
+  colorDanger: "#fda4af",
+  colorInfo: "#93c5fd",
+  fontFamily: "'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  radiusSm: "12px",
+  radiusMd: "20px",
+  radiusLg: "28px",
+  shadowSm: "0 4px 14px rgba(168, 132, 232, 0.12)",
+  shadowMd: "0 18px 40px rgba(168, 132, 232, 0.18)",
+  spacingXs: "6px",
+  spacingS: "12px",
+  spacingM: "18px",
+  spacingL: "28px",
+  spacingXl: "44px",
+  chart1: "#a78bfa",
+  chart2: "#5eead4",
+  chart3: "#fcd34d",
+  chart4: "#fda4af",
+  chart5: "#93c5fd",
+  chart6: "#f9a8d4",
+};
+
 export const builtInThemes: Record<string, ThemeTokens> = {
   light: lightTheme,
   dark: darkTheme,
+  neon: neonTheme,
+  pastel: pastelTheme,
 };
 
 const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
@@ -153,26 +239,42 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
 
 export type ThemeInput = string | Partial<ThemeTokens>;
 
-export function resolveTheme(input: ThemeInput | null | undefined): ThemeTokens {
-  if (!input) return lightTheme;
+export interface ResolvedTheme {
+  /** Built-in theme name when known, otherwise "custom". Drives `data-rui-theme`. */
+  name: string;
+  tokens: ThemeTokens;
+}
+
+export function resolveTheme(input: ThemeInput | null | undefined): ResolvedTheme {
+  if (!input) return { name: "light", tokens: lightTheme };
   if (typeof input === "string") {
     const key = input.trim().toLowerCase();
     if (key.startsWith("{")) {
       try {
-        return mergeTheme(JSON.parse(input) as Partial<ThemeTokens>);
+        return { name: "custom", tokens: mergeTheme(JSON.parse(input) as Partial<ThemeTokens>) };
       } catch {
-        return lightTheme;
+        return { name: "light", tokens: lightTheme };
       }
     }
-    return builtInThemes[key] ?? lightTheme;
+    const tokens = builtInThemes[key];
+    if (tokens) return { name: key, tokens };
+    return { name: "light", tokens: lightTheme };
   }
-  return mergeTheme(input);
+  return { name: "custom", tokens: mergeTheme(input) };
 }
 
-export function applyTheme(host: HTMLElement, tokens: ThemeTokens): void {
+/**
+ * Apply theme tokens to the host element. Also sets `data-rui-theme` so the
+ * shadow-DOM stylesheet can hook into theme-specific overrides (fonts,
+ * gradients, animations, etc.) that go beyond raw token values.
+ */
+export function applyTheme(host: HTMLElement, theme: ResolvedTheme | ThemeTokens): void {
+  const resolved: ResolvedTheme =
+    "tokens" in theme ? theme : { name: "custom", tokens: theme };
   for (const [key, cssVar] of Object.entries(TOKEN_TO_CSS) as Array<[keyof ThemeTokens, string]>) {
-    host.style.setProperty(cssVar, tokens[key]);
+    host.style.setProperty(cssVar, resolved.tokens[key]);
   }
+  host.setAttribute("data-rui-theme", resolved.name);
 }
 
 function mergeTheme(partial: Partial<ThemeTokens>): ThemeTokens {
