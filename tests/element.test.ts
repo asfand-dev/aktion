@@ -92,7 +92,10 @@ describe("<llm-response-ui-lang>", () => {
       setResponse(text: string): void;
       appendChunk(text: string): void;
       streaming: boolean;
+      showErrors: boolean;
     };
+    // Opt in to the error banner so the assertions can observe it.
+    el.showErrors = true;
     el.streaming = true;
     // A clearly-broken in-flight chunk: the trailing line is mid-token.
     el.setResponse(`root = Stack([body])\nbody = Card([`);
@@ -110,6 +113,57 @@ describe("<llm-response-ui-lang>", () => {
     // A subsequent broken response with streaming off should surface errors.
     el.setResponse(`root = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
+    expect(banner.hidden).toBe(false);
+  });
+
+  it("defaults to suppressing the parse-error banner (showErrors=false)", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      showErrors: boolean;
+      streaming: boolean;
+    };
+    expect(el.showErrors).toBe(false);
+    el.setResponse(`root = Stack([\nbroken = Card([`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
+    expect(banner.hidden).toBe(true);
+  });
+
+  it("toggles the banner reactively when showErrors flips", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      showErrors: boolean;
+    };
+    el.setResponse(`root = Stack([\nbroken = Card([`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
+    expect(banner.hidden).toBe(true);
+
+    el.showErrors = true;
+    for (let i = 0; i < 5; i += 1) await flush();
+    expect(banner.hidden).toBe(false);
+
+    el.showErrors = false;
+    for (let i = 0; i < 5; i += 1) await flush();
+    expect(banner.hidden).toBe(true);
+  });
+
+  it("still emits the error event when showErrors is false", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+    };
+    let errorCount = 0;
+    el.addEventListener("error", () => { errorCount += 1; });
+    el.setResponse(`root = Stack([\nbroken = Card([`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    expect(errorCount).toBeGreaterThan(0);
+  });
+
+  it("respects showerrors attribute set declaratively", async () => {
+    document.body.innerHTML = `<llm-response-ui-lang showerrors="true" response='root = Stack([\nbroken = Card(['></llm-response-ui-lang>`;
+    for (let i = 0; i < 5; i += 1) await flush();
+    const el = document.querySelector("llm-response-ui-lang") as HTMLElement;
+    const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(false);
   });
 

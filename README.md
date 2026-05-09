@@ -1,10 +1,19 @@
 # llm-response-ui-lang
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Pages](https://img.shields.io/badge/docs-github%20pages-6366f1)](https://asfand-dev.github.io/llm-response-ui-lang/)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](#contributing)
+
 A framework-agnostic web component that renders LLM-generated UI from
 **LLM Response UI Lang** — a compact, declarative language designed for chat
 assistants. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into
 any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
+
+- **Repository:** <https://github.com/asfand-dev/llm-response-ui-lang>
+- **Live docs and demos:** <https://asfand-dev.github.io/llm-response-ui-lang/>
+- **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
+- **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
 
 The library bundles everything needed at runtime:
 
@@ -38,10 +47,14 @@ render generative UI without extra wiring.
 ### 1. Add the script tag
 
 ```html
-<script type="module" src="https://your-cdn.example.com/llm-response-ui-lang.js"></script>
+<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
 ```
 
-(For non-module setups use `llm-response-ui-lang.iife.js` instead.)
+For non-module setups use the IIFE build:
+
+```html
+<script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer></script>
+```
 
 The CSS is bundled inside the JS and injected into each instance's shadow root,
 so you do **not** need a separate stylesheet.
@@ -94,10 +107,12 @@ el.streaming = false;
 
 ### 5. Send the system prompt to your LLM
 
-Either ship the auto-generated `system_prompt.txt` from your CDN:
+Either fetch the auto-generated `system_prompt.txt` from the CDN:
 
 ```js
-const systemPrompt = await fetch("https://your-cdn.example.com/system_prompt.txt").then(r => r.text());
+const systemPrompt = await fetch(
+  "https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt",
+).then((r) => r.text());
 ```
 
 …or build a richer prompt programmatically (with custom rules, tool
@@ -136,19 +151,21 @@ All members live on the `<llm-response-ui-lang>` element.
 
 ### Attributes
 
-| Attribute   | Values                                                | Description                                                                                |
-|-------------|-------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| `theme`     | `light`, `dark`, or a JSON object literal             | Switches the theme. JSON objects are merged with the default `light` token map.            |
-| `streaming` | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.          |
-| `response`  | LLM Response UI Lang text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                 |
+| Attribute    | Values                                                | Description                                                                                |
+|--------------|-------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| `theme`      | `light`, `dark`, or a JSON object literal             | Switches the theme. JSON objects are merged with the default `light` token map.            |
+| `streaming`  | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.          |
+| `response`   | LLM Response UI Lang text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                 |
+| `showerrors` | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.          |
 
 ### Properties
 
-| Property   | Type                          | Description                                                              |
-|------------|-------------------------------|--------------------------------------------------------------------------|
-| `response` | `string`                      | Equivalent to `setResponse`.                                             |
-| `tools`    | `Record<string, Function>`    | Setter equivalent to `setTools(...)`.                                    |
-| `streaming`| `boolean`                     | Reflects the `streaming` attribute.                                      |
+| Property     | Type                          | Description                                                            |
+|--------------|-------------------------------|------------------------------------------------------------------------|
+| `response`   | `string`                      | Equivalent to `setResponse`.                                           |
+| `tools`      | `Record<string, Function>`    | Setter equivalent to `setTools(...)`.                                  |
+| `streaming`  | `boolean`                     | Reflects the `streaming` attribute.                                    |
+| `showErrors` | `boolean`                     | Reflects the `showerrors` attribute.                                   |
 
 ### Methods
 
@@ -157,7 +174,7 @@ All members live on the `<llm-response-ui-lang>` element.
 | `setResponse(text)`                      | Replace the program (one-shot rendering). Resets state and queries.          |
 | `appendChunk(chunk)`                     | Append a streaming chunk and re-render.                                      |
 | `clear()`                                | Reset state, queries, and the rendered output.                               |
-| `setTheme(name | tokens)`                | Apply a built-in theme by name or a partial token map.                       |
+| `setTheme(name \| tokens)`               | Apply a built-in theme by name or a partial token map.                       |
 | `setTools(tools)`                        | Register tools used by `Query()` and `Mutation()`.                           |
 | `registerComponents(specs, root?)`       | Extend the built-in library with your own components.                        |
 | `getSystemPrompt(options?)`              | Build a system prompt that matches the current library and tools.            |
@@ -168,6 +185,9 @@ All members live on the `<llm-response-ui-lang>` element.
 |----------------------|---------------------------------|----------------------------------------------------------------|
 | `assistant-message`  | `{ message: string }`           | When `@ToAssistant("...")` runs (e.g. a follow-up button).     |
 | `error`              | `{ errors: ParseError[] }`      | After each render whose source had parse errors.               |
+
+The `error` event always fires regardless of `showerrors`, so host apps can
+log or report errors even when the in-page banner is suppressed.
 
 ---
 
@@ -266,6 +286,15 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 
 ---
 
+## LLM integration helper
+
+If you're driving the renderer from an agentic LLM (Cursor, Claude Code, etc.)
+read [`SKILL.md`](./SKILL.md) — it's a self-contained guide that teaches an LLM
+exactly when to reach for this component, what the language looks like, and how
+to wire it into a host application.
+
+---
+
 ## Project layout
 
 ```
@@ -297,7 +326,7 @@ Requirements: **Node ≥ 18** and **npm ≥ 9** (or pnpm/yarn — examples use n
 ### Install
 
 ```bash
-git clone <this repo>
+git clone https://github.com/asfand-dev/llm-response-ui-lang.git
 cd llm-response-ui-lang
 npm install
 ```
@@ -315,7 +344,6 @@ dist/llm-response-ui-lang.js          # ESM bundle
 dist/llm-response-ui-lang.umd.cjs     # UMD bundle for older bundlers
 dist/llm-response-ui-lang.iife.js     # IIFE for non-module <script> tags
 dist/system_prompt.txt                # Auto-generated prompt
-dist/types/                           # `.d.ts` declaration files
 ```
 
 ### Run the test suite
@@ -350,20 +378,50 @@ Then open <http://localhost:4321/index.html>.
 
 ---
 
-## CDN deployment recipe
+## CDN deployment
 
-Once you've run `npm run build`, deploy the `dist/` folder to any static host
-and point your CDN at it. End users only need:
+This repository ships its own copy of the bundle on GitHub Pages, so most users
+do not need to host anything themselves:
 
 ```html
-<script type="module" src="https://your-cdn.example.com/llm-response-ui-lang.js"></script>
+<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
 <llm-response-ui-lang theme="dark"></llm-response-ui-lang>
 ```
 
-…and a fetch of `system_prompt.txt` server-side to build their LLM messages.
+…and a fetch of `system_prompt.txt` server-side to build LLM messages:
+
+```bash
+curl https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt
+```
+
+To ship your own copy, run `npm run build` and serve the `dist/` folder from
+any static host — every artifact in `dist/` is self-contained.
+
+GitHub Pages deployment for this repo is automated via
+[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml). Push
+to `main` and the workflow will build, test, assemble `site/`, and publish.
+
+---
+
+## Contributing
+
+Contributions are very welcome. The fastest path is:
+
+1. Fork and clone the repo.
+2. `npm install && npm test` — make sure the suite is green on `main` first.
+3. Make your change in a focused branch (e.g. `feat/inline-charts`).
+4. Add or update tests in `tests/`. Aim for good edge-case coverage.
+5. Run `npm run build` to confirm the bundle and the system prompt still build.
+6. Open a pull request describing the motivation and any user-visible changes.
+
+Issues, design discussions, and bug reports are tracked at
+<https://github.com/asfand-dev/llm-response-ui-lang/issues>.
+
+By contributing you agree that your work will be released under the project's
+MIT license.
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

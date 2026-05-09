@@ -5,9 +5,14 @@
  *   - Attributes:
  *       `theme`             — "light" | "dark" | JSON token map
  *       `streaming`         — "true" while text is still arriving from the LLM
+ *       `response`          — LLM Response UI Lang program (string)
+ *       `showerrors`        — "true" to render parse errors in the UI
+ *                             (defaults to off; the `error` event still fires)
  *   - Properties:
  *       `response: string`        — current LLM Response UI Lang text
  *       `tools: ToolRegistry`     — async functions backing Query/Mutation
+ *       `streaming: boolean`      — reflects the `streaming` attribute
+ *       `showErrors: boolean`     — reflects the `showerrors` attribute
  *   - Methods:
  *       `setResponse(text)`       — replace the current program
  *       `appendChunk(text)`       — append a streaming chunk and re-render
@@ -51,12 +56,18 @@ import { componentStyles } from "./theme/styles.js";
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
+const ATTRIBUTE_SHOW_ERRORS = "showerrors";
 
 export class LlmResponseUiLangElement extends HTMLElement {
   static readonly tagName = "llm-response-ui-lang";
 
   static get observedAttributes(): string[] {
-    return [ATTRIBUTE_THEME, ATTRIBUTE_STREAMING, ATTRIBUTE_RESPONSE];
+    return [
+      ATTRIBUTE_THEME,
+      ATTRIBUTE_STREAMING,
+      ATTRIBUTE_RESPONSE,
+      ATTRIBUTE_SHOW_ERRORS,
+    ];
   }
 
   private readonly state = new StateStore();
@@ -132,6 +143,9 @@ export class LlmResponseUiLangElement extends HTMLElement {
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
       this.scheduleRender();
+    }
+    if (name === ATTRIBUTE_SHOW_ERRORS) {
+      this.updateErrorBanner();
     }
     if (name === ATTRIBUTE_RESPONSE) {
       const next = value ?? "";
@@ -216,6 +230,15 @@ export class LlmResponseUiLangElement extends HTMLElement {
     else this.removeAttribute(ATTRIBUTE_STREAMING);
   }
 
+  get showErrors(): boolean {
+    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_SHOW_ERRORS));
+  }
+
+  set showErrors(value: boolean) {
+    if (value) this.setAttribute(ATTRIBUTE_SHOW_ERRORS, "true");
+    else this.removeAttribute(ATTRIBUTE_SHOW_ERRORS);
+  }
+
   // ----- Internal -----
 
   private applyThemeFromAttribute(): void {
@@ -281,12 +304,16 @@ export class LlmResponseUiLangElement extends HTMLElement {
   }
 
   private updateErrorBanner(): void {
-    // While the response is still streaming, the in-flight last line is almost
-    // always mid-token and will fail to parse. Suppress the banner entirely so
-    // the user only sees the progressively-revealed UI, not a flicker of
-    // transient errors. Errors are still dispatched via the `error` event for
-    // host apps that want to observe them programmatically.
-    if (this.streaming || this.parseErrors.length === 0) {
+    // The banner is opt-in via the `showerrors` attribute. While the response
+    // is still streaming, the in-flight last line is almost always mid-token
+    // and will fail to parse, so we also suppress the banner during streaming
+    // even when errors are explicitly enabled. Errors are still dispatched via
+    // the `error` event for host apps that want to observe them programmatically.
+    if (
+      !this.showErrors ||
+      this.streaming ||
+      this.parseErrors.length === 0
+    ) {
       this.errorEl.hidden = true;
       this.errorEl.replaceChildren();
       return;
@@ -302,6 +329,21 @@ export class LlmResponseUiLangElement extends HTMLElement {
     }
     this.errorEl.replaceChildren(title, list);
   }
+}
+
+/**
+ * HTML boolean-ish attribute parser: treat empty strings, "true", "1", or
+ * the attribute name itself as `true`. Anything else (including missing) is
+ * `false`. This matches how `<input disabled>` and friends are usually read.
+ */
+function parseBooleanAttribute(value: string | null): boolean {
+  if (value === null) return false;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "" || normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === ATTRIBUTE_SHOW_ERRORS) return true;
+  return false;
 }
 
 export function defineElement(): void {

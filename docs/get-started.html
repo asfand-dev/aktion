@@ -40,12 +40,12 @@
         it includes the parser, the runtime, the built-in components, and the
         styles, so no extra CSS file is required.
       </p>
-<pre><code>&lt;script type="module" src="https://your-cdn.example.com/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
 
       <p>
         For non-module scripts (older bundlers, Webflow, etc.) use the IIFE build:
       </p>
-<pre><code>&lt;script src="https://your-cdn.example.com/llm-response-ui-lang.iife.js" defer&gt;&lt;/script&gt;</code></pre>
+<pre><code>&lt;script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer&gt;&lt;/script&gt;</code></pre>
 
       <h2>2. Place the tag</h2>
 <pre><code>&lt;llm-response-ui-lang id="response" theme="light"&gt;&lt;/llm-response-ui-lang&gt;</code></pre>
@@ -68,7 +68,7 @@
       </p>
 
 <pre><code>// Fetch the canned prompt
-const systemPrompt = await fetch("https://your-cdn.example.com/system_prompt.txt").then(r =&gt; r.text());
+const systemPrompt = await fetch("https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt").then(r =&gt; r.text());
 
 // or build a prompt from the live library (e.g. with extra rules and tool descriptions)
 const el = document.querySelector("llm-response-ui-lang");
@@ -120,6 +120,20 @@ el.streaming = false;</code></pre>
 <pre><code>el.addEventListener("assistant-message", (event) =&gt; {
   sendMessageToLLM(event.detail.message);
 });</code></pre>
+
+      <h2>6. (Optional) Debug parse errors</h2>
+      <p>
+        Parse errors are silenced in the rendered UI by default so users see
+        clean output even when the LLM emits a partial or invalid line. Add
+        <code>showerrors="true"</code> while iterating on prompts to display
+        them inline:
+      </p>
+<pre><code>&lt;llm-response-ui-lang showerrors="true" theme="light"&gt;&lt;/llm-response-ui-lang&gt;</code></pre>
+      <p>
+        The <code>error</code> event fires regardless of this attribute, so
+        production apps can keep the banner hidden and still log parse failures
+        programmatically.
+      </p>
 
       <div class="callout">
         <h4>That's it</h4>

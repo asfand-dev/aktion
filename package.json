@@ -46,5 +46,13 @@
     "rich-ui",
     "custom-elements"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asfand-dev/llm-response-ui-lang.git"
+  },
+  "homepage": "https://asfand-dev.github.io/llm-response-ui-lang/",
+  "bugs": {
+    "url": "https://github.com/asfand-dev/llm-response-ui-lang/issues"
+  },
   "license": "MIT"
 }
