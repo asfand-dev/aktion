@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat bot · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <link rel="stylesheet" href="assets/chat-bot.css" />
+</head>
+<body>
+  <!-- Setup screen: ask for OpenAI API key + model. -->
+  <section id="setup-screen" class="setup-screen">
+    <div class="setup-card">
+      <span class="tag-pill">Live demo</span>
+      <h1 style="margin-top:10px">Connect to OpenAI</h1>
+      <p class="lede">
+        This demo sends your messages to the OpenAI Chat Completions API. The
+        assistant is instructed to respond <em>only</em> in LLM Response UI Lang,
+        which is then rendered inline by <code>&lt;llm-response-ui-lang&gt;</code>.
+      </p>
+
+      <form id="setup-form">
+        <div class="field">
+          <label for="api-key">OpenAI API key</label>
+          <input id="api-key" type="password" autocomplete="off" placeholder="sk-..." required />
+          <span class="hint">Stored locally in your browser. Never sent anywhere except OpenAI.</span>
+        </div>
+
+        <div class="field">
+          <label for="model">Model</label>
+          <input id="model" type="text" placeholder="gpt-4o-mini" list="model-suggestions" required />
+          <datalist id="model-suggestions">
+            <option value="gpt-4o-mini"></option>
+            <option value="gpt-4o"></option>
+            <option value="gpt-4.1-mini"></option>
+            <option value="gpt-4.1"></option>
+            <option value="gpt-3.5-turbo"></option>
+          </datalist>
+          <span class="hint">Any chat-completion model your key has access to.</span>
+        </div>
+
+        <div id="setup-error" class="err hidden"></div>
+
+        <p class="privacy">
+          Your key stays in <code>localStorage</code> on this device only. Clear it any time
+          via the “Reset” button in the chat header.
+        </p>
+
+        <div class="actions">
+          <a class="example-back" href="examples.html">← Back to docs</a>
+          <button class="btn" type="submit">Start chatting</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Chat screen -->
+  <section id="chat-screen" class="chat-shell hidden">
+    <header class="chat-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        llm-response-ui-lang · chat bot
+      </a>
+      <div class="chat-meta">
+        <span class="pill">Model · <code id="chat-model">—</code></span>
+        <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
+      </div>
+    </header>
+
+    <div class="chat-stage">
+      <div id="chat-history" class="chat-history" aria-live="polite"></div>
+
+      <form id="composer" class="chat-composer">
+        <textarea
+          id="chat-input"
+          placeholder="Ask for a dashboard, form, table, or anything…"
+          rows="1"
+          aria-label="Message"
+        ></textarea>
+        <button id="send-btn" class="btn" type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+
+  <script type="module">
+    import "../dist/llm-response-ui-lang.js";
+
+    const STORAGE_KEYS = {
+      apiKey: "llm-response-ui-lang.chat.openai-key",
+      model: "llm-response-ui-lang.chat.openai-model",
+    };
+    const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+    const MAX_HISTORY_TURNS = 12;
+
+    /* -------- Settings -------- */
+    const settings = {
+      get apiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) ?? ""; },
+      get model() { return localStorage.getItem(STORAGE_KEYS.model) ?? ""; },
+      save(apiKey, model) {
+        localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
+        localStorage.setItem(STORAGE_KEYS.model, model);
+      },
+      clear() {
+        localStorage.removeItem(STORAGE_KEYS.apiKey);
+        localStorage.removeItem(STORAGE_KEYS.model);
+      },
+    };
+
+    /* -------- System prompt -------- */
+    function buildSystemPrompt() {
+      const proxy = document.createElement("llm-response-ui-lang");
+      return proxy.getSystemPrompt({
+        // preamble:
+        //   "You are a UI assistant. Respond ONLY in LLM Response UI Lang. " +
+        //   "Never output prose, JSON, HTML, or markdown code fences — output one " +
+        //   "`identifier = Expression` per line and nothing else. The renderer " +
+        //   "displays your output as a real UI, so always make it useful and visual.",
+        // additionalRules: [
+        //   // "Do NOT wrap your output in triple-backtick fences.",
+        //   // "Always start the very first line with `root = Stack([...])`.",
+        //   // "End every reply with a FollowUpBlock of 2-3 short follow-up prompts so the conversation can continue.",
+        //   "When the user asks for data, generate plausible sample data inline.",
+        // ],
+      });
+    }
+
+    /* -------- OpenAI streaming -------- */
+    async function* streamCompletion({ apiKey, model, messages, signal }) {
+      const res = await fetch(OPENAI_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model, messages, stream: true, temperature: 0.4 }),
+        signal,
+      });
+      if (!res.ok || !res.body) {
+        let detail = "";
+        try {
+          const data = await res.json();
+          detail = data.error?.message ?? "";
+        } catch { /* ignore */ }
+        throw new Error(detail || `OpenAI request failed (${res.status})`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+          const event = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          for (const line of event.split("\n")) {
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            if (payload === "[DONE]") return;
+            try {
+              const json = JSON.parse(payload);
+              const delta = json.choices?.[0]?.delta?.content;
+              if (delta) yield delta;
+            } catch { /* ignore unparseable chunk */ }
+          }
+        }
+      }
+    }
+
+    /* -------- Sanitize stray markdown fences -------- *
+     * The LLM is told not to emit fences, but if it does we strip the
+     * leading ```...\n and trailing ``` from the buffered text before
+     * re-rendering. We only patch the display; the raw view shows the
+     * original output.
+     */
+    function stripFences(text) {
+      let out = text.trim();
+      const opening = out.match(/^```[a-zA-Z0-9_-]*\n/);
+      if (opening) out = out.slice(opening[0].length);
+      if (out.endsWith("```")) out = out.slice(0, -3).trimEnd();
+      return out;
+    }
+
+    /* -------- Chat UI -------- */
+    const els = {
+      setup: document.getElementById("setup-screen"),
+      chat: document.getElementById("chat-screen"),
+      setupForm: document.getElementById("setup-form"),
+      apiKey: document.getElementById("api-key"),
+      model: document.getElementById("model"),
+      setupErr: document.getElementById("setup-error"),
+      chatModel: document.getElementById("chat-model"),
+      resetBtn: document.getElementById("reset-btn"),
+      history: document.getElementById("chat-history"),
+      composer: document.getElementById("composer"),
+      input: document.getElementById("chat-input"),
+      sendBtn: document.getElementById("send-btn"),
+    };
+
+    const conversation = [];
+    let inFlightController = null;
+    let systemPrompt = "";
+
+    function showSetup() {
+      els.setup.classList.remove("hidden");
+      els.chat.classList.add("hidden");
+      els.apiKey.value = settings.apiKey;
+      els.model.value = settings.model || "gpt-4o-mini";
+      els.setupErr.classList.add("hidden");
+      els.apiKey.focus();
+    }
+
+    function showChat() {
+      els.setup.classList.add("hidden");
+      els.chat.classList.remove("hidden");
+      els.chatModel.textContent = settings.model || "gpt-4o-mini";
+      els.input.focus();
+    }
+
+    function appendUserMessage(text) {
+      const wrap = document.createElement("div");
+      wrap.className = "chat-msg user";
+      const role = document.createElement("div");
+      role.className = "role";
+      role.textContent = "You";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = text;
+      wrap.append(role, bubble);
+      els.history.append(wrap);
+      scrollToEnd();
+    }
+
+    function appendAssistantMessage() {
+      const wrap = document.createElement("div");
+      wrap.className = "chat-msg assistant";
+
+      const role = document.createElement("div");
+      role.className = "role";
+      role.textContent = "Assistant · LLM Response UI Lang";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+
+      const renderer = document.createElement("llm-response-ui-lang");
+      renderer.setAttribute("theme", "light");
+
+      const typing = document.createElement("div");
+      typing.className = "typing";
+      typing.innerHTML = '<span class="blink"></span>Composing UI…';
+
+      bubble.append(typing, renderer);
+
+      const rawBtn = document.createElement("button");
+      rawBtn.type = "button";
+      rawBtn.className = "raw-toggle";
+      rawBtn.textContent = "Show source";
+
+      const raw = document.createElement("pre");
+      raw.className = "raw";
+
+      rawBtn.addEventListener("click", () => {
+        wrap.classList.toggle("show-raw");
+        rawBtn.textContent = wrap.classList.contains("show-raw") ? "Hide source" : "Show source";
+      });
+
+      wrap.append(role, bubble, rawBtn, raw);
+
+      renderer.addEventListener("assistant-message", (event) => {
+        const message = event.detail?.message;
+        if (typeof message === "string" && message.trim()) {
+          sendMessage(message);
+        }
+      });
+
+      els.history.append(wrap);
+      scrollToEnd();
+      return { wrap, renderer, raw, typing };
+    }
+
+    function appendErrorMessage(text) {
+      const wrap = document.createElement("div");
+      wrap.className = "chat-msg assistant";
+      const role = document.createElement("div");
+      role.className = "role";
+      role.textContent = "Assistant";
+      const err = document.createElement("div");
+      err.className = "err";
+      err.textContent = text;
+      wrap.append(role, err);
+      els.history.append(wrap);
+      scrollToEnd();
+    }
+
+    function scrollToEnd() {
+      requestAnimationFrame(() => {
+        els.history.scrollTop = els.history.scrollHeight;
+      });
+    }
+
+    function setBusy(busy) {
+      els.sendBtn.disabled = busy;
+      els.input.disabled = busy;
+      els.sendBtn.textContent = busy ? "Sending…" : "Send";
+    }
+
+    async function sendMessage(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      if (inFlightController) {
+        inFlightController.abort();
+        inFlightController = null;
+      }
+
+      conversation.push({ role: "user", content: trimmed });
+      appendUserMessage(trimmed);
+
+      const turn = appendAssistantMessage();
+      setBusy(true);
+
+      const truncated = conversation.slice(-MAX_HISTORY_TURNS * 2);
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...truncated,
+      ];
+
+      const controller = new AbortController();
+      inFlightController = controller;
+
+      try {
+        let fullText = "";
+        for await (const delta of streamCompletion({
+          apiKey: settings.apiKey,
+          model: settings.model || "gpt-4o-mini",
+          messages,
+          signal: controller.signal,
+        })) {
+          fullText += delta;
+          turn.raw.textContent = fullText;
+          turn.renderer.setResponse(stripFences(fullText));
+          scrollToEnd();
+        }
+        turn.typing.remove();
+        conversation.push({ role: "assistant", content: fullText });
+      } catch (err) {
+        if (controller.signal.aborted) {
+          turn.typing.textContent = "Cancelled.";
+          return;
+        }
+        turn.wrap.remove();
+        appendErrorMessage(err.message || "Request failed.");
+        // Drop the user turn so retries don't include a paired error.
+        conversation.pop();
+      } finally {
+        setBusy(false);
+        if (inFlightController === controller) inFlightController = null;
+      }
+    }
+
+    /* -------- Wiring -------- */
+    els.setupForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const apiKey = els.apiKey.value.trim();
+      const model = els.model.value.trim() || "gpt-4o-mini";
+      if (!apiKey) {
+        els.setupErr.textContent = "API key is required.";
+        els.setupErr.classList.remove("hidden");
+        return;
+      }
+      settings.save(apiKey, model);
+      systemPrompt = buildSystemPrompt();
+      showChat();
+    });
+
+    els.resetBtn.addEventListener("click", () => {
+      if (inFlightController) inFlightController.abort();
+      settings.clear();
+      conversation.length = 0;
+      els.history.replaceChildren();
+      showSetup();
+    });
+
+    els.input.addEventListener("input", () => {
+      els.input.style.height = "auto";
+      els.input.style.height = `${Math.min(160, els.input.scrollHeight)}px`;
+    });
+
+    els.input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        els.composer.requestSubmit();
+      }
+    });
+
+    els.composer.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = els.input.value;
+      if (!text.trim() || els.sendBtn.disabled) return;
+      els.input.value = "";
+      els.input.style.height = "auto";
+      sendMessage(text);
+    });
+
+    /* -------- Boot -------- */
+    if (settings.apiKey) {
+      systemPrompt = buildSystemPrompt();
+      showChat();
+    } else {
+      showSetup();
+    }
+  </script>
+</body>
+</html>

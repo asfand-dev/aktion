@@ -1,0 +1,267 @@
+/*
+ * Shared styling for the standalone example pages
+ * (chat-bot.html, tools-example.html, external-data-example.html).
+ *
+ * These pages do NOT use the docs sidebar/header layout. They render as
+ * focused single-purpose demos that are reachable from the docs site.
+ */
+
+:root {
+  --ex-bg: #f5f6ff;
+  --ex-surface: #ffffff;
+  --ex-surface-soft: #f8fafc;
+  --ex-border: #e5e7eb;
+  --ex-border-strong: #d1d5db;
+  --ex-text: #0f172a;
+  --ex-text-muted: #475569;
+  --ex-primary: #6366f1;
+  --ex-primary-hover: #4f46e5;
+  --ex-secondary: #ec4899;
+  --ex-radius: 14px;
+  --ex-radius-lg: 22px;
+  --ex-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  --ex-shadow-lg: 0 24px 60px rgba(79, 70, 229, 0.18);
+  --ex-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ex-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
+  --ex-gradient-soft: linear-gradient(135deg, rgba(99, 102, 241, 0.10), rgba(236, 72, 153, 0.10));
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--ex-bg);
+  color: var(--ex-text);
+  font-size: 15px;
+  line-height: 1.55;
+  background-image:
+    radial-gradient(60vw 60vw at 110% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+    radial-gradient(50vw 50vw at -10% 100%, rgba(236, 72, 153, 0.08), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+.example-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 56px;
+}
+
+.example-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.example-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ex-text);
+}
+
+.example-brand .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--ex-gradient);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.example-back {
+  font-size: 13px;
+  color: var(--ex-text-muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ex-border);
+  background: var(--ex-surface);
+  transition: color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.example-back:hover {
+  color: var(--ex-text);
+  border-color: var(--ex-border-strong);
+  transform: translateX(-2px);
+}
+
+.example-hero {
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-border);
+  border-radius: var(--ex-radius-lg);
+  padding: 28px 32px;
+  margin-bottom: 22px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--ex-shadow);
+}
+
+.example-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--ex-gradient);
+}
+
+.example-hero h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #0f172a 0%, #4f46e5 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.example-hero p {
+  margin: 0;
+  color: var(--ex-text-muted);
+  max-width: 720px;
+}
+
+.example-card {
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-border);
+  border-radius: var(--ex-radius);
+  padding: 20px;
+  box-shadow: var(--ex-shadow);
+}
+
+.example-card + .example-card { margin-top: 18px; }
+
+.example-card h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.example-card .lede {
+  margin: 0 0 16px;
+  color: var(--ex-text-muted);
+  font-size: 13px;
+}
+
+.example-source {
+  background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+  color: #e2e8f0;
+  border-radius: var(--ex-radius);
+  padding: 14px 16px;
+  font-family: var(--ex-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  max-height: 280px;
+}
+
+.example-output {
+  margin-top: 14px;
+  border: 1px solid var(--ex-border);
+  border-radius: var(--ex-radius);
+  background: var(--ex-surface-soft);
+  padding: 18px;
+}
+
+.btn {
+  background: var(--ex-gradient);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 180ms ease, opacity 150ms ease;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.30);
+}
+
+.btn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(99, 102, 241, 0.36); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ex-text-muted);
+  border: 1px solid var(--ex-border);
+  box-shadow: none;
+}
+.btn-ghost:hover { background: rgba(99, 102, 241, 0.06); color: var(--ex-text); transform: none; box-shadow: none; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ex-text);
+}
+
+.field .hint {
+  font-size: 12px;
+  color: var(--ex-text-muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ex-text);
+  background: var(--ex-surface);
+  border: 1px solid var(--ex-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--ex-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ex-primary-hover);
+  background: rgba(99, 102, 241, 0.10);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.muted { color: var(--ex-text-muted); }
+.small { font-size: 12.5px; }
+
+@media (max-width: 720px) {
+  .example-shell { padding: 18px 14px 36px; }
+  .example-hero { padding: 22px 18px; }
+  .example-hero h1 { font-size: 22px; }
+}
