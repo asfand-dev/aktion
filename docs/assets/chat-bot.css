@@ -21,6 +21,14 @@
   flex-wrap: wrap;
 }
 
+
+.chat-meta .pill code {
+  font-family: var(--ex-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ex-text-muted);
+}
+
 .chat-meta {
   display: flex;
   align-items: center;
@@ -40,13 +48,39 @@
   border-radius: 999px;
   font-weight: 600;
   color: var(--ex-text);
+  position: relative;
 }
 
-.chat-meta .pill code {
-  font-family: var(--ex-mono);
+/* Style the raw select elements to blend seamlessly into the pills */
+.chat-meta .pill select {
+  font-family: var(--ex-mono, monospace);
   font-size: 12px;
   font-weight: 500;
   color: var(--ex-text-muted);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  padding-right: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 12px;
+  max-width: 200px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-meta .pill select:hover,
+.chat-meta .pill select:focus {
+  color: var(--ex-text);
+}
+
+/* Fix dropdown option colors depending on system dark/light mode */
+.chat-meta .pill select option {
+  color: #000; 
+  font-family: var(--ex-mono, monospace);
 }
 
 .chat-stage {
@@ -116,13 +150,6 @@
 
 .chat-msg.assistant {
   align-self: stretch;
-}
-
-.chat-msg.assistant .bubble {
-  background: var(--ex-surface-soft);
-  border: 1px solid var(--ex-border);
-  border-radius: 14px;
-  padding: 14px;
 }
 
 .chat-msg.assistant llm-response-ui-lang {
@@ -327,30 +354,6 @@
 }
 
 @media (max-width: 480px) {
-  .chat-shell { padding: 10px 8px 0; gap: 8px; }
-  .chat-history { padding: 10px 10px 4px; }
-  .chat-msg.user .bubble { font-size: 14px; }
-  .chat-composer {
-    padding: 8px 10px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-    gap: 6px;
-    border-radius: 0;
-  }
-  .chat-composer textarea {
-    padding: 9px 11px;
-    border-radius: 10px;
-    min-height: 40px;
-    line-height: 1.35;
-  }
-  .chat-composer .btn {
-    padding: 9px 14px;
-    border-radius: 10px;
-    min-width: 64px;
-    font-size: 13px;
-  }
-}
-
-@media (max-width: 360px) {
   .chat-shell { padding: 8px 6px 0; }
   .chat-composer { padding: 6px 8px; gap: 6px; }
   .chat-composer .btn {

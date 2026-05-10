@@ -8,33 +8,31 @@
   <link rel="stylesheet" href="assets/chat-bot.css" />
 </head>
 <body>
-  <!-- Setup screen: ask for OpenAI API key + model. -->
+  <!-- Setup screen: ask for OpenRouter API key + model. -->
   <section id="setup-screen" class="setup-screen">
     <div class="setup-card">
       <span class="tag-pill">Live demo</span>
-      <h1 style="margin-top:10px">Connect to OpenAI</h1>
+      <h1 style="margin-top:10px">Connect to OpenRouter</h1>
       <p class="lede">
-        This demo sends your messages to the OpenAI Chat Completions API. The
+        This demo sends your messages to the OpenRouter Chat Completions API. The
         assistant is instructed to respond <em>only</em> in LLM Response UI Lang,
         which is then rendered inline by <code>&lt;llm-response-ui-lang&gt;</code>.
       </p>
 
       <form id="setup-form">
         <div class="field">
-          <label for="api-key">OpenAI API key</label>
+          <label for="api-key">OpenRouter API key</label>
           <input id="api-key" type="password" autocomplete="off" placeholder="sk-..." required />
-          <span class="hint">Stored locally in your browser. Never sent anywhere except OpenAI.</span>
+          <span class="hint">Stored locally in your browser. Never sent anywhere except OpenRouter.</span>
         </div>
 
         <div class="field">
           <label for="model">Model</label>
-          <input id="model" type="text" placeholder="gpt-4o-mini" list="model-suggestions" required />
+          <input id="model" type="text" placeholder="google/gemini-3-flash-preview" list="model-suggestions" required />
           <datalist id="model-suggestions">
-            <option value="gpt-4o-mini"></option>
-            <option value="gpt-4o"></option>
+            <option value="google/gemini-3.1-flash-lite"></option>
+            <option value="google/gemini-3-flash-preview"></option>
             <option value="gpt-4.1-mini"></option>
-            <option value="gpt-4.1"></option>
-            <option value="gpt-3.5-turbo"></option>
           </datalist>
           <span class="hint">Any chat-completion model your key has access to.</span>
         </div>
@@ -62,7 +60,34 @@
         llm-response-ui-lang · chat bot
       </a>
       <div class="chat-meta">
-        <span class="pill">Model · <code id="chat-model">—</code></span>
+        <span class="pill">
+          Theme · 
+          <select id="chat-theme-select">
+            <option value="light">light</option>
+            <option value="pastel">pastel</option>
+            <option value="skyline">skyline</option>
+          </select>
+        </span>
+        <span class="pill">
+          Model · 
+          <select id="chat-model-select">
+            <option value="google/gemini-3-flash-preview">google/gemini-3-flash-preview</option>
+            <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
+            <option value="x-ai/grok-4.3">x-ai/grok-4.3</option>
+            <option value="google/gemma-4-31b-it">google/gemma-4-31b-it</option>
+            <option value="openai/gpt-5.4-mini">openai/gpt-5.4-mini</option>
+            <option value="openai/gpt-5.4">openai/gpt-5.4</option>
+            <option value="openai/gpt-5.3-codex">openai/gpt-5.3-codex</option>
+            <option value="deepseek/deepseek-v4-pro">deepseek/deepseek-v4-pro</option>
+            <option value="google/gemini-3.1-pro-preview-customtools">google/gemini-3.1-pro-preview-customtools</option>
+            <option value="anthropic/claude-sonnet-4.6">anthropic/claude-sonnet-4.6</option>
+            <option value="moonshotai/kimi-k2.5">moonshotai/kimi-k2.5</option>
+            <option value="openrouter/owl-alpha">openrouter/owl-alpha</option>
+            <option value="qwen/qwen3.6-plus">qwen/qwen3.6-plus</option>
+            <option value="minimax/minimax-m2.7">minimax/minimax-m2.7</option>
+            <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
+          </select>
+        </span>
         <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
       </div>
     </header>
@@ -86,47 +111,39 @@
     import "../dist/llm-response-ui-lang.js";
 
     const STORAGE_KEYS = {
-      apiKey: "llm-response-ui-lang.chat.openai-key",
-      model: "llm-response-ui-lang.chat.openai-model",
+      apiKey: "llm-response-ui-lang.chat.openrouter-key",
+      model: "llm-response-ui-lang.chat.openrouter-model",
+      theme: "llm-response-ui-lang.chat.theme",
     };
-    const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-    const MAX_HISTORY_TURNS = 12;
+    const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+    const MAX_HISTORY_TURNS = 5;
 
     /* -------- Settings -------- */
     const settings = {
       get apiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) ?? ""; },
       get model() { return localStorage.getItem(STORAGE_KEYS.model) ?? ""; },
-      save(apiKey, model) {
+      get theme() { return localStorage.getItem(STORAGE_KEYS.theme) ?? "light"; },
+      save(apiKey, model, theme) {
         localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
-        localStorage.setItem(STORAGE_KEYS.model, model);
+        if (model) localStorage.setItem(STORAGE_KEYS.model, model);
+        if (theme) localStorage.setItem(STORAGE_KEYS.theme, theme);
       },
       clear() {
         localStorage.removeItem(STORAGE_KEYS.apiKey);
         localStorage.removeItem(STORAGE_KEYS.model);
+        localStorage.removeItem(STORAGE_KEYS.theme);
       },
     };
 
     /* -------- System prompt -------- */
     function buildSystemPrompt() {
       const proxy = document.createElement("llm-response-ui-lang");
-      return proxy.getSystemPrompt({
-        // preamble:
-        //   "You are a UI assistant. Respond ONLY in LLM Response UI Lang. " +
-        //   "Never output prose, JSON, HTML, or markdown code fences — output one " +
-        //   "`identifier = Expression` per line and nothing else. The renderer " +
-        //   "displays your output as a real UI, so always make it useful and visual.",
-        // additionalRules: [
-        //   // "Do NOT wrap your output in triple-backtick fences.",
-        //   // "Always start the very first line with `root = Stack([...])`.",
-        //   // "End every reply with a FollowUpBlock of 2-3 short follow-up prompts so the conversation can continue.",
-        //   "When the user asks for data, generate plausible sample data inline.",
-        // ],
-      });
+      return proxy.getSystemPrompt({});
     }
 
-    /* -------- OpenAI streaming -------- */
+    /* -------- OpenRouter streaming -------- */
     async function* streamCompletion({ apiKey, model, messages, signal }) {
-      const res = await fetch(OPENAI_URL, {
+      const res = await fetch(OPENROUTER_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -141,7 +158,7 @@
           const data = await res.json();
           detail = data.error?.message ?? "";
         } catch { /* ignore */ }
-        throw new Error(detail || `OpenAI request failed (${res.status})`);
+        throw new Error(detail || `OpenRouter request failed (${res.status}). Please check your API key and model.`);
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -169,12 +186,6 @@
       }
     }
 
-    /* -------- Sanitize stray markdown fences -------- *
-     * The LLM is told not to emit fences, but if it does we strip the
-     * leading ```...\n and trailing ``` from the buffered text before
-     * re-rendering. We only patch the display; the raw view shows the
-     * original output.
-     */
     function stripFences(text) {
       let out = text.trim();
       const opening = out.match(/^```[a-zA-Z0-9_-]*\n/);
@@ -191,7 +202,8 @@
       apiKey: document.getElementById("api-key"),
       model: document.getElementById("model"),
       setupErr: document.getElementById("setup-error"),
-      chatModel: document.getElementById("chat-model"),
+      themeSelect: document.getElementById("chat-theme-select"),
+      modelSelect: document.getElementById("chat-model-select"),
       resetBtn: document.getElementById("reset-btn"),
       history: document.getElementById("chat-history"),
       composer: document.getElementById("composer"),
@@ -207,7 +219,7 @@
       els.setup.classList.remove("hidden");
       els.chat.classList.add("hidden");
       els.apiKey.value = settings.apiKey;
-      els.model.value = settings.model || "gpt-4o-mini";
+      els.model.value = settings.model || "google/gemini-3-flash-preview";
       els.setupErr.classList.add("hidden");
       els.apiKey.focus();
     }
@@ -215,7 +227,17 @@
     function showChat() {
       els.setup.classList.add("hidden");
       els.chat.classList.remove("hidden");
-      els.chatModel.textContent = settings.model || "gpt-4o-mini";
+      
+      const currentModel = settings.model || "google/gemini-3-flash-preview";
+      els.modelSelect.value = currentModel;
+      // Fallback in case setup screen model isn't in the dropdown
+      if (els.modelSelect.value !== currentModel) {
+        const customOpt = new Option(currentModel, currentModel);
+        els.modelSelect.add(customOpt);
+        els.modelSelect.value = currentModel;
+      }
+      
+      els.themeSelect.value = settings.theme || "light";
       els.input.focus();
     }
 
@@ -239,13 +261,14 @@
 
       const role = document.createElement("div");
       role.className = "role";
-      role.textContent = "Assistant · LLM Response UI Lang";
+      role.textContent = "Assistant";
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
 
       const renderer = document.createElement("llm-response-ui-lang");
-      renderer.setAttribute("theme", "light");
+      renderer.setAttribute("transparent", "true");
+      renderer.setAttribute("theme", settings.theme || "light");
 
       const typing = document.createElement("div");
       typing.className = "typing";
@@ -334,7 +357,7 @@
         let fullText = "";
         for await (const delta of streamCompletion({
           apiKey: settings.apiKey,
-          model: settings.model || "gpt-4o-mini",
+          model: settings.model || "google/gemini-3-flash-preview",
           messages,
           signal: controller.signal,
         })) {
@@ -352,7 +375,6 @@
         }
         turn.wrap.remove();
         appendErrorMessage(err.message || "Request failed.");
-        // Drop the user turn so retries don't include a paired error.
         conversation.pop();
       } finally {
         setBusy(false);
@@ -361,16 +383,33 @@
     }
 
     /* -------- Wiring -------- */
+    
+    // Theme Select handling
+    els.themeSelect.addEventListener("change", (e) => {
+      const newTheme = e.target.value;
+      settings.save(settings.apiKey, settings.model, newTheme);
+      // Immediately update all existing renderers
+      document.querySelectorAll("llm-response-ui-lang").forEach(renderer => {
+        renderer.setAttribute("theme", newTheme);
+      });
+    });
+
+    // Model Select handling
+    els.modelSelect.addEventListener("change", (e) => {
+      const newModel = e.target.value;
+      settings.save(settings.apiKey, newModel, settings.theme);
+    });
+
     els.setupForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const apiKey = els.apiKey.value.trim();
-      const model = els.model.value.trim() || "gpt-4o-mini";
+      const model = els.model.value.trim() || "google/gemini-3-flash-preview";
       if (!apiKey) {
         els.setupErr.textContent = "API key is required.";
         els.setupErr.classList.remove("hidden");
         return;
       }
-      settings.save(apiKey, model);
+      settings.save(apiKey, model, settings.theme);
       systemPrompt = buildSystemPrompt();
       showChat();
     });

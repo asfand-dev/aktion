@@ -233,6 +233,7 @@ function closingSection(): string {
 - Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
 - Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
 - Use the smallest set of components that satisfies the request.
+- While using the icons, it should be emoji strings only.
 - Do not invent component names that are not in the list above.`;
 }
 
