@@ -10,7 +10,6 @@ assistants. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into
 any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
 
-- **Repository:** <https://github.com/asfand-dev/llm-response-ui-lang>
 - **Live docs and demos:** <https://asfand-dev.github.io/llm-response-ui-lang/>
 - **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
 - **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
