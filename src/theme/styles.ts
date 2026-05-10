@@ -1207,4 +1207,198 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   text-underline-offset: 3px;
   font-weight: 700;
 }
+
+/* Skyline — enterprise cloud-console look. Calm navy + cyan, crisp 1px
+   borders, small radii, accent strip on primary cards, animated underline
+   on tabs. Designed to look at home in an admin dashboard. */
+:host([data-rui-theme="skyline"]) {
+  background:
+    linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%);
+  font-feature-settings: "ss01", "cv11";
+}
+:host([data-rui-theme="skyline"][transparent]),
+:host([data-rui-theme="skyline"][transparent="true"]) {
+  background: transparent;
+}
+:host([data-rui-theme="skyline"]) .rui-card,
+:host([data-rui-theme="skyline"]) .rui-stat-card,
+:host([data-rui-theme="skyline"]) .rui-callout,
+:host([data-rui-theme="skyline"]) .rui-chart,
+:host([data-rui-theme="skyline"]) .rui-table-wrapper,
+:host([data-rui-theme="skyline"]) .rui-accordion-item,
+:host([data-rui-theme="skyline"]) .rui-list-item,
+:host([data-rui-theme="skyline"]) .rui-modal,
+:host([data-rui-theme="skyline"]) .rui-code-block {
+  border: 1px solid var(--rui-color-border);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+  transition: border-color 160ms ease, box-shadow 200ms ease, transform 160ms ease;
+}
+:host([data-rui-theme="skyline"]) .rui-card:hover {
+  border-color: color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme="skyline"]) .rui-card[data-variant="elevated"] {
+  position: relative;
+  overflow: hidden;
+}
+:host([data-rui-theme="skyline"]) .rui-card[data-variant="elevated"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--rui-color-primary), var(--rui-color-info));
+}
+:host([data-rui-theme="skyline"]) .rui-card-title,
+:host([data-rui-theme="skyline"]) .rui-section-title,
+:host([data-rui-theme="skyline"]) .rui-header-title,
+:host([data-rui-theme="skyline"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="skyline"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme="skyline"]) .rui-text[data-variant="large-heavy"] {
+  color: var(--rui-color-primary);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+:host([data-rui-theme="skyline"]) .rui-button {
+  border-radius: var(--rui-radius-sm);
+  background: var(--rui-color-primary);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 0 rgba(13, 27, 58, 0.06);
+  transition: background 140ms ease, transform 80ms ease, box-shadow 160ms ease;
+}
+:host([data-rui-theme="skyline"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary-hover);
+  box-shadow: 0 4px 10px rgba(0, 53, 128, 0.18);
+}
+:host([data-rui-theme="skyline"]) .rui-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+:host([data-rui-theme="skyline"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-primary);
+  border: 1px solid var(--rui-color-primary);
+  box-shadow: none;
+}
+:host([data-rui-theme="skyline"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 6%, var(--rui-color-surface));
+}
+:host([data-rui-theme="skyline"]) .rui-button[data-variant="ghost"] {
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme="skyline"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent);
+}
+:host([data-rui-theme="skyline"]) .rui-input,
+:host([data-rui-theme="skyline"]) .rui-select,
+:host([data-rui-theme="skyline"]) .rui-textarea {
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  border-radius: var(--rui-radius-sm);
+  transition: border-color 140ms ease, box-shadow 160ms ease;
+}
+:host([data-rui-theme="skyline"]) .rui-input:focus,
+:host([data-rui-theme="skyline"]) .rui-select:focus,
+:host([data-rui-theme="skyline"]) .rui-textarea:focus {
+  border-color: var(--rui-color-info);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-info) 22%, transparent);
+}
+:host([data-rui-theme="skyline"]) .rui-tab-list {
+  border-bottom-color: var(--rui-color-border);
+}
+:host([data-rui-theme="skyline"]) .rui-tab-trigger {
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+  border-bottom-width: 2px;
+}
+:host([data-rui-theme="skyline"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-primary);
+}
+:host([data-rui-theme="skyline"]) .rui-tab-trigger[aria-selected="true"] {
+  color: var(--rui-color-info);
+  border-bottom-color: var(--rui-color-info);
+}
+:host([data-rui-theme="skyline"]) .rui-table th {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom-color: var(--rui-color-border);
+}
+:host([data-rui-theme="skyline"]) .rui-table td {
+  border-bottom-color: var(--rui-color-border-subtle);
+}
+:host([data-rui-theme="skyline"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-info) 5%, transparent);
+}
+:host([data-rui-theme="skyline"]) .rui-tag,
+:host([data-rui-theme="skyline"]) .rui-badge {
+  border-radius: 999px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+:host([data-rui-theme="skyline"]) .rui-tag::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  display: inline-block;
+}
+:host([data-rui-theme="skyline"]) .rui-badge[data-variant="primary"] {
+  background: color-mix(in srgb, var(--rui-color-info) 14%, transparent);
+  color: var(--rui-color-info);
+}
+:host([data-rui-theme="skyline"]) .rui-stat-value {
+  color: var(--rui-color-primary);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+:host([data-rui-theme="skyline"]) .rui-stat-label {
+  letter-spacing: 0.06em;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme="skyline"]) .rui-callout[data-variant="info"] .rui-callout-icon,
+:host([data-rui-theme="skyline"]) .rui-callout[data-variant="success"] .rui-callout-icon,
+:host([data-rui-theme="skyline"]) .rui-callout[data-variant="warning"] .rui-callout-icon,
+:host([data-rui-theme="skyline"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme="skyline"]) .rui-callout[data-variant="error"] .rui-callout-icon {
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+}
+:host([data-rui-theme="skyline"]) .rui-link {
+  color: var(--rui-color-info);
+  font-weight: 500;
+}
+:host([data-rui-theme="skyline"]) .rui-follow-up-button {
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  color: var(--rui-color-primary);
+  font-weight: 500;
+  border-radius: var(--rui-radius-sm);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+:host([data-rui-theme="skyline"]) .rui-follow-up-button:hover {
+  background: color-mix(in srgb, var(--rui-color-info) 8%, var(--rui-color-surface));
+  border-color: var(--rui-color-info);
+  color: var(--rui-color-info);
+}
+:host([data-rui-theme="skyline"]) .rui-steps-item::before {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-primary);
+  border: 1px solid var(--rui-color-primary);
+  font-weight: 600;
+}
+:host([data-rui-theme="skyline"]) .rui-divider,
+:host([data-rui-theme="skyline"]) .rui-separator {
+  background: var(--rui-color-border);
+}
 `;

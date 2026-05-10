@@ -76,6 +76,20 @@ describe("resolveTheme", () => {
     expect(builtInThemes.glass.fontFamily).not.toBe(lightTheme.fontFamily);
     expect(builtInThemes.brutalist.fontFamily).not.toBe(lightTheme.fontFamily);
   });
+
+  it("ships skyline as an enterprise-console built-in", () => {
+    const skyline = builtInThemes.skyline;
+    expect(skyline).toBeDefined();
+    // Deep navy primary + crisp small radii are the cornerstones of the look.
+    expect(skyline.colorPrimary).toBe("#003580");
+    expect(skyline.radiusSm).toBe("4px");
+    expect(skyline.radiusMd).toBe("6px");
+    // Distinct from light/dark so the theme actually adds value.
+    expect(skyline.colorBg).not.toBe(lightTheme.colorBg);
+    expect(skyline.fontFamily).not.toBe(lightTheme.fontFamily);
+    // Resolves cleanly through the public resolver.
+    expect(resolveTheme("skyline").name).toBe("skyline");
+  });
 });
 
 describe("applyTheme", () => {

@@ -8,6 +8,7 @@
  *   - "pastel"     (soft, friendly, light & rounded)
  *   - "glass"      (frosted glass, translucent surfaces, vivid gradient bg)
  *   - "brutalist"  (neo-brutalism, hard edges, thick borders, bold colors)
+ *   - "skyline"    (deep navy + cyan, crisp & calm)
  *
  * Consumers can also pass a JSON object via the `theme` attribute, or call
  * `element.setTheme({...})` to apply a fully custom token map.
@@ -281,6 +282,49 @@ export const brutalistTheme: ThemeTokens = {
   chart6: "#0a0a0a",
 };
 
+/**
+ * Skyline — enterprise cloud-console aesthetic. Deep navy primary, calm
+ * cyan accents, very pale blue page background, white surfaces with crisp
+ * 1px borders, small radii, and a clean Inter type stack. The look should
+ * feel at home in an admin panel: dense, scannable, minimal chrome.
+ */
+export const skylineTheme: ThemeTokens = {
+  ...lightTheme,
+  colorBg: "#eff2f7",
+  colorBgSubtle: "#e6ecf3",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f4f7fb",
+  colorBorder: "#d6deea",
+  colorBorderSubtle: "rgba(13, 27, 58, 0.08)",
+  colorText: "#0d1b3a",
+  colorTextMuted: "#5a6a85",
+  colorPrimary: "#003580",
+  colorPrimaryHover: "#002a66",
+  colorPrimaryText: "#ffffff",
+  colorSuccess: "#1b8f4f",
+  colorWarning: "#c47e00",
+  colorDanger: "#c8362b",
+  colorInfo: "#0095d6",
+  fontFamily: "'Inter', 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  radiusSm: "4px",
+  radiusMd: "6px",
+  radiusLg: "10px",
+  shadowSm: "0 1px 0 rgba(13, 27, 58, 0.04), 0 1px 3px rgba(13, 27, 58, 0.06)",
+  shadowMd: "0 4px 16px rgba(13, 27, 58, 0.08), 0 1px 3px rgba(13, 27, 58, 0.04)",
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "14px",
+  spacingL: "20px",
+  spacingXl: "32px",
+  chart1: "#003580",
+  chart2: "#0095d6",
+  chart3: "#1b8f4f",
+  chart4: "#c47e00",
+  chart5: "#d43594",
+  chart6: "#5a6a85",
+};
+
 export const builtInThemes: Record<string, ThemeTokens> = {
   light: lightTheme,
   dark: darkTheme,
@@ -288,6 +332,7 @@ export const builtInThemes: Record<string, ThemeTokens> = {
   pastel: pastelTheme,
   glass: glassTheme,
   brutalist: brutalistTheme,
+  skyline: skylineTheme,
 };
 
 const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {

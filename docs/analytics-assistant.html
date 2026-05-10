@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analytics assistant · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        llm-response-ui-lang · analytics assistant
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · NL → chart</span>
+      <h1 style="margin-top:10px">Type a question, get a chart back</h1>
+      <p>
+        A natural-language analytics assistant that maps free-text questions
+        onto a small mock warehouse. The same UI Lang program renders the
+        suggestion chips, the active chart, the breakdown table, and a written
+        summary. All powered by one tool: <code>analytics_query</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Ask the warehouse</h2>
+      <p class="lede">
+        Click a suggestion or type your own question. The mock router maps to one of
+        five intents (revenue, signups, churn, plan-mix, top-customers) and returns
+        the appropriate shape — labels, series, summary, and a few KPIs. The UI Lang
+        program is unaware of which intent fired; it just renders whatever
+        <code>data</code> looks like.
+      </p>
+      <pre class="example-source"><code id="src-analytics">$question = "How is revenue trending this quarter?"
+$range = "90d"
+
+result = Query("analytics_query", {q: $question, range: $range}, {
+  intent: "loading",
+  title: "Loading…",
+  summary: "",
+  metric: "",
+  delta: "",
+  trend: "",
+  labels: [],
+  series: [],
+  colA: "",
+  colB: "",
+  colC: "",
+  rows: []
+})
+
+questionField = FormControl("Ask a question", Input("question", "Try: how is revenue trending this quarter?", "text", null, $question))
+
+rangeField = FormControl("Range", Select("range", [
+  SelectItem("30d", "Last 30 days"),
+  SelectItem("90d", "Last 90 days"),
+  SelectItem("365d", "Last year")
+], "90d", $range))
+
+queryRow = Stack([questionField, rangeField], "row", "m", "stretch")
+
+suggestions = Buttons([
+  Button("Revenue trend",       Action([@Set($question, "How is revenue trending this quarter?")]),  "secondary", "normal", "small"),
+  Button("Daily signups",       Action([@Set($question, "Daily signups in the last 30 days"), @Set($range, "30d")]), "secondary", "normal", "small"),
+  Button("Plan mix",            Action([@Set($question, "Show me the plan mix")]),                   "secondary", "normal", "small"),
+  Button("Recent churn",        Action([@Set($question, "Which customers churned recently?")]),      "secondary", "normal", "small"),
+  Button("Top 5 customers",     Action([@Set($question, "Top 5 customers by revenue")]),             "secondary", "normal", "small")
+])
+
+intentBadge = Tag("Intent: " + result.intent, null, "sm", "primary")
+trendTag = Tag(result.trend, null, "sm", result.trend == "up" ? "success" : result.trend == "down" ? "danger" : "neutral")
+
+kpis = Stack([
+  StatCard(result.metric, result.delta, result.trend),
+  StatCard("Detected intent", result.intent),
+  StatCard("Time range", $range)
+], "row", "m", "stretch", "start", true)
+
+chartLine = LineChart(result.labels, [Series(result.metric, result.series)], "natural", "Date", result.metric)
+chartBar  = BarChart(result.labels, [Series(result.metric, result.series)])
+
+chartTabs = Tabs([
+  TabItem("trend", "Trend",   [chartLine]),
+  TabItem("bars",  "Bars",    [chartBar])
+])
+
+tbl = Table([
+  Col(result.colA, result.rows.label),
+  Col(result.colB, result.rows.value, "number"),
+  Col(result.colC, @Each(result.rows, "row", Tag(row.delta, null, "sm", row.deltaVariant)))
+])
+
+chartCard = Card([CardHeader(result.title, result.summary), kpis, chartTabs])
+breakdownCard = Card([CardHeader("Breakdown", "Detail rows used to build the chart"), tbl])
+
+view = result.intent == "loading" ? Skeleton(4) : Stack([chartCard, breakdownCard])
+
+root = Stack([
+  Card([
+    CardHeader("Analytics assistant", "Ask anything about revenue, signups, churn, or customers"),
+    Stack([intentBadge, trendTag], "row", "s", "center", "start", true),
+    queryRow,
+    suggestions
+  ], "elevated"),
+  view
+])</code></pre>
+      <div class="example-output">
+        <llm-response-ui-lang id="rui-analytics" theme="light"></llm-response-ui-lang>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The router</h2>
+      <p class="lede">
+        A tiny rule-based router stands in for a real LLM. Replace it with a model
+        call (or a function-calling endpoint) and the front-end stays the same.
+      </p>
+      <pre class="example-source"><code>el.setTools({
+  analytics_query: async ({ q, range }) =&gt; {
+    await sleep(450);
+    const intent = routeIntent(q);          // "revenue" | "signups" | "churn" | "plan-mix" | "top-customers"
+    return buildPayload(intent, range);     // { intent, title, summary, metric, delta, trend, labels, series, table }
+  },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/llm-response-ui-lang.js";
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    /* ----------------------------- Mock warehouse --------------------------- */
+
+    function dailyLabels(days) {
+      const out = [];
+      const now = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        out.push(`${d.getMonth() + 1}/${d.getDate()}`);
+      }
+      return out;
+    }
+
+    function noisyTrend(days, base, slope, noise) {
+      const out = [];
+      let v = base;
+      for (let i = 0; i < days; i++) {
+        v += slope + (Math.random() - 0.5) * noise;
+        out.push(Math.max(0, Math.round(v)));
+      }
+      return out;
+    }
+
+    function deltaTag(curr, prev) {
+      if (prev === 0) return { delta: "—", deltaVariant: "neutral" };
+      const pct = Math.round(((curr - prev) / prev) * 100);
+      const sign = pct >= 0 ? "+" : "";
+      return {
+        delta: `${sign}${pct}%`,
+        deltaVariant: pct > 5 ? "success" : pct < -5 ? "danger" : "neutral",
+      };
+    }
+
+    function rangeDays(range) {
+      if (range === "30d") return 30;
+      if (range === "365d") return 90; // collapse a year into 90 monthly-style buckets for the chart
+      return 90;
+    }
+
+    /* ----------------------------- Intent router ---------------------------- */
+
+    function routeIntent(q) {
+      const text = (q ?? "").toLowerCase();
+      if (/(churn|cancel|downgrad)/.test(text)) return "churn";
+      if (/(plan|tier|mix|distribution)/.test(text)) return "plan-mix";
+      if (/(top|ranking|biggest|largest|highest).*(customer|account|user)/.test(text)) return "top-customers";
+      if (/(signup|sign-up|new user|registration)/.test(text)) return "signups";
+      if (/(revenue|mrr|arr|sales|income)/.test(text)) return "revenue";
+      return "revenue";
+    }
+
+    /* ------------------------------ Payload --------------------------------- */
+
+    function buildPayload(intent, range) {
+      const days = rangeDays(range);
+      const labels = dailyLabels(days);
+
+      switch (intent) {
+        case "revenue": {
+          const series = noisyTrend(days, 4200, 35, 700);
+          const last = series[series.length - 1];
+          const prev = series[series.length - 8] ?? series[0];
+          const cmp = deltaTag(last, prev);
+          const rows = labels.slice(-7).map((label, i) => {
+            const idx = series.length - 7 + i;
+            const value = series[idx];
+            const prevDay = series[idx - 1] ?? value;
+            return { label, value, ...deltaTag(value, prevDay) };
+          });
+          return {
+            intent,
+            title: "Daily revenue",
+            summary: `Revenue is trending ${cmp.delta} week-over-week. Strongest day: ${Math.max(...series).toLocaleString()}.`,
+            metric: "Revenue €",
+            delta: cmp.delta,
+            trend: cmp.deltaVariant === "success" ? "up" : cmp.deltaVariant === "danger" ? "down" : "neutral",
+            labels,
+            series,
+            colA: "Day", colB: "Revenue", colC: "vs prev",
+            rows,
+          };
+        }
+        case "signups": {
+          const series = noisyTrend(days, 90, 1.2, 35);
+          const last = series[series.length - 1];
+          const prev = series[series.length - 8] ?? series[0];
+          const cmp = deltaTag(last, prev);
+          const rows = labels.slice(-7).map((label, i) => {
+            const idx = series.length - 7 + i;
+            const value = series[idx];
+            const prevDay = series[idx - 1] ?? value;
+            return { label, value, ...deltaTag(value, prevDay) };
+          });
+          return {
+            intent,
+            title: "Daily signups",
+            summary: `Signups are ${cmp.delta} week-over-week. Average: ${Math.round(series.reduce((a, b) => a + b, 0) / series.length)} per day.`,
+            metric: "Signups",
+            delta: cmp.delta,
+            trend: cmp.deltaVariant === "success" ? "up" : cmp.deltaVariant === "danger" ? "down" : "neutral",
+            labels,
+            series,
+            colA: "Day", colB: "Signups", colC: "vs prev",
+            rows,
+          };
+        }
+        case "churn": {
+          const series = noisyTrend(days, 6, 0.04, 4).map((v) => Math.max(0, Math.min(40, v)));
+          const last = series[series.length - 1];
+          const prev = series[series.length - 8] ?? series[0];
+          const cmp = deltaTag(last, prev);
+          const churnRows = [
+            { label: "Acme Robotics",  value: 1280, delta: "Pro → Starter", deltaVariant: "warning" },
+            { label: "Northwind",      value: 940,  delta: "Cancelled",     deltaVariant: "danger"  },
+            { label: "Cobalt Labs",    value: 620,  delta: "Cancelled",     deltaVariant: "danger"  },
+            { label: "Bytecanvas",     value: 410,  delta: "Pro → Starter", deltaVariant: "warning" },
+            { label: "Pastel Studio",  value: 290,  delta: "Cancelled",     deltaVariant: "danger"  },
+          ];
+          return {
+            intent,
+            title: "Churn risk",
+            summary: `Daily cancellations are ${cmp.delta} week-over-week. ${churnRows.length} at-risk accounts surfaced.`,
+            metric: "Cancellations",
+            delta: cmp.delta,
+            trend: cmp.deltaVariant === "success" ? "down" : cmp.deltaVariant === "danger" ? "up" : "neutral",
+            labels,
+            series,
+            colA: "Account", colB: "MRR €", colC: "Reason",
+            rows: churnRows,
+          };
+        }
+        case "plan-mix": {
+          const labels = ["Starter", "Pro", "Team", "Enterprise"];
+          const series = [3210, 1480, 410, 92];
+          const rows = labels.map((label, i) => ({
+            label,
+            value: series[i],
+            delta: i === 1 ? "+12%" : i === 3 ? "+18%" : i === 0 ? "-3%" : "+2%",
+            deltaVariant: i === 1 || i === 3 ? "success" : i === 0 ? "warning" : "neutral",
+          }));
+          return {
+            intent: "plan-mix",
+            title: "Customers by plan",
+            summary: "Pro is the fastest-growing tier (+12%). Enterprise is small but adding strategic logos.",
+            metric: "Total accounts",
+            delta: `${series.reduce((a, b) => a + b, 0).toLocaleString()}`,
+            trend: "up",
+            labels,
+            series,
+            colA: "Plan", colB: "Accounts", colC: "vs prev",
+            rows,
+          };
+        }
+        case "top-customers": {
+          const labels = ["Aurora Health", "Northwind", "Helix Bio", "Orbitcorp", "Flowmark"];
+          const series = [12_800, 9_460, 7_120, 6_540, 4_980];
+          const rows = labels.map((label, i) => ({
+            label,
+            value: series[i],
+            delta: i === 0 ? "+22%" : i === 1 ? "-4%" : "+6%",
+            deltaVariant: i === 1 ? "warning" : "success",
+          }));
+          return {
+            intent: "top-customers",
+            title: "Top customers by MRR",
+            summary: `Aurora Health remains #1 at €${series[0].toLocaleString()} MRR (+22%). Northwind slipping after a downgrade.`,
+            metric: "Top MRR €",
+            delta: `+${Math.round(((series[0] - series[1]) / series[1]) * 100)}% vs #2`,
+            trend: "up",
+            labels,
+            series,
+            colA: "Customer", colB: "MRR €", colC: "vs prev",
+            rows,
+          };
+        }
+        default:
+          return { intent: "unknown", title: "—", summary: "I couldn't classify that question.", metric: "", delta: "", trend: "neutral", labels: [], series: [], colA: "A", colB: "B", colC: "C", rows: [] };
+      }
+    }
+
+    /* -------------------------- Wire up the element ------------------------- */
+
+    const el = document.getElementById("rui-analytics");
+
+    el.setTools({
+      analytics_query: async ({ q, range }) => {
+        await sleep(450);
+        const intent = routeIntent(q);
+        return buildPayload(intent, range);
+      },
+    });
+
+    el.setResponse(document.getElementById("src-analytics").textContent);
+  </script>
+</body>
+</html>

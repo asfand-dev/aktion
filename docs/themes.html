@@ -68,6 +68,8 @@
         <a href="chat-bot.html">Chat bot</a>
         <a href="tools-example.html">Tools integration</a>
         <a href="external-data-example.html">External data</a>
+        <a href="support-agent.html">Support agent</a>
+        <a href="analytics-assistant.html">Analytics assistant</a>
       </nav>
     </aside>
 
@@ -84,7 +86,7 @@
 
       <h2>Built-in themes</h2>
       <p>
-        Six themes ship out of the box. Pass the name via the
+        Seven themes ship out of the box. Pass the name via the
         <code>theme</code> attribute or call <code>setTheme()</code>.
       </p>
 <pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;     &lt;!-- crisp default      --&gt;
@@ -92,7 +94,8 @@
 &lt;llm-response-ui-lang theme="neon"&gt;&lt;/llm-response-ui-lang&gt;      &lt;!-- cyberpunk glow     --&gt;
 &lt;llm-response-ui-lang theme="pastel"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- soft &amp; rounded     --&gt;
 &lt;llm-response-ui-lang theme="glass"&gt;&lt;/llm-response-ui-lang&gt;     &lt;!-- frosted glass      --&gt;
-&lt;llm-response-ui-lang theme="brutalist"&gt;&lt;/llm-response-ui-lang&gt; &lt;!-- neo-brutalism       --&gt;</code></pre>
+&lt;llm-response-ui-lang theme="brutalist"&gt;&lt;/llm-response-ui-lang&gt; &lt;!-- neo-brutalism       --&gt;
+&lt;llm-response-ui-lang theme="skyline"&gt;&lt;/llm-response-ui-lang&gt;   &lt;!-- enterprise console  --&gt;</code></pre>
 
       <p>Compare them side-by-side:</p>
       <div class="theme-grid">
@@ -137,6 +140,13 @@
             <span class="theme-card-tag" style="color: #0a0a0a; background: #fde68a; border: 2px solid #0a0a0a; border-radius: 0;">Neo-brutalism</span>
           </div>
           <llm-response-ui-lang theme="brutalist" transparent data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card" style="background: linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%); border: 1px solid #d6deea;">
+          <div class="theme-card-header">
+            <span class="theme-card-name" style="color: #003580;">Skyline</span>
+            <span class="theme-card-tag" style="color: #003580; background: rgba(0, 53, 128, 0.10);">Cloud console</span>
+          </div>
+          <llm-response-ui-lang theme="skyline" transparent data-source-id="src-preview"></llm-response-ui-lang>
         </div>
       </div>
       <pre id="src-preview" hidden><code>root = Stack([card, kpis, btns])

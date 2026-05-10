@@ -38,6 +38,7 @@ const THEME_BG = {
   pastel: "#fdf6ff",
   glass: "linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%)",
   brutalist: "#fef9c3",
+  skyline: "linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%)",
 };
 
 function paintExampleOutputs(themeName) {
