@@ -14,6 +14,7 @@
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
@@ -39,6 +40,10 @@
         <select id="playground-theme">
           <option value="light">Light</option>
           <option value="dark">Dark</option>
+          <option value="neon">Neon</option>
+          <option value="pastel">Pastel</option>
+          <option value="glass">Glass</option>
+          <option value="brutalist">Brutalist</option>
         </select>
       </div>
 
@@ -62,7 +67,7 @@ follow = FollowUpBlock([
         </section>
         <section class="playground-pane">
           <h3>Preview</h3>
-          <llm-response-ui-lang id="playground-target" theme="light" style="flex:1; overflow:auto;"></llm-response-ui-lang>
+          <llm-response-ui-lang id="playground-target" theme="light" transparent style="flex:1; overflow:auto;"></llm-response-ui-lang>
         </section>
       </div>
     </main>

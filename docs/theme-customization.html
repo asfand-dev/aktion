@@ -37,6 +37,11 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 8px;
     }
+    @media (min-width: 1100px) {
+      .studio-presets {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
     .studio-preset {
       cursor: pointer;
       border: 1px solid var(--doc-border);
@@ -125,8 +130,13 @@
       background: var(--doc-bg);
       border: 1px solid var(--doc-border);
       border-radius: var(--doc-radius);
-      padding: 18px;
+      padding: 0;
       box-shadow: var(--doc-shadow);
+      overflow: hidden;
+    }
+    .studio-preview llm-response-ui-lang {
+      display: block;
+      padding: 18px;
     }
     .studio-snippet {
       background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
@@ -189,6 +199,7 @@
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
@@ -205,7 +216,7 @@
     <main>
       <h1>Theme customization</h1>
       <p>
-        Pick one of the four built-in themes, then tweak any token in the
+        Pick one of the six built-in themes, then tweak any token in the
         side panel — the preview re-renders instantly. Copy the JSON or the
         <code>setTheme()</code> snippet at the bottom and drop it into your
         own app.
@@ -263,6 +274,22 @@
                   <span style="background:#5eead4"></span>
                 </span>
               </button>
+              <button class="studio-preset" data-preset="glass" type="button" role="tab">
+                Glass
+                <span class="studio-preset-swatch">
+                  <span style="background:linear-gradient(135deg,#0b132b,#1f3a8a)"></span>
+                  <span style="background:#60a5fa"></span>
+                  <span style="background:#22d3ee"></span>
+                </span>
+              </button>
+              <button class="studio-preset" data-preset="brutalist" type="button" role="tab">
+                Brutalist
+                <span class="studio-preset-swatch">
+                  <span style="background:#fef9c3"></span>
+                  <span style="background:#1d4ed8"></span>
+                  <span style="background:#dc2626"></span>
+                </span>
+              </button>
             </div>
           </div>
 
@@ -283,8 +310,8 @@
         </aside>
 
         <section class="studio-output">
-          <div class="studio-preview">
-            <llm-response-ui-lang id="preview" theme="light"></llm-response-ui-lang>
+          <div class="studio-preview" id="preview-wrap">
+            <llm-response-ui-lang id="preview" theme="light" transparent></llm-response-ui-lang>
           </div>
 
           <div>
@@ -494,6 +521,10 @@ follow = FollowUpBlock([
       // data-rui-theme attribute fires layout-level overrides. As soon as
       // the user touches a field we switch to a JSON map.
       els.preview.setTheme(workingTheme);
+      // Mirror the theme's bg on the wrapping container so the preview
+      // surface blends with the host (which we render with `transparent`).
+      const wrap = document.getElementById("preview-wrap");
+      if (wrap) wrap.style.background = workingTheme.colorBg ?? "var(--doc-bg)";
       renderTokenTable();
       renderSnippet();
     }

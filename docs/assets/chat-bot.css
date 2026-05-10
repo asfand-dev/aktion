@@ -7,6 +7,7 @@
   margin: 0 auto;
   padding: 24px 24px 24px;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -194,6 +195,7 @@
 .chat-composer {
   border-top: 1px solid var(--ex-border);
   padding: 14px 16px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
   background: var(--ex-surface);
   display: flex;
   align-items: flex-end;
@@ -201,13 +203,15 @@
 }
 
 .chat-composer textarea {
-  flex: 1;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
   resize: none;
   border: 1px solid var(--ex-border);
   border-radius: 12px;
   padding: 10px 12px;
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
   min-height: 42px;
   max-height: 160px;
   line-height: 1.4;
@@ -221,6 +225,10 @@
   border-color: var(--ex-primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
   background: var(--ex-surface);
+}
+
+.chat-composer .btn {
+  flex-shrink: 0;
 }
 
 /* Setup card */
@@ -295,7 +303,7 @@
    chat bot stays usable on narrow viewports. */
 @media (max-width: 720px) {
   .chat-shell {
-    padding: 14px 12px;
+    padding: 12px 12px 0;
     gap: 10px;
     height: 100dvh;
   }
@@ -308,7 +316,8 @@
   .chat-msg.assistant .bubble { padding: 12px; border-radius: 12px; }
   .chat-msg.assistant .raw { font-size: 12px; padding: 10px 12px; }
   .chat-composer { padding: 10px 12px; gap: 8px; }
-  .chat-composer textarea { font-size: 14px; min-height: 38px; }
+  .chat-composer textarea { font-size: 16px; min-height: 40px; }
+  .chat-composer .btn { padding: 8px 14px; }
   .setup-screen { margin: 24px auto; padding: 0 14px; }
   .setup-card { padding: 22px 20px; border-radius: var(--ex-radius); }
   .setup-card h1 { font-size: 20px; }
@@ -317,9 +326,50 @@
   .setup-card .actions .example-back { text-align: center; }
 }
 
-@media (max-width: 420px) {
-  .chat-shell { padding: 10px 8px; }
+@media (max-width: 480px) {
+  .chat-shell { padding: 10px 8px 0; gap: 8px; }
   .chat-history { padding: 10px 10px 4px; }
-  .chat-msg.user .bubble { font-size: 13.5px; }
-  .chat-composer textarea { padding: 8px 10px; }
+  .chat-msg.user .bubble { font-size: 14px; }
+  .chat-composer {
+    padding: 8px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 6px;
+    border-radius: 0;
+  }
+  .chat-composer textarea {
+    padding: 9px 11px;
+    border-radius: 10px;
+    min-height: 40px;
+    line-height: 1.35;
+  }
+  .chat-composer .btn {
+    padding: 9px 14px;
+    border-radius: 10px;
+    min-width: 64px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .chat-shell { padding: 8px 6px 0; }
+  .chat-composer { padding: 6px 8px; gap: 6px; }
+  .chat-composer .btn {
+    padding: 9px 10px;
+    min-width: 0;
+    width: 44px;
+    height: 44px;
+    font-size: 0;
+    background: var(--ex-gradient);
+    color: transparent;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .chat-composer .btn::before {
+    content: "↑";
+    font-size: 18px;
+    color: #fff;
+    line-height: 1;
+  }
 }

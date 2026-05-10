@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Framework integration · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/site.css" />
+  <style>
+    .framework-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 18px 0 28px;
+    }
+    .framework-chip {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 14px 16px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      background: var(--doc-surface);
+      text-decoration: none;
+      color: inherit;
+      transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+    }
+    .framework-chip:hover {
+      transform: translateY(-2px);
+      border-color: rgba(99, 102, 241, 0.40);
+      box-shadow: var(--doc-shadow-lg);
+    }
+    .framework-chip-name { font-weight: 700; font-size: 14px; color: var(--doc-text); }
+    .framework-chip-stack { font-size: 12px; color: var(--doc-text-muted); }
+    .framework-section { scroll-margin-top: 84px; }
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .pill-row span {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--doc-primary-hover);
+      background: rgba(99, 102, 241, 0.10);
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>llm-response-ui-lang</h1>
+      <p>Web component runtime for LLM Response UI Lang</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+        <span class="nav-section-label">Live demos</span>
+        <a href="chat-bot.html">Chat bot</a>
+        <a href="tools-example.html">Tools integration</a>
+        <a href="external-data-example.html">External data</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Framework integration</h1>
+      <p>
+        <code>&lt;llm-response-ui-lang&gt;</code> is a standard
+        <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Element</a>,
+        so it works in every framework that renders HTML — including React,
+        Next.js, Vue, Nuxt, Angular, Svelte, SolidJS, Astro, Remix, plain HTML,
+        and any static-site generator. This page shows the recommended setup
+        for each.
+      </p>
+
+      <div class="callout">
+        <h4>Universal pattern</h4>
+        <p>
+          Three things matter no matter which framework you use:
+        </p>
+        <ol>
+          <li>Import the bundle <em>once</em> in client-side code so it registers the custom element.</li>
+          <li>Render <code>&lt;llm-response-ui-lang&gt;</code> wherever you want the LLM output to appear.</li>
+          <li>Get a reference to the element and call <code>setResponse()</code>, <code>appendChunk()</code>, <code>setTheme()</code>, or <code>setTools()</code>.</li>
+        </ol>
+      </div>
+
+      <h2>Pick your stack</h2>
+      <div class="framework-grid">
+        <a class="framework-chip" href="#react">
+          <span class="framework-chip-name">React</span>
+          <span class="framework-chip-stack">react 18+, Vite/CRA</span>
+        </a>
+        <a class="framework-chip" href="#nextjs">
+          <span class="framework-chip-name">Next.js</span>
+          <span class="framework-chip-stack">app or pages router</span>
+        </a>
+        <a class="framework-chip" href="#vue">
+          <span class="framework-chip-name">Vue 3</span>
+          <span class="framework-chip-stack">composition API</span>
+        </a>
+        <a class="framework-chip" href="#nuxt">
+          <span class="framework-chip-name">Nuxt 3</span>
+          <span class="framework-chip-stack">SSR-aware</span>
+        </a>
+        <a class="framework-chip" href="#angular">
+          <span class="framework-chip-name">Angular</span>
+          <span class="framework-chip-stack">17+ standalone</span>
+        </a>
+        <a class="framework-chip" href="#svelte">
+          <span class="framework-chip-name">Svelte / SvelteKit</span>
+          <span class="framework-chip-stack">5+</span>
+        </a>
+        <a class="framework-chip" href="#solid">
+          <span class="framework-chip-name">SolidJS</span>
+          <span class="framework-chip-stack">1.x</span>
+        </a>
+        <a class="framework-chip" href="#astro">
+          <span class="framework-chip-name">Astro</span>
+          <span class="framework-chip-stack">client:load</span>
+        </a>
+        <a class="framework-chip" href="#html">
+          <span class="framework-chip-name">Plain HTML</span>
+          <span class="framework-chip-stack">no build step</span>
+        </a>
+      </div>
+
+      <h2>Installation</h2>
+      <p>Pick whichever channel suits your project:</p>
+<pre><code># From npm — works for any bundler
+npm install llm-response-ui-lang
+
+# Or load from CDN — no build step required
+&lt;script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
+
+      <p>
+        The bundle is self-contained: it includes the parser, runtime, the
+        complete component library, and the styles (rendered into the shadow
+        DOM). You only ever need a single import.
+      </p>
+
+      <hr />
+
+      <h2 id="react" class="framework-section">React</h2>
+      <div class="pill-row"><span>React 18+</span><span>Vite / CRA / Parcel</span></div>
+      <p>
+        React (&lt; 19) doesn't natively understand custom-element props or
+        events, but it does pass attributes through and accepts a
+        <code>ref</code>. The pattern below uses a ref to call methods and a
+        <code>useEffect</code> hook to wire events.
+      </p>
+<pre><code>// LLMResponse.tsx
+import { useEffect, useRef } from "react";
+import "llm-response-ui-lang";
+
+interface Props {
+  response: string;
+  theme?: "light" | "dark" | "neon" | "pastel" | "glass" | "brutalist";
+  onAssistantMessage?: (text: string) =&gt; void;
+}
+
+export function LLMResponse({ response, theme = "light", onAssistantMessage }: Props) {
+  const ref = useRef&lt;HTMLElement &amp; { setResponse: (t: string) =&gt; void }&gt;(null);
+
+  useEffect(() =&gt; {
+    ref.current?.setResponse(response);
+  }, [response]);
+
+  useEffect(() =&gt; {
+    const el = ref.current;
+    if (!el || !onAssistantMessage) return;
+    const handler = (e: Event) =&gt; onAssistantMessage((e as CustomEvent).detail.message);
+    el.addEventListener("assistant-message", handler);
+    return () =&gt; el.removeEventListener("assistant-message", handler);
+  }, [onAssistantMessage]);
+
+  return &lt;llm-response-ui-lang ref={ref} theme={theme} transparent /&gt;;
+}</code></pre>
+
+      <p>
+        Add the JSX intrinsic element type once so TypeScript stops complaining:
+      </p>
+<pre><code>// types/llm-response-ui-lang.d.ts
+import type { DetailedHTMLProps, HTMLAttributes } from "react";
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "llm-response-ui-lang": DetailedHTMLProps&lt;
+        HTMLAttributes&lt;HTMLElement&gt; &amp; {
+          theme?: string;
+          transparent?: boolean;
+          showerrors?: string;
+        },
+        HTMLElement
+      &gt;;
+    }
+  }
+}</code></pre>
+
+      <p>
+        For React 19+ you can pass props directly as element properties — no ref
+        needed for the simple read-only case:
+      </p>
+<pre><code>&lt;llm-response-ui-lang theme="dark" response={text} /&gt;</code></pre>
+
+      <hr />
+
+      <h2 id="nextjs" class="framework-section">Next.js (app router)</h2>
+      <div class="pill-row"><span>Next 13+</span><span>app router</span><span>Client component</span></div>
+      <p>
+        Custom elements only work in the browser, so the wrapper must be a
+        client component (the import statement registers the element on
+        <code>HTMLElement</code> globals). Mark the file with
+        <code>"use client"</code> at the top.
+      </p>
+<pre><code>// app/components/LLMResponse.tsx
+"use client";
+
+import { useEffect, useRef } from "react";
+import "llm-response-ui-lang";
+
+export function LLMResponse({ response, theme = "light" }: { response: string; theme?: string }) {
+  const ref = useRef&lt;any&gt;(null);
+  useEffect(() =&gt; { ref.current?.setResponse(response); }, [response]);
+  return &lt;llm-response-ui-lang ref={ref} theme={theme} transparent /&gt;;
+}
+
+// app/page.tsx — server component
+import { LLMResponse } from "./components/LLMResponse";
+
+export default function Page() {
+  const program = `root = Stack([greeting])
+greeting = Card([CardHeader("Hello", "Generative UI in Next.js")])`;
+  return &lt;LLMResponse response={program} theme="light" /&gt;;
+}</code></pre>
+
+      <p>
+        For SSR-only pages you can skip the wrapper and import via a
+        <code>next/dynamic</code> call with <code>ssr: false</code>:
+      </p>
+<pre><code>const LLMResponse = dynamic(() =&gt; import("./components/LLMResponse").then(m =&gt; m.LLMResponse), {
+  ssr: false,
+});</code></pre>
+
+      <hr />
+
+      <h2 id="vue" class="framework-section">Vue 3</h2>
+      <div class="pill-row"><span>Vue 3</span><span>Vite</span><span>composition API</span></div>
+      <p>
+        Tell Vue to skip its component resolver for any tag matching the custom
+        element. In <code>vite.config.ts</code> (or wherever the Vue plugin is
+        configured):
+      </p>
+<pre><code>// vite.config.ts
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+
+export default defineConfig({
+  plugins: [
+    vue({
+      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "llm-response-ui-lang" } },
+    }),
+  ],
+});</code></pre>
+
+      <p>Then use it like any other element:</p>
+<pre><code>&lt;script setup lang="ts"&gt;
+import { ref, onMounted, watch } from "vue";
+import "llm-response-ui-lang";
+
+const target = ref&lt;HTMLElement | null&gt;(null);
+const response = ref(`root = Stack([Card([CardHeader("Hello from Vue")])])`);
+const theme = ref("light");
+
+onMounted(() =&gt; (target.value as any)?.setResponse(response.value));
+watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;llm-response-ui-lang ref="target" :theme="theme" transparent /&gt;
+&lt;/template&gt;</code></pre>
+
+      <hr />
+
+      <h2 id="nuxt" class="framework-section">Nuxt 3</h2>
+      <div class="pill-row"><span>Nuxt 3</span><span>SSR</span></div>
+      <p>
+        Nuxt renders on the server by default, so the import has to be deferred
+        until the client. Use a <code>&lt;ClientOnly&gt;</code> wrapper and
+        register the element type in <code>nuxt.config.ts</code>:
+      </p>
+<pre><code>// nuxt.config.ts
+export default defineNuxtConfig({
+  vue: {
+    compilerOptions: { isCustomElement: (tag) =&gt; tag === "llm-response-ui-lang" },
+  },
+});
+
+// plugins/llm-response-ui-lang.client.ts
+import "llm-response-ui-lang";
+export default defineNuxtPlugin(() =&gt; {});</code></pre>
+
+<pre><code>&lt;!-- pages/index.vue --&gt;
+&lt;template&gt;
+  &lt;ClientOnly&gt;
+    &lt;llm-response-ui-lang theme="light" transparent ref="renderer" /&gt;
+  &lt;/ClientOnly&gt;
+&lt;/template&gt;</code></pre>
+
+      <hr />
+
+      <h2 id="angular" class="framework-section">Angular</h2>
+      <div class="pill-row"><span>Angular 17+</span><span>standalone components</span></div>
+      <p>
+        Add <code>CUSTOM_ELEMENTS_SCHEMA</code> to the component (or module) so
+        the template compiler accepts the unknown tag, then import the bundle
+        once in <code>main.ts</code>:
+      </p>
+<pre><code>// main.ts
+import "llm-response-ui-lang";
+import { bootstrapApplication } from "@angular/platform-browser";
+import { AppComponent } from "./app/app.component";
+
+bootstrapApplication(AppComponent);
+
+// app.component.ts
+import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, ViewChild, AfterViewInit } from "@angular/core";
+
+@Component({
+  standalone: true,
+  selector: "app-root",
+  template: `&lt;llm-response-ui-lang #renderer theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;`,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+})
+export class AppComponent implements AfterViewInit {
+  @ViewChild("renderer") renderer!: ElementRef&lt;HTMLElement &amp; { setResponse(t: string): void }&gt;;
+
+  ngAfterViewInit() {
+    this.renderer.nativeElement.setResponse(`root = Stack([Card([CardHeader("Hello, Angular")])])`);
+  }
+}</code></pre>
+
+      <hr />
+
+      <h2 id="svelte" class="framework-section">Svelte / SvelteKit</h2>
+      <div class="pill-row"><span>Svelte 4 / 5</span><span>SvelteKit</span></div>
+      <p>
+        Svelte already understands custom elements. Import the bundle (in a
+        client-side <code>+page.ts</code> hook or directly in the component)
+        and you're done.
+      </p>
+<pre><code>&lt;!-- routes/+page.svelte --&gt;
+&lt;script lang="ts"&gt;
+  import { onMount } from "svelte";
+  import "llm-response-ui-lang";
+
+  let renderer: any;
+  const program = `root = Stack([Card([CardHeader("Hello from Svelte")])])`;
+  onMount(() =&gt; renderer?.setResponse(program));
+&lt;/script&gt;
+
+&lt;llm-response-ui-lang bind:this={renderer} theme="light" transparent /&gt;</code></pre>
+
+      <p>
+        For server-rendered routes wrap the import in
+        <code>browser</code>-guarded code (e.g.
+        <code>if (browser) await import("llm-response-ui-lang");</code>) so it
+        only runs in the client bundle.
+      </p>
+
+      <hr />
+
+      <h2 id="solid" class="framework-section">SolidJS</h2>
+      <div class="pill-row"><span>SolidJS 1.x</span></div>
+<pre><code>// App.tsx
+import { onMount } from "solid-js";
+import "llm-response-ui-lang";
+
+export default function App() {
+  let renderer: any;
+  onMount(() =&gt; renderer?.setResponse(`root = Stack([Card([CardHeader("Hello, Solid")])])`));
+  return &lt;llm-response-ui-lang ref={renderer} theme="light" transparent /&gt;;
+}</code></pre>
+
+      <hr />
+
+      <h2 id="astro" class="framework-section">Astro</h2>
+      <div class="pill-row"><span>Astro 4+</span></div>
+      <p>
+        Astro can ship the element either as a hydrated island or as a static
+        tag with a small inline script. Both approaches are valid:
+      </p>
+<pre><code>---
+// src/pages/index.astro
+---
+&lt;llm-response-ui-lang id="response" theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;
+
+&lt;script&gt;
+  import "llm-response-ui-lang";
+  const el = document.getElementById("response") as any;
+  el.setResponse(`root = Stack([Card([CardHeader("Hello, Astro")])])`);
+&lt;/script&gt;</code></pre>
+
+      <hr />
+
+      <h2 id="html" class="framework-section">Plain HTML</h2>
+      <div class="pill-row"><span>No build step</span><span>Works offline</span></div>
+      <p>
+        The CDN build is the smallest possible footprint — no bundler, no
+        framework, just one script tag.
+      </p>
+<pre><code>&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;body&gt;
+    &lt;llm-response-ui-lang theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;
+
+    &lt;script type="module"&gt;
+      import "https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js";
+      const el = document.querySelector("llm-response-ui-lang");
+      el.setResponse(`root = Stack([Card([CardHeader("Hello, world")])])`);
+    &lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+      <hr />
+
+      <h2>Common patterns across frameworks</h2>
+
+      <h3>Streaming an LLM response</h3>
+      <p>
+        Set <code>streaming</code> to <code>true</code>, push tokens with
+        <code>appendChunk()</code>, then flip the attribute back when the
+        stream ends. Internally the renderer suppresses transient parse errors
+        while the attribute is set.
+      </p>
+<pre><code>el.streaming = true;
+el.clear();
+for await (const chunk of stream) el.appendChunk(chunk);
+el.streaming = false;</code></pre>
+
+      <h3>Wiring tools (Query / Mutation)</h3>
+      <p>
+        Tools are async functions with a single argument object. The runtime
+        invokes them whenever a <code>Query</code> or <code>Mutation</code>
+        references them.
+      </p>
+<pre><code>el.setTools({
+  list_orders: async ({ limit }) =&gt; (await fetch(`/api/orders?limit=${limit}`)).json(),
+  update_order: async ({ id, status }) =&gt; {
+    await fetch(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    return { ok: true };
+  },
+});</code></pre>
+
+      <h3>Reacting to follow-up clicks</h3>
+      <p>
+        Buttons that call <code>@ToAssistant("...")</code> dispatch an
+        <code>assistant-message</code> event with <code>event.detail.message</code>.
+        Hook it into your chat input.
+      </p>
+<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
+  sendToLLM(event.detail.message);
+});</code></pre>
+
+      <h3>Aligning the background with your page</h3>
+      <p>
+        When the surrounding page already has a custom theme, pass the
+        <code>transparent</code> attribute (used in every snippet above) so the
+        host inherits the parent's background. The internal cards retain their
+        own surface colors. See the
+        <a href="themes.html#aligning-the-background-with-your-page">theming page</a>
+        for two more options.
+      </p>
+
+      <h3>Generating the system prompt</h3>
+      <p>
+        Either fetch the bundled file or build it programmatically — both
+        return identical text:
+      </p>
+<pre><code>// 1. Fetch the canned prompt
+const promptText = await fetch("https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt").then(r =&gt; r.text());
+
+// 2. Generate at runtime (lets you add tools or extra rules)
+import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "llm-response-ui-lang";
+const same = SYSTEM_PROMPT_TEXT;
+const custom = generatePrompt(defaultLibrary, {
+  preamble: "You are an analytics assistant.",
+  additionalRules: ["Always end with a FollowUpBlock."],
+});</code></pre>
+
+      <div class="callout">
+        <h4>Need a different framework?</h4>
+        <p>
+          The element relies only on the
+          <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Elements v1</a>
+          and ES2020 features. Anywhere you can render HTML and run JavaScript
+          in a modern browser, the bundle just works.
+        </p>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

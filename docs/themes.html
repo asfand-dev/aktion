@@ -57,6 +57,7 @@
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
@@ -83,13 +84,15 @@
 
       <h2>Built-in themes</h2>
       <p>
-        Four themes ship out of the box. Pass the name via the
+        Six themes ship out of the box. Pass the name via the
         <code>theme</code> attribute or call <code>setTheme()</code>.
       </p>
-<pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;   &lt;!-- crisp default --&gt;
-&lt;llm-response-ui-lang theme="dark"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- standard dark    --&gt;
-&lt;llm-response-ui-lang theme="neon"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- cyberpunk glow   --&gt;
-&lt;llm-response-ui-lang theme="pastel"&gt;&lt;/llm-response-ui-lang&gt;  &lt;!-- soft & rounded   --&gt;</code></pre>
+<pre><code>&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;     &lt;!-- crisp default      --&gt;
+&lt;llm-response-ui-lang theme="dark"&gt;&lt;/llm-response-ui-lang&gt;      &lt;!-- standard dark      --&gt;
+&lt;llm-response-ui-lang theme="neon"&gt;&lt;/llm-response-ui-lang&gt;      &lt;!-- cyberpunk glow     --&gt;
+&lt;llm-response-ui-lang theme="pastel"&gt;&lt;/llm-response-ui-lang&gt;    &lt;!-- soft &amp; rounded     --&gt;
+&lt;llm-response-ui-lang theme="glass"&gt;&lt;/llm-response-ui-lang&gt;     &lt;!-- frosted glass      --&gt;
+&lt;llm-response-ui-lang theme="brutalist"&gt;&lt;/llm-response-ui-lang&gt; &lt;!-- neo-brutalism       --&gt;</code></pre>
 
       <p>Compare them side-by-side:</p>
       <div class="theme-grid">
@@ -98,28 +101,42 @@
             <span class="theme-card-name">Light</span>
             <span class="theme-card-tag">Default</span>
           </div>
-          <llm-response-ui-lang theme="light" data-source-id="src-preview"></llm-response-ui-lang>
+          <llm-response-ui-lang theme="light" transparent data-source-id="src-preview"></llm-response-ui-lang>
         </div>
         <div class="theme-card" style="background: #111827;">
           <div class="theme-card-header">
             <span class="theme-card-name" style="color: #f8fafc;">Dark</span>
             <span class="theme-card-tag" style="color: #f8fafc; background: rgba(248, 250, 252, 0.10);">High contrast</span>
           </div>
-          <llm-response-ui-lang theme="dark" data-source-id="src-preview"></llm-response-ui-lang>
+          <llm-response-ui-lang theme="dark" transparent data-source-id="src-preview"></llm-response-ui-lang>
         </div>
         <div class="theme-card" style="background: #05060f;">
           <div class="theme-card-header">
             <span class="theme-card-name" style="color: #f8fafc;">Neon</span>
             <span class="theme-card-tag" style="color: #f8fafc; background: rgba(248, 250, 252, 0.10);">Cyberpunk glow</span>
           </div>
-          <llm-response-ui-lang theme="neon" data-source-id="src-preview"></llm-response-ui-lang>
+          <llm-response-ui-lang theme="neon" transparent data-source-id="src-preview"></llm-response-ui-lang>
         </div>
         <div class="theme-card" style="background: #fdf6ff;">
           <div class="theme-card-header">
             <span class="theme-card-name" style="color: #3b1f56;">Pastel</span>
             <span class="theme-card-tag" style="color: #3b1f56; background: rgba(59, 31, 86, 0.10);">Soft & rounded</span>
           </div>
-          <llm-response-ui-lang theme="pastel" data-source-id="src-preview"></llm-response-ui-lang>
+          <llm-response-ui-lang theme="pastel" transparent data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card" style="background: linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%);">
+          <div class="theme-card-header">
+            <span class="theme-card-name" style="color: #f1f5ff;">Glass</span>
+            <span class="theme-card-tag" style="color: #f1f5ff; background: rgba(241, 245, 255, 0.12);">Frosted glass</span>
+          </div>
+          <llm-response-ui-lang theme="glass" transparent data-source-id="src-preview"></llm-response-ui-lang>
+        </div>
+        <div class="theme-card" style="background: #fef9c3; border: 2px solid #0a0a0a; box-shadow: 6px 6px 0 0 #0a0a0a;">
+          <div class="theme-card-header">
+            <span class="theme-card-name" style="color: #0a0a0a; text-transform: uppercase; letter-spacing: 0.05em;">Brutalist</span>
+            <span class="theme-card-tag" style="color: #0a0a0a; background: #fde68a; border: 2px solid #0a0a0a; border-radius: 0;">Neo-brutalism</span>
+          </div>
+          <llm-response-ui-lang theme="brutalist" transparent data-source-id="src-preview"></llm-response-ui-lang>
         </div>
       </div>
       <pre id="src-preview" hidden><code>root = Stack([card, kpis, btns])
@@ -178,6 +195,47 @@ el.setTheme({
           shadow DOM still uses these variables.
         </p>
       </div>
+
+      <h2>Aligning the background with your page</h2>
+      <p>
+        By default the host element fills its background with the theme's
+        <code>colorBg</code> token. When you embed the component inside a page
+        that already has its own background, that produces a visible seam. There
+        are three ways to fix it — pick whichever fits your stack:
+      </p>
+
+      <h3>1. Use the <code>transparent</code> attribute</h3>
+      <p>
+        The simplest option: tell the component to skip painting its own
+        background. The internal cards keep their surface colors, so the UI
+        stays legible on any backdrop.
+      </p>
+<pre><code>&lt;div class="my-themed-page"&gt;
+  &lt;llm-response-ui-lang theme="dark" transparent&gt;&lt;/llm-response-ui-lang&gt;
+&lt;/div&gt;</code></pre>
+
+      <h3>2. Override the host background CSS variable</h3>
+      <p>
+        For finer control set <code>--rui-host-bg</code> on the host. It takes
+        precedence over the theme's default background.
+      </p>
+<pre><code>llm-response-ui-lang {
+  --rui-host-bg: transparent;          /* or any color/gradient */
+}</code></pre>
+
+      <h3>3. Match the outer container to the theme's <code>colorBg</code></h3>
+      <p>
+        Drop the same color on the wrapping container so they blend visually.
+        Useful when you do want the host to keep its background but want the
+        edges to disappear into the page chrome.
+      </p>
+<pre><code>.my-themed-page {
+  background: var(--rui-color-bg, #ffffff);   /* mirror the theme */
+}</code></pre>
+      <p>
+        Programmatically you can read the resolved tokens from
+        <code>builtInThemes[name]</code> and apply them to your own container.
+      </p>
     </main>
   </div>
   <script type="module">

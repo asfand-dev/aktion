@@ -14,6 +14,7 @@
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="themes.html">Theming</a>
@@ -70,6 +71,10 @@
         <select id="theme-picker">
           <option value="light">Light</option>
           <option value="dark">Dark</option>
+          <option value="neon">Neon</option>
+          <option value="pastel">Pastel</option>
+          <option value="glass">Glass</option>
+          <option value="brutalist">Brutalist</option>
         </select>
       </div>
 
@@ -238,6 +243,535 @@ group = CheckBoxGroup("notifications", [
   CheckBoxItem("Product updates", "product", "Major releases & changelogs", true),
   CheckBoxItem("Security alerts", "security", "Critical fixes", true),
   CheckBoxItem("Newsletter", "newsletter", "Monthly digest")
+])</code></pre>
+        </div>
+      </div>
+
+      <h2>Real-world blocks</h2>
+      <p>
+        Drop-in patterns for the screens you build on every project. Each one
+        uses only the built-in components, so they render the same in any theme.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>Register / sign-up</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$name = ""
+$email = ""
+$password = ""
+$plan = "starter"
+$accepted = false
+$status = "Fill in the form to create your account."
+
+submit = Button("Create account", Action([@Set($status, "Account created for " + $name + " on the " + $plan + " plan.")]), "primary")
+
+form = Form("signup", submit, [
+  FormControl("Full name", Input("name", "Ada Lovelace", "text", ["required","minLength:2"], $name)),
+  FormControl("Work email", Input("email", "ada@example.com", "email", ["required","email"], $email)),
+  FormControl("Password", Input("password", "At least 8 characters", "password", ["required","minLength:8"], $password)),
+  FormControl("Plan", Select("plan", [
+    SelectItem("starter","Starter — free"),
+    SelectItem("pro","Pro — $29/mo"),
+    SelectItem("team","Team — $79/mo")
+  ], null, null, $plan)),
+  FormControl("Terms", Checkbox("accepted", "I agree to the Terms of Service and Privacy Policy", $accepted))
+])
+
+card = Card([
+  CardHeader("Create your account", "Free 14-day trial · no credit card"),
+  form,
+  Callout("info", "What happens next?", $status)
+])
+
+root = Stack([card])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Login</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$email = ""
+$password = ""
+$remember = true
+$msg = ""
+
+login = Button("Sign in", Action([@Set($msg, "Welcome back, " + $email + "!")]), "primary")
+
+actions = Buttons([
+  login,
+  Button("Continue with Google", null, "secondary"),
+  Button("Continue with GitHub", null, "secondary")
+])
+
+form = Form("login", login, [
+  FormControl("Email", Input("email", "you@example.com", "email", ["required","email"], $email)),
+  FormControl("Password", Input("password", "••••••••", "password", ["required"], $password)),
+  FormControl("Remember me", Checkbox("remember", "Keep me signed in for 30 days", $remember))
+])
+
+footer = Stack([
+  Link("Forgot password?", "#"),
+  Link("Create an account", "#")
+], "row", "s", "center", "between")
+
+card = Card([
+  CardHeader("Welcome back", "Sign in to your workspace"),
+  form,
+  Separator("horizontal", true),
+  actions,
+  footer,
+  $msg == "" ? null : Callout("success", "Signed in", $msg)
+])
+
+root = Stack([card])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Product listing</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$query = ""
+$category = "all"
+
+products = Query("list_products", {}, {rows: [
+  {name: "Aurora Headphones", price: 149, category: "audio", rating: 4.7, badge: "New"},
+  {name: "Lumen Desk Lamp", price: 79, category: "home", rating: 4.5, badge: ""},
+  {name: "Nimbus Backpack", price: 119, category: "travel", rating: 4.8, badge: "Bestseller"},
+  {name: "Pulse Smartwatch", price: 229, category: "wearables", rating: 4.4, badge: ""},
+  {name: "Echo Bluetooth Speaker", price: 89, category: "audio", rating: 4.6, badge: ""},
+  {name: "Drift Travel Pillow", price: 29, category: "travel", rating: 4.3, badge: "Sale"}
+]})
+
+filtered = @Filter(products.rows, "category", "equals", $category)
+visible = $category == "all" ? products.rows : filtered
+hits = @Filter(visible, "name", "contains", $query)
+
+makeCard = @Each(hits, "p", Card([
+  Stack([
+    TextContent(p.name, "large-heavy"),
+    Tag(p.badge, null, "sm", "primary")
+  ], "row", "s", "center", "between"),
+  TextContent("$" + p.price, "body-heavy", "primary"),
+  Stack([
+    Tag(p.category, null, "sm", "neutral"),
+    TextContent("★ " + p.rating, "small", "muted")
+  ], "row", "s", "center", "start"),
+  Buttons([
+    Button("Add to cart", Action([@ToAssistant("Add " + p.name + " to my cart")]), "primary", "normal", "small"),
+    Button("Details", null, "secondary", "normal", "small")
+  ])
+]))
+
+filters = Stack([
+  FormControl("Search", Input("q", "Search products", "text", null, $query)),
+  FormControl("Category", Select("cat", [
+    SelectItem("all","All"),
+    SelectItem("audio","Audio"),
+    SelectItem("home","Home"),
+    SelectItem("travel","Travel"),
+    SelectItem("wearables","Wearables")
+  ], null, null, $category))
+], "row", "m", "stretch", "start", true)
+
+stats = Stack([
+  StatCard("Showing", "" + @Count(hits)),
+  StatCard("Avg rating", "" + @Avg(hits.rating)),
+  StatCard("Avg price", "$" + @Avg(hits.price))
+], "row", "m", "stretch", "start", true)
+
+grid = Stack([makeCard], "row", "m", "stretch", "start", true)
+
+root = Stack([
+  Card([CardHeader("Storefront", "Curated essentials"), filters]),
+  stats,
+  @Count(hits) > 0 ? grid : Callout("info", "No matches", "Try a different search or category.")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Changelog</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([header, releases])
+
+header = Card([CardHeader("Changelog", "Everything we shipped, in reverse chronological order")])
+
+releases = Stack([v14, v13, v12, v11])
+
+v14 = Card([
+  Stack([
+    TextContent("v1.4.0", "large-heavy"),
+    Tag("Latest", null, "sm", "primary")
+  ], "row", "s", "center", "start"),
+  TextContent("Released May 8, 2026", "small", "muted"),
+  TagBlock(["new", "themes", "performance"], "primary", "sm"),
+  Markdown("- **Two new themes** — `glass` and `brutalist`.\n- **Background alignment** via the new `transparent` attribute.\n- 18% faster initial render on large programs.")
+])
+
+v13 = Card([
+  Stack([
+    TextContent("v1.3.0", "large-heavy"),
+    Tag("Stable", null, "sm", "success")
+  ], "row", "s", "center", "start"),
+  TextContent("Released April 14, 2026", "small", "muted"),
+  TagBlock(["responsive", "tables", "inputs"], "info", "sm"),
+  Markdown("- Phone-first layouts across the entire library.\n- Horizontal scroll on overflowing tables.\n- Fix: text inputs no longer lose focus while streaming.")
+])
+
+v12 = Card([
+  Stack([
+    TextContent("v1.2.0", "large-heavy"),
+    Tag("Stable", null, "sm", "success")
+  ], "row", "s", "center", "start"),
+  TextContent("Released March 22, 2026", "small", "muted"),
+  TagBlock(["components", "language"], "info", "sm"),
+  Markdown("- Added `Separator`, `TagBlock`, and `CheckBoxGroup`.\n- `Tabs` now switches active panels properly.")
+])
+
+v11 = Card([
+  Stack([
+    TextContent("v1.1.0", "large-heavy"),
+    Tag("Archived", null, "sm", "neutral")
+  ], "row", "s", "center", "start"),
+  TextContent("Released February 5, 2026", "small", "muted"),
+  TagBlock(["streaming", "errors"], "warning", "sm"),
+  Markdown("- Streaming-friendly parser tolerates partial lines.\n- Optional `showerrors` attribute.")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>FAQ</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([hero, faq, follow])
+
+hero = Card([CardHeader("Frequently asked questions", "Can't find an answer? Reach out — we read every message.")])
+
+faq = Accordion([
+  AccordionItem("Is there a free plan?", [
+    Markdown("Yes. The **Starter** plan is free forever for projects up to 5 contributors. Upgrade only when you outgrow it.")
+  ]),
+  AccordionItem("Can I cancel anytime?", [
+    Markdown("Of course. Cancel from **Billing → Subscription** and you'll keep access until the end of the current period.")
+  ]),
+  AccordionItem("Do you support self-hosting?", [
+    Markdown("Self-hosting is included on every paid plan. Download the helm chart from your dashboard, or run the Docker image directly."),
+    CodeBlock("bash", "docker run -p 8080:8080 ghcr.io/example/app:latest")
+  ]),
+  AccordionItem("Which payment methods do you accept?", [
+    TagBlock(["Visa", "Mastercard", "Amex", "Apple Pay", "Google Pay", "ACH", "Wire"], "primary", "sm")
+  ]),
+  AccordionItem("How is my data protected?", [
+    Markdown("All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We're SOC 2 Type II certified."),
+    Callout("success", "Compliance", "SOC 2 Type II · ISO 27001 · GDPR · HIPAA available on Enterprise.")
+  ])
+])
+
+follow = FollowUpBlock([
+  FollowUpItem("Talk to sales"),
+  FollowUpItem("See pricing"),
+  FollowUpItem("Read the docs")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Order history</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$status = "all"
+
+orders = Query("list_orders", {}, {rows: [
+  {id: "ORD-2041", date: "May 6", customer: "Ada Lovelace", items: 3, total: 142.40, status: "shipped"},
+  {id: "ORD-2040", date: "May 5", customer: "Grace Hopper", items: 1, total: 49.00, status: "processing"},
+  {id: "ORD-2039", date: "May 5", customer: "Linus Torvalds", items: 2, total: 88.50, status: "delivered"},
+  {id: "ORD-2038", date: "May 4", customer: "Margaret Hamilton", items: 5, total: 312.99, status: "shipped"},
+  {id: "ORD-2037", date: "May 3", customer: "Alan Turing", items: 1, total: 19.95, status: "cancelled"},
+  {id: "ORD-2036", date: "May 2", customer: "Katherine Johnson", items: 4, total: 240.00, status: "delivered"}
+]})
+
+filtered = $status == "all" ? orders.rows : @Filter(orders.rows, "status", "equals", $status)
+
+statusFilter = FormControl("Filter", Select("status", [
+  SelectItem("all","All orders"),
+  SelectItem("processing","Processing"),
+  SelectItem("shipped","Shipped"),
+  SelectItem("delivered","Delivered"),
+  SelectItem("cancelled","Cancelled")
+], null, null, $status))
+
+stats = Stack([
+  StatCard("Orders", "" + @Count(filtered)),
+  StatCard("Revenue", "$" + @Sum(filtered.total), "up"),
+  StatCard("Avg ticket", "$" + @Round(@Avg(filtered.total), 2))
+], "row", "m", "stretch", "start", true)
+
+statusTags = @Each(filtered, "row",
+  row.status == "delivered" ? Tag("Delivered", null, "sm", "success") :
+  row.status == "shipped"   ? Tag("Shipped",   null, "sm", "info") :
+  row.status == "processing"? Tag("Processing",null, "sm", "warning") :
+                              Tag("Cancelled", null, "sm", "danger"))
+
+actions = @Each(filtered, "row", Buttons([
+  Button("View", Action([@ToAssistant("Show order " + row.id)]), "secondary", "normal", "small"),
+  Button("Reorder", Action([@ToAssistant("Reorder " + row.id)]), "ghost", "normal", "small")
+]))
+
+table = Table([
+  Col("Order", filtered.id),
+  Col("Date", filtered.date),
+  Col("Customer", filtered.customer),
+  Col("Items", filtered.items, "number"),
+  Col("Total", filtered.total, "currency"),
+  Col("Status", statusTags),
+  Col("Actions", actions)
+])
+
+root = Stack([
+  Card([CardHeader("Order history", "Last 30 days"), statusFilter]),
+  stats,
+  Card([CardHeader("Orders"), @Count(filtered) > 0 ? table : Callout("info", "Nothing here", "No orders match this filter.")])
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Shopping cart</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">cart = Query("get_cart", {}, {items: [
+  {sku: "AUR-01", name: "Aurora Headphones", qty: 1, price: 149.00},
+  {sku: "LUM-02", name: "Lumen Desk Lamp", qty: 2, price: 79.00},
+  {sku: "NIM-03", name: "Nimbus Backpack", qty: 1, price: 119.00}
+]})
+
+lineTotals = @Each(cart.items, "i", i.qty * i.price)
+
+subtotal = @Sum(lineTotals)
+shipping = subtotal > 200 ? 0 : 12
+discount = subtotal > 250 ? @Round(subtotal * 0.10, 2) : 0
+tax = @Round((subtotal - discount) * 0.085, 2)
+total = subtotal + shipping + tax - discount
+
+qtyTags = @Each(cart.items, "i", Tag("× " + i.qty, null, "sm", "neutral"))
+remove = @Each(cart.items, "i", Button("Remove", Action([@ToAssistant("Remove " + i.sku + " from cart")]), "ghost", "normal", "small"))
+lineCol = @Each(cart.items, "i", "$" + (i.qty * i.price))
+
+table = Table([
+  Col("Item", cart.items.name),
+  Col("Qty", qtyTags),
+  Col("Unit", cart.items.price, "currency"),
+  Col("Line total", lineCol, "currency"),
+  Col("", remove)
+])
+
+summary = Card([
+  CardHeader("Order summary"),
+  Stack([TextContent("Subtotal", "small"), TextContent("$" + subtotal, "small-heavy")], "row", "s", "center", "between"),
+  Stack([TextContent("Shipping", "small"), TextContent(shipping == 0 ? "Free" : "$" + shipping, "small-heavy")], "row", "s", "center", "between"),
+  Stack([TextContent("Tax (8.5%)", "small"), TextContent("$" + tax, "small-heavy")], "row", "s", "center", "between"),
+  discount > 0 ? Stack([TextContent("Discount", "small", "success"), TextContent("- $" + discount, "small-heavy", "success")], "row", "s", "center", "between") : null,
+  Separator("horizontal", true),
+  Stack([TextContent("Total", "large-heavy"), TextContent("$" + total, "large-heavy", "primary")], "row", "s", "center", "between"),
+  Buttons([
+    Button("Checkout", Action([@ToAssistant("Proceed to checkout")]), "primary"),
+    Button("Apply coupon", null, "secondary")
+  ])
+])
+
+root = Stack([
+  Card([CardHeader("Your cart", @Count(cart.items) + " items"), table]),
+  summary
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Services showcase</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([hero, services, sla, follow])
+
+hero = Card([
+  CardHeader("Services we offer", "End-to-end product engineering for ambitious teams"),
+  TagBlock(["Strategy","Design","Engineering","Launch","Growth"], "primary", "sm")
+])
+
+services = Stack([
+  Card([
+    Stack([Tag("01", null, "sm", "primary"), TextContent("Product strategy", "large-heavy")], "row", "s", "center", "start"),
+    Markdown("Discovery sprints, opportunity mapping, and a roadmap that ships."),
+    TagBlock(["workshops","research","roadmaps"], "info", "sm"),
+    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
+  ]),
+  Card([
+    Stack([Tag("02", null, "sm", "primary"), TextContent("Design systems", "large-heavy")], "row", "s", "center", "start"),
+    Markdown("From brand foundations to a typed component library your engineers will actually use."),
+    TagBlock(["tokens","figma","components"], "info", "sm"),
+    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
+  ]),
+  Card([
+    Stack([Tag("03", null, "sm", "primary"), TextContent("Web & mobile engineering", "large-heavy")], "row", "s", "center", "start"),
+    Markdown("React, Next.js, Vue, Swift, Kotlin — choose your stack and we ship the app."),
+    TagBlock(["next.js","react native","node"], "info", "sm"),
+    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
+  ]),
+  Card([
+    Stack([Tag("04", null, "sm", "primary"), TextContent("AI integrations", "large-heavy")], "row", "s", "center", "start"),
+    Markdown("Production-grade RAG pipelines, agent flows, and evaluation harnesses."),
+    TagBlock(["llm","rag","evals"], "info", "sm"),
+    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
+  ])
+], "row", "m", "stretch", "start", true)
+
+sla = Stack([
+  StatCard("Avg engagement", "12 wks"),
+  StatCard("Client NPS", "73", "up", "+9 YoY"),
+  StatCard("Time to MVP", "6 wks", "down", "-2 wks"),
+  StatCard("Retention", "94%", "up")
+], "row", "m", "stretch", "start", true)
+
+follow = FollowUpBlock([
+  FollowUpItem("Book a discovery call"),
+  FollowUpItem("See case studies"),
+  FollowUpItem("Request a proposal")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Todo list (reactive)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$tab = "active"
+$selected = {t1: true, t6: true}
+
+todos = Query("list_todos", {}, {rows: [
+  {id: "t1", title: "Draft the launch announcement", project: "Marketing", due: "Today", priority: "high", done: true},
+  {id: "t2", title: "Review pull requests", project: "Engineering", due: "Today", priority: "medium", done: false},
+  {id: "t3", title: "Sync with design on cart UX", project: "Product", due: "Tomorrow", priority: "high", done: false},
+  {id: "t4", title: "Update onboarding checklist", project: "Customer success", due: "Fri", priority: "low", done: false},
+  {id: "t5", title: "Migrate analytics dashboard", project: "Engineering", due: "Next week", priority: "medium", done: false},
+  {id: "t6", title: "Send weekly investor update", project: "Operations", due: "Last week", priority: "low", done: true}
+]})
+
+active = @Filter(todos.rows, "done", "equals", false)
+done = @Filter(todos.rows, "done", "equals", true)
+visible = $tab == "done" ? done : ($tab == "all" ? todos.rows : active)
+
+priorityTag = @Each(visible, "t",
+  t.priority == "high"  ? Tag("High",   null, "sm", "danger") :
+  t.priority == "medium"? Tag("Medium", null, "sm", "warning") :
+                          Tag("Low",    null, "sm", "neutral"))
+
+selectableItems = @Each(visible, "t", CheckBoxItem(t.title, t.id, t.project + " · due " + t.due, t.done))
+
+board = Card([
+  Stack([
+    TextContent("Today's focus", "large-heavy"),
+    Tag("" + @Count(active) + " open", null, "sm", "primary")
+  ], "row", "s", "center", "between"),
+  CheckBoxGroup("todos", selectableItems, $selected)
+])
+
+stats = Stack([
+  StatCard("Open", "" + @Count(active)),
+  StatCard("Done", "" + @Count(done), "up"),
+  StatCard("High priority", "" + @Count(@Filter(active, "priority", "equals", "high")))
+], "row", "m", "stretch", "start", true)
+
+filter = Tabs([
+  TabItem("active", "Active", [board]),
+  TabItem("done", "Done", [board]),
+  TabItem("all", "All", [board])
+])
+
+addRow = Stack([
+  Input("new", "Add a todo and press enter…", "text", null, ""),
+  Button("Add", Action([@ToAssistant("Add a todo to my list")]), "primary")
+], "row", "s", "center", "stretch", true)
+
+root = Stack([
+  Card([CardHeader("Todos", "Snapshot of your week"), addRow]),
+  stats,
+  Card([CardHeader("Inbox"), filter])
 ])</code></pre>
         </div>
       </div>

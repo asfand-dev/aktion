@@ -25,6 +25,28 @@ function highlightActiveLink() {
   });
 }
 
+/**
+ * Theme tokens that drive the surrounding container background so the
+ * `.example-output` chrome blends with the theme picked in the dropdown.
+ * Mirrors the values exported from `builtInThemes` in the bundle, but kept
+ * inline so the picker works without waiting for the bundle to load.
+ */
+const THEME_BG = {
+  light: "#ffffff",
+  dark: "#0b1220",
+  neon: "#05060f",
+  pastel: "#fdf6ff",
+  glass: "linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%)",
+  brutalist: "#fef9c3",
+};
+
+function paintExampleOutputs(themeName) {
+  const bg = THEME_BG[themeName] ?? THEME_BG.light;
+  document.querySelectorAll(".example-output").forEach((node) => {
+    node.style.background = bg;
+  });
+}
+
 function setupThemePicker() {
   const select = document.getElementById("theme-picker");
   if (!select) return;
@@ -33,6 +55,7 @@ function setupThemePicker() {
     document.querySelectorAll("llm-response-ui-lang").forEach((el) => {
       el.setAttribute("theme", value);
     });
+    paintExampleOutputs(value);
   };
   select.addEventListener("change", apply);
   apply();
@@ -54,6 +77,9 @@ function setupExamples() {
     if (target && lang) {
       const text = lang.textContent.trim();
       target.setAttribute("data-source", "");
+      // Let the surrounding `.example-output` background drive the look so the
+      // host blends with the docs theme picker.
+      if (!target.hasAttribute("transparent")) target.setAttribute("transparent", "");
       importLibrary().then(() => {
         target.setResponse(text);
       });
@@ -67,13 +93,20 @@ function setupPlayground() {
   const target = document.getElementById("playground-target");
   if (!input || !target) return;
 
+  const applyPlaygroundTheme = (value) => {
+    target.setAttribute("theme", value);
+    const pane = target.closest(".playground-pane");
+    if (pane) pane.style.background = THEME_BG[value] ?? THEME_BG.light;
+  };
+
   importLibrary().then(() => {
     const update = () => target.setResponse(input.value);
     update();
     input.addEventListener("input", update);
-    themeSelect?.addEventListener("change", () => {
-      target.setAttribute("theme", themeSelect.value);
-    });
+    if (themeSelect) {
+      applyPlaygroundTheme(themeSelect.value);
+      themeSelect.addEventListener("change", () => applyPlaygroundTheme(themeSelect.value));
+    }
   });
 }
 

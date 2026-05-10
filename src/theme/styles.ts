@@ -12,7 +12,7 @@ export const componentStyles = `
   display: block;
   box-sizing: border-box;
   color: var(--rui-color-text);
-  background: var(--rui-color-bg);
+  background: var(--rui-host-bg, var(--rui-color-bg));
   font-family: var(--rui-font-family);
   line-height: 1.5;
   font-size: 14px;
@@ -47,6 +47,15 @@ export const componentStyles = `
 * { box-sizing: border-box; }
 button { font-family: inherit; font-size: inherit; cursor: pointer; }
 input, textarea, select, button { color: inherit; font-family: inherit; }
+
+/* Opt-in: render the host with no background so it inherits the parent
+   container's color. Useful when embedding inside a themed page where the
+   surrounding chrome already carries the background. The internal cards
+   keep their own surface colors so the UI stays legible. */
+:host([transparent]),
+:host([transparent="true"]) {
+  background: transparent;
+}
 
 .rui-root {
   display: flex;
@@ -721,6 +730,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
     radial-gradient(50vw 50vw at -10% 110%, rgba(34, 211, 238, 0.18), transparent 60%),
     var(--rui-color-bg);
 }
+:host([data-rui-theme="neon"][transparent]),
+:host([data-rui-theme="neon"][transparent="true"]) {
+  background: transparent;
+}
 :host([data-rui-theme="neon"]) .rui-card,
 :host([data-rui-theme="neon"]) .rui-stat-card,
 :host([data-rui-theme="neon"]) .rui-callout,
@@ -807,6 +820,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
     radial-gradient(70vw 50vw at 0% 100%, rgba(94, 234, 212, 0.18), transparent 60%),
     var(--rui-color-bg);
 }
+:host([data-rui-theme="pastel"][transparent]),
+:host([data-rui-theme="pastel"][transparent="true"]) {
+  background: transparent;
+}
 :host([data-rui-theme="pastel"]) .rui-card,
 :host([data-rui-theme="pastel"]) .rui-stat-card,
 :host([data-rui-theme="pastel"]) .rui-chart,
@@ -875,5 +892,319 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 :host([data-rui-theme="pastel"]) .rui-follow-up-button:hover {
   background: linear-gradient(135deg, rgba(167, 139, 250, 0.22), rgba(249, 168, 212, 0.22));
   transform: translateY(-1px);
+}
+
+/* Glass — frosted translucent surfaces over a vivid gradient backdrop.
+   Cards use real backdrop-filter blur so they pick up whatever sits behind
+   the host. Buttons get a soft inner highlight. */
+:host([data-rui-theme="glass"]) {
+  background:
+    radial-gradient(60vw 60vw at 0% 0%, rgba(96, 165, 250, 0.45), transparent 60%),
+    radial-gradient(50vw 50vw at 100% 0%, rgba(167, 139, 250, 0.40), transparent 55%),
+    radial-gradient(70vw 60vw at 50% 110%, rgba(34, 211, 238, 0.30), transparent 60%),
+    linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%);
+  background-attachment: local;
+}
+:host([data-rui-theme="glass"][transparent]),
+:host([data-rui-theme="glass"][transparent="true"]) {
+  background: transparent;
+}
+:host([data-rui-theme="glass"]) .rui-card,
+:host([data-rui-theme="glass"]) .rui-stat-card,
+:host([data-rui-theme="glass"]) .rui-callout,
+:host([data-rui-theme="glass"]) .rui-chart,
+:host([data-rui-theme="glass"]) .rui-table-wrapper,
+:host([data-rui-theme="glass"]) .rui-accordion-item,
+:host([data-rui-theme="glass"]) .rui-list-item,
+:host([data-rui-theme="glass"]) .rui-modal,
+:host([data-rui-theme="glass"]) .rui-code-block {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 18px 50px rgba(7, 14, 33, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+:host([data-rui-theme="glass"]) .rui-input,
+:host([data-rui-theme="glass"]) .rui-select,
+:host([data-rui-theme="glass"]) .rui-textarea {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--rui-color-text);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:host([data-rui-theme="glass"]) .rui-input::placeholder,
+:host([data-rui-theme="glass"]) .rui-textarea::placeholder { color: rgba(241, 245, 255, 0.45); }
+:host([data-rui-theme="glass"]) .rui-input:focus,
+:host([data-rui-theme="glass"]) .rui-select:focus,
+:host([data-rui-theme="glass"]) .rui-textarea:focus {
+  border-color: rgba(96, 165, 250, 0.85);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.20);
+  background: rgba(255, 255, 255, 0.14);
+}
+:host([data-rui-theme="glass"]) .rui-button {
+  background: linear-gradient(135deg, #60a5fa, #22d3ee);
+  color: #0b132b;
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  box-shadow: 0 10px 24px rgba(34, 211, 238, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.40);
+}
+:host([data-rui-theme="glass"]) .rui-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(34, 211, 238, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.50);
+}
+:host([data-rui-theme="glass"]) .rui-button[data-variant="secondary"] {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--rui-color-text);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+:host([data-rui-theme="glass"]) .rui-button[data-variant="ghost"] {
+  background: transparent;
+  color: var(--rui-color-text);
+  border-color: rgba(255, 255, 255, 0.20);
+  box-shadow: none;
+}
+:host([data-rui-theme="glass"]) .rui-card-title,
+:host([data-rui-theme="glass"]) .rui-section-title,
+:host([data-rui-theme="glass"]) .rui-header-title,
+:host([data-rui-theme="glass"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="glass"]) .rui-text[data-variant="heading"] {
+  background: linear-gradient(135deg, #ffffff, #c7d2fe 60%, #a5f3fc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.01em;
+}
+:host([data-rui-theme="glass"]) .rui-tab-list { border-bottom-color: rgba(255, 255, 255, 0.15); }
+:host([data-rui-theme="glass"]) .rui-tab-trigger { color: rgba(241, 245, 255, 0.65); }
+:host([data-rui-theme="glass"]) .rui-tab-trigger:hover { color: #ffffff; }
+:host([data-rui-theme="glass"]) .rui-tab-trigger[aria-selected="true"] {
+  color: #ffffff;
+  border-bottom-color: #60a5fa;
+}
+:host([data-rui-theme="glass"]) .rui-table th {
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+:host([data-rui-theme="glass"]) .rui-table td { border-bottom-color: rgba(255, 255, 255, 0.10); }
+:host([data-rui-theme="glass"]) .rui-follow-up-button {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: var(--rui-color-text);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:host([data-rui-theme="glass"]) .rui-follow-up-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 6px 18px rgba(34, 211, 238, 0.20);
+}
+:host([data-rui-theme="glass"]) .rui-skeleton-line {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.20) 50%, rgba(255, 255, 255, 0.08) 100%);
+  background-size: 200% 100%;
+}
+:host([data-rui-theme="glass"]) .rui-divider { background: rgba(255, 255, 255, 0.15); }
+:host([data-rui-theme="glass"]) .rui-separator { background: rgba(255, 255, 255, 0.15); }
+
+/* Brutalist — chunky borders, hard offset shadows, no gradients, all-caps
+   display type. The aesthetic only works with sharp geometry, so we override
+   the radii on every container in case the user passes a custom token map. */
+:host([data-rui-theme="brutalist"]) {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 22px,
+      rgba(10, 10, 10, 0.04) 22px,
+      rgba(10, 10, 10, 0.04) 24px
+    ),
+    var(--rui-color-bg);
+  font-weight: 500;
+}
+:host([data-rui-theme="brutalist"][transparent]),
+:host([data-rui-theme="brutalist"][transparent="true"]) {
+  background: transparent;
+}
+:host([data-rui-theme="brutalist"]) .rui-card,
+:host([data-rui-theme="brutalist"]) .rui-stat-card,
+:host([data-rui-theme="brutalist"]) .rui-chart,
+:host([data-rui-theme="brutalist"]) .rui-callout,
+:host([data-rui-theme="brutalist"]) .rui-table-wrapper,
+:host([data-rui-theme="brutalist"]) .rui-accordion-item,
+:host([data-rui-theme="brutalist"]) .rui-list-item,
+:host([data-rui-theme="brutalist"]) .rui-modal,
+:host([data-rui-theme="brutalist"]) .rui-code-block {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  box-shadow: 6px 6px 0 0 #0a0a0a;
+  background: var(--rui-color-surface);
+}
+:host([data-rui-theme="brutalist"]) .rui-card[data-variant="elevated"] { box-shadow: 8px 8px 0 0 #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-card[data-variant="outlined"] { box-shadow: 3px 3px 0 0 #0a0a0a; }
+
+:host([data-rui-theme="brutalist"]) .rui-card-title,
+:host([data-rui-theme="brutalist"]) .rui-section-title,
+:host([data-rui-theme="brutalist"]) .rui-header-title,
+:host([data-rui-theme="brutalist"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="brutalist"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme="brutalist"]) .rui-text[data-variant="large-heavy"] {
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  font-weight: 800;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-button {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 4px 4px 0 0 #0a0a0a;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+:host([data-rui-theme="brutalist"]) .rui-button:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 #0a0a0a;
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme="brutalist"]) .rui-button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 0 #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-button[data-variant="secondary"] {
+  background: #ffffff;
+  color: #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-button[data-variant="ghost"] {
+  background: var(--rui-color-bg);
+  color: #0a0a0a;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: #ffffff;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-input,
+:host([data-rui-theme="brutalist"]) .rui-select,
+:host([data-rui-theme="brutalist"]) .rui-textarea {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  background: #ffffff;
+  font-weight: 500;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-input:focus,
+:host([data-rui-theme="brutalist"]) .rui-select:focus,
+:host([data-rui-theme="brutalist"]) .rui-textarea:focus {
+  border-color: var(--rui-color-primary);
+  box-shadow: 3px 3px 0 0 var(--rui-color-primary);
+  outline: none;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-tag,
+:host([data-rui-theme="brutalist"]) .rui-badge {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--rui-color-warning);
+  color: #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-badge[data-variant="primary"] {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+}
+:host([data-rui-theme="brutalist"]) .rui-badge[data-variant="success"] { background: var(--rui-color-success); color: #ffffff; }
+:host([data-rui-theme="brutalist"]) .rui-badge[data-variant="warning"] { background: var(--rui-color-warning); color: #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-badge[data-variant="danger"] { background: var(--rui-color-danger); color: #ffffff; }
+
+:host([data-rui-theme="brutalist"]) .rui-tab-list { border-bottom: 2px solid #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-tab-trigger {
+  border: 2px solid transparent;
+  border-bottom: none;
+  margin-bottom: -2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+:host([data-rui-theme="brutalist"]) .rui-tab-trigger[aria-selected="true"] {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border-color: #0a0a0a;
+  border-bottom-color: var(--rui-color-primary);
+}
+
+:host([data-rui-theme="brutalist"]) .rui-table th {
+  background: #0a0a0a;
+  color: #fef9c3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  border-bottom: 2px solid #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-table td { border-bottom: 1px solid #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-table-caption {
+  background: var(--rui-color-warning);
+  color: #0a0a0a;
+  font-weight: 800;
+  text-transform: uppercase;
+  border-bottom: 2px solid #0a0a0a;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-follow-up-button {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  background: var(--rui-color-warning);
+  color: #0a0a0a;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+:host([data-rui-theme="brutalist"]) .rui-follow-up-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 0 #0a0a0a;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+}
+
+:host([data-rui-theme="brutalist"]) .rui-divider,
+:host([data-rui-theme="brutalist"]) .rui-separator { background: #0a0a0a; height: 2px; }
+:host([data-rui-theme="brutalist"]) .rui-separator[data-orientation="vertical"] { width: 2px; height: auto; }
+
+:host([data-rui-theme="brutalist"]) .rui-callout[data-variant="info"] { background: #bfdbfe; color: #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-callout[data-variant="success"] { background: #bbf7d0; color: #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-callout[data-variant="warning"] { background: var(--rui-color-warning); color: #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme="brutalist"]) .rui-callout[data-variant="error"] { background: #fecaca; color: #0a0a0a; }
+:host([data-rui-theme="brutalist"]) .rui-callout-icon {
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+  width: 26px;
+  height: 26px;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-stat-value { font-weight: 900; }
+:host([data-rui-theme="brutalist"]) .rui-stat-label { font-weight: 800; color: #0a0a0a; }
+
+:host([data-rui-theme="brutalist"]) .rui-steps-item::before {
+  border-radius: 0;
+  border: 2px solid #0a0a0a;
+  background: var(--rui-color-warning);
+  color: #0a0a0a;
+  font-weight: 900;
+}
+
+:host([data-rui-theme="brutalist"]) .rui-link {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  font-weight: 700;
 }
 `;

@@ -62,6 +62,20 @@ describe("resolveTheme", () => {
     expect(builtInThemes.neon.fontFamily).not.toBe(lightTheme.fontFamily);
     expect(builtInThemes.pastel.fontFamily).not.toBe(lightTheme.fontFamily);
   });
+
+  it("ships glass and brutalist as built-ins with their own identities", () => {
+    expect(builtInThemes.glass).toBeDefined();
+    expect(builtInThemes.brutalist).toBeDefined();
+    // Glass uses translucent surfaces and a dark backdrop.
+    expect(builtInThemes.glass.colorSurface.startsWith("rgba")).toBe(true);
+    expect(builtInThemes.glass.colorBg).not.toBe(lightTheme.colorBg);
+    // Brutalist uses 0px radii and chunky offset shadows.
+    expect(builtInThemes.brutalist.radiusMd).toBe("0px");
+    expect(builtInThemes.brutalist.shadowMd).toContain("#0a0a0a");
+    // Both pick distinct fonts so the look isn't just colors.
+    expect(builtInThemes.glass.fontFamily).not.toBe(lightTheme.fontFamily);
+    expect(builtInThemes.brutalist.fontFamily).not.toBe(lightTheme.fontFamily);
+  });
 });
 
 describe("applyTheme", () => {
