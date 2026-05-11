@@ -8,6 +8,88 @@ description: >-
   question. Companion to README.md (integration) and SKILL.md (skill summary).
 ---
 
+# Introduction 
+
+## What is LLM Response UI Lang (llm-response-ui-lang)
+
+A framework-agnostic web component that renders LLM-generated UI from
+**LLM Response UI Lang** — a compact, declarative language designed for chat
+assistants. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into
+any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
+all — and you have a streaming, interactive renderer for an LLM's response.
+
+- **Live docs and demos:** <https://asfand-dev.github.io/llm-response-ui-lang/>
+- **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
+- **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+
+The library bundles everything needed at runtime:
+
+- An **LLM Response UI Lang parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
+- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
+- A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
+- An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
+- **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
+- A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available.
+
+Everything lives inside a Shadow DOM, so the renderer's styles never leak into
+your application — and your application's styles never leak into the
+renderer.
+
+---
+
+## Why?
+
+LLMs are great at writing structured text, and a small DSL lets them describe a
+full UI in 60–70% fewer tokens than JSON. This project ships that idea
+**as a single web component**, so any framework — or no framework at all — can
+render generative UI without extra wiring.
+
+---
+
+## Quick start
+
+### 1. Add the script tag
+
+```html
+<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
+```
+
+For non-module setups use the IIFE build:
+
+```html
+<script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer></script>
+```
+
+The CSS is bundled inside the JS and injected into each instance's shadow root,
+so you do **not** need a separate stylesheet.
+
+### 2. Mount the tag
+
+```html
+<llm-response-ui-lang id="reply" theme="light"></llm-response-ui-lang>
+```
+
+### 3. Render a response
+
+There are three equivalent ways to set the program text:
+
+```html
+<!-- as an attribute -->
+<llm-response-ui-lang response='root = Card([CardHeader("Hi")])'></llm-response-ui-lang>
+
+<!-- as inner text -->
+<llm-response-ui-lang>
+  root = Card([CardHeader("Hi")])
+</llm-response-ui-lang>
+
+<!-- as a property / method -->
+<script>
+  const el = document.querySelector("llm-response-ui-lang");
+  el.setResponse(`root = Stack([greeting])
+greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
+</script>
+```
+
 # Building applications with LLM Response UI Lang
 
 > **Audience.** You are an LLM authoring code in a host page that has mounted
