@@ -328,7 +328,7 @@ main pre code { background: none; padding: 0; color: inherit; font-size: inherit
   transition: background 200ms ease;
 }
 
-.example-output llm-response-ui-lang { display: block; }
+.example-output streaming-ui-script { display: block; }
 
 .btn {
   background: var(--doc-gradient);

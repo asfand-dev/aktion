@@ -1,18 +1,18 @@
 /**
- * `<llm-response-ui-lang>` custom element.
+ * `<streaming-ui-script>` custom element.
  *
  * Public surface:
  *   - Attributes:
  *       `theme`             — "light" | "dark" | JSON token map
  *       `streaming`         — "true" while text is still arriving from the LLM
- *       `response`          — LLM Response UI Lang program (string)
+ *       `response`          — Streaming UI Script program (string)
  *       `showerrors`        — "true" to render parse errors in the UI
  *                             (defaults to off; the `error` event still fires)
  *       `enable-javascript` — "true" to allow `Script(...)` and `@Js(...)` to
  *                             execute (default off for safety; the system
  *                             prompt also omits the JS section by default).
  *   - Properties:
- *       `response: string`        — current LLM Response UI Lang text
+ *       `response: string`        — current Streaming UI Script text
  *       `tools: ToolRegistry`     — async functions backing Query/Mutation
  *       `streaming: boolean`      — reflects the `streaming` attribute
  *       `showErrors: boolean`     — reflects the `showerrors` attribute
@@ -64,8 +64,8 @@ const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
 const ATTRIBUTE_ENABLE_JS = "enable-javascript";
 
-export class LlmResponseUiLangElement extends HTMLElement {
-  static readonly tagName = "llm-response-ui-lang";
+export class StreamingUiScriptElement extends HTMLElement {
+  static readonly tagName = "streaming-ui-script";
 
   static get observedAttributes(): string[] {
     return [
@@ -328,7 +328,7 @@ export class LlmResponseUiLangElement extends HTMLElement {
         rootValue = rootBinding();
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[llm-response-ui-lang] root evaluation error", err);
+        console.error("[streaming-ui-script] root evaluation error", err);
       }
     }
 
@@ -475,7 +475,7 @@ function parseBooleanAttribute(value: string | null): boolean {
 }
 
 export function defineElement(): void {
-  if (!customElements.get(LlmResponseUiLangElement.tagName)) {
-    customElements.define(LlmResponseUiLangElement.tagName, LlmResponseUiLangElement);
+  if (!customElements.get(StreamingUiScriptElement.tagName)) {
+    customElements.define(StreamingUiScriptElement.tagName, StreamingUiScriptElement);
   }
 }

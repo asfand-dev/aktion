@@ -3,7 +3,7 @@
  *
  * `Script("id", "body", deps?)` is a behaviour-only node — it renders an
  * invisible placeholder and delegates execution to the `ScriptRunner` that
- * lives on the host `<llm-response-ui-lang>` element. When the
+ * lives on the host `<streaming-ui-script>` element. When the
  * `enable-javascript` attribute is `false` (the default), the component
  * silently no-ops so an existing program that contains Script(...) calls
  * still renders cleanly.

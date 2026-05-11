@@ -1,5 +1,5 @@
 /**
- * Evaluator for LLM Response UI Lang programs.
+ * Evaluator for Streaming UI Script programs.
  *
  * The evaluator walks expressions to produce values. Component calls
  * become `ComponentNode` objects that the renderer maps to web components.
@@ -29,7 +29,7 @@ export interface ArgMeta {
 
 export interface ComponentNode {
   __kind: "Component";
-  /** Component name as written in LLM Response UI Lang. */
+  /** Component name as written in Streaming UI Script. */
   name: string;
   /** Positional arguments after evaluation. */
   args: unknown[];

@@ -1,5 +1,5 @@
 /**
- * Tokenizer for LLM Response UI Lang.
+ * Tokenizer for Streaming UI Script.
  *
  * The language is line-oriented. We tokenize into a flat stream of tokens
  * including NEWLINE markers so that the parser can recover at line boundaries.

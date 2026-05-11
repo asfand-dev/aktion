@@ -1,32 +1,32 @@
 ---
-name: llm-response-ui-lang
+name: streaming-ui-script
 description: >-
   Renders LLM-generated UI inside any HTML page using the
-  `<llm-response-ui-lang>` web component. Use when the user wants a chat
+  `<streaming-ui-script>` web component. Use when the user wants a chat
   assistant, agent, or LLM endpoint to return rich, interactive UI (cards,
   tables, charts, forms, follow-ups) instead of plain text or JSON, when
   integrating generative UI into React/Vue/Angular/Svelte/plain HTML, when
   asked to wire up streaming LLM responses, or when working with files that
-  reference `llm-response-ui-lang`, `LLM Response UI Lang`, or `system_prompt.txt`.
+  reference `streaming-ui-script`, `Streaming UI Script`, or `system_prompt.txt`.
 ---
 
-# llm-response-ui-lang
+# streaming-ui-script
 
-A single web component that renders **LLM Response UI Lang** — a compact,
+A single web component that renders **Streaming UI Script** — a compact,
 line-oriented language the LLM emits — into a styled, interactive shadow-DOM
-UI. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into a page
+UI. Drop one `<script>` tag and one `<streaming-ui-script>` tag into a page
 and you have streaming generative UI in any framework.
 
-- **Live docs:** <https://asfand-dev.github.io/llm-response-ui-lang/>
-- **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
-- **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+- **Live docs:** <https://asfand-dev.github.io/streaming-ui-script/>
+- **CDN bundle (ESM):** <https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js>
+- **System prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
 
 ## Quick start (copy-paste integration)
 
 ```html
-<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
+<script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"></script>
 
-<llm-response-ui-lang id="reply" theme="light"></llm-response-ui-lang>
+<streaming-ui-script id="reply" theme="light"></streaming-ui-script>
 
 <script>
   const el = document.getElementById("reply");
@@ -44,7 +44,7 @@ flow is:
 
 ```js
 const systemPrompt = await fetch(
-  "https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt",
+  "https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt",
 ).then((r) => r.text());
 
 const res = await fetch("/api/chat", {
@@ -71,7 +71,7 @@ el.streaming = false;
 |----------------------|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `theme`              | `light` (default), `dark`, JSON literal | Switches the theme. JSON merges into the light token map.                                                                                |
 | `streaming`          | `true` / unset                          | Hint that text is still arriving. Suppresses transient mid-token parse errors.                                                           |
-| `response`           | LLM Response UI Lang text               | Sets the program declaratively.                                                                                                          |
+| `response`           | Streaming UI Script text               | Sets the program declaratively.                                                                                                          |
 | `showerrors`         | `true` / unset                          | If present, shows parse errors in the rendered UI. Defaults to off.                                                                      |
 | `enable-javascript`  | `true` / unset                          | If `true`, allows `Script(...)` and `@Js(...)` to execute and the generated system prompt includes a JavaScript section. Default `false`. |
 
@@ -97,7 +97,7 @@ el.streaming = false;
 The `error` event always fires regardless of `showerrors`, so host apps can
 log or surface errors even when the in-page banner is suppressed.
 
-## LLM Response UI Lang in 60 seconds
+## Streaming UI Script in 60 seconds
 
 Use this section to author or debug the program text the LLM produces.
 
@@ -148,7 +148,7 @@ CheckBoxGroup, Radio, Button, Buttons), **Data** (Table, Col, List, StatCard),
 (SectionBlock, FollowUpBlock, FollowUpItem, ActionLink), and **Scripting**
 (`Script` — opt-in via `enable-javascript="true"`). For the full positional
 signature of every component, call `el.getSystemPrompt()` or open
-[components reference](https://asfand-dev.github.io/llm-response-ui-lang/components.html).
+[components reference](https://asfand-dev.github.io/streaming-ui-script/components.html).
 
 ### JavaScript interactions (opt-in)
 
@@ -175,15 +175,15 @@ Both share a `ctx` argument exposing `state`, `tools`, `args`, `dispatch`,
 `open`, `query`, `queryAll`, `host`, `cleanup`, and `signal`. The system
 prompt only mentions these features when the flag is on, and
 `getSystemPrompt()` mirrors the live attribute. See the
-[JavaScript interactions guide](https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html)
+[JavaScript interactions guide](https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html)
 for the full API, or [`coding-gen-skill.md`](./coding-gen-skill.md) for a
 full app walkthrough.
 
 ```html
-<llm-response-ui-lang
+<streaming-ui-script
   id="renderer"
   enable-javascript="true"
-></llm-response-ui-lang>
+></streaming-ui-script>
 ```
 
 ```js
@@ -232,8 +232,8 @@ builtin captures the change (e.g. toggling one field of one item).
 
 ### 1. Chat bot that renders rich responses
 
-Tell the model in the system prompt that it must respond ONLY in LLM Response
-UI Lang, then stream tokens into the element. The component handles partial
+Tell the model in the system prompt that it must respond ONLY in Streaming
+UI Script, then stream tokens into the element. The component handles partial
 parses, so users see the layout shell appear before its children fill in.
 
 ```js
@@ -333,7 +333,7 @@ native HTML tag. Three details worth knowing:
 | React     | Pass `response` as a string prop. For tools/events use a `ref` and call `setTools` / `addEventListener` in `useEffect`. |
 | Vue       | Treat as a normal element. Bind `:response` and use `@assistant-message` for the event.              |
 | Angular   | Add `CUSTOM_ELEMENTS_SCHEMA` to the module. Use property binding `[response]` and `(assistant-message)` events. |
-| Svelte    | Just use `<llm-response-ui-lang response={text}>` and handle events with `on:assistant-message`.     |
+| Svelte    | Just use `<streaming-ui-script response={text}>` and handle events with `on:assistant-message`.     |
 
 ## Troubleshooting
 
@@ -377,9 +377,9 @@ Skip it when:
   — read this when the goal is to author a complete app (todo list, dashboard,
   chat, wizard, settings, real-time feed, etc.) rather than embed the
   component.
-- Component reference: <https://asfand-dev.github.io/llm-response-ui-lang/components.html>
-- Language reference: <https://asfand-dev.github.io/llm-response-ui-lang/language.html>
-- JavaScript interactions: <https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html>
-- Live demos (chat, tools, external data): <https://asfand-dev.github.io/llm-response-ui-lang/examples.html>
+- Component reference: <https://asfand-dev.github.io/streaming-ui-script/components.html>
+- Language reference: <https://asfand-dev.github.io/streaming-ui-script/language.html>
+- JavaScript interactions: <https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html>
+- Live demos (chat, tools, external data): <https://asfand-dev.github.io/streaming-ui-script/examples.html>
 - Generated system prompt (always in sync with the bundle):
-  <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+  <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>

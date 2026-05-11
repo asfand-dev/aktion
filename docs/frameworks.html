@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Framework integration · llm-response-ui-lang</title>
+  <title>Framework integration · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/site.css" />
   <style>
     .framework-grid {
@@ -53,8 +53,8 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>llm-response-ui-lang</h1>
-      <p>Web component runtime for LLM Response UI Lang</p>
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -81,7 +81,7 @@
     <main>
       <h1>Framework integration</h1>
       <p>
-        <code>&lt;llm-response-ui-lang&gt;</code> is a standard
+        <code>&lt;streaming-ui-script&gt;</code> is a standard
         <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Element</a>,
         so it works in every framework that renders HTML — including React,
         Next.js, Vue, Nuxt, Angular, Svelte, SolidJS, Astro, Remix, plain HTML,
@@ -96,7 +96,7 @@
         </p>
         <ol>
           <li>Import the bundle <em>once</em> in client-side code so it registers the custom element.</li>
-          <li>Render <code>&lt;llm-response-ui-lang&gt;</code> wherever you want the LLM output to appear.</li>
+          <li>Render <code>&lt;streaming-ui-script&gt;</code> wherever you want the LLM output to appear.</li>
           <li>Get a reference to the element and call <code>setResponse()</code>, <code>appendChunk()</code>, <code>setTheme()</code>, or <code>setTools()</code>.</li>
         </ol>
       </div>
@@ -144,10 +144,10 @@
       <h2>Installation</h2>
       <p>Pick whichever channel suits your project:</p>
 <pre><code># From npm — works for any bundler
-npm install llm-response-ui-lang
+npm install streaming-ui-script
 
 # Or load from CDN — no build step required
-&lt;script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
+&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;</code></pre>
 
       <p>
         The bundle is self-contained: it includes the parser, runtime, the
@@ -167,7 +167,7 @@ npm install llm-response-ui-lang
       </p>
 <pre><code>// LLMResponse.tsx
 import { useEffect, useRef } from "react";
-import "llm-response-ui-lang";
+import "streaming-ui-script";
 
 interface Props {
   response: string;
@@ -190,18 +190,18 @@ export function LLMResponse({ response, theme = "light", onAssistantMessage }: P
     return () =&gt; el.removeEventListener("assistant-message", handler);
   }, [onAssistantMessage]);
 
-  return &lt;llm-response-ui-lang ref={ref} theme={theme} transparent /&gt;;
+  return &lt;streaming-ui-script ref={ref} theme={theme} transparent /&gt;;
 }</code></pre>
 
       <p>
         Add the JSX intrinsic element type once so TypeScript stops complaining:
       </p>
-<pre><code>// types/llm-response-ui-lang.d.ts
+<pre><code>// types/streaming-ui-script.d.ts
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      "llm-response-ui-lang": DetailedHTMLProps&lt;
+      "streaming-ui-script": DetailedHTMLProps&lt;
         HTMLAttributes&lt;HTMLElement&gt; &amp; {
           theme?: string;
           transparent?: boolean;
@@ -217,7 +217,7 @@ declare global {
         For React 19+ you can pass props directly as element properties — no ref
         needed for the simple read-only case:
       </p>
-<pre><code>&lt;llm-response-ui-lang theme="dark" response={text} /&gt;</code></pre>
+<pre><code>&lt;streaming-ui-script theme="dark" response={text} /&gt;</code></pre>
 
       <hr />
 
@@ -233,12 +233,12 @@ declare global {
 "use client";
 
 import { useEffect, useRef } from "react";
-import "llm-response-ui-lang";
+import "streaming-ui-script";
 
 export function LLMResponse({ response, theme = "light" }: { response: string; theme?: string }) {
   const ref = useRef&lt;any&gt;(null);
   useEffect(() =&gt; { ref.current?.setResponse(response); }, [response]);
-  return &lt;llm-response-ui-lang ref={ref} theme={theme} transparent /&gt;;
+  return &lt;streaming-ui-script ref={ref} theme={theme} transparent /&gt;;
 }
 
 // app/page.tsx — server component
@@ -274,7 +274,7 @@ import vue from "@vitejs/plugin-vue";
 export default defineConfig({
   plugins: [
     vue({
-      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "llm-response-ui-lang" } },
+      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "streaming-ui-script" } },
     }),
   ],
 });</code></pre>
@@ -282,7 +282,7 @@ export default defineConfig({
       <p>Then use it like any other element:</p>
 <pre><code>&lt;script setup lang="ts"&gt;
 import { ref, onMounted, watch } from "vue";
-import "llm-response-ui-lang";
+import "streaming-ui-script";
 
 const target = ref&lt;HTMLElement | null&gt;(null);
 const response = ref(`root = Stack([Card([CardHeader("Hello from Vue")])])`);
@@ -293,7 +293,7 @@ watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
 &lt;/script&gt;
 
 &lt;template&gt;
-  &lt;llm-response-ui-lang ref="target" :theme="theme" transparent /&gt;
+  &lt;streaming-ui-script ref="target" :theme="theme" transparent /&gt;
 &lt;/template&gt;</code></pre>
 
       <hr />
@@ -308,18 +308,18 @@ watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
 <pre><code>// nuxt.config.ts
 export default defineNuxtConfig({
   vue: {
-    compilerOptions: { isCustomElement: (tag) =&gt; tag === "llm-response-ui-lang" },
+    compilerOptions: { isCustomElement: (tag) =&gt; tag === "streaming-ui-script" },
   },
 });
 
-// plugins/llm-response-ui-lang.client.ts
-import "llm-response-ui-lang";
+// plugins/streaming-ui-script.client.ts
+import "streaming-ui-script";
 export default defineNuxtPlugin(() =&gt; {});</code></pre>
 
 <pre><code>&lt;!-- pages/index.vue --&gt;
 &lt;template&gt;
   &lt;ClientOnly&gt;
-    &lt;llm-response-ui-lang theme="light" transparent ref="renderer" /&gt;
+    &lt;streaming-ui-script theme="light" transparent ref="renderer" /&gt;
   &lt;/ClientOnly&gt;
 &lt;/template&gt;</code></pre>
 
@@ -333,7 +333,7 @@ export default defineNuxtPlugin(() =&gt; {});</code></pre>
         once in <code>main.ts</code>:
       </p>
 <pre><code>// main.ts
-import "llm-response-ui-lang";
+import "streaming-ui-script";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { AppComponent } from "./app/app.component";
 
@@ -345,7 +345,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, ViewChild, AfterViewInit
 @Component({
   standalone: true,
   selector: "app-root",
-  template: `&lt;llm-response-ui-lang #renderer theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;`,
+  template: `&lt;streaming-ui-script #renderer theme="light" transparent&gt;&lt;/streaming-ui-script&gt;`,
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AppComponent implements AfterViewInit {
@@ -368,19 +368,19 @@ export class AppComponent implements AfterViewInit {
 <pre><code>&lt;!-- routes/+page.svelte --&gt;
 &lt;script lang="ts"&gt;
   import { onMount } from "svelte";
-  import "llm-response-ui-lang";
+  import "streaming-ui-script";
 
   let renderer: any;
   const program = `root = Stack([Card([CardHeader("Hello from Svelte")])])`;
   onMount(() =&gt; renderer?.setResponse(program));
 &lt;/script&gt;
 
-&lt;llm-response-ui-lang bind:this={renderer} theme="light" transparent /&gt;</code></pre>
+&lt;streaming-ui-script bind:this={renderer} theme="light" transparent /&gt;</code></pre>
 
       <p>
         For server-rendered routes wrap the import in
         <code>browser</code>-guarded code (e.g.
-        <code>if (browser) await import("llm-response-ui-lang");</code>) so it
+        <code>if (browser) await import("streaming-ui-script");</code>) so it
         only runs in the client bundle.
       </p>
 
@@ -390,12 +390,12 @@ export class AppComponent implements AfterViewInit {
       <div class="pill-row"><span>SolidJS 1.x</span></div>
 <pre><code>// App.tsx
 import { onMount } from "solid-js";
-import "llm-response-ui-lang";
+import "streaming-ui-script";
 
 export default function App() {
   let renderer: any;
   onMount(() =&gt; renderer?.setResponse(`root = Stack([Card([CardHeader("Hello, Solid")])])`));
-  return &lt;llm-response-ui-lang ref={renderer} theme="light" transparent /&gt;;
+  return &lt;streaming-ui-script ref={renderer} theme="light" transparent /&gt;;
 }</code></pre>
 
       <hr />
@@ -409,10 +409,10 @@ export default function App() {
 <pre><code>---
 // src/pages/index.astro
 ---
-&lt;llm-response-ui-lang id="response" theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;
+&lt;streaming-ui-script id="response" theme="light" transparent&gt;&lt;/streaming-ui-script&gt;
 
 &lt;script&gt;
-  import "llm-response-ui-lang";
+  import "streaming-ui-script";
   const el = document.getElementById("response") as any;
   el.setResponse(`root = Stack([Card([CardHeader("Hello, Astro")])])`);
 &lt;/script&gt;</code></pre>
@@ -428,11 +428,11 @@ export default function App() {
 <pre><code>&lt;!doctype html&gt;
 &lt;html&gt;
   &lt;body&gt;
-    &lt;llm-response-ui-lang theme="light" transparent&gt;&lt;/llm-response-ui-lang&gt;
+    &lt;streaming-ui-script theme="light" transparent&gt;&lt;/streaming-ui-script&gt;
 
     &lt;script type="module"&gt;
-      import "https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js";
-      const el = document.querySelector("llm-response-ui-lang");
+      import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
+      const el = document.querySelector("streaming-ui-script");
       el.setResponse(`root = Stack([Card([CardHeader("Hello, world")])])`);
     &lt;/script&gt;
   &lt;/body&gt;
@@ -494,10 +494,10 @@ el.streaming = false;</code></pre>
         return identical text:
       </p>
 <pre><code>// 1. Fetch the canned prompt
-const promptText = await fetch("https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt").then(r =&gt; r.text());
+const promptText = await fetch("https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt").then(r =&gt; r.text());
 
 // 2. Generate at runtime (lets you add tools or extra rules)
-import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "llm-response-ui-lang";
+import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "streaming-ui-script";
 const same = SYSTEM_PROMPT_TEXT;
 const custom = generatePrompt(defaultLibrary, {
   preamble: "You are an analytics assistant.",

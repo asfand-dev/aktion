@@ -2,7 +2,7 @@
  * JavaScript interactions runtime.
  *
  * Powers two language features that are opt-in via the `enable-javascript`
- * attribute on `<llm-response-ui-lang>`:
+ * attribute on `<streaming-ui-script>`:
  *
  *   1. `Script("id", "body", deps?)` — behaviour-only component whose JS body
  *      runs after the next render. The body receives a `ctx` object exposing
@@ -58,7 +58,7 @@ export interface ScriptContext {
   query(id: string): HTMLElement | null;
   /** `host.shadowRoot.querySelectorAll` returning a live-ish array. */
   queryAll(selector: string): HTMLElement[];
-  /** Host element (the `<llm-response-ui-lang>` tag). */
+  /** Host element (the `<streaming-ui-script>` tag). */
   readonly host: HTMLElement | null;
   /** Register a cleanup callback that runs before the next re-run or unmount. */
   cleanup(fn: () => void): void;
@@ -234,7 +234,7 @@ export class ScriptRunner {
         cleanup();
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[llm-response-ui-lang] Script cleanup failed", err);
+        console.error("[streaming-ui-script] Script cleanup failed", err);
       }
     }
     inst.cleanups = [];
@@ -304,7 +304,7 @@ async function invokeScriptBody(body: string, ctx: ScriptContext, label: string)
     await fn.call(null, ctx);
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error(`[llm-response-ui-lang] ${label} execution failed`, err);
+    console.error(`[streaming-ui-script] ${label} execution failed`, err);
   }
 }
 

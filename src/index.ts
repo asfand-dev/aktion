@@ -2,13 +2,13 @@
  * Public entry point.
  *
  * Importing this file (or loading the bundled script) registers the
- * `<llm-response-ui-lang>` custom element. All public types and helpers are
+ * `<streaming-ui-script>` custom element. All public types and helpers are
  * also re-exported so consumers can use them programmatically.
  */
 
-import { LlmResponseUiLangElement, defineElement } from "./element.js";
+import { StreamingUiScriptElement, defineElement } from "./element.js";
 
-export { LlmResponseUiLangElement, defineElement };
+export { StreamingUiScriptElement, defineElement };
 
 export * from "./parser/index.js";
 export * from "./runtime/index.js";
@@ -19,7 +19,7 @@ export * from "./theme/index.js";
 
 declare global {
   interface HTMLElementTagNameMap {
-    "llm-response-ui-lang": LlmResponseUiLangElement;
+    "streaming-ui-script": StreamingUiScriptElement;
   }
 }
 

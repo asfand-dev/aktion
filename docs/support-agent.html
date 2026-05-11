@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Support agent · llm-response-ui-lang</title>
+  <title>Support agent · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · support agent
+        streaming-ui-script · support agent
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -31,7 +31,7 @@
     <article class="example-card" id="ex-inbox">
       <h2>Triage workspace</h2>
       <p class="lede">
-        The same <code>&lt;llm-response-ui-lang&gt;</code> instance drives both panes —
+        The same <code>&lt;streaming-ui-script&gt;</code> instance drives both panes —
         the inbox shows tickets via <code>list_tickets</code>, and selecting one
         calls <code>get_ticket</code> + <code>triage_ticket</code> to render the
         details. Replying or escalating fires a <code>Mutation</code> that updates
@@ -119,7 +119,7 @@ rightPane = Card([
 
 root = Stack([leftPane, rightPane], "row", "l", "stretch")</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-support" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-support" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -146,7 +146,7 @@ root = Stack([leftPane, rightPane], "row", "l", "stretch")</code></pre>
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

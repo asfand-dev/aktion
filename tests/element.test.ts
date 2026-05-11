@@ -1,5 +1,5 @@
 /**
- * Behavioural tests for <llm-response-ui-lang>.
+ * Behavioural tests for <streaming-ui-script>.
  *
  * These run in happy-dom which provides Custom Elements + ShadowRoot. The most
  * important regression here: ensuring setResponse on a program that uses
@@ -23,13 +23,13 @@ table = Table([
   Col("Stars", data.rows.stars, "number")
 ])`;
 
-describe("<llm-response-ui-lang>", () => {
+describe("<streaming-ui-script>", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
   const create = () => {
-    const el = document.createElement("llm-response-ui-lang");
+    const el = document.createElement("streaming-ui-script");
     document.body.appendChild(el);
     return el as HTMLElement & {
       setResponse(text: string): void;
@@ -73,17 +73,17 @@ describe("<llm-response-ui-lang>", () => {
   });
 
   it("accepts the response attribute declaratively", async () => {
-    document.body.innerHTML = `<llm-response-ui-lang response='root = Card([CardHeader(\"From attribute\")])'></llm-response-ui-lang>`;
+    document.body.innerHTML = `<streaming-ui-script response='root = Card([CardHeader(\"From attribute\")])'></streaming-ui-script>`;
     await flush();
     await flush();
-    const el = document.querySelector("llm-response-ui-lang")!;
+    const el = document.querySelector("streaming-ui-script")!;
     expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("From attribute");
   });
 
-  it("getSystemPrompt returns LLM Response UI Lang spec text", () => {
+  it("getSystemPrompt returns Streaming UI Script spec text", () => {
     const el = create();
     const prompt = el.getSystemPrompt();
-    expect(prompt).toContain("LLM Response UI Lang");
+    expect(prompt).toContain("Streaming UI Script");
     expect(prompt).toContain("root = Stack(");
   });
 
@@ -160,9 +160,9 @@ describe("<llm-response-ui-lang>", () => {
   });
 
   it("respects showerrors attribute set declaratively", async () => {
-    document.body.innerHTML = `<llm-response-ui-lang showerrors="true" response='root = Stack([\nbroken = Card(['></llm-response-ui-lang>`;
+    document.body.innerHTML = `<streaming-ui-script showerrors="true" response='root = Stack([\nbroken = Card(['></streaming-ui-script>`;
     for (let i = 0; i < 5; i += 1) await flush();
-    const el = document.querySelector("llm-response-ui-lang") as HTMLElement;
+    const el = document.querySelector("streaming-ui-script") as HTMLElement;
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(false);
   });

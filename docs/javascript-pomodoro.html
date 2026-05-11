@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JS demo · Pomodoro · llm-response-ui-lang</title>
+  <title>JS demo · Pomodoro · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · pomodoro timer
+        streaming-ui-script · pomodoro timer
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -36,12 +36,12 @@
         completed sessions counter increments.
       </p>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-pomodoro" theme="light" enable-javascript="true"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-pomodoro" theme="light" enable-javascript="true"></streaming-ui-script>
       </div>
     </article>
 
     <article class="example-card">
-      <h2>UI Lang source</h2>
+      <h2>UI Script source</h2>
       <p class="lede">
         Note how every state transition is expressed as
         <code>Action([@Set(...)])</code> — the script doesn't decide policy,
@@ -128,7 +128,7 @@ el.setTools({
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const PHASE_SECONDS = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 };
 
@@ -195,7 +195,7 @@ el.setTools({
       }
     }, { once: true });
 
-    customElements.whenDefined("llm-response-ui-lang").then(() => {
+    customElements.whenDefined("streaming-ui-script").then(() => {
       el.setResponse(document.getElementById("src-pomodoro").textContent);
     });
   </script>

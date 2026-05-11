@@ -1,18 +1,18 @@
 {
-  "name": "llm-response-ui-lang",
+  "name": "streaming-ui-script",
   "version": "0.1.0",
-  "description": "Framework-agnostic web component for rendering LLM-generated rich UI using LLM Response UI Lang syntax.",
+  "description": "Framework-agnostic web component for rendering LLM-generated rich UI using Streaming UI Script syntax.",
   "type": "module",
-  "main": "./dist/llm-response-ui-lang.umd.cjs",
-  "module": "./dist/llm-response-ui-lang.js",
+  "main": "./dist/streaming-ui-script.umd.cjs",
+  "module": "./dist/streaming-ui-script.js",
   "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/llm-response-ui-lang.js",
-      "require": "./dist/llm-response-ui-lang.umd.cjs",
+      "import": "./dist/streaming-ui-script.js",
+      "require": "./dist/streaming-ui-script.umd.cjs",
       "types": "./dist/types/index.d.ts"
     },
-    "./style.css": "./dist/llm-response-ui-lang.css",
+    "./style.css": "./dist/streaming-ui-script.css",
     "./system_prompt.txt": "./dist/system_prompt.txt"
   },
   "files": [
@@ -41,18 +41,18 @@
     "llm",
     "ai",
     "web-components",
-    "llm-response-ui-lang",
+    "streaming-ui-script",
     "generative-ui",
     "rich-ui",
     "custom-elements"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/asfand-dev/llm-response-ui-lang.git"
+    "url": "git+https://github.com/asfand-dev/streaming-ui-script.git"
   },
-  "homepage": "https://asfand-dev.github.io/llm-response-ui-lang/",
+  "homepage": "https://asfand-dev.github.io/streaming-ui-script/",
   "bugs": {
-    "url": "https://github.com/asfand-dev/llm-response-ui-lang/issues"
+    "url": "https://github.com/asfand-dev/streaming-ui-script/issues"
   },
   "license": "MIT"
 }

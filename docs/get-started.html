@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Get started · llm-response-ui-lang</title>
+  <title>Get started · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/site.css" />
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>llm-response-ui-lang</h1>
-      <p>Web component runtime for LLM Response UI Lang</p>
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -48,15 +48,15 @@
         it includes the parser, the runtime, the built-in components, and the
         styles, so no extra CSS file is required.
       </p>
-<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"&gt;&lt;/script&gt;</code></pre>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;</code></pre>
 
       <p>
         For non-module scripts (older bundlers, Webflow, etc.) use the IIFE build:
       </p>
-<pre><code>&lt;script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer&gt;&lt;/script&gt;</code></pre>
+<pre><code>&lt;script src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.iife.js" defer&gt;&lt;/script&gt;</code></pre>
 
       <h2>2. Place the tag</h2>
-<pre><code>&lt;llm-response-ui-lang id="response" theme="light"&gt;&lt;/llm-response-ui-lang&gt;</code></pre>
+<pre><code>&lt;streaming-ui-script id="response" theme="light"&gt;&lt;/streaming-ui-script&gt;</code></pre>
 
       <p>
         The element renders empty by default. Set its content with one of:
@@ -76,10 +76,10 @@
       </p>
 
 <pre><code>// Fetch the canned prompt
-const systemPrompt = await fetch("https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt").then(r =&gt; r.text());
+const systemPrompt = await fetch("https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt").then(r =&gt; r.text());
 
 // or build a prompt from the live library (e.g. with extra rules and tool descriptions)
-const el = document.querySelector("llm-response-ui-lang");
+const el = document.querySelector("streaming-ui-script");
 const prompt = el.getSystemPrompt({
   preamble: "You are an analytics assistant.",
   additionalRules: ["Always end with a FollowUpBlock of 2 prompts."],
@@ -104,7 +104,7 @@ el.streaming = false;</code></pre>
 
       <h2>4. (Optional) Provide tools</h2>
       <p>
-        LLM Response UI Lang can call <code>Query("tool_name", args)</code> and
+        Streaming UI Script can call <code>Query("tool_name", args)</code> and
         <code>Mutation("tool_name", args)</code>. Register tools as plain functions on
         the element so it can fetch fresh data on demand.
       </p>
@@ -136,7 +136,7 @@ el.streaming = false;</code></pre>
         <code>showerrors="true"</code> while iterating on prompts to display
         them inline:
       </p>
-<pre><code>&lt;llm-response-ui-lang showerrors="true" theme="light"&gt;&lt;/llm-response-ui-lang&gt;</code></pre>
+<pre><code>&lt;streaming-ui-script showerrors="true" theme="light"&gt;&lt;/streaming-ui-script&gt;</code></pre>
       <p>
         The <code>error</code> event fires regardless of this attribute, so
         production apps can keep the banner hidden and still log parse failures

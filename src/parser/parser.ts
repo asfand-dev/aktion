@@ -1,5 +1,5 @@
 /**
- * Parser for LLM Response UI Lang.
+ * Parser for Streaming UI Script.
  *
  * Grammar (informal, line-oriented):
  *

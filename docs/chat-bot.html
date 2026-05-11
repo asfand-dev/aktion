@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat bot · llm-response-ui-lang</title>
+  <title>Chat bot · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
   <link rel="stylesheet" href="assets/chat-bot.css" />
 </head>
@@ -15,8 +15,8 @@
       <h1 style="margin-top:10px">Connect to OpenRouter</h1>
       <p class="lede">
         This demo sends your messages to the OpenRouter Chat Completions API. The
-        assistant is instructed to respond <em>only</em> in LLM Response UI Lang,
-        which is then rendered inline by <code>&lt;llm-response-ui-lang&gt;</code>.
+        assistant is instructed to respond <em>only</em> in Streaming UI Script,
+        which is then rendered inline by <code>&lt;streaming-ui-script&gt;</code>.
       </p>
 
       <form id="setup-form">
@@ -57,7 +57,7 @@
     <header class="chat-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · chat bot
+        streaming-ui-script · chat bot
       </a>
       <div class="chat-meta">
         <span class="pill">
@@ -105,13 +105,13 @@
   </section>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const STORAGE_KEYS = {
-      apiKey: "llm-response-ui-lang.chat.openrouter-key",
-      model: "llm-response-ui-lang.chat.openrouter-model",
-      theme: "llm-response-ui-lang.chat.theme",
-      enableJs: "llm-response-ui-lang.chat.enable-javascript",
+      apiKey: "streaming-ui-script.chat.openrouter-key",
+      model: "streaming-ui-script.chat.openrouter-model",
+      theme: "streaming-ui-script.chat.theme",
+      enableJs: "streaming-ui-script.chat.enable-javascript",
     };
     const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
     const MAX_HISTORY_TURNS = 5;
@@ -150,7 +150,7 @@
     // what we set on the actual renderer. Pass the flag explicitly so the
     // generated prompt mirrors the renderer's runtime configuration.
     function buildSystemPrompt() {
-      const proxy = document.createElement("llm-response-ui-lang");
+      const proxy = document.createElement("streaming-ui-script");
       return proxy.getSystemPrompt({
         enableJavascript: settings.enableJavascript,
       });
@@ -283,7 +283,7 @@
       const bubble = document.createElement("div");
       bubble.className = "bubble";
 
-      const renderer = document.createElement("llm-response-ui-lang");
+      const renderer = document.createElement("streaming-ui-script");
       renderer.setAttribute("transparent", "true");
       if (settings.enableJavascript) {
         renderer.setAttribute("enable-javascript", "true");
@@ -409,7 +409,7 @@
       const newTheme = e.target.value;
       settings.save(settings.apiKey, settings.model, newTheme);
       // Immediately update all existing renderers
-      document.querySelectorAll("llm-response-ui-lang").forEach(renderer => {
+      document.querySelectorAll("streaming-ui-script").forEach(renderer => {
         renderer.setAttribute("theme", newTheme);
       });
     });
@@ -427,7 +427,7 @@
       const enabled = !!e.target.checked;
       settings.setEnableJavascript(enabled);
       systemPrompt = buildSystemPrompt();
-      document.querySelectorAll("llm-response-ui-lang").forEach((renderer) => {
+      document.querySelectorAll("streaming-ui-script").forEach((renderer) => {
         if (enabled) renderer.setAttribute("enable-javascript", "true");
         else renderer.removeAttribute("enable-javascript");
       });

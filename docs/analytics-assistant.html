@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Analytics assistant · llm-response-ui-lang</title>
+  <title>Analytics assistant · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · analytics assistant
+        streaming-ui-script · analytics assistant
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -21,7 +21,7 @@
       <h1 style="margin-top:10px">Type a question, get a chart back</h1>
       <p>
         A natural-language analytics assistant that maps free-text questions
-        onto a small mock warehouse. The same UI Lang program renders the
+        onto a small mock warehouse. The same UI Script program renders the
         suggestion chips, the active chart, the breakdown table, and a written
         summary. All powered by one tool: <code>analytics_query</code>.
       </p>
@@ -32,7 +32,7 @@
       <p class="lede">
         Click a suggestion or type your own question. The mock router maps to one of
         five intents (revenue, signups, churn, plan-mix, top-customers) and returns
-        the appropriate shape — labels, series, summary, and a few KPIs. The UI Lang
+        the appropriate shape — labels, series, summary, and a few KPIs. The UI Script
         program is unaware of which intent fired; it just renders whatever
         <code>data</code> looks like.
       </p>
@@ -110,7 +110,7 @@ root = Stack([
   view
 ])</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-analytics" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-analytics" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -131,7 +131,7 @@ root = Stack([
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

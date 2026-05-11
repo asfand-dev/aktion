@@ -27,7 +27,7 @@ export class ActionRunner {
         await this.runStep(step);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[llm-response-ui-lang] action step failed", step, err);
+        console.error("[streaming-ui-script] action step failed", step, err);
         return;
       }
     }

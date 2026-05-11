@@ -33,7 +33,7 @@ const mount = (attributes: Record<string, string> = {}): ElementWithApi => {
   // Cast through `unknown` because the class declares `state` private but
   // we need to read it here for assertions; structural overlap rules require
   // the intermediate cast.
-  const el = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+  const el = document.createElement("streaming-ui-script") as unknown as ElementWithApi;
   for (const [name, value] of Object.entries(attributes)) {
     el.setAttribute(name, value);
   }
@@ -293,7 +293,7 @@ root = Stack([boot])`,
     // The chat-bot pattern: build the prompt from a freshly-created proxy
     // element that doesn't yet carry the attribute, but we know the renderer
     // it feeds *will* be enabled.
-    const proxy = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+    const proxy = document.createElement("streaming-ui-script") as unknown as ElementWithApi;
     const prompt = proxy.getSystemPrompt({ enableJavascript: true });
     expect(prompt).toContain("JavaScript interactions");
     expect(prompt).toContain('Script("id", body, deps?)');
@@ -303,7 +303,7 @@ root = Stack([boot])`,
     // The single biggest LLM authoring error is escaping newlines inside
     // double-quoted Script bodies. The prompt should call out backticks as
     // the preferred surface for multi-line code.
-    const proxy = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+    const proxy = document.createElement("streaming-ui-script") as unknown as ElementWithApi;
     const prompt = proxy.getSystemPrompt({ enableJavascript: true });
     expect(prompt).toContain("backtick-quoted string");
     expect(prompt).toContain("multi-line backtick body");

@@ -193,7 +193,7 @@
   align-self: stretch;
 }
 
-.chat-msg.assistant llm-response-ui-lang {
+.chat-msg.assistant streaming-ui-script {
   display: block;
 }
 

@@ -3,7 +3,7 @@ import type { ComponentLibrary, ComponentSpec } from "./types.js";
 /**
  * Combines two libraries by name. Components from `extra` win on collision.
  * Useful when a consumer registers their own components alongside the
- * built-ins via `<llm-response-ui-lang>.registerComponents([...])`.
+ * built-ins via `<streaming-ui-script>.registerComponents([...])`.
  */
 export function mergeLibraries(
   base: ComponentLibrary,

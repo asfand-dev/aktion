@@ -2,7 +2,7 @@
  * System prompt generator.
  *
  * Produces a clear, ordered prompt that teaches the LLM:
- *   1. The LLM Response UI Lang syntax it must use.
+ *   1. The Streaming UI Script syntax it must use.
  *   2. The components in the active library and their positional signatures.
  *   3. The data tools (Query/Mutation) it can call.
  *   4. Any preamble, rules, and worked examples the host app provides.
@@ -87,7 +87,7 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
 
 function headerSection(preamble: string | undefined, rootComponent: string): string {
   const header = preamble?.trim() ||
-    "You are a UI assistant. Respond ONLY in LLM Response UI Lang — a compact, line-oriented language for generating user interfaces. Never write prose, JSON, markdown, or HTML. Output a flat list of `identifier = Expression` lines and nothing else.";
+    "You are a UI assistant. Respond ONLY in Streaming UI Script — a compact, line-oriented language for generating user interfaces. Never write prose, JSON, markdown, or HTML. Output a flat list of `identifier = Expression` lines and nothing else.";
   const rootRule = `Every response MUST begin with \`root = ${rootComponent}([...])\`. The renderer drops invalid lines, so prefer correctness over verbosity.`;
   return `${header}\n${rootRule}`;
 }
@@ -208,7 +208,7 @@ For anything else, use the \`@\` builtins above. There is no \`.filter()\`, \`.m
 
 function javascriptSection(): string {
   return `## JavaScript interactions (advanced)
-The host has opted in with \`enable-javascript="true"\`. You may now emit JavaScript through two surfaces. **Reach for plain LLM Response UI Lang first** — \`$variables\`, \`Query\`/\`Mutation\`, and \`Action([@Set,@Run,@Reset,@ToAssistant,@OpenUrl])\` already cover most behaviour. Only emit JS when the requested feature truly needs it (timers, fetch you control, DOM focus/scroll, clipboard, keyboard shortcuts, animation, sub-second polling).
+The host has opted in with \`enable-javascript="true"\`. You may now emit JavaScript through two surfaces. **Reach for plain Streaming UI Script first** — \`$variables\`, \`Query\`/\`Mutation\`, and \`Action([@Set,@Run,@Reset,@ToAssistant,@OpenUrl])\` already cover most behaviour. Only emit JS when the requested feature truly needs it (timers, fetch you control, DOM focus/scroll, clipboard, keyboard shortcuts, animation, sub-second polling).
 
 ### Two surfaces
 1. \`Script("id", body, deps?)\` — a behaviour-only component. Runs the body when it mounts, and re-runs when any listed \`$variable\` changes. Renders nothing visible.
@@ -232,14 +232,14 @@ Both receive a single \`ctx\` argument. Use the bare variable name (no \`$\`) wh
 - \`ctx.dispatch(message)\` — fire an \`assistant-message\` event (same payload as \`@ToAssistant\`).
 - \`ctx.open(url)\` — open a URL (same as \`@OpenUrl\`).
 - \`ctx.query(id)\` / \`ctx.queryAll(selector)\` — DOM lookups inside the renderer's shadow root.
-- \`ctx.host\` — the \`<llm-response-ui-lang>\` element (for custom-event dispatch).
+- \`ctx.host\` — the \`<streaming-ui-script>\` element (for custom-event dispatch).
 - \`ctx.cleanup(fn)\` — register a teardown that runs before the next re-run AND on unmount. Always pair intervals, listeners, observers, subscriptions with cleanup.
 - \`ctx.signal\` — AbortSignal that fires when the script is about to re-run or be unmounted. Pass it to \`fetch\` and check \`ctx.signal.aborted\` before writing state from async work.
 
 ### Before reaching for JS: do it declaratively
 Most "imperative-looking" UI logic is already expressible without JS. Check this table FIRST:
 
-| You're tempted to write…              | Idiomatic LLM Response UI Lang                                                |
+| You're tempted to write…              | Idiomatic Streaming UI Script                                                |
 |---------------------------------------|-------------------------------------------------------------------------------|
 | \`Script("init", "ctx.state.set('todos', [...])")\` to seed data | \`$todos = [...]\` — state declarations seed themselves |
 | \`@Js("ctx.state.set('todos', ctx.state.get('todos').concat(newItem))")\` | \`@Set($todos, @Push($todos, newItem))\` |
@@ -439,7 +439,7 @@ shortcut = Script("shortcut", \`
 
 function inlineModeSection(): string {
   return `## Inline mode
-You may answer questions in plain text. When you do, wrap any UI you produce in a fenced \`\`\`llm-response-ui-lang block. Otherwise output LLM Response UI Lang directly.`;
+You may answer questions in plain text. When you do, wrap any UI you produce in a fenced \`\`\`streaming-ui-script block. Otherwise output Streaming UI Script directly.`;
 }
 
 function editModeSection(): string {
@@ -475,7 +475,7 @@ function rulesSection(rules: ReadonlyArray<string>): string {
 
 function streamingSection(rootComponent: string): string {
   return `## Hoisting & Streaming (CRITICAL)
-LLM Response UI Lang supports hoisting: a reference can be used BEFORE it is defined. The renderer re-parses the program on every streamed chunk and silently treats unresolved references as empty, so a partially-streamed response renders progressively without flashing errors — provided you write statements in the right order.
+Streaming UI Script supports hoisting: a reference can be used BEFORE it is defined. The renderer re-parses the program on every streamed chunk and silently treats unresolved references as empty, so a partially-streamed response renders progressively without flashing errors — provided you write statements in the right order.
 
 **Required statement order for streaming-friendly output:**
 1. \`root = ${rootComponent}([...])\` — emit this FIRST so the UI shell appears immediately, even before its children stream in.
@@ -495,7 +495,7 @@ A correctly-ordered response renders top-down: the shell appears first, sections
 
 function closingSection(enableJavascript: boolean): string {
   const base = `## Output rules
-- Output ONLY LLM Response UI Lang lines (or a fenced \`\`\`llm-response-ui-lang block when inline mode is enabled).
+- Output ONLY Streaming UI Script lines (or a fenced \`\`\`streaming-ui-script block when inline mode is enabled).
 - Always start with \`root = ...\` on the very first line.
 - Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
 - Order statements top-down: \`root\` first, then the components it references, then leaf data values last.

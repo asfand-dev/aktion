@@ -9,9 +9,9 @@
  *   ├── index.html, get-started.html…   (docs HTML)
  *   ├── assets/site.js, site.css…       (docs assets)
  *   └── dist/                           (CDN-shippable bundle)
- *       ├── llm-response-ui-lang.js
- *       ├── llm-response-ui-lang.iife.js
- *       ├── llm-response-ui-lang.umd.cjs
+ *       ├── streaming-ui-script.js
+ *       ├── streaming-ui-script.iife.js
+ *       ├── streaming-ui-script.umd.cjs
  *       └── system_prompt.txt
  *
  * The docs HTML / JS sources use `../dist/…` paths so local development from
@@ -58,12 +58,12 @@ async function rewriteDeployPaths(siteDir) {
 
     if (ext === ".html") {
       updated = updated
-        .replaceAll("../dist/llm-response-ui-lang", "./dist/llm-response-ui-lang")
+        .replaceAll("../dist/streaming-ui-script", "./dist/streaming-ui-script")
         .replaceAll("../dist/system_prompt", "./dist/system_prompt");
     } else {
       updated = updated.replaceAll(
-        "../../dist/llm-response-ui-lang",
-        "../dist/llm-response-ui-lang",
+        "../../dist/streaming-ui-script",
+        "../dist/streaming-ui-script",
       );
     }
 

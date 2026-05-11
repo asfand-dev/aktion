@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Theme customization · llm-response-ui-lang</title>
+  <title>Theme customization · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/site.css" />
   <style>
     /* Page-specific styles for the theme studio. */
@@ -134,7 +134,7 @@
       box-shadow: var(--doc-shadow);
       overflow: hidden;
     }
-    .studio-preview llm-response-ui-lang {
+    .studio-preview streaming-ui-script {
       display: block;
       padding: 18px;
     }
@@ -194,8 +194,8 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>llm-response-ui-lang</h1>
-      <p>Web component runtime for LLM Response UI Lang</p>
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -325,7 +325,7 @@
 
         <section class="studio-output">
           <div class="studio-preview" id="preview-wrap">
-            <llm-response-ui-lang id="preview" theme="light" transparent></llm-response-ui-lang>
+            <streaming-ui-script id="preview" theme="light" transparent></streaming-ui-script>
           </div>
 
           <div>
@@ -357,26 +357,26 @@
       <p>Pick whichever fits your stack — they all hit the same code path.</p>
 
 <pre><code>// 1. Built-in name on the attribute
-&lt;llm-response-ui-lang theme="neon"&gt;&lt;/llm-response-ui-lang&gt;
+&lt;streaming-ui-script theme="neon"&gt;&lt;/streaming-ui-script&gt;
 
 // 2. JSON token map on the attribute (escape the quotes)
-&lt;llm-response-ui-lang theme='{"colorPrimary":"#16a34a","radiusMd":"14px"}'&gt;&lt;/llm-response-ui-lang&gt;
+&lt;streaming-ui-script theme='{"colorPrimary":"#16a34a","radiusMd":"14px"}'&gt;&lt;/streaming-ui-script&gt;
 
 // 3. Programmatic — extend a built-in or pass a partial map
-const el = document.querySelector("llm-response-ui-lang");
+const el = document.querySelector("streaming-ui-script");
 el.setTheme({ colorPrimary: "#16a34a", radiusMd: "14px" });</code></pre>
 
       <h2>Tips</h2>
       <ul>
         <li>Partial maps are merged on top of the <code>light</code> theme — only override what you need.</li>
         <li>Switching themes does not re-render: the runtime updates CSS variables on the host element, and the shadow DOM picks them up instantly.</li>
-        <li>You can target the host from outside too: <code>llm-response-ui-lang { --rui-color-primary: #16a34a; }</code>.</li>
+        <li>You can target the host from outside too: <code>streaming-ui-script { --rui-color-primary: #16a34a; }</code>.</li>
       </ul>
     </main>
   </div>
 
   <script type="module">
-    import { defaultLibrary, builtInThemes } from "../dist/llm-response-ui-lang.js";
+    import { defaultLibrary, builtInThemes } from "../dist/streaming-ui-script.js";
 
     const COLOR_TOKENS = [
       "colorBg", "colorBgSubtle", "colorSurface", "colorSurfaceMuted",
@@ -431,7 +431,7 @@ el.setTheme({ colorPrimary: "#16a34a", radiusMd: "14px" });</code></pre>
     const PREVIEW_PROGRAM = `root = Stack([hero, kpis, form, follow])
 hero = Card([
   CardHeader("Theme studio", "Tweak the panel — the UI updates live"),
-  Markdown("This card is rendered inside <llm-response-ui-lang> using your custom tokens. Try changing the **primary color** or the **radius** values.")
+  Markdown("This card is rendered inside <streaming-ui-script> using your custom tokens. Try changing the **primary color** or the **radius** values.")
 ])
 kpis = Stack([
   StatCard("Active", "12,540", "up", "+18%"),
@@ -546,7 +546,7 @@ follow = FollowUpBlock([
     function renderSnippet() {
       const json = JSON.stringify(workingTheme, null, 2);
       els.snippet.textContent =
-        "const el = document.querySelector(\"llm-response-ui-lang\");\n" +
+        "const el = document.querySelector(\"streaming-ui-script\");\n" +
         `el.setTheme(${json});`;
     }
 

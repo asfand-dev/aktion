@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JS demo · Stopwatch · llm-response-ui-lang</title>
+  <title>JS demo · Stopwatch · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · stopwatch
+        streaming-ui-script · stopwatch
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -20,7 +20,7 @@
       <span class="tag-pill">JS demo · Script() + ctx.cleanup</span>
       <h1 style="margin-top:10px">A stopwatch driven entirely by <code>Script()</code></h1>
       <p>
-        The same <code>&lt;llm-response-ui-lang&gt;</code> program drives the
+        The same <code>&lt;streaming-ui-script&gt;</code> program drives the
         display, the controls, and the laps list — but the actual ticking is
         wired by a single <code>Script(...)</code>. It uses
         <code>setInterval</code> for sub-second precision,
@@ -37,14 +37,14 @@
         Toggle <em>Show source</em> below the demo to inspect the program.
       </p>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-stopwatch" theme="light" enable-javascript="true"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-stopwatch" theme="light" enable-javascript="true"></streaming-ui-script>
       </div>
     </article>
 
     <article class="example-card">
-      <h2>UI Lang source</h2>
+      <h2>UI Script source</h2>
       <p class="lede">
-        Plain <code>llm-response-ui-lang</code> with two scripts:
+        Plain <code>streaming-ui-script</code> with two scripts:
         <code>ticker</code> increments <code>$elapsedMs</code> every 50 ms while
         running, and <code>laptimer</code> formats the latest split. Everything
         else is declarative.
@@ -119,7 +119,7 @@ root = Stack([display, controls, lapsCard, ticker, formatter])</code></pre>
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const el = document.getElementById("rui-stopwatch");
     el.setResponse(document.getElementById("src-stopwatch").textContent);

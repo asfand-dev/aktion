@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>External data example · llm-response-ui-lang</title>
+  <title>External data example · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · external data
+        streaming-ui-script · external data
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -71,7 +71,7 @@ view = data.status == "error" ? errBanner : data.status == "loading" ? loading :
 
 root = Stack([Card([CardHeader("GitHub explorer", "Live data via api.github.com"), userField]), view])</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-github" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-github" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -109,7 +109,7 @@ root = Stack([Card([CardHeader("GitHub explorer", "Live data via api.github.com"
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     const el = document.getElementById("rui-github");
 

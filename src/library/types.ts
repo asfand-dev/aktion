@@ -2,7 +2,7 @@
  * Component library schema types.
  *
  * Components are described by:
- *   - `name`: identifier used in LLM Response UI Lang (e.g. `Stack`, `Button`).
+ *   - `name`: identifier used in Streaming UI Script (e.g. `Stack`, `Button`).
  *   - `props`: ordered prop list. Order defines positional argument mapping.
  *   - `description`: shown in the generated system prompt.
  *   - `render`: produces a DOM node from resolved prop values.
@@ -80,7 +80,7 @@ export interface ComponentLibrary {
   componentGroups?: ReadonlyArray<ComponentGroup>;
 }
 
-/** Resolve positional args from LLM Response UI Lang into named props. */
+/** Resolve positional args from Streaming UI Script into named props. */
 export function mapPositionalArgs(
   spec: ComponentSpec,
   args: ReadonlyArray<unknown>,

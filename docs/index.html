@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>llm-response-ui-lang</title>
+  <title>streaming-ui-script</title>
   <link rel="stylesheet" href="assets/site.css" />
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>llm-response-ui-lang</h1>
-      <p>Web component runtime for LLM Response UI Lang</p>
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -37,8 +37,8 @@
     <main>
       <h1>Render LLM-generated UI in any framework</h1>
       <p>
-        <code>&lt;llm-response-ui-lang&gt;</code> is a single web component that turns
-        LLM Response UI Lang text into a rich, interactive UI inside its shadow
+        <code>&lt;streaming-ui-script&gt;</code> is a single web component that turns
+        Streaming UI Script text into a rich, interactive UI inside its shadow
         DOM. It works with any framework — React, Vue, Angular, Svelte, or plain
         HTML — and ships as a single JavaScript file plus an auto-generated
         system prompt.
@@ -47,10 +47,10 @@
       <div class="cta">
         <h2>Drop-in CDN install</h2>
         <p>One script tag and you're rendering generative UI from your LLM.</p>
-        <pre><code>&lt;script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"&gt;&lt;/script&gt;
-&lt;llm-response-ui-lang theme="light"&gt;&lt;/llm-response-ui-lang&gt;
+        <pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;
+&lt;streaming-ui-script theme="light"&gt;&lt;/streaming-ui-script&gt;
 &lt;script&gt;
-  const el = document.querySelector("llm-response-ui-lang");
+  const el = document.querySelector("streaming-ui-script");
   el.setResponse(`root = Stack([greeting])
 greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 &lt;/script&gt;</code></pre>
@@ -62,7 +62,7 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
           <p>Built on the standard Custom Elements API — works wherever HTML works.</p>
         </div>
         <div class="feature">
-          <h3>LLM Response UI Lang</h3>
+          <h3>Streaming UI Script</h3>
           <p>Parser, evaluator, reactive state, queries, mutations, and built-in functions.</p>
         </div>
         <div class="feature">
@@ -122,13 +122,13 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <llm-response-ui-lang theme="light"></llm-response-ui-lang>
+            <streaming-ui-script theme="light"></streaming-ui-script>
           </div>
         </div>
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">root = Stack([welcome, kpis, chart, follow])
 welcome = Card([
-  CardHeader("Hello there", "Generative UI rendered from LLM Response UI Lang"),
+  CardHeader("Hello there", "Generative UI rendered from Streaming UI Script"),
   Markdown("This card was streamed in **plain text** and rendered as a real UI.")
 ])
 kpis = Stack([
@@ -155,7 +155,7 @@ follow = FollowUpBlock([
       <ul>
         <li><a href="get-started.html">Get started</a> — the 30-second integration guide.</li>
         <li><a href="frameworks.html">Framework integration</a> — drop-in setup for React, Next.js, Vue, Angular, Svelte, and more.</li>
-        <li><a href="language.html">Language reference</a> — full LLM Response UI Lang syntax.</li>
+        <li><a href="language.html">Language reference</a> — full Streaming UI Script syntax.</li>
         <li><a href="components.html">Component reference</a> — every built-in component and its props.</li>
         <li><a href="examples.html">Examples</a> — copy-paste recipes for forms, dashboards, and chat.</li>
         <li><a href="playground.html">Playground</a> — try the language live in your browser.</li>

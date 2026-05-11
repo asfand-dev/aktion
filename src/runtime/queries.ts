@@ -2,7 +2,7 @@
  * Query / Mutation registry.
  *
  * Tools are user-supplied async functions registered against the
- * `<llm-response-ui-lang>` element. A `Query("toolName", args, defaults, refresh?)`
+ * `<streaming-ui-script>` element. A `Query("toolName", args, defaults, refresh?)`
  * declaration creates an entry that:
  *   - Starts with the `defaults` value so partial UIs render immediately
  *   - Auto-runs whenever `$variables` referenced by `args` change
@@ -176,7 +176,7 @@ export class QueryRegistry {
     } catch (err) {
       entry.current = entry.defaults;
       // eslint-disable-next-line no-console
-      console.error(`[llm-response-ui-lang] tool "${entry.toolName}" failed`, err);
+      console.error(`[streaming-ui-script] tool "${entry.toolName}" failed`, err);
     } finally {
       if (entry.kind === "Query") entry.inFlight = false;
       this.notify();

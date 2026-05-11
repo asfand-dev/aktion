@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tools example · llm-response-ui-lang</title>
+  <title>Tools example · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="examples.html">
         <span class="dot"></span>
-        llm-response-ui-lang · tools example
+        streaming-ui-script · tools example
       </a>
       <a class="example-back" href="examples.html">← Back to docs</a>
     </header>
@@ -49,7 +49,7 @@ tbl = Table([
 view = @Count(data.rows) > 0 ? tbl : empty
 root = Stack([Card([CardHeader("Team contacts", "Type to filter" ), searchBox, view])])</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-contacts" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-contacts" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -84,7 +84,7 @@ empty = TextContent("Nothing on the list yet — add your first todo above.", "s
 view = @Count(list.rows) > 0 ? tbl : empty
 root = Stack([Card([CardHeader("Todos", "Stored in memory in this page"), form, view])])</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-todos" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-todos" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -100,7 +100,7 @@ chart = LineChart(data.labels, [Series("Requests/min", data.series)])
 status = TextContent("Auto-refreshing every 2s", "small", "muted")
 root = Stack([Card([CardHeader("Live metrics", "Polled tool"), chart, status])])</code></pre>
       <div class="example-output">
-        <llm-response-ui-lang id="rui-metrics" theme="light"></llm-response-ui-lang>
+        <streaming-ui-script id="rui-metrics" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -111,7 +111,7 @@ root = Stack([Card([CardHeader("Live metrics", "Polled tool"), chart, status])])
         and may return a value or a promise. The returned value becomes the result of the
         corresponding <code>Query</code> / <code>Mutation</code>.
       </p>
-      <pre class="example-source"><code>const el = document.querySelector("llm-response-ui-lang");
+      <pre class="example-source"><code>const el = document.querySelector("streaming-ui-script");
 
 el.setTools({
   list_contacts: ({ q }) =&gt; ({ rows: filterContacts(q) }),
@@ -124,7 +124,7 @@ el.setTools({
   </div>
 
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     /* -------- Example 1: read-only contacts list -------- */
     const CONTACTS = [

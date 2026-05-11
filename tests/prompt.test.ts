@@ -5,7 +5,7 @@ import { defaultLibrary } from "../src/library/index.js";
 describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("LLM Response UI Lang");
+    expect(text).toContain("Streaming UI Script");
     expect(text).toContain("root = Stack(");
     expect(text).toContain("Stack(children: Node[]");
     expect(text).toContain("CardHeader(title: string");

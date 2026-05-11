@@ -1,8 +1,8 @@
 ---
-name: llm-response-ui-lang/coding-gen-skill
+name: streaming-ui-script/coding-gen-skill
 description: >-
   Deep knowledge base for building **complete applications** in
-  LLM Response UI Lang. Read this when the goal is to author a full
+  Streaming UI Script. Read this when the goal is to author a full
   reactive app (todo list, dashboard, wizard, chat, settings, real-time feed,
   search, CRUD) rather than embed the renderer or answer a one-shot UI
   question. Companion to README.md (integration) and SKILL.md (skill summary).
@@ -10,21 +10,21 @@ description: >-
 
 # Introduction 
 
-## What is LLM Response UI Lang (llm-response-ui-lang)
+## What is Streaming UI Script (streaming-ui-script)
 
 A framework-agnostic web component that renders LLM-generated UI from
-**LLM Response UI Lang** — a compact, declarative language designed for chat
-assistants. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into
+**Streaming UI Script** — a compact, declarative language designed for chat
+assistants. Drop one `<script>` tag and one `<streaming-ui-script>` tag into
 any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
 
-- **Live docs and demos:** <https://asfand-dev.github.io/llm-response-ui-lang/>
-- **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
-- **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+- **Live docs and demos:** <https://asfand-dev.github.io/streaming-ui-script/>
+- **CDN bundle (ESM):** <https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js>
+- **System prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
 
 The library bundles everything needed at runtime:
 
-- An **LLM Response UI Lang parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
+- An **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
 - A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
 - An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
@@ -51,13 +51,13 @@ render generative UI without extra wiring.
 ### 1. Add the script tag
 
 ```html
-<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
+<script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"></script>
 ```
 
 For non-module setups use the IIFE build:
 
 ```html
-<script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer></script>
+<script src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.iife.js" defer></script>
 ```
 
 The CSS is bundled inside the JS and injected into each instance's shadow root,
@@ -66,7 +66,7 @@ so you do **not** need a separate stylesheet.
 ### 2. Mount the tag
 
 ```html
-<llm-response-ui-lang id="reply" theme="light"></llm-response-ui-lang>
+<streaming-ui-script id="reply" theme="light"></streaming-ui-script>
 ```
 
 ### 3. Render a response
@@ -75,25 +75,25 @@ There are three equivalent ways to set the program text:
 
 ```html
 <!-- as an attribute -->
-<llm-response-ui-lang response='root = Card([CardHeader("Hi")])'></llm-response-ui-lang>
+<streaming-ui-script response='root = Card([CardHeader("Hi")])'></streaming-ui-script>
 
 <!-- as inner text -->
-<llm-response-ui-lang>
+<streaming-ui-script>
   root = Card([CardHeader("Hi")])
-</llm-response-ui-lang>
+</streaming-ui-script>
 
 <!-- as a property / method -->
 <script>
-  const el = document.querySelector("llm-response-ui-lang");
+  const el = document.querySelector("streaming-ui-script");
   el.setResponse(`root = Stack([greeting])
 greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 </script>
 ```
 
-# Building applications with LLM Response UI Lang
+# Building applications with Streaming UI Script
 
 > **Audience.** You are an LLM authoring code in a host page that has mounted
-> `<llm-response-ui-lang>`. This document teaches the full mental model and
+> `<streaming-ui-script>`. This document teaches the full mental model and
 > all the patterns needed to build apps end-to-end. It assumes the basics
 > from [`SKILL.md`](./SKILL.md) and goes deep.
 >
@@ -135,7 +135,7 @@ If you internalise only these ten rules, you will write correct programs:
 
 ## 1. Mental model
 
-LLM Response UI Lang has three layers that compose into a full application:
+Streaming UI Script has three layers that compose into a full application:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -192,7 +192,7 @@ $identifier = Literal               # reactive state declaration
 
 - `identifier` is bare: `kebab-case`, `snake_case`, or `lowerCamelCase`. No
   prefix unless it's a state declaration.
-- `Expression` is any LLM Response UI Lang expression (component call, value,
+- `Expression` is any Streaming UI Script expression (component call, value,
   ternary, member access, etc.).
 - `$identifier = …` declares reactive state. The right-hand side **must be a
   literal** (string, number, boolean, array, object) — no function calls.
@@ -218,7 +218,7 @@ kpis = Stack([rev, growth], "row", "m")
 rev = StatCard("Revenue", "" + data.revenue, "up", "+12%")
 growth = StatCard("Growth", data.growth_pct, "up")
 chart = LineChart(months, [series])
-footer = TextContent("Generated by LLM Response UI Lang", "small", "muted")
+footer = TextContent("Generated by Streaming UI Script", "small", "muted")
 
 $days = "90"
 data = Query("perf_summary", {days: $days}, {revenue: 0, growth_pct: "0%"})
@@ -808,7 +808,7 @@ ctx.open(url)               // open URL via configured opener
 ctx.query(id)               // shadowRoot.getElementById
 ctx.queryAll(selector)      // shadowRoot.querySelectorAll → array
 
-ctx.host                    // the <llm-response-ui-lang> element
+ctx.host                    // the <streaming-ui-script> element
 ctx.cleanup(fn)             // register teardown (intervals, listeners, observers)
 ctx.signal                  // AbortSignal — fires when the script is about to re-run or unmount
 ```
@@ -1383,8 +1383,8 @@ If you can answer "yes" to all ten, your response is ready.
 
 - **Library README:** [`README.md`](./README.md) — install, embed, theme, deploy.
 - **Skill summary:** [`SKILL.md`](./SKILL.md) — short "when to use this and how".
-- **Component reference:** <https://asfand-dev.github.io/llm-response-ui-lang/components.html>
-- **Language reference:** <https://asfand-dev.github.io/llm-response-ui-lang/language.html>
-- **JS interactions guide:** <https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html>
-- **Live demos:** <https://asfand-dev.github.io/llm-response-ui-lang/examples.html>
-- **Generated system prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+- **Component reference:** <https://asfand-dev.github.io/streaming-ui-script/components.html>
+- **Language reference:** <https://asfand-dev.github.io/streaming-ui-script/language.html>
+- **JS interactions guide:** <https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html>
+- **Live demos:** <https://asfand-dev.github.io/streaming-ui-script/examples.html>
+- **Generated system prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>

@@ -1,8 +1,8 @@
 /**
- * Built-in component library for `<llm-response-ui-lang>`.
+ * Built-in component library for `<streaming-ui-script>`.
  *
  * Exports a single `defaultLibrary` that ships with the package. Consumers can
- * extend it via `<llm-response-ui-lang>.registerComponents([...])`.
+ * extend it via `<streaming-ui-script>.registerComponents([...])`.
  */
 
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
@@ -111,7 +111,7 @@ const componentGroups: ComponentGroup[] = [
     name: "Scripting",
     components: ["Script"],
     notes: [
-      "- Only available when the host page enables JavaScript interactions (`<llm-response-ui-lang enable-javascript=\"true\">`).",
+      "- Only available when the host page enables JavaScript interactions (`<streaming-ui-script enable-javascript=\"true\">`).",
       "- Use sparingly: most state can be handled with `$variables` + `Action([@Set(...), @Run(...)])`.",
     ],
   },

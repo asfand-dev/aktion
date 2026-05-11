@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JavaScript interactions · llm-response-ui-lang</title>
+  <title>JavaScript interactions · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/site.css" />
   <style>
     .js-grid {
@@ -99,8 +99,8 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>llm-response-ui-lang</h1>
-      <p>Web component runtime for LLM Response UI Lang</p>
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -168,7 +168,7 @@
         <h4>JavaScript interactions are off by default</h4>
         <p>
           Set <code>enable-javascript="true"</code> on the
-          <code>&lt;llm-response-ui-lang&gt;</code> tag to allow the LLM to
+          <code>&lt;streaming-ui-script&gt;</code> tag to allow the LLM to
           execute JavaScript. When disabled (the default), <code>Script(...)</code>
           and <code>@Js(...)</code> silently no-op, and the system prompt
           omits the JavaScript section entirely. Only enable it when you
@@ -183,14 +183,14 @@
         calling <code>getSystemPrompt()</code> on an enabled element produces
         a prompt that teaches the model how to write scripts.
       </p>
-<pre><code>&lt;llm-response-ui-lang
+<pre><code>&lt;streaming-ui-script
   id="renderer"
   theme="light"
   enable-javascript="true"
-&gt;&lt;/llm-response-ui-lang&gt;
+&gt;&lt;/streaming-ui-script&gt;
 
 &lt;script type="module"&gt;
-  import "https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js";
+  import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
   const el = document.getElementById("renderer");
 
   // The generated prompt now contains a `## JavaScript interactions` section.
@@ -206,26 +206,26 @@ el.enableJavascript = false;    // tears down running scripts and disables furth
       <div class="callout">
         <h4>Heads up: proxy elements</h4>
         If you build the system prompt from a <em>temporary</em>
-        <code>&lt;llm-response-ui-lang&gt;</code> element (a common pattern when
+        <code>&lt;streaming-ui-script&gt;</code> element (a common pattern when
         each turn renders into its own instance), the proxy has no attributes
         unless you set them. Always pass the JS flag explicitly so the prompt
         mirrors the renderer:
 <pre><code>const ENABLE_JS = true;
 
 function buildPrompt() {
-  const proxy = document.createElement("llm-response-ui-lang");
+  const proxy = document.createElement("streaming-ui-script");
   return proxy.getSystemPrompt({ enableJavascript: ENABLE_JS });
 }
 
 // ...then later, when creating the renderer per turn:
-const renderer = document.createElement("llm-response-ui-lang");
+const renderer = document.createElement("streaming-ui-script");
 if (ENABLE_JS) renderer.setAttribute("enable-javascript", "true");</code></pre>
       </div>
 
       <h2>2. Writing the body string</h2>
       <p>
         The <code>body</code> argument of <code>Script(...)</code> and
-        <code>@Js(...)</code> is a string in LLM Response UI Lang. You can
+        <code>@Js(...)</code> is a string in Streaming UI Script. You can
         write it two ways:
       </p>
       <ul>
@@ -304,7 +304,7 @@ quick = Script("quick", "ctx.state.set('ready', true);")</code></pre>
           </tr>
           <tr>
             <td><code>ctx.host</code></td>
-            <td>The <code>&lt;llm-response-ui-lang&gt;</code> element itself.</td>
+            <td>The <code>&lt;streaming-ui-script&gt;</code> element itself.</td>
           </tr>
           <tr>
             <td><code>ctx.cleanup(fn)</code></td>
@@ -373,12 +373,12 @@ ticker = Script("ticker", `
 `, ["running"])
 root = Stack([counter, controls, ticker])</code></pre>
         <div class="demo-preview">
-          <llm-response-ui-lang
+          <streaming-ui-script
             id="demo-counter"
             theme="light"
             enable-javascript="true"
             transparent
-          ></llm-response-ui-lang>
+          ></streaming-ui-script>
         </div>
       </div>
 
@@ -410,12 +410,12 @@ loader = Script("loader", `
 `, [])
 root = Stack([header, status, list, loader])</code></pre>
         <div class="demo-preview">
-          <llm-response-ui-lang
+          <streaming-ui-script
             id="demo-tools"
             theme="light"
             enable-javascript="true"
             transparent
-          ></llm-response-ui-lang>
+          ></streaming-ui-script>
         </div>
       </div>
 
@@ -459,7 +459,7 @@ root = Stack([list])</code></pre>
         assistant to acknowledge it).
       </p>
       <div class="demo-row">
-<pre class="demo-source"><code>$snippet = "npm install llm-response-ui-lang"
+<pre class="demo-source"><code>$snippet = "npm install streaming-ui-script"
 $msg = "Press Copy to test."
 snippet = Card([
   CardHeader("Copy to clipboard"),
@@ -475,12 +475,12 @@ snippet = Card([
 ])
 root = Stack([snippet])</code></pre>
         <div class="demo-preview">
-          <llm-response-ui-lang
+          <streaming-ui-script
             id="demo-clipboard"
             theme="light"
             enable-javascript="true"
             transparent
-          ></llm-response-ui-lang>
+          ></streaming-ui-script>
         </div>
       </div>
 
@@ -616,13 +616,13 @@ root = Stack([field, list, search])</code></pre>
         Together with <code>$variables</code>, queries, mutations, and
         actions, JavaScript interactions close the loop: anything you would
         build in React, Vue, Angular, Svelte, or Solid can now be expressed
-        by an LLM in LLM Response UI Lang and rendered inside the shadow DOM.
+        by an LLM in Streaming UI Script and rendered inside the shadow DOM.
       </p>
     </main>
   </div>
   <script type="module" src="assets/site.js"></script>
   <script type="module">
-    import "../dist/llm-response-ui-lang.js";
+    import "../dist/streaming-ui-script.js";
 
     // Wire the three demos. They share their state with each other only by
     // accident — every element has its own state store inside the shadow DOM.
@@ -668,7 +668,7 @@ loader = Script("loader", "try { const data = await ctx.tools.list_repos({ limit
 root = Stack([header, status, list, loader])`);
 
     const clipboard = document.getElementById("demo-clipboard");
-    clipboard.setResponse(`$snippet = "npm install llm-response-ui-lang"
+    clipboard.setResponse(`$snippet = "npm install streaming-ui-script"
 $msg = "Press Copy to test."
 snippet = Card([
   CardHeader("Copy to clipboard"),

@@ -1,5 +1,5 @@
 /**
- * AST types for LLM Response UI Lang.
+ * AST types for Streaming UI Script.
  *
  * The grammar is line-oriented:
  *   identifier = Expression

@@ -1,22 +1,22 @@
-# llm-response-ui-lang
+# streaming-ui-script
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Pages](https://img.shields.io/badge/docs-github%20pages-6366f1)](https://asfand-dev.github.io/llm-response-ui-lang/)
+[![Pages](https://img.shields.io/badge/docs-github%20pages-6366f1)](https://asfand-dev.github.io/streaming-ui-script/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](#contributing)
 
 A framework-agnostic web component that renders LLM-generated UI from
-**LLM Response UI Lang** — a compact, declarative language designed for chat
-assistants. Drop one `<script>` tag and one `<llm-response-ui-lang>` tag into
+**Streaming UI Script** — a compact, declarative language designed for chat
+assistants. Drop one `<script>` tag and one `<streaming-ui-script>` tag into
 any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
 
-- **Live docs and demos:** <https://asfand-dev.github.io/llm-response-ui-lang/>
-- **CDN bundle (ESM):** <https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js>
-- **System prompt:** <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
+- **Live docs and demos:** <https://asfand-dev.github.io/streaming-ui-script/>
+- **CDN bundle (ESM):** <https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js>
+- **System prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
 
 The library bundles everything needed at runtime:
 
-- An **LLM Response UI Lang parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
+- An **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
 - A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
 - An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
@@ -43,13 +43,13 @@ render generative UI without extra wiring.
 ### 1. Add the script tag
 
 ```html
-<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
+<script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"></script>
 ```
 
 For non-module setups use the IIFE build:
 
 ```html
-<script src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.iife.js" defer></script>
+<script src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.iife.js" defer></script>
 ```
 
 The CSS is bundled inside the JS and injected into each instance's shadow root,
@@ -58,7 +58,7 @@ so you do **not** need a separate stylesheet.
 ### 2. Mount the tag
 
 ```html
-<llm-response-ui-lang id="reply" theme="light"></llm-response-ui-lang>
+<streaming-ui-script id="reply" theme="light"></streaming-ui-script>
 ```
 
 ### 3. Render a response
@@ -67,16 +67,16 @@ There are three equivalent ways to set the program text:
 
 ```html
 <!-- as an attribute -->
-<llm-response-ui-lang response='root = Card([CardHeader("Hi")])'></llm-response-ui-lang>
+<streaming-ui-script response='root = Card([CardHeader("Hi")])'></streaming-ui-script>
 
 <!-- as inner text -->
-<llm-response-ui-lang>
+<streaming-ui-script>
   root = Card([CardHeader("Hi")])
-</llm-response-ui-lang>
+</streaming-ui-script>
 
 <!-- as a property / method -->
 <script>
-  const el = document.querySelector("llm-response-ui-lang");
+  const el = document.querySelector("streaming-ui-script");
   el.setResponse(`root = Stack([greeting])
 greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 </script>
@@ -107,7 +107,7 @@ Either fetch the auto-generated `system_prompt.txt` from the CDN:
 
 ```js
 const systemPrompt = await fetch(
-  "https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt",
+  "https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt",
 ).then((r) => r.text());
 ```
 
@@ -143,7 +143,7 @@ el.addEventListener("assistant-message", (event) => {
 
 ## Public API
 
-All members live on the `<llm-response-ui-lang>` element.
+All members live on the `<streaming-ui-script>` element.
 
 ### Attributes
 
@@ -151,7 +151,7 @@ All members live on the `<llm-response-ui-lang>` element.
 |----------------------|-------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `theme`              | `light`, `dark`, or a JSON object literal             | Switches the theme. JSON objects are merged with the default `light` token map.                                                          |
 | `streaming`          | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.                                                        |
-| `response`           | LLM Response UI Lang text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                                                               |
+| `response`           | Streaming UI Script text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                                                               |
 | `showerrors`         | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.                                                        |
 | `enable-javascript`  | `true` / unset                                        | If `true`, allows `Script(...)` + `@Js(...)` to run and the generated system prompt teaches the LLM about them. Defaults to off.         |
 
@@ -212,7 +212,7 @@ el.setTheme({
 You can also style the host element from outside:
 
 ```css
-llm-response-ui-lang {
+streaming-ui-script {
   --rui-color-primary: #16a34a;
   --rui-radius-md: 14px;
 }
@@ -222,7 +222,7 @@ A full list of tokens lives in `docs/themes.html` and `src/theme/index.ts`.
 
 ---
 
-## LLM Response UI Lang in 60 seconds
+## Streaming UI Script in 60 seconds
 
 ```text
 $days = "7"
@@ -284,7 +284,7 @@ surfaces:
   `@Each` loop into a click handler.
 
 ```html
-<llm-response-ui-lang enable-javascript="true"></llm-response-ui-lang>
+<streaming-ui-script enable-javascript="true"></streaming-ui-script>
 ```
 
 ```text
@@ -306,7 +306,7 @@ newlines and unescaped `"` are fine). The generated system prompt teaches the
 LLM about these features only when the flag is on, and `getSystemPrompt()`
 always mirrors the live attribute.
 
-See the [JavaScript interactions guide](https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html)
+See the [JavaScript interactions guide](https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html)
 or the deeper [`coding-gen-skill.md`](./coding-gen-skill.md) for a full
 end-to-end app walkthrough.
 
@@ -355,7 +355,7 @@ two companion documents are kept in sync with the bundle:
   to reach for this component** and the minimum integration surface (mount,
   stream, tools, theme).
 - [`coding-gen-skill.md`](./coding-gen-skill.md) — an **extensive knowledge
-  base** for building complete applications in LLM Response UI Lang: mental
+  base** for building complete applications in Streaming UI Script: mental
   model, every component group, state management, queries/mutations, actions,
   loops, JavaScript interactions, app patterns (todo list, dashboard, wizard,
   chat, settings, real-time), and anti-patterns. Treat it as the "deep dive"
@@ -394,8 +394,8 @@ Requirements: **Node ≥ 18** and **npm ≥ 9** (or pnpm/yarn — examples use n
 ### Install
 
 ```bash
-git clone https://github.com/asfand-dev/llm-response-ui-lang.git
-cd llm-response-ui-lang
+git clone https://github.com/asfand-dev/streaming-ui-script.git
+cd streaming-ui-script
 npm install
 ```
 
@@ -408,9 +408,9 @@ npm run build
 Produces:
 
 ```
-dist/llm-response-ui-lang.js          # ESM bundle
-dist/llm-response-ui-lang.umd.cjs     # UMD bundle for older bundlers
-dist/llm-response-ui-lang.iife.js     # IIFE for non-module <script> tags
+dist/streaming-ui-script.js          # ESM bundle
+dist/streaming-ui-script.umd.cjs     # UMD bundle for older bundlers
+dist/streaming-ui-script.iife.js     # IIFE for non-module <script> tags
 dist/system_prompt.txt                # Auto-generated prompt
 ```
 
@@ -452,14 +452,14 @@ This repository ships its own copy of the bundle on GitHub Pages, so most users
 do not need to host anything themselves:
 
 ```html
-<script type="module" src="https://asfand-dev.github.io/llm-response-ui-lang/dist/llm-response-ui-lang.js"></script>
-<llm-response-ui-lang theme="dark"></llm-response-ui-lang>
+<script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"></script>
+<streaming-ui-script theme="dark"></streaming-ui-script>
 ```
 
 …and a fetch of `system_prompt.txt` server-side to build LLM messages:
 
 ```bash
-curl https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt
+curl https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt
 ```
 
 To ship your own copy, run `npm run build` and serve the `dist/` folder from
@@ -483,7 +483,7 @@ Contributions are very welcome. The fastest path is:
 6. Open a pull request describing the motivation and any user-visible changes.
 
 Issues, design discussions, and bug reports are tracked at
-<https://github.com/asfand-dev/llm-response-ui-lang/issues>.
+<https://github.com/asfand-dev/streaming-ui-script/issues>.
 
 By contributing you agree that your work will be released under the project's
 MIT license.

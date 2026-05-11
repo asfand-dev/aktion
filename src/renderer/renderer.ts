@@ -77,7 +77,7 @@ export class Renderer {
       return spec.render(node, props, helpers);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error(`[llm-response-ui-lang] failed to render ${spec.name}`, err);
+      console.error(`[streaming-ui-script] failed to render ${spec.name}`, err);
       const fallback = document.createElement("div");
       fallback.className = "rui-render-error";
       fallback.textContent = `[render error in ${spec.name}]`;

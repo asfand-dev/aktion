@@ -1,5 +1,5 @@
 /**
- * Built-in `@Name(...)` functions for LLM Response UI Lang.
+ * Built-in `@Name(...)` functions for Streaming UI Script.
  *
  * These are pure data transformations. Action builtins (@Run, @Set, @Reset,
  * @ToAssistant, @OpenUrl) are handled separately because they are emitted as
