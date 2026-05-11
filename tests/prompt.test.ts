@@ -44,4 +44,23 @@ describe("generatePrompt", () => {
     // The syntax section should mention forward references / hoisting.
     expect(text).toContain("Forward references are allowed");
   });
+
+  it("omits the JavaScript interactions section by default", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).not.toContain("## JavaScript interactions");
+    expect(text).not.toContain('Script("id"');
+    expect(text).not.toContain("### Scripting");
+  });
+
+  it("includes the JavaScript interactions section when enabled", () => {
+    const text = generatePrompt(defaultLibrary, { enableJavascript: true });
+    expect(text).toContain("## JavaScript interactions");
+    expect(text).toContain('Script("id"');
+    expect(text).toContain("@Js(");
+    expect(text).toContain("ctx.state.set");
+    expect(text).toContain("ctx.tools");
+    expect(text).toContain("ctx.cleanup");
+    // The Scripting group should also surface in the Components section.
+    expect(text).toContain("### Scripting");
+  });
 });

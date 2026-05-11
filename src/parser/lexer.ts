@@ -94,9 +94,14 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // String literal: "..." with simple escape support.
-    if (ch === '"' || ch === "'") {
+    // String literal:
+    //   - "..." / '...' — single-line strings with escape support
+    //   - `...`         — multi-line "raw" strings (template-literal style),
+    //                     useful for embedding JavaScript bodies in Script(...)
+    //                     and @Js(...) without escaping every newline.
+    if (ch === '"' || ch === "'" || ch === "`") {
       const quote = ch;
+      const multiline = ch === "`";
       const startLine = line;
       const startCol = column;
       advance();
@@ -112,11 +117,14 @@ export function tokenize(source: string): Token[] {
             case "\\": value += "\\"; break;
             case '"': value += '"'; break;
             case "'": value += "'"; break;
+            case "`": value += "`"; break;
             default: value += escaped ?? "";
           }
           continue;
         }
-        if (peek() === "\n") {
+        if (!multiline && peek() === "\n") {
+          // Quoted strings stop at newlines so a half-written line never
+          // swallows the rest of the program. Backtick strings keep going.
           break;
         }
         value += advance();

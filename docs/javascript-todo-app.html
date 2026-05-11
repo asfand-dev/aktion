@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JS demo · Todo app · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        llm-response-ui-lang · todo app
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">JS demo · Query + Mutation + Script</span>
+      <h1 style="margin-top:10px">A full todo app, persisted to <code>localStorage</code></h1>
+      <p>
+        The UI is plain LLM Response UI Lang — input, filter buttons, list,
+        bulk actions, footer. Reads go through a <code>Query</code> tool,
+        writes through <code>Mutation</code>s. A single <code>Script</code>
+        listens for keyboard shortcuts (⌘+Enter to add) and exposes a
+        keyboard hint badge.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Add a few tasks, then refresh the page — they survive. The filter
+        buttons mutate <code>$filter</code> declaratively; the list updates
+        because <code>list_todos</code> re-runs whenever its args change.
+      </p>
+      <div class="example-output">
+        <llm-response-ui-lang id="rui-todo" theme="light" enable-javascript="true"></llm-response-ui-lang>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>UI Lang source</h2>
+      <p class="lede">
+        Note how the script only takes care of the imperative pieces
+        (focus, keyboard shortcut, status pill). State and data flow stay
+        declarative.
+      </p>
+<pre class="example-source"><code id="src-todo">$filter = "all"
+$draft = ""
+$ver = 0
+$shortcut = "⌘ Enter to add"
+
+data = Query("list_todos", {filter: $filter, ver: $ver}, {rows: [], total: 0, active: 0, done: 0})
+add = Mutation("add_todo", {title: $draft})
+toggle = Mutation("toggle_todo", {id: $toggleId})
+remove = Mutation("delete_todo", {id: $deleteId})
+clearDone = Mutation("clear_completed", {})
+$toggleId = ""
+$deleteId = ""
+
+inputField = FormControl("New task", Input("draft", "What needs doing?", "text", null, $draft))
+addBtn = Button("Add", Action([@Run(add), @Run(data), @Reset($draft)]), "primary")
+form = Stack([inputField, addBtn], "row", "m", "end")
+
+filterButtons = Buttons([
+  Button("All " + "(" + data.total + ")",        Action([@Set($filter, "all")]),    $filter == "all" ? "primary" : "ghost",    "normal", "small"),
+  Button("Active " + "(" + data.active + ")",    Action([@Set($filter, "active")]), $filter == "active" ? "primary" : "ghost", "normal", "small"),
+  Button("Completed " + "(" + data.done + ")",   Action([@Set($filter, "done")]),   $filter == "done" ? "primary" : "ghost",   "normal", "small")
+])
+
+statusTag = Tag($shortcut, null, "sm", "neutral")
+
+toggleBtn = @Each(data.rows, "t", Button(t.done ? "✓" : "○", Action([@Set($toggleId, t.id), @Run(toggle), @Run(data)]), t.done ? "secondary" : "ghost", "normal", "small"))
+deleteBtn = @Each(data.rows, "t", Button("Delete", Action([@Set($deleteId, t.id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))
+titleCell  = @Each(data.rows, "t", TextContent(t.title, t.done ? "small" : "body", t.done ? "muted" : null))
+createdCell= @Each(data.rows, "t", TextContent(t.created, "small", "muted"))
+
+tbl = Table([
+  Col("",        toggleBtn),
+  Col("Title",   titleCell),
+  Col("Added",   createdCell),
+  Col("",        deleteBtn)
+])
+
+empty = TextContent($filter == "done" ? "Nothing completed yet." : ($filter == "active" ? "All clear!" : "No tasks. Add your first one above."), "small", "muted")
+list = @Count(data.rows) > 0 ? tbl : empty
+
+footer = Stack([
+  TextContent("" + data.active + " active · " + data.done + " done", "small", "muted"),
+  Button("Clear completed", Action([@Run(clearDone), @Run(data)]), "ghost", "normal", "small")
+], "row", "m", "center", "between")
+
+shortcutScript = Script("shortcut", "const onKey = async (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); const draft = (ctx.state.get('draft') ?? '').trim(); if (!draft) return; await ctx.tools.add_todo({ title: draft }); if (ctx.signal.aborted) return; ctx.state.set('draft', ''); ctx.state.set('ver', (ctx.state.get('ver') ?? 0) + 1); } }; window.addEventListener('keydown', onKey); ctx.cleanup(() => window.removeEventListener('keydown', onKey));")
+
+root = Stack([
+  Card([CardHeader("Things to do", "Persisted to localStorage")]),
+  Card([form]),
+  Card([Stack([filterButtons, statusTag], "row", "m", "center", "between")]),
+  Card([list]),
+  Card([footer]),
+  shortcutScript
+])</code></pre>
+    </article>
+
+    <article class="example-card">
+      <h2>The host wires the storage tools</h2>
+      <p class="lede">
+        Tools are plain functions — the LLM (or you, in this case) decides
+        when to call them. Add localStorage persistence in one place and
+        every <code>Query</code> / <code>Mutation</code> stays in sync.
+      </p>
+<pre><code class="example-source">const STORAGE_KEY = "rui-todo-app";
+const load = () =&gt; JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+const save = (todos) =&gt; localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+
+el.setTools({
+  list_todos: ({ filter }) =&gt; {
+    const todos = load();
+    const visible = todos.filter((t) =&gt; (
+      filter === "all" || (filter === "done" ? t.done : !t.done)
+    ));
+    return {
+      rows: visible.map((t) =&gt; ({ ...t, created: relative(t.createdAt) })),
+      total: todos.length,
+      active: todos.filter((t) =&gt; !t.done).length,
+      done: todos.filter((t) =&gt; t.done).length,
+    };
+  },
+  add_todo:        ({ title }) =&gt; { ... },
+  toggle_todo:     ({ id })    =&gt; { ... },
+  delete_todo:     ({ id })    =&gt; { ... },
+  clear_completed: ()          =&gt; { ... },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/llm-response-ui-lang.js";
+
+    const STORAGE_KEY = "rui-todo-app";
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); }
+      catch { return []; }
+    }
+    function save(todos) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(todos)); }
+      catch { /* quota or disabled storage — ignore */ }
+    }
+
+    function uid() {
+      return Math.random().toString(36).slice(2, 10);
+    }
+
+    function relative(ts) {
+      const diff = Date.now() - ts;
+      if (diff < 60_000) return "just now";
+      if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+      if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+      return new Date(ts).toLocaleDateString();
+    }
+
+    if (load().length === 0) {
+      save([
+        { id: uid(), title: "Ship the JS-interactions docs",          done: true,  createdAt: Date.now() - 86_400_000 },
+        { id: uid(), title: "Wire localStorage into the todo demo",   done: false, createdAt: Date.now() - 3_600_000 },
+        { id: uid(), title: "Try ⌘+Enter to add a task quickly",       done: false, createdAt: Date.now() - 60_000 },
+      ]);
+    }
+
+    const el = document.getElementById("rui-todo");
+
+    el.setTools({
+      list_todos: ({ filter }) => {
+        const todos = load();
+        const visible = todos.filter((t) => (
+          filter === "all" || (filter === "done" ? t.done : !t.done)
+        ));
+        return {
+          rows: visible.map((t) => ({
+            id: t.id,
+            title: t.title,
+            done: t.done,
+            created: relative(t.createdAt),
+          })),
+          total: todos.length,
+          active: todos.filter((t) => !t.done).length,
+          done: todos.filter((t) => t.done).length,
+        };
+      },
+      add_todo: ({ title }) => {
+        const trimmed = (title ?? "").trim();
+        if (!trimmed) return { ok: false };
+        const todos = load();
+        todos.unshift({ id: uid(), title: trimmed, done: false, createdAt: Date.now() });
+        save(todos);
+        return { ok: true };
+      },
+      toggle_todo: ({ id }) => {
+        const todos = load();
+        const t = todos.find((x) => x.id === id);
+        if (t) { t.done = !t.done; save(todos); }
+        return { ok: true };
+      },
+      delete_todo: ({ id }) => {
+        save(load().filter((t) => t.id !== id));
+        return { ok: true };
+      },
+      clear_completed: () => {
+        save(load().filter((t) => !t.done));
+        return { ok: true };
+      },
+    });
+
+    el.setResponse(document.getElementById("src-todo").textContent);
+  </script>
+</body>
+</html>

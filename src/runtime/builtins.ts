@@ -80,6 +80,17 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     });
     return arr;
   },
+  /**
+   * Append a value to an array, returning a new array. Designed to be paired
+   * with `@Set` so the LLM can grow a list declaratively, no JS required:
+   *   addBtn = Button("Add", Action([@Set($todos, @Push($todos, newTodo))]))
+   */
+  Push: (args) => [...toArray(args[0]), args[1]],
+  /**
+   * Concatenate two arrays. Useful for prepending items as well:
+   *   @Set($todos, @Concat([newTodo], $todos))
+   */
+  Concat: (args) => [...toArray(args[0]), ...toArray(args[1])],
   Round: (args) => {
     const n = toNumber(args[0]);
     const decimals = args[1] === undefined ? 0 : toNumber(args[1]);
@@ -100,14 +111,20 @@ export type ActionStep =
   | { kind: "Set"; name: string; value: unknown }
   | { kind: "Reset"; names: string[] }
   | { kind: "ToAssistant"; message: string }
-  | { kind: "OpenUrl"; url: string };
+  | { kind: "OpenUrl"; url: string }
+  /**
+   * `args` carries values captured at render time — used to pass per-item data
+   * (loop variables, computed values) into the JS body. Accessible inside the
+   * body as `ctx.args.<key>`. Always an object, never null.
+   */
+  | { kind: "Js"; code: string; args: Record<string, unknown> };
 
 export const isActionStep = (value: unknown): value is ActionStep => {
   if (!value || typeof value !== "object") return false;
   const kind = (value as { kind?: unknown }).kind;
   return (
     kind === "Run" || kind === "Set" || kind === "Reset" ||
-    kind === "ToAssistant" || kind === "OpenUrl"
+    kind === "ToAssistant" || kind === "OpenUrl" || kind === "Js"
   );
 };
 

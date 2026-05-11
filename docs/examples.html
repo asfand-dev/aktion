@@ -17,6 +17,7 @@
         <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="themes.html">Theming</a>
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
@@ -27,6 +28,9 @@
         <a href="external-data-example.html">External data</a>
         <a href="support-agent.html">Support agent</a>
         <a href="analytics-assistant.html">Analytics assistant</a>
+        <a href="javascript-todo-app.html">Todo app (JS)</a>
+        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
+        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
       </nav>
     </aside>
 
@@ -36,6 +40,15 @@
         Each example below renders LLM Response UI Lang inline. Switch to the
         source tab to see the exact text the component receives. Use the theme
         picker to test contrast.
+      </p>
+
+      <p>
+        Need to wire up <em>behaviour</em> (timers, fetch, focus, animations,
+        clipboard) inside an assistant response? See the dedicated
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        page — once you opt in with <code>enable-javascript="true"</code>,
+        the LLM can author <code>Script(...)</code> and <code>@Js(...)</code>
+        for anything the declarative components don't cover.
       </p>
 
       <h2 style="margin-top:28px">Live demos</h2>
@@ -74,6 +87,24 @@
           <span class="demo-tag">NL → chart</span>
           <h3>Analytics assistant</h3>
           <p>Type a question about revenue, signups, or churn — the same component renders the right chart, KPIs, and breakdown.</p>
+          <span class="demo-arrow">Open demo →</span>
+        </a>
+        <a class="demo-card" href="javascript-todo-app.html">
+          <span class="demo-tag">JS · Script + tools</span>
+          <h3>Todo app (localStorage)</h3>
+          <p>A full reactive todo list with filters, keyboard shortcut, and localStorage persistence — wired via <code>Query</code>, <code>Mutation</code>, and a single <code>Script</code>.</p>
+          <span class="demo-arrow">Open demo →</span>
+        </a>
+        <a class="demo-card" href="javascript-pomodoro.html">
+          <span class="demo-tag">JS · timers + audio</span>
+          <h3>Pomodoro timer</h3>
+          <p>Phases, audio chime, and optional notifications. The script owns the countdown; the host owns the policy.</p>
+          <span class="demo-arrow">Open demo →</span>
+        </a>
+        <a class="demo-card" href="javascript-stopwatch.html">
+          <span class="demo-tag">JS · rAF + cleanup</span>
+          <h3>Stopwatch + laps</h3>
+          <p>Sub-second precision via <code>requestAnimationFrame</code>, lap splits, and proper teardown when the timer pauses.</p>
           <span class="demo-arrow">Open demo →</span>
         </a>
       </div>
@@ -719,6 +750,117 @@ follow = FollowUpBlock([
   FollowUpItem("Book a discovery call"),
   FollowUpItem("See case studies"),
   FollowUpItem("Request a proposal")
+])</code></pre>
+        </div>
+      </div>
+
+      <h2 style="margin-top:32px">JavaScript interactions</h2>
+      <p>
+        The example below needs <code>enable-javascript="true"</code> on its
+        host element so the LLM-authored <code>Script(...)</code> body can
+        actually run. Disable the flag and the same source still parses and
+        renders cleanly — only the JS-driven behaviour switches off. Read the
+        full guide on the
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        page.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>Live ticking counter (Script + @Js)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light" enable-javascript="true"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$count = 0
+$running = false
+header = Card([CardHeader("Live counter", "Powered by Script() + @Js()")])
+display = TextContent("" + $count, "large-heavy")
+controls = Buttons([
+  Button($running ? "Pause" : "Start", Action([@Set($running, !$running)]), "primary"),
+  Button("Reset", Action([@Reset($count, $running)]), "secondary"),
+  Button("+10", Action([@Js("ctx.state.set('count', (ctx.state.get('count') ?? 0) + 10);")]), "ghost")
+])
+ticker = Script("ticker", "if (!ctx.state.get('running')) return; const id = setInterval(() => ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1), 1000); ctx.cleanup(() => clearInterval(id));", ["running"])
+root = Stack([header, display, controls, ticker])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Copy to clipboard (@Js + @ToAssistant)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light" enable-javascript="true"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$snippet = "npm install llm-response-ui-lang"
+$copied = false
+
+resetCopied = Script("reset-copied", "if (!ctx.state.get('copied')) return; const id = setTimeout(() => ctx.state.set('copied', false), 1800); ctx.cleanup(() => clearTimeout(id));", ["copied"])
+
+copyBtn = Button($copied ? "✓ Copied" : "Copy", Action([
+  @Js("await navigator.clipboard.writeText(ctx.state.get('snippet') ?? ''); ctx.state.set('copied', true);")
+]), $copied ? "secondary" : "primary", "normal", "small")
+
+snippetCard = Card([
+  CardHeader("Install", "One command via npm"),
+  Stack([
+    TextContent($snippet, "body-heavy"),
+    copyBtn
+  ], "row", "m", "center", "between")
+], "outlined")
+
+root = Stack([snippetCard, resetCopied])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Live form validation (Script + reactive errors)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <llm-response-ui-lang theme="light" enable-javascript="true"></llm-response-ui-lang>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$email = ""
+$password = ""
+$emailError = ""
+$pwError = ""
+$strength = ""
+
+validator = Script("validate", "const email = (ctx.state.get('email') ?? '').trim(); const pw = ctx.state.get('password') ?? ''; const emailRe = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/; ctx.state.set('emailError', !email ? '' : (emailRe.test(email) ? '' : 'Looks like an invalid email.')); let strength = ''; if (pw.length === 0) strength = ''; else if (pw.length &lt; 8) strength = 'Too short — use at least 8 characters.'; else if (!/\\d/.test(pw) || !/[A-Z]/.test(pw)) strength = 'Add a number and an uppercase letter.'; else strength = 'Strong enough.'; ctx.state.set('strength', strength); ctx.state.set('pwError', pw &amp;&amp; pw.length &lt; 8 ? 'Password is too short.' : '');", ["email", "password"])
+
+emailField  = FormControl("Email", Input("email", "you@example.com", "email", null, $email))
+emailHint   = $emailError == "" ? null : Callout("error", "Email", $emailError)
+
+pwField     = FormControl("Password", Input("password", "At least 8 characters", "password", null, $password))
+pwHint      = $strength == "" ? null : Callout($pwError == "" ? "info" : "warning", "Password strength", $strength)
+
+canSubmit   = $email != "" &amp;&amp; $password != "" &amp;&amp; $emailError == "" &amp;&amp; $pwError == ""
+submitBtn   = Button("Create account", Action([@ToAssistant("Account created!")]), canSubmit ? "primary" : "ghost")
+
+root = Stack([
+  Card([
+    CardHeader("Sign up", "Validation runs in-browser as you type"),
+    emailField, emailHint,
+    pwField, pwHint,
+    submitBtn,
+    validator
+  ])
 ])</code></pre>
         </div>
       </div>

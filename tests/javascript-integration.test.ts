@@ -1,0 +1,324 @@
+/**
+ * Behavioural tests for the opt-in JavaScript interactions feature.
+ *
+ * Covers:
+ *   - `enable-javascript` is off by default and silently disables `Script` / `@Js`.
+ *   - Turning it on runs Script bodies after render and wires `ctx` correctly.
+ *   - Re-renders dispose obsolete scripts and re-run scripts whose deps changed.
+ *   - `@Js("...")` action steps execute on button click.
+ *   - The system prompt only mentions JS when explicitly enabled.
+ */
+
+import { afterEach, describe, expect, it } from "vitest";
+import "../src/index.js";
+
+const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+const waitForRenders = async (n = 10) => {
+  for (let i = 0; i < n; i += 1) await flush();
+};
+
+interface ElementWithApi extends HTMLElement {
+  setResponse(text: string): void;
+  appendChunk(text: string): void;
+  clear(): void;
+  enableJavascript: boolean;
+  streaming: boolean;
+  getSystemPrompt(opts?: Record<string, unknown>): string;
+  setTools(tools: Record<string, (args: Record<string, unknown>) => unknown>): void;
+  state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
+}
+
+const mount = (attributes: Record<string, string> = {}): ElementWithApi => {
+  // Cast through `unknown` because the class declares `state` private but
+  // we need to read it here for assertions; structural overlap rules require
+  // the intermediate cast.
+  const el = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+  for (const [name, value] of Object.entries(attributes)) {
+    el.setAttribute(name, value);
+  }
+  document.body.appendChild(el);
+  return el;
+};
+
+describe("javascript interactions", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("is opt-in: Script() is a no-op by default", async () => {
+    const el = mount();
+    expect(el.enableJavascript).toBe(false);
+
+    // Use the global window to detect script execution side-effects.
+    (window as unknown as { __runs?: number }).__runs = 0;
+    el.setResponse(
+      `runner = Script("runner", "window.__runs = (window.__runs ?? 0) + 1;")
+root = Stack([runner])`,
+    );
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(0);
+  });
+
+  it("runs a Script body once when enabled and the program mounts", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    expect(el.enableJavascript).toBe(true);
+
+    (window as unknown as { __runs?: number }).__runs = 0;
+    el.setResponse(
+      `runner = Script("runner", "window.__runs = (window.__runs ?? 0) + 1;")
+root = Stack([runner])`,
+    );
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(1);
+
+    // Repeated renders without dep changes should NOT re-run the script.
+    el.state.set("__noop__", Math.random());
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(1);
+  });
+
+  it("re-runs the script only when a dep changes, and cleans up between runs", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    (window as unknown as { __runs?: number; __cleans?: number }).__runs = 0;
+    (window as unknown as { __runs?: number; __cleans?: number }).__cleans = 0;
+
+    el.setResponse(`$count = 0
+runner = Script("runner", "window.__runs += 1; ctx.cleanup(() => { window.__cleans += 1; });", ["count"])
+root = Stack([runner])`);
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(1);
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
+
+    el.state.set("count", 1);
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(2);
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
+
+    el.state.set("count", 1);
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(2);
+
+    el.state.set("count", 2);
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(3);
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(2);
+  });
+
+  it("disposes scripts when they leave the tree", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    (window as unknown as { __cleans?: number }).__cleans = 0;
+    el.setResponse(`$show = true
+runner = Script("runner", "ctx.cleanup(() => { window.__cleans += 1; });", [])
+root = Stack([$show ? runner : null])`);
+    await waitForRenders();
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
+
+    el.state.set("show", false);
+    await waitForRenders();
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
+  });
+
+  it("exposes ctx.state.set so a script can drive reactive UI", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    el.setResponse(`$msg = "loading"
+label = TextContent("" + $msg, "large-heavy")
+boot = Script("boot", "ctx.state.set('msg', 'ready');", [])
+root = Stack([label, boot])`);
+    await waitForRenders();
+    const text = el.shadowRoot!.querySelector(".rui-text")?.textContent;
+    expect(text).toBe("ready");
+  });
+
+  it("exposes ctx.tools as a proxy that calls registered handlers", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    el.setTools({
+      load_data: async ({ id }) => ({ id, hello: "world" }),
+    });
+    el.setResponse(`$result = ""
+label = TextContent($result, "small")
+fetcher = Script("fetcher", "const data = await ctx.tools.load_data({ id: 42 }); ctx.state.set('result', JSON.stringify(data));", [])
+root = Stack([label, fetcher])`);
+    await waitForRenders(20);
+    const text = el.shadowRoot!.querySelector(".rui-text")?.textContent;
+    expect(text).toContain('"id":42');
+    expect(text).toContain('"hello":"world"');
+  });
+
+  it("runs @Js action steps on button click and ignores them when disabled", async () => {
+    const programJs = `$count = 0
+label = TextContent("" + $count, "large-heavy")
+btn = Button("Inc", Action([@Js("ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1);")]))
+root = Stack([label, btn])`;
+
+    // Disabled host — clicks should be a no-op.
+    const disabled = mount();
+    disabled.setResponse(programJs);
+    await waitForRenders();
+    const disabledBtn = disabled.shadowRoot!.querySelector("button") as HTMLButtonElement;
+    disabledBtn.click();
+    await waitForRenders();
+    expect(disabled.shadowRoot!.querySelector(".rui-text")?.textContent).toBe("0");
+
+    // Enabled host — same program now updates state.
+    const enabled = mount({ "enable-javascript": "true" });
+    enabled.setResponse(programJs);
+    await waitForRenders();
+    const enabledBtn = enabled.shadowRoot!.querySelector("button") as HTMLButtonElement;
+    enabledBtn.click();
+    await waitForRenders();
+    expect(enabled.shadowRoot!.querySelector(".rui-text")?.textContent).toBe("1");
+  });
+
+  it("supports the canonical 'add via @Push' pattern without any JS", async () => {
+    // The todo-app teaching pattern: adding an item is fully declarative.
+    // No Script/@Js needed. This regression-tests the new @Push builtin and
+    // the .length shortcut working together.
+    const el = mount();
+    el.setResponse(
+      "$todos = []\n" +
+      "$draft = \"\"\n" +
+      "addBtn = Button(\"Add\", Action([@Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft})), @Reset($draft)]))\n" +
+      "root = Stack([addBtn])",
+    );
+    await waitForRenders();
+    el.state.set("draft", "first task");
+    await waitForRenders();
+    const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
+    button.click();
+    await waitForRenders();
+    const todos = el.state.get("todos") as Array<{ id: number; text: string }>;
+    expect(todos).toHaveLength(1);
+    expect(todos[0]).toEqual({ id: 1, text: "first task" });
+    // @Reset returns the state to its declared default, not undefined.
+    expect(el.state.get("draft")).toBe("");
+  });
+
+  it("passes per-item args from @Js(body, args) into ctx.args at click time", async () => {
+    // Regression: LLMs were trying to read loop variables via ctx.state, which
+    // does not work. `@Js(body, {id: t.id})` is the correct way to bake the
+    // loop variable into the action step at render time.
+    const el = mount({ "enable-javascript": "true" });
+    el.setResponse(
+      "$todos = [{id:1, name:\"a\"}, {id:2, name:\"b\"}, {id:3, name:\"c\"}]\n" +
+      "list = @Each($todos, \"t\", row)\n" +
+      "row = Button(t.name, Action([@Js(\"ctx.state.set('clicked', ctx.args.id)\", {id: t.id})]))\n" +
+      "root = Stack([list])",
+    );
+    await waitForRenders();
+    const buttons = el.shadowRoot!.querySelectorAll("button");
+    expect(buttons.length).toBe(3);
+    (buttons[1] as HTMLButtonElement).click();
+    await waitForRenders();
+    expect(el.state.get("clicked")).toBe(2);
+    (buttons[2] as HTMLButtonElement).click();
+    await waitForRenders();
+    expect(el.state.get("clicked")).toBe(3);
+  });
+
+  it("ctx.args defaults to an empty object so handlers can safely destructure", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    el.setResponse(
+      "btn = Button(\"x\", Action([@Js(\"ctx.state.set('args_kind', typeof ctx.args)\")]))\n" +
+      "root = Stack([btn])",
+    );
+    await waitForRenders();
+    (el.shadowRoot!.querySelector("button") as HTMLButtonElement).click();
+    await waitForRenders();
+    expect(el.state.get("args_kind")).toBe("object");
+  });
+
+  it("runs a Script whose body uses a multi-line backtick string", async () => {
+    // Backtick strings let LLMs write JS bodies with real newlines instead of
+    // having to escape them as \n. This regression-tests both the lexer and
+    // the script runner together.
+    const el = mount({ "enable-javascript": "true" });
+    (window as unknown as { __bt?: number }).__bt = 0;
+    el.setResponse(
+      "boot = Script(\"boot\", `\n  const next = (window.__bt ?? 0) + 1;\n  window.__bt = next;\n  ctx.state.set('count', next);\n`)\n" +
+      "root = Stack([boot])",
+    );
+    await waitForRenders();
+    expect((window as unknown as { __bt: number }).__bt).toBe(1);
+    expect(el.state.get("count")).toBe(1);
+  });
+
+  it("skips Script execution while streaming, then runs after streaming ends", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    (window as unknown as { __runs?: number }).__runs = 0;
+    el.streaming = true;
+    el.setResponse(
+      `boot = Script("boot", "window.__runs = (window.__runs ?? 0) + 1;")
+root = Stack([boot])`,
+    );
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(0);
+
+    el.streaming = false;
+    await waitForRenders();
+    expect((window as unknown as { __runs: number }).__runs).toBe(1);
+  });
+
+  it("only includes the JavaScript section in the system prompt when enabled", () => {
+    const el = mount();
+    const off = el.getSystemPrompt();
+    expect(off).not.toContain("JavaScript interactions");
+    expect(off).not.toContain("Script(");
+
+    el.enableJavascript = true;
+    const on = el.getSystemPrompt();
+    expect(on).toContain("JavaScript interactions");
+    expect(on).toContain('Script("id", body, deps?)');
+    expect(on).toContain("@Js(");
+  });
+
+  it("getSystemPrompt({}) on an element with enable-javascript still emits the JS section", () => {
+    // Regression: a caller passing an empty options object (e.g. the chat-bot
+    // demo) used to lose the host's `enable-javascript` flag because the
+    // spread overrode the resolved default with `undefined`.
+    const el = mount({ "enable-javascript": "true" });
+    const prompt = el.getSystemPrompt({});
+    expect(prompt).toContain("JavaScript interactions");
+    expect(prompt).toContain('Script("id", body, deps?)');
+  });
+
+  it("getSystemPrompt({ enableJavascript: undefined }) defaults to the host's attribute", () => {
+    const el = mount({ "enable-javascript": "true" });
+    // Explicit `undefined` must not silently disable JS.
+    const prompt = el.getSystemPrompt({ enableJavascript: undefined });
+    expect(prompt).toContain("JavaScript interactions");
+  });
+
+  it("getSystemPrompt({ enableJavascript: true }) forces JS on even without the attribute", () => {
+    // The chat-bot pattern: build the prompt from a freshly-created proxy
+    // element that doesn't yet carry the attribute, but we know the renderer
+    // it feeds *will* be enabled.
+    const proxy = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+    const prompt = proxy.getSystemPrompt({ enableJavascript: true });
+    expect(prompt).toContain("JavaScript interactions");
+    expect(prompt).toContain('Script("id", body, deps?)');
+  });
+
+  it("teaches the LLM about backtick-quoted multi-line bodies", () => {
+    // The single biggest LLM authoring error is escaping newlines inside
+    // double-quoted Script bodies. The prompt should call out backticks as
+    // the preferred surface for multi-line code.
+    const proxy = document.createElement("llm-response-ui-lang") as unknown as ElementWithApi;
+    const prompt = proxy.getSystemPrompt({ enableJavascript: true });
+    expect(prompt).toContain("backtick-quoted string");
+    expect(prompt).toContain("multi-line backtick body");
+  });
+
+  it("resets cleanly on setResponse so old scripts don't leak across programs", async () => {
+    const el = mount({ "enable-javascript": "true" });
+    (window as unknown as { __cleans?: number }).__cleans = 0;
+    el.setResponse(`runner = Script("runner", "ctx.cleanup(() => { window.__cleans += 1; });", [])
+root = Stack([runner])`);
+    await waitForRenders();
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
+
+    el.setResponse(`root = Stack([])`);
+    await waitForRenders();
+    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
+  });
+});

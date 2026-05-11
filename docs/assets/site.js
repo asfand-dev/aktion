@@ -92,6 +92,7 @@ function setupPlayground() {
   const input = document.getElementById("playground-input");
   const themeSelect = document.getElementById("playground-theme");
   const target = document.getElementById("playground-target");
+  const jsToggle = document.getElementById("playground-enable-js");
   if (!input || !target) return;
 
   const applyPlaygroundTheme = (value) => {
@@ -107,6 +108,15 @@ function setupPlayground() {
     if (themeSelect) {
       applyPlaygroundTheme(themeSelect.value);
       themeSelect.addEventListener("change", () => applyPlaygroundTheme(themeSelect.value));
+    }
+    if (jsToggle) {
+      // Reflect the current attribute state, then keep the renderer in sync.
+      jsToggle.checked = target.hasAttribute("enable-javascript");
+      jsToggle.addEventListener("change", () => {
+        if (jsToggle.checked) target.setAttribute("enable-javascript", "true");
+        else target.removeAttribute("enable-javascript");
+        target.setResponse(input.value);
+      });
     }
   });
 }

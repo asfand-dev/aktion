@@ -55,6 +55,21 @@ export class QueryRegistry {
     this.tools = tools;
   }
 
+  /** List the names of tools registered on this registry. */
+  toolNames(): string[] {
+    return Object.keys(this.tools);
+  }
+
+  /**
+   * Invoke a registered tool by name. Used by the JS bridge so scripts can
+   * trigger backend calls without going through Query / Mutation declarations.
+   */
+  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    const handler = this.tools[name];
+    if (!handler) throw new Error(`Tool "${name}" is not registered`);
+    return handler(args);
+  }
+
   setNotify(notify: () => void): void {
     this.notify = notify;
   }

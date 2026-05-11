@@ -46,6 +46,20 @@ export interface RenderHelpers {
     name: string,
     options?: { event?: string; getValue?: (el: HTMLElement) => unknown },
   ) => void;
+  /**
+   * Register a JavaScript script declared via `Script("id", "body", deps?)`.
+   * The runner reconciles registrations after each render — new scripts run,
+   * changed scripts re-run with cleanup, removed scripts dispose.
+   *
+   * No-op when the host element has `enable-javascript="false"` (the default).
+   */
+  registerScript: (declaration: {
+    id: string;
+    body: string;
+    deps?: ReadonlyArray<string>;
+  }) => void;
+  /** True when the host element has opted in to JavaScript interactions. */
+  javascriptEnabled: boolean;
 }
 
 export type ComponentRenderFn = (

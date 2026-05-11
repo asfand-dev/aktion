@@ -291,6 +291,24 @@ function evaluateBuiltinCall(
     const url = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
     return { kind: "OpenUrl", url } satisfies ActionStep;
   }
+  if (name === "Js") {
+    // @Js(body, args?) — `body` is a JS string. The optional `args` is an
+    // object evaluated at render time and exposed to the body as `ctx.args`.
+    // Use it to capture per-item values inside @Each loops without resorting
+    // to string concatenation:
+    //   @Each($todos, "t", Button("X", Action([
+    //     @Js("ctx.state.set('todos', (ctx.state.get('todos')||[]).filter(x => x.id !== ctx.args.id))", {id: t.id})
+    //   ])))
+    const code = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
+    let capturedArgs: Record<string, unknown> = {};
+    if (args[1]) {
+      const evaluated = evaluate(args[1], ctx);
+      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
+        capturedArgs = evaluated as Record<string, unknown>;
+      }
+    }
+    return { kind: "Js", code, args: capturedArgs } satisfies ActionStep;
+  }
 
   // Iteration builtin uses unevaluated AST.
   if (name === "Each") {
@@ -321,12 +339,28 @@ function evaluateBuiltinCall(
 function memberAccess(target: unknown, property: string): unknown {
   if (target == null) return undefined;
   if (Array.isArray(target)) {
+    // A handful of "array-shaped" properties LLMs reach for reflexively.
+    // Resolving them here means common JS idioms (`$todos.length`,
+    // `$rows.first`) just work without forcing every author to remember the
+    // @Count/@First builtins.
+    switch (property) {
+      case "length": return target.length;
+      case "first": return target[0] ?? null;
+      case "last": return target.length === 0 ? null : target[target.length - 1];
+      default: break;
+    }
+    // "Array pluck": map each item through the property. Idiomatic for
+    // turning `data.rows` into a per-column array.
     return target.map((item) => {
       if (item && typeof item === "object") {
         return (item as Record<string, unknown>)[property];
       }
       return undefined;
     });
+  }
+  if (typeof target === "string") {
+    // Strings get the same shortcut so the LLM doesn't have to switch idioms.
+    if (property === "length") return target.length;
   }
   if (typeof target === "object") {
     return (target as Record<string, unknown>)[property];

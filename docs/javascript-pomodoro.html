@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JS demo · Pomodoro · llm-response-ui-lang</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        llm-response-ui-lang · pomodoro timer
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">JS demo · phases, intervals, audio</span>
+      <h1 style="margin-top:10px">A focused pomodoro app, written declaratively</h1>
+      <p>
+        Three phases — focus, short break, long break — automatically cycle
+        and a single <code>Script</code> drives the countdown. Phase changes
+        trigger a small audio beep and a notification if the user grants
+        permission. The entire UI (rings, controls, history) is plain
+        components.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Try starting a session, then pausing or skipping the phase. When a
+        phase ends the script flips to the next one automatically and the
+        completed sessions counter increments.
+      </p>
+      <div class="example-output">
+        <llm-response-ui-lang id="rui-pomodoro" theme="light" enable-javascript="true"></llm-response-ui-lang>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>UI Lang source</h2>
+      <p class="lede">
+        Note how every state transition is expressed as
+        <code>Action([@Set(...)])</code> — the script doesn't decide policy,
+        it just runs the clock and signals when a phase ends by mutating
+        state.
+      </p>
+<pre class="example-source"><code id="src-pomodoro">$phase = "focus"
+$remaining = 1500
+$running = false
+$completed = 0
+$totalSeconds = 1500
+
+ticker = Script("ticker", "if (!ctx.state.get('running')) return; const tick = async () => { if (ctx.signal.aborted) return; const r = (ctx.state.get('remaining') ?? 0) - 1; if (r &lt;= 0) { ctx.state.set('remaining', 0); ctx.state.set('running', false); const next = await ctx.tools.advance_phase({ phase: ctx.state.get('phase'), completed: ctx.state.get('completed') ?? 0 }); if (ctx.signal.aborted) return; ctx.state.set('phase', next.phase); ctx.state.set('remaining', next.seconds); ctx.state.set('totalSeconds', next.seconds); ctx.state.set('completed', next.completed); } else { ctx.state.set('remaining', r); } }; const id = setInterval(tick, 1000); ctx.cleanup(() => clearInterval(id));", ["running", "phase"])
+
+formatter = Script("formatter", "const r = ctx.state.get('remaining') ?? 0; const m = Math.floor(r / 60); const s = r % 60; const pad = (n) => String(n).padStart(2, '0'); ctx.state.set('clock', pad(m) + ':' + pad(s));", ["remaining"])
+
+$clock = "25:00"
+
+phaseLabel = $phase == "focus" ? "Focus" : ($phase == "short" ? "Short break" : "Long break")
+phaseHint = $phase == "focus" ? "Deep work, no distractions." : ($phase == "short" ? "Stand up, look out the window." : "Step away. Stretch. Hydrate.")
+phaseColor = $phase == "focus" ? "primary" : ($phase == "short" ? "success" : "info")
+
+header = Card([
+  CardHeader(phaseLabel, phaseHint),
+  Stack([
+    Tag(phaseLabel, null, "sm", phaseColor),
+    Tag(@Count($completed) + " sessions today", null, "sm", "neutral")
+  ], "row", "s", "center", "start", true)
+], "elevated")
+
+display = Card([TextContent($clock, "large-heavy")], "outlined")
+
+primary = $running ? "Pause" : "Start"
+primaryVariant = $running ? "secondary" : "primary"
+
+controls = Buttons([
+  Button(primary, Action([@Set($running, !$running)]), primaryVariant),
+  Button("Skip phase", Action([
+    @Set($running, false),
+    @Js("const next = await ctx.tools.advance_phase({ phase: ctx.state.get('phase'), completed: ctx.state.get('completed') ?? 0 }); ctx.state.set('phase', next.phase); ctx.state.set('remaining', next.seconds); ctx.state.set('totalSeconds', next.seconds); ctx.state.set('completed', next.completed);")
+  ]), "ghost"),
+  Button("Reset", Action([
+    @Set($running, false),
+    @Set($phase, "focus"),
+    @Set($remaining, 1500),
+    @Set($totalSeconds, 1500),
+    @Reset($completed)
+  ]), "ghost")
+])
+
+progressPct = ($totalSeconds - $remaining) * 100 / $totalSeconds
+progressLabel = "" + @Round(progressPct) + "% of " + phaseLabel + " complete"
+progressTag = Tag(progressLabel, null, "sm", phaseColor)
+
+settingsHint = TextContent("Tip: skipping advances to the next phase in the focus / short / focus / short / focus / long cycle.", "small", "muted")
+
+root = Stack([header, display, progressTag, controls, settingsHint, ticker, formatter])</code></pre>
+    </article>
+
+    <article class="example-card">
+      <h2>How <code>advance_phase</code> works</h2>
+      <p class="lede">
+        Phase rotation belongs to the host page (so it can persist progress,
+        ring a bell, push a notification, etc.), so the script just calls
+        <code>ctx.tools.advance_phase({})</code>. The host implements the
+        policy:
+      </p>
+<pre><code class="example-source">// Pure host code: derive the next phase from the current one, fire a beep,
+// return the new values. The script writes them back into `ctx.state`, which
+// keeps the reactive UI in sync without exposing any private renderer
+// internals. Reset becomes trivial because there's no host-side mutable state
+// to clear.
+el.setTools({
+  advance_phase: ({ phase, completed }) =&gt; {
+    const nextCompleted = phase === "focus" ? (completed ?? 0) + 1 : (completed ?? 0);
+    const isLong = phase === "focus" &amp;&amp; nextCompleted % 4 === 0;
+    const next = phase === "focus" ? (isLong ? "long" : "short") : "focus";
+    const seconds = ({ focus: 25 * 60, short: 5 * 60, long: 15 * 60 })[next];
+    playChime();
+    return { phase: next, seconds, completed: nextCompleted };
+  },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/llm-response-ui-lang.js";
+
+    const PHASE_SECONDS = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 };
+
+    const el = document.getElementById("rui-pomodoro");
+
+    // Lightweight WebAudio chime so we don't ship a binary asset.
+    function chime() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        osc.type = "triangle";
+        gain.gain.setValueAtTime(0.0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+        setTimeout(() => ctx.close(), 600);
+      } catch {
+        /* audio blocked — ignore */
+      }
+    }
+
+    function maybeNotify(title, body) {
+      if (typeof Notification === "undefined") return;
+      if (Notification.permission === "granted") {
+        try { new Notification(title, { body }); } catch { /* ignore */ }
+      }
+    }
+
+    el.setTools({
+      // Pure: derive the next phase from current state. The script awaits this
+      // and writes the returned values back into the reactive store via
+      // `ctx.state`. Keeping the tool stateless means Reset just rewinds the
+      // reactive state and we're back to a clean slate.
+      advance_phase: ({ phase, completed }) => {
+        let next;
+        let completedNext = completed ?? 0;
+        if (phase === "focus") {
+          completedNext = completedNext + 1;
+          const long = completedNext % 4 === 0;
+          next = long ? "long" : "short";
+        } else {
+          next = "focus";
+        }
+        const seconds = PHASE_SECONDS[next];
+
+        chime();
+        maybeNotify(
+          next === "focus" ? "Back to focus" : "Time for a break",
+          next === "focus" ? "Let's get into deep work." : "Step away from the screen."
+        );
+
+        return { phase: next, seconds, completed: completedNext };
+      },
+    });
+
+    // Ask for notification permission once on first user gesture.
+    el.addEventListener("click", () => {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    }, { once: true });
+
+    customElements.whenDefined("llm-response-ui-lang").then(() => {
+      el.setResponse(document.getElementById("src-pomodoro").textContent);
+    });
+  </script>
+</body>
+</html>

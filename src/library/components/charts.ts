@@ -60,10 +60,13 @@ export const BarChart: ComponentSpec = {
     if (asString(props.title)) root.append(el("div", { class: "rui-chart-title" }, [asString(props.title)]));
 
     const max = Math.max(1, ...series.flatMap((s) => s.values));
-    const svg = createSvg(640, 240);
-    const padding = { left: 40, right: 12, top: 12, bottom: 32 };
-    const innerWidth = 640 - padding.left - padding.right;
-    const innerHeight = 240 - padding.top - padding.bottom;
+    const width = 640;
+    const height = 240;
+    const labelPlan = planLabels(labels, width - 40 - 12);
+    const padding = { left: 40, right: 12, top: 12, bottom: labelPlan.bottomPadding };
+    const innerWidth = width - padding.left - padding.right;
+    const innerHeight = height - padding.top - padding.bottom;
+    const svg = createSvg(width, height);
 
     drawAxes(svg, padding, innerWidth, innerHeight, max);
 
@@ -80,7 +83,7 @@ export const BarChart: ComponentSpec = {
         const rect = svgEl("rect", {
           x: String(x),
           y: String(y),
-          width: String(barWidth - 2),
+          width: String(Math.max(barWidth - 2, 1)),
           height: String(barHeight),
           fill: colorAt(sIdx),
           rx: "2",
@@ -90,15 +93,7 @@ export const BarChart: ComponentSpec = {
       });
     });
 
-    labels.forEach((label, i) => {
-      const x = padding.left + (i + 0.5) * groupWidth;
-      svg.append(svgEl("text", {
-        x: String(x),
-        y: String(padding.top + innerHeight + 18),
-        "text-anchor": "middle",
-        class: "rui-chart-label",
-      }, [label]));
-    });
+    drawXAxisLabels(svg, labels, padding, innerWidth, innerHeight, labelPlan, (i) => padding.left + (i + 0.5) * groupWidth);
 
     root.append(svg);
     if (series.length > 0) root.append(legend(series));
@@ -123,17 +118,26 @@ export const LineChart: ComponentSpec = {
     const all = series.flatMap((s) => s.values);
     const max = Math.max(1, ...all);
     const min = Math.min(0, ...all);
-    const svg = createSvg(640, 240);
-    const padding = { left: 40, right: 12, top: 12, bottom: 32 };
-    const innerWidth = 640 - padding.left - padding.right;
-    const innerHeight = 240 - padding.top - padding.bottom;
+    const width = 640;
+    const height = 240;
+    const labelPlan = planLabels(labels, width - 40 - 12);
+    const padding = { left: 40, right: 12, top: 12, bottom: labelPlan.bottomPadding };
+    const innerWidth = width - padding.left - padding.right;
+    const innerHeight = height - padding.top - padding.bottom;
+    const svg = createSvg(width, height);
 
     drawAxes(svg, padding, innerWidth, innerHeight, max, min);
 
-    const stepX = innerWidth / Math.max(labels.length - 1, 1);
+    const denominator = Math.max(labels.length - 1, 1);
+    const stepX = innerWidth / denominator;
+    // Line charts can render data even when there are no labels (or fewer
+    // labels than data points) — derive an x-position per data point.
+    const pointCount = Math.max(...series.map((s) => s.values.length), labels.length);
+    const xForPoint = (i: number): number => padding.left + i * (innerWidth / Math.max(pointCount - 1, 1));
+
     series.forEach((s, sIdx) => {
       const points = s.values.map((value, i) => {
-        const x = padding.left + i * stepX;
+        const x = xForPoint(i);
         const y = padding.top + innerHeight - ((value - min) / (max - min || 1)) * innerHeight;
         return [x, y] as const;
       });
@@ -146,25 +150,21 @@ export const LineChart: ComponentSpec = {
         "stroke-linejoin": "round",
         "stroke-linecap": "round",
       }));
-      points.forEach(([x, y]) => {
-        svg.append(svgEl("circle", {
-          cx: String(x),
-          cy: String(y),
-          r: "3",
-          fill: colorAt(sIdx),
-        }));
-      });
+      // Hide individual data points when the line is dense — they create
+      // visual noise without helping readability.
+      if (s.values.length <= 30) {
+        points.forEach(([x, y]) => {
+          svg.append(svgEl("circle", {
+            cx: String(x),
+            cy: String(y),
+            r: "3",
+            fill: colorAt(sIdx),
+          }));
+        });
+      }
     });
 
-    labels.forEach((label, i) => {
-      const x = padding.left + i * stepX;
-      svg.append(svgEl("text", {
-        x: String(x),
-        y: String(padding.top + innerHeight + 18),
-        "text-anchor": "middle",
-        class: "rui-chart-label",
-      }, [label]));
-    });
+    drawXAxisLabels(svg, labels, padding, innerWidth, innerHeight, labelPlan, (i) => padding.left + i * stepX);
 
     root.append(svg);
     if (series.length > 0) root.append(legend(series));
@@ -216,6 +216,81 @@ export const PieChart: ComponentSpec = {
     return root;
   },
 };
+
+interface LabelPlan {
+  /** Render every Nth label (1 = all of them). */
+  step: number;
+  /** Rotate labels -45° when horizontal space per label is too tight. */
+  rotated: boolean;
+  /** Truncate each label to this many characters; full label stays in <title>. */
+  maxChars: number;
+  /** Reserved height under the chart so rotated labels are not clipped. */
+  bottomPadding: number;
+}
+
+// Pixel budget assumptions for label sizing. These are deliberately conservative
+// — the chart is rendered as SVG so we cannot measure text without a layout
+// pass, but treating each character as ~7px wide tracks reality for the
+// chart label font (~11px sans-serif) closely enough for layout decisions.
+const APPROX_CHAR_PX = 7;
+// Below this per-label slot, even rotated labels are too tight; we thin them
+// by showing every Nth label and keep the rest discoverable via hover titles.
+const MIN_ROTATED_SLOT_PX = 12;
+
+function planLabels(labels: ReadonlyArray<string>, innerWidth: number): LabelPlan {
+  if (labels.length === 0) {
+    return { step: 1, rotated: false, maxChars: 32, bottomPadding: 32 };
+  }
+  const slot = innerWidth / Math.max(labels.length, 1);
+  const longest = labels.reduce((max, l) => Math.max(max, l.length), 0);
+  // Horizontal fit: enough room to print without rotating.
+  if (longest * APPROX_CHAR_PX + 4 <= slot) {
+    return { step: 1, rotated: false, maxChars: longest, bottomPadding: 32 };
+  }
+  // Otherwise rotate. If still too tight after rotating, drop every Nth label.
+  const step = slot < MIN_ROTATED_SLOT_PX ? Math.max(1, Math.ceil(MIN_ROTATED_SLOT_PX / slot)) : 1;
+  // Cap label characters by the bottom padding we are willing to spend. The
+  // 50px budget renders ~14 chars after the 45° rotation flattens to ~70%.
+  const maxChars = Math.min(longest, 14);
+  return { step, rotated: true, maxChars, bottomPadding: 60 };
+}
+
+function truncateLabel(label: string, maxChars: number): string {
+  if (label.length <= maxChars) return label;
+  return label.slice(0, Math.max(maxChars - 1, 1)) + "…";
+}
+
+function drawXAxisLabels(
+  svg: SVGSVGElement,
+  labels: ReadonlyArray<string>,
+  padding: { left: number; right: number; top: number; bottom: number },
+  _innerWidth: number,
+  innerHeight: number,
+  plan: LabelPlan,
+  xFor: (index: number) => number,
+): void {
+  const baseY = padding.top + innerHeight + (plan.rotated ? 14 : 18);
+  labels.forEach((label, i) => {
+    if (i % plan.step !== 0) return;
+    const x = xFor(i);
+    const display = truncateLabel(label, plan.maxChars);
+    const attrs: Record<string, string> = {
+      x: String(x),
+      y: String(baseY),
+      class: "rui-chart-label",
+      "text-anchor": plan.rotated ? "end" : "middle",
+    };
+    if (plan.rotated) {
+      attrs.transform = `rotate(-45, ${x}, ${baseY})`;
+    }
+    const text = svgEl("text", attrs, [display]);
+    if (display !== label) {
+      // Preserve the full label as a hover tooltip when we had to truncate.
+      text.append(svgEl("title", {}, [label]));
+    }
+    svg.append(text);
+  });
+}
 
 function createSvg(width: number, height: number): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

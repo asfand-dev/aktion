@@ -6,6 +6,7 @@
 
 import type { ActionPayload, ActionStep } from "./builtins.js";
 import type { EvaluationContext } from "./evaluator.js";
+import type { ScriptRunner } from "./scripts.js";
 
 export interface ActionRunnerOptions {
   getContext: () => EvaluationContext;
@@ -13,6 +14,8 @@ export interface ActionRunnerOptions {
   onAssistantMessage?: (message: string) => void;
   /** Override how URLs are opened (defaults to window.open). */
   onOpenUrl?: (url: string) => void;
+  /** Optional bridge for `@Js("...")` steps (when JS interactions are on). */
+  scriptRunner?: ScriptRunner;
 }
 
 export class ActionRunner {
@@ -49,6 +52,12 @@ export class ActionRunner {
         const opener = this.options.onOpenUrl;
         if (opener) opener(step.url);
         else if (typeof window !== "undefined") window.open(step.url, "_blank", "noopener");
+        return;
+      }
+      case "Js": {
+        // No-op when scripts are disabled — the action keeps flowing through
+        // other steps so a single button can still @Run mutations, etc.
+        this.options.scriptRunner?.runInline(step.code, step.args);
         return;
       }
     }

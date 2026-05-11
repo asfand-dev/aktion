@@ -17,6 +17,7 @@
         <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="themes.html">Theming</a>
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
@@ -27,6 +28,9 @@
         <a href="external-data-example.html">External data</a>
         <a href="support-agent.html">Support agent</a>
         <a href="analytics-assistant.html">Analytics assistant</a>
+        <a href="javascript-todo-app.html">Todo app (JS)</a>
+        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
+        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
       </nav>
     </aside>
 
@@ -37,17 +41,23 @@
         every keystroke. Use this to debug LLM output or to author starter prompts.
       </p>
 
-      <div class="theme-picker" style="margin-bottom:14px">
-        <label for="playground-theme">Theme</label>
-        <select id="playground-theme">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="neon">Neon</option>
-          <option value="pastel">Pastel</option>
-          <option value="glass">Glass</option>
-          <option value="brutalist">Brutalist</option>
-          <option value="skyline">Skyline</option>
-        </select>
+      <div class="theme-picker" style="margin-bottom:14px; display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+        <span style="display:inline-flex; gap:6px; align-items:center">
+          <label for="playground-theme">Theme</label>
+          <select id="playground-theme">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="neon">Neon</option>
+            <option value="pastel">Pastel</option>
+            <option value="glass">Glass</option>
+            <option value="brutalist">Brutalist</option>
+            <option value="skyline">Skyline</option>
+          </select>
+        </span>
+        <label style="display:inline-flex; gap:6px; align-items:center; font-size:13px">
+          <input id="playground-enable-js" type="checkbox" />
+          Enable JavaScript (<code>Script</code> + <code>@Js</code>)
+        </label>
       </div>
 
       <div class="playground-layout">

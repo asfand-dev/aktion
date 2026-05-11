@@ -81,6 +81,10 @@
             <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
           </select>
         </span>
+        <label class="pill toggle-pill" for="chat-enable-js" title="Allow the LLM to emit Script() and @Js() with the rendered UI">
+          <input id="chat-enable-js" type="checkbox" />
+          <span>Enable JavaScript</span>
+        </label>
         <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
       </div>
     </header>
@@ -107,6 +111,7 @@
       apiKey: "llm-response-ui-lang.chat.openrouter-key",
       model: "llm-response-ui-lang.chat.openrouter-model",
       theme: "llm-response-ui-lang.chat.theme",
+      enableJs: "llm-response-ui-lang.chat.enable-javascript",
     };
     const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
     const MAX_HISTORY_TURNS = 5;
@@ -116,22 +121,39 @@
       get apiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) ?? ""; },
       get model() { return localStorage.getItem(STORAGE_KEYS.model) ?? ""; },
       get theme() { return localStorage.getItem(STORAGE_KEYS.theme) ?? "light"; },
+      get enableJavascript() {
+        // Default the toggle to ON so first-time visitors see the JS-driven
+        // demos out of the box; users can flip it off via the topbar toggle.
+        const raw = localStorage.getItem(STORAGE_KEYS.enableJs);
+        if (raw === null) return true;
+        return raw === "true";
+      },
       save(apiKey, model, theme) {
         localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
         if (model) localStorage.setItem(STORAGE_KEYS.model, model);
         if (theme) localStorage.setItem(STORAGE_KEYS.theme, theme);
       },
+      setEnableJavascript(value) {
+        localStorage.setItem(STORAGE_KEYS.enableJs, value ? "true" : "false");
+      },
       clear() {
         localStorage.removeItem(STORAGE_KEYS.apiKey);
         localStorage.removeItem(STORAGE_KEYS.model);
         localStorage.removeItem(STORAGE_KEYS.theme);
+        localStorage.removeItem(STORAGE_KEYS.enableJs);
       },
     };
 
     /* -------- System prompt -------- */
+    // The proxy element has no attributes by default, so `getSystemPrompt()`
+    // would otherwise default `enableJavascript` to `false` here regardless of
+    // what we set on the actual renderer. Pass the flag explicitly so the
+    // generated prompt mirrors the renderer's runtime configuration.
     function buildSystemPrompt() {
       const proxy = document.createElement("llm-response-ui-lang");
-      return proxy.getSystemPrompt({});
+      return proxy.getSystemPrompt({
+        enableJavascript: settings.enableJavascript,
+      });
     }
 
     /* -------- OpenRouter streaming -------- */
@@ -197,6 +219,7 @@
       setupErr: document.getElementById("setup-error"),
       themeSelect: document.getElementById("chat-theme-select"),
       modelSelect: document.getElementById("chat-model-select"),
+      enableJsToggle: document.getElementById("chat-enable-js"),
       resetBtn: document.getElementById("reset-btn"),
       history: document.getElementById("chat-history"),
       composer: document.getElementById("composer"),
@@ -231,6 +254,7 @@
       }
       
       els.themeSelect.value = settings.theme || "light";
+      els.enableJsToggle.checked = settings.enableJavascript;
       els.input.focus();
     }
 
@@ -261,6 +285,9 @@
 
       const renderer = document.createElement("llm-response-ui-lang");
       renderer.setAttribute("transparent", "true");
+      if (settings.enableJavascript) {
+        renderer.setAttribute("enable-javascript", "true");
+      }
       renderer.setAttribute("theme", settings.theme || "light");
 
       const typing = document.createElement("div");
@@ -391,6 +418,19 @@
     els.modelSelect.addEventListener("change", (e) => {
       const newModel = e.target.value;
       settings.save(settings.apiKey, newModel, settings.theme);
+    });
+
+    // Enable JavaScript toggle: persist, rebuild the system prompt so future
+    // turns reflect the new mode, and flip the attribute on every renderer
+    // that's already on the page so live demos honour the change immediately.
+    els.enableJsToggle.addEventListener("change", (e) => {
+      const enabled = !!e.target.checked;
+      settings.setEnableJavascript(enabled);
+      systemPrompt = buildSystemPrompt();
+      document.querySelectorAll("llm-response-ui-lang").forEach((renderer) => {
+        if (enabled) renderer.setAttribute("enable-javascript", "true");
+        else renderer.removeAttribute("enable-javascript");
+      });
     });
 
     els.setupForm.addEventListener("submit", (event) => {

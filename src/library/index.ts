@@ -25,6 +25,7 @@ import { BarChart, LineChart, PieChart, Series } from "./components/charts.js";
 import {
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink,
 } from "./components/chat.js";
+import { Script } from "./components/scripts.js";
 
 export * from "./types.js";
 export * from "./registry.js";
@@ -39,6 +40,7 @@ const components: ComponentSpec[] = [
   Table, Col, List, ListItem, StatCard,
   BarChart, LineChart, PieChart, Series,
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink,
+  Script,
 ];
 
 const componentGroups: ComponentGroup[] = [
@@ -103,6 +105,14 @@ const componentGroups: ComponentGroup[] = [
     components: ["SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem", "ActionLink"],
     notes: [
       "- End most responses with a `FollowUpBlock` of 2–4 short prompts to keep the conversation moving.",
+    ],
+  },
+  {
+    name: "Scripting",
+    components: ["Script"],
+    notes: [
+      "- Only available when the host page enables JavaScript interactions (`<llm-response-ui-lang enable-javascript=\"true\">`).",
+      "- Use sparingly: most state can be handled with `$variables` + `Action([@Set(...), @Run(...)])`.",
     ],
   },
 ];

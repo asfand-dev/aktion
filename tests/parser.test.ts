@@ -59,4 +59,39 @@ describe("parser", () => {
     const expr = program.statements[0]?.expression;
     expect(expr?.kind).toBe("Ternary");
   });
+
+  it("supports backtick-quoted multi-line strings (template-literal style)", () => {
+    // Backticks let LLMs embed JavaScript bodies without escaping newlines.
+    const source = "ticker = Script(\"ticker\", `const x = 1;\nctx.state.set('x', x);`, [\"x\"])";
+    const program = parse(source);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    expect(expr?.kind).toBe("Call");
+    if (expr?.kind !== "Call") return;
+    const body = expr.arguments[1];
+    expect(body?.kind).toBe("Literal");
+    if (body?.kind !== "Literal") return;
+    expect(body.value).toBe("const x = 1;\nctx.state.set('x', x);");
+  });
+
+  it("backtick strings allow unescaped double quotes inside the body", () => {
+    const source = "snippet = Script(\"s\", `console.log(\"hi\");`)";
+    const program = parse(source);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    if (expr?.kind !== "Call") throw new Error("expected Call");
+    const body = expr.arguments[1];
+    if (body?.kind !== "Literal") throw new Error("expected Literal");
+    expect(body.value).toBe('console.log("hi");');
+  });
+
+  it("backtick strings keep escape sequences working", () => {
+    const source = "msg = Script(\"m\", `a\\nb\\tc`)";
+    const program = parse(source);
+    const expr = program.statements[0]?.expression;
+    if (expr?.kind !== "Call") throw new Error("expected Call");
+    const body = expr.arguments[1];
+    if (body?.kind !== "Literal") throw new Error("expected Literal");
+    expect(body.value).toBe("a\nb\tc");
+  });
 });

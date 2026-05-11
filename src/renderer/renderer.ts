@@ -12,6 +12,7 @@ import { isComponentNode, type ComponentNode } from "../runtime/evaluator.js";
 import { isActionPayload } from "../runtime/builtins.js";
 import type { ActionRunner } from "../runtime/actions.js";
 import type { StateStore } from "../runtime/state.js";
+import type { ScriptRunner } from "../runtime/scripts.js";
 import { findComponent } from "../library/registry.js";
 import {
   mapPositionalArgs,
@@ -23,6 +24,8 @@ export interface RenderOptions {
   library: ComponentLibrary;
   state: StateStore;
   actionRunner: ActionRunner;
+  /** Optional script runner — when omitted, Script() and @Js are no-ops. */
+  scriptRunner?: ScriptRunner;
 }
 
 export class Renderer {
@@ -51,6 +54,7 @@ export class Renderer {
       return placeholder;
     }
     const props = mapPositionalArgs(spec, node.args);
+    const scriptRunner = this.options.scriptRunner;
     const helpers: RenderHelpers = {
       renderNode: (childValue) => this.render(childValue),
       runAction: (payload) => {
@@ -64,6 +68,10 @@ export class Renderer {
           this.options.state.set(name, next);
         });
       },
+      registerScript: (declaration) => {
+        scriptRunner?.declare(declaration);
+      },
+      javascriptEnabled: Boolean(scriptRunner?.isEnabled()),
     };
     try {
       return spec.render(node, props, helpers);

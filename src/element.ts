@@ -8,11 +8,15 @@
  *       `response`          — LLM Response UI Lang program (string)
  *       `showerrors`        — "true" to render parse errors in the UI
  *                             (defaults to off; the `error` event still fires)
+ *       `enable-javascript` — "true" to allow `Script(...)` and `@Js(...)` to
+ *                             execute (default off for safety; the system
+ *                             prompt also omits the JS section by default).
  *   - Properties:
  *       `response: string`        — current LLM Response UI Lang text
  *       `tools: ToolRegistry`     — async functions backing Query/Mutation
  *       `streaming: boolean`      — reflects the `streaming` attribute
  *       `showErrors: boolean`     — reflects the `showerrors` attribute
+ *       `enableJavascript: boolean` — reflects the `enable-javascript` attribute
  *   - Methods:
  *       `setResponse(text)`       — replace the current program
  *       `appendChunk(text)`       — append a streaming chunk and re-render
@@ -33,6 +37,7 @@ import {
   StateStore,
   QueryRegistry,
   ActionRunner,
+  ScriptRunner,
   createContext,
   planProgram,
   type ToolRegistry,
@@ -57,6 +62,7 @@ const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
+const ATTRIBUTE_ENABLE_JS = "enable-javascript";
 
 export class LlmResponseUiLangElement extends HTMLElement {
   static readonly tagName = "llm-response-ui-lang";
@@ -67,11 +73,13 @@ export class LlmResponseUiLangElement extends HTMLElement {
       ATTRIBUTE_STREAMING,
       ATTRIBUTE_RESPONSE,
       ATTRIBUTE_SHOW_ERRORS,
+      ATTRIBUTE_ENABLE_JS,
     ];
   }
 
   private readonly state = new StateStore();
   private readonly queries = new QueryRegistry();
+  private readonly scriptRunner: ScriptRunner;
   private readonly actionRunner: ActionRunner;
   private library: ComponentLibrary = defaultLibrary;
   private renderer: Renderer;
@@ -97,15 +105,26 @@ export class LlmResponseUiLangElement extends HTMLElement {
     this.rootEl.className = "rui-root";
     this.root.append(style, this.errorEl, this.rootEl);
 
+    const dispatchAssistantMessage = (message: string): void => {
+      this.dispatchEvent(new CustomEvent("assistant-message", {
+        detail: { message },
+        bubbles: true,
+        composed: true,
+      }));
+    };
+
+    this.scriptRunner = new ScriptRunner({
+      state: this.state,
+      queries: this.queries,
+      getRoot: () => this.root,
+      getHost: () => this,
+      onAssistantMessage: dispatchAssistantMessage,
+    });
+
     this.actionRunner = new ActionRunner({
       getContext: () => this.context,
-      onAssistantMessage: (message) => {
-        this.dispatchEvent(new CustomEvent("assistant-message", {
-          detail: { message },
-          bubbles: true,
-          composed: true,
-        }));
-      },
+      onAssistantMessage: dispatchAssistantMessage,
+      scriptRunner: this.scriptRunner,
     });
 
     this.context = createContext(this.state, this.queries);
@@ -113,6 +132,7 @@ export class LlmResponseUiLangElement extends HTMLElement {
       library: this.library,
       state: this.state,
       actionRunner: this.actionRunner,
+      scriptRunner: this.scriptRunner,
     });
 
     this.queries.setNotify(() => this.scheduleRender());
@@ -121,6 +141,7 @@ export class LlmResponseUiLangElement extends HTMLElement {
 
   connectedCallback(): void {
     this.applyThemeFromAttribute();
+    this.syncScriptRunnerFlags();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "") {
       this.setResponse(responseAttr);
@@ -136,12 +157,17 @@ export class LlmResponseUiLangElement extends HTMLElement {
     }
   }
 
+  disconnectedCallback(): void {
+    this.scriptRunner.reset();
+  }
+
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === ATTRIBUTE_THEME) this.applyThemeFromAttribute();
     if (name === ATTRIBUTE_STREAMING) {
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
+      this.syncScriptRunnerFlags();
       this.scheduleRender();
     }
     if (name === ATTRIBUTE_SHOW_ERRORS) {
@@ -150,6 +176,10 @@ export class LlmResponseUiLangElement extends HTMLElement {
     if (name === ATTRIBUTE_RESPONSE) {
       const next = value ?? "";
       if (next !== this.currentResponse) this.setResponse(next);
+    }
+    if (name === ATTRIBUTE_ENABLE_JS) {
+      this.syncScriptRunnerFlags();
+      this.scheduleRender();
     }
   }
 
@@ -160,6 +190,9 @@ export class LlmResponseUiLangElement extends HTMLElement {
     this.programDirty = true;
     this.state.rebind([]);
     this.queries.reset();
+    // Drop any scripts left over from the previous program — they reference
+    // the old state graph and would leak intervals / event listeners.
+    this.scriptRunner.reset();
     this.scheduleRender();
   }
 
@@ -185,17 +218,27 @@ export class LlmResponseUiLangElement extends HTMLElement {
       library: this.library,
       state: this.state,
       actionRunner: this.actionRunner,
+      scriptRunner: this.scriptRunner,
     });
     this.scheduleRender();
   }
 
   getSystemPrompt(options?: PromptOptions): string {
-    return generatePrompt(this.library, options);
+    // Default the JS section to whatever the host has opted into so the prompt
+    // and runtime stay consistent. Spread caller options first, then resolve
+    // the JS flag with `??` so an explicit `undefined` falls back to the
+    // attribute instead of disabling JS silently.
+    const merged: PromptOptions = {
+      ...options,
+      enableJavascript: options?.enableJavascript ?? this.enableJavascript,
+    };
+    return generatePrompt(this.library, merged);
   }
 
   clear(): void {
     this.currentResponse = "";
     this.queries.reset();
+    this.scriptRunner.reset();
     this.state.rebind([]);
     this.programDirty = true;
     this.parseErrors = [];
@@ -239,7 +282,21 @@ export class LlmResponseUiLangElement extends HTMLElement {
     else this.removeAttribute(ATTRIBUTE_SHOW_ERRORS);
   }
 
+  get enableJavascript(): boolean {
+    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_ENABLE_JS));
+  }
+
+  set enableJavascript(value: boolean) {
+    if (value) this.setAttribute(ATTRIBUTE_ENABLE_JS, "true");
+    else this.removeAttribute(ATTRIBUTE_ENABLE_JS);
+  }
+
   // ----- Internal -----
+
+  private syncScriptRunnerFlags(): void {
+    this.scriptRunner.setEnabled(this.enableJavascript);
+    this.scriptRunner.setStreaming(this.streaming);
+  }
 
   private applyThemeFromAttribute(): void {
     const attr = this.getAttribute(ATTRIBUTE_THEME);
@@ -281,9 +338,13 @@ export class LlmResponseUiLangElement extends HTMLElement {
     // the swap and restore it on the matching element afterwards so typing
     // feels native.
     const focusSnapshot = this.captureFocus();
+    this.syncScriptRunnerFlags();
+    this.scriptRunner.beginCycle();
     const rendered = this.renderer.render(rootValue);
     this.rootEl.replaceChildren(rendered);
     this.restoreFocus(focusSnapshot);
+    // Run scripts AFTER the DOM is in place so `ctx.query("id")` resolves.
+    this.scriptRunner.flush();
   }
 
   private captureFocus(): FocusSnapshot | null {

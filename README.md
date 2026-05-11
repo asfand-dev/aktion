@@ -16,15 +16,12 @@ all — and you have a streaming, interactive renderer for an LLM's response.
 
 The library bundles everything needed at runtime:
 
-- An **LLM Response UI Lang parser** (line-oriented, streaming-first, error-tolerant).
-- An **evaluator with reactive state**, queries, mutations, actions, and 17
-  built-in functions (`@Count`, `@Filter`, `@Each`, etc.).
-- A **rich component library** of ~50 components (layout, content, forms,
-  tables, charts, chat composites, …).
-- **Two built-in themes** (`light`, `dark`) plus full custom-token support via
-  CSS custom properties.
-- A **system prompt generator** that emits a clean, ordered prompt teaching the
-  LLM exactly which components are available.
+- An **LLM Response UI Lang parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
+- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
+- A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
+- An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
+- **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
+- A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available.
 
 Everything lives inside a Shadow DOM, so the renderer's styles never leak into
 your application — and your application's styles never leak into the
@@ -150,21 +147,23 @@ All members live on the `<llm-response-ui-lang>` element.
 
 ### Attributes
 
-| Attribute    | Values                                                | Description                                                                                |
-|--------------|-------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| `theme`      | `light`, `dark`, or a JSON object literal             | Switches the theme. JSON objects are merged with the default `light` token map.            |
-| `streaming`  | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.          |
-| `response`   | LLM Response UI Lang text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                 |
-| `showerrors` | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.          |
+| Attribute            | Values                                                | Description                                                                                                                              |
+|----------------------|-------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `theme`              | `light`, `dark`, or a JSON object literal             | Switches the theme. JSON objects are merged with the default `light` token map.                                                          |
+| `streaming`          | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.                                                        |
+| `response`           | LLM Response UI Lang text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                                                               |
+| `showerrors`         | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.                                                        |
+| `enable-javascript`  | `true` / unset                                        | If `true`, allows `Script(...)` + `@Js(...)` to run and the generated system prompt teaches the LLM about them. Defaults to off.         |
 
 ### Properties
 
-| Property     | Type                          | Description                                                            |
-|--------------|-------------------------------|------------------------------------------------------------------------|
-| `response`   | `string`                      | Equivalent to `setResponse`.                                           |
-| `tools`      | `Record<string, Function>`    | Setter equivalent to `setTools(...)`.                                  |
-| `streaming`  | `boolean`                     | Reflects the `streaming` attribute.                                    |
-| `showErrors` | `boolean`                     | Reflects the `showerrors` attribute.                                   |
+| Property            | Type                          | Description                                                            |
+|---------------------|-------------------------------|------------------------------------------------------------------------|
+| `response`          | `string`                      | Equivalent to `setResponse`.                                           |
+| `tools`             | `Record<string, Function>`    | Setter equivalent to `setTools(...)`.                                  |
+| `streaming`         | `boolean`                     | Reflects the `streaming` attribute.                                    |
+| `showErrors`        | `boolean`                     | Reflects the `showerrors` attribute.                                   |
+| `enableJavascript`  | `boolean`                     | Reflects the `enable-javascript` attribute.                            |
 
 ### Methods
 
@@ -238,17 +237,78 @@ Highlights:
 
 - One statement per line: `name = Expression`.
 - `$variables` are reactive — passing one to an Input or Select two-way-binds.
-- `Query("tool", {args}, {defaults}, refreshSec?)` runs immediately and re-runs
-  when its `$variable` args change.
+- Strings come in three flavours: `"double"`, `'single'`, and `` `backtick` `` (multi-line, no escaping required — perfect for JS bodies).
+- `Query("tool", {args}, {defaults}, refreshSec?)` runs immediately and re-runs when its `$variable` args change.
 - `Mutation("tool", {...})` only runs from `@Run(name)` inside an `Action([...])`.
-- `@Each(arr, "row", template)` iterates inline; `@Filter`, `@Sort`, `@Count`,
-  `@Sum`, `@Avg`, `@Round`, etc. are all available.
-- Forward references are allowed — list `root = Stack([...])` first and let the
-  children stream in beneath it.
+- `@Each(arr, "row", template)` iterates inline. The loop variable is scoped strictly to `template`.
+- `@Filter`, `@Sort`, `@Count`, `@Sum`, `@Avg`, `@Round`, `@Push`, `@Concat` and more are available.
+- Array shortcuts: `$rows.length`, `$rows.first`, `$rows.last`, plus pluck (`$rows.title` → `[title1, title2, …]`).
+- Forward references are allowed — list `root = Stack([...])` first and let the children stream in beneath it.
+
+### Build a todo app declaratively (no JS required for add/delete)
+
+```text
+$todos = [{id: 1, text: "Welcome — try editing", done: false}]
+$draft = ""
+
+addBtn = Button("Add", Action([
+  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Reset($draft)
+]), "primary")
+
+row = Card([Stack([
+  TextContent(t.text),
+  Button("Delete", Action([@Set($todos, @Filter($todos, "id", "!=", t.id))]), "ghost")
+])])
+
+list = @Each($todos, "t", row)
+root = Stack([Input("draft-input", "What needs doing?", "text", null, $draft), addBtn, list])
+```
 
 The full reference is on the docs site (`docs/language.html`).
 
 ---
+
+## JavaScript interactions (opt-in)
+
+Add `enable-javascript="true"` to the element and the LLM may emit two extra
+surfaces:
+
+- `Script("id", body, deps?)` — behaviour-only node that runs on mount and
+  re-runs whenever any listed `$variable` changes. Lifecycle matches
+  `useEffect`: cleanup before re-run, disposal on unmount, AbortSignal exposed
+  as `ctx.signal`.
+- `@Js(body, args?)` — action step you drop inside `Action([...])`. The
+  optional `args` object is evaluated at render time and exposed inside the
+  body as `ctx.args`. This is the canonical way to feed per-row data from an
+  `@Each` loop into a click handler.
+
+```html
+<llm-response-ui-lang enable-javascript="true"></llm-response-ui-lang>
+```
+
+```text
+list = @Each($todos, "t", row)
+row = Card([Stack([
+  TextContent(t.text),
+  Button("Toggle", Action([
+    @Js(`
+      const todos = ctx.state.get('todos') || [];
+      ctx.state.set('todos', todos.map(x => x.id === ctx.args.id ? Object.assign({}, x, {done: !x.done}) : x));
+    `, {id: t.id})
+  ]))
+])])
+```
+
+`body` is a regular string. Use double quotes for one-liners (escape inner
+`"` as `\"` and newlines as `\n`) or backticks for multi-line code (real
+newlines and unescaped `"` are fine). The generated system prompt teaches the
+LLM about these features only when the flag is on, and `getSystemPrompt()`
+always mirrors the live attribute.
+
+See the [JavaScript interactions guide](https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html)
+or the deeper [`coding-gen-skill.md`](./coding-gen-skill.md) for a full
+end-to-end app walkthrough.
 
 ## Built-in components
 
@@ -260,6 +320,7 @@ The full reference is on the docs site (`docs/language.html`).
 | Data      | `Table`, `Col`, `List`, `ListItem`, `StatCard`                                                                          |
 | Charts    | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
 | Chat      | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`                                              |
+| Scripting | `Script` (opt-in via `enable-javascript="true"`)                                                                        |
 
 Add your own with `registerComponents`:
 
@@ -288,9 +349,17 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 ## LLM integration helper
 
 If you're driving the renderer from an agentic LLM (Cursor, Claude Code, etc.)
-read [`SKILL.md`](./SKILL.md) — it's a self-contained guide that teaches an LLM
-exactly when to reach for this component, what the language looks like, and how
-to wire it into a host application.
+two companion documents are kept in sync with the bundle:
+
+- [`SKILL.md`](./SKILL.md) — a focused, hostable agent skill describing **when
+  to reach for this component** and the minimum integration surface (mount,
+  stream, tools, theme).
+- [`coding-gen-skill.md`](./coding-gen-skill.md) — an **extensive knowledge
+  base** for building complete applications in LLM Response UI Lang: mental
+  model, every component group, state management, queries/mutations, actions,
+  loops, JavaScript interactions, app patterns (todo list, dashboard, wizard,
+  chat, settings, real-time), and anti-patterns. Treat it as the "deep dive"
+  the model can read once and then author full apps unaided.
 
 ---
 

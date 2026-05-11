@@ -83,6 +83,47 @@
   font-family: var(--ex-mono, monospace);
 }
 
+/* Enable-JavaScript toggle pill */
+.chat-meta .toggle-pill {
+  cursor: pointer;
+  user-select: none;
+  color: var(--ex-text-muted);
+  font-size: 12px;
+}
+.chat-meta .toggle-pill input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--ex-border);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+}
+.chat-meta .toggle-pill input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.chat-meta .toggle-pill input[type="checkbox"]:checked {
+  background: var(--ex-accent, #2563eb);
+}
+.chat-meta .toggle-pill input[type="checkbox"]:checked::after {
+  transform: translateX(12px);
+}
+.chat-meta .toggle-pill:hover {
+  color: var(--ex-text);
+}
+
 .chat-stage {
   flex: 1;
   display: flex;

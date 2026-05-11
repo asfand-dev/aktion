@@ -67,12 +67,13 @@ el.streaming = false;
 
 ### Attributes
 
-| Attribute    | Values                                  | Purpose                                                                                    |
-|--------------|-----------------------------------------|--------------------------------------------------------------------------------------------|
-| `theme`      | `light` (default), `dark`, JSON literal | Switches the theme. JSON merges into the light token map.                                  |
-| `streaming`  | `true` / unset                          | Hint that text is still arriving. Suppresses transient mid-token parse errors.             |
-| `response`   | LLM Response UI Lang text               | Sets the program declaratively.                                                            |
-| `showerrors` | `true` / unset                          | If present, shows parse errors in the rendered UI. Defaults to off.                        |
+| Attribute            | Values                                  | Purpose                                                                                                                                  |
+|----------------------|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `theme`              | `light` (default), `dark`, JSON literal | Switches the theme. JSON merges into the light token map.                                                                                |
+| `streaming`          | `true` / unset                          | Hint that text is still arriving. Suppresses transient mid-token parse errors.                                                           |
+| `response`           | LLM Response UI Lang text               | Sets the program declaratively.                                                                                                          |
+| `showerrors`         | `true` / unset                          | If present, shows parse errors in the rendered UI. Defaults to off.                                                                      |
+| `enable-javascript`  | `true` / unset                          | If `true`, allows `Script(...)` and `@Js(...)` to execute and the generated system prompt includes a JavaScript section. Default `false`. |
 
 ### Methods
 
@@ -128,18 +129,104 @@ Built-in functions (all `@`-prefixed):
 - Aggregation: `@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`.
 - Numeric: `@Round`, `@Abs`, `@Floor`, `@Ceil`.
 - Filter / sort: `@Filter(arr, "field", "op", value)`, `@Sort(arr, "field", "asc"|"desc")`.
-- Iteration: `@Each(arr, "varName", template)`.
+- Array growth: `@Push(arr, value)` (append, returns NEW array), `@Concat(a, b)`.
+- Iteration: `@Each(arr, "varName", template)` — `varName` is scoped strictly to `template`.
 - Action steps: `@Run(ref)`, `@Set($var, value)`, `@Reset($a, $b, ...)`,
-  `@ToAssistant("text")`, `@OpenUrl("https://...")`.
+  `@ToAssistant("text")`, `@OpenUrl("https://...")`, `@Js(body, args?)`.
+
+Array & string shortcuts (member access):
+
+- `$rows.length` / `$rows.first` / `$rows.last` — count and boundary elements.
+- `$rows.field` — array pluck (map each item to `field`).
+- `$msg.length` — character count for strings.
 
 Component groups available out of the box: **Layout** (Stack, Card, Tabs,
 Accordion, Modal, Steps), **Content** (TextContent, Markdown, Callout, Tag,
 TagBlock, CodeBlock, Image), **Forms** (Form, Input, Select, Checkbox,
 CheckBoxGroup, Radio, Button, Buttons), **Data** (Table, Col, List, StatCard),
-**Charts** (BarChart, LineChart, PieChart, Series), and **Chat** composites
-(SectionBlock, FollowUpBlock, FollowUpItem, ActionLink). For the full
-positional signature of every component, call `el.getSystemPrompt()` or open
+**Charts** (BarChart, LineChart, PieChart, Series), **Chat** composites
+(SectionBlock, FollowUpBlock, FollowUpItem, ActionLink), and **Scripting**
+(`Script` — opt-in via `enable-javascript="true"`). For the full positional
+signature of every component, call `el.getSystemPrompt()` or open
 [components reference](https://asfand-dev.github.io/llm-response-ui-lang/components.html).
+
+### JavaScript interactions (opt-in)
+
+Set `enable-javascript="true"` on the element to allow the LLM to author
+JavaScript via two surfaces:
+
+- `Script("id", body, deps?)` — behaviour-only node that runs on mount and
+  again whenever any listed `$variable` changes. Lifecycle matches
+  `useEffect` (cleanup before re-run, disposal on unmount).
+- `@Js(body, args?)` — action step you drop inside `Action([...])` to run JS
+  imperatively from a button or follow-up. The optional `args` object is
+  evaluated at render time and exposed inside the body as `ctx.args` — this
+  is the **only correct way** to feed per-row data from `@Each` into a click
+  handler.
+
+`body` is a string. Two ergonomic options:
+
+- Double-quoted (`"..."`) — one-line bodies. Escape inner `"` as `\"` and
+  newlines as `\n`.
+- Backtick-quoted (`` `...` ``) — multi-line bodies. Real newlines and
+  unescaped double quotes are fine. Prefer this for any non-trivial script.
+
+Both share a `ctx` argument exposing `state`, `tools`, `args`, `dispatch`,
+`open`, `query`, `queryAll`, `host`, `cleanup`, and `signal`. The system
+prompt only mentions these features when the flag is on, and
+`getSystemPrompt()` mirrors the live attribute. See the
+[JavaScript interactions guide](https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html)
+for the full API, or [`coding-gen-skill.md`](./coding-gen-skill.md) for a
+full app walkthrough.
+
+```html
+<llm-response-ui-lang
+  id="renderer"
+  enable-javascript="true"
+></llm-response-ui-lang>
+```
+
+```js
+// Backticks let the Script body span lines without escapes.
+el.setResponse(`$count = 0
+display = TextContent("" + $count, "large-heavy")
+ticker = Script("ticker", \`
+  const id = setInterval(() => {
+    ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1);
+  }, 1000);
+  ctx.cleanup(() => clearInterval(id));
+\`, [])
+root = Stack([display, ticker])`);
+```
+
+#### Per-item handler pattern (the @Js(body, args) idiom)
+
+Loop variables from `@Each` are **render-time only**. They are NOT readable
+from JS through `ctx.state` — pass them as `@Js`'s second argument instead:
+
+```text
+$todos = [{id: 1, text: "Walk dog"}, {id: 2, text: "Buy milk"}]
+
+list = @Each($todos, "t", row)
+row = Card([Stack([
+  TextContent(t.text),
+  Button("Delete", Action([
+    @Set($todos, @Filter($todos, "id", "!=", t.id))  // no JS — pure builtins
+  ])),
+  Button("Toggle", Action([
+    @Js(`
+      const todos = ctx.state.get('todos') || [];
+      ctx.state.set('todos', todos.map(x => x.id === ctx.args.id ? Object.assign({}, x, {done: !x.done}) : x));
+    `, {id: t.id})
+  ]))
+])])
+
+root = Stack([list])
+```
+
+Prefer pure builtins (`@Set` + `@Filter` / `@Push` / `@Sort`) over JS whenever
+the operation is expressible declaratively. Reach for `@Js` only when no
+builtin captures the change (e.g. toggling one field of one item).
 
 ## Common integration patterns
 
@@ -286,8 +373,13 @@ Skip it when:
 ## Further reading
 
 - Full README: [README.md](./README.md)
+- **Deep app-building knowledge base:** [`coding-gen-skill.md`](./coding-gen-skill.md)
+  — read this when the goal is to author a complete app (todo list, dashboard,
+  chat, wizard, settings, real-time feed, etc.) rather than embed the
+  component.
 - Component reference: <https://asfand-dev.github.io/llm-response-ui-lang/components.html>
 - Language reference: <https://asfand-dev.github.io/llm-response-ui-lang/language.html>
+- JavaScript interactions: <https://asfand-dev.github.io/llm-response-ui-lang/javascript-interactions.html>
 - Live demos (chat, tools, external data): <https://asfand-dev.github.io/llm-response-ui-lang/examples.html>
 - Generated system prompt (always in sync with the bundle):
   <https://asfand-dev.github.io/llm-response-ui-lang/dist/system_prompt.txt>
