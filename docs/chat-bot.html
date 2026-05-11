@@ -85,6 +85,10 @@
           <input id="chat-enable-js" type="checkbox" />
           <span>Enable JavaScript</span>
         </label>
+        <label class="pill toggle-pill" for="chat-enable-routes" title="Allow the LLM to author Routes() / NavLink() and update the URL hash">
+          <input id="chat-enable-routes" type="checkbox" />
+          <span>Enable Routes</span>
+        </label>
         <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
       </div>
     </header>
@@ -112,6 +116,7 @@
       model: "streaming-ui-script.chat.openrouter-model",
       theme: "streaming-ui-script.chat.theme",
       enableJs: "streaming-ui-script.chat.enable-javascript",
+      enableRoutes: "streaming-ui-script.chat.enable-routes",
     };
     const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
     const MAX_HISTORY_TURNS = 5;
@@ -128,6 +133,10 @@
         if (raw === null) return true;
         return raw === "true";
       },
+      get enableRoutes() {
+        // Routing is opt-in: stays off until the user toggles it on.
+        return localStorage.getItem(STORAGE_KEYS.enableRoutes) === "true";
+      },
       save(apiKey, model, theme) {
         localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
         if (model) localStorage.setItem(STORAGE_KEYS.model, model);
@@ -136,11 +145,15 @@
       setEnableJavascript(value) {
         localStorage.setItem(STORAGE_KEYS.enableJs, value ? "true" : "false");
       },
+      setEnableRoutes(value) {
+        localStorage.setItem(STORAGE_KEYS.enableRoutes, value ? "true" : "false");
+      },
       clear() {
         localStorage.removeItem(STORAGE_KEYS.apiKey);
         localStorage.removeItem(STORAGE_KEYS.model);
         localStorage.removeItem(STORAGE_KEYS.theme);
         localStorage.removeItem(STORAGE_KEYS.enableJs);
+        localStorage.removeItem(STORAGE_KEYS.enableRoutes);
       },
     };
 
@@ -153,6 +166,7 @@
       const proxy = document.createElement("streaming-ui-script");
       return proxy.getSystemPrompt({
         enableJavascript: settings.enableJavascript,
+        enableRoutes: settings.enableRoutes,
       });
     }
 
@@ -220,6 +234,7 @@
       themeSelect: document.getElementById("chat-theme-select"),
       modelSelect: document.getElementById("chat-model-select"),
       enableJsToggle: document.getElementById("chat-enable-js"),
+      enableRoutesToggle: document.getElementById("chat-enable-routes"),
       resetBtn: document.getElementById("reset-btn"),
       history: document.getElementById("chat-history"),
       composer: document.getElementById("composer"),
@@ -255,6 +270,7 @@
       
       els.themeSelect.value = settings.theme || "light";
       els.enableJsToggle.checked = settings.enableJavascript;
+      els.enableRoutesToggle.checked = settings.enableRoutes;
       els.input.focus();
     }
 
@@ -287,6 +303,9 @@
       renderer.setAttribute("transparent", "true");
       if (settings.enableJavascript) {
         renderer.setAttribute("enable-javascript", "true");
+      }
+      if (settings.enableRoutes) {
+        renderer.setAttribute("enable-routes", "true");
       }
       renderer.setAttribute("theme", settings.theme || "light");
 
@@ -430,6 +449,16 @@
       document.querySelectorAll("streaming-ui-script").forEach((renderer) => {
         if (enabled) renderer.setAttribute("enable-javascript", "true");
         else renderer.removeAttribute("enable-javascript");
+      });
+    });
+
+    els.enableRoutesToggle.addEventListener("change", (e) => {
+      const enabled = !!e.target.checked;
+      settings.setEnableRoutes(enabled);
+      systemPrompt = buildSystemPrompt();
+      document.querySelectorAll("streaming-ui-script").forEach((renderer) => {
+        if (enabled) renderer.setAttribute("enable-routes", "true");
+        else renderer.removeAttribute("enable-routes");
       });
     });
 

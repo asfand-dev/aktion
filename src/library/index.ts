@@ -26,6 +26,7 @@ import {
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink,
 } from "./components/chat.js";
 import { Script } from "./components/scripts.js";
+import { Routes, Route, NavLink } from "./components/router.js";
 
 export * from "./types.js";
 export * from "./registry.js";
@@ -41,6 +42,7 @@ const components: ComponentSpec[] = [
   BarChart, LineChart, PieChart, Series,
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink,
   Script,
+  Routes, Route, NavLink,
 ];
 
 const componentGroups: ComponentGroup[] = [
@@ -113,6 +115,17 @@ const componentGroups: ComponentGroup[] = [
     notes: [
       "- Only available when the host page enables JavaScript interactions (`<streaming-ui-script enable-javascript=\"true\">`).",
       "- Use sparingly: most state can be handled with `$variables` + `Action([@Set(...), @Run(...)])`.",
+    ],
+  },
+  {
+    name: "Routing",
+    components: ["Routes", "Route", "NavLink"],
+    notes: [
+      "- Only available when the host page enables routing (`<streaming-ui-script enable-routes=\"true\">`).",
+      "- Wrap a list of `Route(path, content)` entries inside `Routes(...)` to declare a multi-page UI.",
+      "- Use `NavLink(label, to)` for navigation and `@Navigate(\"/path\")` action steps for programmatic moves.",
+      "- Inside a Route's content, read URL params via the `params` loop variable (e.g. `params.id` for `/users/:id`).",
+      "- The current path is also available as `$route` so any expression can react to it.",
     ],
   },
 ];

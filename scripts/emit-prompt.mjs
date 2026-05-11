@@ -23,10 +23,14 @@ async function main() {
     throw new Error("Bundle does not export generatePrompt/defaultLibrary");
   }
   const text = generatePrompt(defaultLibrary);
+  const textWithRoutes = generatePrompt(defaultLibrary, { enableRoutes: true });
   await mkdir(distDir, { recursive: true });
   await writeFile(resolve(distDir, "system_prompt.txt"), text, "utf8");
+  await writeFile(resolve(distDir, "system_prompt_routing.txt"), textWithRoutes, "utf8");
   // eslint-disable-next-line no-console
   console.log(`Wrote ${text.length} chars to dist/system_prompt.txt`);
+  // eslint-disable-next-line no-console
+  console.log(`Wrote ${textWithRoutes.length} chars to dist/system_prompt_routing.txt`);
 }
 
 function installDomShim() {

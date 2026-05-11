@@ -93,6 +93,7 @@ function setupPlayground() {
   const themeSelect = document.getElementById("playground-theme");
   const target = document.getElementById("playground-target");
   const jsToggle = document.getElementById("playground-enable-js");
+  const routesToggle = document.getElementById("playground-enable-routes");
   if (!input || !target) return;
 
   const applyPlaygroundTheme = (value) => {
@@ -115,6 +116,14 @@ function setupPlayground() {
       jsToggle.addEventListener("change", () => {
         if (jsToggle.checked) target.setAttribute("enable-javascript", "true");
         else target.removeAttribute("enable-javascript");
+        target.setResponse(input.value);
+      });
+    }
+    if (routesToggle) {
+      routesToggle.checked = target.hasAttribute("enable-routes");
+      routesToggle.addEventListener("change", () => {
+        if (routesToggle.checked) target.setAttribute("enable-routes", "true");
+        else target.removeAttribute("enable-routes");
         target.setResponse(input.value);
       });
     }

@@ -13,6 +13,7 @@ import { isActionPayload } from "../runtime/builtins.js";
 import type { ActionRunner } from "../runtime/actions.js";
 import type { StateStore } from "../runtime/state.js";
 import type { ScriptRunner } from "../runtime/scripts.js";
+import type { Router } from "../runtime/router.js";
 import { findComponent } from "../library/registry.js";
 import {
   mapPositionalArgs,
@@ -26,6 +27,14 @@ export interface RenderOptions {
   actionRunner: ActionRunner;
   /** Optional script runner — when omitted, Script() and @Js are no-ops. */
   scriptRunner?: ScriptRunner;
+  /**
+   * Hash-based router. Always provided so components can read the active
+   * path; the host element controls whether the router is enabled (listens
+   * to `hashchange`) via the `enable-routes` attribute.
+   */
+  router?: Router;
+  /** True when the host has `enable-routes="true"`. */
+  routesEnabled?: boolean;
 }
 
 export class Renderer {
@@ -72,6 +81,8 @@ export class Renderer {
         scriptRunner?.declare(declaration);
       },
       javascriptEnabled: Boolean(scriptRunner?.isEnabled()),
+      router: this.options.router ?? null,
+      routesEnabled: Boolean(this.options.routesEnabled),
     };
     try {
       return spec.render(node, props, helpers);

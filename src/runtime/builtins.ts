@@ -113,6 +113,12 @@ export type ActionStep =
   | { kind: "ToAssistant"; message: string }
   | { kind: "OpenUrl"; url: string }
   /**
+   * Internal hash-based navigation. Updates `window.location.hash` so the
+   * browser back/forward buttons keep working. No-op when the host element
+   * has `enable-routes` off.
+   */
+  | { kind: "Navigate"; path: string }
+  /**
    * `args` carries values captured at render time — used to pass per-item data
    * (loop variables, computed values) into the JS body. Accessible inside the
    * body as `ctx.args.<key>`. Always an object, never null.
@@ -124,7 +130,8 @@ export const isActionStep = (value: unknown): value is ActionStep => {
   const kind = (value as { kind?: unknown }).kind;
   return (
     kind === "Run" || kind === "Set" || kind === "Reset" ||
-    kind === "ToAssistant" || kind === "OpenUrl" || kind === "Js"
+    kind === "ToAssistant" || kind === "OpenUrl" ||
+    kind === "Navigate" || kind === "Js"
   );
 };
 

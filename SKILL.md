@@ -74,6 +74,7 @@ el.streaming = false;
 | `response`           | Streaming UI Script text               | Sets the program declaratively.                                                                                                          |
 | `showerrors`         | `true` / unset                          | If present, shows parse errors in the rendered UI. Defaults to off.                                                                      |
 | `enable-javascript`  | `true` / unset                          | If `true`, allows `Script(...)` and `@Js(...)` to execute and the generated system prompt includes a JavaScript section. Default `false`. |
+| `enable-routes`      | `true` / unset                          | If `true`, enables hash-based routing (`Routes`, `Route`, `NavLink`, `@Navigate`) and includes the routing section in the system prompt. Default `false`. |
 
 ### Methods
 
@@ -86,6 +87,7 @@ el.streaming = false;
 | `setTools(tools)`                   | Register `Query` / `Mutation` handlers.                         |
 | `registerComponents(specs, root?)`  | Extend the built-in library.                                    |
 | `getSystemPrompt(opts?)`            | Build a system prompt that matches the live library.            |
+| `navigate(path)`                    | Programmatically navigate when routing is enabled (updates `window.location.hash`). |
 
 ### Events
 
@@ -93,6 +95,7 @@ el.streaming = false;
 |---------------------|------------------------------|-------------------------------------------------------|
 | `assistant-message` | `{ message: string }`        | A button or follow-up ran `@ToAssistant("...")`.      |
 | `error`             | `{ errors: ParseError[] }`   | After a render whose source had parse errors.         |
+| `route-change`      | `{ path, previousPath, params, pattern }` | Path changed (fires only while routing is enabled).   |
 
 The `error` event always fires regardless of `showerrors`, so host apps can
 log or surface errors even when the in-page banner is suppressed.
@@ -227,6 +230,54 @@ root = Stack([list])
 Prefer pure builtins (`@Set` + `@Filter` / `@Push` / `@Sort`) over JS whenever
 the operation is expressible declaratively. Reach for `@Js` only when no
 builtin captures the change (e.g. toggling one field of one item).
+
+### Routing (opt-in)
+
+Set `enable-routes="true"` on the element to unlock hash-based multi-page
+UIs. The LLM can then author:
+
+- `Routes(items, default?)` — outlet that renders the matching `Route` based
+  on the current URL hash (`#/path`). Children must be `Route(...)` entries.
+- `Route(path, content)` — declares one page. `path` supports literal
+  segments (`"/about"`), parameter segments (`"/users/:id"` →
+  `params.id`), and a trailing wildcard (`"/docs/*"` → `params._`).
+- `NavLink(label, to, variant?, exact?, icon?)` — router-aware anchor that
+  intercepts clicks, updates the hash without reloading, and reflects
+  `data-active="true"` for the current path.
+- `@Navigate("/path")` — action step for programmatic navigation. Use inside
+  any `Action([...])` chain.
+- Reactive surfaces: `$route` (current path, owned by the runtime — never
+  declare it yourself) and `params` (loop variable scoped to the matched
+  Route's content).
+
+```html
+<streaming-ui-script enable-routes="true"></streaming-ui-script>
+```
+
+```text
+root = Stack([nav, main])
+nav = Stack([
+  NavLink("Home",     "/",          "ghost", true),
+  NavLink("Dashboard","/dashboard", "ghost"),
+  NavLink("Users",    "/users",     "ghost")
+], "row", "s")
+main = Routes([
+  Route("/",           homePage),
+  Route("/dashboard",  dashboardPage),
+  Route("/users/:id",  userPage),
+  Route("*",           notFoundPage)
+], "/")
+homePage      = Card([CardHeader("Welcome")])
+dashboardPage = Card([CardHeader("Dashboard")])
+userPage      = Card([CardHeader("User " + params.id)])
+notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + ".")
+```
+
+When `enable-routes` is off (the default), routing components fall back to
+inert rendering and the system prompt omits the entire routing section. See
+the [routing guide](https://asfand-dev.github.io/streaming-ui-script/routing.html)
+and the [live routing demo](https://asfand-dev.github.io/streaming-ui-script/routing-demo.html)
+for end-to-end examples.
 
 ## Common integration patterns
 
@@ -380,6 +431,8 @@ Skip it when:
 - Component reference: <https://asfand-dev.github.io/streaming-ui-script/components.html>
 - Language reference: <https://asfand-dev.github.io/streaming-ui-script/language.html>
 - JavaScript interactions: <https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html>
+- Routing: <https://asfand-dev.github.io/streaming-ui-script/routing.html>
+- Routing live demo: <https://asfand-dev.github.io/streaming-ui-script/routing-demo.html>
 - Live demos (chat, tools, external data): <https://asfand-dev.github.io/streaming-ui-script/examples.html>
 - Generated system prompt (always in sync with the bundle):
   <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>

@@ -38,9 +38,11 @@ import {
   QueryRegistry,
   ActionRunner,
   ScriptRunner,
+  Router,
   createContext,
   planProgram,
   type ToolRegistry,
+  type RouteChangeDetail,
 } from "./runtime/index.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
@@ -63,6 +65,13 @@ const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
 const ATTRIBUTE_ENABLE_JS = "enable-javascript";
+const ATTRIBUTE_ENABLE_ROUTES = "enable-routes";
+/**
+ * Reserved reactive state name written by the router. Read it from any
+ * expression as `$route` to access the current path. Kept in lock-step with
+ * `window.location.hash` when `enable-routes="true"`.
+ */
+const STATE_ROUTE = "route";
 
 export class StreamingUiScriptElement extends HTMLElement {
   static readonly tagName = "streaming-ui-script";
@@ -74,6 +83,7 @@ export class StreamingUiScriptElement extends HTMLElement {
       ATTRIBUTE_RESPONSE,
       ATTRIBUTE_SHOW_ERRORS,
       ATTRIBUTE_ENABLE_JS,
+      ATTRIBUTE_ENABLE_ROUTES,
     ];
   }
 
@@ -81,6 +91,7 @@ export class StreamingUiScriptElement extends HTMLElement {
   private readonly queries = new QueryRegistry();
   private readonly scriptRunner: ScriptRunner;
   private readonly actionRunner: ActionRunner;
+  private readonly router = new Router();
   private library: ComponentLibrary = defaultLibrary;
   private renderer: Renderer;
   private context: EvaluationContext;
@@ -125,23 +136,28 @@ export class StreamingUiScriptElement extends HTMLElement {
       getContext: () => this.context,
       onAssistantMessage: dispatchAssistantMessage,
       scriptRunner: this.scriptRunner,
+      router: this.router,
     });
 
-    this.context = createContext(this.state, this.queries);
+    this.context = createContext(this.state, this.queries, this.router);
     this.renderer = new Renderer({
       library: this.library,
       state: this.state,
       actionRunner: this.actionRunner,
       scriptRunner: this.scriptRunner,
+      router: this.router,
+      routesEnabled: this.enableRoutes,
     });
 
     this.queries.setNotify(() => this.scheduleRender());
     this.state.subscribe(() => this.scheduleRender());
+    this.router.subscribe((detail) => this.handleRouteChange(detail));
   }
 
   connectedCallback(): void {
     this.applyThemeFromAttribute();
     this.syncScriptRunnerFlags();
+    this.syncRouter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "") {
       this.setResponse(responseAttr);
@@ -159,6 +175,7 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   disconnectedCallback(): void {
     this.scriptRunner.reset();
+    this.router.stop();
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -179,6 +196,10 @@ export class StreamingUiScriptElement extends HTMLElement {
     }
     if (name === ATTRIBUTE_ENABLE_JS) {
       this.syncScriptRunnerFlags();
+      this.scheduleRender();
+    }
+    if (name === ATTRIBUTE_ENABLE_ROUTES) {
+      this.syncRouter();
       this.scheduleRender();
     }
   }
@@ -224,15 +245,27 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   getSystemPrompt(options?: PromptOptions): string {
-    // Default the JS section to whatever the host has opted into so the prompt
-    // and runtime stay consistent. Spread caller options first, then resolve
-    // the JS flag with `??` so an explicit `undefined` falls back to the
-    // attribute instead of disabling JS silently.
+    // Default the feature flags to whatever the host has opted into so the
+    // prompt and runtime stay consistent. Spread caller options first, then
+    // resolve each flag with `??` so an explicit `undefined` falls back to
+    // the attribute rather than silently disabling a feature.
     const merged: PromptOptions = {
       ...options,
       enableJavascript: options?.enableJavascript ?? this.enableJavascript,
+      enableRoutes: options?.enableRoutes ?? this.enableRoutes,
     };
     return generatePrompt(this.library, merged);
+  }
+
+  /** Programmatic navigation API. No-op when `enable-routes` is off. */
+  navigate(path: string): void {
+    if (!this.enableRoutes) return;
+    this.router.navigate(path);
+  }
+
+  /** Current route path (`/`, `/about`, …). Returns "/" when routing is off. */
+  get route(): string {
+    return this.router.getPath();
   }
 
   clear(): void {
@@ -244,6 +277,9 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.parseErrors = [];
     this.errorEl.hidden = true;
     this.rootEl.replaceChildren();
+    // Drop any cached active match — the next render will recompute from
+    // the current path against whatever Routes the new program declares.
+    this.router.setActiveMatch(null, {});
   }
 
   // ----- Property accessors -----
@@ -291,11 +327,60 @@ export class StreamingUiScriptElement extends HTMLElement {
     else this.removeAttribute(ATTRIBUTE_ENABLE_JS);
   }
 
+  get enableRoutes(): boolean {
+    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_ENABLE_ROUTES));
+  }
+
+  set enableRoutes(value: boolean) {
+    if (value) this.setAttribute(ATTRIBUTE_ENABLE_ROUTES, "true");
+    else this.removeAttribute(ATTRIBUTE_ENABLE_ROUTES);
+  }
+
   // ----- Internal -----
 
   private syncScriptRunnerFlags(): void {
     this.scriptRunner.setEnabled(this.enableJavascript);
     this.scriptRunner.setStreaming(this.streaming);
+  }
+
+  /**
+   * Attach or detach the hash-change listener based on the current value of
+   * the `enable-routes` attribute. Recreates the renderer so component
+   * helpers see the correct `routesEnabled` flag immediately.
+   */
+  private syncRouter(): void {
+    const enabled = this.enableRoutes;
+    if (enabled) {
+      this.router.start();
+      // Seed `$route` immediately so the very first render sees the URL
+      // hash (instead of the default "/").
+      this.state.set(STATE_ROUTE, this.router.getPath());
+    } else {
+      this.router.stop();
+    }
+    this.renderer = new Renderer({
+      library: this.library,
+      state: this.state,
+      actionRunner: this.actionRunner,
+      scriptRunner: this.scriptRunner,
+      router: this.router,
+      routesEnabled: enabled,
+    });
+  }
+
+  /**
+   * React to any path change: write the new value into `$route` (so
+   * conditional expressions re-evaluate), schedule a re-render, and bubble
+   * a `route-change` event so host pages can sync analytics or sidebars.
+   */
+  private handleRouteChange(detail: RouteChangeDetail): void {
+    this.state.set(STATE_ROUTE, detail.path);
+    this.dispatchEvent(new CustomEvent("route-change", {
+      detail,
+      bubbles: true,
+      composed: true,
+    }));
+    this.scheduleRender();
   }
 
   private applyThemeFromAttribute(): void {
@@ -389,11 +474,20 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   private replan(): void {
     this.queries.reset();
-    this.context = createContext(this.state, this.queries);
+    this.context = createContext(this.state, this.queries, this.router);
     this.queries.setNotify(() => this.scheduleRender());
 
     const program = parse(this.currentResponse);
     planProgram(program, this.context);
+
+    // Seed `$route` so user expressions like `$route == "/about"` resolve
+    // even before the first hashchange fires. We never overwrite a
+    // user-declared `$route` default — `set` only writes if the new value
+    // differs from what's stored, and `state.has("route")` is preserved by
+    // the planner's first pass.
+    if (this.enableRoutes) {
+      this.state.set(STATE_ROUTE, this.router.getPath());
+    }
 
     this.parseErrors = program.errors.map(
       (e) => `Line ${e.line}: ${e.message}`,

@@ -18,6 +18,7 @@
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="javascript-interactions.html">JavaScript interactions</a>
+        <a href="routing.html">Routing</a>
         <a href="themes.html">Theming</a>
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
@@ -31,6 +32,7 @@
         <a href="javascript-todo-app.html">Todo app (JS)</a>
         <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
         <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
+        <a href="routing-demo.html">Routing demo</a>
       </nav>
     </aside>
 
@@ -101,7 +103,7 @@ data = Query("usage", {days: $days}, {rows: []})</code></pre>
           <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>@Concat(a, b)</code></td></tr>
           <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> is local to <code>template</code></td></tr>
           <tr><td>Array shortcuts</td><td><code>$rows.length</code>, <code>$rows.first</code>, <code>$rows.last</code>, <code>$rows.field</code> (pluck)</td></tr>
-          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url")</code></td></tr>
+          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url"), @Navigate("/path")</code> (last requires <code>enable-routes</code>)</td></tr>
         </tbody>
       </table>
 
@@ -137,6 +139,19 @@ btn    = Button("Create", Action([@Run(create), @Run(list), @Reset($title)]))</c
         these features when the flag is on. See the dedicated
         <a href="javascript-interactions.html">JavaScript interactions</a>
         page for the full API.
+      </p>
+
+      <h2>Routing (opt-in)</h2>
+      <p>
+        When the host sets <code>enable-routes="true"</code> on the element,
+        four routing primitives become available: <code>Routes(items, default?)</code>,
+        <code>Route(path, content)</code>, <code>NavLink(label, to, …)</code>,
+        and the <code>@Navigate("/path")</code> action step. The current path
+        is exposed reactively as <code>$route</code>; matched URL parameters
+        land in the <code>params</code> loop variable inside each Route's
+        content. See the dedicated
+        <a href="routing.html">routing reference</a> (and
+        <a href="routing-demo.html">live demo</a>) for the full surface.
       </p>
 
       <h2>Error handling</h2>

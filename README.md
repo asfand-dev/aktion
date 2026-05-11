@@ -20,6 +20,7 @@ The library bundles everything needed at runtime:
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
 - A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
 - An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
+- An **opt-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(label, to)`, `@Navigate("/path")`, and reactive `$route` + `params`. Hash-based, framework-agnostic, off by default.
 - **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
 - A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available.
 
@@ -154,6 +155,7 @@ All members live on the `<streaming-ui-script>` element.
 | `response`           | Streaming UI Script text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                                                               |
 | `showerrors`         | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.                                                        |
 | `enable-javascript`  | `true` / unset                                        | If `true`, allows `Script(...)` + `@Js(...)` to run and the generated system prompt teaches the LLM about them. Defaults to off.         |
+| `enable-routes`      | `true` / unset                                        | If `true`, enables hash-based routing (`Routes` / `Route` / `NavLink` / `@Navigate`) and adds the routing section to the system prompt. Defaults to off. |
 
 ### Properties
 
@@ -164,6 +166,8 @@ All members live on the `<streaming-ui-script>` element.
 | `streaming`         | `boolean`                     | Reflects the `streaming` attribute.                                    |
 | `showErrors`        | `boolean`                     | Reflects the `showerrors` attribute.                                   |
 | `enableJavascript`  | `boolean`                     | Reflects the `enable-javascript` attribute.                            |
+| `enableRoutes`      | `boolean`                     | Reflects the `enable-routes` attribute.                                |
+| `route`             | `string` (read-only)          | Current path tracked by the router (e.g. `"/users/42"`).               |
 
 ### Methods
 
@@ -176,6 +180,7 @@ All members live on the `<streaming-ui-script>` element.
 | `setTools(tools)`                        | Register tools used by `Query()` and `Mutation()`.                           |
 | `registerComponents(specs, root?)`       | Extend the built-in library with your own components.                        |
 | `getSystemPrompt(options?)`              | Build a system prompt that matches the current library and tools.            |
+| `navigate(path)`                         | Programmatically navigate when routing is enabled (updates `window.location.hash`). |
 
 ### Events
 
@@ -183,6 +188,7 @@ All members live on the `<streaming-ui-script>` element.
 |----------------------|---------------------------------|----------------------------------------------------------------|
 | `assistant-message`  | `{ message: string }`           | When `@ToAssistant("...")` runs (e.g. a follow-up button).     |
 | `error`              | `{ errors: ParseError[] }`      | After each render whose source had parse errors.               |
+| `route-change`       | `{ path, previousPath, params, pattern }` | When the current hash path changes (only fires while routing is enabled). |
 
 The `error` event always fires regardless of `showerrors`, so host apps can
 log or report errors even when the in-page banner is suppressed.
@@ -310,6 +316,62 @@ See the [JavaScript interactions guide](https://asfand-dev.github.io/streaming-u
 or the deeper [`coding-gen-skill.md`](./coding-gen-skill.md) for a full
 end-to-end app walkthrough.
 
+## Routing (opt-in)
+
+Add `enable-routes="true"` to the element and the LLM may emit hash-based
+routes that stay in sync with the URL (`#/dashboard`, `#/users/42`). Browser
+back/forward, bookmarks, and deep links all work — and the host page never
+reloads.
+
+```html
+<streaming-ui-script enable-routes="true"></streaming-ui-script>
+```
+
+```text
+root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",     "/",          "ghost", true),
+  NavLink("Dashboard","/dashboard", "ghost"),
+  NavLink("Users",    "/users",     "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",           homePage),
+  Route("/dashboard",  dashboardPage),
+  Route("/users/:id",  userPage),
+  Route("*",           notFoundPage)
+], "/")
+
+homePage      = Card([CardHeader("Welcome")])
+dashboardPage = Card([CardHeader("Dashboard")])
+userPage      = Card([CardHeader("User " + params.id)])
+notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + ".")
+```
+
+- `Routes(items, default?)` picks the matching `Route` based on the current
+  hash path. First match wins; `default` is the fallback when nothing else
+  matches.
+- `Route(path, content)` supports literal segments (`"/about"`), parameter
+  segments (`"/users/:id"` → `params.id`), and trailing wildcards
+  (`"/docs/*"` → `params._`).
+- `NavLink(label, to, variant?, exact?, icon?)` is a router-aware anchor
+  that intercepts clicks and reflects `data-active="true"` for the current
+  path.
+- `@Navigate("/path")` is an action step you can drop into any
+  `Action([...])` for programmatic navigation. From JS, call
+  `el.navigate("/path")`.
+- The current path is exposed reactively as `$route`. Inside a matched
+  route's content, the captured params land in the `params` loop variable.
+
+The generated system prompt teaches the LLM about routing only when the flag
+is on; with `enable-routes="false"` (the default) the routing section is
+omitted entirely and routing components fall back to inert rendering.
+
+See the [routing guide](https://asfand-dev.github.io/streaming-ui-script/routing.html)
+and the [live routing demo](https://asfand-dev.github.io/streaming-ui-script/routing-demo.html)
+for a full end-to-end walkthrough.
+
 ## Built-in components
 
 | Group     | Components                                                                                                              |
@@ -321,6 +383,7 @@ end-to-end app walkthrough.
 | Charts    | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
 | Chat      | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`                                              |
 | Scripting | `Script` (opt-in via `enable-javascript="true"`)                                                                        |
+| Routing   | `Routes`, `Route`, `NavLink` (opt-in via `enable-routes="true"`)                                                        |
 
 Add your own with `registerComponents`:
 

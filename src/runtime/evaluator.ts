@@ -21,6 +21,7 @@ import {
   type ActionPayload,
   type ActionStep,
 } from "./builtins.js";
+import { matchRoute, type Router, type RouteParams } from "./router.js";
 
 export interface ArgMeta {
   /** Name of the `$variable` if this argument is a direct state reference. */
@@ -51,23 +52,37 @@ export interface EvaluationContext {
   queries: QueryRegistry;
   /** Per-program scope for non-state assignments (refs to other lines). */
   bindings: Map<string, () => unknown>;
+  /**
+   * Raw AST expressions for each top-level identifier. Used by `Routes(...)`
+   * to deferr-evaluate a matched `Route(path, content)`'s content with the
+   * extracted path params injected as a loop variable.
+   */
+  expressions: Map<string, Expression>;
   /** Set of $variable names accessed during the current evaluation. */
   trackedState: Set<string>;
   /** Set of query/mutation refs accessed during the current evaluation. */
   trackedQueries: Set<string>;
-  /** Inline loop variables for `@Each`. */
+  /** Inline loop variables for `@Each` and `Routes` (`params`). */
   loopVars: Map<string, unknown>;
+  /** Optional router — used to special-case `Routes(...)` and `@Navigate(...)`. */
+  router?: Router;
 }
 
 /** Build a top-level evaluation context for a freshly parsed program. */
-export function createContext(state: StateStore, queries: QueryRegistry): EvaluationContext {
+export function createContext(
+  state: StateStore,
+  queries: QueryRegistry,
+  router?: Router,
+): EvaluationContext {
   return {
     state,
     queries,
     bindings: new Map(),
+    expressions: new Map(),
     trackedState: new Set(),
     trackedQueries: new Set(),
     loopVars: new Map(),
+    router,
   };
 }
 
@@ -97,9 +112,13 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
     }
   }
 
-  // Third pass: install lazy bindings for non-state assignments.
+  // Third pass: install lazy bindings for non-state assignments. We also
+  // keep the raw AST around (in `ctx.expressions`) so `Routes(...)` can find
+  // a `Route(path, content)` referenced by name and re-evaluate its content
+  // with path params injected as a loop variable.
   for (const stmt of program.statements) {
     if (stmt.isState) continue;
+    ctx.expressions.set(stmt.identifier, stmt.expression);
     if (
       stmt.expression.kind === "Call" &&
       (stmt.expression.callee === "Query" || stmt.expression.callee === "Mutation")
@@ -230,6 +249,9 @@ function evaluateComponentCall(
   if (callee === "Mutation") {
     return null; // mutations are run via @Run inside actions
   }
+  if (callee === "Routes") {
+    return evaluateRoutes(args, ctx, loc);
+  }
   if (callee === "Action") {
     const stepsArg = args[0];
     let steps: ActionStep[] = [];
@@ -291,6 +313,10 @@ function evaluateBuiltinCall(
     const url = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
     return { kind: "OpenUrl", url } satisfies ActionStep;
   }
+  if (name === "Navigate") {
+    const path = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
+    return { kind: "Navigate", path } satisfies ActionStep;
+  }
   if (name === "Js") {
     // @Js(body, args?) — `body` is a JS string. The optional `args` is an
     // object evaluated at render time and exposed to the body as `ctx.args`.
@@ -334,6 +360,151 @@ function evaluateBuiltinCall(
   if (!fn) return null;
   const evaluated = args.map((a) => evaluate(a, ctx));
   return fn(evaluated);
+}
+
+/**
+ * Special-case `Routes(items, default?)` evaluation. We inspect the items
+ * array AST to find candidate `Route(path, content)` expressions, pick the
+ * one whose path matches the router's current path, and re-evaluate that
+ * Route's content with `params` injected as a loop variable. The resulting
+ * tree is wrapped in a `Routes` component node whose first arg is the
+ * matched content (the renderer just renders whatever's inside).
+ *
+ * Doing the match at evaluation time (rather than at render time) is what
+ * lets the matched page's content read `params.id` correctly on the very
+ * first frame after a route change — there's no "stale params" tick.
+ */
+function evaluateRoutes(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const path = readRoutePath(ctx);
+  const defaultExpr = args[1];
+  const itemsExpr = args[0];
+
+  const candidates = collectRouteCandidates(itemsExpr, ctx);
+
+  let matched: { pattern: string; params: RouteParams; contentExpr: Expression | undefined } | null = null;
+
+  for (const candidate of candidates) {
+    const result = matchRoute(candidate.pattern, path);
+    if (result.matched) {
+      matched = { pattern: candidate.pattern, params: result.params, contentExpr: candidate.contentExpr };
+      break;
+    }
+  }
+
+  if (!matched && defaultExpr) {
+    const defaultPath = String(evaluate(defaultExpr, ctx) ?? "");
+    if (defaultPath) {
+      for (const candidate of candidates) {
+        if (candidate.pattern === defaultPath || matchRoute(candidate.pattern, defaultPath).matched) {
+          matched = { pattern: candidate.pattern, params: {}, contentExpr: candidate.contentExpr };
+          break;
+        }
+      }
+    }
+  }
+
+  // If still no match but we have any candidates, fall back to the first one
+  // so the LLM-generated UI is never blank. This is also the path taken when
+  // routes are disabled — `path` defaults to `/` and a `Route("/")` (if any)
+  // wins, otherwise the first declared page shows.
+  if (!matched && candidates.length > 0) {
+    matched = { pattern: candidates[0]!.pattern, params: {}, contentExpr: candidates[0]!.contentExpr };
+  }
+
+  let content: unknown = null;
+  if (matched && matched.contentExpr) {
+    const prev = ctx.loopVars.get("params");
+    const hadPrev = ctx.loopVars.has("params");
+    ctx.loopVars.set("params", matched.params);
+    try {
+      content = evaluate(matched.contentExpr, ctx);
+    } finally {
+      if (hadPrev) ctx.loopVars.set("params", prev);
+      else ctx.loopVars.delete("params");
+    }
+  }
+
+  // Record the match on the router so `NavLink(active)` can highlight the
+  // currently active anchor. Done outside the params loop so we never
+  // re-enter evaluation through the router.
+  ctx.router?.setActiveMatch(matched ? matched.pattern : null, matched ? matched.params : {});
+
+  return {
+    __kind: "Component",
+    name: "Routes",
+    args: [content, matched ? matched.pattern : ""],
+    argMeta: [{}, {}],
+    source: loc,
+  } satisfies ComponentNode;
+}
+
+/**
+ * Collect every `Route(path, content)` AST expression referenced from `items`.
+ * `items` can be an inline array literal of Route calls, an identifier
+ * referencing an array, or even a single identifier pointing at a Route —
+ * we resolve all three so the LLM is free to write Routes the most natural
+ * way for the response.
+ */
+function collectRouteCandidates(
+  expr: Expression | undefined,
+  ctx: EvaluationContext,
+): Array<{ pattern: string; contentExpr: Expression | undefined }> {
+  if (!expr) return [];
+
+  if (expr.kind === "Array") {
+    const out: Array<{ pattern: string; contentExpr: Expression | undefined }> = [];
+    for (const element of expr.elements) {
+      const resolved = resolveRouteExpr(element, ctx);
+      if (resolved) out.push(resolved);
+    }
+    return out;
+  }
+
+  if (expr.kind === "Identifier") {
+    const referenced = ctx.expressions.get(expr.name);
+    if (referenced) return collectRouteCandidates(referenced, ctx);
+  }
+
+  const single = resolveRouteExpr(expr, ctx);
+  return single ? [single] : [];
+}
+
+function resolveRouteExpr(
+  expr: Expression,
+  ctx: EvaluationContext,
+): { pattern: string; contentExpr: Expression | undefined } | null {
+  if (expr.kind === "Call" && expr.callee === "Route") {
+    const patternExpr = expr.arguments[0];
+    const pattern = patternExpr ? String(evaluate(patternExpr, ctx) ?? "") : "";
+    return { pattern, contentExpr: expr.arguments[1] };
+  }
+  if (expr.kind === "Identifier") {
+    const referenced = ctx.expressions.get(expr.name);
+    if (referenced) return resolveRouteExpr(referenced, ctx);
+  }
+  return null;
+}
+
+/**
+ * Resolve the current route path. Prefers the router (when present), falls
+ * back to `$route` state, and finally to "/". Tracking `$route` here makes
+ * `Routes(...)` reactive to host pages that write the path imperatively
+ * (e.g. for SSR-style hydration).
+ */
+function readRoutePath(ctx: EvaluationContext): string {
+  if (ctx.router) {
+    return ctx.router.getPath();
+  }
+  if (ctx.state.has("route")) {
+    ctx.trackedState.add("route");
+    const value = ctx.state.get("route");
+    if (typeof value === "string" && value) return value;
+  }
+  return "/";
 }
 
 function memberAccess(target: unknown, property: string): unknown {

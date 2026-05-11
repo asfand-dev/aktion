@@ -28,6 +28,7 @@ The library bundles everything needed at runtime:
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
 - A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
 - An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
+- An **opt-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic. Off by default.
 - **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
 - A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available.
 
@@ -130,6 +131,10 @@ If you internalise only these ten rules, you will write correct programs:
    for multi-line script bodies.
 10. **`Script(...)` requires `enable-javascript="true"` on the host element.**
     Without it, `Script` and `@Js` silently no-op.
+11. **`Routes(...)` / `Route(...)` / `NavLink(...)` / `@Navigate(...)` require
+    `enable-routes="true"` on the host element.** Without it, the routing
+    primitives fall back to inert rendering and `$route` / `params` are
+    unavailable.
 
 ---
 
@@ -646,6 +651,7 @@ Use these only inside `Action([...])`:
 | `@ToAssistant("text")`     | Fire `assistant-message`.                                    |
 | `@OpenUrl("url")`          | Open a URL.                                                  |
 | `@Js(body, args?)`         | Run JavaScript (requires `enable-javascript`).               |
+| `@Navigate("/path")`       | Navigate to a hash path (requires `enable-routes`).          |
 
 ---
 
@@ -773,6 +779,24 @@ Script(id, body, deps?)                 # body: string; deps: ("$name")[] | null
 
 `Script` renders nothing. Place it at the bottom of `root = Stack([...])`
 so the visible UI commits first.
+
+### Routing (opt-in)
+
+```text
+Routes(items, default?)                 # items: Route[]; default: matching path string
+Route(path, content)                    # path supports literals, ":params", and trailing "*"
+NavLink(label, to, variant?, exact?, icon?)
+  variant: "default" | "primary" | "ghost" | "pill"
+  exact: boolean (defaults to false → prefix match for nested-route highlighting)
+```
+
+`Routes` renders only the matched `Route`'s content. Inside that content, the
+loop variable `params` is bound to the captured URL parameters (e.g.
+`params.id` for `/users/:id`; `params._` for trailing wildcards). The
+runtime-owned reactive state `$route` holds the current path everywhere.
+
+`@Navigate("/path")` is the action step for programmatic navigation; see
+§ 10.5 for details.
 
 ---
 
@@ -932,6 +956,111 @@ copyBtn = Button("Copy", Action([
 | `$todos.map(t => t.title)`                                        | `$todos.title` (array pluck).                                        |
 | `@Js("ctx.state.set('open', !ctx.state.get('open'))")`             | `@Set($open, !$open)`                                                |
 | Imperative reset of several values                                | `@Reset($a, $b, $c)`                                                 |
+
+---
+
+## 10.5. Routing layer (multi-page UIs)
+
+Enable with `enable-routes="true"` on the host element. When off, the routing
+components silently degrade (e.g. `Routes` renders its first child, `NavLink`
+is inert), and the generated system prompt omits the entire routing section.
+
+The router is **hash-based** by design: it owns `window.location.hash`, plays
+nicely with static hosting, deep links, browser back/forward, and bookmarks,
+and never requires server-side rewrite rules. It's a tiny addition (~100
+lines), zero new dependencies.
+
+### Surfaces
+
+| Surface                                       | Purpose                                                                                                                  |
+|-----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `Routes(items, default?)`                     | Outlet that renders the matching `Route`. First match wins. `default` is the path of the fallback Route.                |
+| `Route(path, content)`                        | Declares one page. `path` supports literal, `:param`, and trailing `*` segments.                                         |
+| `NavLink(label, to, variant?, exact?, icon?)` | Router-aware anchor. Intercepts clicks, updates the hash without reload, reflects `data-active="true"` for the current path. |
+| `@Navigate("/path")` action step              | Programmatic navigation inside any `Action([...])` chain.                                                                |
+| `$route` (reactive)                           | Current path. Owned by the runtime — never declare it yourself.                                                          |
+| `params` (loop variable)                      | URL parameters captured by the matched Route. Scoped to that Route's content (acts like an `@Each` var).                 |
+
+### Path patterns
+
+| Pattern                              | Matches                                                | Captures                                              |
+|--------------------------------------|--------------------------------------------------------|-------------------------------------------------------|
+| `"/"`                                | Only the root path.                                    | —                                                     |
+| `"/about"`                           | Exact path `#/about`.                                  | —                                                     |
+| `"/users/:id"`                       | `#/users/42`, `#/users/jane`.                          | `params.id`                                           |
+| `"/teams/:teamId/members/:memberId"` | Nested parameters.                                     | `params.teamId`, `params.memberId`                    |
+| `"/docs/*"`                          | `#/docs`, `#/docs/guides/intro`, etc.                  | `params._` (the remainder)                            |
+| `"*"`                                | Anything (use as the LAST route for a 404 fallback).    | `params._`                                            |
+
+Parameter values are automatically URI-decoded, so `#/users/jane%20doe`
+yields `params.id === "jane doe"`.
+
+### Canonical layout
+
+```text
+root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",      "/",          "ghost", true),   # exact=true keeps "/" from highlighting on every other path
+  NavLink("Dashboard", "/dashboard", "ghost"),
+  NavLink("Users",     "/users",     "ghost"),
+  NavLink("Settings",  "/settings",  "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",           homePage),
+  Route("/dashboard",  dashboardPage),
+  Route("/users",      usersListPage),
+  Route("/users/:id",  userDetailPage),
+  Route("/settings/*", settingsArea),
+  Route("*",           notFoundPage)
+], "/")
+
+homePage       = Card([CardHeader("Welcome")])
+dashboardPage  = Card([CardHeader("Dashboard")])
+usersListPage  = Card([CardHeader("Users")])
+userDetailPage = Card([CardHeader("User " + params.id), Buttons([Button("Back", Action([@Navigate("/users")]), "ghost")])])
+settingsArea   = Card([CardHeader("Settings"), TextContent("Section: " + params._)])
+notFoundPage   = Callout("warning", "Not found", "We couldn't find " + $route + ".")
+```
+
+### Idioms
+
+- **Drive a `Query` from `params`.** Pass the bare loop variable so dependency
+  tracking still works inside the matched Route's content:
+  ```text
+  userData = Query("get_user", {id: params.id}, {name: "", email: ""})
+  userDetailPage = Card([CardHeader(userData.name, userData.email)])
+  ```
+- **Save → navigate → notify.** Compose `@Navigate` with other action steps:
+  ```text
+  saveBtn = Button("Save", Action([
+    @Run(saveMutation),
+    @Navigate("/dashboard"),
+    @ToAssistant("Profile updated.")
+  ]), "primary")
+  ```
+- **React to `$route` outside a Route.** Show a global banner only on certain
+  paths:
+  ```text
+  banner = $route == "/onboarding" ? Callout("info", "Welcome", "Let's get you set up.") : null
+  ```
+- **Tabs become routes.** Replace `Tabs([...])` with `Routes([...])` whenever
+  individual tabs should be deep-linkable.
+- **Programmatic navigation from `@Js`.** When you need imperative routing
+  (e.g. for keyboard shortcuts or after a fetch), call `ctx.host.navigate("/path")`
+  from inside an `@Js` body. The standard declarative path is `@Navigate(...)`.
+
+### Common mistakes
+
+| Mistake                                                                              | Fix                                                                              |
+|--------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
+| `$route = "/dashboard"` (assigning the route yourself).                              | Never declare or assign `$route`. The runtime owns it. Use `@Navigate("/dashboard")`. |
+| `NavLink("Home", "/")` without `exact=true`.                                         | The home link will light up on every page (every path starts with `/`). Pass `exact=true`. |
+| Putting `Routes` inside a conditional that hides the nav.                            | Render `nav` once at the top of `root` so it stays visible across pages.         |
+| Forgetting `Route("*", notFoundPage)`.                                               | Unknown URLs render an empty outlet. Always include a wildcard or a `default`.    |
+| Reading `params` outside a matched `Route`.                                          | `params` is a loop variable — undefined outside the matched Route's content.      |
+| Using `Link("…", "#/path")` for in-app navigation.                                   | Use `NavLink` so the link reflects the active state and avoids a full reload.    |
 
 ---
 
@@ -1213,6 +1342,65 @@ confirmModal = Modal("Delete item?", $confirming != null, [
 ])
 ```
 
+### Pattern H — Multi-page app with hash routing
+
+Requires `enable-routes="true"`. The nav lives at the top of `root` and stays
+visible; `Routes(...)` swaps in the active page based on the URL.
+
+```text
+$users = [
+  {id: "ada",   name: "Ada Lovelace",   role: "Founding engineer"},
+  {id: "grace", name: "Grace Hopper",   role: "Compiler researcher"}
+]
+
+root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",  "/",      "ghost", true),
+  NavLink("Users", "/users", "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",          homePage),
+  Route("/users",     usersListPage),
+  Route("/users/:id", userDetailPage),
+  Route("*",          notFoundPage)
+], "/")
+
+homePage = Card([
+  CardHeader("Welcome"),
+  Buttons([Button("Browse users", Action([@Navigate("/users")]), "primary")])
+])
+
+usersListPage = Card([
+  CardHeader("Users"),
+  @Each($users, "u", userRow)
+])
+
+userRow = Card([
+  Stack([
+    TextContent(u.name, "body-heavy"),
+    Buttons([Button("Open", Action([@Navigate("/users/" + u.id)]), "ghost")])
+  ], "row", "m", "center", "between")
+], "outlined")
+
+userDetailPage = Card([
+  CardHeader("User " + params.id),
+  Buttons([Button("Back", Action([@Navigate("/users")]), "ghost")])
+])
+
+notFoundPage = Callout("warning", "Not found", "No page matches " + $route + ".")
+```
+
+Highlights:
+
+- Inline `@Navigate("/users/" + u.id)` works because each `Route`'s content
+  is evaluated with the `@Each` variable in scope at render time.
+- `params.id` lands automatically when `/users/:id` matches — no extra
+  bookkeeping required.
+- The fallback `Route("*", notFoundPage)` makes sure unknown URLs render
+  something meaningful instead of an empty outlet.
+
 ---
 
 ## 12. Common pitfalls and anti-patterns
@@ -1336,6 +1524,9 @@ const prompt = el.getSystemPrompt({
 | Action step         | A node inside `Action([...])`. One of `@Set / @Reset / @Run / @ToAssistant / @OpenUrl / @Js`.        |
 | `ctx`               | The bridge passed to JS bodies (`Script` and `@Js`). See § 10.                                       |
 | `ctx.args`          | Render-time arguments captured by `@Js(body, args)`. Empty for `Script`.                             |
+| Route               | A single page declaration: `Route(path, content)`. Lives inside a `Routes(...)` outlet. See § 10.5.  |
+| `$route`            | Runtime-owned reactive state holding the current hash path. See § 10.5.                              |
+| `params`            | Loop variable bound inside a matched `Route`'s content. Holds URL parameters. See § 10.5.            |
 
 ---
 
@@ -1353,6 +1544,7 @@ const prompt = el.getSystemPrompt({
 | Add a timer, fetch, focus, keyboard shortcut  | § 10 "JavaScript layer"                          |
 | Wire a per-row Delete / Toggle button         | § 10 (Per-item handler pattern)                  |
 | Build a complete app                          | § 11 "Application patterns"                      |
+| Wire up multiple pages / deep links           | § 10.5 "Routing layer" and Pattern H in § 11     |
 | Diagnose a parse error or broken interaction  | § 12 "Common pitfalls"                           |
 
 ---
@@ -1374,8 +1566,11 @@ Walk this list before you send your output:
 9. Are all `Script` ids unique within this response?
 10. Could any `@Js` be replaced by `@Set` + a builtin (`@Push`, `@Filter`,
     `@Sort`, `@Concat`)?
+11. If the response uses routing, does it include a wildcard or `default`
+    fallback, never assign `$route` itself, and read `params.*` only inside
+    a matched `Route`'s content?
 
-If you can answer "yes" to all ten, your response is ready.
+If you can answer "yes" to all checks, your response is ready.
 
 ---
 
@@ -1386,5 +1581,7 @@ If you can answer "yes" to all ten, your response is ready.
 - **Component reference:** <https://asfand-dev.github.io/streaming-ui-script/components.html>
 - **Language reference:** <https://asfand-dev.github.io/streaming-ui-script/language.html>
 - **JS interactions guide:** <https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html>
+- **Routing guide:** <https://asfand-dev.github.io/streaming-ui-script/routing.html>
+- **Routing live demo:** <https://asfand-dev.github.io/streaming-ui-script/routing-demo.html>
 - **Live demos:** <https://asfand-dev.github.io/streaming-ui-script/examples.html>
 - **Generated system prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>

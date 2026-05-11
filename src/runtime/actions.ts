@@ -6,6 +6,7 @@
 
 import type { ActionPayload, ActionStep } from "./builtins.js";
 import type { EvaluationContext } from "./evaluator.js";
+import type { Router } from "./router.js";
 import type { ScriptRunner } from "./scripts.js";
 
 export interface ActionRunnerOptions {
@@ -14,6 +15,8 @@ export interface ActionRunnerOptions {
   onAssistantMessage?: (message: string) => void;
   /** Override how URLs are opened (defaults to window.open). */
   onOpenUrl?: (url: string) => void;
+  /** Optional router used to handle `@Navigate("...")` steps. */
+  router?: Router;
   /** Optional bridge for `@Js("...")` steps (when JS interactions are on). */
   scriptRunner?: ScriptRunner;
 }
@@ -52,6 +55,13 @@ export class ActionRunner {
         const opener = this.options.onOpenUrl;
         if (opener) opener(step.url);
         else if (typeof window !== "undefined") window.open(step.url, "_blank", "noopener");
+        return;
+      }
+      case "Navigate": {
+        // Routes still render correctly even when the router is disabled
+        // because evaluation falls back to the first declared Route — so we
+        // only call `navigate` when the router is actually attached.
+        this.options.router?.navigate(step.path);
         return;
       }
       case "Js": {

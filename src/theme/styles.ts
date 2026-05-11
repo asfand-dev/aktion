@@ -160,6 +160,67 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 }
 .rui-link:hover { text-decoration: underline; }
 
+/* Routing — NavLink anchor + Routes outlet. NavLink is a hash-aware anchor
+   that reflects the current route via data-active="true". Routes wraps
+   the matched page so themes can target it without leaking styles into
+   surrounding content. */
+.rui-routes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rui-spacing-m);
+  width: 100%;
+}
+.rui-route { display: contents; }
+.rui-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+  color: var(--rui-color-text);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.rui-nav-link:hover {
+  background: var(--rui-color-surface-muted);
+  text-decoration: none;
+}
+.rui-nav-link[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
+  color: var(--rui-color-primary);
+  border-color: color-mix(in srgb, var(--rui-color-primary) 28%, transparent);
+}
+.rui-nav-link[data-variant="primary"] {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+}
+.rui-nav-link[data-variant="primary"]:hover { background: var(--rui-color-primary-hover); }
+.rui-nav-link[data-variant="primary"][data-active="true"] {
+  background: var(--rui-color-primary-hover);
+  border-color: transparent;
+}
+.rui-nav-link[data-variant="ghost"] {
+  background: transparent;
+}
+.rui-nav-link[data-variant="ghost"]:hover {
+  background: var(--rui-color-surface-muted);
+}
+.rui-nav-link[data-variant="pill"] {
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--rui-color-surface-muted);
+}
+.rui-nav-link[data-variant="pill"][data-active="true"] {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border-color: transparent;
+}
+.rui-nav-link[data-routes-enabled="false"] { opacity: 0.6; }
+.rui-nav-link-icon { display: inline-flex; align-items: center; }
+
 /* Badge & Tag */
 .rui-badge {
   display: inline-flex;

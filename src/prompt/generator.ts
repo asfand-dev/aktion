@@ -44,6 +44,12 @@ export interface PromptOptions {
    * never advertise a feature they haven't enabled at runtime.
    */
   enableJavascript?: boolean;
+  /**
+   * When true, teach the LLM about hash-based routing (`Routes`, `Route`,
+   * `NavLink`, `@Navigate`, and the `$route` / `params` reactive surfaces).
+   * Default false — mirrors the `enable-routes` attribute on the element.
+   */
+  enableRoutes?: boolean;
 }
 
 export function generatePrompt(library: ComponentLibrary, options: PromptOptions = {}): string {
@@ -54,16 +60,21 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
     inlineMode: options.inlineMode ?? false,
     editMode: options.editMode ?? false,
     enableJavascript: options.enableJavascript ?? false,
+    enableRoutes: options.enableRoutes ?? false,
   };
 
   const sections: string[] = [];
   sections.push(headerSection(options.preamble, library.root));
   sections.push(syntaxSection(library.root));
-  sections.push(componentsSection(library, { includeScripting: flags.enableJavascript }));
+  sections.push(componentsSection(library, {
+    includeScripting: flags.enableJavascript,
+    includeRouting: flags.enableRoutes,
+  }));
   if (flags.bindings) sections.push(bindingsSection());
   if (flags.toolCalls) sections.push(toolingSection());
   if (flags.toolCalls || flags.bindings) sections.push(builtinsSection());
   if (flags.enableJavascript) sections.push(javascriptSection());
+  if (flags.enableRoutes) sections.push(routingSection());
   if (flags.inlineMode) sections.push(inlineModeSection());
   if (flags.editMode) sections.push(editModeSection());
   if (options.tools && options.tools.length > 0) {
@@ -79,7 +90,7 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
     sections.push(rulesSection(options.additionalRules));
   }
   sections.push(streamingSection(library.root));
-  sections.push(closingSection(flags.enableJavascript));
+  sections.push(closingSection(flags.enableJavascript, flags.enableRoutes));
   sections.push(finalVerificationSection(library.root));
 
   return sections.join("\n\n").trim() + "\n";
@@ -110,16 +121,21 @@ function syntaxSection(rootComponent: string): string {
 
 interface ComponentsSectionOptions {
   includeScripting: boolean;
+  includeRouting: boolean;
 }
 
 const SCRIPTING_GROUP_NAMES = new Set(["Scripting"]);
 const SCRIPTING_COMPONENT_NAMES = new Set(["Script"]);
+const ROUTING_GROUP_NAMES = new Set(["Routing"]);
+const ROUTING_COMPONENT_NAMES = new Set(["Routes", "Route", "NavLink"]);
 
 function componentsSection(library: ComponentLibrary, options: ComponentsSectionOptions): string {
   const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
-  const groups = options.includeScripting
-    ? allGroups
-    : allGroups.filter((g) => !SCRIPTING_GROUP_NAMES.has(g.name));
+  const groups = allGroups.filter((g) => {
+    if (!options.includeScripting && SCRIPTING_GROUP_NAMES.has(g.name)) return false;
+    if (!options.includeRouting && ROUTING_GROUP_NAMES.has(g.name)) return false;
+    return true;
+  });
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [];
   lines.push("## Components");
@@ -138,12 +154,13 @@ function componentsSection(library: ComponentLibrary, options: ComponentsSection
     }
     lines.push("");
   }
-  // Append any components not in a group, skipping scripting ones unless
-  // JavaScript interactions are explicitly enabled.
+  // Append any components not in a group, skipping scripting and routing
+  // ones unless the corresponding feature is explicitly enabled.
   const grouped = new Set<string>(allGroups.flatMap((g) => g.components));
   const ungrouped = library.components.filter((c) => {
     if (grouped.has(c.name)) return false;
     if (!options.includeScripting && SCRIPTING_COMPONENT_NAMES.has(c.name)) return false;
+    if (!options.includeRouting && ROUTING_COMPONENT_NAMES.has(c.name)) return false;
     return true;
   });
   if (ungrouped.length > 0) {
@@ -437,6 +454,78 @@ shortcut = Script("shortcut", \`
 6. Did I escape correctly (or use backticks to avoid escapes)?`;
 }
 
+function routingSection(): string {
+  return `## Routing (multi-page navigation)
+The host has opted in with \`enable-routes="true"\`. You can now build multi-page UIs that synchronise with the URL hash (\`#/path\`). Browser back/forward, bookmarks, and direct deep links all work.
+
+### Surfaces
+1. \`Routes(items, default?)\` — outlet that picks the matching \`Route\` and renders only that page. \`items\` is an array of \`Route(path, content)\` entries; \`default\` (optional) is the path of the fallback Route when nothing matches. First match wins, so order the items from most-specific to least.
+2. \`Route(path, content)\` — declares one page. \`path\` supports:
+   - Literal segments — \`"/"\`, \`"/about"\`, \`"/settings/profile"\`.
+   - Parameter segments — \`"/users/:id"\`, \`"/teams/:teamId/members/:memberId"\`. Inside the page's content, read the captured value via the \`params\` loop variable (\`params.id\`, \`params.teamId\`).
+   - Trailing wildcard — \`"/docs/*"\` matches any path under \`/docs/\`. The remainder lands in \`params._\`.
+   - Pure wildcard \`"*"\` — matches anything. Use this for a 404 fallback at the END of the items list.
+3. \`NavLink(label, to, variant?, exact?, icon?)\` — anchor that navigates on click. Reflects \`data-active="true"\` automatically when the current path starts with \`to\` (set \`exact=true\` for strict equality, e.g. for a "/" home link that must not match every other page).
+4. \`@Navigate("/path")\` — action step for programmatic navigation. Use inside \`Action([...])\` from any button, follow-up, or \`@Js\` handler.
+
+### Reactive surface
+- \`$route\` — reactive state holding the current path string (\`"/"\`, \`"/about"\`, …). Read it anywhere; **never declare it yourself** (the runtime owns the value).
+- \`params\` — loop variable bound only inside the matched Route's content. Always an object: \`{}\` for parameter-less routes, \`{id: "42"}\` for \`/users/:id\` matching \`/users/42\`. Outside the matched Route's content, \`params\` is undefined.
+
+### Canonical layout
+\`\`\`
+root = Stack([nav, main])
+nav = Stack([
+  NavLink("Home",     "/",         "ghost", true),
+  NavLink("Dashboard","/dashboard","ghost"),
+  NavLink("Settings", "/settings", "ghost")
+], "row", "s")
+main = Routes([
+  Route("/",           homePage),
+  Route("/dashboard",  dashboardPage),
+  Route("/users/:id",  userPage),
+  Route("/settings/*", settingsArea),
+  Route("*",           notFoundPage)
+], "/")
+
+homePage      = Card([CardHeader("Welcome", "Pick a section from the nav above.")])
+dashboardPage = Card([CardHeader("Dashboard"), TextContent("KPIs and charts go here.")])
+userPage      = Card([
+  CardHeader("User " + params.id, "Profile detail"),
+  Buttons([
+    Button("Edit", Action([@Navigate("/users/" + params.id + "/edit")]), "primary"),
+    Button("Back", Action([@Navigate("/dashboard")]), "ghost")
+  ])
+])
+settingsArea  = Card([CardHeader("Settings"), TextContent("Section: " + params._)])
+notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + ".")
+\`\`\`
+
+### Patterns
+- **Active section in a sidebar.** Use \`NavLink\` with \`exact=true\` for the root page and \`exact=false\` (the default) for nested sections so a child path like \`/settings/profile\` still highlights the parent "Settings" link.
+- **Tabs as routes.** Replace \`Tabs([...])\` with \`Routes([...])\` when you want each tab to be deep-linkable. \`Routes\` re-renders only the active page, just like \`Tabs\` does for panels.
+- **Programmatic navigation after a mutation.**
+  \`\`\`
+  saveBtn = Button("Save", Action([@Run(saveMutation), @Navigate("/dashboard"), @ToAssistant("Saved.")]))
+  \`\`\`
+- **Driving a Query from \`params\`.** Compose the query args from \`params\`:
+  \`\`\`
+  userData = Query("get_user", {id: params.id}, {name: "", email: ""})
+  userPage = Card([CardHeader(userData.name, userData.email)])
+  \`\`\`
+- **Reacting to the path in any expression.** \`$route\` is reactive, so you can branch on it outside of \`Routes\` (e.g. show a global banner only on certain paths):
+  \`\`\`
+  banner = $route == "/onboarding" ? Callout("info", "Welcome", "Let's get you set up.") : null
+  \`\`\`
+
+### Common mistakes
+- **Declaring \`$route = "..."\` yourself.** The runtime owns \`$route\`; assignments to it are pointless because the router overwrites the value on the next hashchange.
+- **Putting \`Routes\` deep inside a conditional that hides the navigation.** Render the nav once at the top of \`root\` so it stays visible across all routes.
+- **Forgetting the wildcard.** Without \`Route("*", …)\` (or the \`default\` argument), an unknown URL renders an empty outlet.
+- **Reading \`params\` outside the matched Route.** \`params\` is a loop variable scoped to the matched content, just like \`@Each\`'s var.
+- **Using a regular \`Link(...)\` with \`href="#/path"\`.** That works but doesn't reflect the active state. Prefer \`NavLink\` for in-app navigation; reserve \`Link\` for external URLs.`;
+}
+
 function inlineModeSection(): string {
   return `## Inline mode
 You may answer questions in plain text. When you do, wrap any UI you produce in a fenced \`\`\`streaming-ui-script block. Otherwise output Streaming UI Script directly.`;
@@ -493,7 +582,7 @@ Streaming UI Script supports hoisting: a reference can be used BEFORE it is defi
 A correctly-ordered response renders top-down: the shell appears first, sections fill in next, and the leaf data lands last — without any flash of error text in between.`;
 }
 
-function closingSection(enableJavascript: boolean): string {
+function closingSection(enableJavascript: boolean, enableRoutes: boolean): string {
   const base = `## Output rules
 - Output ONLY Streaming UI Script lines (or a fenced \`\`\`streaming-ui-script block when inline mode is enabled).
 - Always start with \`root = ...\` on the very first line.
@@ -502,12 +591,20 @@ function closingSection(enableJavascript: boolean): string {
 - Use the smallest set of components that satisfies the request.
 - While using the icons, it should be emoji strings only.
 - Do not invent component names that are not in the list above.`;
-  if (!enableJavascript) return base;
-  return `${base}
-- Only emit \`Script(...)\` / \`@Js(...)\` when behaviour cannot be expressed with \`$variables\` + \`Action([...])\`. Default to the declarative path.
+  const lines: string[] = [base];
+  if (enableJavascript) {
+    lines.push(`- Only emit \`Script(...)\` / \`@Js(...)\` when behaviour cannot be expressed with \`$variables\` + \`Action([...])\`. Default to the declarative path.
 - Place \`Script(...)\` definitions AFTER the visible UI in your statement order so the shell renders before scripts execute.
 - Prefer backtick-quoted bodies (\`\`...\`\`) for any \`Script\` body longer than one line — they allow real newlines and unescaped double quotes, eliminating the most common parse errors.
-- Every \`Script(...)\` MUST have a string id as the first argument and a body as the second. Never omit the id. Never reuse an id within a single response.`;
+- Every \`Script(...)\` MUST have a string id as the first argument and a body as the second. Never omit the id. Never reuse an id within a single response.`);
+  }
+  if (enableRoutes) {
+    lines.push(`- Only use \`Routes(...)\`, \`Route(...)\`, \`NavLink(...)\`, and \`@Navigate(...)\` when the response actually needs multiple pages. A single-page UI never needs them.
+- When you do use routing, \`Routes([...])\` MUST be reached from \`root\` (typically \`root = Stack([navBar, mainOutlet])\` where \`mainOutlet = Routes([...])\`).
+- Always include a fallback \`Route("*", notFoundPage)\` (or set the \`default\` argument of \`Routes\`) so unknown paths render a sensible 404 instead of an empty screen.
+- Never declare \`$route\` yourself — the runtime owns it. Read \`$route\` anywhere you need to react to the current path.`);
+  }
+  return lines.join("\n");
 }
 
 function finalVerificationSection(rootComponent: string): string {

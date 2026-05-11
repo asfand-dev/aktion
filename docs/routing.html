@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Routing · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/site.css" />
+  <style>
+    .routing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 18px 0 28px;
+    }
+    .routing-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      background: var(--doc-surface);
+      box-shadow: var(--doc-shadow);
+    }
+    .routing-card-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--doc-text);
+    }
+    .routing-card-desc {
+      font-size: 12.5px;
+      color: var(--doc-text-muted);
+      line-height: 1.45;
+    }
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      font-size: 13.5px;
+    }
+    .api-table th,
+    .api-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--doc-border);
+      vertical-align: top;
+    }
+    .api-table th {
+      background: rgba(99, 102, 241, 0.06);
+      font-weight: 700;
+      color: var(--doc-text);
+    }
+    .api-table code {
+      font-size: 12.5px;
+    }
+    .callout--warn {
+      border: 1px solid rgba(234, 179, 8, 0.45);
+      background: rgba(234, 179, 8, 0.10);
+    }
+    .demo-row {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    @media (max-width: 880px) {
+      .demo-row { grid-template-columns: 1fr; }
+    }
+    .demo-source {
+      margin: 0;
+      max-height: 360px;
+      overflow: auto;
+    }
+    .demo-preview {
+      background: var(--doc-bg);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      padding: 16px;
+      min-height: 220px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        <a href="routing.html">Routing</a>
+        <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+        <span class="nav-section-label">Live demos</span>
+        <a href="chat-bot.html">Chat bot</a>
+        <a href="tools-example.html">Tools integration</a>
+        <a href="external-data-example.html">External data</a>
+        <a href="support-agent.html">Support agent</a>
+        <a href="analytics-assistant.html">Analytics assistant</a>
+        <a href="javascript-todo-app.html">Todo app (JS)</a>
+        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
+        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
+        <a href="routing-demo.html">Routing demo</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Routing</h1>
+      <p>
+        <code>&lt;streaming-ui-script&gt;</code> ships a tiny, hash-based router
+        that lets an LLM-authored UI span multiple pages. Navigation stays in
+        sync with the URL (<code>#/dashboard</code>, <code>#/users/42</code>),
+        browser back/forward works, and deep links survive a refresh — all
+        without pulling in <code>react-router</code> or any framework-specific
+        dependency.
+      </p>
+
+      <div class="routing-grid">
+        <div class="routing-card">
+          <div class="routing-card-title"><code>Routes(items, default?)</code></div>
+          <p class="routing-card-desc">
+            Outlet that renders the matching <code>Route</code> child based on
+            the current hash path. First match wins; falls back to
+            <code>default</code> when nothing matches.
+          </p>
+        </div>
+        <div class="routing-card">
+          <div class="routing-card-title"><code>Route(path, content)</code></div>
+          <p class="routing-card-desc">
+            Declares one page. <code>path</code> supports literal segments,
+            <code>:param</code> placeholders, and a trailing
+            <code>*</code> wildcard.
+          </p>
+        </div>
+        <div class="routing-card">
+          <div class="routing-card-title"><code>NavLink(label, to, …)</code></div>
+          <p class="routing-card-desc">
+            Anchor that navigates without reloading the page and automatically
+            reflects <code>data-active="true"</code> for the current path.
+          </p>
+        </div>
+        <div class="routing-card">
+          <div class="routing-card-title"><code>@Navigate("/path")</code></div>
+          <p class="routing-card-desc">
+            Action step for programmatic navigation. Use inside any
+            <code>Action([...])</code> chain to move after a save, submit,
+            or follow-up.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout callout--warn">
+        <h4>Routing is off by default</h4>
+        <p>
+          Set <code>enable-routes="true"</code> on the
+          <code>&lt;streaming-ui-script&gt;</code> tag to turn the router on.
+          When disabled (the default), routing components fall back to inert
+          rendering and the system prompt omits the routing section entirely —
+          so the LLM never invents URLs in apps that don't want them.
+        </p>
+      </div>
+
+      <h2>1. Enable the feature</h2>
+      <p>
+        Add the <code>enable-routes</code> attribute when you want the LLM to
+        author routes. The element keeps the system prompt in sync — calling
+        <code>getSystemPrompt()</code> on an enabled element produces a prompt
+        that teaches the model how to wire <code>Routes</code> /
+        <code>NavLink</code> / <code>@Navigate</code>.
+      </p>
+<pre><code>&lt;streaming-ui-script
+  id="renderer"
+  theme="light"
+  enable-routes="true"
+&gt;&lt;/streaming-ui-script&gt;
+
+&lt;script type="module"&gt;
+  import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
+  const el = document.getElementById("renderer");
+
+  const systemPrompt = el.getSystemPrompt({
+    preamble: "You are a UI assistant building a multi-page dashboard.",
+  });
+&lt;/script&gt;</code></pre>
+
+      <p>You can flip the flag at runtime as well:</p>
+<pre><code>el.enableRoutes = true;    // attach the hashchange listener, expose $route
+el.enableRoutes = false;   // detach, $route stays where it last was</code></pre>
+
+      <div class="callout">
+        <h4>Heads up: proxy elements</h4>
+        If you build the system prompt from a <em>temporary</em>
+        <code>&lt;streaming-ui-script&gt;</code> element (a common pattern when
+        each turn renders into its own instance), pass the flag explicitly so
+        the prompt mirrors the renderer:
+<pre><code>const ENABLE_ROUTES = true;
+
+function buildPrompt() {
+  const proxy = document.createElement("streaming-ui-script");
+  return proxy.getSystemPrompt({ enableRoutes: ENABLE_ROUTES });
+}
+
+const renderer = document.createElement("streaming-ui-script");
+if (ENABLE_ROUTES) renderer.setAttribute("enable-routes", "true");</code></pre>
+      </div>
+
+      <h2>2. Anatomy of a multi-page program</h2>
+      <p>
+        The canonical layout: a persistent navigation built from
+        <code>NavLink</code>s, followed by a <code>Routes(...)</code> outlet
+        that swaps in the matching page. The <code>root</code> only references
+        named pages — every page becomes its own line that streams in
+        independently.
+      </p>
+<pre><code>root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",      "/",          "ghost", true),
+  NavLink("Dashboard", "/dashboard", "ghost"),
+  NavLink("Users",     "/users",     "ghost"),
+  NavLink("Settings",  "/settings",  "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",           homePage),
+  Route("/dashboard",  dashboardPage),
+  Route("/users",      usersPage),
+  Route("/users/:id",  userDetailPage),
+  Route("/settings/*", settingsArea),
+  Route("*",           notFoundPage)
+], "/")
+
+homePage       = Card([CardHeader("Welcome")])
+dashboardPage  = Card([CardHeader("Dashboard")])
+usersPage      = Card([CardHeader("Users")])
+userDetailPage = Card([CardHeader("User " + params.id)])
+settingsArea   = Card([CardHeader("Settings"), TextContent("Section: " + params._)])
+notFoundPage   = Callout("warning", "Not found", "We couldn't find " + $route + ".")</code></pre>
+
+      <h2>3. Path patterns</h2>
+      <p>
+        <code>Route</code> patterns are matched left-to-right, one segment at a
+        time. They are designed to be cheap to evaluate (no regex compilation,
+        no allocator pressure) so swapping pages is essentially free.
+      </p>
+      <table class="api-table">
+        <thead>
+          <tr><th>Pattern</th><th>Matches</th><th>Captures</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>"/"</code></td>
+            <td>Only the root path.</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>"/about"</code></td>
+            <td>Exact path <code>#/about</code>.</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>"/users/:id"</code></td>
+            <td><code>#/users/42</code>, <code>#/users/jane</code>.</td>
+            <td><code>params.id</code></td>
+          </tr>
+          <tr>
+            <td><code>"/teams/:teamId/members/:memberId"</code></td>
+            <td>Nested parameters.</td>
+            <td><code>params.teamId</code>, <code>params.memberId</code></td>
+          </tr>
+          <tr>
+            <td><code>"/docs/*"</code></td>
+            <td><code>#/docs</code>, <code>#/docs/guides/intro</code>.</td>
+            <td><code>params._</code> = remainder</td>
+          </tr>
+          <tr>
+            <td><code>"*"</code></td>
+            <td>Anything (use as the final route for 404 / fallback).</td>
+            <td><code>params._</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>4. Reactive surfaces</h2>
+      <p>
+        The router exposes two reactive surfaces that any expression can read:
+      </p>
+      <table class="api-table">
+        <thead>
+          <tr><th>Surface</th><th>Type</th><th>Where it's available</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>$route</code></td>
+            <td>string</td>
+            <td>
+              Anywhere. Holds the current path (e.g. <code>"/users/42"</code>).
+              The runtime owns it — never declare <code>$route = "..."</code>
+              yourself.
+            </td>
+          </tr>
+          <tr>
+            <td><code>params</code></td>
+            <td>object</td>
+            <td>
+              Inside the matched <code>Route</code>'s content only. Acts like
+              an <code>@Each</code> loop variable: <code>params.id</code>,
+              <code>params._</code> (wildcard remainder), etc. Undefined
+              outside that scope.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5. Programmatic navigation</h2>
+      <p>
+        Use the <code>@Navigate</code> action step inside any
+        <code>Action([...])</code> chain to push a new path. Combine it with
+        <code>@Run</code>, <code>@Set</code>, or <code>@ToAssistant</code>
+        for hybrid flows (save → navigate → notify):
+      </p>
+<pre><code>saveBtn = Button("Save", Action([
+  @Run(saveMutation),
+  @Navigate("/dashboard"),
+  @ToAssistant("Profile updated.")
+]))
+
+cancelBtn = Button("Cancel", Action([@Navigate("/dashboard")]), "ghost")</code></pre>
+
+      <p>
+        From plain JavaScript (e.g. integration tests, an outer chat UI, or a
+        custom hotkey handler), call <code>el.navigate("/path")</code> on the
+        element:
+      </p>
+<pre><code>const renderer = document.querySelector("streaming-ui-script");
+renderer.navigate("/users/42");
+
+// Listen for hash changes (yours or the user's):
+renderer.addEventListener("route-change", (event) =&gt; {
+  console.log("now at", event.detail.path, event.detail.params);
+});</code></pre>
+
+      <h2>6. NavLink behaviour</h2>
+      <ul>
+        <li>
+          Renders as an <code>&lt;a&gt;</code> with
+          <code>href="#/your-path"</code>, so middle-click / open-in-new-tab
+          still work like a regular link.
+        </li>
+        <li>
+          Click is intercepted and translated to an in-memory
+          <code>@Navigate</code> so the page never reloads.
+        </li>
+        <li>
+          Reflects <code>data-active="true"</code> when the current path is
+          equal to <code>to</code> or starts with <code>to + "/"</code> —
+          perfect for highlighting a parent nav entry while a child route is
+          active.
+        </li>
+        <li>
+          Pass <code>exact=true</code> to require strict equality. Always do
+          this for a home link <code>"/"</code>, otherwise every other path
+          will also light it up.
+        </li>
+        <li>
+          Variants: <code>"default"</code> (block link), <code>"primary"</code>,
+          <code>"ghost"</code> (great for nav rows), and <code>"pill"</code>
+          (compact pill shape). Pass an emoji as <code>icon</code> for a leading
+          glyph.
+        </li>
+      </ul>
+
+      <h2>7. Worked example: deep-linkable user detail</h2>
+      <p>
+        A two-page mini app with a list view and a detail view. The detail
+        page reads <code>params.id</code> straight from the URL, so a
+        bookmarked <code>#/users/42</code> renders exactly the same content
+        whether the user arrived from the list, a typed URL, or the browser
+        history.
+      </p>
+      <div class="demo-row">
+<pre class="demo-source"><code>$users = [
+  {id: "ada",    name: "Ada Lovelace",     role: "Founding engineer"},
+  {id: "grace",  name: "Grace Hopper",     role: "Compiler researcher"},
+  {id: "lin",    name: "Lin-Manuel",       role: "Product designer"}
+]
+
+root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",  "/",      "ghost", true),
+  NavLink("Users", "/users", "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",          home),
+  Route("/users",     userList),
+  Route("/users/:id", userDetail),
+  Route("*",          notFound)
+], "/")
+
+home = Card([
+  CardHeader("Welcome", "Pick a section from the nav"),
+  Buttons([Button("Browse users", Action([@Navigate("/users")]), "primary")])
+])
+
+userList = Card([
+  CardHeader("Users", "Click a row to deep-link"),
+  Table([
+    Col("Name", $users.name),
+    Col("Role", $users.role),
+    Col("",     @Each($users, "u", openRow))
+  ])
+])
+
+openRow = Button("Open", Action([@Js("ctx.host.navigate('/users/' + ctx.args.id)", {id: u.id})]), "ghost")
+
+userDetail = Card([
+  CardHeader("User " + params.id, "Detail view"),
+  TextContent("Role: " + (($users.find ? $users.find(u =&gt; u.id === params.id) : null)?.role ?? "—")),
+  Buttons([
+    Button("Back", Action([@Navigate("/users")]), "ghost")
+  ])
+])
+
+notFound = Callout("warning", "Not found", "No page matches " + $route)</code></pre>
+        <div class="demo-preview">
+          <streaming-ui-script
+            id="demo-routing-users"
+            theme="light"
+            enable-routes="true"
+            enable-javascript="true"
+            transparent
+          ></streaming-ui-script>
+        </div>
+      </div>
+
+      <h2>8. Worked example: settings with nested area</h2>
+      <p>
+        Combine a literal route with a trailing wildcard to model a nested
+        section. The wildcard remainder lands in <code>params._</code>, so
+        you can drive a secondary nav from the URL itself without redeclaring
+        the route map.
+      </p>
+      <div class="demo-row">
+<pre class="demo-source"><code>root = Stack([nav, main])
+
+nav = Stack([
+  NavLink("Home",     "/",         "ghost", true),
+  NavLink("Settings", "/settings", "ghost")
+], "row", "s")
+
+main = Routes([
+  Route("/",           home),
+  Route("/settings",   settingsHome),
+  Route("/settings/*", settingsArea),
+  Route("*",           notFound)
+], "/")
+
+home = Card([CardHeader("Welcome", "Open Settings, then click a sub-section")])
+
+settingsHome = Card([
+  CardHeader("Settings"),
+  Stack([
+    NavLink("Profile",       "/settings/profile",       "pill"),
+    NavLink("Notifications", "/settings/notifications", "pill"),
+    NavLink("Security",      "/settings/security",      "pill")
+  ], "row", "s")
+])
+
+settingsArea = Card([
+  CardHeader("Settings · " + params._, "Wildcard route"),
+  TextContent("Sub-section: " + params._),
+  Buttons([Button("Back", Action([@Navigate("/settings")]), "ghost")])
+])
+
+notFound = Callout("warning", "Not found", "No page matches " + $route)</code></pre>
+        <div class="demo-preview">
+          <streaming-ui-script
+            id="demo-routing-settings"
+            theme="light"
+            enable-routes="true"
+            transparent
+          ></streaming-ui-script>
+        </div>
+      </div>
+
+      <h2>9. Common mistakes</h2>
+      <ul>
+        <li>
+          <strong>Declaring <code>$route</code> yourself.</strong> The runtime
+          owns the variable; any assignment is overwritten on the next
+          <code>hashchange</code>. Read it freely, but never write it.
+        </li>
+        <li>
+          <strong>Putting <code>Routes</code> inside a conditional that hides
+          the nav.</strong> Render the nav once at the top of <code>root</code>
+          so it stays visible across every page.
+        </li>
+        <li>
+          <strong>Forgetting the wildcard route.</strong> Without
+          <code>Route("*", …)</code> (or the <code>default</code> argument), an
+          unknown URL renders an empty outlet.
+        </li>
+        <li>
+          <strong>Using a regular <code>Link(...)</code> with
+          <code>href="#/path"</code>.</strong> That works, but it doesn't
+          highlight the active section. Prefer <code>NavLink</code> for
+          in-app navigation; keep <code>Link</code> for external URLs.
+        </li>
+        <li>
+          <strong>Reading <code>params</code> outside the matched Route.</strong>
+          <code>params</code> is scoped to the active Route's content — outside
+          that scope it's undefined.
+        </li>
+      </ul>
+
+      <h2>10. JavaScript API summary</h2>
+      <table class="api-table">
+        <thead>
+          <tr><th>API</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>el.enableRoutes</code></td>
+            <td>Boolean getter/setter mirroring the <code>enable-routes</code> attribute. Setting it starts/stops the router.</td>
+          </tr>
+          <tr>
+            <td><code>el.route</code></td>
+            <td>Read-only string with the current path (e.g. <code>"/users/42"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>el.navigate(path)</code></td>
+            <td>Programmatically navigate. Updates <code>window.location.hash</code> when routing is enabled, otherwise no-op.</td>
+          </tr>
+          <tr>
+            <td><code>route-change</code> event</td>
+            <td>
+              CustomEvent fired on the element whenever the path changes.
+              <code>event.detail</code> contains <code>path</code>,
+              <code>previousPath</code>, <code>params</code>, and the matched
+              <code>pattern</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Where to next?</h2>
+      <ul>
+        <li><a href="routing-demo.html">Live routing demo</a> — a full multi-page app you can navigate and deep-link.</li>
+        <li><a href="components.html">Component reference</a> — every component, including the routing primitives.</li>
+        <li><a href="javascript-interactions.html">JavaScript interactions</a> — pairs well with routing for tools, modals, and persistence.</li>
+      </ul>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js"></script>
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const usersDemo = document.getElementById("demo-routing-users");
+    usersDemo.setResponse(`$users = [
+  {id: "ada",    name: "Ada Lovelace",     role: "Founding engineer"},
+  {id: "grace",  name: "Grace Hopper",     role: "Compiler researcher"},
+  {id: "lin",    name: "Lin-Manuel",       role: "Product designer"}
+]
+root = Stack([nav, main])
+nav = Stack([
+  NavLink("Home",  "/",      "ghost", true),
+  NavLink("Users", "/users", "ghost")
+], "row", "s")
+main = Routes([
+  Route("/",          home),
+  Route("/users",     userList),
+  Route("/users/:id", userDetail),
+  Route("*",          notFound)
+], "/")
+home = Card([
+  CardHeader("Welcome", "Pick a section from the nav"),
+  Buttons([Button("Browse users", Action([@Navigate("/users")]), "primary")])
+])
+userList = Card([
+  CardHeader("Users", "Click a row to deep-link"),
+  Stack([@Each($users, "u", userRow)])
+])
+userRow = Buttons([Button(u.name + " — " + u.role, Action([@Js("ctx.host.navigate('/users/' + ctx.args.id)", {id: u.id})]), "ghost")])
+userDetail = Card([
+  CardHeader("User " + params.id, "Detail view"),
+  TextContent("Open URL: #/users/" + params.id),
+  Buttons([Button("Back", Action([@Navigate("/users")]), "ghost")])
+])
+notFound = Callout("warning", "Not found", "No page matches " + $route)`);
+
+    const settingsDemo = document.getElementById("demo-routing-settings");
+    settingsDemo.setResponse(`root = Stack([nav, main])
+nav = Stack([
+  NavLink("Home",     "/",         "ghost", true),
+  NavLink("Settings", "/settings", "ghost")
+], "row", "s")
+main = Routes([
+  Route("/",           home),
+  Route("/settings",   settingsHome),
+  Route("/settings/*", settingsArea),
+  Route("*",           notFound)
+], "/")
+home = Card([CardHeader("Welcome", "Open Settings, then click a sub-section")])
+settingsHome = Card([
+  CardHeader("Settings"),
+  Stack([
+    NavLink("Profile",       "/settings/profile",       "pill"),
+    NavLink("Notifications", "/settings/notifications", "pill"),
+    NavLink("Security",      "/settings/security",      "pill")
+  ], "row", "s")
+])
+settingsArea = Card([
+  CardHeader("Settings · " + params._, "Wildcard route"),
+  TextContent("Sub-section: " + params._),
+  Buttons([Button("Back", Action([@Navigate("/settings")]), "ghost")])
+])
+notFound = Callout("warning", "Not found", "No page matches " + $route)`);
+  </script>
+</body>
+</html>

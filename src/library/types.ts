@@ -9,6 +9,7 @@
  */
 
 import type { ComponentNode } from "../runtime/evaluator.js";
+import type { Router } from "../runtime/router.js";
 
 export type PrimitiveType =
   | "string"
@@ -60,6 +61,14 @@ export interface RenderHelpers {
   }) => void;
   /** True when the host element has opted in to JavaScript interactions. */
   javascriptEnabled: boolean;
+  /**
+   * Hash-based router instance, or `null` when routing isn't enabled on the
+   * host. `NavLink(...)` uses this to navigate; `Routes(...)` consults it
+   * via the evaluator before rendering.
+   */
+  router: Router | null;
+  /** True when the host has `enable-routes="true"`. */
+  routesEnabled: boolean;
 }
 
 export type ComponentRenderFn = (
