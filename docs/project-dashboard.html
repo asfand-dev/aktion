@@ -127,7 +127,7 @@ root = Stack([banner, header, controlsRow, metrics, board, bottomGrid, focusedNo
         or events come back — <code>@Each</code> over the arrays does the
         right thing.
       </p>
-      <pre><code class="example-source">el.setTools({
+      <pre class="example-source"><code>el.setTools({
   program_summary: async ({ range, assignee }) =&gt; {
     await sleep(280);
     const totals = totalsFor(range, assignee);

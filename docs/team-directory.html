@@ -138,7 +138,7 @@ root = Stack([header, popularRow, controls, body, pager, detailSheet], "column",
         <code>Sheet</code>. Both are tiny — the patterns do the visual heavy
         lifting.
       </p>
-      <pre><code class="example-source">el.setTools({
+      <pre class="example-source"><code>el.setTools({
   list_members: ({ q, department, page }) =&gt; {
     const filtered = members.filter(matches({ q, department }));
     const pageSize = 6;
