@@ -72,7 +72,7 @@ controlsRow = Stack([rangeField, assigneeField], "row", "m", "stretch", "start",
 header = PageHeader(
   "Engineering · Q3 program",
   "Track deliverables across squads",
-  [BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")],
+  Breadcrumb([BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")]),
   [Button("Export", Action([@ToAssistant("Export the dashboard as PDF")]), "ghost"), Button("New milestone", Action([@ToAssistant("Open the new milestone form")]), "primary")],
   Tag("On track", null, "sm", "success")
 )

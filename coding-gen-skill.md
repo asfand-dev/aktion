@@ -847,7 +847,7 @@ Hero(title, subtitle?, primary?, secondary?, eyebrow?, highlights?, imageSrc?, t
   primary / secondary: pass Button(...) nodes for the CTAs
   highlights: string[] — small pill chips below subtitle
 PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)
-  breadcrumbs: BreadcrumbItem[] OR string[]
+  breadcrumbs: Breadcrumb OR string[]
   actions: Node[] — Buttons / Tags shown on the right
   status: Tag(...) or Badge(...) — small inline status next to title
 
@@ -1533,7 +1533,7 @@ banner = Banner(
 header = PageHeader(
   "Engineering · Q3 program",
   "Track deliverables across squads",
-  [BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")],
+  Breadcrumb([BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")]),
   [Button("Export", null, "ghost"), Button("New milestone", null, "primary")],
   Tag("On track", null, "sm", "success")
 )
@@ -1674,7 +1674,7 @@ $deleting = false
 
 header = PageHeader(
   "Settings", "Personalise your workspace",
-  [BreadcrumbItem("Home", "#"), BreadcrumbItem("Settings")]
+  Breadcrumb([BreadcrumbItem("Home", "#"), BreadcrumbItem("Settings")])
 )
 
 generalTab = Card([

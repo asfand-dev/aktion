@@ -50,7 +50,7 @@ detail = Query("get_member", {id: $selectedId}, {
 header = PageHeader(
   "Team directory",
   "Everyone at Acme Robotics, searchable in one place",
-  [BreadcrumbItem("Company", "#"), BreadcrumbItem("People")],
+  Breadcrumb([BreadcrumbItem("Company", "#"), BreadcrumbItem("People")]),
   [
     Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]), "ghost"),
     Button("Invite",     Action([@ToAssistant("Open the invite-by-email form")]), "primary")

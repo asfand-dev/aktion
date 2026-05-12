@@ -59,7 +59,7 @@ savingBanner = $saveStatus == "saving" ? Banner("Saving…", "Hang tight while w
 header = PageHeader(
   "Settings",
   "Personalise your workspace",
-  [BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Settings")],
+  Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Settings")]),
   [
     Button("Cancel",       Action([@ToAssistant("Discard pending changes")]), "ghost"),
     Button("Save changes", Action([@Set($saveStatus, "saving"), @Run(saveMutation), @Set($saveStatus, "saved")]), "primary")
