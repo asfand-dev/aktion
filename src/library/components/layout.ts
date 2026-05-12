@@ -1,10 +1,11 @@
 /**
- * Layout components: Stack, Card, CardHeader, CardBody, CardFooter,
- * Tabs, TabItem, Accordion, AccordionItem, Section, Divider, Modal.
+ * Layout components: Stack, Grid, Card, CardHeader, CardBody, CardFooter,
+ * Tabs, TabItem, Accordion, AccordionItem, Section, Divider, Modal,
+ * AspectRatio, ScrollArea.
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber } from "../utils.js";
 
 export const Stack: ComponentSpec = {
   name: "Stack",
@@ -274,6 +275,85 @@ export const Accordion: ComponentSpec = {
   render: (_node, props, helpers) => {
     const root = el("div", { class: "rui-accordion" });
     for (const child of asArray(props.items)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
+export const Grid: ComponentSpec = {
+  name: "Grid",
+  description:
+    "Responsive CSS grid. Use for KPI strips, feature blocks, card grids, " +
+    "and any layout where children should stay on the same row but reflow on " +
+    "narrow viewports. Prefer `Grid` over `Stack` with `direction=\"row\"` " +
+    "whenever the children should size uniformly.",
+  props: [
+    { name: "children", type: "Node[]" },
+    { name: "columns", type: "number", optional: true, description: "Target column count 1–6 (default auto-fit)" },
+    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"] },
+    { name: "minItemWidth", type: "string", optional: true, description: "CSS width used by the auto-fit fallback (default 220px)" },
+  ],
+  render: (_node, props, helpers) => {
+    const requested = asNumber(props.columns, 0);
+    const columns = requested > 0 ? Math.max(1, Math.min(6, requested)) : 0;
+    const root = el("div", {
+      class: "rui-grid",
+      "data-columns": columns > 0 ? String(columns) : null,
+      "data-gap": asString(props.gap, "m"),
+      style: columns === 0 ? `--rui-grid-min-item:${asString(props.minItemWidth, "220px")}` : null,
+    });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
+export const AspectRatio: ComponentSpec = {
+  name: "AspectRatio",
+  description:
+    "Container that constrains its child to a fixed aspect ratio (e.g. 16:9 " +
+    "for video embeds, 1:1 for thumbnails). The child fills the box.",
+  props: [
+    { name: "ratio", type: "string", description: "`width:height` (e.g. `16:9`, `4:3`) or a decimal like `1.78`" },
+    { name: "children", type: "Node[]" },
+  ],
+  render: (_node, props, helpers) => {
+    const ratio = parseRatio(asString(props.ratio, "16:9"));
+    const root = el("div", {
+      class: "rui-aspect-ratio",
+      style: `aspect-ratio:${ratio};`,
+    });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
+function parseRatio(input: string): string {
+  if (input.includes(":")) {
+    const [w, h] = input.split(":");
+    const num = Number(w);
+    const den = Number(h);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return `${num} / ${den}`;
+  }
+  const n = Number(input);
+  return Number.isFinite(n) && n > 0 ? `${n} / 1` : "16 / 9";
+}
+
+export const ScrollArea: ComponentSpec = {
+  name: "ScrollArea",
+  description:
+    "Bounded scroll container. Use to clip long lists / logs / chat panels " +
+    "to a fixed max height with a clean scrollbar.",
+  props: [
+    { name: "children", type: "Node[]" },
+    { name: "maxHeight", type: "string", optional: true, description: "CSS height (default 320px)" },
+    { name: "direction", type: "string", optional: true, enum: ["vertical", "horizontal", "both"] },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", {
+      class: "rui-scroll-area",
+      "data-direction": asString(props.direction, "vertical"),
+      style: `max-height:${asString(props.maxHeight, "320px")};`,
+    });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
   },
 };

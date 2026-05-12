@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Marketing landing · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · marketing landing
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · rich patterns</span>
+      <h1 style="margin-top:10px">A full marketing landing page, generated from one Streaming UI Script program</h1>
+      <p>
+        No <code>Query</code>, no <code>Mutation</code> — just composable
+        patterns. Hero with CTAs and highlights, feature grid, testimonials,
+        pricing tiers, team line-up, and a closing banner. The same UI Script
+        program would scale to any LLM-authored landing page or product
+        announcement.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Every visual section below is one statement. Use the toggle group to
+        switch the pricing focus.
+      </p>
+      <pre class="example-source"><code id="src-landing">$plan = "pro"
+
+planToggle = ToggleGroup("plan", [
+  {value: "starter", label: "Starter", icon: "🪴"},
+  {value: "pro",     label: "Pro",     icon: "🚀"},
+  {value: "scale",   label: "Scale",   icon: "🏛"}
+], $plan)
+
+hero = Hero(
+  "Ship generative UI in a single tag",
+  "Drop in &lt;streaming-ui-script&gt;, feed it tokens from your LLM, and watch a real interactive UI appear — no framework lock-in.",
+  Button("Get started",    Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]), "primary"),
+  Button("Read the docs",  Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/")]), "ghost"),
+  "New · v2.3 just shipped",
+  ["Framework-agnostic", "Streaming-first", "Themeable"]
+)
+
+features = FeatureGrid([
+  FeatureItem("Framework-agnostic", "Works in React, Vue, Angular, Svelte, or plain HTML.",        "🧩", "primary"),
+  FeatureItem("Streaming-first",    "Render tokens the moment they arrive — never wait for the full response.", "⚡", "info"),
+  FeatureItem("80+ components",     "Layout, forms, charts, kanban, timelines, banners — out of the box.",     "🎁", "success"),
+  FeatureItem("Theming",            "Light, dark, neon, pastel — swap with one attribute.",       "🎨", "warning"),
+  FeatureItem("Routing built-in",   "Multi-page apps with hash routes — no router needed.",        "🧭", "primary"),
+  FeatureItem("Tiny footprint",     "Under 40 KB gzipped with zero runtime dependencies.",         "🪶", "info")
+], 3)
+
+starterCard = Card([
+  CardHeader("Starter", "For weekend hackers"),
+  TextContent("$0", "large-heavy"),
+  TextContent("Free forever — bring your own LLM key.", "small", "muted"),
+  Separator("horizontal", true),
+  List([
+    ListItem("Up to 3 prompts per day", null, "✓"),
+    ListItem("Community Discord access", null, "✓"),
+    ListItem("Light & dark themes", null, "✓")
+  ]),
+  Buttons([Button("Start free", Action([@ToAssistant("Start the free plan")]), $plan == "starter" ? "primary" : "secondary")])
+], $plan == "starter" ? "elevated" : "outlined")
+
+proCard = Card([
+  CardHeader("Pro", "For shipping teams"),
+  TextContent("$29", "large-heavy"),
+  TextContent("per editor / month — billed yearly.", "small", "muted"),
+  Separator("horizontal", true),
+  List([
+    ListItem("Unlimited prompts", null, "✓"),
+    ListItem("Custom themes + tokens", null, "✓"),
+    ListItem("Routing & multi-page apps", null, "✓"),
+    ListItem("Email support", null, "✓")
+  ]),
+  Buttons([Button("Start Pro trial", Action([@ToAssistant("Start the Pro trial")]), $plan == "pro" ? "primary" : "secondary")])
+], $plan == "pro" ? "elevated" : "outlined")
+
+scaleCard = Card([
+  CardHeader("Scale", "For platforms & agents"),
+  TextContent("Custom", "large-heavy"),
+  TextContent("Per-seat or volume pricing.", "small", "muted"),
+  Separator("horizontal", true),
+  List([
+    ListItem("Everything in Pro", null, "✓"),
+    ListItem("SSO + audit logs", null, "✓"),
+    ListItem("Dedicated success engineer", null, "✓"),
+    ListItem("SLA & private build", null, "✓")
+  ]),
+  Buttons([Button("Talk to sales", Action([@ToAssistant("Schedule a call with sales")]), $plan == "scale" ? "primary" : "secondary")])
+], $plan == "scale" ? "elevated" : "outlined")
+
+pricingGrid = Grid([starterCard, proCard, scaleCard], 3, "l")
+
+testimonialA = Testimonial(
+  "This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.",
+  "Jordan Patel", "Founder, Looplog", null, 5
+)
+
+testimonialB = Testimonial(
+  "Our weekly recap email is generated end-to-end by an LLM. The renderer made the front-end stop being a bottleneck.",
+  "Mei Tanaka", "Eng lead, Atlasworks", null, 5
+)
+
+testimonialC = Testimonial(
+  "Switching from a hand-rolled DSL to streaming-ui-script removed 4,000 lines of glue code from our copilot.",
+  "Sam Reyes", "Staff engineer, Northwind", null, 4
+)
+
+socialGrid = Grid([testimonialA, testimonialB, testimonialC], 3, "m")
+
+teamGrid = Grid([
+  ProfileCard("Ada Lovelace",   "Founding engineer",       null, "Designed the streaming evaluator and the action graph.", ["TypeScript", "Compilers"], null),
+  ProfileCard("Grace Hopper",   "Component lead",          null, "Owns the rich-UI patterns and the theming system.",      ["Design systems", "A11y"], null),
+  ProfileCard("Linus Torvalds", "Infra & performance",     null, "Keeps the bundle under 40 KB and CI under 90 seconds.",  ["Perf", "DX"], null)
+], 3, "m")
+
+faq = Accordion([
+  AccordionItem("Does it work without React?", [TextContent("Yes — it's a web component. Drop in one script tag and a streaming-ui-script tag, and you're done. React, Vue, Angular, Svelte all work because they all support custom elements.")]),
+  AccordionItem("How do I add my own components?", [TextContent("Call el.registerComponents([...]). Each spec contains a name, props, and a render function. After registering, the LLM sees them in the system prompt automatically.")]),
+  AccordionItem("Is it really only 40 KB?", [TextContent("38 KB gzipped at the time of writing — and there are no runtime dependencies. The CSS is bundled inline and injected into each instance's shadow root.")])
+])
+
+closingBanner = Banner(
+  "Ready to ship generative UI?",
+  "Read the 30-second integration guide and you'll have a streaming UI before your coffee gets cold.",
+  Button("Get started", Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]), "primary"),
+  "✨",
+  "primary"
+)
+
+root = Stack([
+  hero,
+  Section([planToggle], "Pricing"),
+  pricingGrid,
+  Section([], "Why teams pick streaming-ui-script"),
+  features,
+  Section([], "Loved by builders"),
+  socialGrid,
+  Section([], "Meet the team"),
+  teamGrid,
+  Section([faq], "FAQ"),
+  closingBanner
+], "column", "xl")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-landing" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        This landing page is 70 lines of Streaming UI Script. No CSS, no
+        JavaScript, no host wiring — just one <code>setResponse(…)</code>
+        call and the patterns do the rest.
+      </p>
+      <pre><code class="example-source">// Host code is one line:
+el.setResponse(document.getElementById("src-landing").textContent);</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-landing");
+    el.setResponse(document.getElementById("src-landing").textContent);
+  </script>
+</body>
+</html>

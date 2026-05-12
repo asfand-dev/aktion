@@ -26,7 +26,7 @@ The library bundles everything needed at runtime:
 
 - An **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
-- A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
+- A **rich component library** of 80+ components — layout (`Stack`, `Grid`, `Sheet`, `AspectRatio`, `ScrollArea`), content, forms, tables, charts, chat composites, feedback (`Avatar`, `Progress`, `Switch`, `Toggle`, `Tooltip`, `HoverCard`, `Kbd`), navigation (`Breadcrumb`, `Pagination`), and **high-level pattern composites** (`Hero`, `PageHeader`, `MetricGrid`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `Banner`, `KanbanBoard`).
 - An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
 - An **opt-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic. Off by default.
 - **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
@@ -104,34 +104,42 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 
 ---
 
-## 0. TL;DR — the ten rules
+## 0. TL;DR — the rules
 
-If you internalise only these ten rules, you will write correct programs:
+If you internalise these rules, you will write correct, polished programs:
 
 1. **One statement per line.** `name = Expression`. The renderer commits each
    line as it streams in.
 2. **`root = …` is line one.** It anchors the UI shell so users see structure
    before children arrive. Use forward references (`root = Stack([header, list])`)
    and define `header`, `list` below it.
-3. **`$variables` are the only mutable state.** Everything else is recomputed
+3. **Reach for high-level patterns first.** Start with `Hero`, `PageHeader`,
+   `MetricGrid`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`,
+   `ProfileCard`, `Banner`, `KanbanBoard`. They commit a full visual section
+   in one line — never reinvent these with raw `Stack`/`Card`.
+4. **`$variables` are the only mutable state.** Everything else is recomputed
    from them on every render.
-4. **`Query` runs automatically when its `$variable` args change.** Pass the
+5. **`Query` runs automatically when its `$variable` args change.** Pass the
    bare `$variable` — `{q: $search}`, not `{q: "" + $search}` — so dependency
    tracking works.
-5. **`Mutation` only runs from `@Run(name)` inside `Action([...])`.**
-6. **`@Each($items, "x", template)` scopes `x` strictly to `template`.** `x`
+6. **`Mutation` only runs from `@Run(name)` inside `Action([...])`.**
+7. **`@Each($items, "x", template)` scopes `x` strictly to `template`.** `x`
    is **not** state and **cannot** be read via `ctx.state` from JS.
-7. **Pass per-item data to JS via `@Js(body, {id: x.id})`.** Read it inside
+8. **Pass per-item data to JS via `@Js(body, {id: x.id})`.** Read it inside
    the body as `ctx.args.id`.
-8. **Prefer declarative builtins (`@Push`, `@Filter`, `@Sort`, `@Set`) over
+9. **Prefer declarative builtins (`@Push`, `@Filter`, `@Sort`, `@Set`) over
    `@Js`.** Only fall back to JS when no builtin captures the change (e.g.
    toggling one field on one item).
-9. **Strings come in three flavours.** `"double"`, `'single'`, and
-   `` `backtick` ``. Backticks span lines and don't need escapes — use them
-   for multi-line script bodies.
-10. **`Script(...)` requires `enable-javascript="true"` on the host element.**
+10. **Strings come in three flavours.** `"double"`, `'single'`, and
+    `` `backtick` ``. Backticks span lines and don't need escapes — use them
+    for multi-line script bodies.
+11. **Use `Grid`, not `Stack(row, wrap=true)`, for uniform-sized tiles.**
+    Use `Stack(direction="row")` only when items have different sizes.
+12. **Add status colour everywhere.** `StatCard(..., trend, delta)`, `Tag`
+    variants, `TimelineItem(status)`, `Banner` — colour conveys meaning.
+13. **`Script(...)` requires `enable-javascript="true"` on the host element.**
     Without it, `Script` and `@Js` silently no-op.
-11. **`Routes(...)` / `Route(...)` / `NavLink(...)` / `@Navigate(...)` require
+14. **`Routes(...)` / `Route(...)` / `NavLink(...)` / `@Navigate(...)` require
     `enable-routes="true"` on the host element.** Without it, the routing
     primitives fall back to inert rendering and `$route` / `params` are
     unavailable.
@@ -671,6 +679,10 @@ Stack(children, direction?, gap?, align?, justify?, wrap?)
   justify: "start" | "center" | "end" | "between" | "around"
   wrap: boolean
 
+Grid(children, columns?, gap?, minItemWidth?)
+  columns: 1..6 (default: auto-fit responsive)
+  minItemWidth: CSS width (default 220px) — used when columns is omitted
+
 Section(children, title?)
 Card(children, variant?)
   variant: "default" | "outlined" | "elevated"
@@ -688,9 +700,29 @@ Accordion(items)
 AccordionItem(title, children, open?)
 
 Modal(title, open, children)             # `open` is usually a $variable
+Sheet(title, open, children, side?, footer?)
+  side: "right" (default) | "left" | "top" | "bottom"
+
 Steps(items)
 StepsItem(title, details?)
+
+AspectRatio(ratio, children)              # ratio: "16:9", "1:1", "4:3", or decimal
+ScrollArea(children, maxHeight?, direction?)
+  maxHeight: CSS height (default 320px)
+  direction: "vertical" (default) | "horizontal" | "both"
 ```
+
+**When to reach for which container.**
+
+| Goal                                                | Use                                                                |
+|-----------------------------------------------------|--------------------------------------------------------------------|
+| Vertical list of mixed-height blocks                | `Stack` (default direction)                                        |
+| Uniform-sized cards / tiles / KPIs in a row         | `Grid` — auto-fits responsively, children stay equal width         |
+| Asymmetric row (sidebar + main)                     | `Stack(direction="row")`                                           |
+| Centered confirmation dialog                        | `Modal(title, open, [body])`                                       |
+| Detail panel that slides in from the side           | `Sheet(title, open, [body], side)`                                 |
+| Long log / chat / list with capped height           | `ScrollArea([items], maxHeight)`                                   |
+| Fixed-ratio embed (video, thumbnail)                | `AspectRatio("16:9", [Image(...)])`                                |
 
 ### Content
 
@@ -748,8 +780,9 @@ Col(header, values, format?)
 List(items, ordered?)
 ListItem(title, description?, icon?)
 
-StatCard(label, value, trend?, delta?)
+StatCard(label, value, trend?, delta?, icon?)
   trend: "up" | "down" | "flat"
+  icon: optional short emoji or 1–2 char glyph (e.g. "💰", "⚡")
 ```
 
 ### Charts
@@ -770,6 +803,82 @@ FollowUpBlock(items, title?)            # items: FollowUpItem[] | {label,message
 FollowUpItem(label, message?)
 ActionLink(label, action)
 ```
+
+### Feedback & media
+
+```text
+Avatar(name, src?, size?, status?)
+  size: "sm" | "md" (default) | "lg" | "xl"
+  status: "online" | "offline" | "busy" | "away"
+AvatarGroup(items, max?, size?)
+  items: Avatar[] | {name, src?}[] | string[]
+  max: maximum avatars to show before showing "+N" (default 4)
+Progress(value?, max?, label?, tone?, indeterminate?, showValue?)
+  value: 0..max
+  tone: "primary" (default) | "success" | "warning" | "danger" | "info"
+Switch(id, label?, value?, description?, disabled?)
+  value: bound boolean (typically a $variable for two-way binding)
+Toggle(label, value?, icon?, variant?, size?)
+  value: pressed state — pass $variable for click-to-flip binding
+  variant: "default" | "outline" | "ghost"
+ToggleGroup(id, items, value?, variant?, size?)
+  items: string[] | [value,label][] | {value,label,icon?}[]
+  value: typically $variable for two-way single-select binding
+Tooltip(label, trigger, side?)         # short hint on hover/focus
+  side: "top" (default) | "bottom" | "left" | "right"
+HoverCard(trigger, content, side?)     # rich card on hover/focus
+Kbd(keys, size?)                       # keys: "⌘ K" or string[] (renders chips)
+```
+
+### Navigation
+
+```text
+Breadcrumb(items, separator?)          # items: BreadcrumbItem[] or string[]
+BreadcrumbItem(label, href?, icon?)    # omit href on the current/leaf page
+Pagination(page, totalPages, siblings?)
+  page: typically a $variable for two-way binding
+  siblings: page numbers shown either side of current (default 1)
+```
+
+### Patterns (high-level composites — reach for these first)
+
+```text
+Hero(title, subtitle?, primary?, secondary?, eyebrow?, highlights?, imageSrc?, tone?)
+  primary / secondary: pass Button(...) nodes for the CTAs
+  highlights: string[] — small pill chips below subtitle
+PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)
+  breadcrumbs: BreadcrumbItem[] OR string[]
+  actions: Node[] — Buttons / Tags shown on the right
+  status: Tag(...) or Badge(...) — small inline status next to title
+
+MetricGrid(items, columns?)            # items: StatCard[]
+EmptyState(title, description?, icon?, action?)
+  icon: emoji string (default "📭")
+  action: Button(...)
+Timeline(items)
+TimelineItem(title, time?, description?, icon?, tone?)
+  tone: "default" | "primary" | "success" | "warning" | "danger" | "info"
+FeatureGrid(items, columns?)
+FeatureItem(title, description?, icon?, tone?)
+Testimonial(quote, author, role?, avatarSrc?, rating?)
+  rating: 0–5 stars
+ProfileCard(name, role?, avatarSrc?, bio?, tags?, actions?)
+  tags: string[]
+  actions: Node[] — Buttons rendered at the bottom
+Comment(author, body, time?, avatarSrc?, actions?)
+Banner(title, message?, action?, icon?, tone?)
+  tone: "default" | "primary" | "success" | "warning" | "danger" | "info"
+  action: Button(...)
+
+KanbanBoard(columns)                    # columns: KanbanColumn[]
+KanbanColumn(title, items, tone?)       # items: KanbanCard[]
+KanbanCard(title, description?, tags?, assignee?, tone?, icon?, action?)
+```
+
+**Why patterns matter for streaming.** Patterns commit a full visual section
+in one statement. `MetricGrid([StatCard("MRR","$48k","up","+12%","💰"), …])`
+streams a dashboard row as a single line instead of a half-screen `Stack` of
+ad-hoc primitives. **Reach for a pattern before composing from scratch.**
 
 ### Scripting (opt-in)
 
@@ -1401,6 +1510,223 @@ Highlights:
 - The fallback `Route("*", notFoundPage)` makes sure unknown URLs render
   something meaningful instead of an empty outlet.
 
+### Pattern I — Rich project dashboard (PageHeader + MetricGrid + Kanban + Timeline)
+
+When the prompt is "show me a dashboard", reach for high-level patterns first.
+The dashboard below uses **one statement per visual section** and never
+hand-rolls a row of `Card`s.
+
+```text
+root = Stack([banner, header, metrics, board, timelineCard, follow], "column", "l")
+
+$range = "30d"
+$assignee = "everyone"
+
+banner = Banner(
+  "v2.3 ships Friday",
+  "Two hot bugs left in QA — see the board below.",
+  Button("Open release", null, "ghost", "button", "small"),
+  "🚀",
+  "info"
+)
+
+header = PageHeader(
+  "Engineering · Q3 program",
+  "Track deliverables across squads",
+  [BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")],
+  [Button("Export", null, "ghost"), Button("New milestone", null, "primary")],
+  Tag("On track", null, "sm", "success")
+)
+
+# Data — one Query that drives every tile in the dashboard.
+data = Query("program_summary", {range: $range, assignee: $assignee},
+  {shipped: 0, inReview: 0, blocked: 0, velocity: 0, deltas: {}, columns: [], events: []})
+
+metrics = MetricGrid([
+  StatCard("Shipped this week", "" + data.shipped,           "up",   data.deltas.shipped,  "🚀"),
+  StatCard("In review",         "" + data.inReview,          "flat", data.deltas.review,   "👀"),
+  StatCard("Blocked",           "" + data.blocked,           "down", data.deltas.blocked,  "🛑"),
+  StatCard("Velocity",          "" + data.velocity + " pts", "up",   data.deltas.velocity, "⚡")
+])
+
+board = KanbanBoard(
+  @Each(data.columns, "col",
+    KanbanColumn(col.title,
+      @Each(col.cards, "c",
+        KanbanCard(c.title, c.description, c.tags, c.assignee, c.tone, c.icon)
+      ),
+      col.tone
+    )
+  )
+)
+
+timelineCard = Card([
+  CardHeader("Recent activity"),
+  Timeline(@Each(data.events, "e",
+    TimelineItem(e.title, e.time, e.description, e.icon, e.tone)
+  ))
+])
+
+follow = FollowUpBlock([
+  FollowUpItem("Open the blocked items"),
+  FollowUpItem("Drill into QA velocity"),
+  FollowUpItem("Send weekly digest")
+], "Next steps")
+```
+
+**Why this works.**
+
+- `PageHeader` ships breadcrumbs + actions + status in one statement.
+- `MetricGrid` is a `Grid` of `StatCard`s with sensible defaults — replaces
+  a wide row of hand-rolled cards.
+- `KanbanBoard` + `KanbanColumn` + `KanbanCard` encode the entire "trello-like
+  board" shape; `@Each` over `data.columns` lets the LLM stay agnostic about
+  how many columns the tool returned.
+- `Timeline` lives inside a `Card` so the section reads as a feed, with status
+  pips coloured by `e.tone`.
+
+### Pattern J — Marketing landing page (Hero + FeatureGrid + Testimonial)
+
+Static content that still feels alive. No `Query`, no `Mutation` — just
+patterns.
+
+```text
+root = Stack([hero, features, social, cta], "column", "xl")
+
+hero = Hero(
+  "Ship LLM UI in a single tag",
+  "Drop in <streaming-ui-script>, paste a prompt, watch the UI come alive.",
+  Button("Get started",     Action([@OpenUrl("/get-started.html")]), "primary"),
+  Button("View on GitHub",  Action([@OpenUrl("https://github.com/")]), "ghost"),
+  "New · v2.3 just shipped",
+  ["Framework-agnostic", "Streaming-first", "Themeable"]
+)
+
+features = FeatureGrid([
+  FeatureItem("Framework-agnostic", "Works in React, Vue, Angular, Svelte, or plain HTML.", "🧩"),
+  FeatureItem("Streaming-first",   "Render tokens as they arrive.",                          "⚡"),
+  FeatureItem("Theming",           "Light, dark, neon, pastel — swap with one attribute.",  "🎨"),
+  FeatureItem("Routing built-in",  "Multi-page apps without a router.",                     "🧭")
+])
+
+social = Grid([
+  Testimonial("This is exactly the abstraction I wanted between my agent and my UI.",
+    "Jordan Patel", "Founder, Looplog", null, 5),
+  Testimonial("Our weekly recap email is generated end-to-end by an LLM. No more dashboards to maintain.",
+    "Mei Tanaka", "Eng lead, Atlasworks", null, 5)
+], 2)
+
+cta = Banner(
+  "Ready to ship generative UI?",
+  "Read the 30-second integration guide.",
+  Button("Get started", Action([@OpenUrl("/get-started.html")]), "primary"),
+  "✨",
+  "primary"
+)
+```
+
+### Pattern K — Team directory (ProfileCard grid + Pagination + EmptyState)
+
+```text
+root = Stack([header, controls, body, pager], "column", "l")
+
+$search = ""
+$page = 1
+
+data = Query("list_members", {q: $search, page: $page}, {rows: [], total: 0, pageSize: 6, pages: 1})
+
+header = PageHeader("Team", "Everyone in the company directory", null,
+  [Button("Invite", null, "primary")],
+  Tag("" + data.total + " people", null, "sm", "primary"))
+
+controls = Stack([
+  FormControl("Search", Input("search", "Name, role, team…", "text", null, $search)),
+  AvatarGroup(data.rows, 5, "md")
+], "row", "m", "center", "between", true)
+
+empty = EmptyState(
+  `No matches for "` + $search + `"`,
+  "Try a different name, team, or role.",
+  "🔍",
+  Button("Clear", Action([@Reset($search)]), "ghost")
+)
+
+cards = Grid(@Each(data.rows, "u",
+  ProfileCard(u.name, u.role, u.avatar, u.bio, u.tags,
+    [Button("Message", null, "secondary", "button", "small")]
+  )
+))
+
+body = @Count(data.rows) > 0 ? cards : empty
+pager = Pagination($page, data.pages, 1)
+```
+
+### Pattern L — Settings panel (Tabs + Switch + ToggleGroup + Sheet)
+
+```text
+root = Stack([header, tabsBlock, dangerZone, confirmSheet], "column", "l")
+
+$notifications = true
+$theme = "light"
+$autosave = true
+$language = "en"
+$deleting = false
+
+header = PageHeader(
+  "Settings", "Personalise your workspace",
+  [BreadcrumbItem("Home", "#"), BreadcrumbItem("Settings")]
+)
+
+generalTab = Card([
+  CardHeader("General"),
+  Switch("notifications", "Email me weekly digests", $notifications),
+  Switch("autosave",      "Autosave drafts every 30s", $autosave),
+  Separator("horizontal", true),
+  FormControl("Language", Select("language", [
+    SelectItem("en", "English"),
+    SelectItem("fr", "Français"),
+    SelectItem("de", "Deutsch")
+  ], null, null, $language))
+])
+
+appearanceTab = Card([
+  CardHeader("Appearance"),
+  FormControl("Theme",
+    ToggleGroup("theme", [
+      {value: "light", label: "Light", icon: "☀"},
+      {value: "dark",  label: "Dark",  icon: "🌙"},
+      {value: "neon",  label: "Neon",  icon: "✨"}
+    ], $theme)
+  ),
+  FormControl("Open palette", Kbd(["⌘", "K"]))
+])
+
+tabsBlock = Tabs([
+  TabItem("general",    "General",    [generalTab]),
+  TabItem("appearance", "Appearance", [appearanceTab])
+], "general")
+
+dangerZone = Card([
+  CardHeader("Danger zone", "Irreversible — proceed with care"),
+  Buttons([Button("Delete workspace", Action([@Set($deleting, true)]), "danger")])
+], "outlined")
+
+confirmSheet = Sheet("Delete workspace?", $deleting, [
+  TextContent("This permanently deletes every project, file, and member."),
+  Buttons([
+    Button("Cancel",  Action([@Set($deleting, false)]), "ghost"),
+    Button("Delete",  Action([@Set($deleting, false)]), "danger")
+  ])
+], "right")
+```
+
+**Why this works.**
+
+- `Switch`, `ToggleGroup`, and `Pagination` are all **two-way bound** to a
+  `$variable` — just pass the bare `$name` as the value/page arg.
+- `Sheet` is the right pattern for a "confirm" affordance that should feel
+  heavier than a `Modal` but lighter than a full page.
+
 ---
 
 ## 12. Common pitfalls and anti-patterns
@@ -1419,6 +1745,11 @@ Highlights:
 | Mutating `$todos` inside `@Js` via `.push()` (mutates state in place; no re-render). | Always assign a fresh array: `ctx.state.set('todos', [...todos, newItem])`.                                                       |
 | Touching `localStorage`, `document.cookie`, custom `fetch(...)` directly.            | Go through tools: `await ctx.tools.save_pref({key, value})`.                                                                      |
 | Defining everything inline in `root = Stack([...])` (no streaming).                  | Break into named statements: `root = Stack([header, body, footer])` so each section renders independently as it arrives.          |
+| Hand-rolling a dashboard row from raw `Card`s + `Stack` + `TextContent`.             | Use `MetricGrid([StatCard(...), ...])` — one statement, polished defaults, responsive grid.                                       |
+| Building a multi-column "trello-like" board out of nested `Stack`s.                  | Use `KanbanBoard([KanbanColumn(title, [KanbanCard(...)])])` — encodes the entire shape.                                            |
+| Putting page title + breadcrumbs + actions in 4 separate statements.                 | Use `PageHeader(title, subtitle, breadcrumbs, actions, status)` — one statement.                                                  |
+| Using `Stack(direction="row", wrap=true)` for tiles that should all be the same size.| Use `Grid(items, columns?)` — auto-fits with uniform sizing.                                                                       |
+| Showing an empty list with bare `TextContent("No items.", "small", "muted")`.        | Use `EmptyState(title, description, action, icon)` — guides the user to the next step.                                            |
 
 ---
 
@@ -1541,9 +1872,14 @@ const prompt = el.getSystemPrompt({
 | Render a list                                 | § 6 "Loops & lists"                              |
 | Filter / count / sort / aggregate             | § 8 "Built-in functions"                         |
 | Find a component signature                    | § 9 "Component reference"                        |
+| Compose a polished UI fast                    | § 9 "Patterns" + § 11 Patterns I–L               |
 | Add a timer, fetch, focus, keyboard shortcut  | § 10 "JavaScript layer"                          |
 | Wire a per-row Delete / Toggle button         | § 10 (Per-item handler pattern)                  |
 | Build a complete app                          | § 11 "Application patterns"                      |
+| Build a dashboard                             | § 11 Pattern I (Rich project dashboard)          |
+| Build a landing page                          | § 11 Pattern J (Marketing landing page)          |
+| Build a directory / search-with-pagination    | § 11 Pattern K (Team directory)                  |
+| Build a settings / preferences screen         | § 11 Pattern L (Settings panel)                  |
 | Wire up multiple pages / deep links           | § 10.5 "Routing layer" and Pattern H in § 11     |
 | Diagnose a parse error or broken interaction  | § 12 "Common pitfalls"                           |
 
@@ -1555,18 +1891,26 @@ Walk this list before you send your output:
 
 1. Is `root = …` the FIRST line?
 2. Is every name referenced from `root` defined somewhere below?
-3. Are state declarations literal values (no function calls on the right)?
-4. Are `Query` args bare `$variable` references (not interpolations)?
-5. Inside `@Each`, are loop-variable reads confined to the template?
-6. For per-row buttons, am I using `@Js(body, {id: x.id})` instead of
+3. **Did I reach for high-level patterns first?** Could a `PageHeader`
+   replace a hand-rolled title row? A `MetricGrid` replace a row of
+   `StatCard`s? A `KanbanBoard` replace nested `Stack`s? An `EmptyState`
+   replace a bare "no results" text?
+4. **For tiles that should all be the same size**, did I use `Grid` instead
+   of `Stack(row, wrap=true)`?
+5. **Did I add status colour where it conveys meaning?** Trends on
+   `StatCard`, variants on `Tag` and `Banner`, `status` on `TimelineItem`.
+6. Are state declarations literal values (no function calls on the right)?
+7. Are `Query` args bare `$variable` references (not interpolations)?
+8. Inside `@Each`, are loop-variable reads confined to the template?
+9. For per-row buttons, am I using `@Js(body, {id: x.id})` instead of
    `ctx.state.get('x')`?
-7. For multi-line `Script` bodies, am I using backticks?
-8. Did I register `ctx.cleanup(...)` for every interval / listener /
-   subscription / observer?
-9. Are all `Script` ids unique within this response?
-10. Could any `@Js` be replaced by `@Set` + a builtin (`@Push`, `@Filter`,
+10. For multi-line `Script` bodies, am I using backticks?
+11. Did I register `ctx.cleanup(...)` for every interval / listener /
+    subscription / observer?
+12. Are all `Script` ids unique within this response?
+13. Could any `@Js` be replaced by `@Set` + a builtin (`@Push`, `@Filter`,
     `@Sort`, `@Concat`)?
-11. If the response uses routing, does it include a wildcard or `default`
+14. If the response uses routing, does it include a wildcard or `default`
     fallback, never assign `$route` itself, and read `params.*` only inside
     a matched `Route`'s content?
 

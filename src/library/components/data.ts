@@ -115,16 +115,21 @@ export const List: ComponentSpec = {
 
 export const StatCard: ComponentSpec = {
   name: "StatCard",
-  description: "Single KPI card with label, value, and optional delta.",
+  description: "Single KPI card with label, value, optional delta, and optional icon.",
   props: [
     { name: "label", type: "string" },
     { name: "value", type: "string" },
     { name: "trend", type: "string", optional: true, enum: ["up", "down", "flat"] },
     { name: "delta", type: "string", optional: true, description: "Change vs previous period" },
+    { name: "icon", type: "string", optional: true, description: "Optional emoji shown in a chip beside the label" },
   ],
   render: (_node, props) => {
     const root = el("div", { class: "rui-stat-card" });
-    root.append(el("div", { class: "rui-stat-label" }, [asString(props.label)]));
+    const icon = asString(props.icon);
+    const labelRow = el("div", { class: "rui-stat-label-row" });
+    if (icon) labelRow.append(el("span", { class: "rui-stat-icon" }, [icon]));
+    labelRow.append(el("div", { class: "rui-stat-label" }, [asString(props.label)]));
+    root.append(labelRow);
     root.append(el("div", { class: "rui-stat-value" }, [asString(props.value)]));
     const delta = asString(props.delta);
     const trend = asString(props.trend);

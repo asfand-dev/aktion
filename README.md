@@ -374,16 +374,46 @@ for a full end-to-end walkthrough.
 
 ## Built-in components
 
-| Group     | Components                                                                                                              |
-|-----------|-------------------------------------------------------------------------------------------------------------------------|
-| Layout    | `Stack`, `Section`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Divider`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Steps`, `StepsItem` |
-| Content   | `TextContent`, `Header`, `Image`, `Link`, `Badge`, `Tag`, `TagBlock`, `Alert`, `Callout`, `CodeBlock`, `Skeleton`, `Markdown` |
-| Forms     | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Button`, `Buttons` |
-| Data      | `Table`, `Col`, `List`, `ListItem`, `StatCard`                                                                          |
-| Charts    | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
-| Chat      | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`                                              |
-| Scripting | `Script` (opt-in via `enable-javascript="true"`)                                                                        |
-| Routing   | `Routes`, `Route`, `NavLink` (opt-in via `enable-routes="true"`)                                                        |
+| Group              | Components                                                                                                              |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Layout             | `Stack`, `Grid`, `Section`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Divider`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Sheet`, `Steps`, `StepsItem`, `AspectRatio`, `ScrollArea` |
+| Content            | `TextContent`, `Header`, `Image`, `Link`, `Badge`, `Tag`, `TagBlock`, `Alert`, `Callout`, `CodeBlock`, `Skeleton`, `Markdown`, `Kbd` |
+| Forms              | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `Toggle`, `ToggleGroup`, `Button`, `Buttons` |
+| Data               | `Table`, `Col`, `List`, `ListItem`, `StatCard`, `Progress`, `Pagination`                                                |
+| Charts             | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
+| Feedback & Media   | `Avatar`, `AvatarGroup`, `Tooltip`, `HoverCard`                                                                         |
+| Navigation         | `Breadcrumb`, `BreadcrumbItem`                                                                                          |
+| Chat               | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`                                              |
+| Patterns           | `Hero`, `PageHeader`, `MetricGrid`, `EmptyState`, `Timeline`, `TimelineItem`, `FeatureGrid`, `FeatureItem`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `KanbanBoard`, `KanbanColumn`, `KanbanCard` |
+| Scripting          | `Script` (opt-in via `enable-javascript="true"`)                                                                        |
+| Routing            | `Routes`, `Route`, `NavLink` (opt-in via `enable-routes="true"`)                                                        |
+
+### Rich pattern composites
+
+The **Patterns** group is the secret sauce for getting beautiful, dense UI out
+of an LLM with minimal tokens. Each composite packs an entire idiom (hero,
+page header, KPI strip, empty state, timeline, kanban, …) into one positional
+call. Reach for these before composing the equivalent layout from
+`Card` + `Stack`:
+
+```text
+root = Stack([dashHeader, kpis, board, follow])
+dashHeader = PageHeader("Engineering Q3", "12 active · 4 at risk", ["Workspace", "Engineering"], dashActions, Badge("On track", "success"))
+dashActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
+kpis = MetricGrid([StatCard("Active", "12", "flat"), StatCard("At risk", "4", "up", "+2"), StatCard("Shipped", "8", "up", "+3"), StatCard("On-time", "87%", "down", "-3%")])
+board = KanbanBoard([
+  KanbanColumn("To do",      [KanbanCard("Migrate auth", "Roll out new SDK.", ["auth"], "Asha")]),
+  KanbanColumn("Doing",      [KanbanCard("Streaming UI v2", "20 new components.", ["frontend"], "Alex", "primary")]),
+  KanbanColumn("Review",     [KanbanCard("Mobile onboarding", "Awaiting design.", ["mobile"], "Wren", "warning")]),
+  KanbanColumn("Done",       [KanbanCard("Activity timeline", "Shipped to 100%.", ["shipped"], "Mira", "success")])
+])
+follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
+```
+
+The generated system prompt teaches the LLM about every component, and the
+`## Design principles` + `## Composition recipes` sections steer the model
+toward dashboard / landing / detail-page layouts that look like a shadcn site
+out of the box.
 
 Add your own with `registerComponents`:
 

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project dashboard · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · project dashboard
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · rich patterns</span>
+      <h1 style="margin-top:10px">A full engineering program dashboard, one statement per section</h1>
+      <p>
+        This single Streaming UI Script program drives an entire dashboard:
+        announcement banner, page header with breadcrumbs and actions, KPI
+        strip, kanban board, activity timeline, and follow-up chips. Every
+        section reaches for a high-level pattern (<code>PageHeader</code>,
+        <code>MetricGrid</code>, <code>KanbanBoard</code>,
+        <code>Timeline</code>, <code>Banner</code>) instead of stitching
+        primitives together by hand.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live dashboard</h2>
+      <p class="lede">
+        Change the range or owner and the whole dashboard re-renders.
+        Click a kanban card to mark it as the active item.
+      </p>
+      <pre class="example-source"><code id="src-dashboard">$range = "30d"
+$assignee = "everyone"
+$focusedCard = ""
+
+data = Query("program_summary", {range: $range, assignee: $assignee}, {
+  shipped: 0, inReview: 0, blocked: 0, velocity: 0,
+  deltas: {shipped: "", review: "", blocked: "", velocity: ""},
+  columns: [], events: [], blockers: []
+})
+
+banner = Banner(
+  "v2.3 ships Friday",
+  "Two hot bugs left in QA — see the board below.",
+  Button("Open release", Action([@ToAssistant("Open the v2.3 release notes")]), "secondary", "button", "small"),
+  "🚀",
+  "info"
+)
+
+rangeField = FormControl("Range", Select("range", [
+  SelectItem("7d",  "Last 7 days"),
+  SelectItem("30d", "Last 30 days"),
+  SelectItem("90d", "Last quarter")
+], null, null, $range))
+
+assigneeField = FormControl("Assignee", Select("assignee", [
+  SelectItem("everyone", "Everyone"),
+  SelectItem("ada",      "Ada Lovelace"),
+  SelectItem("grace",    "Grace Hopper"),
+  SelectItem("linus",    "Linus Torvalds")
+], null, null, $assignee))
+
+controlsRow = Stack([rangeField, assigneeField], "row", "m", "stretch", "start", true)
+
+header = PageHeader(
+  "Engineering · Q3 program",
+  "Track deliverables across squads",
+  [BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")],
+  [Button("Export", Action([@ToAssistant("Export the dashboard as PDF")]), "ghost"), Button("New milestone", Action([@ToAssistant("Open the new milestone form")]), "primary")],
+  Tag("On track", null, "sm", "success")
+)
+
+metrics = MetricGrid([
+  StatCard("Shipped this week", "" + data.shipped,           "up",   data.deltas.shipped,  "🚀"),
+  StatCard("In review",         "" + data.inReview,          "flat", data.deltas.review,   "👀"),
+  StatCard("Blocked",           "" + data.blocked,           "down", data.deltas.blocked,  "🛑"),
+  StatCard("Velocity",          "" + data.velocity + " pts", "up",   data.deltas.velocity, "⚡")
+])
+
+board = KanbanBoard(@Each(data.columns, "col",
+  KanbanColumn(col.title, @Each(col.cards, "c",
+    KanbanCard(c.title, c.description, c.tags, c.assignee, c.tone, c.icon, Action([@Set($focusedCard, c.title), @ToAssistant("Open card: " + c.title)]))
+  ), col.tone)
+))
+
+timelineCard = Card([
+  CardHeader("Recent activity", "Latest events across all squads"),
+  Timeline(@Each(data.events, "e",
+    TimelineItem(e.title, e.time, e.description, e.icon, e.tone)
+  ))
+])
+
+blockersList = Card([
+  CardHeader("Top blockers", "Need a decision this week"),
+  List(@Each(data.blockers, "b", ListItem(b.title, b.owner, b.icon)))
+])
+
+bottomGrid = Grid([timelineCard, blockersList], 2, "l")
+
+focusedNote = $focusedCard == "" ? null : Callout("info", "Focused card", $focusedCard)
+
+followUps = FollowUpBlock([
+  FollowUpItem("Drill into blocked items"),
+  FollowUpItem("Send a weekly digest"),
+  FollowUpItem("Compare to last quarter")
+], "Try next")
+
+root = Stack([banner, header, controlsRow, metrics, board, bottomGrid, focusedNote, followUps], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-dashboard" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The single tool that drives everything</h2>
+      <p class="lede">
+        One <code>Query("program_summary", …)</code> call returns every shape
+        the dashboard needs: KPI deltas, kanban columns, timeline events,
+        blockers. The UI Script program is agnostic about how many columns
+        or events come back — <code>@Each</code> over the arrays does the
+        right thing.
+      </p>
+      <pre><code class="example-source">el.setTools({
+  program_summary: async ({ range, assignee }) =&gt; {
+    await sleep(280);
+    const totals = totalsFor(range, assignee);
+    return {
+      ...totals,
+      columns: kanbanFor(assignee),
+      events:  activityFor(range),
+      blockers: blockersFor(assignee),
+    };
+  },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const ASSIGNEES = {
+      ada:   "Ada Lovelace",
+      grace: "Grace Hopper",
+      linus: "Linus Torvalds",
+    };
+
+    function totalsFor(range, assignee) {
+      const base = { "7d": 1, "30d": 1, "90d": 3 }[range] ?? 1;
+      const teamMultiplier = assignee === "everyone" ? 1 : 0.4;
+      const shipped = Math.round(12 * base * teamMultiplier);
+      const inReview = Math.round(8 * base * teamMultiplier);
+      const blocked = Math.max(1, Math.round(3 * teamMultiplier));
+      const velocity = Math.round(42 * base * teamMultiplier);
+      const deltas = {
+        shipped:  `+${Math.round(shipped * 0.18)} vs prev`,
+        review:   `${Math.round(inReview * 0.04)} flat`,
+        blocked:  `-${Math.max(1, Math.round(blocked * 0.5))} vs prev`,
+        velocity: `+${Math.round(velocity * 0.07)} vs prev`,
+      };
+      return { shipped, inReview, blocked, velocity, deltas };
+    }
+
+    function kanbanFor(assignee) {
+      const all = [
+        {
+          title: "Backlog",
+          tone: "default",
+          cards: [
+            { title: "Spec onboarding revamp", description: "Discovery + 3 prototype variants", tags: ["product", "ux"], assignee: "Grace Hopper", tone: "default", icon: "📝", owner: "grace" },
+            { title: "Investigate flaky CI runs",       description: "Top of the operational backlog", tags: ["infra"], assignee: "Linus Torvalds", tone: "default", icon: "🛠", owner: "linus" },
+            { title: "Token usage telemetry",      description: "Foundation for billing v2",         tags: ["data", "billing"], assignee: "Ada Lovelace", tone: "default", icon: "📊", owner: "ada" },
+          ],
+        },
+        {
+          title: "In progress",
+          tone: "primary",
+          cards: [
+            { title: "Rich-UI patterns release", description: "Patterns + 4 demos", tags: ["product"], assignee: "Ada Lovelace", tone: "primary", icon: "✨", owner: "ada" },
+            { title: "SSO upgrade", description: "Okta + Workspaces", tags: ["security"], assignee: "Linus Torvalds", tone: "primary", icon: "🔐", owner: "linus" },
+          ],
+        },
+        {
+          title: "Review",
+          tone: "warning",
+          cards: [
+            { title: "Quota dashboard QA", description: "Last-mile UX tweaks", tags: ["qa"], assignee: "Grace Hopper", tone: "warning", icon: "🔎", owner: "grace" },
+            { title: "Migration docs",      description: "Needs SRE sign-off",  tags: ["docs"], assignee: "Ada Lovelace", tone: "warning", icon: "📚", owner: "ada" },
+          ],
+        },
+        {
+          title: "Shipped",
+          tone: "success",
+          cards: [
+            { title: "Tokenizer 2.1",             description: "Released Monday — perf +14%", tags: ["perf"],   assignee: "Linus Torvalds", tone: "success", icon: "🚢", owner: "linus" },
+            { title: "Mobile push notifications", description: "iOS + Android beta",          tags: ["mobile"], assignee: "Grace Hopper", tone: "success", icon: "📱", owner: "grace" },
+            { title: "Audit log export",          description: "CSV + Parquet",               tags: ["data"],   assignee: "Ada Lovelace", tone: "success", icon: "📥", owner: "ada" },
+          ],
+        },
+      ];
+      if (assignee === "everyone") return all;
+      return all.map((col) => ({
+        ...col,
+        cards: col.cards.filter((c) => c.owner === assignee),
+      }));
+    }
+
+    function activityFor(range) {
+      const base = [
+        { title: "Ada merged #2491",                  time: "5 min ago",  description: "Rich-UI patterns ready for review",    icon: "🟣", tone: "primary" },
+        { title: "QA caught a regression",            time: "1h ago",     description: "Quota dashboard double-counts",         icon: "⚠️", tone: "warning" },
+        { title: "Tokenizer 2.1 deployed to prod",    time: "Yesterday",  description: "Latency improved 14%",                  icon: "🟢", tone: "success" },
+        { title: "Security review opened",            time: "2 days ago", description: "Awaiting threat model from infosec",   icon: "🔵", tone: "info" },
+        { title: "Linus closed flaky-tests sprint",   time: "3 days ago", description: "0 flakes in last 200 builds",           icon: "🟢", tone: "success" },
+      ];
+      const limit = range === "7d" ? 3 : range === "30d" ? 4 : 5;
+      return base.slice(0, limit);
+    }
+
+    function blockersFor(assignee) {
+      const all = [
+        { title: "Need SOC2 sign-off on audit log export", owner: "Linus Torvalds",  icon: "🛑" },
+        { title: "Pricing review for token telemetry",     owner: "Ada Lovelace",   icon: "💸" },
+        { title: "Design review for onboarding revamp",    owner: "Grace Hopper",   icon: "🎨" },
+      ];
+      if (assignee === "everyone") return all;
+      const filter = ASSIGNEES[assignee];
+      return all.filter((b) => b.owner === filter);
+    }
+
+    const el = document.getElementById("rui-dashboard");
+
+    el.setTools({
+      program_summary: async ({ range, assignee }) => {
+        await sleep(280);
+        return {
+          ...totalsFor(range, assignee),
+          columns: kanbanFor(assignee),
+          events:  activityFor(range),
+          blockers: blockersFor(assignee),
+        };
+      },
+    });
+
+    el.setResponse(document.getElementById("src-dashboard").textContent);
+  </script>
+</body>
+</html>

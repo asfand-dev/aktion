@@ -66,10 +66,12 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
   const sections: string[] = [];
   sections.push(headerSection(options.preamble, library.root));
   sections.push(syntaxSection(library.root));
+  sections.push(designPrinciplesSection());
   sections.push(componentsSection(library, {
     includeScripting: flags.enableJavascript,
     includeRouting: flags.enableRoutes,
   }));
+  sections.push(compositionRecipesSection());
   if (flags.bindings) sections.push(bindingsSection());
   if (flags.toolCalls) sections.push(toolingSection());
   if (flags.toolCalls || flags.bindings) sections.push(builtinsSection());
@@ -83,8 +85,9 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
   if (options.toolExamples && options.toolExamples.length > 0) {
     sections.push(examplesSection("Tool examples", options.toolExamples));
   }
-  if (options.examples && options.examples.length > 0) {
-    sections.push(examplesSection("Examples", options.examples));
+  const examples = options.examples ?? defaultRichExamples();
+  if (examples.length > 0) {
+    sections.push(examplesSection("Examples", examples));
   }
   if (options.additionalRules && options.additionalRules.length > 0) {
     sections.push(rulesSection(options.additionalRules));
@@ -117,6 +120,152 @@ function syntaxSection(rootComponent: string): string {
 - Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
 - Comments are not allowed.
 - The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.`;
+}
+
+function designPrinciplesSection(): string {
+  return `## Design principles (READ THIS BEFORE COMPOSING)
+You are emitting UI for a real product surface — not a wireframe. Aim for the
+visual polish of a shadcn/ui or Vercel-quality page, not a "minimal demo".
+Follow these rules every time:
+
+1. **Reach for high-level patterns first.** Before composing Card+Stack by hand,
+   check whether one of these single-line composites already does the job:
+   - \`Hero(...)\` for landing/intro headers
+   - \`PageHeader(...)\` for dashboard / detail page headers (with breadcrumbs + actions)
+   - \`MetricGrid([...])\` for KPI strips (NOT \`Stack(direction="row")\`)
+   - \`FeatureGrid([FeatureItem(...)])\` for product highlights
+   - \`Timeline([TimelineItem(...)])\` for activity / changelog feeds
+   - \`KanbanBoard([KanbanColumn([KanbanCard(...)])])\` for task views
+   - \`EmptyState(...)\` for zero-state placeholders
+   - \`ProfileCard(...)\`, \`Comment(...)\`, \`Testimonial(...)\` for people-shaped content
+   - \`Banner(...)\` for top-of-page announcements
+2. **Lay out grids with \`Grid\`, not \`Stack\`.** Use \`Grid(children, columns?, gap?, minItemWidth?)\`
+   when children should size uniformly across a row (cards, tiles, KPIs). \`Stack\`
+   is for prose-style sequences and side-by-side asymmetric content.
+3. **Always wrap dashboards in a \`PageHeader\`.** Every dashboard, detail page,
+   or settings screen starts with \`PageHeader(title, subtitle, breadcrumbs, actions)\`.
+4. **Use status badges liberally.** Pair a primary title with a \`Badge\`/\`Tag\`
+   for status, priority, owner, etc. — never leave status as plain prose.
+5. **Use icons (emoji) for visual hierarchy.** \`StatCard\`, \`FeatureItem\`,
+   \`TimelineItem\`, \`Callout\`, \`Banner\`, \`KanbanCard\`, \`ListItem\`,
+   \`Tag\`, and \`BreadcrumbItem\` all accept an \`icon\` — set it. Suggested mapping:
+   - 📊 metrics · 📈 growth · 📉 decline · ⚡️ performance · 🔔 alerts
+   - ✅ success · ⚠️ warning · ❌ error · ℹ️ info · 🔒 security
+   - 🚀 launch · 🎯 goal · 💡 idea · 🛠 settings · 👥 team
+6. **Use avatars for people.** Author names, assignees, commenters always render
+   with \`Avatar(name, src?, size?)\` — never plain text. Pair multiple users
+   with \`AvatarGroup\`.
+7. **End empty/zero states with a \`Button\` CTA.** Use \`EmptyState(title, description, icon, action)\`
+   instead of an empty Card with a sad paragraph.
+8. **Group related fields.** Inside a \`Form\`, group related \`FormControl\`s
+   inside a \`Card\` with a \`CardHeader\` per section.
+9. **Mix tone deliberately.** Most surfaces should be \`default\`. Use \`primary\`,
+   \`success\`, \`warning\`, \`danger\`, \`info\` to highlight ONE thing per page
+   (the primary CTA, the critical alert, the active KPI delta).
+10. **Density matters.** A page should have AT LEAST 4–6 named sections
+    (PageHeader, MetricGrid, content cards, related lists, FollowUpBlock). One
+    Card with a paragraph of text is never enough for a dashboard request.`;
+}
+
+function compositionRecipesSection(): string {
+  return `## Composition recipes
+Use these recipes as starting points. Pick the one that matches the user's intent and adapt it.
+
+### Dashboard / analytics page
+\`\`\`
+root          = Stack([dashHeader, dashKpis, dashChartCard, dashRecent, dashFollowUps])
+dashHeader    = PageHeader("Sales overview", "Last 30 days", ["Workspace", "Reports", "Sales"], dashActions, dashStatus)
+dashActions   = [Button("Export", Action([@Run(export_csv)]), "secondary"), Button("New report", Action([@Run(new_report)]), "primary")]
+dashStatus    = Badge("Live", "success")
+dashKpis      = MetricGrid([kpiRevenue, kpiOrders, kpiAov, kpiConvRate])
+kpiRevenue    = StatCard("Revenue", "$248,312", "up", "+12.4%")
+kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%")
+kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%")
+kpiConvRate   = StatCard("Conversion", "3.42%", "down", "-0.7%")
+dashChartCard = Card([CardHeader("Revenue trend", "Daily, last 30 days"), dashChart])
+dashChart     = LineChart(metrics.day, [Series("Revenue", metrics.revenue), Series("Orders", metrics.orders)])
+dashRecent    = Card([CardHeader("Latest orders"), recentTable])
+recentTable   = Table([Col("Order", orders.id), Col("Customer", orders.customer), Col("Total", orders.total, "currency"), Col("Status", orders.statusTag)])
+dashFollowUps = FollowUpBlock(["Break down by region", "Compare to last quarter", "Show top customers"])
+\`\`\`
+
+### Landing / marketing page
+\`\`\`
+root        = Stack([landingHero, landingFeatures, landingTestimonial, landingFollowUps])
+landingHero = Hero(
+  "Ship generative UI in minutes",
+  "Drop one tag into your app and let your LLM render rich, streaming interfaces.",
+  Button("Get started", Action([@OpenUrl("/docs")]), "primary"),
+  Button("Live demo", Action([@OpenUrl("/demo")]), "secondary"),
+  "NEW",
+  ["No framework lock-in", "Streaming-first", "Shadow DOM isolated"]
+)
+landingFeatures = FeatureGrid([featInstall, featStream, featExtend])
+featInstall = FeatureItem("One script tag", "Works in React, Vue, Svelte, Angular, and vanilla HTML.", "📦")
+featStream  = FeatureItem("Streaming-first", "Progressive render — the shell appears before children stream in.", "⚡️", "info")
+featExtend  = FeatureItem("Extensible", "Register your own components and they show up in the system prompt automatically.", "🛠", "success")
+landingTestimonial = Testimonial(
+  "Replaced 400 lines of JSON-rendering React in an afternoon. Our chat bot finally looks like a product.",
+  "Asha Patel",
+  "Staff Engineer · Acme",
+  ""
+)
+landingFollowUps = FollowUpBlock(["Show me the system prompt", "Embed it in my React app", "Wire up tools"])
+\`\`\`
+
+### Detail / profile page
+\`\`\`
+root        = Stack([profileHeader, profileGrid, profileTimeline, profileFollowUps])
+profileHeader = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], profileActions, profileStatus)
+profileActions = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
+profileStatus = Tag("Online", "online", "sm", "success")
+profileGrid = Grid([profileCard, profileBio], 2, "l")
+profileCard = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.", ["design", "ux", "type"], profileSocial)
+profileSocial = [Button("Follow", Action([@Run(follow)]), "primary", "small"), Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "small")]
+profileBio = Card([CardHeader("About"), aboutMd])
+aboutMd = Markdown("Alex joined Acme in 2022 and led the design system rewrite. Outside of work: rock climbing, espresso, and **lots** of typography.")
+profileTimeline = Card([CardHeader("Recent activity"), recentEvents])
+recentEvents = Timeline([
+  TimelineItem("Shipped v2.0", "2 hours ago", "Updated 14 components and added the patterns API.", "🚀", "success"),
+  TimelineItem("Joined Design Review", "Yesterday", "Reviewed the new dashboard wireframes.", "🎨", "primary"),
+  TimelineItem("Profile updated", "3 days ago", "", "✏️")
+])
+profileFollowUps = FollowUpBlock(["Show projects", "Open inbox", "Schedule a 1:1"])
+\`\`\`
+
+### Empty / zero state
+\`\`\`
+root = Stack([blankHeader, blankBody])
+blankHeader = PageHeader("Reports", "Generate, schedule, and share insights.", null, blankActions)
+blankActions = [Button("New report", Action([@Run(new_report)]), "primary")]
+blankBody = EmptyState("No reports yet", "Reports you create or are shared with you will show up here.", "📊", Button("Create your first report", Action([@Run(new_report)]), "primary"))
+\`\`\`
+
+### Settings page (form + Switches)
+\`\`\`
+root = Stack([settingsHeader, settingsForm])
+settingsHeader = PageHeader("Notification preferences", "Choose where you want to be notified.", ["Settings", "Notifications"])
+$emailEnabled = true
+$pushEnabled = false
+$digest = "weekly"
+settingsForm = Card([
+  CardHeader("Channels"),
+  FormControl("Email", Switch("email-on", "Send important updates to alex@acme.com", $emailEnabled)),
+  Separator,
+  FormControl("Push", Switch("push-on", "Mobile push notifications", $pushEnabled)),
+  Separator,
+  FormControl("Digest frequency", ToggleGroup("digest", [["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"]], $digest))
+])
+\`\`\``;
+}
+
+function defaultRichExamples(): string[] {
+  return [
+    // Compact "good vs lazy" pair the LLM can pattern-match against. The
+    // example is intentionally dense so the model sees rich layouts as
+    // the baseline expectation.
+    `# Project status dashboard\nroot          = Stack([statusBanner, dashHeader, kpis, projectsBoard, statusFollowUps])\nstatusBanner  = Banner("Quarterly review is open", "Submit your team's update by Friday.", Banner_cta, "🎯", "primary")\nBanner_cta    = Button("Submit update", Action([@Run(open_submit)]), "primary", "small")\ndashHeader    = PageHeader("Engineering Q3", "12 active projects · 4 at risk", ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)\ndashActions   = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]\ndashStatus    = Badge("On track", "success")\nkpis          = MetricGrid([kpiOpen, kpiAtRisk, kpiDone, kpiOnTime])\nkpiOpen       = StatCard("Active", "12", "flat", "0 vs last week")\nkpiAtRisk     = StatCard("At risk", "4", "up", "+2")\nkpiDone       = StatCard("Shipped", "8", "up", "+3")\nkpiOnTime     = StatCard("On-time", "87%", "down", "-3%")\nprojectsBoard = KanbanBoard([colTodo, colDoing, colReview, colDone])\ncolTodo       = KanbanColumn("To do",      [cardA, cardB], "default")\ncolDoing      = KanbanColumn("In progress",[cardC],        "primary")\ncolReview     = KanbanColumn("In review",  [cardD],        "warning")\ncolDone       = KanbanColumn("Done",       [cardE],        "success")\ncardA         = KanbanCard("Migrate auth to new SDK", "Track auth → SDK rollout across services.", ["auth","p1"], "Asha P.", "primary")\ncardB         = KanbanCard("Spike: vector search",    "Compare pgvector vs Qdrant.",                ["research"], "Diego",  "default")\ncardC         = KanbanCard("Streaming UI v2",         "Add 20 components & rich prompt patterns.", ["frontend"], "Alex",   "primary")\ncardD         = KanbanCard("Mobile onboarding",       "Awaiting design review.",                    ["mobile"],  "Wren",   "warning")\ncardE         = KanbanCard("Activity timeline",       "Shipped to 100% of users.",                  ["shipped"], "Mira",   "success")\nstatusFollowUps = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
+  ];
 }
 
 interface ComponentsSectionOptions {
@@ -588,7 +737,11 @@ function closingSection(enableJavascript: boolean, enableRoutes: boolean): strin
 - Always start with \`root = ...\` on the very first line.
 - Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
 - Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
-- Use the smallest set of components that satisfies the request.
+- **Reach for pattern composites** (\`Hero\`, \`PageHeader\`, \`MetricGrid\`, \`FeatureGrid\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`Testimonial\`, \`Banner\`, \`Comment\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
+- **Use \`Grid\` for uniform card rows** (KPIs, tiles, features). Reserve \`Stack(direction="row")\` for asymmetric side-by-side content.
+- **Decorate with status.** Every PageHeader gets a status \`Badge\` or \`Tag\` when relevant. Every StatCard/FeatureItem/Banner gets an icon (emoji string).
+- **Use Avatars for people.** Author, assignee, commenter names render as \`Avatar(...)\` (or via \`Comment\` / \`ProfileCard\` which include one). Never plain text.
+- Use the smallest set of components that satisfies the request — but the request is rarely satisfied by a single Card. Most responses use 4–8 named sections.
 - While using the icons, it should be emoji strings only.
 - Do not invent component names that are not in the list above.`;
   const lines: string[] = [base];

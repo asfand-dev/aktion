@@ -143,15 +143,27 @@ Array & string shortcuts (member access):
 - `$rows.field` — array pluck (map each item to `field`).
 - `$msg.length` — character count for strings.
 
-Component groups available out of the box: **Layout** (Stack, Card, Tabs,
-Accordion, Modal, Steps), **Content** (TextContent, Markdown, Callout, Tag,
-TagBlock, CodeBlock, Image), **Forms** (Form, Input, Select, Checkbox,
-CheckBoxGroup, Radio, Button, Buttons), **Data** (Table, Col, List, StatCard),
-**Charts** (BarChart, LineChart, PieChart, Series), **Chat** composites
-(SectionBlock, FollowUpBlock, FollowUpItem, ActionLink), and **Scripting**
-(`Script` — opt-in via `enable-javascript="true"`). For the full positional
-signature of every component, call `el.getSystemPrompt()` or open
+Component groups available out of the box: **Layout** (Stack, Grid, Card,
+Tabs, Accordion, Modal, Sheet, Steps, AspectRatio, ScrollArea), **Content**
+(TextContent, Markdown, Callout, Tag, TagBlock, CodeBlock, Image, Kbd),
+**Forms** (Form, Input, Select, Checkbox, CheckBoxGroup, Radio, Switch,
+Toggle, ToggleGroup, Button, Buttons), **Data** (Table, Col, List, StatCard,
+Progress, Pagination), **Charts** (BarChart, LineChart, PieChart, Series),
+**Feedback & Media** (Avatar, AvatarGroup, Tooltip, HoverCard), **Navigation**
+(Breadcrumb, BreadcrumbItem), **Chat** composites (SectionBlock,
+FollowUpBlock, FollowUpItem, ActionLink), **Patterns** (Hero, PageHeader,
+MetricGrid, EmptyState, Timeline, FeatureGrid, Testimonial, ProfileCard,
+Comment, Banner, KanbanBoard), and **Scripting** (`Script` — opt-in via
+`enable-javascript="true"`). For the full positional signature of every
+component, call `el.getSystemPrompt()` or open
 [components reference](https://asfand-dev.github.io/streaming-ui-script/components.html).
+
+**Reach for the Patterns group first when composing dashboards, landing pages,
+profile views, kanban boards, or empty/zero-state placeholders.** Patterns are
+opinionated single-line composites (e.g. `PageHeader(title, subtitle, breadcrumbs, actions, status)`,
+`MetricGrid([statCard1, statCard2, …])`, `KanbanBoard([KanbanColumn(...)])`) that
+encode the right spacing, hierarchy, and tone. They consistently produce more
+polished UI than hand-rolled `Card` + `Stack` layouts and use fewer tokens.
 
 ### JavaScript interactions (opt-in)
 

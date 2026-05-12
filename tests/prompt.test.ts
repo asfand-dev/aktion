@@ -34,6 +34,38 @@ describe("generatePrompt", () => {
     expect(text).toContain("Demo");
   });
 
+  it("includes the design principles and composition recipes by default", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("## Design principles");
+    expect(text).toContain("Reach for high-level patterns first");
+    expect(text).toContain("## Composition recipes");
+    expect(text).toContain("Dashboard / analytics page");
+    expect(text).toContain("Landing / marketing page");
+  });
+
+  it("documents the new shadcn-parity primitives and pattern composites", () => {
+    const text = generatePrompt(defaultLibrary);
+    // Primitives we added (shadcn parity)
+    for (const name of ["Avatar", "Progress", "Switch", "Toggle", "Tooltip", "Breadcrumb", "Pagination", "Sheet", "Grid"]) {
+      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
+    }
+    // Pattern composites
+    for (const name of ["Hero", "PageHeader", "MetricGrid", "EmptyState", "Timeline", "FeatureGrid", "KanbanBoard"]) {
+      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
+    }
+    // The Patterns group is announced in components section
+    expect(text).toContain("### Patterns");
+    expect(text).toContain("### Feedback & Media");
+    expect(text).toContain("### Navigation");
+  });
+
+  it("falls back to a built-in rich example when none is provided", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("## Examples");
+    expect(text).toContain("MetricGrid");
+    expect(text).toContain("KanbanBoard");
+  });
+
   it("teaches streaming-friendly statement order", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("## Hoisting & Streaming");

@@ -48,6 +48,34 @@ describe("<streaming-ui-script>", () => {
     expect(shadow.querySelector(".rui-card-subtitle")?.textContent).toBe("World");
   });
 
+  it("renders a rich pattern-composite layout end-to-end", async () => {
+    const el = create();
+    el.setResponse(`root = Stack([header, kpis, board, follow])
+header = PageHeader("Engineering Q3", "12 active · 4 at risk", ["Workspace", "Engineering"], headerActions, status)
+headerActions = [Button("Export", null, "secondary"), Button("New project", null, "primary")]
+status = Badge("On track", "success")
+kpis = MetricGrid([k1, k2, k3])
+k1 = StatCard("Active", "12", "flat", "0 vs last week", "📊")
+k2 = StatCard("At risk", "4", "up", "+2", "⚠️")
+k3 = StatCard("Shipped", "8", "up", "+3", "🚀")
+board = KanbanBoard([colTodo, colDoing])
+colTodo = KanbanColumn("To do", [cardA])
+colDoing = KanbanColumn("Doing", [cardB], "primary")
+cardA = KanbanCard("Migrate auth", "Roll out new SDK.", ["auth"], "Asha")
+cardB = KanbanCard("Streaming UI v2", "20 new components.", ["frontend"], "Alex", "primary", "✨")
+follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+    const shadow = el.shadowRoot!;
+    expect(shadow.querySelector(".rui-page-header-title")?.textContent).toBe("Engineering Q3");
+    expect(shadow.querySelector(".rui-metric-grid")).not.toBeNull();
+    expect(shadow.querySelectorAll(".rui-stat-card")).toHaveLength(3);
+    expect(shadow.querySelectorAll(".rui-kanban-column")).toHaveLength(2);
+    expect(shadow.querySelectorAll(".rui-kanban-card")).toHaveLength(2);
+    expect(shadow.querySelector(".rui-stat-icon")?.textContent).toBe("📊");
+    expect(shadow.querySelector(".rui-kanban-card-icon")?.textContent).toBe("✨");
+    expect(shadow.querySelector(".rui-badge[data-variant='success']")?.textContent).toBe("On track");
+  });
+
   it("does not infinite-loop when the program registers a Query", async () => {
     const el = create();
     el.setResponse(PROGRAM_WITH_QUERY);

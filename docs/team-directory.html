@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Team directory · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · team directory
+      </a>
+      <a class="example-back" href="examples.html">← Back to docs</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · search + sheet + pagination</span>
+      <h1 style="margin-top:10px">A searchable team directory with detail sheets and rich tooltips</h1>
+      <p>
+        Profile cards, avatar groups, a department toggle group, a paginated
+        list, an empty state, and a slide-in <code>Sheet</code> for full
+        member detail — all wired through a single search + pagination
+        <code>Query</code>. Hover an avatar in the row of "popular" members
+        to reveal a tooltip with the person's full title.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live directory</h2>
+      <p class="lede">
+        Search by name or skill, switch departments, paginate through results,
+        and click "View profile" to open a detail sheet. Reset the search to
+        see the empty-state CTA.
+      </p>
+      <pre class="example-source"><code id="src-team">$search = ""
+$department = "all"
+$page = 1
+$selectedId = ""
+
+data = Query("list_members", {q: $search, department: $department, page: $page}, {
+  rows: [], total: 0, pages: 1, popular: []
+})
+detail = Query("get_member", {id: $selectedId}, {
+  id: "", name: "", role: "", bio: "", tags: [], stats: [], avatar: ""
+})
+
+header = PageHeader(
+  "Team directory",
+  "Everyone at Acme Robotics, searchable in one place",
+  [BreadcrumbItem("Company", "#"), BreadcrumbItem("People")],
+  [
+    Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]), "ghost"),
+    Button("Invite",     Action([@ToAssistant("Open the invite-by-email form")]), "primary")
+  ],
+  Tag("" + data.total + " people", null, "sm", "primary")
+)
+
+searchField = FormControl(
+  "Search",
+  Input("search", "Name, role, skill…", "text", null, $search),
+  "Filters update as you type"
+)
+
+departmentToggle = FormControl("Department", ToggleGroup("department", [
+  {value: "all",   label: "All"},
+  {value: "eng",   label: "Engineering", icon: "💻"},
+  {value: "ds",    label: "Design",      icon: "🎨"},
+  {value: "ops",   label: "Operations",  icon: "📦"},
+  {value: "sales", label: "Sales",       icon: "📈"}
+], $department))
+
+controls = Stack([searchField, departmentToggle], "row", "m", "stretch", "start", true)
+
+popularRow = Card([
+  CardHeader("Most-mentioned this week", "Hover an avatar to see their role"),
+  AvatarGroup(data.popular, 6, "lg")
+])
+
+cardsGrid = Grid(@Each(data.rows, "u",
+  Card([
+    ProfileCard(u.name, u.role, u.avatar, u.bio, u.tags, [
+      Button("View profile", Action([@Set($selectedId, u.id)]), "secondary", "button", "small"),
+      Button("Message",      Action([@ToAssistant("Open a DM thread with " + u.name)]), "ghost", "button", "small")
+    ])
+  ])
+), 3, "m")
+
+emptyState = EmptyState(
+  "No matches for your filters",
+  "Try a different search term or pick another department.",
+  "🔍",
+  Button("Clear filters", Action([@Reset($search), @Reset($department), @Set($page, 1)]), "primary")
+)
+
+body = @Count(data.rows) > 0 ? cardsGrid : emptyState
+
+pager = Pagination($page, data.pages, 1)
+
+detailSheet = Sheet(
+  detail.name == "" ? "Loading…" : detail.name,
+  $selectedId != "",
+  [
+    Stack([
+      Avatar(detail.name, detail.avatar, "xl"),
+      Stack([
+        TextContent(detail.role, "body-heavy"),
+        TextContent(detail.bio, "body", "muted")
+      ], "column", "xs")
+    ], "row", "m", "start", "start"),
+    Separator("horizontal", true),
+    TagBlock(detail.tags, "primary", "sm"),
+    Separator("horizontal", true),
+    MetricGrid(@Each(detail.stats, "s",
+      StatCard(s.label, s.value, s.trend, s.delta, s.icon)
+    ), 3)
+  ],
+  "right",
+  [
+    Button("Close",   Action([@Reset($selectedId)]), "ghost"),
+    Button("Message", Action([@ToAssistant("Open a DM thread with " + detail.name), @Reset($selectedId)]), "primary")
+  ]
+)
+
+root = Stack([header, popularRow, controls, body, pager, detailSheet], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-team" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The two tools</h2>
+      <p class="lede">
+        <code>list_members</code> handles the paged grid and "popular"
+        avatar row. <code>get_member</code> hydrates the detail
+        <code>Sheet</code>. Both are tiny — the patterns do the visual heavy
+        lifting.
+      </p>
+      <pre><code class="example-source">el.setTools({
+  list_members: ({ q, department, page }) =&gt; {
+    const filtered = members.filter(matches({ q, department }));
+    const pageSize = 6;
+    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    return {
+      rows: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length,
+      pages,
+      popular: members.slice(0, 6).map(({ name }) =&gt; ({ name })),
+    };
+  },
+  get_member: ({ id }) =&gt; members.find((m) =&gt; m.id === id) ?? emptyMember,
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const PAGE_SIZE = 6;
+
+    const MEMBERS = [
+      { id: "u_ada",     name: "Ada Lovelace",       role: "Founding engineer",  department: "eng",   bio: "Designed the streaming evaluator and the action graph.",        tags: ["TypeScript", "Compilers", "DX"],          icon: "💻" },
+      { id: "u_grace",   name: "Grace Hopper",       role: "Component lead",     department: "eng",   bio: "Owns the rich-UI patterns library and the design tokens.",      tags: ["Design systems", "A11y", "Patterns"],     icon: "🎨" },
+      { id: "u_linus",   name: "Linus Torvalds",     role: "Infra & perf",       department: "eng",   bio: "Keeps the bundle under 40 KB and CI under 90 seconds.",         tags: ["Perf", "Infra", "DX"],                    icon: "⚙️" },
+      { id: "u_alan",    name: "Alan Turing",        role: "Director of research", department: "eng", bio: "Steers the long-term agent and DSL strategy.",                  tags: ["Research", "DSLs"],                       icon: "🧠" },
+      { id: "u_marie",   name: "Marie Curie",        role: "Principal designer", department: "ds",    bio: "Drives the visual language and the marketing site.",            tags: ["Brand", "Illustration"],                  icon: "🖌" },
+      { id: "u_pablo",   name: "Pablo Picasso",      role: "Senior designer",    department: "ds",    bio: "Owns the dashboard patterns and chart styling.",                 tags: ["Data viz", "Patterns"],                   icon: "🎨" },
+      { id: "u_henri",   name: "Henri Matisse",      role: "Illustrator",        department: "ds",    bio: "Hand-draws the marketing illustrations for every release.",     tags: ["Illustration", "Branding"],                icon: "✏️" },
+      { id: "u_amelia",  name: "Amelia Earhart",     role: "Head of operations", department: "ops",   bio: "Runs the office, the offsite, and the on-call schedule.",       tags: ["Ops", "Logistics"],                       icon: "📦" },
+      { id: "u_neil",    name: "Neil Armstrong",     role: "Customer success",   department: "sales", bio: "First responder for enterprise migrations and onboarding.",     tags: ["Onboarding", "Migrations"],               icon: "🚀" },
+      { id: "u_sally",   name: "Sally Ride",         role: "Account executive",  department: "sales", bio: "Owns the platform & agent vertical for North America.",         tags: ["Enterprise", "Discovery"],                icon: "📈" },
+      { id: "u_rosa",    name: "Rosa Parks",         role: "People partner",     department: "ops",   bio: "Hiring + onboarding for the engineering org.",                  tags: ["Hiring", "Onboarding"],                   icon: "🤝" },
+      { id: "u_mae",     name: "Mae Jemison",        role: "Solutions engineer", department: "sales", bio: "Embeds with launch customers to land the first integration.",   tags: ["Integrations", "DX"],                     icon: "🧪" },
+    ];
+
+    function tagStatsFor(member) {
+      return [
+        { label: "PRs merged",   value: "" + (24 + member.name.length),                   trend: "up",   delta: "+8 vs prev", icon: "🚀" },
+        { label: "Reviews",      value: "" + (40 + (member.name.length % 18)),            trend: "flat", delta: "", icon: "👀" },
+        { label: "Mentions",     value: "" + (10 + (member.name.length % 9)),             trend: "up",   delta: "+3", icon: "🔥" },
+      ];
+    }
+
+    function matches({ q, department }) {
+      const term = (q ?? "").toLowerCase().trim();
+      return (m) => {
+        if (department && department !== "all" && m.department !== department) return false;
+        if (!term) return true;
+        return m.name.toLowerCase().includes(term)
+          || m.role.toLowerCase().includes(term)
+          || m.tags.some((t) => t.toLowerCase().includes(term));
+      };
+    }
+
+    const el = document.getElementById("rui-team");
+
+    el.setTools({
+      list_members: async ({ q, department, page }) => {
+        await sleep(180);
+        const filtered = MEMBERS.filter(matches({ q, department }));
+        const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.max(1, Math.min(pages, page ?? 1));
+        return {
+          rows: filtered
+            .slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+            .map((m) => ({
+              id: m.id,
+              name: m.name,
+              role: m.role,
+              avatar: "",
+              bio: m.bio,
+              tags: m.tags,
+            })),
+          total: filtered.length,
+          pages,
+          popular: MEMBERS.slice(0, 6).map((m) => ({ name: m.name })),
+        };
+      },
+      get_member: async ({ id }) => {
+        if (!id) {
+          return { id: "", name: "", role: "", bio: "", tags: [], stats: [], avatar: "" };
+        }
+        await sleep(120);
+        const m = MEMBERS.find((x) => x.id === id);
+        if (!m) {
+          return { id, name: "Unknown member", role: "", bio: "We couldn't find that record.", tags: [], stats: [], avatar: "" };
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          role: m.role,
+          bio: m.bio,
+          tags: m.tags,
+          avatar: "",
+          stats: tagStatsFor(m),
+        };
+      },
+    });
+
+    el.setResponse(document.getElementById("src-team").textContent);
+  </script>
+</body>
+</html>
