@@ -8,15 +8,11 @@
  *       `response`          — Streaming UI Script program (string)
  *       `showerrors`        — "true" to render parse errors in the UI
  *                             (defaults to off; the `error` event still fires)
- *       `enable-javascript` — "true" to allow `Script(...)` and `@Js(...)` to
- *                             execute (default off for safety; the system
- *                             prompt also omits the JS section by default).
  *   - Properties:
  *       `response: string`        — current Streaming UI Script text
  *       `tools: ToolRegistry`     — async functions backing Query/Mutation
  *       `streaming: boolean`      — reflects the `streaming` attribute
  *       `showErrors: boolean`     — reflects the `showerrors` attribute
- *       `enableJavascript: boolean` — reflects the `enable-javascript` attribute
  *   - Methods:
  *       `setResponse(text)`       — replace the current program
  *       `appendChunk(text)`       — append a streaming chunk and re-render
@@ -30,6 +26,13 @@
  *   - `assistant-message` — fired when the user clicks a follow-up or a button
  *     runs `@ToAssistant("...")`. `event.detail.message` carries the text.
  *   - `error` — fired with `event.detail.errors` for parse failures.
+ *   - `route-change` — fired when the active hash route changes.
+ *
+ * JavaScript interactions (`Script(...)`, `@Js(...)`) and hash-based routing
+ * (`Routes`, `Route`, `NavLink`, `@Navigate`) are always available — no
+ * additional attributes required. The system prompt comes in two flavours:
+ *   - `getSystemPrompt()` — full prompt (everything the language offers).
+ *   - `getSystemPrompt({ mode: "chat" })` — compact chat-focused prompt.
  */
 
 import { parse } from "./parser/index.js";
@@ -49,6 +52,7 @@ import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
 import { defaultLibrary } from "./library/index.js";
 import { mergeLibraries } from "./library/registry.js";
 import { Renderer } from "./renderer/renderer.js";
+import { morphChildren } from "./renderer/morph.js";
 import {
   generatePrompt,
   type PromptOptions,
@@ -59,19 +63,56 @@ import {
   type ThemeInput,
 } from "./theme/index.js";
 import { componentStyles } from "./theme/styles.js";
+import { ensureFontAwesomeLoaded } from "./icons/index.js";
 
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
-const ATTRIBUTE_ENABLE_JS = "enable-javascript";
-const ATTRIBUTE_ENABLE_ROUTES = "enable-routes";
 /**
  * Reserved reactive state name written by the router. Read it from any
  * expression as `$route` to access the current path. Kept in lock-step with
- * `window.location.hash` when `enable-routes="true"`.
+ * `window.location.hash`.
  */
 const STATE_ROUTE = "route";
+
+/**
+ * Lazily-built `CSSStyleSheet` shared across every instance via
+ * `adoptedStyleSheets`. The browser parses the source once and reuses the
+ * compiled rules for every shadow root that adopts it, which keeps memory
+ * and startup time flat as the number of `<streaming-ui-script>` elements
+ * grows. The boolean tracks whether the platform actually supports the
+ * adoption API — older runtimes fall back to per-instance `<style>` tags.
+ */
+let sharedStyleSheet: CSSStyleSheet | null = null;
+let sharedStyleSheetSupported: boolean | null = null;
+
+function getSharedStyleSheet(): CSSStyleSheet | null {
+  if (sharedStyleSheetSupported === false) return null;
+  if (sharedStyleSheet) return sharedStyleSheet;
+  try {
+    if (
+      typeof CSSStyleSheet === "undefined" ||
+      !("replaceSync" in CSSStyleSheet.prototype) ||
+      // Some test environments (happy-dom) expose `CSSStyleSheet` but its
+      // `replaceSync` is a no-op that doesn't propagate to adoption — keep
+      // the fallback so the rendered DOM still has styles.
+      typeof document === "undefined" ||
+      !("adoptedStyleSheets" in Document.prototype)
+    ) {
+      sharedStyleSheetSupported = false;
+      return null;
+    }
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(componentStyles);
+    sharedStyleSheet = sheet;
+    sharedStyleSheetSupported = true;
+    return sheet;
+  } catch {
+    sharedStyleSheetSupported = false;
+    return null;
+  }
+}
 
 export class StreamingUiScriptElement extends HTMLElement {
   static readonly tagName = "streaming-ui-script";
@@ -82,8 +123,6 @@ export class StreamingUiScriptElement extends HTMLElement {
       ATTRIBUTE_STREAMING,
       ATTRIBUTE_RESPONSE,
       ATTRIBUTE_SHOW_ERRORS,
-      ATTRIBUTE_ENABLE_JS,
-      ATTRIBUTE_ENABLE_ROUTES,
     ];
   }
 
@@ -107,14 +146,30 @@ export class StreamingUiScriptElement extends HTMLElement {
   constructor() {
     super();
     this.root = this.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
-    style.textContent = componentStyles;
     this.errorEl = document.createElement("div");
     this.errorEl.className = "rui-error-banner";
     this.errorEl.hidden = true;
     this.rootEl = document.createElement("div");
     this.rootEl.className = "rui-root";
-    this.root.append(style, this.errorEl, this.rootEl);
+
+    // Adopt the shared, pre-parsed stylesheet when the platform supports
+    // it — every instance reuses the same compiled rules instead of
+    // parsing a 4k-line CSS string per shadow root. Fall back to an inline
+    // `<style>` tag when the constructable-stylesheet API is unavailable
+    // (older browsers, some headless DOMs).
+    const sheet = getSharedStyleSheet();
+    if (sheet) {
+      try {
+        // `as CSSStyleSheet[]` keeps the typing predictable across DOM lib
+        // versions where `adoptedStyleSheets` is typed as readonly.
+        (this.root as ShadowRoot & { adoptedStyleSheets: CSSStyleSheet[] }).adoptedStyleSheets = [sheet];
+        this.root.append(this.errorEl, this.rootEl);
+      } catch {
+        this.root.append(this.buildInlineStyle(), this.errorEl, this.rootEl);
+      }
+    } else {
+      this.root.append(this.buildInlineStyle(), this.errorEl, this.rootEl);
+    }
 
     const dispatchAssistantMessage = (message: string): void => {
       this.dispatchEvent(new CustomEvent("assistant-message", {
@@ -146,7 +201,6 @@ export class StreamingUiScriptElement extends HTMLElement {
       actionRunner: this.actionRunner,
       scriptRunner: this.scriptRunner,
       router: this.router,
-      routesEnabled: this.enableRoutes,
     });
 
     this.queries.setNotify(() => this.scheduleRender());
@@ -155,11 +209,12 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   connectedCallback(): void {
+    ensureFontAwesomeLoaded(this.root);
     this.applyThemeFromAttribute();
-    this.syncScriptRunnerFlags();
-    this.syncRouter();
+    this.syncScriptRunnerStreaming();
+    this.startRouter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
-    if (responseAttr !== null && responseAttr !== "") {
+    if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
       this.setResponse(responseAttr);
       return;
     }
@@ -167,8 +222,14 @@ export class StreamingUiScriptElement extends HTMLElement {
       const fallback = (this.textContent ?? "").trim();
       if (fallback) {
         this.setResponse(fallback);
+        return;
       }
-    } else {
+    }
+    // Reconnect path: scripts were torn down in `disconnectedCallback`, so
+    // we always re-render to give them a chance to re-register. Marking
+    // the program dirty also re-plans queries from a clean slate.
+    if (this.currentResponse) {
+      this.programDirty = true;
       this.scheduleRender();
     }
   }
@@ -184,7 +245,7 @@ export class StreamingUiScriptElement extends HTMLElement {
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
-      this.syncScriptRunnerFlags();
+      this.syncScriptRunnerStreaming();
       this.scheduleRender();
     }
     if (name === ATTRIBUTE_SHOW_ERRORS) {
@@ -193,14 +254,6 @@ export class StreamingUiScriptElement extends HTMLElement {
     if (name === ATTRIBUTE_RESPONSE) {
       const next = value ?? "";
       if (next !== this.currentResponse) this.setResponse(next);
-    }
-    if (name === ATTRIBUTE_ENABLE_JS) {
-      this.syncScriptRunnerFlags();
-      this.scheduleRender();
-    }
-    if (name === ATTRIBUTE_ENABLE_ROUTES) {
-      this.syncRouter();
-      this.scheduleRender();
     }
   }
 
@@ -214,13 +267,23 @@ export class StreamingUiScriptElement extends HTMLElement {
     // Drop any scripts left over from the previous program — they reference
     // the old state graph and would leak intervals / event listeners.
     this.scriptRunner.reset();
+    // Drop persisted component-local UI state — stale slots from the
+    // previous program could otherwise leak into structurally-similar
+    // components rendered at the same tree position.
+    this.renderer.reset();
+    this.parseErrors = [];
     this.scheduleRender();
   }
 
   /** Append a streaming chunk and re-render. */
   appendChunk(chunk: string): void {
-    if (!chunk) return;
-    this.currentResponse += chunk;
+    // Coerce defensively so callers can forward e.g. `decoder.decode(...)`
+    // results without checking emptiness, and so a stray non-string never
+    // corrupts the buffer with `"undefined"`-style concatenation.
+    if (chunk === null || chunk === undefined) return;
+    const text = typeof chunk === "string" ? chunk : String(chunk);
+    if (text === "") return;
+    this.currentResponse += text;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -235,35 +298,28 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   registerComponents(components: ComponentSpec[], rootName?: string): void {
     this.library = mergeLibraries(this.library, { components, root: rootName });
-    this.renderer = new Renderer({
-      library: this.library,
-      state: this.state,
-      actionRunner: this.actionRunner,
-      scriptRunner: this.scriptRunner,
-    });
+    // Swap the library on the existing renderer so per-instance state slots
+    // (Tabs active pane, Popover open/closed, …) carry over to the next
+    // render. Recreating the renderer would have dropped that state.
+    this.renderer.setLibrary(this.library);
     this.scheduleRender();
   }
 
+  /**
+   * Build a system prompt for the active library. Pass `{ mode: "chat" }`
+   * for the compact chat-focused prompt; omit `mode` (or pass `"full"`)
+   * for the complete prompt.
+   */
   getSystemPrompt(options?: PromptOptions): string {
-    // Default the feature flags to whatever the host has opted into so the
-    // prompt and runtime stay consistent. Spread caller options first, then
-    // resolve each flag with `??` so an explicit `undefined` falls back to
-    // the attribute rather than silently disabling a feature.
-    const merged: PromptOptions = {
-      ...options,
-      enableJavascript: options?.enableJavascript ?? this.enableJavascript,
-      enableRoutes: options?.enableRoutes ?? this.enableRoutes,
-    };
-    return generatePrompt(this.library, merged);
+    return generatePrompt(this.library, options ?? {});
   }
 
-  /** Programmatic navigation API. No-op when `enable-routes` is off. */
+  /** Programmatic navigation API. */
   navigate(path: string): void {
-    if (!this.enableRoutes) return;
     this.router.navigate(path);
   }
 
-  /** Current route path (`/`, `/about`, …). Returns "/" when routing is off. */
+  /** Current route path (`/`, `/about`, …). */
   get route(): string {
     return this.router.getPath();
   }
@@ -273,9 +329,15 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.queries.reset();
     this.scriptRunner.reset();
     this.state.rebind([]);
+    // Drop component-local UI state (Tabs active pane, Popover open flag,
+    // …). Without this, a fresh program would inherit slot values from
+    // the previous program and snap stateful primitives into the wrong
+    // initial UI.
+    this.renderer.reset();
     this.programDirty = true;
     this.parseErrors = [];
     this.errorEl.hidden = true;
+    this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
     // Drop any cached active match — the next render will recompute from
     // the current path against whatever Routes the new program declares.
@@ -292,8 +354,8 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.setResponse(value);
   }
 
-  get tools(): ToolRegistry | null {
-    return null;
+  get tools(): ToolRegistry {
+    return this.queries.getTools();
   }
 
   set tools(value: ToolRegistry | null) {
@@ -301,7 +363,7 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   get streaming(): boolean {
-    return this.getAttribute(ATTRIBUTE_STREAMING) === "true";
+    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_STREAMING));
   }
 
   set streaming(value: boolean) {
@@ -318,54 +380,28 @@ export class StreamingUiScriptElement extends HTMLElement {
     else this.removeAttribute(ATTRIBUTE_SHOW_ERRORS);
   }
 
-  get enableJavascript(): boolean {
-    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_ENABLE_JS));
-  }
-
-  set enableJavascript(value: boolean) {
-    if (value) this.setAttribute(ATTRIBUTE_ENABLE_JS, "true");
-    else this.removeAttribute(ATTRIBUTE_ENABLE_JS);
-  }
-
-  get enableRoutes(): boolean {
-    return parseBooleanAttribute(this.getAttribute(ATTRIBUTE_ENABLE_ROUTES));
-  }
-
-  set enableRoutes(value: boolean) {
-    if (value) this.setAttribute(ATTRIBUTE_ENABLE_ROUTES, "true");
-    else this.removeAttribute(ATTRIBUTE_ENABLE_ROUTES);
-  }
-
   // ----- Internal -----
 
-  private syncScriptRunnerFlags(): void {
-    this.scriptRunner.setEnabled(this.enableJavascript);
+  private buildInlineStyle(): HTMLStyleElement {
+    const style = document.createElement("style");
+    style.textContent = componentStyles;
+    return style;
+  }
+
+  private syncScriptRunnerStreaming(): void {
     this.scriptRunner.setStreaming(this.streaming);
   }
 
   /**
-   * Attach or detach the hash-change listener based on the current value of
-   * the `enable-routes` attribute. Recreates the renderer so component
-   * helpers see the correct `routesEnabled` flag immediately.
+   * Start the router so the hash listener is attached and `$route` is
+   * seeded with the current URL. Idempotent — safe to call from
+   * `connectedCallback`.
    */
-  private syncRouter(): void {
-    const enabled = this.enableRoutes;
-    if (enabled) {
-      this.router.start();
-      // Seed `$route` immediately so the very first render sees the URL
-      // hash (instead of the default "/").
-      this.state.set(STATE_ROUTE, this.router.getPath());
-    } else {
-      this.router.stop();
-    }
-    this.renderer = new Renderer({
-      library: this.library,
-      state: this.state,
-      actionRunner: this.actionRunner,
-      scriptRunner: this.scriptRunner,
-      router: this.router,
-      routesEnabled: enabled,
-    });
+  private startRouter(): void {
+    this.router.start();
+    // Seed `$route` immediately so the very first render sees the URL
+    // hash (instead of the default "/").
+    this.state.set(STATE_ROUTE, this.router.getPath());
   }
 
   /**
@@ -417,16 +453,21 @@ export class StreamingUiScriptElement extends HTMLElement {
       }
     }
 
-    // Each tick replaces the entire subtree, which would otherwise blur the
-    // user's focused field on every keystroke (since text inputs trigger a
-    // re-render via two-way binding). Snapshot the focus + selection before
-    // the swap and restore it on the matching element afterwards so typing
-    // feels native.
-    const focusSnapshot = this.captureFocus();
-    this.syncScriptRunnerFlags();
+    // Each tick we re-evaluate the entire tree, but instead of throwing the
+    // live DOM away (`replaceChildren`) we hand the freshly-rendered tree
+    // to a small reconciler that diffs against the existing DOM. That keeps
+    // form inputs, scroll positions, <details>.open, and any other browser-
+    // owned state stable across renders — typing into one input no longer
+    // resets the active tab three components over. The focus snapshot is
+    // still useful as a defensive backstop for the rare case where a node's
+    // identity actually changes (different tag, replaced subtree).
+    this.syncScriptRunnerStreaming();
     this.scriptRunner.beginCycle();
+    this.renderer.beginRender();
+    const focusSnapshot = this.captureFocus();
     const rendered = this.renderer.render(rootValue);
-    this.rootEl.replaceChildren(rendered);
+    morphChildren(this.rootEl, rendered);
+    this.renderer.endRender();
     this.restoreFocus(focusSnapshot);
     // Run scripts AFTER the DOM is in place so `ctx.query("id")` resolves.
     this.scriptRunner.flush();
@@ -453,6 +494,10 @@ export class StreamingUiScriptElement extends HTMLElement {
     if (!snapshot) return;
     const target = this.rootEl.querySelector<HTMLElement>(`#${cssEscapeId(snapshot.id)}`);
     if (!target || target.tagName !== snapshot.tagName) return;
+    // If the morph reconciler reused the same DOM node, focus and selection
+    // were never lost; skip the work to avoid spurious focus/blur events.
+    const root = this.root as unknown as { activeElement: Element | null };
+    if (root.activeElement === target) return;
     target.focus();
     if (
       (target instanceof HTMLInputElement ||
@@ -460,15 +505,12 @@ export class StreamingUiScriptElement extends HTMLElement {
       snapshot.selectionStart != null &&
       snapshot.selectionEnd != null
     ) {
-      try {
-        target.setSelectionRange(
-          snapshot.selectionStart,
-          snapshot.selectionEnd,
-          snapshot.selectionDirection ?? "none",
-        );
-      } catch {
-        // Some input types (e.g. number, email) reject setSelectionRange.
-      }
+      applySelectionRange(
+        target,
+        snapshot.selectionStart,
+        snapshot.selectionEnd,
+        snapshot.selectionDirection ?? "none",
+      );
     }
   }
 
@@ -481,13 +523,8 @@ export class StreamingUiScriptElement extends HTMLElement {
     planProgram(program, this.context);
 
     // Seed `$route` so user expressions like `$route == "/about"` resolve
-    // even before the first hashchange fires. We never overwrite a
-    // user-declared `$route` default — `set` only writes if the new value
-    // differs from what's stored, and `state.has("route")` is preserved by
-    // the planner's first pass.
-    if (this.enableRoutes) {
-      this.state.set(STATE_ROUTE, this.router.getPath());
-    }
+    // even before the first hashchange fires.
+    this.state.set(STATE_ROUTE, this.router.getPath());
 
     this.parseErrors = program.errors.map(
       (e) => `Line ${e.line}: ${e.message}`,
@@ -506,7 +543,7 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   private updateErrorBanner(): void {
-    // The banner is opt-in via the `showerrors` attribute. While the response
+    // The banner is additional attributes via the `showerrors` attribute. While the response
     // is still streaming, the in-flight last line is almost always mid-token
     // and will fail to parse, so we also suppress the banner during streaming
     // even when errors are explicitly enabled. Errors are still dispatched via
@@ -551,6 +588,55 @@ function cssEscapeId(id: string): string {
     return CSS.escape(id);
   }
   return id.replace(/([^A-Za-z0-9_-])/g, "\\$1");
+}
+
+/**
+ * Input types that do not support `setSelectionRange` per the WHATWG spec
+ * — calling it throws `InvalidStateError`. We round-trip through
+ * `type="text"` so we can still restore the caret, then flip the type back.
+ * This is the same workaround major frameworks (and morphdom) use.
+ */
+const SELECTION_UNSUPPORTED_TYPES = new Set([
+  "email",
+  "number",
+  "tel",
+  "url",
+  "date",
+  "datetime-local",
+  "month",
+  "week",
+  "time",
+  "color",
+]);
+
+function applySelectionRange(
+  target: HTMLInputElement | HTMLTextAreaElement,
+  start: number,
+  end: number,
+  direction: "forward" | "backward" | "none",
+): void {
+  if (target instanceof HTMLInputElement && SELECTION_UNSUPPORTED_TYPES.has(target.type)) {
+    const previousType = target.type;
+    try {
+      // Flip to `text` so the platform honours setSelectionRange, then
+      // restore the declared type. This preserves both caret position and
+      // type-specific validation / UI on the element.
+      target.type = "text";
+      target.setSelectionRange(start, end, direction);
+    } catch {
+      // Last-resort: at least keep focus; modern browsers will park the
+      // caret at the end of the field on focus().
+    } finally {
+      target.type = previousType;
+    }
+    return;
+  }
+  try {
+    target.setSelectionRange(start, end, direction);
+  } catch {
+    // Defensive: some headless DOM implementations throw even for text
+    // inputs in edge cases. Focus alone is good enough.
+  }
 }
 
 /**

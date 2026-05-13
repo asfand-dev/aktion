@@ -8,6 +8,7 @@ import type { ActionPayload, ActionStep } from "./builtins.js";
 import type { EvaluationContext } from "./evaluator.js";
 import type { Router } from "./router.js";
 import type { ScriptRunner } from "./scripts.js";
+import { sanitiseHref } from "../library/utils.js";
 
 export interface ActionRunnerOptions {
   getContext: () => EvaluationContext;
@@ -15,9 +16,9 @@ export interface ActionRunnerOptions {
   onAssistantMessage?: (message: string) => void;
   /** Override how URLs are opened (defaults to window.open). */
   onOpenUrl?: (url: string) => void;
-  /** Optional router used to handle `@Navigate("...")` steps. */
+  /** Router used to handle `@Navigate("...")` steps. */
   router?: Router;
-  /** Optional bridge for `@Js("...")` steps (when JS interactions are on). */
+  /** Bridge for `@Js("...")` steps. */
   scriptRunner?: ScriptRunner;
 }
 
@@ -52,21 +53,25 @@ export class ActionRunner {
         this.options.onAssistantMessage?.(step.message);
         return;
       case "OpenUrl": {
+        // Sanitise so a hostile `javascript:` URL emitted by an LLM/tool
+        // response cannot execute when the user clicks a button. A consumer
+        // who overrides `onOpenUrl` still receives the sanitised value; the
+        // unsafe placeholder (`#`) is harmless to pass through.
+        const safeUrl = sanitiseHref(step.url, "#");
         const opener = this.options.onOpenUrl;
-        if (opener) opener(step.url);
-        else if (typeof window !== "undefined") window.open(step.url, "_blank", "noopener");
+        if (opener) opener(safeUrl);
+        else if (safeUrl !== "#" && typeof window !== "undefined") {
+          // `noreferrer` rounds out `noopener` so the destination cannot
+          // read the opener's `document.referrer`.
+          window.open(safeUrl, "_blank", "noopener,noreferrer");
+        }
         return;
       }
       case "Navigate": {
-        // Routes still render correctly even when the router is disabled
-        // because evaluation falls back to the first declared Route — so we
-        // only call `navigate` when the router is actually attached.
         this.options.router?.navigate(step.path);
         return;
       }
       case "Js": {
-        // No-op when scripts are disabled — the action keeps flowing through
-        // other steps so a single button can still @Run mutations, etc.
         this.options.scriptRunner?.runInline(step.code, step.args);
         return;
       }

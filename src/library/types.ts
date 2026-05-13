@@ -36,6 +36,17 @@ export interface ComponentSpec {
   render: ComponentRenderFn;
 }
 
+/**
+ * Stable, component-local state slot. Returned by
+ * `RenderHelpers.useInstanceState`. Keep the reference for the lifetime of
+ * a single render — the renderer wires it to a long-lived storage cell so
+ * subsequent renders read the value the previous click handler wrote.
+ */
+export interface InstanceStateSlot<T> {
+  get(): T;
+  set(value: T): void;
+}
+
 export interface RenderHelpers {
   /** Render a child node tree (a ComponentNode or array of nodes). */
   renderNode: (node: unknown) => Node;
@@ -51,24 +62,39 @@ export interface RenderHelpers {
    * Register a JavaScript script declared via `Script("id", "body", deps?)`.
    * The runner reconciles registrations after each render — new scripts run,
    * changed scripts re-run with cleanup, removed scripts dispose.
-   *
-   * No-op when the host element has `enable-javascript="false"` (the default).
    */
   registerScript: (declaration: {
     id: string;
     body: string;
     deps?: ReadonlyArray<string>;
   }) => void;
-  /** True when the host element has opted in to JavaScript interactions. */
-  javascriptEnabled: boolean;
   /**
-   * Hash-based router instance, or `null` when routing isn't enabled on the
-   * host. `NavLink(...)` uses this to navigate; `Routes(...)` consults it
-   * via the evaluator before rendering.
+   * Persist component-local state across re-renders. The slot is keyed by
+   * the component's position in the tree (its source location plus its
+   * path through `@Each` siblings), so independent instances never share
+   * a value. Used by stateful primitives like `Tabs` so user-driven UI
+   * state (active tab, expanded row, …) survives a re-render triggered by
+   * unrelated state changes.
    */
-  router: Router | null;
-  /** True when the host has `enable-routes="true"`. */
-  routesEnabled: boolean;
+  useInstanceState: <T>(key: string, initialValue: T) => InstanceStateSlot<T>;
+  /**
+   * Register a cleanup callback tied to this component instance. The renderer
+   * invokes the callback once the instance disappears from the tree (e.g. a
+   * Toast finishes auto-dismissing or the parent re-renders without it).
+   * Use for `setTimeout` / `setInterval` handles and external resources so we
+   * never accumulate work for components the user can no longer see.
+   *
+   * Calling this multiple times during a single render replaces any previous
+   * disposer for the same `key` (cancelling the prior cleanup runs immediately
+   * via that callback's caller). If `key` is omitted, each call registers an
+   * independent disposer.
+   */
+  registerDisposer: (cleanup: () => void, key?: string) => void;
+  /**
+   * Hash-based router instance, always provided. `NavLink(...)` uses this to
+   * navigate; `Routes(...)` consults it via the evaluator before rendering.
+   */
+  router: Router;
 }
 
 export type ComponentRenderFn = (

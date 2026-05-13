@@ -14,11 +14,10 @@
  * changes (browser back/forward, direct URL edits) are picked up by the
  * `hashchange` listener.
  *
- * When the host element's `enable-routes` attribute is `false` (the default),
- * the router still exists but stays in "memory" mode: `navigate(...)` records
- * the new path internally without touching the URL, and the `hashchange`
- * listener is never attached. This keeps the rendering path uniform and lets
- * a host page enable routing dynamically at runtime.
+ * The router is always started by the host element when it connects so that
+ * navigation works out of the box. In environments without a `window`
+ * (server-side rendering, tests) the router stays in "memory" mode:
+ * `navigate(...)` records the new path internally without touching the URL.
  */
 
 export type RouteParams = Record<string, string>;
@@ -176,11 +175,6 @@ export class Router {
       window.removeEventListener("hashchange", this.hashListener);
     }
     this.hashListener = null;
-  }
-
-  /** True once `start()` has run. */
-  isEnabled(): boolean {
-    return this.enabled;
   }
 
   getPath(): string {

@@ -11,6 +11,7 @@ import {
   applyTheme,
   lightTheme,
 } from "../src/theme/index.js";
+import { componentStyles } from "../src/theme/styles.js";
 
 describe("resolveTheme", () => {
   it("returns the light theme for null/undefined/missing input", () => {
@@ -105,5 +106,38 @@ describe("applyTheme", () => {
     const host = document.createElement("div");
     applyTheme(host, builtInThemes.light);
     expect(host.getAttribute("data-rui-theme")).toBe("custom");
+  });
+});
+
+/**
+ * The theme stylesheet is loaded through `adoptedStyleSheets`, which the
+ * CSSOM spec cascades AFTER stylesheets injected via `<link>`. That means
+ * any same-specificity declaration in here will win a tie-break against
+ * Font Awesome's `.fa-solid` / `.fa-regular` font-family rule and silently
+ * break every element that mashes FA classes onto a styled host.
+ *
+ * The visible symptom (regression caught in production) was the `Rating`
+ * stars rendering as horizontal stripes / boxes — the `::before` glyph
+ * inherited the wrong font and the browser drew the missing-glyph fallback.
+ *
+ * These guards make sure we never silently reintroduce the same bug for
+ * any of the components that mix FA classes with their own class.
+ */
+describe("componentStyles font-family safety", () => {
+  /**
+   * Extract the body of a CSS rule `selector { … }` from the inline
+   * stylesheet. Returns the empty string when the selector is not found so
+   * negative assertions are easy to express.
+   */
+  const ruleBody = (selector: string): string => {
+    const idx = componentStyles.indexOf(`${selector} {`);
+    if (idx === -1) return "";
+    const start = componentStyles.indexOf("{", idx);
+    const end = componentStyles.indexOf("}", start);
+    return start === -1 || end === -1 ? "" : componentStyles.slice(start + 1, end);
+  };
+
+  it("does not declare font-family on .rui-rating-star (FA needs to win the cascade)", () => {
+    expect(ruleBody(".rui-rating-star")).not.toMatch(/font-family\s*:/);
   });
 });

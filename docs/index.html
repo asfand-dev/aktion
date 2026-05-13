@@ -3,14 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <title>streaming-ui-script · Generative UI for any framework</title>
+  <meta name="description" content="A single web component that renders LLM-generated UI from a compact streaming language. Drop-in install, framework-agnostic, theme-aware, batteries included." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
+<body data-page="introduction">
   <div class="layout">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
+      <p>Web component runtime</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -23,89 +35,79 @@
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Render LLM-generated UI in any framework</h1>
-      <p>
-        <code>&lt;streaming-ui-script&gt;</code> is a single web component that turns
-        Streaming UI Script text into a rich, interactive UI inside its shadow
-        DOM. It works with any framework — React, Vue, Angular, Svelte, or plain
-        HTML — and ships as a single JavaScript file plus an auto-generated
-        system prompt.
-      </p>
+      <header class="hero">
+        <span class="hero-eyebrow">v0.5 · Generative UI</span>
+        <h1>Render LLM-generated UI in any framework.</h1>
+        <p class="lead">
+          <code>&lt;streaming-ui-script&gt;</code> is a single web component that
+          turns a compact, streaming-first language into a rich, interactive UI
+          inside its shadow DOM. Works with React, Vue, Angular, Svelte, plain
+          HTML — or no framework at all.
+        </p>
+        <div class="hero-cta">
+          <a class="btn" href="get-started.html">Get started →</a>
+          <a class="btn btn-ghost" href="live-examples.html">Browse live demos</a>
+        </div>
+      </header>
 
-      <div class="cta">
-        <h2>Drop-in CDN install</h2>
-        <p>One script tag and you're rendering generative UI from your LLM.</p>
-        <pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;
+      <h2 id="install">Drop-in CDN install</h2>
+      <p>One script tag and one custom element — that's the whole integration.</p>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;
 &lt;streaming-ui-script theme="light"&gt;&lt;/streaming-ui-script&gt;
 &lt;script&gt;
   const el = document.querySelector("streaming-ui-script");
   el.setResponse(`root = Stack([greeting])
 greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 &lt;/script&gt;</code></pre>
-      </div>
 
+      <h2 id="features">Why streaming-ui-script?</h2>
       <div class="feature-grid">
         <div class="feature">
           <h3>Framework-agnostic</h3>
           <p>Built on the standard Custom Elements API — works wherever HTML works.</p>
         </div>
         <div class="feature">
-          <h3>Streaming UI Script</h3>
-          <p>Parser, evaluator, reactive state, queries, mutations, and built-in functions.</p>
+          <h3>Streaming-first language</h3>
+          <p>Parser, evaluator, reactive state, queries, mutations, and 20+ built-ins.</p>
         </div>
         <div class="feature">
-          <h3>Streaming-first</h3>
-          <p>Use <code>appendChunk()</code> to feed LLM tokens as they arrive.</p>
+          <h3>Stream tokens live</h3>
+          <p>Use <code>appendChunk()</code> to feed LLM tokens as they arrive — the UI renders progressively.</p>
         </div>
         <div class="feature">
-          <h3>Theming</h3>
-          <p>Switch themes via the <code>theme</code> attribute or pass a JSON token map.</p>
+          <h3>Seven themes built in</h3>
+          <p>Switch via the <code>theme</code> attribute or pass a custom JSON token map.</p>
         </div>
         <div class="feature">
           <h3>System prompt included</h3>
-          <p>Use the auto-generated <code>system_prompt.txt</code> or call <code>getSystemPrompt()</code>.</p>
+          <p>Auto-generated <code>system_prompt.txt</code> stays in lock-step with the bundled component library.</p>
         </div>
         <div class="feature">
           <h3>Extensible</h3>
-          <p>Register your own components via <code>registerComponents([...])</code>.</p>
+          <p>Register your own components via <code>registerComponents([...])</code> — they show up in the prompt automatically.</p>
         </div>
         <div class="feature">
           <h3>JavaScript interactions</h3>
-          <p>
-            Opt in with <code>enable-javascript</code> to let the LLM author
-            <code>Script(...)</code> + <code>@Js(...)</code> effects —
-            <a href="javascript-interactions.html">React-style hooks for
-            generative UI</a>.
-          </p>
+          <p>Built-in <code>Script(...)</code> + <code>@Js(...)</code> surfaces for React-style hooks — always on, no extra flags.</p>
+        </div>
+        <div class="feature">
+          <h3>Multi-page routing</h3>
+          <p>Hash-based <code>Routes</code>, <code>NavLink</code>, and <code>@Navigate</code> ship with every renderer.</p>
         </div>
       </div>
 
-      <h2>Live demo</h2>
+      <h2 id="live-demo">Live demo</h2>
       <p>
-        The component below was rendered from a few lines of Streaming UI Script. Use the theme picker to swap palettes — the preview updates
-        instantly.
+        The component below was rendered from a few lines of Streaming UI Script.
+        Use the theme picker to swap palettes — the preview updates instantly.
       </p>
 
-      <div class="theme-picker" style="margin-bottom:12px">
+      <div class="theme-picker" style="margin-bottom:14px;">
         <label for="theme-picker">Theme</label>
         <select id="theme-picker">
           <option value="light">Light</option>
@@ -120,11 +122,11 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
 
       <div class="example">
         <div class="example-header">
-          <h3>Welcome card with chart</h3>
-        </div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+          <h3>Welcome card with KPIs & chart</h3>
+          <div class="example-tabs" role="tablist">
+            <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+            <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+          </div>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
@@ -157,23 +159,57 @@ follow = FollowUpBlock([
         </div>
       </div>
 
-      <h2>Where to next?</h2>
-      <ul>
-        <li><a href="get-started.html">Get started</a> — the 30-second integration guide.</li>
-        <li><a href="frameworks.html">Framework integration</a> — drop-in setup for React, Next.js, Vue, Angular, Svelte, and more.</li>
-        <li><a href="language.html">Language reference</a> — full Streaming UI Script syntax.</li>
-        <li><a href="components.html">Component reference</a> — every built-in component and its props.</li>
-        <li><a href="examples.html">Examples</a> — copy-paste recipes for forms, dashboards, and chat.</li>
-        <li><a href="playground.html">Playground</a> — try the language live in your browser.</li>
-        <li><a href="support-agent.html">Support agent demo</a> — an AI triage workspace driven by async tools.</li>
-        <li><a href="analytics-assistant.html">Analytics assistant demo</a> — natural-language questions to live charts.</li>
-        <li><a href="project-dashboard.html">Project dashboard</a>, <a href="marketing-landing.html">marketing landing</a>, <a href="team-directory.html">team directory</a>, and <a href="settings-app.html">settings app</a> — full feature pages built from the new <code>Hero</code>, <code>PageHeader</code>, <code>MetricGrid</code>, <code>KanbanBoard</code>, <code>Timeline</code>, and <code>Sheet</code> pattern composites.</li>
-        <li><a href="javascript-interactions.html">JavaScript interactions</a> — opt-in <code>Script()</code> &amp; <code>@Js()</code> for behaviours the declarative components don't cover.</li>
-        <li><a href="javascript-todo-app.html">Todo app demo</a>, <a href="javascript-pomodoro.html">pomodoro</a>, <a href="javascript-stopwatch.html">stopwatch</a> — full small apps built on the JS interaction surface.</li>
-        <li><a href="routing.html">Routing</a> &amp; <a href="routing-demo.html">live demo</a> — opt-in hash-based multi-page UIs via <code>Routes</code>, <code>NavLink</code>, and <code>@Navigate</code>.</li>
-      </ul>
+      <h2 id="next">Where to next?</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="get-started.html">
+          <span class="demo-tag">Setup</span>
+          <h3>Get started</h3>
+          <p>The 30-second integration guide — load the bundle, mount the tag, stream a response.</p>
+          <span class="demo-arrow">Read the guide →</span>
+        </a>
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Frameworks</span>
+          <h3>Framework integration</h3>
+          <p>Drop-in setup for React, Next.js, Vue, Angular, Svelte, and plain HTML.</p>
+          <span class="demo-arrow">See recipes →</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Language</span>
+          <h3>Language reference</h3>
+          <p>Full syntax for Streaming UI Script — statements, expressions, state, built-ins.</p>
+          <span class="demo-arrow">View reference →</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Library</span>
+          <h3>Component reference</h3>
+          <p>Every built-in component, prop, and enum the LLM can reach for.</p>
+          <span class="demo-arrow">Browse library →</span>
+        </a>
+        <a class="demo-card" href="javascript-interactions.html">
+          <h3>JavaScript interactions</h3>
+          <p><code>Script(...)</code> + <code>@Js(...)</code> for effects the declarative components don't cover.</p>
+          <span class="demo-arrow">Learn more →</span>
+        </a>
+        <a class="demo-card" href="routing.html">
+          <h3>Routing</h3>
+          <p>Hash-based multi-page UIs via <code>Routes</code>, <code>NavLink</code>, and <code>@Navigate</code>.</p>
+          <span class="demo-arrow">Read the guide →</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Edit Streaming UI Script live — the preview re-renders on every keystroke.</p>
+          <span class="demo-arrow">Open playground →</span>
+        </a>
+        <a class="demo-card" href="live-examples.html">
+          <span class="demo-tag">Showcase</span>
+          <h3>Live examples</h3>
+          <p>Chat, dashboards, commerce, routing, JavaScript apps — every demo, with source.</p>
+          <span class="demo-arrow">Browse demos →</span>
+        </a>
+      </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
 </body>
 </html>

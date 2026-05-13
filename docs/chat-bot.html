@@ -6,6 +6,8 @@
   <title>Chat bot · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
   <link rel="stylesheet" href="assets/chat-bot.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body>
   <!-- Setup screen: ask for OpenRouter API key + model. -->
@@ -81,14 +83,13 @@
             <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
           </select>
         </span>
-        <label class="pill toggle-pill" for="chat-enable-js" title="Allow the LLM to emit Script() and @Js() with the rendered UI">
-          <input id="chat-enable-js" type="checkbox" />
-          <span>Enable JavaScript</span>
-        </label>
-        <label class="pill toggle-pill" for="chat-enable-routes" title="Allow the LLM to author Routes() / NavLink() and update the URL hash">
-          <input id="chat-enable-routes" type="checkbox" />
-          <span>Enable Routes</span>
-        </label>
+        <span class="pill">
+          Prompt ·
+          <select id="chat-prompt-mode" title="Pick the system prompt flavour sent to the model">
+            <option value="chat">chat (compact)</option>
+            <option value="full">full (everything)</option>
+          </select>
+        </span>
         <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
       </div>
     </header>
@@ -115,59 +116,47 @@
       apiKey: "streaming-ui-script.chat.openrouter-key",
       model: "streaming-ui-script.chat.openrouter-model",
       theme: "streaming-ui-script.chat.theme",
-      enableJs: "streaming-ui-script.chat.enable-javascript",
-      enableRoutes: "streaming-ui-script.chat.enable-routes",
+      promptMode: "streaming-ui-script.chat.prompt-mode",
     };
     const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
     const MAX_HISTORY_TURNS = 5;
+    const PROMPT_MODES = new Set(["chat", "full"]);
 
     /* -------- Settings -------- */
     const settings = {
       get apiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) ?? ""; },
       get model() { return localStorage.getItem(STORAGE_KEYS.model) ?? ""; },
       get theme() { return localStorage.getItem(STORAGE_KEYS.theme) ?? "light"; },
-      get enableJavascript() {
-        // Default the toggle to ON so first-time visitors see the JS-driven
-        // demos out of the box; users can flip it off via the topbar toggle.
-        const raw = localStorage.getItem(STORAGE_KEYS.enableJs);
-        if (raw === null) return true;
-        return raw === "true";
-      },
-      get enableRoutes() {
-        // Routing is opt-in: stays off until the user toggles it on.
-        return localStorage.getItem(STORAGE_KEYS.enableRoutes) === "true";
+      get promptMode() {
+        // Default to the compact chat prompt — most chat replies don't need
+        // the full design system catalog and the smaller prompt streams faster.
+        const raw = localStorage.getItem(STORAGE_KEYS.promptMode);
+        return PROMPT_MODES.has(raw) ? raw : "chat";
       },
       save(apiKey, model, theme) {
         localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
         if (model) localStorage.setItem(STORAGE_KEYS.model, model);
         if (theme) localStorage.setItem(STORAGE_KEYS.theme, theme);
       },
-      setEnableJavascript(value) {
-        localStorage.setItem(STORAGE_KEYS.enableJs, value ? "true" : "false");
-      },
-      setEnableRoutes(value) {
-        localStorage.setItem(STORAGE_KEYS.enableRoutes, value ? "true" : "false");
+      setPromptMode(mode) {
+        const value = PROMPT_MODES.has(mode) ? mode : "chat";
+        localStorage.setItem(STORAGE_KEYS.promptMode, value);
       },
       clear() {
         localStorage.removeItem(STORAGE_KEYS.apiKey);
         localStorage.removeItem(STORAGE_KEYS.model);
         localStorage.removeItem(STORAGE_KEYS.theme);
-        localStorage.removeItem(STORAGE_KEYS.enableJs);
-        localStorage.removeItem(STORAGE_KEYS.enableRoutes);
+        localStorage.removeItem(STORAGE_KEYS.promptMode);
       },
     };
 
     /* -------- System prompt -------- */
-    // The proxy element has no attributes by default, so `getSystemPrompt()`
-    // would otherwise default `enableJavascript` to `false` here regardless of
-    // what we set on the actual renderer. Pass the flag explicitly so the
-    // generated prompt mirrors the renderer's runtime configuration.
+    // JavaScript interactions and routing are always available on the
+    // renderer; the only thing we vary here is which flavour of prompt the
+    // LLM sees — the compact chat prompt or the full prompt.
     function buildSystemPrompt() {
       const proxy = document.createElement("streaming-ui-script");
-      return proxy.getSystemPrompt({
-        enableJavascript: settings.enableJavascript,
-        enableRoutes: settings.enableRoutes,
-      });
+      return proxy.getSystemPrompt({ mode: settings.promptMode });
     }
 
     /* -------- OpenRouter streaming -------- */
@@ -233,8 +222,7 @@
       setupErr: document.getElementById("setup-error"),
       themeSelect: document.getElementById("chat-theme-select"),
       modelSelect: document.getElementById("chat-model-select"),
-      enableJsToggle: document.getElementById("chat-enable-js"),
-      enableRoutesToggle: document.getElementById("chat-enable-routes"),
+      promptModeSelect: document.getElementById("chat-prompt-mode"),
       resetBtn: document.getElementById("reset-btn"),
       history: document.getElementById("chat-history"),
       composer: document.getElementById("composer"),
@@ -269,8 +257,7 @@
       }
       
       els.themeSelect.value = settings.theme || "light";
-      els.enableJsToggle.checked = settings.enableJavascript;
-      els.enableRoutesToggle.checked = settings.enableRoutes;
+      els.promptModeSelect.value = settings.promptMode;
       els.input.focus();
     }
 
@@ -301,12 +288,6 @@
 
       const renderer = document.createElement("streaming-ui-script");
       renderer.setAttribute("transparent", "true");
-      if (settings.enableJavascript) {
-        renderer.setAttribute("enable-javascript", "true");
-      }
-      if (settings.enableRoutes) {
-        renderer.setAttribute("enable-routes", "true");
-      }
       renderer.setAttribute("theme", settings.theme || "light");
 
       const typing = document.createElement("div");
@@ -439,27 +420,10 @@
       settings.save(settings.apiKey, newModel, settings.theme);
     });
 
-    // Enable JavaScript toggle: persist, rebuild the system prompt so future
-    // turns reflect the new mode, and flip the attribute on every renderer
-    // that's already on the page so live demos honour the change immediately.
-    els.enableJsToggle.addEventListener("change", (e) => {
-      const enabled = !!e.target.checked;
-      settings.setEnableJavascript(enabled);
+    // Prompt-mode toggle: rebuild the system prompt for subsequent turns.
+    els.promptModeSelect.addEventListener("change", (e) => {
+      settings.setPromptMode(e.target.value);
       systemPrompt = buildSystemPrompt();
-      document.querySelectorAll("streaming-ui-script").forEach((renderer) => {
-        if (enabled) renderer.setAttribute("enable-javascript", "true");
-        else renderer.removeAttribute("enable-javascript");
-      });
-    });
-
-    els.enableRoutesToggle.addEventListener("change", (e) => {
-      const enabled = !!e.target.checked;
-      settings.setEnableRoutes(enabled);
-      systemPrompt = buildSystemPrompt();
-      document.querySelectorAll("streaming-ui-script").forEach((renderer) => {
-        if (enabled) renderer.setAttribute("enable-routes", "true");
-        else renderer.removeAttribute("enable-routes");
-      });
     });
 
     els.setupForm.addEventListener("submit", (event) => {

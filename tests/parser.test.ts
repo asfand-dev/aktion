@@ -94,4 +94,58 @@ describe("parser", () => {
     if (body?.kind !== "Literal") throw new Error("expected Literal");
     expect(body.value).toBe("a\nb\tc");
   });
+
+  it("strips `#` line comments on their own line", () => {
+    const program = parse(`# header for the next block\nroot = Card([])`);
+    expect(program.errors).toEqual([]);
+    expect(program.statements).toHaveLength(1);
+    expect(program.statements[0]).toMatchObject({
+      identifier: "root",
+      expression: { kind: "Call", callee: "Card" },
+    });
+  });
+
+  it("strips trailing `#` line comments after a statement", () => {
+    const program = parse(`root = Card([]) # the top level card\nname = "Alex"`);
+    expect(program.errors).toEqual([]);
+    const ids = program.statements.map((s) => s.identifier);
+    expect(ids).toEqual(["root", "name"]);
+  });
+
+  it("keeps `#` inside string literals untouched", () => {
+    const program = parse(`hex = "#ff00aa # not a comment"`);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    expect(expr).toMatchObject({ kind: "Literal", value: "#ff00aa # not a comment" });
+  });
+
+  it("parses subtraction without whitespace as Binary `-`", () => {
+    // Regression: the lexer used to greedily consume the `-` into the
+    // following number whenever the previous character was anything,
+    // turning `$x-1` into `[$x, Number(-1)]` (which then failed to parse
+    // as a valid expression).
+    const program = parse(`val = $x-1`);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    expect(expr).toMatchObject({
+      kind: "Binary",
+      operator: "-",
+      left: { kind: "StateRef", name: "x" },
+      right: { kind: "Literal", value: 1 },
+    });
+  });
+
+  it("rejects multi-dot numbers gracefully (1.2.3 -> 1.2 then `.3` member)", () => {
+    const program = parse(`val = 1.2`);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    expect(expr).toMatchObject({ kind: "Literal", value: 1.2 });
+  });
+
+  it("still treats a parenthesised negative literal as a signed number", () => {
+    const program = parse(`val = (-3)`);
+    expect(program.errors).toEqual([]);
+    const expr = program.statements[0]?.expression;
+    expect(expr).toMatchObject({ kind: "Literal", value: -3 });
+  });
 });

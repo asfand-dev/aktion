@@ -4,9 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <meta name="description" content="Copy-paste recipes for forms, dashboards, chats, e-commerce, and every common UI pattern." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
+<body data-page="examples">
   <div class="layout">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
@@ -23,127 +35,40 @@
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Examples</h1>
-      <p>
-        Each example below renders Streaming UI Script inline. Switch to the
-        source tab to see the exact text the component receives. Use the theme
-        picker to test contrast.
-      </p>
+      <header class="hero">
+        <span class="hero-eyebrow">Recipes</span>
+        <h1>Examples.</h1>
+        <p class="lead">
+          Inline examples that render Streaming UI Script live. Switch to the
+          source tab to see the exact text the renderer receives, and use the
+          theme picker to test contrast.
+        </p>
+      </header>
 
       <p>
         Need to wire up <em>behaviour</em> (timers, fetch, focus, animations,
         clipboard) inside an assistant response? See the dedicated
         <a href="javascript-interactions.html">JavaScript interactions</a>
-        page — once you opt in with <code>enable-javascript="true"</code>,
-        the LLM can author <code>Script(...)</code> and <code>@Js(...)</code>
-        for anything the declarative components don't cover.
+        page — the LLM can always author <code>Script(...)</code> and
+        <code>@Js(...)</code> for anything the declarative components don't
+        cover.
       </p>
 
-      <h2 style="margin-top:28px">Live demos</h2>
-      <p>
-        End-to-end demos that open in their own page — no docs chrome, just the
-        component, real wiring, and editable source. They cover the most common
-        patterns: talking to an LLM, exposing tools, pulling in external data, and
-        rendering full real-world workspaces.
-      </p>
-      <div class="demo-grid">
-        <a class="demo-card" href="chat-bot.html">
-          <span class="demo-tag">Streaming</span>
-          <h3>Chat bot</h3>
-          <p>OpenAI-powered chat that streams replies straight into the renderer. Bring your own API key.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="tools-example.html">
-          <span class="demo-tag">Tools</span>
-          <h3>Tools integration</h3>
-          <p>Read, write, and poll patterns wired to in-page <code>setTools()</code> handlers.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="external-data-example.html">
-          <span class="demo-tag">Public API</span>
-          <h3>External data</h3>
-          <p>Live GitHub repository explorer powered by a single tool function.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="support-agent.html">
-          <span class="demo-tag">Async tools</span>
-          <h3>Support agent</h3>
-          <p>An AI triage workspace: pick a ticket, the agent suggests priority, routing, and a draft reply.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="analytics-assistant.html">
-          <span class="demo-tag">NL → chart</span>
-          <h3>Analytics assistant</h3>
-          <p>Type a question about revenue, signups, or churn — the same component renders the right chart, KPIs, and breakdown.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="javascript-todo-app.html">
-          <span class="demo-tag">JS · Script + tools</span>
-          <h3>Todo app (localStorage)</h3>
-          <p>A full reactive todo list with filters, keyboard shortcut, and localStorage persistence — wired via <code>Query</code>, <code>Mutation</code>, and a single <code>Script</code>.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="javascript-pomodoro.html">
-          <span class="demo-tag">JS · timers + audio</span>
-          <h3>Pomodoro timer</h3>
-          <p>Phases, audio chime, and optional notifications. The script owns the countdown; the host owns the policy.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="javascript-stopwatch.html">
-          <span class="demo-tag">JS · rAF + cleanup</span>
-          <h3>Stopwatch + laps</h3>
-          <p>Sub-second precision via <code>requestAnimationFrame</code>, lap splits, and proper teardown when the timer pauses.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="routing-demo.html">
-          <span class="demo-tag">Routing · hash-based</span>
-          <h3>Multi-page routing</h3>
-          <p>A four-page app driven by <code>Routes</code> + <code>NavLink</code> + <code>@Navigate</code>. Deep links, browser back/forward, and <code>$route</code> reactivity.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="project-dashboard.html">
-          <span class="demo-tag">Patterns · dashboard</span>
-          <h3>Project dashboard</h3>
-          <p>A full engineering program dashboard: banner, <code>PageHeader</code>, KPI strip, kanban board, activity timeline — every section is one pattern.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="marketing-landing.html">
-          <span class="demo-tag">Patterns · landing</span>
-          <h3>Marketing landing</h3>
-          <p>Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ, and a closing banner — generated from one program.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="team-directory.html">
-          <span class="demo-tag">Patterns · directory</span>
-          <h3>Team directory</h3>
-          <p>Profile cards, avatar groups, search-with-pagination, an empty state, and a slide-in <code>Sheet</code> for full member detail.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
-        <a class="demo-card" href="settings-app.html">
-          <span class="demo-tag">Patterns · settings</span>
-          <h3>Settings app</h3>
-          <p>Tabs, <code>Switch</code>, <code>ToggleGroup</code>, <code>Progress</code>, <code>Kbd</code>, and a danger-zone confirmation <code>Sheet</code>.</p>
-          <span class="demo-arrow">Open demo →</span>
-        </a>
+      <div class="callout" style="margin-top:24px">
+        <h4>Looking for end-to-end demos?</h4>
+        <p>
+          Every standalone live demo — chat bots, tools, routing, rich
+          patterns, commerce, inbox, CRM, pricing — now lives in one
+          searchable catalog.
+        </p>
+        <p>
+          <a href="live-examples.html"><strong>Browse the live examples →</strong></a>
+        </p>
       </div>
 
       <h2>Inline examples</h2>
@@ -260,22 +185,34 @@ root = Stack([form, status])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([header, kpis, charts, items])
-header = Header("Q3 performance", "Updated nightly")
-kpis = Stack([
-  StatCard("Revenue", "$48,230", "up", "+12% vs Q2"),
-  StatCard("Active users", "12,540", "up", "+8% vs Q2"),
-  StatCard("Churn", "2.1%", "down", "-0.4 pp")
-], "row", "m", "stretch", "start", true)
-charts = Stack([
-  Card([CardHeader("Daily traffic"), LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])]),
-  Card([CardHeader("Plan mix"), PieChart(["Free","Pro","Team"], [240, 95, 32])])
-], "row", "m", "stretch", "start", true)
-items = Card([CardHeader("Top accounts"), Table([
+<pre><code class="example-source">$range = "q3"
+header = PageHeader("Q3 performance", "Updated nightly · all amounts in USD",
+  ["Workspace", "Analytics", "Q3"],
+  [Button("Export", Action([@ToAssistant("Export Q3 performance as PDF")]), "secondary"),
+   Button("Schedule digest", Action([@ToAssistant("Schedule a weekly digest")]), "primary")],
+  Badge("Live", "success"))
+toolbar = Toolbar([
+  FormControl("Range", Select("range", [SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")], null, null, $range))
+], [StatusDot("Streaming", "success", true)])
+kpis = MetricGrid([
+  StatCard("Revenue",     "$48,230", "up",   "+12% vs Q2", "sack-dollar"),
+  StatCard("Active users","12,540",  "up",   "+8% vs Q2",  "users"),
+  StatCard("Churn",       "2.1%",    "down", "-0.4 pp",    "arrow-trend-down"),
+  StatCard("NPS",         "62",      "flat", "+1",         "star")
+])
+trafficCard = Card([SectionHeader("Daily traffic", "Visits vs signups", null, Tag("On track", null, "sm", "success")),
+  LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])])
+mixCard = Card([SectionHeader("Plan mix", "Active subscribers by tier", null, null),
+  PieChart(["Free","Pro","Team"], [240, 95, 32])])
+charts = Grid([trafficCard, mixCard], 2, "l")
+topAccounts = Card([SectionHeader("Top accounts", "Largest MRR contributors", null, null,
+  [Button("View all", Action([@ToAssistant("Open the accounts list")]), "ghost", "button", "small")]), Table([
   Col("Account", ["Acme","Globex","Initech"]),
   Col("MRR", [4200, 2400, 1850], "currency"),
   Col("Plan", [Tag("Team",null,"sm","primary"), Tag("Pro",null,"sm","success"), Tag("Free",null,"sm","neutral")])
-])])</code></pre>
+])])
+follow = FollowUpBlock(["Drill into churn", "Compare to last quarter", "Open billing"])
+root = Stack([header, toolbar, kpis, charts, topAccounts, follow], "column", "l")</code></pre>
         </div>
       </div>
 
@@ -327,6 +264,680 @@ group = CheckBoxGroup("notifications", [
   CheckBoxItem("Security alerts", "security", "Critical fixes", true),
   CheckBoxItem("Newsletter", "newsletter", "Monthly digest")
 ])</code></pre>
+        </div>
+      </div>
+
+      <h2>Rich layouts (production-quality)</h2>
+      <p>
+        These compositions show what the LLM should reach for by default: a
+        full app shell, a detail page, and a pricing page — all built from the
+        same component vocabulary as the smaller examples above. Use them as a
+        baseline for any "build me an app" request.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>App shell with sidebar nav</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = AppShell(nav, content, topbar)
+
+nav = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview",  "house", true),
+    SidebarItem("Projects",  "folder", false, "12"),
+    SidebarItem("Calendar",  "calendar"),
+    SidebarItem("Messages",  "comments", false, "3")
+  ]),
+  SidebarSection("Insights", [
+    SidebarItem("Analytics", "chart-pie"),
+    SidebarItem("Reports",   "chart-line"),
+    SidebarItem("Billing",   "credit-card")
+  ])
+], "Acme HQ", "Production · v2.3",
+  Stack([Avatar("Asha Patel", null, "sm"),
+   Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")], 2))
+
+topbar = [StatusDot("Realtime", "success", true),
+  Buttons([Button("Invite", null, "ghost", "button", "small"),
+           Button("Upgrade", null, "primary", "button", "small")])]
+
+header = PageHeader("Overview", "Everything happening across your workspace",
+  null,
+  [Button("New project", Action([@ToAssistant("Start a new project")]), "primary")],
+  Badge("Live", "success"))
+
+kpis = MetricGrid([
+  StatCard("MRR",          "$48.2k", "up",   "+12%", "sack-dollar"),
+  StatCard("Active users", "2,184",  "up",   "+184", "users"),
+  StatCard("Open tickets", "23",     "down", "-9",   "ticket"),
+  StatCard("NPS",          "62",     "flat", "+1",   "star")
+])
+
+projects = Card([SectionHeader("Active projects", null, "WORK", null,
+  [Button("View all", null, "ghost", "button", "small")]),
+  List([
+    ListItem("Streaming UI v2.4", "Ada Lovelace · 3 open issues", "rocket"),
+    ListItem("Auth SDK rewrite",  "Linus T · 1 open issue",       "shield-halved"),
+    ListItem("Onboarding revamp", "Grace Hopper · awaiting QA",   "bullseye")
+  ])])
+
+systemCard = Card([SectionHeader("System status", null, "OPS",
+  Tag("All normal", null, "sm", "success")),
+  Stack([
+    StatusDot("API",       "success"),
+    StatusDot("Database",  "success"),
+    StatusDot("Webhooks",  "warning"),
+    StatusDot("Streaming", "success", true)
+  ], "column", "s")])
+
+activity = Card([SectionHeader("Recent activity"), Timeline([
+  TimelineItem("Ada merged PR #248",    "5m ago",   "Patterns ready for review",   "code-pull-request", "primary"),
+  TimelineItem("QA caught regression",  "1h ago",   "Quota dashboard double-count","triangle-exclamation", "warning"),
+  TimelineItem("Tokenizer 2.1 shipped", "Yesterday","Latency -14%",                "circle-check", "success")
+])])
+
+content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity,
+  FollowUpBlock(["Show at-risk projects", "Open billing", "Invite my team"])]</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Detail page (PageHeader + DescriptionList + activity)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">header = PageHeader("Alex Rivera", "Product Designer · alex@acme.com",
+  ["Team", "Engineering"],
+  [Button("Message", Action([@ToAssistant("Open chat with Alex")]), "primary"),
+   Button("Edit", Action([@ToAssistant("Edit Alex's profile")]), "ghost")],
+  Tag("Online", "circle-check", "sm", "success"))
+
+profile = ProfileCard("Alex Rivera", "Product Designer", "",
+  "Designs the future of generative UI at Acme.",
+  ["design", "ux", "typography"],
+  [Button("Follow", Action([@ToAssistant("Follow Alex")]), "primary", "button", "small"),
+   Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "button", "small")])
+
+details = Card([SectionHeader("Profile details", null, "OVERVIEW"),
+  DescriptionList([
+    DescriptionItem("Team",     "Design Systems", "users"),
+    DescriptionItem("Manager",  "Margaret Hamilton"),
+    DescriptionItem("Location", "Berlin, DE", "location-dot"),
+    DescriptionItem("Joined",   "Mar 2022"),
+    DescriptionItem("Slack",    Tag("@alex", null, "sm", "primary")),
+    DescriptionItem("Status",   StatusDot("Active", "success"))
+  ], 2)])
+
+activity = Card([SectionHeader("Recent activity", "Last 14 days"), Timeline([
+  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components and added the patterns API.", "rocket", "success"),
+  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed the dashboard wireframes.",                "palette", "primary"),
+  TimelineItem("Profile updated",      "3 days ago", "",                                                  "pen")
+])])
+
+danger = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"),
+  Buttons([Button("Delete account", Action([@ToAssistant("Delete Alex's account")]), "danger")])])
+
+follow = FollowUpBlock(["Show Alex's projects", "Open inbox", "Schedule a 1:1"])
+
+root = Stack([header, Grid([profile, details], 2, "l"), activity, danger, follow], "column", "l")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Pricing page (Hero + PricingTable + FAQ)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">hero = Hero(
+  "Pricing that scales with you",
+  "Start free, upgrade as your team grows. No hidden fees.",
+  Button("Compare plans", Action([@OpenUrl("#tiers")]), "primary"),
+  Button("Contact sales", Action([@OpenUrl("/contact")]), "secondary"),
+  "PRICING",
+  ["Free for hobby projects", "Cancel anytime", "Annual discount: 20%"]
+)
+
+pricing = PricingTable([
+  PricingCard("Starter", "$0", "/mo", "For hobby projects and side experiments.",
+    ["1 workspace", "Up to 5 contributors", "Community support", "1 GB storage"],
+    Button("Get started", Action([@OpenUrl("/signup?plan=starter")]), "secondary"),
+    null, false),
+  PricingCard("Pro", "$29", "/mo", "For teams shipping LLM features in production.",
+    ["Unlimited workspaces", "All themes + patterns", "Priority support", "100 GB storage", "SOC2 audit logs"],
+    Button("Start free trial", Action([@OpenUrl("/signup?plan=pro")]), "primary"),
+    "Most popular", true),
+  PricingCard("Scale", "Talk to us", null, "For companies with custom requirements.",
+    ["Dedicated success manager", "Custom themes", "SSO + SCIM", "99.99% SLA", "On-prem available"],
+    Button("Contact sales", Action([@OpenUrl("/contact")]), "ghost"),
+    null, false)
+])
+
+faqs = Card([SectionHeader("Frequently asked questions"), Accordion([
+  AccordionItem("Can I switch plans later?", [Markdown("Yes — upgrade or downgrade any time from **Billing → Subscription**.")]),
+  AccordionItem("Do you offer student discounts?", [Markdown("**50% off Pro** for verified students and educators.")]),
+  AccordionItem("How does the free trial work?", [Markdown("14-day Pro trial. No credit card. Cancel any time.")])
+])])
+
+closing = Banner("Still deciding?", "Talk to a real human about your use case.",
+  Button("Book a call", Action([@OpenUrl("/contact")]), "primary"), "comments", "primary")
+
+follow = FollowUpBlock(["Compare to competitors", "Show the enterprise plan", "Open the FAQ"])
+
+root = Stack([hero, pricing, faqs, closing, follow], "column", "xl")</code></pre>
+        </div>
+      </div>
+
+      <h2>Richer composition primitives</h2>
+      <p>
+        Bite-sized examples for the newer high-density patterns —
+        <code>Cover</code>, <code>MediaCard</code>, <code>Stats</code>,
+        <code>Tile</code>, <code>Notification</code>, <code>PersonChip</code>,
+        <code>Quote</code>, <code>Note</code>, <code>Rating</code>,
+        <code>ProgressRing</code>, <code>ChatBubble</code>, and
+        <code>SearchBar</code>. Use them whenever you'd otherwise be
+        stitching primitives together by hand.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>Cover hero with caption + actions</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Cover(
+  "Build the future of generative UI",
+  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&amp;q=80",
+  "From a single LLM prompt to a streaming, themeable, interactive UI — in 90 seconds.",
+  "Spring release",
+  "Cancel anytime · no credit card to start",
+  [Button("Get started", Action([@ToAssistant("Start the free plan")]), "primary"),
+   Button("Watch the demo", Action([@OpenUrl("https://example.com/demo")]), "ghost")],
+  "primary",
+  "300px"
+)</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>MediaCard grid + Rating</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([
+  Grid([
+    MediaCard("Aurora Headphones",
+              "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&amp;q=80",
+              "Studio-grade sound, 40-hour battery.",
+              ["wireless", "ANC"],
+              "$249 · 4.8 stars",
+              [Button("Add to cart", Action([@ToAssistant("Add Aurora to cart")]), "primary")]),
+    MediaCard("Aurora Earbuds",
+              "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=900&amp;q=80",
+              "Same DAC, in-ear comfort.",
+              ["wireless", "in-ear"],
+              "$149 · 4.7 stars",
+              [Button("Add to cart", Action([@ToAssistant("Add earbuds to cart")]), "primary")])
+  ], 2, "m"),
+  Rating(4.8, 5, "Average rating", 1284, "md", false)
+], "column", "l")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Stats trust strip</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stats([
+  {label: "Teams trust it",   value: "2,400+",  hint: "In 40 countries",        tone: "primary"},
+  {label: "Uptime SLA",       value: "99.99%",  hint: "Multi-region",           tone: "success"},
+  {label: "Time to first UI", value: "&lt;90 sec", hint: "Signup → render",        tone: "info"},
+  {label: "Support reply",    value: "&lt;1 hr",   hint: "Median weekday reply",   tone: "warning"}
+], "center")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Tile grid quick-actions</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Grid([
+  Tile("Total contacts",   "users", "2,481",  "+128 this week",            "primary",  Action([@ToAssistant("Show contacts")])),
+  Tile("Active deals",     "briefcase", "47",     "$418k ARR pipeline",        "info",     Action([@ToAssistant("Show deals")])),
+  Tile("At-risk accounts", "triangle-exclamation", "12",     "Needs follow-up this week", "warning",  Action([@ToAssistant("Show at-risk")])),
+  Tile("Champions",        "trophy", "63",     "NPS 9 or 10 in last 30d",   "success",  Action([@ToAssistant("Show champions")]))
+], 4, "m")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Notification panel</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([
+  Notification("Stripe receipts",
+               "Receipt for Pro plan — $29.00 charged today.",
+               "10:24 AM", null,
+               "https://i.pravatar.cc/64?img=12",
+               "primary", true,
+               [Button("Open", Action([@ToAssistant("Open the receipt")]), "ghost", "button", "small")]),
+  Notification("GitHub digest",
+               "12 new pull requests waiting for review across 3 repos.",
+               "Yesterday", "code-branch", null,
+               "info", false,
+               [Button("Open", Action([@OpenUrl("https://github.com/")]), "ghost", "button", "small")]),
+  Notification("Linus Torvalds",
+               "Perf review attached. Some easy wins on the parser.",
+               "Mon", null,
+               "https://i.pravatar.cc/64?img=11",
+               "default", false,
+               [Button("Reply", Action([@ToAssistant("Reply to Linus")]), "ghost", "button", "small")])
+], "column", "s")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>PersonChip + Quote + Note</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([
+  Stack([
+    PersonChip("Naomi Rivers", "VP Engineering · Looplog", "https://i.pravatar.cc/64?img=47", "md", "online"),
+    PersonChip("Marc Lee",     "Head of Data · Northwind", "https://i.pravatar.cc/64?img=11", "md", "busy"),
+    PersonChip("Grace Hopper", "Founder · Atlasworks",     "https://i.pravatar.cc/64?img=32", "md", "online")
+  ], "row", "s", "stretch", "start", true),
+  Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
+        "Naomi · last QBR", "primary"),
+  Note("Owner: Mei Tanaka · ARR $84,000 · renewal in Q3", "tip")
+], "column", "m")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>SearchBar + ProgressRing + ChatBubble thread</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$query = ""
+
+root = Stack([
+  SearchBar("q", "Search the catalog…", $query, "/"),
+  Stack([
+    ProgressRing(72, 100, null, "In stock",  "success"),
+    ProgressRing(28, 100, null, "Backlog",   "warning"),
+    ProgressRing(100, 100, "circle-check", "Shipped",   "primary")
+  ], "row", "l", "center"),
+  ChatBubble("Support",
+             "Hi! Tracking shows your package landed in the local hub this morning.",
+             "9:12 AM", null, "agent", "delivered"),
+  ChatBubble("You",
+             "Perfect — I can wait. Thank you!",
+             "9:15 AM", null, "me", "read")
+], "column", "m")</code></pre>
+        </div>
+      </div>
+
+      <h2>Menus, overlays &amp; toasts</h2>
+      <p>
+        Click-triggered surfaces for everything that doesn't belong on the page
+        all the time — <code>DropdownMenu</code> for action menus,
+        <code>Popover</code> for filter panels and rich tooltips,
+        <code>Toast</code> /<code>Toasts</code> for transient feedback. All three
+        keep their open/closed state across re-renders, so unrelated state
+        changes (typing into an input, ticking a checkbox…) never collapse them
+        mid-interaction.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>DropdownMenu with sections, icons &amp; danger action</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([
+  TextContent("Click the avatar to open the menu.", "small-muted"),
+  DropdownMenu(
+    Avatar("Alex Rivera", "https://i.pravatar.cc/64?img=12", "md"),
+    [
+      MenuLabel("Account"),
+      MenuItem("Profile",   Action([@ToAssistant("Open profile")]),   "user"),
+      MenuItem("Settings",  Action([@ToAssistant("Open settings")]),  "gear",         "⌘,"),
+      MenuItem("Keyboard shortcuts", Action([@ToAssistant("Show shortcuts")]), "keyboard", "?"),
+      MenuSeparator(),
+      MenuLabel("Workspace"),
+      MenuItem("Invite teammates", Action([@ToAssistant("Open invite dialog")]), "user-plus"),
+      MenuItem("Billing",          Action([@ToAssistant("Open billing")]),       "credit-card"),
+      MenuSeparator(),
+      MenuItem("Sign out",  Action([@ToAssistant("Sign out")]), "right-from-bracket", null, "danger")
+    ],
+    "bottom",
+    "start"
+  )
+], "column", "s")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Popover filter panel</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$status   = "any"
+$priority = "any"
+
+statusItems = [SelectItem("any","Any"), SelectItem("open","Open"), SelectItem("closed","Closed")]
+priorityItems = [SelectItem("any","Any"), SelectItem("high","High"), SelectItem("medium","Medium"), SelectItem("low","Low")]
+
+root = Stack([
+  Popover(
+    Button("Filters", null, "secondary"),
+    [
+      FormControl("Status",   Select("status",   statusItems,   null, "Pick a status",   $status)),
+      FormControl("Priority", Select("priority", priorityItems, null, "Pick a priority", $priority)),
+      Stack([
+        Button("Reset",   Action([@Set($status, "any"), @Set($priority, "any")]), "ghost", "button", "small"),
+        Button("Apply",   Action([@ToAssistant("Apply filters")]), "primary", "button", "small")
+      ], "row", "s", "stretch", "between", true)
+    ],
+    "Filter board",
+    "bottom",
+    "start",
+    "320px"
+  ),
+  TextContent("Current: status=" + $status + " · priority=" + $priority, "small-muted")
+], "row", "m", "center", "start")</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Toast stack (bottom-right)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">// Every toast shows a × close button. Pass `duration` (ms) to auto-dismiss;
+// omit it for a persistent toast the user must close manually.
+
+root = Toasts([
+  Toast("Changes saved",
+        "Your draft was synced across all devices.",
+        "success", "circle-check",
+        4000),                       // auto-dismiss after 4s
+  Toast("Heads up",
+        "Two reviewers were notified for approval.",
+        "info", "circle-info",
+        6000),                       // auto-dismiss after 6s
+  Toast("Couldn't reach the server",
+        "Your edits are queued — we'll retry automatically.",
+        "warning", "triangle-exclamation",
+        null,                         // no auto-dismiss
+        Button("Retry now", Action([@ToAssistant("Retry the save")]), "ghost", "button", "small"))
+], "bottom-right")</code></pre>
+        </div>
+      </div>
+
+      <h2>Extended form inputs</h2>
+      <p>
+        Beyond <code>Input</code>/<code>Select</code>: <code>Slider</code>,
+        <code>NumberInput</code>, <code>DatePicker</code>,
+        <code>FileUpload</code>, and the searchable
+        <code>Combobox</code>. Pass a <code>$variable</code> as
+        <code>value</code> to get two-way binding for free; the renderer keeps
+        the input in step with reactive state on every render.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>Slider + NumberInput + DatePicker</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$volume  = 60
+$qty     = 2
+$date    = "2026-06-01"
+
+root = Card([
+  CardHeader("Configure your order", "Live preview reflects the bound state"),
+  Form("order",
+    Buttons([Button("Save", Action([@ToAssistant("Save order")]), "primary")]),
+    [
+      FormControl("Quantity",      NumberInput("qty",  $qty,    1,  99,  1)),
+      FormControl("Delivery date", DatePicker("date",  $date,   null, "2026-01-01", "2026-12-31")),
+      FormControl("Volume",        Slider("vol",       0, 100,  5,  $volume, null, true))
+    ]
+  ),
+  Note("Quantity: " + $qty + " · Date: " + $date + " · Volume: " + $volume + "%", "tip")
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Combobox + FileUpload</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$country = "us"
+
+countries = [
+  SelectItem("us", "United States"),
+  SelectItem("uk", "United Kingdom"),
+  SelectItem("ca", "Canada"),
+  SelectItem("au", "Australia"),
+  SelectItem("de", "Germany"),
+  SelectItem("fr", "France"),
+  SelectItem("jp", "Japan"),
+  SelectItem("br", "Brazil")
+]
+
+root = Card([
+  CardHeader("Profile setup", "Pick a country and add a photo"),
+  Form("setup",
+    Buttons([Button("Continue", Action([@ToAssistant("Save profile")]), "primary")]),
+    [
+      FormControl("Country",
+        Combobox("country", countries, $country, "Search countries…"),
+        "Start typing to filter the list."),
+      FormControl("Profile photo",
+        FileUpload("avatar", "Click or drop a PNG / JPG", "image/*", false, "Up to 5 MB"),
+        "We'll resize and crop it for you.")
+    ]
+  )
+])</code></pre>
+        </div>
+      </div>
+
+      <h2>Hierarchical data &amp; top navigation</h2>
+      <p>
+        <code>Tree</code> + <code>TreeNode</code> render file browsers, org
+        charts, category outlines, settings groups — anything that nests. They
+        ride on the native <code>&lt;details&gt;</code> element, so
+        expand/collapse state survives re-renders for free. Pair with
+        <code>Navbar</code> + <code>NavbarItem</code> when you need a sticky
+        top bar across the surface.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>File browser tree</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Card([
+  CardHeader("Repository", "src/library/components"),
+  Tree([
+    TreeNode("src", [
+      TreeNode("library", [
+        TreeNode("components", [
+          TreeNode("menu.ts",     null, "file-code"),
+          TreeNode("forms.ts",    null, "file-code"),
+          TreeNode("feedback.ts", null, "file-code", false, true),
+          TreeNode("data.ts",     null, "file-code")
+        ], "folder-open", true, false, "12"),
+        TreeNode("index.ts", null, "file-code")
+      ], "folder-open", true),
+      TreeNode("element.ts", null, "file-code"),
+      TreeNode("theme", [
+        TreeNode("styles.ts", null, "file-code"),
+        TreeNode("index.ts",  null, "file-code")
+      ], "folder", false)
+    ], "folder-open", true),
+    TreeNode("tests", [
+      TreeNode("library.test.ts", null, "file-code"),
+      TreeNode("element.test.ts", null, "file-code")
+    ], "folder", false, false, "11"),
+    TreeNode("README.md", null, "file-lines")
+  ])
+])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Navbar with brand, links &amp; actions</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">root = Stack([
+  Navbar(
+    "Acme",
+    [
+      NavbarItem("Home",    "/",         "house", true),
+      NavbarItem("Docs",    "/docs",     "book"),
+      NavbarItem("Pricing", "/pricing",  "tag"),
+      NavbarItem("Blog",    "/blog",     "newspaper")
+    ],
+    [
+      Button("Sign in",     Action([@ToAssistant("Sign in")]), "ghost"),
+      Button("Get started", Action([@ToAssistant("Sign up")]),  "primary")
+    ],
+    true,
+    "default"
+  ),
+  Card([
+    CardHeader("Welcome to Acme", "The Navbar above is sticky"),
+    TextContent(
+      "Use Navbar at the top of full-page surfaces. Each NavbarItem fires @Navigate when you pass a `to` path, so it integrates with the built-in router.",
+      "body"
+    )
+  ])
+], "column", "m")</code></pre>
         </div>
       </div>
 
@@ -464,7 +1075,7 @@ makeCard = @Each(hits, "p", Card([
   TextContent("$" + p.price, "body-heavy", "primary"),
   Stack([
     Tag(p.category, null, "sm", "neutral"),
-    TextContent("★ " + p.rating, "small", "muted")
+    Rating(p.rating, 5, "" + p.rating, null, "sm")
   ], "row", "s", "center", "start"),
   Buttons([
     Button("Add to cart", Action([@ToAssistant("Add " + p.name + " to my cart")]), "primary", "normal", "small"),
@@ -793,11 +1404,9 @@ follow = FollowUpBlock([
 
       <h2 style="margin-top:32px">JavaScript interactions</h2>
       <p>
-        The example below needs <code>enable-javascript="true"</code> on its
-        host element so the LLM-authored <code>Script(...)</code> body can
-        actually run. Disable the flag and the same source still parses and
-        renders cleanly — only the JS-driven behaviour switches off. Read the
-        full guide on the
+        The example below uses an LLM-authored <code>Script(...)</code> body
+        that runs against the always-on JavaScript runtime. Read the full
+        guide on the
         <a href="javascript-interactions.html">JavaScript interactions</a>
         page.
       </p>
@@ -810,7 +1419,7 @@ follow = FollowUpBlock([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light" enable-javascript="true"></streaming-ui-script>
+            <streaming-ui-script theme="light"></streaming-ui-script>
           </div>
         </div>
         <div class="example-panel" data-key="source">
@@ -836,7 +1445,7 @@ root = Stack([header, display, controls, ticker])</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light" enable-javascript="true"></streaming-ui-script>
+            <streaming-ui-script theme="light"></streaming-ui-script>
           </div>
         </div>
         <div class="example-panel" data-key="source">
@@ -845,7 +1454,7 @@ $copied = false
 
 resetCopied = Script("reset-copied", "if (!ctx.state.get('copied')) return; const id = setTimeout(() => ctx.state.set('copied', false), 1800); ctx.cleanup(() => clearTimeout(id));", ["copied"])
 
-copyBtn = Button($copied ? "✓ Copied" : "Copy", Action([
+copyBtn = Button($copied ? "Copied" : "Copy", Action([
   @Js("await navigator.clipboard.writeText(ctx.state.get('snippet') ?? ''); ctx.state.set('copied', true);")
 ]), $copied ? "secondary" : "primary", "normal", "small")
 
@@ -869,7 +1478,7 @@ root = Stack([snippetCard, resetCopied])</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light" enable-javascript="true"></streaming-ui-script>
+            <streaming-ui-script theme="light"></streaming-ui-script>
           </div>
         </div>
         <div class="example-panel" data-key="source">
@@ -971,6 +1580,6 @@ root = Stack([
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
 </body>
 </html>

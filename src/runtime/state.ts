@@ -40,27 +40,59 @@ export class StateStore {
     this.scheduleFlush();
   }
 
+  /** Iterate over every (name, value) pair. Order is insertion order. */
+  entries(): IterableIterator<[string, StateValue]> {
+    return this.values.entries();
+  }
+
+  /** Snapshot every (name, value) pair into a plain object. */
+  snapshot(): Record<string, StateValue> {
+    const out: Record<string, StateValue> = {};
+    this.values.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
+  }
+
   reset(...names: string[]): void {
+    let dirty = false;
     for (const name of names) {
+      // Reset is a no-op for names that were never declared — keeps the
+      // store free of `undefined` sentinels when the LLM types
+      // `@Reset($typo)` for a variable that doesn't exist.
+      if (!this.defaults.has(name)) continue;
       const fallback = this.defaults.get(name);
+      if (this.values.get(name) === fallback) continue;
       this.values.set(name, fallback);
       this.pendingChanges.add(name);
+      dirty = true;
     }
-    this.scheduleFlush();
+    if (dirty) this.scheduleFlush();
   }
 
   resetAll(): void {
+    let dirty = false;
     for (const [name, value] of this.defaults.entries()) {
+      if (this.values.get(name) === value) continue;
       this.values.set(name, value);
       this.pendingChanges.add(name);
+      dirty = true;
     }
-    this.scheduleFlush();
+    if (dirty) this.scheduleFlush();
   }
 
-  /** Replace all state entries. Called when a fresh program is loaded. */
+  /**
+   * Replace all state entries. Called when a fresh program is loaded.
+   *
+   * Also drops any pending change notifications: their names refer to the
+   * previous program's bindings, which no longer exist, and forwarding them
+   * to subscribers can fire queries / scripts that race against the new
+   * program's planning step.
+   */
   rebind(declarations: Iterable<[string, StateValue]>): void {
     this.values.clear();
     this.defaults.clear();
+    this.pendingChanges.clear();
     for (const [name, value] of declarations) {
       this.defaults.set(name, value);
       this.values.set(name, value);

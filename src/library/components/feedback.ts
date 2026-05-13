@@ -1,7 +1,7 @@
 /**
  * Feedback primitives modeled after shadcn/ui:
  * Avatar, AvatarGroup, Progress, Switch, Toggle, ToggleGroup, Tooltip,
- * HoverCard, Kbd.
+ * HoverCard, Popover, Toast, Toasts, Kbd.
  *
  * These cover the most common "small bits of UI" that the LLM otherwise has
  * to fake with TextContent + emoji combinations. Every component is purely
@@ -10,8 +10,13 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber } from "../utils.js";
-import { initialsFor } from "./_internal.js";
+import { isActionPayload } from "../../runtime/builtins.js";
+import {
+  el, asArray, asString, asBoolean, asNumber, renderIcon,
+  sanitiseCssLength, sanitiseImageSrc,
+} from "../utils.js";
+import { initialsFor, installDismissListeners, disposeDismissListeners } from "./_internal.js";
+import { resolveIconClasses } from "../../icons/index.js";
 
 const AVATAR_SIZES = ["sm", "md", "lg", "xl"] as const;
 
@@ -34,12 +39,16 @@ export const Avatar: ComponentSpec = {
       role: "img",
     });
     const name = asString(props.name);
-    const src = asString(props.src);
+    const src = sanitiseImageSrc(props.src);
     if (src) {
       const img = el("img", { src, alt: name, loading: "lazy" });
-      img.addEventListener("error", () => {
-        img.replaceWith(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
-      });
+      // Resolve the live image from the event so this handler still works
+      // after the morph reconciler copies it onto a kept DOM node.
+      img.onerror = (event) => {
+        const ev = event as Event;
+        const live = (ev.currentTarget ?? ev.target) as Element;
+        live.replaceWith(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
+      };
       root.append(img);
     } else {
       root.append(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
@@ -212,17 +221,17 @@ export const Toggle: ComponentSpec = {
       "data-size": asString(props.size, "md"),
       "data-state": pressed ? "on" : "off",
     });
-    const icon = asString(props.icon);
-    if (icon) button.append(el("span", { class: "rui-toggle-icon" }, [icon]));
+    const iconNode = renderIcon(props.icon, { className: "rui-toggle-icon" });
+    if (iconNode) button.append(iconNode);
     button.append(el("span", { class: "rui-toggle-label" }, [asString(props.label)]));
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName) {
-      button.addEventListener("click", () => {
+      button.onclick = () => {
         helpers.runAction({
           kind: "Action",
           steps: [{ kind: "Set", name: stateName, value: !pressed }],
         });
-      });
+      };
     }
     return button;
   },
@@ -266,15 +275,16 @@ export const ToggleGroup: ComponentSpec = {
         "data-state": isOn ? "on" : "off",
         "data-value": value,
       });
-      if (icon) btn.append(el("span", { class: "rui-toggle-icon" }, [icon]));
+      const itemIconNode = renderIcon(icon, { className: "rui-toggle-icon" });
+      if (itemIconNode) btn.append(itemIconNode);
       btn.append(el("span", { class: "rui-toggle-label" }, [label]));
       if (stateName) {
-        btn.addEventListener("click", () => {
+        btn.onclick = () => {
           helpers.runAction({
             kind: "Action",
             steps: [{ kind: "Set", name: stateName, value }],
           });
-        });
+        };
       }
       root.append(btn);
     }
@@ -352,6 +362,202 @@ export const HoverCard: ComponentSpec = {
   },
 };
 
+export const Rating: ComponentSpec = {
+  name: "Rating",
+  description:
+    "Compact 0–5 star rating with optional numeric badge and review " +
+    "count. Use in product cards, testimonials, reviews, and KPI rows. " +
+    "Pass `interactive=true` and a `$variable` as `value` to let users " +
+    "rate something.",
+  props: [
+    { name: "value", type: "number", description: "0–5 stars; can be a $variable when interactive" },
+    { name: "max", type: "number", optional: true, description: "Maximum number of stars (default 5)" },
+    { name: "label", type: "string", optional: true, description: "Inline text shown after the stars (e.g. \"4.2 of 5\")" },
+    { name: "count", type: "number", optional: true, description: "Review/voter count rendered in parentheses" },
+    { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
+    { name: "interactive", type: "boolean", optional: true, description: "Allow clicking a star to set the value" },
+  ],
+  render: (node, props, helpers) => {
+    const max = Math.max(1, Math.floor(asNumber(props.max, 5)));
+    const raw = Math.max(0, Math.min(max, asNumber(props.value, 0)));
+    const size = asString(props.size, "md");
+    const interactive = asBoolean(props.interactive);
+    const stateName = node.argMeta?.[0]?.stateRef;
+    const root = el("div", {
+      class: "rui-rating",
+      "data-size": size,
+      "data-interactive": interactive && stateName ? "true" : "false",
+      role: "img",
+      "aria-label": `${raw} of ${max} stars`,
+    });
+    const stars = el("span", { class: "rui-rating-stars" });
+    for (let i = 1; i <= max; i += 1) {
+      const fill = Math.max(0, Math.min(1, raw - (i - 1)));
+      // Use Font Awesome's dedicated half-star glyph; the previous CSS
+      // background-clip trick only worked on text content (★ / ☆) and
+      // produced a broken/half-cut glyph for FA pseudo-element icons.
+      const iconName =
+        fill >= 1 ? "star" : fill > 0 ? "star-half-stroke" : "regular:star";
+      const iconClasses = resolveIconClasses(iconName).join(" ");
+      const star = el(interactive && stateName ? "button" : "span", {
+        class: `rui-rating-star ${iconClasses}`.trim(),
+        type: interactive && stateName ? "button" : null,
+        "data-fill": fill >= 1 ? "full" : fill > 0 ? "half" : "empty",
+        "aria-label": interactive && stateName ? `Rate ${i}` : null,
+        "aria-hidden": interactive && stateName ? null : "true",
+      });
+      if (interactive && stateName) {
+        (star as HTMLButtonElement).onclick = () => {
+          helpers.runAction({
+            kind: "Action",
+            steps: [{ kind: "Set", name: stateName, value: i }],
+          });
+        };
+      }
+      stars.append(star);
+    }
+    root.append(stars);
+    const label = asString(props.label);
+    if (label) root.append(el("span", { class: "rui-rating-label" }, [label]));
+    const count = props.count != null ? asNumber(props.count, 0) : null;
+    if (count !== null && count > 0) {
+      root.append(el("span", { class: "rui-rating-count" }, [`(${count.toLocaleString()})`]));
+    }
+    return root;
+  },
+};
+
+export const ProgressRing: ComponentSpec = {
+  name: "ProgressRing",
+  description:
+    "Circular progress indicator. Use for KPIs, quotas, completion rings, " +
+    "and any metric better shown as a circle than a bar. Renders the " +
+    "value (or a custom label) inside the ring.",
+  props: [
+    { name: "value", type: "number", optional: true, description: "Current value (ignored when indeterminate)" },
+    { name: "max", type: "number", optional: true, description: "Upper bound (default 100)" },
+    { name: "label", type: "string", optional: true, description: "Text shown inside the ring (default \"{percent}%\")" },
+    { name: "caption", type: "string", optional: true, description: "Small caption rendered under the ring" },
+    { name: "tone", type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
+    { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
+    { name: "indeterminate", type: "boolean", optional: true },
+  ],
+  render: (_node, props) => {
+    const max = Math.max(1, asNumber(props.max, 100));
+    const indeterminate = asBoolean(props.indeterminate);
+    const value = Math.max(0, Math.min(max, asNumber(props.value, 0)));
+    const percent = Math.round((value / max) * 100);
+    const size = asString(props.size, "md");
+    const px = size === "lg" ? 120 : size === "sm" ? 72 : 96;
+    const stroke = size === "lg" ? 10 : size === "sm" ? 6 : 8;
+    const r = (px - stroke) / 2;
+    const circumference = 2 * Math.PI * r;
+    const offset = indeterminate ? circumference * 0.65 : circumference * (1 - percent / 100);
+    const root = el("div", {
+      class: "rui-progress-ring",
+      "data-tone": asString(props.tone, "primary"),
+      "data-size": size,
+      "data-indeterminate": indeterminate ? "true" : "false",
+    });
+    const wrap = el("div", { class: "rui-progress-ring-wrap" });
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("width", String(px));
+    svg.setAttribute("height", String(px));
+    svg.setAttribute("viewBox", `0 0 ${px} ${px}`);
+    svg.setAttribute("class", "rui-progress-ring-svg");
+    const track = document.createElementNS(svgNS, "circle");
+    track.setAttribute("class", "rui-progress-ring-track");
+    track.setAttribute("cx", String(px / 2));
+    track.setAttribute("cy", String(px / 2));
+    track.setAttribute("r", String(r));
+    track.setAttribute("stroke-width", String(stroke));
+    track.setAttribute("fill", "none");
+    svg.appendChild(track);
+    const bar = document.createElementNS(svgNS, "circle");
+    bar.setAttribute("class", "rui-progress-ring-bar");
+    bar.setAttribute("cx", String(px / 2));
+    bar.setAttribute("cy", String(px / 2));
+    bar.setAttribute("r", String(r));
+    bar.setAttribute("stroke-width", String(stroke));
+    bar.setAttribute("fill", "none");
+    bar.setAttribute("stroke-linecap", "round");
+    bar.setAttribute("stroke-dasharray", String(circumference));
+    bar.setAttribute("stroke-dashoffset", String(offset));
+    svg.appendChild(bar);
+    wrap.append(svg);
+    const rawLabel = asString(props.label, indeterminate ? "…" : `${percent}%`);
+    const center = el("span", { class: "rui-progress-ring-value" });
+    // Allow the inner label to be a Font Awesome icon name (e.g. "circle-check")
+    // for completion-style rings, while still accepting plain text labels.
+    const labelIcon = renderIcon(rawLabel, { className: "rui-progress-ring-icon" });
+    if (labelIcon && resolveIconClasses(rawLabel).length > 0) {
+      center.append(labelIcon);
+    } else {
+      center.append(document.createTextNode(rawLabel));
+    }
+    wrap.append(center);
+    root.append(wrap);
+    const caption = asString(props.caption);
+    if (caption) root.append(el("span", { class: "rui-progress-ring-caption" }, [caption]));
+    return root;
+  },
+};
+
+export const ChatBubble: ComponentSpec = {
+  name: "ChatBubble",
+  description:
+    "Single chat-style message bubble with author, time, and body. Use " +
+    "for conversation threads, agent transcripts, support chats, and any " +
+    "message-style UI. Set `from=\"me\"` (or any non-empty author) for " +
+    "the active speaker — the bubble aligns to the right with a primary " +
+    "tint. `from=\"agent\"` (default) renders as the canonical incoming " +
+    "bubble on the left.",
+  props: [
+    { name: "author", type: "string" },
+    { name: "body", type: "string" },
+    { name: "time", type: "string", optional: true },
+    { name: "avatarSrc", type: "string", optional: true },
+    { name: "from", type: "string", optional: true, enum: ["agent", "me", "system"], description: "Lane (default agent)" },
+    { name: "status", type: "string", optional: true, enum: ["sending", "sent", "delivered", "read", "error"] },
+  ],
+  render: (_node, props) => {
+    const from = asString(props.from, "agent");
+    const root = el("div", {
+      class: "rui-chat-bubble",
+      "data-from": from,
+    });
+    if (from !== "me") {
+      root.append(renderAvatarFallback(asString(props.avatarSrc), asString(props.author)));
+    }
+    const bubble = el("div", { class: "rui-chat-bubble-bubble" });
+    const head = el("header", { class: "rui-chat-bubble-head" });
+    head.append(el("span", { class: "rui-chat-bubble-author" }, [asString(props.author)]));
+    const time = asString(props.time);
+    if (time) head.append(el("span", { class: "rui-chat-bubble-time" }, [time]));
+    bubble.append(head);
+    bubble.append(el("p", { class: "rui-chat-bubble-body" }, [asString(props.body)]));
+    const status = asString(props.status);
+    if (status) bubble.append(el("span", { class: "rui-chat-bubble-status", "data-status": status }, [status]));
+    root.append(bubble);
+    if (from === "me") {
+      root.append(renderAvatarFallback(asString(props.avatarSrc), asString(props.author)));
+    }
+    return root;
+  },
+};
+
+function renderAvatarFallback(src: string, name: string): HTMLElement {
+  const wrap = el("span", { class: "rui-chat-bubble-avatar" });
+  const safeSrc = sanitiseImageSrc(src);
+  if (safeSrc) {
+    wrap.append(el("img", { src: safeSrc, alt: name, loading: "lazy" }));
+  } else {
+    wrap.append(el("span", { class: "rui-chat-bubble-fallback" }, [initialsFor(name)]));
+  }
+  return wrap;
+}
+
 export const Kbd: ComponentSpec = {
   name: "Kbd",
   description:
@@ -374,4 +580,314 @@ export const Kbd: ComponentSpec = {
     return root;
   },
 };
+
+const POPOVER_SIDES = ["bottom", "top", "left", "right"] as const;
+const POPOVER_ALIGNS = ["start", "center", "end"] as const;
+
+export const Popover: ComponentSpec = {
+  name: "Popover",
+  description:
+    "Click-triggered popup with arbitrary rich content. Use when " +
+    "HoverCard's hover trigger is too eager and Modal/Sheet is too heavy — " +
+    "perfect for filter panels, color pickers, share menus, and small " +
+    "settings flyouts. The trigger stays visible while the popover is " +
+    "open — clicking it again, clicking outside, pressing Escape, or " +
+    "clicking the built-in × button all close it.",
+  props: [
+    { name: "trigger", type: "Node", description: "Clickable trigger element (Button, Avatar, IconButton, …). The trigger remains visible while the popover is open." },
+    { name: "content", type: "Node[]", description: "Body rendered inside the popover" },
+    { name: "title", type: "string", optional: true, description: "Optional bold heading rendered above the content" },
+    { name: "side", type: "string", optional: true, enum: POPOVER_SIDES, description: "Where the popover opens relative to the trigger (default \"bottom\")" },
+    { name: "align", type: "string", optional: true, enum: POPOVER_ALIGNS, description: "Alignment along the trigger edge (default \"start\")" },
+    { name: "width", type: "string", optional: true, description: "CSS width for the popover panel (default \"280px\")" },
+  ],
+  render: (_node, props, helpers) => {
+    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const isOpen = openSlot.get();
+    const width = sanitiseCssLength(props.width, "");
+    const root = el("div", {
+      class: "rui-popover",
+      "data-open": isOpen ? "true" : "false",
+      "data-side": asString(props.side, "bottom"),
+      "data-align": asString(props.align, "start"),
+    });
+
+    // Render the user's trigger directly and wrap it in a span so we can
+    // attach the toggle handler without nesting <button> inside <button>
+    // (which is invalid HTML and silently swallows clicks in some browsers).
+    const triggerWrap = el("span", {
+      class: "rui-popover-trigger",
+      "data-state": isOpen ? "open" : "closed",
+      "aria-haspopup": "dialog",
+      "aria-expanded": isOpen ? "true" : "false",
+    });
+    triggerWrap.append(helpers.renderNode(props.trigger));
+    root.append(triggerWrap);
+
+    const body = el("div", {
+      class: "rui-popover-content",
+      role: "dialog",
+      style: width ? `width: ${width};` : null,
+    });
+    // Always render a header so the close (×) button has a stable slot,
+    // whether or not the user provided a title.
+    const header = el("div", { class: "rui-popover-header" });
+    const titleText = asString(props.title);
+    header.append(
+      titleText
+        ? el("div", { class: "rui-popover-title" }, [titleText])
+        : el("span", { class: "rui-popover-title-spacer" }),
+    );
+    const closeBtn = el("button", {
+      type: "button",
+      class: "rui-popover-close",
+      "aria-label": "Close popover",
+    }, ["×"]);
+    closeBtn.onclick = (event) => {
+      event.stopPropagation();
+      setPopoverOpen(closeBtn, false, openSlot);
+    };
+    header.append(closeBtn);
+    body.append(header);
+    for (const child of asArray(props.content)) {
+      body.append(helpers.renderNode(child));
+    }
+    root.append(body);
+
+    // Property-based handlers so the morph reconciler can copy the latest
+    // closure (with up-to-date `openSlot`) onto kept DOM. `addEventListener`
+    // would leak a fresh listener onto every detached re-render snapshot.
+    triggerWrap.onclick = (event) => {
+      event.stopPropagation();
+      const origin = (event.currentTarget ?? event.target) as Element;
+      const next = !openSlot.get();
+      const liveRoot = setPopoverOpen(origin, next, openSlot);
+      if (next && liveRoot) installPopoverDismiss(liveRoot, openSlot);
+    };
+    triggerWrap.onkeydown = (event) => {
+      const e = event as KeyboardEvent;
+      const origin = (e.currentTarget ?? e.target) as Element;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        const next = !openSlot.get();
+        const liveRoot = setPopoverOpen(origin, next, openSlot);
+        if (next && liveRoot) installPopoverDismiss(liveRoot, openSlot);
+      } else if (e.key === "Escape" && openSlot.get()) {
+        e.preventDefault();
+        setPopoverOpen(origin, false, openSlot);
+      }
+    };
+
+    return root;
+  },
+};
+
+/**
+ * Toggle a Popover's open state and reflect it in the live DOM so the
+ * change feels instant. Returns the live root so callers can install the
+ * outside-click / Escape dismiss handlers on `open`.
+ */
+const setPopoverOpen = (
+  origin: Element,
+  next: boolean,
+  openSlot: { set: (value: boolean) => void },
+): HTMLElement | null => {
+  openSlot.set(next);
+  const liveRoot = origin.closest(".rui-popover") as HTMLElement | null;
+  if (!liveRoot) return null;
+  liveRoot.setAttribute("data-open", next ? "true" : "false");
+  const trigger = liveRoot.querySelector(".rui-popover-trigger");
+  trigger?.setAttribute("aria-expanded", next ? "true" : "false");
+  trigger?.setAttribute("data-state", next ? "open" : "closed");
+  if (!next) disposeDismissListeners(liveRoot);
+  return liveRoot;
+};
+
+const installPopoverDismiss = (
+  liveRoot: HTMLElement,
+  openSlot: { set: (value: boolean) => void },
+): void => {
+  installDismissListeners({
+    liveRoot,
+    onDismiss: () => {
+      openSlot.set(false);
+      liveRoot.setAttribute("data-open", "false");
+      const trigger = liveRoot.querySelector(".rui-popover-trigger");
+      trigger?.setAttribute("aria-expanded", "false");
+      trigger?.setAttribute("data-state", "closed");
+    },
+  });
+};
+
+const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
+
+export const Toast: ComponentSpec = {
+  name: "Toast",
+  description:
+    "Single transient notification card. Always shows a close (×) button " +
+    "that removes the toast from the DOM (and fires `onClose` if set). " +
+    "Pass `duration` (ms) to auto-dismiss. Use inside `Toasts` for a " +
+    "stack — for top-of-page announcements prefer `Banner`, for permanent " +
+    "inbox entries prefer `Notification`.",
+  props: [
+    { name: "title", type: "string" },
+    { name: "message", type: "string", optional: true },
+    { name: "tone", type: "string", optional: true, enum: TOAST_TONES, description: "Visual accent (default \"default\")" },
+    { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (default picked from tone)" },
+    { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
+    { name: "action", type: "Button", optional: true, description: "Optional inline action Button(...) shown above the message" },
+    { name: "onClose", type: "Action", optional: true, description: "Action fired when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
+  ],
+  render: (_node, props, helpers) => {
+    const tone = asString(props.tone, "default");
+    const root = el("div", {
+      class: "rui-toast",
+      role: "status",
+      "aria-live": tone === "danger" ? "assertive" : "polite",
+      "data-tone": tone,
+    });
+    const iconName = asString(props.icon) || defaultToastIcon(tone);
+    const iconNode = renderIcon(iconName, { className: "rui-toast-icon" });
+    if (iconNode) root.append(iconNode);
+    const body = el("div", { class: "rui-toast-body" });
+    body.append(el("div", { class: "rui-toast-title" }, [asString(props.title)]));
+    const message = asString(props.message);
+    if (message) body.append(el("div", { class: "rui-toast-message" }, [message]));
+    if (props.action) {
+      const actionWrap = el("div", { class: "rui-toast-action" });
+      actionWrap.append(helpers.renderNode(props.action));
+      body.append(actionWrap);
+    }
+    root.append(body);
+
+    // Track dismiss locally so re-renders don't restart the timer or undo
+    // the manual close. `useInstanceState` keeps the slot keyed by the
+    // toast's path in the tree.
+    const dismissedSlot = helpers.useInstanceState<boolean>("dismissed", false);
+    const timerSlot = helpers.useInstanceState<ReturnType<typeof setTimeout> | null>("timer", null);
+
+    // Resolves whichever .rui-toast element is currently in the DOM,
+    // preferring the live one over the closure-captured (potentially
+    // detached) root.
+    const liveToast = (origin?: Element): HTMLElement | null => {
+      if (origin) {
+        const live = origin.closest(".rui-toast") as HTMLElement | null;
+        if (live) return live;
+      }
+      return root.isConnected ? root : null;
+    };
+
+    const cancelTimer = (): void => {
+      const handle = timerSlot.get();
+      if (handle !== null) {
+        clearTimeout(handle);
+        timerSlot.set(null);
+      }
+    };
+
+    const removalTimerSlot = helpers.useInstanceState<ReturnType<typeof setTimeout> | null>("removal-timer", null);
+
+    const dismiss = (origin?: Element): void => {
+      if (dismissedSlot.get()) return;
+      dismissedSlot.set(true);
+      // Clear the pending auto-dismiss timer so it doesn't fire `onClose`
+      // a second time after the user has already closed the toast.
+      cancelTimer();
+      const target = liveToast(origin);
+      if (!target) return;
+      target.classList.add("is-dismissed");
+      // Allow the CSS exit animation to complete before unmounting.
+      const handle = setTimeout(() => {
+        removalTimerSlot.set(null);
+        target.remove();
+      }, 180);
+      removalTimerSlot.set(handle);
+      helpers.registerDisposer(() => {
+        const h = removalTimerSlot.get();
+        if (h !== null) {
+          clearTimeout(h);
+          removalTimerSlot.set(null);
+        }
+      }, "exit-animation-timer");
+      if (isActionPayload(props.onClose)) helpers.runAction(props.onClose);
+    };
+
+    const closeBtn = el("button", {
+      type: "button",
+      class: "rui-toast-close",
+      "aria-label": "Dismiss notification",
+    }, ["×"]);
+    closeBtn.onclick = (event) => {
+      event.stopPropagation();
+      dismiss((event.currentTarget ?? event.target) as Element);
+    };
+    root.append(closeBtn);
+
+    const duration = asNumber(props.duration, 0);
+    if (duration > 0 && timerSlot.get() === null && !dismissedSlot.get()) {
+      const handle = setTimeout(() => {
+        timerSlot.set(null);
+        // Only auto-dismiss if the element is still in the document and
+        // hasn't been manually closed.
+        if (!dismissedSlot.get() && root.isConnected) dismiss();
+      }, duration);
+      timerSlot.set(handle);
+      // If the toast is unmounted before the timer fires (parent re-rendered
+      // without it, page navigated, host cleared), cancel the timer instead
+      // of letting it fire a stale `onClose` action.
+      helpers.registerDisposer(() => {
+        const h = timerSlot.get();
+        if (h !== null) {
+          clearTimeout(h);
+          timerSlot.set(null);
+        }
+      }, "auto-dismiss-timer");
+    }
+
+    if (dismissedSlot.get()) {
+      // The toast was already dismissed in a previous render cycle —
+      // return an empty placeholder so the reconciler doesn't resurrect it.
+      const placeholder = el("div", { class: "rui-toast-placeholder", hidden: "" });
+      return placeholder;
+    }
+    return root;
+  },
+};
+
+const TOASTS_POSITIONS = [
+  "top-right", "top-left", "top-center",
+  "bottom-right", "bottom-left", "bottom-center",
+] as const;
+
+export const Toasts: ComponentSpec = {
+  name: "Toasts",
+  description:
+    "Fixed-position container that stacks Toast notifications. Pin to a " +
+    "viewport corner with `position`. Pair with a `$toasts` $variable + " +
+    "`@Push` / `@Filter` to add and remove toasts declaratively.",
+  props: [
+    { name: "items", type: "Toast[]" },
+    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Viewport anchor (default \"top-right\")" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", {
+      class: "rui-toasts",
+      "data-position": asString(props.position, "top-right"),
+      "aria-live": "polite",
+    });
+    for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
+    return root;
+  },
+};
+
+function defaultToastIcon(tone: string): string {
+  switch (tone) {
+    case "success": return "circle-check";
+    case "warning": return "triangle-exclamation";
+    case "danger": return "circle-xmark";
+    case "primary": return "bell";
+    case "info": return "circle-info";
+    default: return "circle-info";
+  }
+}
 

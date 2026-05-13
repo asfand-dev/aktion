@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * Emit dist/system_prompt.txt by importing the freshly built ESM bundle.
- * This keeps the prompt in lockstep with the components shipped in the bundle.
+ * Emit the system prompt artefacts by importing the freshly built ESM bundle.
+ * This keeps the prompts in lockstep with the components shipped in the bundle.
+ *
+ * Two flavours are written into `dist/`:
+ *   - `system_prompt.txt`      — full prompt (every component, JS, routing).
+ *   - `system_prompt_chat.txt` — compact chat-focused prompt for short replies.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -22,15 +26,15 @@ async function main() {
   if (typeof generatePrompt !== "function" || !defaultLibrary) {
     throw new Error("Bundle does not export generatePrompt/defaultLibrary");
   }
-  const text = generatePrompt(defaultLibrary);
-  const textWithRoutes = generatePrompt(defaultLibrary, { enableRoutes: true });
+  const full = generatePrompt(defaultLibrary);
+  const chat = generatePrompt(defaultLibrary, { mode: "chat" });
   await mkdir(distDir, { recursive: true });
-  await writeFile(resolve(distDir, "system_prompt.txt"), text, "utf8");
-  await writeFile(resolve(distDir, "system_prompt_routing.txt"), textWithRoutes, "utf8");
+  await writeFile(resolve(distDir, "system_prompt.txt"), full, "utf8");
+  await writeFile(resolve(distDir, "system_prompt_chat.txt"), chat, "utf8");
   // eslint-disable-next-line no-console
-  console.log(`Wrote ${text.length} chars to dist/system_prompt.txt`);
+  console.log(`Wrote ${full.length} chars to dist/system_prompt.txt`);
   // eslint-disable-next-line no-console
-  console.log(`Wrote ${textWithRoutes.length} chars to dist/system_prompt_routing.txt`);
+  console.log(`Wrote ${chat.length} chars to dist/system_prompt_chat.txt`);
 }
 
 function installDomShim() {

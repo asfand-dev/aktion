@@ -1,0 +1,53 @@
+---
+description: Always read README.md before code changes; update it when the change affects anything the README documents.
+alwaysApply: true
+---
+
+# Keep README.md in sync with the codebase
+
+`README.md` is the canonical entry point for this repository. It documents the
+public API of `<streaming-ui-script>`, the bundled component library, themes,
+docs site pages, live examples, project layout, and the build / test workflow.
+
+## Before any code change
+
+1. **Read `README.md` first.** It tells you which features exist, which
+   attributes / methods / events are public, and how the docs site and live
+   examples are organised. Use it to orient yourself before touching code.
+2. Skim the relevant section (e.g. *Built-in components*, *Themes*, *Routing*,
+   *Project layout*) so your change stays consistent with the documented
+   contract.
+
+## After (or while making) a code change
+
+If your change affects anything documented in `README.md`, update the README
+in the same commit. Common triggers:
+
+| If you change…                                              | Update in README.md                                |
+|-------------------------------------------------------------|----------------------------------------------------|
+| `src/element.ts` attributes / properties / methods / events | *Public API* tables (Attributes / Properties / Methods / Events). |
+| `src/library/components/*` — add / remove / rename a component | *Built-in components* table and any inline example. |
+| `src/theme/index.ts` — add / remove a built-in theme        | *Themes* table and the intro bullet count.         |
+| `src/runtime/builtins.ts` — add / remove a `@Builtin`       | The "20+ built-in functions" bullet at the top.    |
+| `src/prompt/generator.ts` — change emitted prompt sections  | The prompt-related bullets and the *Build* section if outputs change. |
+| `scripts/emit-prompt.mjs` — change dist output filenames    | *Build the library and system prompt* code block.  |
+| `docs/*.html` — add a new docs page or live example         | *Documentation site* table and / or *Live examples* table. |
+| `package.json` scripts / dist outputs / Node engine reqs    | *Run it locally* section.                          |
+| `tests/*` — add a new top-level test file                   | *Run the test suite* bullet list.                  |
+| `src/` folder layout                                        | *Project layout* tree.                             |
+
+If you are unsure whether a change is README-worthy, ask: would a new
+contributor reading only `README.md` get a wrong or stale picture of the
+project after this change? If yes, update the README.
+
+## Don't
+
+- Don't let `README.md` drift behind the code. If you ship a feature without
+  documenting it here, the next contributor (and the LLM consumers reading
+  this repo) will not know it exists.
+- Don't duplicate `coding-gen-skill.md` content into the README. Link to it
+  instead — they have different audiences (human integrators vs. LLMs
+  authoring full apps).
+- Don't invent CDN URLs, theme names, or component names in the README —
+  cross-check against `src/library/index.ts`, `src/theme/index.ts`, and
+  `docs/live-examples.html` first.

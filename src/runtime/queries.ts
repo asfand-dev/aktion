@@ -12,7 +12,7 @@
  */
 
 import type { CallExpr, Expression } from "../parser/types.js";
-import type { EvaluationContext } from "./evaluator.js";
+import { evaluate, type EvaluationContext } from "./evaluator.js";
 
 export type ToolHandler = (args: Record<string, unknown>) => unknown | Promise<unknown>;
 
@@ -50,9 +50,36 @@ export class QueryRegistry {
   private entries = new Map<string, Entry>();
   private tools: ToolRegistry = {};
   private notify: () => void = () => {};
+  /**
+   * Returns a fresh `EvaluationContext` for the active program. Set by the
+   * planner the first time a Query / Mutation registers so we can re-fetch
+   * any query whose tool only just became available (e.g. `setTools(...)`
+   * is called after the element's response is already in flight).
+   */
+  private getCtx: (() => EvaluationContext) | null = null;
 
   setTools(tools: ToolRegistry): void {
+    const previous = this.tools;
     this.tools = tools;
+    if (!this.getCtx) return;
+    // Re-bootstrap any Query whose tool was missing before this call so it
+    // fetches the first time around. Without this, host pages that register
+    // tools *after* installing the response (a very common shape — tools
+    // depend on auth/session that resolves asynchronously) would never see
+    // a network call.
+    for (const entry of this.entries.values()) {
+      if (entry.kind !== "Query") continue;
+      const hadHandler = Boolean(previous[entry.toolName]);
+      const hasHandler = Boolean(tools[entry.toolName]);
+      if (!hadHandler && hasHandler) {
+        void this.execute(entry, this.getCtx);
+      }
+    }
+  }
+
+  /** Current tool registry (used by host elements to expose `.tools`). */
+  getTools(): ToolRegistry {
+    return this.tools;
   }
 
   /** List the names of tools registered on this registry. */
@@ -88,6 +115,7 @@ export class QueryRegistry {
    * (which may reference `$variables`) just before each invocation.
    */
   register(name: string, callExpr: CallExpr, getCtx: () => EvaluationContext): void {
+    this.getCtx = getCtx;
     const isQuery = callExpr.callee === "Query";
     const toolNameExpr = callExpr.arguments[0];
     const argsExpr = callExpr.arguments[1] ?? null;
@@ -140,6 +168,9 @@ export class QueryRegistry {
       }
     }
     this.entries.clear();
+    // Drop the context getter so a future `setTools(...)` doesn't re-fire
+    // queries against a torn-down program.
+    this.getCtx = null;
   }
 
   /**
@@ -224,27 +255,15 @@ function evaluateStaticDefault(expr: Expression): unknown {
 }
 
 function evaluateArgsObject(expr: Expression, ctx: EvaluationContext): Record<string, unknown> {
-  if (expr.kind !== "Object") return {};
-  const out: Record<string, unknown> = {};
-  for (const prop of expr.properties) {
-    out[prop.key] = evaluateExpressionLightweight(prop.value, ctx);
+  // Delegate to the full evaluator so query args can use any expression the
+  // language supports (Member access, Binary ops, builtins like @Filter, …),
+  // not just literal-only shapes. Returns {} for non-object expressions to
+  // keep call sites simple.
+  const value = evaluate(expr, ctx);
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
   }
-  return out;
-}
-
-function evaluateExpressionLightweight(expr: Expression, ctx: EvaluationContext): unknown {
-  // Re-import would be circular; replicate the minimum needed.
-  switch (expr.kind) {
-    case "Literal": return expr.value;
-    case "StateRef": return ctx.state.get(expr.name);
-    case "Array": return expr.elements.map((e) => evaluateExpressionLightweight(e, ctx));
-    case "Object": {
-      const obj: Record<string, unknown> = {};
-      for (const prop of expr.properties) obj[prop.key] = evaluateExpressionLightweight(prop.value, ctx);
-      return obj;
-    }
-    default: return null;
-  }
+  return {};
 }
 
 function collectStateRefs(expr: Expression | null): Set<string> {

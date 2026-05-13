@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM contacts · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · CRM contacts
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · directory</span>
+      <h1 style="margin-top:10px">A working CRM directory, generated from one program</h1>
+      <p>
+        A polished directory with a <code>SearchBar</code>, segmented filter
+        chips, four <code>Tile</code> quick stats, a grid of person cards,
+        pagination, and a slide-in detail <code>Sheet</code>. Filtering and
+        search drive a single <code>$contacts</code> array through
+        <code>@Filter</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Tap a stat tile to filter, type into the search bar, or click
+        "View profile" on any card to open the detail sheet.
+      </p>
+      <pre class="example-source"><code id="src-crm">$segment  = "all"
+$query    = ""
+$selected = ""
+
+$contacts = [
+  {id: "naomi",
+   name: "Naomi Rivers",
+   role: "VP Engineering · Looplog",
+   avatar: "https://i.pravatar.cc/120?img=47",
+   bio: "Built Looplog from 0 → 1.2M sessions/day. Owns the Q3 expansion deal.",
+   segment: "champions",
+   tags: ["champion", "enterprise"],
+   company: "Looplog · 240 seats",
+   owner: "Mei Tanaka",
+   arr: "$84,000",
+   renewal: "Q3 · Sep 14"},
+  {id: "marc",
+   name: "Marc Lee",
+   role: "Head of Data · Northwind",
+   avatar: "https://i.pravatar.cc/120?img=11",
+   bio: "Renewing in 14 days. Wants a custom dashboard demo before signing.",
+   segment: "customers",
+   tags: ["renewal", "data"],
+   company: "Northwind · 120 seats",
+   owner: "Naomi Rivers",
+   arr: "$56,000",
+   renewal: "Q2 · Jun 02"},
+  {id: "grace",
+   name: "Grace Hopper",
+   role: "Founder · Atlasworks",
+   avatar: "https://i.pravatar.cc/120?img=32",
+   bio: "Just upgraded to Scale. Asked about SSO + audit logs.",
+   segment: "champions",
+   tags: ["scale", "sso"],
+   company: "Atlasworks · 80 seats",
+   owner: "Naomi Rivers",
+   arr: "$42,000",
+   renewal: "Q1 · Mar 18"},
+  {id: "linus",
+   name: "Linus Torvalds",
+   role: "Staff Eng · Kernelist",
+   avatar: "https://i.pravatar.cc/120?img=12",
+   bio: "Trial expires Friday. Hands-on with the JavaScript interactions feature.",
+   segment: "prospects",
+   tags: ["trial", "perf"],
+   company: "Kernelist",
+   owner: "Sam Reyes",
+   arr: "$0 (trial)",
+   renewal: "—"},
+  {id: "ada",
+   name: "Ada Lovelace",
+   role: "CTO · Compute Lab",
+   avatar: "https://i.pravatar.cc/120?img=20",
+   bio: "Pilot signed. Needs onboarding for 12 engineers in two weeks.",
+   segment: "customers",
+   tags: ["onboarding", "enterprise"],
+   company: "Compute Lab · 12 seats",
+   owner: "Mei Tanaka",
+   arr: "$24,000",
+   renewal: "Q4 · Dec 08"},
+  {id: "mei",
+   name: "Mei Tanaka",
+   role: "Eng lead · Atlasworks",
+   avatar: "https://i.pravatar.cc/120?img=14",
+   bio: "Open question on theming for a customer-facing portal.",
+   segment: "champions",
+   tags: ["theming", "champion"],
+   company: "Atlasworks · 80 seats",
+   owner: "Naomi Rivers",
+   arr: "$42,000",
+   renewal: "Q1 · Mar 18"},
+  {id: "sam",
+   name: "Sam Reyes",
+   role: "Architect · Northwind",
+   avatar: "https://i.pravatar.cc/120?img=15",
+   bio: "Quiet for 30 days. Worth a check-in before the QBR.",
+   segment: "at-risk",
+   tags: ["at-risk", "qbr"],
+   company: "Northwind · 120 seats",
+   owner: "Naomi Rivers",
+   arr: "$56,000",
+   renewal: "Q2 · Jun 02"},
+  {id: "jordan",
+   name: "Jordan Patel",
+   role: "Founder · Looplog",
+   avatar: "https://i.pravatar.cc/120?img=22",
+   bio: "References us in their public roadmap. Great expansion candidate.",
+   segment: "champions",
+   tags: ["champion", "advocacy"],
+   company: "Looplog · 240 seats",
+   owner: "Mei Tanaka",
+   arr: "$84,000",
+   renewal: "Q3 · Sep 14"}
+]
+
+segmentRows = $segment == "all" ? $contacts : @Filter($contacts, "segment", "==", $segment)
+visibleRows = $query == "" ? segmentRows : @Filter(segmentRows, "name", "contains", $query)
+visibleCount = @Count(visibleRows)
+totalCount = @Count($contacts)
+
+searchBar = SearchBar("crm-q", "Search contacts by name…", $query, "/")
+
+segments = ToggleGroup("segment", [
+  {value: "all",        label: "All",        icon: "users"},
+  {value: "customers",  label: "Customers",  icon: "handshake"},
+  {value: "prospects",  label: "Prospects",  icon: "seedling"},
+  {value: "champions",  label: "Champions",  icon: "trophy"},
+  {value: "at-risk",    label: "At-risk",    icon: "triangle-exclamation"}
+], $segment)
+
+statTiles = Grid([
+  Tile("Total contacts",   "users", "2,481", "+128 this week",            "primary", Action([@Set($segment, "all")])),
+  Tile("Active deals",     "briefcase", "47",    "$418k ARR pipeline",        "info",    Action([@Set($segment, "customers")])),
+  Tile("At-risk accounts", "triangle-exclamation", "12",    "Needs follow-up this week", "warning", Action([@Set($segment, "at-risk")])),
+  Tile("Champions",        "trophy", "63",    "NPS 9 or 10 in last 30d",   "success", Action([@Set($segment, "champions")]))
+], 4, "m")
+
+filterRow = Stack([
+  searchBar,
+  segments
+], "column", "m")
+
+emptyResults = EmptyState(
+  "No contacts match",
+  "Adjust the segment or clear the search to see more results.",
+  "magnifying-glass",
+  Button("Reset filters",
+         Action([@Set($segment, "all"), @Reset($query)]),
+         "secondary")
+)
+
+contactGrid = Grid(
+  @Each(visibleRows, "c",
+    ProfileCard(
+      c.name,
+      c.role,
+      c.avatar,
+      c.bio,
+      c.tags,
+      [Button("View profile",
+              Action([@Set($selected, c.id)]),
+              "secondary",
+              "button",
+              "small")]
+    )
+  ),
+  4, "m"
+)
+
+cards = visibleCount == 0 ? emptyResults : contactGrid
+
+selected = @First(@Filter($contacts, "id", "==", $selected))
+selectedExists = @Count(@Filter($contacts, "id", "==", $selected))
+
+detailGeneric = EmptyState("Profile not loaded",
+                            "Pick a contact card on the left to see their details here.",
+                            "user",
+                            null)
+
+detailLoaded = Stack([
+  PersonChip(selected.name, selected.role, selected.avatar, "lg", "online"),
+  DescriptionList([
+    DescriptionItem("Company",  selected.company),
+    DescriptionItem("Owner",    selected.owner),
+    DescriptionItem("ARR",      selected.arr),
+    DescriptionItem("Renewal",  selected.renewal)
+  ]),
+  Note(selected.bio, "info"),
+  Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
+        selected.name + " · last QBR",
+        "primary"),
+  Stack(
+    @Each(selected.tags, "t", Tag(t, null, "sm", "info")),
+    "row", "s"
+  )
+], "column", "m")
+
+detailBody = selectedExists == 0 ? detailGeneric : detailLoaded
+
+detailSheet = Sheet(
+  "Contact detail",
+  $selected != "",
+  [detailBody],
+  "right",
+  [Buttons([
+    Button("Close",
+           Action([@Set($selected, "")]),
+           "secondary"),
+    Button("Open in CRM",
+           Action([@ToAssistant("Open " + $selected + " in the CRM")]),
+           "primary")
+  ])]
+)
+
+resultSummary = TextContent(
+  "Showing " + visibleCount + " of " + totalCount + " contacts" + ($query == "" ? "" : (" · matching \"" + $query + "\"")),
+  "small",
+  "muted"
+)
+
+root = Stack([
+  PageHeader(
+    "Contacts",
+    "2,481 contacts · 12 at-risk",
+    null,
+    [Button("New contact",
+            Action([@ToAssistant("Open the new-contact form")]),
+            "primary")],
+    Badge("CRM v3.1", "info")
+  ),
+  statTiles,
+  filterRow,
+  resultSummary,
+  cards,
+  detailSheet
+], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-crm" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        Cards, filter chips, the search bar, the result summary, and the
+        detail sheet all read from the same <code>$contacts</code> array.
+        Segmenting and searching are one <code>@Filter</code> chain;
+        opening a contact is a single <code>@Set</code> on
+        <code>$selected</code>. No host code runs for any of the
+        interactions.
+      </p>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-crm");
+    el.setResponse(document.getElementById("src-crm").textContent);
+  </script>
+</body>
+</html>

@@ -4,10 +4,545 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Playground · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <meta name="description" content="A polished in-browser playground for Streaming UI Script with syntax highlighting, autocomplete, inspection mode, and live rendering." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* =========================================================================
+       Playground — page-scoped layout.
+
+       The page hijacks the docs main column for a desktop-class IDE-style
+       layout: app bar at the top, editor + viewer panes with a draggable
+       splitter, and a slim status bar at the bottom of the editor. All
+       styles are scoped to body[data-page="playground"] so they don't leak
+       into other docs pages.
+       ========================================================================= */
+
+    body[data-page="playground"] .layout > main {
+      padding: 0;
+      max-width: none;
+    }
+
+    .pg-app {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 0px);
+      min-height: 560px;
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      font-family: var(--doc-font);
+      isolation: isolate;
+    }
+
+    /* ------- App bar ------- */
+    .pg-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      flex-wrap: wrap;
+    }
+    .pg-bar-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-right: 6px;
+    }
+    .pg-bar-title i { color: var(--doc-primary); }
+    .pg-spacer { flex: 1; }
+
+    .pg-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-bg-soft);
+    }
+    .pg-group select {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 6px 22px 6px 10px;
+      border-radius: calc(var(--doc-radius-md) - 2px);
+      cursor: pointer;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                        linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 12px) 14px, calc(100% - 7px) 14px;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+
+    .pg-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      transition: background var(--doc-transition), border-color var(--doc-transition), color var(--doc-transition);
+    }
+    .pg-btn:hover { background: var(--doc-bg-soft); border-color: var(--doc-border-strong); }
+    .pg-btn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+    .pg-btn[aria-pressed="true"], .pg-btn.is-active {
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
+      border-color: transparent;
+    }
+    .pg-btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .pg-btn i { width: 14px; text-align: center; }
+    .pg-btn .pg-btn-text { font-weight: 500; }
+    @media (max-width: 720px) {
+      .pg-btn .pg-btn-text { display: none; }
+    }
+
+    .pg-iconbtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--doc-text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+    }
+    .pg-iconbtn:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .pg-iconbtn[aria-pressed="true"] { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .pg-iconbtn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+
+    .pg-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-muted);
+    }
+    .pg-pill[data-tone="danger"] { background: rgba(239, 68, 68, .12); color: #b91c1c; }
+    .pg-pill[data-tone="success"] { background: rgba(16, 185, 129, .12); color: #047857; }
+    :root[data-doc-theme="dark"] .pg-pill[data-tone="danger"] { color: #fca5a5; }
+    :root[data-doc-theme="dark"] .pg-pill[data-tone="success"] { color: #6ee7b7; }
+
+    /* ------- Workspace ------- */
+    .pg-workspace {
+      flex: 1;
+      display: grid;
+      min-height: 0;
+      position: relative;
+      background: var(--doc-bg);
+    }
+    .pg-workspace[data-mode="split-h"] { grid-template-columns: var(--pg-split, 1fr 6px 1fr); grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="split-v"] { grid-template-rows: var(--pg-split-v, 1fr 6px 1fr); grid-template-columns: 1fr; }
+    .pg-workspace[data-mode="editor-only"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="editor-only"] .pg-pane--viewer { display: none; }
+    .pg-workspace[data-mode="editor-only"] .pg-splitter { display: none; }
+    .pg-workspace[data-mode="viewer-only"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="viewer-only"] .pg-pane--editor { display: none; }
+    .pg-workspace[data-mode="viewer-only"] .pg-splitter { display: none; }
+
+    .pg-pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: var(--doc-surface);
+    }
+    .pg-pane--editor { border-right: 1px solid var(--doc-border); }
+    .pg-workspace[data-mode="split-v"] .pg-pane--editor { border-right: 0; border-bottom: 1px solid var(--doc-border); }
+
+    .pg-pane-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .pg-pane-toolbar h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 0;
+      color: var(--doc-text-muted);
+    }
+
+    /* ------- Editor ------- */
+    .pg-editor-host {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+      font-family: var(--doc-mono);
+      font-size: 13px;
+    }
+    .pg-editor-host .cm-editor { height: 100%; }
+    .pg-editor-host .cm-scroller { font-family: var(--doc-mono); }
+    .pg-editor-host .cm-content { padding: 12px 0; }
+    .pg-editor-host .cm-gutters {
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-subtle);
+      border-right: 1px solid var(--doc-border-subtle);
+    }
+    .pg-editor-host .cm-activeLine { background-color: var(--doc-primary-softer); }
+    .pg-editor-host .cm-activeLineGutter { background-color: var(--doc-primary-softer); color: var(--doc-primary); }
+    .pg-editor-host .pg-source-highlight { background: rgba(99, 102, 241, .18); transition: background-color 1.2s ease-out; }
+
+    .pg-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 12px;
+      border-top: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .pg-status button {
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      border: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pg-status button:hover { color: var(--doc-primary); }
+    .pg-status [data-tone="danger"] { color: var(--doc-danger); }
+
+    /* ------- Viewer ------- */
+    .pg-pane--viewer { background: var(--doc-bg-soft); position: relative; }
+    .pg-viewer-frame {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+      background: var(--doc-bg);
+    }
+    .pg-viewer-frame streaming-ui-script {
+      display: block;
+      width: 100%;
+      min-height: 100%;
+    }
+    .pg-pane--viewer[data-inspect="true"] .pg-viewer-frame streaming-ui-script {
+      cursor: crosshair;
+    }
+
+    /* ------- Splitter ------- */
+    .pg-splitter {
+      background: var(--doc-border);
+      cursor: col-resize;
+      position: relative;
+      transition: background var(--doc-transition);
+    }
+    .pg-splitter:hover, .pg-splitter[data-dragging="true"] {
+      background: var(--doc-primary);
+    }
+    .pg-workspace[data-mode="split-v"] .pg-splitter { cursor: row-resize; }
+    .pg-splitter::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      background: rgba(0, 0, 0, .15);
+      border-radius: 999px;
+    }
+    .pg-workspace[data-mode="split-h"] .pg-splitter::after { width: 2px; height: 28px; }
+    .pg-workspace[data-mode="split-v"] .pg-splitter::after { height: 2px; width: 28px; }
+
+    /* ------- Inspect tooltip ------- */
+    .pg-inspect-overlay {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+      border: 2px solid var(--doc-primary);
+      border-radius: 4px;
+      background: rgba(99, 102, 241, .08);
+      transition: all 80ms ease-out;
+    }
+    .pg-inspect-tooltip {
+      position: fixed;
+      z-index: 101;
+      max-width: 360px;
+      pointer-events: none;
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-lg);
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--doc-text);
+    }
+    .pg-inspect-tooltip h4 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--doc-primary);
+    }
+    .pg-inspect-tooltip .pg-inspect-sig {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      padding: 4px 6px;
+      border-radius: var(--doc-radius-xs);
+      margin: 4px 0 8px;
+      display: block;
+      color: var(--doc-text);
+    }
+    .pg-inspect-tooltip .pg-inspect-desc { color: var(--doc-text-muted); margin: 0 0 8px; }
+    .pg-inspect-tooltip .pg-inspect-params { margin: 0; padding-left: 14px; }
+    .pg-inspect-tooltip .pg-inspect-params li { margin-bottom: 2px; }
+    .pg-inspect-tooltip .pg-inspect-params code { font-size: 11px; }
+    .pg-inspect-tooltip .pg-inspect-meta {
+      color: var(--doc-text-subtle);
+      font-size: 11px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--doc-border-subtle);
+    }
+
+    /* ------- Loading skeleton ------- */
+    .pg-loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+      background: var(--doc-surface);
+    }
+    .pg-loader[hidden] { display: none; }
+    .pg-loader i { animation: pg-spin 1s linear infinite; }
+    @keyframes pg-spin { to { transform: rotate(360deg); } }
+
+    /* ------- Help modal ------- */
+    .pg-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .55);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .pg-modal-backdrop[hidden] { display: none; }
+    .pg-inspect-overlay[hidden], .pg-inspect-tooltip[hidden] { display: none; }
+    .pg-loader[hidden] { display: none; }
+    .pg-modal {
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      box-shadow: var(--doc-shadow-lg);
+      width: min(520px, 100%);
+      max-height: 80vh;
+      overflow: auto;
+      padding: 20px 22px;
+    }
+    .pg-modal h2 { margin: 0 0 12px; font-size: 18px; }
+    .pg-modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pg-modal td { padding: 6px 0; }
+    .pg-modal td:first-child { white-space: nowrap; padding-right: 16px; }
+    .pg-modal kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      border-radius: 4px;
+    }
+
+    /* ------- Toast ------- */
+    .pg-toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 250;
+      background: var(--doc-text);
+      color: var(--doc-text-inverse);
+      padding: 10px 14px;
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-lg);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transform: translateY(8px);
+      opacity: 0;
+      transition: opacity 200ms ease, transform 200ms ease;
+    }
+    .pg-toast[data-visible="true"] {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ------- Collapsible sidebar (playground-scoped) -------
+       The playground toggles `data-sidebar-collapsed` on `.layout` to
+       collapse the docs nav and reclaim horizontal space for the editor.
+       We collapse to a single-column grid (instead of giving column 1 a 0
+       width) because `display:none` removes the sidebar from the grid flow,
+       which would otherwise leave `main` stuck in a 0-width track. Also
+       lift the docs `max-width` so the playground spans the full viewport
+       — the IDE-style layout feels cramped inside the 1500px shell. */
+    body[data-page="playground"] .layout[data-sidebar-collapsed="true"] {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: none;
+    }
+    body[data-page="playground"] .layout[data-sidebar-collapsed="true"] > .sidebar {
+      display: none;
+    }
+    .pg-sidebar-toggle i {
+      transition: transform var(--doc-transition);
+    }
+    .pg-sidebar-toggle[aria-pressed="true"] i {
+      transform: rotate(180deg);
+    }
+
+    /* ------- Editor hover / signature tooltip ------- */
+    .pg-cm-tooltip {
+      max-width: 360px;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px 12px;
+    }
+    .pg-cm-tooltip h4 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--doc-primary);
+    }
+    .pg-cm-tooltip h4 .pg-cm-group {
+      font-weight: 400;
+      color: var(--doc-text-muted);
+      margin-left: auto;
+      font-size: 11px;
+    }
+    .pg-cm-tooltip code.pg-cm-sig {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      padding: 4px 6px;
+      border-radius: var(--doc-radius-xs);
+      margin: 4px 0 8px;
+      display: block;
+      color: var(--doc-text);
+      white-space: pre-wrap;
+    }
+    .pg-cm-tooltip code.pg-cm-sig .pg-cm-active {
+      color: var(--doc-primary);
+      font-weight: 700;
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+    .pg-cm-tooltip p.pg-cm-desc {
+      color: var(--doc-text-muted);
+      margin: 0 0 8px;
+    }
+    .pg-cm-tooltip .pg-cm-param {
+      background: var(--doc-bg-soft);
+      border-left: 2px solid var(--doc-primary);
+      padding: 6px 8px;
+      border-radius: var(--doc-radius-xs);
+      margin: 0 0 8px;
+    }
+    .pg-cm-tooltip .pg-cm-param-name {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pg-cm-tooltip .pg-cm-param-type {
+      color: var(--doc-text-muted);
+      font-size: 11px;
+      font-family: var(--doc-mono);
+    }
+    .pg-cm-tooltip .pg-cm-param-desc {
+      color: var(--doc-text-muted);
+      margin: 4px 0 0;
+      font-size: 12px;
+    }
+    .pg-cm-tooltip .pg-cm-enum-label {
+      display: block;
+      margin-top: 6px;
+      color: var(--doc-text-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .pg-cm-tooltip .pg-cm-enum-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .pg-cm-tooltip .pg-cm-enum {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      background: var(--doc-primary-softer);
+      color: var(--doc-primary);
+      padding: 2px 6px;
+      border-radius: 999px;
+    }
+    .pg-cm-tooltip ul.pg-cm-params {
+      margin: 0;
+      padding-left: 16px;
+    }
+    .pg-cm-tooltip ul.pg-cm-params li {
+      margin-bottom: 2px;
+    }
+    .pg-cm-tooltip ul.pg-cm-params li code {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+    }
+
+    /* ------- Layout (mobile defaults) ------- */
+    @media (max-width: 880px) {
+      body[data-page="playground"] .sidebar { display: none; }
+      body[data-page="playground"] .layout { grid-template-columns: 1fr; }
+      body[data-page="playground"] .pg-sidebar-toggle { display: none; }
+      .pg-app { height: 100vh; }
+    }
+  </style>
 </head>
-<body>
-  <div class="layout">
+<body data-page="playground">
+  <div class="layout" data-wide="true">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
       <p>Web component runtime for Streaming UI Script</p>
@@ -22,80 +557,176 @@
         <a href="themes.html">Theming</a>
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="playground.html" aria-current="page">Playground</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Playground</h1>
-      <p>
-        Edit the source on the left — the component on the right re-renders on
-        every keystroke. Use this to debug LLM output or to author starter prompts.
-      </p>
+      <div class="pg-app" id="pg-app">
+        <!-- App bar -->
+        <header class="pg-bar" role="banner">
+          <button class="pg-iconbtn pg-sidebar-toggle" id="pg-sidebar-toggle"
+                  aria-pressed="false"
+                  aria-controls="site-nav"
+                  title="Collapse sidebar"
+                  aria-label="Toggle sidebar">
+            <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
+          </button>
+          <div class="pg-bar-title">
+            <i class="fa-solid fa-flask" aria-hidden="true"></i>
+            <span>Playground</span>
+          </div>
 
-      <div class="theme-picker" style="margin-bottom:14px; display:flex; gap:16px; align-items:center; flex-wrap:wrap">
-        <span style="display:inline-flex; gap:6px; align-items:center">
-          <label for="playground-theme">Theme</label>
-          <select id="playground-theme">
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="neon">Neon</option>
-            <option value="pastel">Pastel</option>
-            <option value="glass">Glass</option>
-            <option value="brutalist">Brutalist</option>
-            <option value="skyline">Skyline</option>
-          </select>
-        </span>
-        <label style="display:inline-flex; gap:6px; align-items:center; font-size:13px">
-          <input id="playground-enable-js" type="checkbox" />
-          Enable JavaScript (<code>Script</code> + <code>@Js</code>)
-        </label>
-        <label style="display:inline-flex; gap:6px; align-items:center; font-size:13px">
-          <input id="playground-enable-routes" type="checkbox" />
-          Enable routing (<code>Routes</code> + <code>NavLink</code>)
-        </label>
+          <div class="pg-group" role="group" aria-label="Example presets">
+            <label class="sr-only" for="pg-example">Example</label>
+            <select id="pg-example" aria-label="Example preset">
+              <option value="chat">Chat reply</option>
+              <option value="dashboard">Project dashboard</option>
+              <option value="todo">Reactive todo</option>
+              <option value="routing">Routing app</option>
+              <option value="counter">JS counter</option>
+              <option value="chart">Chart + metrics</option>
+            </select>
+          </div>
+
+          <div class="pg-group" role="group" aria-label="Theme">
+            <label class="sr-only" for="pg-theme">Theme</label>
+            <select id="pg-theme" aria-label="Renderer theme">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="neon">Neon</option>
+              <option value="pastel">Pastel</option>
+              <option value="glass">Glass</option>
+              <option value="brutalist">Brutalist</option>
+              <option value="skyline">Skyline</option>
+            </select>
+          </div>
+
+          <div class="pg-spacer"></div>
+
+          <div role="group" aria-label="Run mode">
+            <button class="pg-btn" id="pg-run-mode" aria-pressed="false" title="Toggle live / manual run">
+              <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+              <span class="pg-btn-text" id="pg-run-label">Live</span>
+            </button>
+            <button class="pg-btn" id="pg-run" title="Run (Cmd/Ctrl+Enter)" aria-label="Run program">
+              <i class="fa-solid fa-play" aria-hidden="true"></i>
+              <span class="pg-btn-text">Run</span>
+            </button>
+          </div>
+
+          <div role="group" aria-label="View mode">
+            <button class="pg-iconbtn" data-mode="split-h" title="Side-by-side" aria-label="Side-by-side layout">
+              <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="split-v" title="Stacked" aria-label="Stacked layout">
+              <i class="fa-solid fa-grip-lines" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="editor-only" title="Editor only (Zen)" aria-label="Editor only">
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="viewer-only" title="Viewer only" aria-label="Viewer only">
+              <i class="fa-solid fa-display" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <button class="pg-btn" id="pg-inspect" aria-pressed="false" title="Inspect mode (Cmd/Ctrl+Shift+I)">
+            <i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i>
+            <span class="pg-btn-text">Inspect</span>
+          </button>
+
+          <button class="pg-iconbtn" id="pg-share" title="Copy share link" aria-label="Copy share link">
+            <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-copy" title="Copy code" aria-label="Copy code">
+            <i class="fa-solid fa-copy" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-reset" title="Reset to example" aria-label="Reset to current example">
+            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-help" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
+            <i class="fa-solid fa-keyboard" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <!-- Editor + viewer workspace -->
+        <div class="pg-workspace" id="pg-workspace" data-mode="split-h">
+          <section class="pg-pane pg-pane--editor" aria-label="Editor pane">
+            <div class="pg-pane-toolbar">
+              <h3>Streaming UI Script</h3>
+              <div class="pg-spacer"></div>
+              <span class="pg-pill" id="pg-pill-preset" title="Active example">Chat reply</span>
+            </div>
+            <div class="pg-editor-host" id="pg-editor">
+              <div class="pg-loader" id="pg-editor-loader">
+                <i class="fa-solid fa-circle-notch" aria-hidden="true"></i>
+                <span>Loading editor…</span>
+              </div>
+            </div>
+            <div class="pg-status" id="pg-status">
+              <span id="pg-status-cursor"><i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i> Ln 1, Col 1</span>
+              <button id="pg-status-errors" type="button" data-tone="success" title="Jump to first error">
+                <i class="fa-solid fa-check" aria-hidden="true"></i>
+                <span id="pg-status-errors-text">No errors</span>
+              </button>
+              <span id="pg-status-chars"><i class="fa-solid fa-text-width" aria-hidden="true"></i> 0 chars</span>
+              <span class="pg-spacer"></span>
+              <span id="pg-status-keys" title="Cmd/Ctrl + Enter to run when not in live mode">
+                <kbd>⌘</kbd>+<kbd>↵</kbd>
+              </span>
+            </div>
+          </section>
+
+          <div class="pg-splitter" id="pg-splitter" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0"></div>
+
+          <section class="pg-pane pg-pane--viewer" id="pg-viewer-pane" aria-label="Renderer pane" data-inspect="false">
+            <div class="pg-pane-toolbar">
+              <h3>Preview</h3>
+              <div class="pg-spacer"></div>
+              <span class="pg-pill" id="pg-pill-theme">light</span>
+              <button class="pg-iconbtn" id="pg-fullscreen" title="Toggle full-screen viewer" aria-label="Toggle full-screen viewer">
+                <i class="fa-solid fa-expand" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="pg-viewer-frame" id="pg-viewer-frame">
+              <streaming-ui-script id="pg-target" theme="light"></streaming-ui-script>
+            </div>
+          </section>
+        </div>
       </div>
 
-      <div class="playground-layout">
-        <section class="playground-pane">
-          <h3>Streaming UI Script</h3>
-          <textarea id="playground-input" class="playground-input" spellcheck="false">root = Stack([greeting, sample, follow])
-greeting = Card([CardHeader("Hello, world", "Edit this text and watch it update")])
-sample = Card([
-  CardHeader("Sample stat"),
-  Stack([
-    StatCard("Active users", "12,540", "up", "+12% vs last week"),
-    StatCard("Revenue", "$48.2k", "flat"),
-    StatCard("Errors", "12", "down", "-32%")
-  ], "row", "m", "stretch", "start", true)
-])
-follow = FollowUpBlock([
-  FollowUpItem("Add a chart"),
-  FollowUpItem("Show an alert")
-], "Try editing")</textarea>
-        </section>
-        <section class="playground-pane">
-          <h3>Preview</h3>
-          <streaming-ui-script id="playground-target" theme="light" transparent style="flex:1; overflow:auto;"></streaming-ui-script>
-        </section>
+      <!-- Inspect overlays (sit at body level, outside shadow DOM) -->
+      <div class="pg-inspect-overlay" id="pg-inspect-overlay" hidden></div>
+      <div class="pg-inspect-tooltip" id="pg-inspect-tooltip" hidden role="tooltip"></div>
+
+      <!-- Help modal -->
+      <div class="pg-modal-backdrop" id="pg-modal-backdrop" hidden>
+        <div class="pg-modal" role="dialog" aria-labelledby="pg-modal-title" aria-modal="true">
+          <h2 id="pg-modal-title">Keyboard shortcuts</h2>
+          <table>
+            <tbody>
+              <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Run program (in manual mode)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd></td><td>Toggle inspect mode</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save to localStorage (auto on type)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Toggle live / manual run</td></tr>
+              <tr><td><kbd>Tab</kbd></td><td>Indent / accept snippet</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td><td>Trigger autocomplete</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Close popups / exit full-screen</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
+            Type a component name like <code>Card</code> and press <kbd>Tab</kbd> for a snippet,
+            or <code>@</code> followed by a builtin (e.g. <code>@Each</code>) for argument hints.
+          </p>
+        </div>
       </div>
+
+      <div class="pg-toast" id="pg-toast" role="status" aria-live="polite"></div>
     </main>
   </div>
-  <script type="module" src="assets/site.js"></script>
+
+  <script type="module" src="assets/playground.js?v=2026.05.13d"></script>
 </body>
 </html>

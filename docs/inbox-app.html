@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inbox app · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · inbox app
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · split view</span>
+      <h1 style="margin-top:10px">A working inbox app, generated from one program</h1>
+      <p>
+        Master/detail UI built around <code>SplitView</code>, a polished
+        <code>SearchBar</code>, <code>PersonChip</code> sender lines,
+        <code>Notification</code> entries for the list, and a threaded
+        conversation rendered with <code>ChatBubble</code>. Filtering and
+        search are wired with <code>@Filter</code> over a single
+        <code>$messages</code> array.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Pick a thread from the left list to focus it. Type in the search box
+        or change the folder to filter the list. Compose a reply on the
+        right — <code>$reply</code> binds to the textarea and the send
+        button.
+      </p>
+      <pre class="example-source"><code id="src-inbox">$thread = "billing"
+$folder = "inbox"
+$query  = ""
+$reply  = ""
+
+$messages = [
+  {id: "billing",
+   from: "Stripe Receipts",
+   email: "billing@stripe.com",
+   avatar: "https://i.pravatar.cc/64?img=12",
+   subject: "Receipt for Pro plan — $29.00 charged today.",
+   preview: "Receipt for Pro plan — $29.00 charged today.",
+   time: "10:24 AM",
+   folder: "inbox",
+   tag: "Receipt",
+   tagTone: "info",
+   unread: true,
+   priority: false},
+  {id: "release",
+   from: "Naomi Rivers",
+   email: "Eng manager · Looplog",
+   avatar: "https://i.pravatar.cc/64?img=47",
+   subject: "Re: Q3 release — pushed to Friday",
+   preview: "Pushed the date to Friday, ready for sign-off.",
+   time: "9:02 AM",
+   folder: "inbox",
+   tag: "Release",
+   tagTone: "success",
+   unread: true,
+   priority: true},
+  {id: "github",
+   from: "GitHub Digest",
+   email: "Activity digest · 12 PRs",
+   avatar: "",
+   subject: "12 new pull requests waiting",
+   preview: "12 new pull requests waiting for review across 3 repos.",
+   time: "Yesterday",
+   folder: "inbox",
+   tag: "Activity",
+   tagTone: "info",
+   unread: false,
+   priority: false},
+  {id: "perf",
+   from: "Linus Torvalds",
+   email: "Perf · streaming-ui-script",
+   avatar: "https://i.pravatar.cc/64?img=11",
+   subject: "Perf review attached",
+   preview: "Some easy wins on the parser — caching regex drops parse time by ~38%.",
+   time: "Mon",
+   folder: "inbox",
+   tag: "Review",
+   tagTone: "warning",
+   unread: false,
+   priority: true},
+  {id: "ada",
+   from: "Ada Lovelace",
+   email: "CTO · Compute Lab",
+   avatar: "https://i.pravatar.cc/64?img=20",
+   subject: "Re: Onboarding for 12 engineers",
+   preview: "Pilot signed. Need onboarding for 12 engineers in two weeks.",
+   time: "Mon",
+   folder: "starred",
+   tag: "Pilot",
+   tagTone: "primary",
+   unread: false,
+   priority: false},
+  {id: "mei",
+   from: "Mei Tanaka",
+   email: "Eng lead · Atlasworks",
+   avatar: "https://i.pravatar.cc/64?img=14",
+   subject: "Theming question",
+   preview: "Open question on theming for a customer-facing portal.",
+   time: "Sun",
+   folder: "starred",
+   tag: "Question",
+   tagTone: "info",
+   unread: false,
+   priority: false},
+  {id: "draft1",
+   from: "Draft to support",
+   email: "support@acme.com",
+   avatar: "",
+   subject: "Updating my billing address",
+   preview: "Hi team, please update my billing address to ACME Inc., 1 Market St…",
+   time: "Sun",
+   folder: "sent",
+   tag: "Draft",
+   tagTone: "neutral",
+   unread: false,
+   priority: false},
+  {id: "lottery",
+   from: "You've won!",
+   email: "no-reply@suspicious.tld",
+   avatar: "",
+   subject: "$1,000,000 prize waiting",
+   preview: "Claim your prize before midnight!",
+   time: "Sun",
+   folder: "spam",
+   tag: "Spam",
+   tagTone: "danger",
+   unread: true,
+   priority: false}
+]
+
+folderRows = @Filter($messages, "folder", "==", $folder)
+visibleRows = $query == "" ? folderRows : @Filter(folderRows, "subject", "contains", $query)
+
+unreadCount = @Count(@Filter($messages, "unread", "==", true))
+priorityCount = @Count(@Filter($messages, "priority", "==", true))
+visibleCount = @Count(visibleRows)
+
+folderChips = ToggleGroup("folder", [
+  {value: "inbox",   label: "Inbox",   icon: "inbox"},
+  {value: "starred", label: "Starred", icon: "star"},
+  {value: "sent",    label: "Sent",    icon: "paper-plane"},
+  {value: "spam",    label: "Spam",    icon: "ban"}
+], $folder)
+
+searchBar = SearchBar("inbox-q", "Search subject…", $query, "/")
+
+threadRows = @Each(visibleRows, "m",
+  Notification(
+    m.from,
+    m.preview,
+    m.time,
+    null,
+    m.avatar,
+    $thread == m.id ? "primary" : "default",
+    m.unread,
+    [Button("Open", Action([@Set($thread, m.id)]), "ghost", "button", "small")]
+  )
+)
+
+emptyList = EmptyState(
+  "Nothing matches",
+  "Adjust the folder or clear the search to see more messages.",
+  "magnifying-glass",
+  Button("Clear filters",
+         Action([@Reset($query), @Set($folder, "inbox")]),
+         "secondary")
+)
+
+threadList = visibleCount == 0 ? emptyList : Stack(threadRows, "column", "s")
+
+selected = @First(@Filter($messages, "id", "==", $thread))
+selectedExists = @Count(@Filter($messages, "id", "==", $thread))
+
+billingBody = Stack([
+  ChatBubble("Stripe Receipts",
+             "We've charged $29.00 to Visa •• 4242 for your Pro plan. Your next invoice is in 30 days.",
+             "10:24 AM", null, "agent", "delivered"),
+  ChatBubble("Stripe Receipts",
+             "Need an invoice in your company name? Reply with the billing address and we'll regenerate it.",
+             "10:25 AM", null, "agent", "delivered"),
+  ChatBubble("You",
+             "Please add ACME Inc., 1 Market St, San Francisco to the invoice.",
+             "10:27 AM", null, "me", "read")
+], "column", "m")
+
+releaseBody = Stack([
+  ChatBubble("Naomi Rivers",
+             "Hey — pushing v2.3 to Friday so QA can clear the remaining two bugs.",
+             "9:02 AM", "https://i.pravatar.cc/64?img=47", "agent", "delivered"),
+  ChatBubble("You",
+             "Sounds good. I'll update the launch post and notify the support team.",
+             "9:05 AM", null, "me", "read"),
+  ChatBubble("Naomi Rivers",
+             "Thanks. Adding the changelog draft to the doc — feel free to edit.",
+             "9:06 AM", "https://i.pravatar.cc/64?img=47", "agent", "delivered")
+], "column", "m")
+
+githubBody = Stack([
+  ChatBubble("GitHub Digest",
+             "12 new pull requests waiting for review across 3 repos. Top reviewer this week: @grace.",
+             "Yesterday", null, "agent", "delivered"),
+  ChatBubble("GitHub Digest",
+             "streaming-ui-script #248: Patterns ready for review. streaming-ui-script #249: Tokenizer cache.",
+             "Yesterday", null, "agent", "delivered")
+], "column", "m")
+
+perfBody = Stack([
+  ChatBubble("Linus Torvalds",
+             "Tokenizer is allocating a lot in the hot path. Caching the regex matches drops parse time by ~38%.",
+             "Mon", "https://i.pravatar.cc/64?img=11", "agent", "delivered"),
+  ChatBubble("You",
+             "Huge win. Open a PR against main and I'll fast-track the review.",
+             "Mon", null, "me", "read")
+], "column", "m")
+
+adaBody = Stack([
+  ChatBubble("Ada Lovelace",
+             "Pilot signed off! Can we get 12 engineers onboarded in two weeks?",
+             "Mon", "https://i.pravatar.cc/64?img=20", "agent", "delivered")
+], "column", "m")
+
+meiBody = Stack([
+  ChatBubble("Mei Tanaka",
+             "Quick question on theming a customer-facing portal — can we set a custom accent token at runtime?",
+             "Sun", "https://i.pravatar.cc/64?img=14", "agent", "delivered")
+], "column", "m")
+
+draftBody = Stack([
+  Note("Saved as draft Sunday at 18:42. No recipient has received this yet.", "info"),
+  ChatBubble("You",
+             "Hi team, please update my billing address to ACME Inc., 1 Market St, SF.",
+             "Sun · draft", null, "me", "sending")
+], "column", "m")
+
+spamBody = Stack([
+  Note("This message was flagged as spam. Only the preview is shown.", "warning"),
+  ChatBubble("You've won!",
+             "Claim your $1,000,000 prize before midnight by replying with your bank details.",
+             "Sun", null, "agent", "delivered")
+], "column", "m")
+
+threadBody = $thread == "billing" ? billingBody : ($thread == "release" ? releaseBody : ($thread == "github" ? githubBody : ($thread == "perf" ? perfBody : ($thread == "ada" ? adaBody : ($thread == "mei" ? meiBody : ($thread == "draft1" ? draftBody : spamBody))))))
+
+threadHeader = Stack([
+  PersonChip(selected.from, selected.email, selected.avatar, "md", "online"),
+  Spacer(),
+  Tag(selected.tag, null, "sm", selected.tagTone)
+], "row", "m", "center")
+
+threadFooter = Stack([
+  Separator("horizontal", true),
+  TextArea("reply", "Type a reply… (markdown supported)", 3, $reply),
+  Stack([
+    Tag("Markdown ready", "wand-magic-sparkles", "sm", "info"),
+    Spacer(),
+    Buttons([
+      Button("Save draft", Action([@ToAssistant("Save the reply as a draft.")]), "secondary"),
+      Button("Send reply",
+             Action([@ToAssistant("Send the reply: " + $reply), @Reset($reply)]),
+             "primary")
+    ])
+  ], "row", "m", "center")
+], "column", "m")
+
+leftPane = Stack([
+  searchBar,
+  folderChips,
+  threadList
+], "column", "m")
+
+emptyDetail = EmptyState(
+  "Pick a conversation",
+  "Select an item on the left to read the thread.",
+  "envelope-open-text",
+  null
+)
+
+rightPane = Card([
+  threadHeader,
+  Separator("horizontal", true),
+  threadBody,
+  threadFooter
+], "elevated")
+
+root = Stack([
+  PageHeader(
+    "Inbox",
+    unreadCount + " unread · " + priorityCount + " priority",
+    null,
+    [Button("Compose",
+            Action([@ToAssistant("Compose a new message.")]),
+            "primary")],
+    Badge("Sync · just now", "success")
+  ),
+  SplitView(
+    [leftPane],
+    [selectedExists == 0 ? emptyDetail : rightPane],
+    "360px"
+  )
+], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-inbox" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        Every list row and header count reads from one <code>$messages</code>
+        array. Filtering by folder and search is one <code>@Filter</code>
+        chain; <code>@Each</code> turns the filtered rows into clickable
+        <code>Notification</code>s; switching threads is a single
+        <code>@Set</code> on <code>$thread</code>. No host code runs for any
+        of the interactions.
+      </p>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-inbox");
+    el.setResponse(document.getElementById("src-inbox").textContent);
+  </script>
+</body>
+</html>

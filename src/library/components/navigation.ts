@@ -1,6 +1,6 @@
 /**
  * Navigation primitives modeled after shadcn/ui:
- * Breadcrumb, BreadcrumbItem, Pagination, and Sheet.
+ * Breadcrumb, BreadcrumbItem, Pagination, Sheet, Navbar, NavbarItem.
  *
  * These are intentionally light — they wrap the existing Link/NavLink
  * components when an `href`/`to` is provided so routing stays consistent
@@ -8,7 +8,10 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber } from "../utils.js";
+import { isActionPayload } from "../../runtime/builtins.js";
+import {
+  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseHref,
+} from "../utils.js";
 
 export const BreadcrumbItem: ComponentSpec = {
   name: "BreadcrumbItem",
@@ -18,18 +21,22 @@ export const BreadcrumbItem: ComponentSpec = {
   props: [
     { name: "label", type: "string" },
     { name: "href", type: "string", optional: true },
-    { name: "icon", type: "string", optional: true, description: "Optional emoji prefix" },
+    { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
   ],
   render: (_node, props) => {
     const root = el("li", { class: "rui-breadcrumb-item" });
-    const icon = asString(props.icon);
     const label = asString(props.label);
-    const href = asString(props.href);
+    // Sanitise the href so a hostile `javascript:` URL coming from an LLM
+    // cannot fire on click. Empty input keeps the legacy "current page"
+    // rendering path so leaf crumbs still render as plain text.
+    const rawHref = asString(props.href);
+    const safeHref = rawHref ? sanitiseHref(rawHref) : "";
     const inner: Array<Node | string | null> = [];
-    if (icon) inner.push(el("span", { class: "rui-breadcrumb-icon" }, [icon]));
+    const iconNode = renderIcon(props.icon, { className: "rui-breadcrumb-icon" });
+    if (iconNode) inner.push(iconNode);
     inner.push(el("span", { class: "rui-breadcrumb-label" }, [label]));
-    if (href) {
-      root.append(el("a", { class: "rui-breadcrumb-link", href }, inner));
+    if (safeHref) {
+      root.append(el("a", { class: "rui-breadcrumb-link", href: safeHref }, inner));
     } else {
       root.setAttribute("aria-current", "page");
       const span = el("span", { class: "rui-breadcrumb-current" });
@@ -117,7 +124,7 @@ export const Pagination: ComponentSpec = {
         disabled: opts.disabled ? "" : null,
       }, [label]);
       if (!opts.disabled && !opts.active) {
-        btn.addEventListener("click", () => setPage(target));
+        btn.onclick = () => setPage(target);
       }
       return btn;
     };
@@ -159,6 +166,110 @@ function computePageNumbers(current: number, total: number, siblings: number): A
   return pages;
 }
 
+export const NavbarItem: ComponentSpec = {
+  name: "NavbarItem",
+  description:
+    "Single link inside a Navbar's main item slot. Renders as an inline " +
+    "anchor / button — pass `to` for a router-aware link, `href` for an " +
+    "external link, or `action` for a click handler. `active=true` " +
+    "highlights the current page.",
+  props: [
+    { name: "label", type: "string" },
+    { name: "to", type: "string", optional: true, description: "Internal route (consumes the built-in router)" },
+    { name: "href", type: "string", optional: true, description: "External href; opens in a new tab when set with `external=true`" },
+    { name: "icon", type: "string", optional: true },
+    { name: "active", type: "boolean", optional: true },
+    { name: "action", type: "Action", optional: true, description: "Action fired on click (alternative to `to`/`href`)" },
+    { name: "external", type: "boolean", optional: true },
+  ],
+  render: (_node, props, helpers) => {
+    const label = asString(props.label);
+    const icon = props.icon;
+    const active = asBoolean(props.active);
+    const to = asString(props.to);
+    // Sanitise the external href so a hostile `javascript:` cannot fire on
+    // click. The internal `to` value is always rendered through the hash
+    // router (`#/...`) which is inherently safe.
+    const safeHref = sanitiseHref(props.href, "");
+    const external = asBoolean(props.external);
+    const tagName: "a" | "button" = (to || safeHref) ? "a" : "button";
+    const root = el(tagName, {
+      class: "rui-navbar-item",
+      type: tagName === "button" ? "button" : null,
+      href: safeHref || (to ? `#${to.startsWith("/") ? to : `/${to}`}` : null),
+      target: external && safeHref ? "_blank" : null,
+      rel: external && safeHref ? "noopener noreferrer" : null,
+      "data-active": active ? "true" : "false",
+    });
+    const iconNode = renderIcon(icon, { className: "rui-navbar-item-icon" });
+    if (iconNode) root.append(iconNode);
+    root.append(el("span", { class: "rui-navbar-item-label" }, [label]));
+    if (to && !safeHref) {
+      root.onclick = (event) => {
+        if (event.defaultPrevented) return;
+        const evt = event as MouseEvent;
+        if (evt.button !== 0 || evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey) return;
+        event.preventDefault();
+        helpers.runAction({ kind: "Action", steps: [{ kind: "Navigate", path: to }] });
+      };
+    } else if (isActionPayload(props.action)) {
+      root.onclick = (event) => {
+        event.preventDefault();
+        helpers.runAction(props.action);
+      };
+    }
+    return root;
+  },
+};
+
+export const Navbar: ComponentSpec = {
+  name: "Navbar",
+  description:
+    "Top navigation bar with a brand on the left, primary nav items in " +
+    "the middle, and a right-aligned actions slot (user avatar, " +
+    "DropdownMenu, CTA buttons, …). Use `sticky=true` to pin it to the " +
+    "top of the page. The canonical companion of `Sidebar` for product " +
+    "surfaces; prefer Navbar for marketing/docs pages without a sidebar.",
+  props: [
+    { name: "brand", type: "string | Node", optional: true, description: "Workspace/product name (string) or a node (e.g. logo Image)" },
+    { name: "items", type: "NavbarItem[]", optional: true, description: "Center navigation items" },
+    { name: "actions", type: "Node[]", optional: true, description: "Right-side controls (Buttons, Avatar, DropdownMenu, …)" },
+    { name: "sticky", type: "boolean", optional: true, description: "Pin the bar to the top of the viewport" },
+    { name: "variant", type: "string", optional: true, enum: ["default", "transparent"], description: "Visual variant" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("nav", {
+      class: "rui-navbar",
+      "data-sticky": asBoolean(props.sticky) ? "true" : "false",
+      "data-variant": asString(props.variant, "default"),
+      "aria-label": "Primary",
+    });
+    const brand = props.brand;
+    if (brand !== undefined && brand !== null && brand !== "") {
+      const brandWrap = el("div", { class: "rui-navbar-brand" });
+      if (typeof brand === "string") {
+        brandWrap.append(document.createTextNode(brand));
+      } else {
+        brandWrap.append(helpers.renderNode(brand));
+      }
+      root.append(brandWrap);
+    }
+    const items = asArray<unknown>(props.items);
+    if (items.length > 0) {
+      const list = el("div", { class: "rui-navbar-items" });
+      for (const item of items) list.append(helpers.renderNode(item));
+      root.append(list);
+    }
+    const actions = asArray<unknown>(props.actions);
+    if (actions.length > 0) {
+      const right = el("div", { class: "rui-navbar-actions" });
+      for (const item of actions) right.append(helpers.renderNode(item));
+      root.append(right);
+    }
+    return root;
+  },
+};
+
 export const Sheet: ComponentSpec = {
   name: "Sheet",
   description:
@@ -194,20 +305,20 @@ export const Sheet: ComponentSpec = {
     }, ["×"]);
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName) {
-      closeBtn.addEventListener("click", () => {
+      closeBtn.onclick = () => {
         helpers.runAction({
           kind: "Action",
           steps: [{ kind: "Set", name: stateName, value: false }],
         });
-      });
-      overlay.addEventListener("click", (event) => {
+      };
+      overlay.onclick = (event) => {
         if (event.target === overlay) {
           helpers.runAction({
             kind: "Action",
             steps: [{ kind: "Set", name: stateName, value: false }],
           });
         }
-      });
+      };
     }
     header.append(closeBtn);
     panel.append(header);

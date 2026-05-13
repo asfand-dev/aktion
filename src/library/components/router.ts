@@ -9,21 +9,17 @@
  *
  * - `Route(path, content)` — declares a single page. When used standalone
  *   (no `Routes` parent) it simply renders its content, so the LLM-emitted
- *   page is still usable even if the host hasn't enabled routing.
+ *   page is still usable as a single-page layout.
  *
  * - `NavLink(label, to, variant?, exact?)` — anchor that triggers a hash
  *   navigation on click. Reflects `data-active="true"` when the current
  *   route matches `to` so the prompt can drive an active styling state
  *   without an extra `$variable`.
- *
- * These three components are gated by `enable-routes="true"` on the host
- * element: when the flag is off, the system prompt omits them and the
- * default-rendering fallbacks above keep things rendering anyway.
  */
 
 import type { ComponentSpec } from "../types.js";
 import type { ActionPayload } from "../../runtime/builtins.js";
-import { asBoolean, asString, el } from "../utils.js";
+import { asBoolean, asString, el, renderIcon } from "../utils.js";
 
 export const Routes: ComponentSpec = {
   name: "Routes",
@@ -116,7 +112,7 @@ export const NavLink: ComponentSpec = {
       name: "icon",
       type: "string",
       optional: true,
-      description: "Optional emoji or symbol shown before the label.",
+      description: "Optional Font Awesome icon name shown before the label.",
     },
   ],
   render: (_node, props, helpers) => {
@@ -125,8 +121,7 @@ export const NavLink: ComponentSpec = {
     const variant = asString(props.variant, "default");
     const exact = asBoolean(props.exact, false);
     const router = helpers.router;
-    const routesEnabled = helpers.routesEnabled;
-    const currentPath = router?.getPath() ?? "";
+    const currentPath = router.getPath();
 
     const isActive = (() => {
       if (!currentPath) return false;
@@ -140,33 +135,28 @@ export const NavLink: ComponentSpec = {
       class: "rui-nav-link",
       "data-variant": variant,
       "data-active": isActive ? "true" : "false",
-      "data-routes-enabled": routesEnabled ? "true" : "false",
       href: "#" + (to.startsWith("/") ? to : "/" + to),
     });
 
-    const icon = asString(props.icon);
-    if (icon) anchor.append(el("span", { class: "rui-nav-link-icon" }, [icon]));
+    const iconNode = renderIcon(props.icon, { className: "rui-nav-link-icon" });
+    if (iconNode) anchor.append(iconNode);
     anchor.append(el("span", { class: "rui-nav-link-label" }, [label]));
 
     // Intercept the click so we can keep state changes synchronous instead of
-    // waiting for the browser's hashchange event. When routing is disabled
-    // we let the anchor behave like a normal `<a href>` so users can still
-    // bookmark / right-click → open in new tab.
-    if (router) {
-      anchor.addEventListener("click", (event) => {
-        if (event.defaultPrevented) return;
-        if (event.button !== 0) return;
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        // Build the action payload manually so we go through the same action
-        // pipeline as `@Navigate(...)` — keeps the runtime in one place.
-        const payload: ActionPayload = {
-          kind: "Action",
-          steps: [{ kind: "Navigate", path: to }],
-        };
-        helpers.runAction(payload);
-      });
-    }
+    // waiting for the browser's hashchange event.
+    anchor.onclick = (event) => {
+      if (event.defaultPrevented) return;
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      // Build the action payload manually so we go through the same action
+      // pipeline as `@Navigate(...)` — keeps the runtime in one place.
+      const payload: ActionPayload = {
+        kind: "Action",
+        steps: [{ kind: "Navigate", path: to }],
+      };
+      helpers.runAction(payload);
+    };
 
     return anchor;
   },

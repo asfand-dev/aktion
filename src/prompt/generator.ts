@@ -7,6 +7,17 @@
  *   3. The data tools (Query/Mutation) it can call.
  *   4. Any preamble, rules, and worked examples the host app provides.
  *
+ * Two modes are supported:
+ *   - `"full"` (default) — emits the entire surface area of the language:
+ *     every component group, design principles, composition recipes,
+ *     JavaScript interactions, hash-based routing, and so on. Use for
+ *     rich generative UI surfaces.
+ *   - `"chat"` — emits a compact, chat-focused prompt that mirrors the
+ *     structure of OpenUI Lang's system prompt. Skips JavaScript
+ *     interactions, routing, app-shell composites, and the deep design
+ *     guidance. Use when the LLM only needs to author small, streaming
+ *     UI replies inside a chat bubble.
+ *
  * The output is plain text — no JSON wrapping — so it drops cleanly into a
  * chat completion `system` message.
  */
@@ -22,7 +33,14 @@ export interface ToolSpec {
   kind?: "Query" | "Mutation";
 }
 
+export type PromptMode = "full" | "chat";
+
 export interface PromptOptions {
+  /**
+   * Prompt flavour. `"full"` (default) covers every feature of Streaming
+   * UI Script. `"chat"` emits a compact chat-focused prompt.
+   */
+  mode?: PromptMode;
   /** Library description / role line at the top. */
   preamble?: string;
   /** Free-form rules added at the very end. */
@@ -38,45 +56,38 @@ export interface PromptOptions {
   bindings?: boolean;
   inlineMode?: boolean;
   editMode?: boolean;
-  /**
-   * When true, teach the LLM about Script(...) and @Js(...). Default false —
-   * matches the `enable-javascript` attribute on the element so consumers
-   * never advertise a feature they haven't enabled at runtime.
-   */
-  enableJavascript?: boolean;
-  /**
-   * When true, teach the LLM about hash-based routing (`Routes`, `Route`,
-   * `NavLink`, `@Navigate`, and the `$route` / `params` reactive surfaces).
-   * Default false — mirrors the `enable-routes` attribute on the element.
-   */
-  enableRoutes?: boolean;
 }
 
 export function generatePrompt(library: ComponentLibrary, options: PromptOptions = {}): string {
+  if (options.mode === "chat") return generateChatPrompt(library, options);
+  return generateFullPrompt(library, options);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Full prompt                                                                */
+/* -------------------------------------------------------------------------- */
+
+function generateFullPrompt(library: ComponentLibrary, options: PromptOptions): string {
   const hasTools = (options.tools?.length ?? 0) > 0;
   const flags = {
     toolCalls: options.toolCalls ?? hasTools,
     bindings: options.bindings ?? (options.toolCalls ?? hasTools),
     inlineMode: options.inlineMode ?? false,
     editMode: options.editMode ?? false,
-    enableJavascript: options.enableJavascript ?? false,
-    enableRoutes: options.enableRoutes ?? false,
   };
 
   const sections: string[] = [];
   sections.push(headerSection(options.preamble, library.root));
   sections.push(syntaxSection(library.root));
   sections.push(designPrinciplesSection());
-  sections.push(componentsSection(library, {
-    includeScripting: flags.enableJavascript,
-    includeRouting: flags.enableRoutes,
-  }));
+  sections.push(componentsSection(library));
+  sections.push(iconsSection());
   sections.push(compositionRecipesSection());
   if (flags.bindings) sections.push(bindingsSection());
   if (flags.toolCalls) sections.push(toolingSection());
   if (flags.toolCalls || flags.bindings) sections.push(builtinsSection());
-  if (flags.enableJavascript) sections.push(javascriptSection());
-  if (flags.enableRoutes) sections.push(routingSection());
+  sections.push(javascriptSection());
+  sections.push(routingSection());
   if (flags.inlineMode) sections.push(inlineModeSection());
   if (flags.editMode) sections.push(editModeSection());
   if (options.tools && options.tools.length > 0) {
@@ -93,11 +104,198 @@ export function generatePrompt(library: ComponentLibrary, options: PromptOptions
     sections.push(rulesSection(options.additionalRules));
   }
   sections.push(streamingSection(library.root));
-  sections.push(closingSection(flags.enableJavascript, flags.enableRoutes));
+  sections.push(closingSection());
   sections.push(finalVerificationSection(library.root));
 
   return sections.join("\n\n").trim() + "\n";
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Chat prompt — compact, OpenUI-Lang-style flavour                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Components included in the chat-mode prompt. The aim is to cover the
+ * majority of conversational UI replies (text, lists, tables, charts,
+ * cards, follow-ups, inline forms) without the noise of full-page
+ * dashboards, app shells, or routing.
+ */
+const CHAT_PROMPT_COMPONENTS: ReadonlyArray<string> = [
+  // Layout
+  "Stack", "Grid", "Card", "CardHeader", "CardBody", "CardFooter", "Divider", "Separator",
+  "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps", "StepsItem",
+  // Content
+  "TextContent", "Header", "Image", "Link", "Badge", "Tag", "TagBlock",
+  "Alert", "Callout", "Note", "Quote", "CodeBlock", "Markdown",
+  // Forms
+  "Form", "FormControl", "Input", "TextArea", "Select", "SelectItem",
+  "Checkbox", "Switch", "Button", "Buttons",
+  // Data
+  "Table", "Col", "List", "ListItem", "StatCard", "Progress",
+  // Charts
+  "BarChart", "LineChart", "PieChart", "Series",
+  // Chat
+  "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem", "ActionLink", "ChatBubble",
+  // Lightweight feedback
+  "Avatar", "Rating",
+];
+
+function generateChatPrompt(library: ComponentLibrary, options: PromptOptions): string {
+  const sections: string[] = [];
+  sections.push(chatHeaderSection(options.preamble, library.root));
+  sections.push(chatSyntaxSection(library.root));
+  sections.push(chatComponentsSection(library));
+  sections.push(chatActionsSection());
+  sections.push(chatStreamingSection(library.root));
+  sections.push(chatExamplesSection(options.examples));
+  if (options.tools && options.tools.length > 0) {
+    sections.push(toolsListSection(options.tools));
+  }
+  if (options.additionalRules && options.additionalRules.length > 0) {
+    sections.push(rulesSection(options.additionalRules));
+  }
+  sections.push(chatRulesSection());
+  sections.push(chatFinalVerificationSection(library.root));
+
+  return sections.join("\n\n").trim() + "\n";
+}
+
+function chatHeaderSection(preamble: string | undefined, rootComponent: string): string {
+  const header = preamble?.trim() ||
+    "You are an AI assistant that responds using Streaming UI Script, a declarative UI language for chat replies. Your ENTIRE response must be valid Streaming UI Script code — no markdown, no explanations, just Streaming UI Script.";
+  return `${header}\nEvery response MUST start with \`root = ${rootComponent}([...])\` on the first line.`;
+}
+
+function chatSyntaxSection(rootComponent: string): string {
+  return `## Syntax Rules
+
+1. Each statement is on its own line: \`identifier = Expression\`.
+2. \`root\` is the entry point — every program must define \`root = ${rootComponent}(...)\`.
+3. Expressions are: strings (\`"..."\`), numbers, booleans (\`true\`/\`false\`), \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`.
+4. Prefer references for readability: define \`name = ...\` on one line, then use \`name\` elsewhere.
+5. EVERY variable (except \`root\`) MUST be referenced somewhere. Unreachable definitions silently render nothing.
+6. Arguments are POSITIONAL (order matters, not names). Write \`Stack([children], "row", "l")\`, NOT \`Stack(children: ..., direction: "row")\`.
+7. Optional arguments can be omitted from the end.
+8. Strings use double quotes with backslash escaping.
+9. Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
+10. Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& ||\`, unary \`! -\`. Ternary: \`cond ? a : b\`.
+11. Forward references are allowed — the parser resolves names after parsing the whole input, which keeps streaming smooth.`;
+}
+
+function chatComponentsSection(library: ComponentLibrary): string {
+  const byName = new Map(library.components.map((c) => [c.name, c]));
+  const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
+  const lines: string[] = ["## Component Signatures",
+    "Use only these components. The order of arguments matches the signature exactly. Optional props end with `?`."];
+  for (const group of allGroups) {
+    const filtered = group.components.filter((name) => CHAT_PROMPT_COMPONENTS.includes(name));
+    if (filtered.length === 0) continue;
+    lines.push(`\n### ${group.name}`);
+    for (const componentName of filtered) {
+      const spec = byName.get(componentName);
+      if (!spec) continue;
+      lines.push(formatComponentSignature(spec));
+    }
+  }
+  return lines.join("\n");
+}
+
+function chatActionsSection(): string {
+  return `## Actions — Button Behaviour
+
+\`Action([@steps...])\` wires button clicks to operations. Steps execute in order.
+Buttons without an explicit \`Action\` automatically send their label to the assistant (equivalent to \`Action([@ToAssistant(label)])\`).
+
+Available steps in chat mode:
+- \`@ToAssistant("message")\` — Send a message to the assistant (for conversational buttons like "Tell me more", "Explain this").
+- \`@OpenUrl("https://...")\` — Navigate to a URL.
+
+Example — simple link button:
+\`\`\`
+viewBtn = Button("View", Action([@OpenUrl("https://example.com")]))
+\`\`\`
+
+End most replies with a \`FollowUpBlock\` of 2–4 short prompts to keep the conversation moving:
+\`\`\`
+follow = FollowUpBlock(["Show me more", "Compare alternatives", "Explain this"])
+\`\`\``;
+}
+
+function chatStreamingSection(rootComponent: string): string {
+  return `## Hoisting & Streaming (CRITICAL)
+
+Streaming UI Script supports hoisting: a reference can be used BEFORE it is defined. The output is re-parsed on every streamed chunk, so undefined references render as empty until their definitions arrive. This produces a smooth top-down reveal.
+
+Recommended statement order:
+1. \`root = ${rootComponent}(...)\` — UI shell appears immediately.
+2. Component definitions — fill in as they stream.
+3. Leaf data values — strings, numbers, arrays — last.
+
+Always write the \`root = ${rootComponent}(...)\` statement on the FIRST line.`;
+}
+
+function chatExamplesSection(custom: ReadonlyArray<string> | undefined): string {
+  const examples = custom ?? defaultChatExamples();
+  return examplesSection("Examples", examples);
+}
+
+function chatRulesSection(): string {
+  return `## Important Rules
+
+- When asked about data, generate realistic / plausible data.
+- Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.).
+- For grid-like layouts, use \`Stack\` with \`direction="row"\` and \`wrap=true\`. Avoid \`justify="between"\` unless you specifically want large gutters.
+- Tables are COLUMN-oriented: \`Table([Col("Label", dataArray), Col("Count", countArray, "number")])\`.
+- Pie / Bar charts need NUMBERS, not objects. Use plucked arrays: \`PieChart(data.categories, data.values)\`.
+- Use existing components (Tabs, Accordion) before inventing ternary show/hide patterns.
+- End conversational responses with \`FollowUpBlock([...])\` to keep the conversation flowing.
+- For forms, define one \`FormControl\` reference per field so each control can stream in progressively.
+- Never nest \`Form\` inside \`Form\`.
+- **Icons.** Any \`icon\` prop expects a Font Awesome name (no \`fa-\` prefix), e.g. \`"house"\`, \`"chart-line"\`, \`"star"\`. Optional variant prefix: \`"regular:star"\`, \`"brands:github"\` (default is solid). Do NOT use emoji characters in icon props.`;
+}
+
+function chatFinalVerificationSection(rootComponent: string): string {
+  return `## Final Verification
+
+Before finishing, walk your output and verify:
+1. \`root = ${rootComponent}(...)\` is the FIRST line.
+2. Every referenced name is defined somewhere below.
+3. Every defined name (other than \`root\`) is reachable from \`root\`.
+4. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.`;
+}
+
+function defaultChatExamples(): ReadonlyArray<string> {
+  return [
+    `# Table reply
+root = Stack([title, tbl, follow])
+title = TextContent("Top Languages", "large-heavy")
+tbl = Table([Col("Language", langs), Col("Users (M)", users), Col("Year", years)])
+langs = ["Python", "JavaScript", "Java", "TypeScript", "Go"]
+users = [15.7, 14.2, 12.1, 8.5, 5.2]
+years = [1991, 1995, 1995, 2012, 2009]
+follow = FollowUpBlock(["Sort by users", "Show this as a chart", "Tell me about TypeScript"])`,
+    `# Bar chart reply
+root = Stack([title, chart, follow])
+title = TextContent("Q4 Revenue", "large-heavy")
+chart = BarChart(labels, [s1, s2])
+labels = ["Oct", "Nov", "Dec"]
+s1 = Series("Product A", [120, 150, 180])
+s2 = Series("Product B", [90, 110, 140])
+follow = FollowUpBlock(["Compare to Q3", "Break down by region"])`,
+    `# Inline form
+root = Stack([title, form])
+title = TextContent("Contact us", "large-heavy")
+form = Form("contact", btns, [nameField, emailField, msgField])
+nameField = FormControl("Name", Input("name", "Your name", "text"))
+emailField = FormControl("Email", Input("email", "you@example.com", "email"))
+msgField = FormControl("Message", TextArea("message", "Tell us more...", 4))
+btns = Buttons([Button("Submit", Action([@ToAssistant("Submit")]), "primary"), Button("Cancel", Action([@ToAssistant("Cancel")]), "ghost")])`,
+  ];
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Shared section builders (used by the full prompt)                          */
+/* -------------------------------------------------------------------------- */
 
 function headerSection(preamble: string | undefined, rootComponent: string): string {
   const header = preamble?.trim() ||
@@ -118,179 +316,569 @@ function syntaxSection(rootComponent: string): string {
 - Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& ||\`, unary \`! -\`.
 - Ternary: \`cond ? a : b\`.
 - Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
-- Comments are not allowed.
+- Comments are stripped by the parser (\`// line\`, \`# line\`, \`/* block */\`). Avoid them in responses — they waste tokens.
 - The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.`;
 }
 
 function designPrinciplesSection(): string {
   return `## Design principles (READ THIS BEFORE COMPOSING)
-You are emitting UI for a real product surface — not a wireframe. Aim for the
-visual polish of a shadcn/ui or Vercel-quality page, not a "minimal demo".
-Follow these rules every time:
+You are emitting UI for a real product surface — not a wireframe, not a
+component demo. **Aim for the visual polish of a shadcn/ui + Tailwind page**,
+a Linear/Vercel/Notion-quality interface, or any modern SaaS app the user
+would see in production. The generated UI should be **indistinguishable** in
+quality from a hand-crafted shadcn/ui layout.
+
+### What "rich UI" means here
+- **Multi-section layouts**, not single-card stacks. Most pages have 4–8
+  distinct visual sections (banner, header, KPIs, primary content area,
+  secondary panel, follow-ups).
+- **Clear visual hierarchy** through spacing, typography, and grouping.
+- **Composed patterns** (\`PageHeader\`, \`MetricGrid\`, \`KanbanBoard\`, etc.)
+  instead of hand-rolled Cards.
+- **Status and meaning conveyed via colour** (Badge, Tag, StatusDot, Banner
+  tones, StatCard trend deltas).
+- **Density that matches the request.** Dashboards are dense (KPIs + chart +
+  table + activity). Detail pages are summary-first (PageHeader +
+  DescriptionList + tabs). Landing pages are spacious (Hero + FeatureGrid +
+  Testimonials).
+
+### The rules
 
 1. **Reach for high-level patterns first.** Before composing Card+Stack by hand,
    check whether one of these single-line composites already does the job:
-   - \`Hero(...)\` for landing/intro headers
+   - \`Hero(...)\` for text-first landing/intro headers
+   - \`Cover(title, imageSrc, ...)\` for image-backed hero bands (products, articles, campaign tops)
    - \`PageHeader(...)\` for dashboard / detail page headers (with breadcrumbs + actions)
+   - \`SectionHeader(...)\` for sub-section titles inside a Card (eyebrow + title + actions)
    - \`MetricGrid([...])\` for KPI strips (NOT \`Stack(direction="row")\`)
+   - \`Stats([{label, value, hint?, tone?}, …])\` for compact inline stat rows inside a Card (lighter than \`MetricGrid\`)
+   - \`Toolbar(left, right)\` for filter/search/action rows above a list, table, or board
    - \`FeatureGrid([FeatureItem(...)])\` for product highlights
+   - \`MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?)\` for article/product/preview cards (in a \`Grid\`)
    - \`Timeline([TimelineItem(...)])\` for activity / changelog feeds
    - \`KanbanBoard([KanbanColumn([KanbanCard(...)])])\` for task views
    - \`EmptyState(...)\` for zero-state placeholders
-   - \`ProfileCard(...)\`, \`Comment(...)\`, \`Testimonial(...)\` for people-shaped content
-   - \`Banner(...)\` for top-of-page announcements
-2. **Lay out grids with \`Grid\`, not \`Stack\`.** Use \`Grid(children, columns?, gap?, minItemWidth?)\`
+   - \`Tile(label, icon, value?, description?, tone?, action?)\` for compact icon menus / quick-action grids
+   - \`ProfileCard(...)\`, \`PersonChip(...)\`, \`Comment(...)\`, \`Testimonial(...)\` for people-shaped content
+   - \`Banner(...)\` for top-of-page announcements; \`Notification(...)\` for items inside a notification panel
+   - \`DescriptionList([DescriptionItem(...)])\` for detail-page key/value summaries
+   - \`PricingTable([PricingCard(...)])\` for pricing tiers
+   - \`StatusDot(label, tone?, pulse?)\` for inline health pips
+   - \`Rating(value, max?, label?, count?)\` for product / review stars
+   - \`ProgressRing(value, max?, label?, caption?, tone?)\` for circular KPI/quota indicators
+   - \`Quote(text, cite?)\` for inline pull-quotes (use \`Testimonial\` when you also have an avatar/role)
+   - \`Note(content, tone?)\` for compact tips/warnings (lighter than \`Callout\`)
+   - \`ChatBubble(author, body, time?, from?)\` for chat-style transcripts inside a Card
+2. **Use the App shell for full product surfaces.** When the request implies an
+   app (dashboard with nav, settings with sections, admin console, inbox),
+   wrap \`root\` in \`AppShell(sidebar, content, topbar?)\` so the response has
+   a real left-nav layout — not a single column of cards. The \`content\` slot
+   typically opens with a \`PageHeader\`.
+3. **Wide pages get a \`Container\`.** Landing pages, articles, and marketing
+   sections should wrap \`root\`'s top-level children in \`Container(children, size?)\`
+   (sm/md/lg/xl) so the content keeps a comfortable reading width on large
+   screens. Dashboards inside \`AppShell\` don't need it.
+4. **Lay out grids with \`Grid\`, not \`Stack\`.** Use \`Grid(children, columns?, gap?, minItemWidth?)\`
    when children should size uniformly across a row (cards, tiles, KPIs). \`Stack\`
    is for prose-style sequences and side-by-side asymmetric content.
-3. **Always wrap dashboards in a \`PageHeader\`.** Every dashboard, detail page,
-   or settings screen starts with \`PageHeader(title, subtitle, breadcrumbs, actions)\`.
-4. **Use status badges liberally.** Pair a primary title with a \`Badge\`/\`Tag\`
+5. **Always wrap dashboards in a \`PageHeader\`.** Every dashboard, detail page,
+   or settings screen starts with \`PageHeader(title, subtitle, breadcrumbs, actions, status)\`.
+6. **Always pair lists with a \`Toolbar\`.** Tables, lists, kanban boards, and
+   card grids look unfinished without filter/search controls above them.
+   Use \`Toolbar([SearchBar(...), filterSelect, ...], [primaryButton, ...])\`.
+7. **Prefer \`SearchBar\` for filter inputs.** Anywhere the user filters/searches,
+   use \`SearchBar(id, placeholder?, value?, shortcut?)\` instead of a raw \`Input\` —
+   it ships with the magnifier icon, the keyboard hint chip, and form-friendly submit.
+8. **Use status badges liberally.** Pair a primary title with a \`Badge\`/\`Tag\`
    for status, priority, owner, etc. — never leave status as plain prose.
-5. **Use icons (emoji) for visual hierarchy.** \`StatCard\`, \`FeatureItem\`,
-   \`TimelineItem\`, \`Callout\`, \`Banner\`, \`KanbanCard\`, \`ListItem\`,
-   \`Tag\`, and \`BreadcrumbItem\` all accept an \`icon\` — set it. Suggested mapping:
-   - 📊 metrics · 📈 growth · 📉 decline · ⚡️ performance · 🔔 alerts
-   - ✅ success · ⚠️ warning · ❌ error · ℹ️ info · 🔒 security
-   - 🚀 launch · 🎯 goal · 💡 idea · 🛠 settings · 👥 team
-6. **Use avatars for people.** Author names, assignees, commenters always render
-   with \`Avatar(name, src?, size?)\` — never plain text. Pair multiple users
-   with \`AvatarGroup\`.
-7. **End empty/zero states with a \`Button\` CTA.** Use \`EmptyState(title, description, icon, action)\`
-   instead of an empty Card with a sad paragraph.
-8. **Group related fields.** Inside a \`Form\`, group related \`FormControl\`s
-   inside a \`Card\` with a \`CardHeader\` per section.
-9. **Mix tone deliberately.** Most surfaces should be \`default\`. Use \`primary\`,
-   \`success\`, \`warning\`, \`danger\`, \`info\` to highlight ONE thing per page
-   (the primary CTA, the critical alert, the active KPI delta).
-10. **Density matters.** A page should have AT LEAST 4–6 named sections
-    (PageHeader, MetricGrid, content cards, related lists, FollowUpBlock). One
-    Card with a paragraph of text is never enough for a dashboard request.`;
+9. **Use icons for visual hierarchy.** \`StatCard\`, \`Tile\`, \`FeatureItem\`,
+   \`TimelineItem\`, \`Callout\`, \`Banner\`, \`Notification\`, \`KanbanCard\`, \`ListItem\`,
+   \`SidebarItem\`, \`Tag\`, \`Note\`, and \`BreadcrumbItem\` all accept an \`icon\` — set
+   it. Icons are Font Awesome **names without the \`fa-\` prefix** (e.g.
+   \`"house"\`, \`"chart-line"\`). Optional variant prefix: \`"regular:star"\`,
+   \`"brands:github"\` — default is solid. Suggested mapping:
+   - \`chart-pie\` metrics · \`chart-line\` growth · \`arrow-trend-down\` decline · \`bolt\` performance · \`bell\` alerts
+   - \`circle-check\` success · \`triangle-exclamation\` warning · \`circle-xmark\` error · \`circle-info\` info · \`lock\` security
+   - \`rocket\` launch · \`bullseye\` goal · \`lightbulb\` idea · \`gear\` settings · \`users\` team · \`house\` home
+   - \`inbox\` inbox · \`folder\` projects · \`calendar\` calendar · \`comments\` messages · \`chart-pie\` analytics · \`credit-card\` billing
+   - The \`Icon(name, variant?, size?)\` component renders one inline anywhere a Node is accepted.
+10. **Use avatars for people.** Author names, assignees, commenters always render
+    with \`Avatar(name, src?, size?)\` or — preferably — \`PersonChip(name, role?, avatarSrc?)\`
+    when a row needs both the avatar AND the name+role. Pair multiple users
+    with \`AvatarGroup\`. \`ProfileCard\` and \`Comment\` already include them.
+11. **End empty/zero states with a \`Button\` CTA.** Use \`EmptyState(title, description, icon, action)\`
+    instead of an empty Card with a sad paragraph.
+12. **Group related fields with a \`SectionHeader\` inside a Card.** Settings
+    pages should be a stack of cards, each opening with a \`SectionHeader\`
+    (or \`CardHeader\` for the simplest case) and containing a \`FormControl\`
+    per field. Pair toggles with descriptions via \`Switch(id, label, value, description?)\`.
+13. **Detail pages use \`DescriptionList\`.** Profile / billing / metadata
+    panels are a row of \`DescriptionItem(label, value)\` inside a Card with a
+    \`SectionHeader\` — never a vertical Stack of \`TextContent\` lines.
+14. **Mix tone deliberately.** Most surfaces should be \`default\`. Use \`primary\`,
+    \`success\`, \`warning\`, \`danger\`, \`info\` to highlight ONE thing per
+    page (the primary CTA, the critical alert, the active KPI delta).
+
+### Density targets (CRITICAL — verify before emitting)
+
+The single most common failure is producing a UI that's too sparse. Use these
+**minimum** section counts for each request type:
+
+| Request type            | Minimum named sections | Required patterns                                                              |
+|-------------------------|------------------------|---------------------------------------------------------------------------------|
+| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`MetricGrid\` + chart Card + table/list + secondary Card + \`FollowUpBlock\` |
+| Landing / marketing     | **5**                  | \`Hero\` + \`FeatureGrid\` + (Testimonial \\| PricingTable) + \`Banner\` CTA + \`FollowUpBlock\` |
+| Detail / profile        | **5**                  | \`PageHeader\` + \`DescriptionList\` Card + secondary content Card + \`Timeline\`/\`Comment\` Card + \`FollowUpBlock\` |
+| Settings                | **5**                  | \`PageHeader\` + 3+ Section Cards (with \`SectionHeader\`) + danger-zone Card |
+| List / browse           | **5**                  | \`PageHeader\` + \`Toolbar\` + \`MetricGrid\` (optional) + \`Table\`/\`Grid\` + \`Pagination\` |
+| Full app surface        | **4** (inside shell)   | \`AppShell\` wrapping \`Sidebar\` + (PageHeader + sections) |
+| Empty / zero state      | **3**                  | \`PageHeader\` + \`EmptyState\` (with CTA) + \`FollowUpBlock\` |
+| Form (compose / submit) | **4**                  | \`PageHeader\` (or \`CardHeader\`) + grouped Card sections + buttons row + status \`Callout\` |
+
+If your response has fewer named sections than the minimum, **add more** —
+relevant context (helpful links, related items, recent activity, follow-ups)
+is always available.
+
+### Anti-patterns to avoid
+
+- A single \`Card([CardHeader(...), TextContent(...)])\` for a dashboard request.
+- A vertical \`Stack\` of bare \`StatCard\`s instead of \`MetricGrid([...])\`
+  (or \`Stats([...])\` for an inline strip beside a chart).
+- A vertical \`Stack\` of \`TextContent\` lines for a key/value summary —
+  use \`DescriptionList\` instead.
+- \`Stack(direction="row", wrap=true)\` for uniform tiles — use \`Grid\` (with
+  \`Tile\` for icon menus, \`MediaCard\` for article/product previews).
+- A Table or card grid with no \`Toolbar\` / \`SearchBar\` above it.
+- A form with every field stacked directly on the page — wrap groups in Cards.
+- Empty / loading states with a single line of grey text — use \`EmptyState\`
+  with an icon and a CTA, or \`Skeleton\` for loading.
+- Charts without a \`CardHeader\` describing what's plotted.
+- Plain text for status, priority, or count — use \`Badge\`, \`Tag\`, or \`StatusDot\`.
+- \`Avatar(...) + TextContent(name) + TextContent(role)\` repeated in a list —
+  use \`PersonChip(name, role, avatarSrc?)\` instead.
+- A raw \`Input\` placed in a Toolbar as the search field — use \`SearchBar\`.
+- An article preview built from \`Image\` + \`Card\` + \`TextContent\` — use
+  \`MediaCard\` (or \`Cover\` for a full-bleed hero image).
+- A "4.5/5 stars" line typed in prose — use \`Rating(value, max?, label?, count?)\`.
+- An assistant transcript built from \`Stack([Card(...)])\` per message — use
+  \`ChatBubble\` (with \`from="me"\` / \`from="agent"\`) inside a Card.`;
+}
+
+function iconsSection(): string {
+  return `## Icons (Font Awesome)
+Icon-typed props (every \`icon\` argument: \`StatCard\`, \`Tile\`, \`FeatureItem\`,
+\`Banner\`, \`Notification\`, \`SidebarItem\`, \`NavLink\`, \`ListItem\`, \`Tag\`,
+\`Note\`, \`Callout\`, \`TimelineItem\`, \`KanbanCard\`, \`DescriptionItem\`,
+\`BreadcrumbItem\`, \`Toggle\`/\`ToggleGroup\`) accept a Font Awesome name as a
+string. The element auto-loads the Font Awesome stylesheet — host pages do
+nothing.
+
+- Format: \`"name"\` (defaults to the solid set), e.g. \`"house"\`, \`"chart-line"\`, \`"star"\`, \`"bell"\`.
+- Variants: prefix with \`"regular:name"\` or \`"brands:name"\` (e.g. \`"regular:star"\`, \`"brands:github"\`).
+- DO NOT use emoji characters in \`icon\` props. Use Font Awesome names.
+- Use the \`Icon(name, variant?, size?)\` component to render an icon inline anywhere a Node is expected.
+- Reasonable picks: \`chart-pie\` analytics · \`chart-line\` trend · \`arrow-trend-down\` decline · \`bolt\` performance · \`bell\` alerts · \`circle-check\` success · \`triangle-exclamation\` warning · \`circle-xmark\` error · \`circle-info\` info · \`lock\` security · \`shield-halved\` auth · \`rocket\` launch · \`bullseye\` goal · \`lightbulb\` idea · \`gear\` settings · \`users\` team · \`house\` home · \`inbox\` inbox · \`folder\` projects · \`calendar\` calendar · \`comments\` messages · \`credit-card\` billing · \`sack-dollar\` revenue · \`cart-shopping\` orders · \`ticket\` tickets · \`palette\` design · \`pen\` edit · \`box\` package · \`location-dot\` location · \`magnifying-glass\` search.`;
 }
 
 function compositionRecipesSection(): string {
   return `## Composition recipes
-Use these recipes as starting points. Pick the one that matches the user's intent and adapt it.
+Use these recipes as starting points. Pick the one that matches the user's
+intent and **adapt the structure** — never copy verbatim. Every recipe below
+hits the density target for its page type while keeping each statement small
+and stream-friendly.
 
-### Dashboard / analytics page
+### Dashboard / analytics page (6 sections)
 \`\`\`
-root          = Stack([dashHeader, dashKpis, dashChartCard, dashRecent, dashFollowUps])
-dashHeader    = PageHeader("Sales overview", "Last 30 days", ["Workspace", "Reports", "Sales"], dashActions, dashStatus)
+root          = Stack([dashBanner, dashHeader, dashToolbar, dashKpis, dashRow, dashFollowUps], "column", "l")
+dashBanner    = Banner("Quarterly review is open", "Submit your team's update by Friday.", Button("Submit", Action([@Run(open_submit)]), "primary", "button", "small"), "bullseye", "primary")
+dashHeader    = PageHeader("Sales overview", "Last 30 days · refreshed 5m ago", ["Workspace", "Reports", "Sales"], dashActions, dashStatus)
 dashActions   = [Button("Export", Action([@Run(export_csv)]), "secondary"), Button("New report", Action([@Run(new_report)]), "primary")]
 dashStatus    = Badge("Live", "success")
+dashToolbar   = Toolbar([rangeFilter, segmentFilter], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
+rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","Last 7 days"),SelectItem("30d","Last 30 days"),SelectItem("90d","Last quarter")], null, null, $range))
+segmentFilter = FormControl("Segment", Select("segment", [SelectItem("all","All"),SelectItem("paid","Paid"),SelectItem("organic","Organic")], null, null, $segment))
 dashKpis      = MetricGrid([kpiRevenue, kpiOrders, kpiAov, kpiConvRate])
-kpiRevenue    = StatCard("Revenue", "$248,312", "up", "+12.4%")
-kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%")
-kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%")
-kpiConvRate   = StatCard("Conversion", "3.42%", "down", "-0.7%")
-dashChartCard = Card([CardHeader("Revenue trend", "Daily, last 30 days"), dashChart])
+kpiRevenue    = StatCard("Revenue", "$248,312", "up", "+12.4%", "sack-dollar")
+kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%", "cart-shopping")
+kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%", "ticket")
+kpiConvRate   = StatCard("Conversion", "3.42%", "down", "-0.7%", "arrow-trend-down")
+dashRow       = Grid([dashChartCard, dashRecent], 2, "l")
+dashChartCard = Card([SectionHeader("Revenue trend", "Daily, last 30 days", null, Tag("Up 12.4%", null, "sm", "success")), dashChart])
 dashChart     = LineChart(metrics.day, [Series("Revenue", metrics.revenue), Series("Orders", metrics.orders)])
-dashRecent    = Card([CardHeader("Latest orders"), recentTable])
+dashRecent    = Card([SectionHeader("Latest orders", null, null, null, dashRecentActions), recentTable])
+dashRecentActions = [Button("View all", Action([@Run(view_orders)]), "ghost", "button", "small")]
 recentTable   = Table([Col("Order", orders.id), Col("Customer", orders.customer), Col("Total", orders.total, "currency"), Col("Status", orders.statusTag)])
 dashFollowUps = FollowUpBlock(["Break down by region", "Compare to last quarter", "Show top customers"])
+
+$range   = "30d"
+$segment = "all"
+metrics  = Query("sales_metrics", {range: $range, segment: $segment}, {day:[], revenue:[], orders:[]})
+orders   = Query("recent_orders", {range: $range}, {id:[], customer:[], total:[], statusTag:[]})
 \`\`\`
 
-### Landing / marketing page
+### Full app surface (AppShell + sidebar nav + multi-section content)
+Use whenever the request implies a complete product surface (admin console,
+project management view, dashboard with persistent navigation).
 \`\`\`
-root        = Stack([landingHero, landingFeatures, landingTestimonial, landingFollowUps])
+root  = AppShell(nav, [pageHeader, kpiStrip, contentGrid, activityCard, followUps], topbar)
+
+nav = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview", "house", true),
+    SidebarItem("Projects", "folder", false, "12", Action([@ToAssistant("Open projects")])),
+    SidebarItem("Calendar", "calendar"),
+    SidebarItem("Messages", "comments", false, "3", Action([@ToAssistant("Open messages")]))
+  ]),
+  SidebarSection("Insights", [
+    SidebarItem("Analytics", "chart-pie"),
+    SidebarItem("Reports",   "chart-line"),
+    SidebarItem("Billing",   "credit-card")
+  ])
+], "Acme HQ", "Production · v2.3", sidebarFooter)
+
+sidebarFooter = [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")]
+
+topbar = [
+  StatusDot("Realtime", "success", true),
+  Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])
+]
+
+pageHeader = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
+
+kpiStrip = MetricGrid([
+  StatCard("MRR",          "$48.2k",  "up",   "+12% vs last month", "sack-dollar"),
+  StatCard("Active users", "2,184",   "up",   "+184",               "users"),
+  StatCard("Open tickets", "23",      "down", "-9",                 "ticket"),
+  StatCard("NPS",          "62",      "flat", "+1",                 "star")
+])
+
+contentGrid = Grid([projectsCard, statusCard], 2, "l")
+projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), projectsList])
+projectsList = List([
+  ListItem("Streaming UI v2.4", "Ada Lovelace · 3 open issues", "rocket"),
+  ListItem("Auth SDK rewrite",   "Linus T · 1 open issue",      "shield-halved"),
+  ListItem("Onboarding revamp",  "Grace Hopper · awaiting QA",  "bullseye")
+])
+statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All systems normal", null, "sm", "success")), statusList])
+statusList = Stack([
+  StatusDot("API",       "success"),
+  StatusDot("Database",  "success"),
+  StatusDot("Webhooks",  "warning"),
+  StatusDot("Streaming", "success", true)
+], "column", "s")
+
+activityCard = Card([SectionHeader("Recent activity"), Timeline([
+  TimelineItem("Ada merged PR #248", "5m ago",  "Streaming-UI patterns ready",   "code-pull-request", "primary"),
+  TimelineItem("QA caught regression", "1h ago", "Quota dashboard double-count", "triangle-exclamation", "warning"),
+  TimelineItem("Tokenizer 2.1 deployed", "Yesterday", "Latency -14%",            "circle-check", "success")
+])])
+
+followUps = FollowUpBlock(["Show me the at-risk projects", "Open billing", "Invite my team"])
+\`\`\`
+
+### Detail / profile page (5 sections, with DescriptionList)
+\`\`\`
+root           = Stack([detailHeader, summaryGrid, activityCard, dangerCard, detailFollowUps], "column", "l")
+detailHeader   = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], detailActions, detailStatus)
+detailActions  = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
+detailStatus   = Tag("Online", "circle", "sm", "success")
+
+summaryGrid    = Grid([profileCard, infoCard], 2, "l")
+profileCard    = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.", ["design", "ux", "typography"], [Button("Follow", Action([@Run(follow)]), "primary", "button", "small"), Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "button", "small")])
+infoCard       = Card([SectionHeader("Profile details", null, "OVERVIEW"), profileDescriptions])
+profileDescriptions = DescriptionList([
+  DescriptionItem("Team", "Design Systems", "users"),
+  DescriptionItem("Manager", "Margaret Hamilton"),
+  DescriptionItem("Location", "Berlin, DE", "location-dot"),
+  DescriptionItem("Joined", "Mar 2022"),
+  DescriptionItem("Slack", Tag("@alex", null, "sm", "primary")),
+  DescriptionItem("Status", StatusDot("Active", "success"))
+], 2)
+
+activityCard   = Card([SectionHeader("Recent activity", "Last 14 days"), Timeline([
+  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components and added the patterns API.", "rocket", "success"),
+  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed the new dashboard wireframes.",            "palette", "primary"),
+  TimelineItem("Profile updated",      "3 days ago", "",                                                  "pen")
+])])
+
+dangerCard     = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"), Buttons([Button("Delete account", Action([@Run(delete_account)]), "danger")])], "outlined")
+detailFollowUps = FollowUpBlock(["Show projects", "Open inbox", "Schedule a 1:1"])
+\`\`\`
+
+### Settings page (sectioned form with switches + sidebar nav inside content)
+\`\`\`
+root      = Stack([settingsHeader, generalCard, notificationsCard, billingCard, dangerCard], "column", "l")
+settingsHeader = PageHeader("Settings", "Manage your workspace preferences", ["Settings"], null, Badge("Personal", "primary"))
+
+$emailDigest = true
+$pushAlerts  = false
+$theme       = "system"
+$language    = "en"
+
+generalCard = Card([SectionHeader("General", "Workspace defaults", "PROFILE"), Stack([
+  FormControl("Display name", Input("display-name", "Your name", "text", null, $displayName), "Shown on comments, profile, and mentions."),
+  FormControl("Language",     Select("language", [SelectItem("en","English"),SelectItem("fr","Français"),SelectItem("de","Deutsch")], null, null, $language)),
+  Separator,
+  FormControl("Theme", ToggleGroup("theme", [{value:"light",label:"Light",icon:"sun"},{value:"dark",label:"Dark",icon:"moon"},{value:"system",label:"System",icon:"gear"}], $theme))
+], "column", "m")])
+
+notificationsCard = Card([SectionHeader("Notifications", "Choose what reaches you and how", "INBOX"), Stack([
+  FormControl("Weekly digest",   Switch("digest", "Monday summary of activity", $emailDigest, "Helpful weekly recap of mentions and metrics.")),
+  Separator,
+  FormControl("Push alerts",     Switch("push",   "Mobile push when @-mentioned", $pushAlerts))
+], "column", "m")])
+
+billingCard = Card([SectionHeader("Billing", null, "PAYMENT", Tag("Pro plan", null, "sm", "primary"), [Button("Manage plan", Action([@Run(manage_plan)]), "ghost", "button", "small")]), DescriptionList([
+  DescriptionItem("Plan", "Pro · monthly"),
+  DescriptionItem("Renews", "May 28, 2026"),
+  DescriptionItem("Seats", "12 of 25"),
+  DescriptionItem("Payment", "Visa •••• 4242", "credit-card")
+], 2)])
+
+dangerCard = Card([SectionHeader("Danger zone", "Permanent actions"), Buttons([Button("Export data", Action([@Run(export_data)]), "secondary"), Button("Delete workspace", Action([@Run(delete_workspace)]), "danger")])], "outlined")
+\`\`\`
+
+### Landing / marketing page (Hero + features + pricing + testimonial + CTA)
+\`\`\`
+root            = Stack([landingHero, landingFeatures, pricingBlock, social, landingCta, landingFollowUps], "column", "xl")
+
 landingHero = Hero(
   "Ship generative UI in minutes",
   "Drop one tag into your app and let your LLM render rich, streaming interfaces.",
   Button("Get started", Action([@OpenUrl("/docs")]), "primary"),
-  Button("Live demo", Action([@OpenUrl("/demo")]), "secondary"),
-  "NEW",
-  ["No framework lock-in", "Streaming-first", "Shadow DOM isolated"]
+  Button("Live demo",   Action([@OpenUrl("/demo")]), "secondary"),
+  "NEW · v2.3",
+  ["No framework lock-in", "Streaming-first", "Shadow-DOM isolated"]
 )
-landingFeatures = FeatureGrid([featInstall, featStream, featExtend])
-featInstall = FeatureItem("One script tag", "Works in React, Vue, Svelte, Angular, and vanilla HTML.", "📦")
-featStream  = FeatureItem("Streaming-first", "Progressive render — the shell appears before children stream in.", "⚡️", "info")
-featExtend  = FeatureItem("Extensible", "Register your own components and they show up in the system prompt automatically.", "🛠", "success")
-landingTestimonial = Testimonial(
-  "Replaced 400 lines of JSON-rendering React in an afternoon. Our chat bot finally looks like a product.",
-  "Asha Patel",
-  "Staff Engineer · Acme",
-  ""
-)
+
+landingFeatures = FeatureGrid([
+  FeatureItem("One script tag",      "Works in React, Vue, Svelte, Angular, and plain HTML.", "box"),
+  FeatureItem("Streaming-first",     "Render tokens as they arrive — no rebuild.",            "bolt", "info"),
+  FeatureItem("Themeable",           "Light, dark, neon, brutalist — swap with one attr.",    "palette", "success"),
+  FeatureItem("Tools + routes",      "Wire \`setTools\` once, get auto-running Queries.",     "screwdriver-wrench")
+])
+
+pricingBlock = PricingTable([
+  PricingCard("Starter", "$0", "/mo", "For hobby projects and side experiments.", ["1 workspace", "Up to 5 contributors", "Community support"], Button("Get started", Action([@OpenUrl("/signup?plan=starter")]), "secondary"), null, false),
+  PricingCard("Pro",     "$29", "/mo", "For teams shipping LLM features.",         ["Unlimited workspaces", "All themes + patterns", "Priority support", "SOC2 logs"], Button("Start free trial", Action([@OpenUrl("/signup?plan=pro")]), "primary"), "Most popular", true),
+  PricingCard("Scale",   "Talk to us", null, "For companies with custom needs.",   ["Dedicated success manager", "Custom themes", "SSO + SCIM", "99.99% SLA"], Button("Contact sales", Action([@OpenUrl("/contact")]), "ghost"), null, false)
+])
+
+social = Grid([
+  Testimonial("Replaced 400 lines of React in an afternoon. Our bot finally looks like a product.", "Asha Patel", "Staff Engineer · Acme", "", 5),
+  Testimonial("The patterns are exactly the abstraction I wanted between LLM and UI.",              "Jordan Wei", "Founder · Looplog",      "", 5)
+], 2, "l")
+
+landingCta       = Banner("Ready to ship generative UI?", "Read the 30-second integration guide.", Button("Get started", Action([@OpenUrl("/get-started.html")]), "primary"), "wand-magic-sparkles", "primary")
 landingFollowUps = FollowUpBlock(["Show me the system prompt", "Embed it in my React app", "Wire up tools"])
 \`\`\`
 
-### Detail / profile page
+### List / browse page (filterable, paginated, with stats)
 \`\`\`
-root        = Stack([profileHeader, profileGrid, profileTimeline, profileFollowUps])
-profileHeader = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], profileActions, profileStatus)
-profileActions = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
-profileStatus = Tag("Online", "online", "sm", "success")
-profileGrid = Grid([profileCard, profileBio], 2, "l")
-profileCard = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.", ["design", "ux", "type"], profileSocial)
-profileSocial = [Button("Follow", Action([@Run(follow)]), "primary", "small"), Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "small")]
-profileBio = Card([CardHeader("About"), aboutMd])
-aboutMd = Markdown("Alex joined Acme in 2022 and led the design system rewrite. Outside of work: rock climbing, espresso, and **lots** of typography.")
-profileTimeline = Card([CardHeader("Recent activity"), recentEvents])
-recentEvents = Timeline([
-  TimelineItem("Shipped v2.0", "2 hours ago", "Updated 14 components and added the patterns API.", "🚀", "success"),
-  TimelineItem("Joined Design Review", "Yesterday", "Reviewed the new dashboard wireframes.", "🎨", "primary"),
-  TimelineItem("Profile updated", "3 days ago", "", "✏️")
+root      = Stack([listHeader, listToolbar, listStats, listTableCard, listPager], "column", "l")
+listHeader = PageHeader("Customers", "Everyone in the CRM", null, [Button("Import", Action([@Run(import_csv)]), "ghost"), Button("Add customer", Action([@Run(new_customer)]), "primary")], Tag("" + data.total + " total", null, "sm", "primary"))
+
+$query  = ""
+$status = "all"
+$page   = 1
+
+listToolbar = Toolbar([
+  FormControl("Search", Input("q", "Name, email, company…", "text", null, $query)),
+  FormControl("Status", Select("status", [SelectItem("all","All"),SelectItem("active","Active"),SelectItem("paused","Paused"),SelectItem("churned","Churned")], null, null, $status))
+], [Button("Export", Action([@Run(export)]), "secondary"), Button("Saved views", Action([@Run(views)]), "ghost")])
+
+listStats = MetricGrid([
+  StatCard("Active",   "" + data.active,   "up",   "+4 this week",   "circle-check"),
+  StatCard("Paused",   "" + data.paused,   "flat", "no change",      "circle-pause"),
+  StatCard("Churned",  "" + data.churned,  "down", "-2 this month",  "circle-xmark"),
+  StatCard("Pipeline", "$" + data.pipeline, "up",  "+$12k this week", "sack-dollar")
 ])
-profileFollowUps = FollowUpBlock(["Show projects", "Open inbox", "Schedule a 1:1"])
+
+listTableCard = Card([SectionHeader("All customers", null, null, null, [Button("Sort", Action([@Run(sort)]), "ghost", "button", "small")]), Table([
+  Col("Name",    data.rows.name),
+  Col("Status",  data.rows.statusTag),
+  Col("Owner",   data.rows.owner),
+  Col("Renewal", data.rows.renewal, "date"),
+  Col("MRR",     data.rows.mrr, "currency")
+])])
+
+listPager = Pagination($page, data.pages, 1)
+data      = Query("list_customers", {q: $query, status: $status, page: $page}, {rows:{}, total:0, active:0, paused:0, churned:0, pipeline:0, pages:1})
 \`\`\`
 
-### Empty / zero state
+### Empty / zero state (3 sections)
 \`\`\`
-root = Stack([blankHeader, blankBody])
+root        = Stack([blankHeader, blankBody, blankFollowUps], "column", "l")
 blankHeader = PageHeader("Reports", "Generate, schedule, and share insights.", null, blankActions)
 blankActions = [Button("New report", Action([@Run(new_report)]), "primary")]
-blankBody = EmptyState("No reports yet", "Reports you create or are shared with you will show up here.", "📊", Button("Create your first report", Action([@Run(new_report)]), "primary"))
+blankBody    = EmptyState("No reports yet", "Reports you create or are shared with you will show up here. Try one of the templates to get started.", "chart-pie", Button("Browse templates", Action([@Run(open_templates)]), "primary"))
+blankFollowUps = FollowUpBlock(["Show me a template", "Explain reports", "Open documentation"])
 \`\`\`
 
-### Settings page (form + Switches)
+### Master/detail (SplitView, e.g. inbox or file browser)
 \`\`\`
-root = Stack([settingsHeader, settingsForm])
-settingsHeader = PageHeader("Notification preferences", "Choose where you want to be notified.", ["Settings", "Notifications"])
-$emailEnabled = true
-$pushEnabled = false
-$digest = "weekly"
-settingsForm = Card([
-  CardHeader("Channels"),
-  FormControl("Email", Switch("email-on", "Send important updates to alex@acme.com", $emailEnabled)),
+root = Stack([listHeader, inboxView], "column", "l")
+listHeader = PageHeader("Inbox", "12 unread messages", null, [Button("Compose", Action([@Run(compose)]), "primary")])
+
+$selectedId = "msg-1"
+$filter     = "all"
+$query      = ""
+
+inboxView    = SplitView([inboxToolbar, inboxList], [selectedCard], "360px")
+inboxToolbar = Toolbar([SearchBar("q", "Search inbox…", $query, "/"), FormControl("Filter", Select("filter", [SelectItem("all","All"),SelectItem("unread","Unread"),SelectItem("starred","Starred")], null, null, $filter))], [])
+inboxList    = Card([List(@Each(data.rows, "m", inboxRow))])
+inboxRow     = ListItem(m.subject, m.preview, m.icon)
+
+selectedCard = Card([
+  SectionHeader(data.selected.subject, null, null, Tag(data.selected.category, null, "sm", "primary"), selectedActions),
+  PersonChip(data.selected.from, data.selected.email, data.selected.avatar),
+  Markdown(data.selected.body),
   Separator,
-  FormControl("Push", Switch("push-on", "Mobile push notifications", $pushEnabled)),
-  Separator,
-  FormControl("Digest frequency", ToggleGroup("digest", [["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"]], $digest))
+  Stack([ChatBubble(data.selected.from, data.selected.body, data.selected.time, data.selected.avatar, "agent"),
+         ChatBubble("You", "Thanks — looking now.", "just now", null, "me")], "column", "s")
 ])
+selectedActions = [Button("Reply", Action([@Run(reply)]), "primary"), Button("Archive", Action([@Run(archive)]), "ghost")]
+
+data = Query("inbox", {filter: $filter, q: $query, id: $selectedId}, {rows: [], selected: {subject:"", from:"", email:"", avatar:"", body:"", category:"", time:""}})
+\`\`\`
+
+### Product detail / article hero (Cover + MediaCard + Rating)
+Use when the request implies a content surface that opens with a big image:
+product detail page, blog post, marketing campaign, release announcement.
+\`\`\`
+root = Stack([productCover, productSummary, productStats, relatedHeader, related, reviewsHeader, reviews, productFollowUps], "column", "l")
+
+productCover = Cover(
+  "Aurora Headphones",
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1400",
+  "Studio sound in a 240g shell.",
+  "NEW · Pro line",
+  "From $329 · Free shipping over $80",
+  [Button("Buy now", Action([@Run(checkout)]), "primary"), Button("Add to wishlist", Action([@Run(wishlist)]), "secondary")],
+  "primary",
+  "320px"
+)
+
+productSummary = Grid([summaryCopy, summaryRating], 2, "l")
+summaryCopy    = Card([SectionHeader("Why Aurora", "Engineered for long listening sessions"), Stack([
+  Note("Free returns within 30 days · 2-year warranty included.", "tip"),
+  Markdown("Active noise cancellation with adaptive transparency. **40-hour** battery on a single charge. Hi-Res certified."),
+  Quote("Worth every penny — best balance of clarity, comfort, and battery I've tested.", "— TheVerge")
+])])
+summaryRating  = Card([SectionHeader("Reviews", null, null, Tag("In stock", null, "sm", "success")), Stack([
+  Rating(4.6, 5, "4.6 of 5", 1284, "lg"),
+  Stats([{label:"Comfort", value:"4.8", tone:"success"}, {label:"Sound", value:"4.7", tone:"primary"}, {label:"Battery", value:"4.5"}], "start"),
+  ProgressRing(86, 100, "86%", "Would buy again", "success", "md")
+])])
+
+productStats = MetricGrid([
+  StatCard("Sold this month", "12,481", "up",  "+18% vs prev", "cart-shopping"),
+  StatCard("Avg. rating",     "4.6",    "flat","stable",        "star"),
+  StatCard("In stock",        "1,204",  "down","-220",          "box"),
+  StatCard("Returns",         "1.4%",   "down","-0.2 pp",       "rotate-left")
+])
+
+relatedHeader = SectionHeader("You might also like", null, "RECOMMENDED")
+related       = Grid([relatedA, relatedB, relatedC], 3, "l")
+relatedA      = MediaCard("Aurora Earbuds Pro",   "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?w=600", "True wireless · 36h total battery", ["Wireless","ANC"], "From $199")
+relatedB      = MediaCard("Lumen Studio Stand",   "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=600",  "Aluminium desk stand with mic mount", ["Accessory"],      "$49")
+relatedC      = MediaCard("Aurora Charging Hub",  "https://images.unsplash.com/photo-1591290619762-13050ca9a3eb?w=600", "3-port USB-C charger · 65W",        ["Accessory"],      "$79")
+
+reviewsHeader = SectionHeader("Recent reviews", null, "FROM OWNERS")
+reviews       = Stack([reviewA, reviewB], "column", "m")
+reviewA       = Card([Stack([PersonChip("Maya R.", "Verified owner", null, "sm"),  Rating(5),    Quote("Comfortable enough to wear all day — the ANC is genuinely impressive."), TextContent("Bought · 12 days ago", "small", "muted")])])
+reviewB       = Card([Stack([PersonChip("Tomás L.", "Verified owner", null, "sm"), Rating(4.5), Quote("Sound is fantastic; only minor gripe is the case is a touch large."), TextContent("Bought · 1 month ago", "small", "muted")])])
+
+productFollowUps = FollowUpBlock(["Compare with the Pro line", "Show me wireless earbuds", "Open my orders"])
 \`\`\``;
 }
 
 function defaultRichExamples(): string[] {
   return [
-    // Compact "good vs lazy" pair the LLM can pattern-match against. The
-    // example is intentionally dense so the model sees rich layouts as
-    // the baseline expectation.
-    `# Project status dashboard\nroot          = Stack([statusBanner, dashHeader, kpis, projectsBoard, statusFollowUps])\nstatusBanner  = Banner("Quarterly review is open", "Submit your team's update by Friday.", Banner_cta, "🎯", "primary")\nBanner_cta    = Button("Submit update", Action([@Run(open_submit)]), "primary", "small")\ndashHeader    = PageHeader("Engineering Q3", "12 active projects · 4 at risk", ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)\ndashActions   = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]\ndashStatus    = Badge("On track", "success")\nkpis          = MetricGrid([kpiOpen, kpiAtRisk, kpiDone, kpiOnTime])\nkpiOpen       = StatCard("Active", "12", "flat", "0 vs last week")\nkpiAtRisk     = StatCard("At risk", "4", "up", "+2")\nkpiDone       = StatCard("Shipped", "8", "up", "+3")\nkpiOnTime     = StatCard("On-time", "87%", "down", "-3%")\nprojectsBoard = KanbanBoard([colTodo, colDoing, colReview, colDone])\ncolTodo       = KanbanColumn("To do",      [cardA, cardB], "default")\ncolDoing      = KanbanColumn("In progress",[cardC],        "primary")\ncolReview     = KanbanColumn("In review",  [cardD],        "warning")\ncolDone       = KanbanColumn("Done",       [cardE],        "success")\ncardA         = KanbanCard("Migrate auth to new SDK", "Track auth → SDK rollout across services.", ["auth","p1"], "Asha P.", "primary")\ncardB         = KanbanCard("Spike: vector search",    "Compare pgvector vs Qdrant.",                ["research"], "Diego",  "default")\ncardC         = KanbanCard("Streaming UI v2",         "Add 20 components & rich prompt patterns.", ["frontend"], "Alex",   "primary")\ncardD         = KanbanCard("Mobile onboarding",       "Awaiting design review.",                    ["mobile"],  "Wren",   "warning")\ncardE         = KanbanCard("Activity timeline",       "Shipped to 100% of users.",                  ["shipped"], "Mira",   "success")\nstatusFollowUps = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
+    // Two anchor examples the LLM can pattern-match against. Both are
+    // intentionally dense so "rich" reads as the baseline expectation.
+    `# Project status dashboard (dashboard request → 6+ sections, MetricGrid, Toolbar, Kanban, Timeline, FollowUpBlock)
+root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardGrid, statusFollowUps], "column", "l")
+statusBanner  = Banner("Quarterly review is open", "Submit your team's update by Friday.", bannerCta, "bullseye", "primary")
+bannerCta     = Button("Submit update", Action([@Run(open_submit)]), "primary", "button", "small")
+dashHeader    = PageHeader("Engineering Q3", "12 active projects · 4 at risk", ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)
+dashActions   = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
+dashStatus    = Badge("On track", "success")
+dashToolbar   = Toolbar([rangeFilter, ownerFilter], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
+rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","7d"), SelectItem("30d","30d"), SelectItem("90d","90d")], null, null, $range))
+ownerFilter   = FormControl("Owner", Select("owner", [SelectItem("all","Everyone"), SelectItem("ada","Ada"), SelectItem("linus","Linus")], null, null, $owner))
+kpis          = MetricGrid([kpiOpen, kpiAtRisk, kpiDone, kpiOnTime])
+kpiOpen       = StatCard("Active",  "12",   "flat", "0 vs last week",  "folder")
+kpiAtRisk     = StatCard("At risk", "4",    "up",   "+2 vs last week", "triangle-exclamation")
+kpiDone       = StatCard("Shipped", "8",    "up",   "+3 vs last week", "rocket")
+kpiOnTime     = StatCard("On-time", "87%",  "down", "-3% vs last week","clock")
+boardGrid     = Grid([projectsBoard, activityCard], 2, "l")
+projectsBoard = Card([SectionHeader("Active board", null, "WORK", null, [Button("View board", Action([@Run(open_board)]), "ghost", "button", "small")]), KanbanBoard([colTodo, colDoing, colReview, colDone])])
+colTodo       = KanbanColumn("To do",      [cardA, cardB], "default")
+colDoing      = KanbanColumn("In progress",[cardC],        "primary")
+colReview     = KanbanColumn("In review",  [cardD],        "warning")
+colDone       = KanbanColumn("Done",       [cardE],        "success")
+cardA         = KanbanCard("Migrate auth to new SDK", "Track auth → SDK rollout across services.", ["auth","p1"], "Asha P.", "primary",  "shield-halved")
+cardB         = KanbanCard("Spike: vector search",    "Compare pgvector vs Qdrant.",                ["research"], "Diego",   "default",  "flask")
+cardC         = KanbanCard("Streaming UI v2",         "Add 20 components & rich prompt patterns.", ["frontend"], "Alex",    "primary",  "wand-magic-sparkles")
+cardD         = KanbanCard("Mobile onboarding",       "Awaiting design review.",                    ["mobile"],  "Wren",    "warning",  "mobile-screen")
+cardE         = KanbanCard("Activity timeline",       "Shipped to 100% of users.",                  ["shipped"], "Mira",    "success",  "circle-check")
+activityCard  = Card([SectionHeader("Recent activity", "Latest events across squads"), Timeline([
+  TimelineItem("Ada merged #2491",          "5m ago",  "Streaming UI patterns ready",        "code-pull-request", "primary"),
+  TimelineItem("QA caught regression",      "1h ago",  "Quota dashboard double-counts",      "triangle-exclamation", "warning"),
+  TimelineItem("Tokenizer 2.1 deployed",    "Yesterday","Latency improved 14%",              "circle-check", "success"),
+  TimelineItem("Security review opened",    "2d ago",  "Awaiting threat model from infosec", "circle-info", "info")
+])])
+statusFollowUps = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
+$range = "30d"
+$owner = "all"`,
+    `# App shell with sidebar nav (full product surface)
+root  = AppShell(nav, [headerCard, kpiStrip, contentGrid, footerCard], topbar)
+nav   = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview",  "house", true),
+    SidebarItem("Projects",  "folder", false, "12", Action([@ToAssistant("Open projects")])),
+    SidebarItem("Calendar",  "calendar"),
+    SidebarItem("Messages",  "comments", false, "3", Action([@ToAssistant("Open messages")]))
+  ]),
+  SidebarSection("Insights", [
+    SidebarItem("Analytics", "chart-pie"),
+    SidebarItem("Reports",   "chart-line"),
+    SidebarItem("Billing",   "credit-card")
+  ])
+], "Acme HQ", "Production · v2.3", [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")])
+topbar = [StatusDot("Realtime", "success", true), Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])]
+headerCard = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
+kpiStrip = MetricGrid([
+  StatCard("MRR",          "$48.2k", "up",   "+12% vs last month", "sack-dollar"),
+  StatCard("Active users", "2,184",  "up",   "+184",               "users"),
+  StatCard("Open tickets", "23",     "down", "-9",                 "ticket"),
+  StatCard("NPS",          "62",     "flat", "+1",                 "star")
+])
+contentGrid = Grid([projectsCard, statusCard], 2, "l")
+projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), List([
+  ListItem("Streaming UI v2.4",   "Ada Lovelace · 3 open issues", "rocket"),
+  ListItem("Auth SDK rewrite",    "Linus T · 1 open issue",       "shield-halved"),
+  ListItem("Onboarding revamp",   "Grace Hopper · awaiting QA",   "bullseye")
+])])
+statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All systems normal", null, "sm", "success")), Stack([
+  StatusDot("API",       "success"),
+  StatusDot("Database",  "success"),
+  StatusDot("Webhooks",  "warning"),
+  StatusDot("Streaming", "success", true)
+], "column", "s")])
+footerCard = FollowUpBlock(["Show at-risk projects", "Open billing", "Invite my team"])`,
   ];
 }
 
-interface ComponentsSectionOptions {
-  includeScripting: boolean;
-  includeRouting: boolean;
-}
-
-const SCRIPTING_GROUP_NAMES = new Set(["Scripting"]);
-const SCRIPTING_COMPONENT_NAMES = new Set(["Script"]);
-const ROUTING_GROUP_NAMES = new Set(["Routing"]);
-const ROUTING_COMPONENT_NAMES = new Set(["Routes", "Route", "NavLink"]);
-
-function componentsSection(library: ComponentLibrary, options: ComponentsSectionOptions): string {
+function componentsSection(library: ComponentLibrary): string {
   const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
-  const groups = allGroups.filter((g) => {
-    if (!options.includeScripting && SCRIPTING_GROUP_NAMES.has(g.name)) return false;
-    if (!options.includeRouting && ROUTING_GROUP_NAMES.has(g.name)) return false;
-    return true;
-  });
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [];
   lines.push("## Components");
   lines.push("Use only these components. The order of arguments matches the signature exactly. Optional props end with `?`.");
   lines.push("");
-  for (const group of groups) {
+  for (const group of allGroups) {
     lines.push(`### ${group.name}`);
     for (const componentName of group.components) {
       const spec = byName.get(componentName);
@@ -303,15 +891,9 @@ function componentsSection(library: ComponentLibrary, options: ComponentsSection
     }
     lines.push("");
   }
-  // Append any components not in a group, skipping scripting and routing
-  // ones unless the corresponding feature is explicitly enabled.
+  // Append any components not in a group.
   const grouped = new Set<string>(allGroups.flatMap((g) => g.components));
-  const ungrouped = library.components.filter((c) => {
-    if (grouped.has(c.name)) return false;
-    if (!options.includeScripting && SCRIPTING_COMPONENT_NAMES.has(c.name)) return false;
-    if (!options.includeRouting && ROUTING_COMPONENT_NAMES.has(c.name)) return false;
-    return true;
-  });
+  const ungrouped = library.components.filter((c) => !grouped.has(c.name));
   if (ungrouped.length > 0) {
     lines.push("### Other");
     for (const spec of ungrouped) lines.push(formatComponentSignature(spec));
@@ -347,7 +929,7 @@ function toolingSection(): string {
 - Compose interactions inside \`Action([...])\`:
   - \`btn = Button("Save", Action([@Run(mutation), @Run(query), @Reset($title)]))\`
   - Steps run sequentially; if a step fails the rest are skipped.
-- Action steps available: \`@Run(ref)\`, \`@Set($var, value)\`, \`@Reset($a, $b, ...)\`, \`@ToAssistant("message")\`, \`@OpenUrl("https://...")\`.`;
+- Action steps available: \`@Run(ref)\`, \`@Set($var, value)\`, \`@Reset($a, $b, ...)\`, \`@ToAssistant("message")\`, \`@OpenUrl("https://...")\`, \`@Navigate("/path")\`.`;
 }
 
 function builtinsSection(): string {
@@ -374,7 +956,12 @@ For anything else, use the \`@\` builtins above. There is no \`.filter()\`, \`.m
 
 function javascriptSection(): string {
   return `## JavaScript interactions (advanced)
-The host has opted in with \`enable-javascript="true"\`. You may now emit JavaScript through two surfaces. **Reach for plain Streaming UI Script first** — \`$variables\`, \`Query\`/\`Mutation\`, and \`Action([@Set,@Run,@Reset,@ToAssistant,@OpenUrl])\` already cover most behaviour. Only emit JS when the requested feature truly needs it (timers, fetch you control, DOM focus/scroll, clipboard, keyboard shortcuts, animation, sub-second polling).
+Streaming UI Script exposes two surfaces for behaviour that cannot be expressed
+declaratively. **Reach for plain Streaming UI Script first** — \`$variables\`,
+\`Query\`/\`Mutation\`, and \`Action([@Set,@Run,@Reset,@ToAssistant,@OpenUrl])\`
+already cover most behaviour. Only emit JS when the requested feature truly
+needs it (timers, fetch you control, DOM focus/scroll, clipboard, keyboard
+shortcuts, animation, sub-second polling).
 
 ### Two surfaces
 1. \`Script("id", body, deps?)\` — a behaviour-only component. Runs the body when it mounts, and re-runs when any listed \`$variable\` changes. Renders nothing visible.
@@ -605,7 +1192,9 @@ shortcut = Script("shortcut", \`
 
 function routingSection(): string {
   return `## Routing (multi-page navigation)
-The host has opted in with \`enable-routes="true"\`. You can now build multi-page UIs that synchronise with the URL hash (\`#/path\`). Browser back/forward, bookmarks, and direct deep links all work.
+Streaming UI Script ships a hash-based router so the LLM can build multi-page
+UIs that synchronise with the URL hash (\`#/path\`). Browser back/forward,
+bookmarks, and direct deep links all work.
 
 ### Surfaces
 1. \`Routes(items, default?)\` — outlet that picks the matching \`Route\` and renders only that page. \`items\` is an array of \`Route(path, content)\` entries; \`default\` (optional) is the path of the fallback Route when nothing matches. First match wins, so order the items from most-specific to least.
@@ -731,33 +1320,31 @@ Streaming UI Script supports hoisting: a reference can be used BEFORE it is defi
 A correctly-ordered response renders top-down: the shell appears first, sections fill in next, and the leaf data lands last — without any flash of error text in between.`;
 }
 
-function closingSection(enableJavascript: boolean, enableRoutes: boolean): string {
-  const base = `## Output rules
+function closingSection(): string {
+  return `## Output rules
 - Output ONLY Streaming UI Script lines (or a fenced \`\`\`streaming-ui-script block when inline mode is enabled).
 - Always start with \`root = ...\` on the very first line.
 - Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
 - Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
-- **Reach for pattern composites** (\`Hero\`, \`PageHeader\`, \`MetricGrid\`, \`FeatureGrid\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`Testimonial\`, \`Banner\`, \`Comment\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
-- **Use \`Grid\` for uniform card rows** (KPIs, tiles, features). Reserve \`Stack(direction="row")\` for asymmetric side-by-side content.
-- **Decorate with status.** Every PageHeader gets a status \`Badge\` or \`Tag\` when relevant. Every StatCard/FeatureItem/Banner gets an icon (emoji string).
-- **Use Avatars for people.** Author, assignee, commenter names render as \`Avatar(...)\` (or via \`Comment\` / \`ProfileCard\` which include one). Never plain text.
-- Use the smallest set of components that satisfies the request — but the request is rarely satisfied by a single Card. Most responses use 4–8 named sections.
-- While using the icons, it should be emoji strings only.
-- Do not invent component names that are not in the list above.`;
-  const lines: string[] = [base];
-  if (enableJavascript) {
-    lines.push(`- Only emit \`Script(...)\` / \`@Js(...)\` when behaviour cannot be expressed with \`$variables\` + \`Action([...])\`. Default to the declarative path.
+- **Reach for pattern composites** (\`Hero\`, \`Cover\`, \`PageHeader\`, \`SectionHeader\`, \`MetricGrid\`, \`Stats\`, \`Toolbar\`, \`FeatureGrid\`, \`MediaCard\`, \`Tile\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`PersonChip\`, \`Testimonial\`, \`Quote\`, \`Banner\`, \`Notification\`, \`Comment\`, \`ChatBubble\`, \`DescriptionList\`, \`StatusDot\`, \`Rating\`, \`ProgressRing\`, \`PricingTable\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
+- **Reach for app-shell composites** (\`AppShell\`, \`Sidebar\`, \`SplitView\`) whenever the response represents a complete product surface — never replicate them with bare \`Stack(row, wrap=true)\`.
+- **Use \`Container\` for marketing/article surfaces.** Wrap the top of \`root\` in \`Container(children, size?)\` (sm/md/lg/xl) so wide screens don't stretch reading content edge-to-edge. \`AppShell\` already takes care of width on dashboards.
+- **Use \`Grid\` for uniform card rows** (KPIs, tiles, features, MediaCards). Reserve \`Stack(direction="row")\` for asymmetric side-by-side content; use \`Spacer\` inside a row Stack to push the next item to the far edge.
+- **Decorate with status.** Every PageHeader gets a status \`Badge\` or \`Tag\` when relevant. Every StatCard/FeatureItem/Banner/Tile gets an icon (Font Awesome name like \`"chart-line"\`). Use \`StatusDot\` for inline health pips.
+- **Use Avatars for people.** Author, assignee, commenter names render as \`Avatar(...)\`, \`PersonChip(...)\` (when the row also needs a role/email), or \`Comment\` / \`ProfileCard\` (which include one). Never plain text.
+- **Use \`SearchBar\` for filter inputs**, \`Note\` for tips, \`Quote\` for inline highlights, and \`Rating\` for star scores. They're more polished than the raw equivalents and signal intent.
+- **Hit the density target** for the page type. Dashboards have 6+ sections; detail pages have 5+; settings pages have 5+. A single Card is not enough for any page-shaped request.
+- **Use \`DescriptionList\` for key/value summaries.** Never stack \`TextContent\` rows in a "Field: value" pattern.
+- Icons are Font Awesome names without the \`fa-\` prefix (e.g. \`"house"\`, \`"chart-line"\`, \`"regular:star"\`, \`"brands:github"\`). The element auto-loads the Font Awesome CDN — never paste emoji into an \`icon\` prop.
+- Do not invent component names that are not in the list above.
+- Only emit \`Script(...)\` / \`@Js(...)\` when behaviour cannot be expressed with \`$variables\` + \`Action([...])\`. Default to the declarative path.
 - Place \`Script(...)\` definitions AFTER the visible UI in your statement order so the shell renders before scripts execute.
 - Prefer backtick-quoted bodies (\`\`...\`\`) for any \`Script\` body longer than one line — they allow real newlines and unescaped double quotes, eliminating the most common parse errors.
-- Every \`Script(...)\` MUST have a string id as the first argument and a body as the second. Never omit the id. Never reuse an id within a single response.`);
-  }
-  if (enableRoutes) {
-    lines.push(`- Only use \`Routes(...)\`, \`Route(...)\`, \`NavLink(...)\`, and \`@Navigate(...)\` when the response actually needs multiple pages. A single-page UI never needs them.
+- Every \`Script(...)\` MUST have a string id as the first argument and a body as the second. Never omit the id. Never reuse an id within a single response.
+- Only use \`Routes(...)\`, \`Route(...)\`, \`NavLink(...)\`, and \`@Navigate(...)\` when the response actually needs multiple pages. A single-page UI never needs them.
 - When you do use routing, \`Routes([...])\` MUST be reached from \`root\` (typically \`root = Stack([navBar, mainOutlet])\` where \`mainOutlet = Routes([...])\`).
 - Always include a fallback \`Route("*", notFoundPage)\` (or set the \`default\` argument of \`Routes\`) so unknown paths render a sensible 404 instead of an empty screen.
-- Never declare \`$route\` yourself — the runtime owns it. Read \`$route\` anywhere you need to react to the current path.`);
-  }
-  return lines.join("\n");
+- Never declare \`$route\` yourself — the runtime owns it. Read \`$route\` anywhere you need to react to the current path.`;
 }
 
 function finalVerificationSection(rootComponent: string): string {
@@ -767,7 +1354,20 @@ Before finishing, walk your output and verify:
 2. Every referenced name is defined somewhere below.
 3. Every defined name (other than \`root\`) is reachable from \`root\` — unreachable definitions render nothing.
 4. Containers reference their children by name; large data arrays are on their own trailing lines.
-5. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.`;
+5. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.
+6. **Density check.** Count the named sections under \`root\`. Match against
+   the page-type minimum (dashboards 6, detail 5, settings 5, landing 5, list
+   5). If you are short, add a complementary section (related links, recent
+   activity, status, next steps) — never ship a sparse layout.
+7. **Pattern check.** Did you use \`PageHeader\` / \`SectionHeader\` /
+   \`MetricGrid\` / \`Stats\` / \`Toolbar\` / \`SearchBar\` / \`MediaCard\` /
+   \`DescriptionList\` / \`AppShell\` / \`Container\` where they apply, or did
+   you reinvent them with raw \`Stack\` + \`Card\` + \`Input\` + \`Image\`?
+   Prefer the patterns.
+8. **Status & icon check.** Does every \`StatCard\`/\`Tile\`/\`FeatureItem\`/\`Banner\`/\`Notification\`
+   have a Font Awesome \`icon\` (e.g. \`"chart-line"\`, \`"bell"\`, \`"rocket"\`)?
+   Does \`PageHeader\` carry a status \`Badge\`/\`Tag\` when meaningful? Do people
+   render as \`PersonChip\`/\`Avatar\`/\`ProfileCard\`/\`Comment\`?`;
 }
 
 export function describeComponentSpec(spec: ComponentSpec): string {

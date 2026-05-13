@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout flow · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · checkout flow
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · multi-step wizard</span>
+      <h1 style="margin-top:10px">A working e-commerce checkout, generated from one program</h1>
+      <p>
+        Four-step wizard (info → shipping → payment → review) driven by a
+        single <code>$step</code> variable. <code>Steps</code> across the top
+        shows progress; the main pane swaps between forms; an always-visible
+        <code>SplitView</code> order summary on the right recomputes the
+        total as shipping method and promo codes change. All declarative —
+        no JavaScript handlers in the program.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Walk through the steps. Try the promo code <code>WELCOME10</code>
+        for 10% off, or <code>SHIPFREE</code> for free shipping; switch
+        shipping methods to watch totals recompute; then place the order to
+        see the confirmation screen.
+      </p>
+      <pre class="example-source"><code id="src-checkout">$step = "info"
+$email = "ada@compute.lab"
+$firstName = "Ada"
+$lastName = "Lovelace"
+$phone = ""
+$address1 = ""
+$address2 = ""
+$city = ""
+$region = ""
+$zip = ""
+$country = "us"
+$shipMethod = "standard"
+$payMethod = "card"
+$cardName = ""
+$cardNumber = ""
+$cardExp = ""
+$cardCvc = ""
+$promo = ""
+$promoApplied = ""
+$saveAddress = true
+$marketing = false
+
+$cart = [
+  {id: "tee",     title: "Streaming UI tee",        variant: "Heather grey · M",   qty: 2, price: 32.00},
+  {id: "mug",     title: "Generative UI mug",       variant: "12oz · Indigo",       qty: 1, price: 18.00},
+  {id: "sticker", title: "Pattern composites pack", variant: "20 stickers · Vinyl", qty: 3, price: 6.00}
+]
+
+ship = Query("ship_quote", {country: $country, method: $shipMethod}, {price: 0, eta: ""})
+
+lineTotals = @Each($cart, "c", c.price * c.qty)
+quantities = @Each($cart, "c", c.qty)
+subtotal = @Sum(lineTotals)
+itemCount = @Sum(quantities)
+
+discount = $promoApplied == "WELCOME10" ? @Round(subtotal * 0.1, 2) : 0
+shippingPrice = $promoApplied == "SHIPFREE" ? 0 : ship.price
+total = @Round(subtotal - discount + shippingPrice, 2)
+
+stepIndex = $step == "info" ? 0 : ($step == "shipping" ? 1 : ($step == "payment" ? 2 : ($step == "review" ? 3 : 4)))
+
+progress = Steps([
+  StepsItem("Your info", $firstName + " " + $lastName + " · " + $email),
+  StepsItem("Shipping", $address1 == "" ? "Add address" : ($city + ", " + $region + " · " + ship.eta)),
+  StepsItem("Payment",  $payMethod == "card" ? "Card on file" : ($payMethod == "paypal" ? "PayPal" : "Apple Pay")),
+  StepsItem("Review",   $step == "done" ? "Order placed" : ("Total $" + total))
+])
+
+infoCard = Card([
+  SectionHeader("Your info", "We'll send your receipt and shipping updates here.", "Step 1 of 4"),
+  Stack([
+    FormControl("Email", Input("email", "you@company.com", "email", null, $email)),
+    Grid([
+      FormControl("First name", Input("firstName", "Ada",      "text", null, $firstName)),
+      FormControl("Last name",  Input("lastName",  "Lovelace", "text", null, $lastName))
+    ], 2, "m"),
+    FormControl("Phone (optional)", Input("phone", "+1 555 123 4567", "tel", null, $phone)),
+    Switch("marketing", "Email me product updates and offers", $marketing, "Unsubscribe anytime, one click.")
+  ], "column", "m"),
+  Separator("horizontal", true),
+  Stack([
+    Button("Back to cart", Action([@ToAssistant("Back to cart")]), "ghost"),
+    Spacer(),
+    Button("Continue to shipping",
+           Action([@Set($step, "shipping")]),
+           "primary")
+  ], "row", "m", "center")
+])
+
+shippingCard = Card([
+  SectionHeader("Shipping address", "Where should we send the order?", "Step 2 of 4"),
+  Stack([
+    FormControl("Country", Combobox("country", [
+      SelectItem("us", "United States"),
+      SelectItem("ca", "Canada"),
+      SelectItem("uk", "United Kingdom"),
+      SelectItem("de", "Germany"),
+      SelectItem("fr", "France"),
+      SelectItem("jp", "Japan"),
+      SelectItem("au", "Australia")
+    ], $country, "Search country…")),
+    FormControl("Address line 1", Input("addr1", "1 Market St", "text", null, $address1)),
+    FormControl("Address line 2 (optional)", Input("addr2", "Apt 4B", "text", null, $address2)),
+    Grid([
+      FormControl("City",         Input("city",   "San Francisco", "text", null, $city)),
+      FormControl("State/region", Input("region", "CA",            "text", null, $region)),
+      FormControl("Postal code",  Input("zip",    "94105",         "text", null, $zip))
+    ], 3, "m"),
+    Switch("saveAddress", "Save this address to my account", $saveAddress)
+  ], "column", "m"),
+  Separator("horizontal", true),
+  SectionHeader("Shipping method", "Pick a delivery speed.", null, Tag(ship.eta, "truck", "sm", "info")),
+  Radio("shipMethod", [
+    SelectItem("standard", "Standard · 5-7 business days"),
+    SelectItem("express",  "Express · 2-3 business days"),
+    SelectItem("next-day", "Next-day · order before 2pm")
+  ], $shipMethod),
+  Separator("horizontal", true),
+  Stack([
+    Button("Back",
+           Action([@Set($step, "info")]),
+           "ghost"),
+    Spacer(),
+    Button("Continue to payment",
+           Action([@Set($step, "payment")]),
+           "primary")
+  ], "row", "m", "center")
+])
+
+cardFields = Stack([
+  FormControl("Name on card", Input("cardName",   "Ada Lovelace",        "text", null, $cardName)),
+  FormControl("Card number",  Input("cardNumber", "4242 4242 4242 4242", "text", null, $cardNumber)),
+  Grid([
+    FormControl("Expiry", Input("cardExp", "MM / YY", "text", null, $cardExp)),
+    FormControl("CVC",    Input("cardCvc", "123",     "text", null, $cardCvc))
+  ], 2, "m"),
+  Note("Test cards only. We never store card details — payment is tokenised before it leaves the browser.", "info", "lock")
+], "column", "m")
+
+paypalPanel = Stack([
+  Note("You'll be redirected to PayPal to confirm your payment after placing the order.", "info", "paypal"),
+  Buttons([Button("Continue with PayPal",
+                   Action([@OpenUrl("https://www.paypal.com")]),
+                   "primary")])
+], "column", "m")
+
+applePayPanel = Stack([
+  Note("Apple Pay works on Safari with Touch ID or Face ID. We don't see your card details.", "info", "apple"),
+  Buttons([Button("Pay with Apple Pay",
+                   Action([@ToAssistant("Trigger Apple Pay")]),
+                   "primary")])
+], "column", "m")
+
+paymentBody = $payMethod == "card" ? cardFields : ($payMethod == "paypal" ? paypalPanel : applePayPanel)
+
+paymentCard = Card([
+  SectionHeader("Payment method", "Pick how you'd like to pay.", "Step 3 of 4"),
+  Radio("payMethod", [
+    SelectItem("card",     "Credit or debit card"),
+    SelectItem("paypal",   "PayPal"),
+    SelectItem("applepay", "Apple Pay")
+  ], $payMethod),
+  Separator("horizontal", true),
+  paymentBody,
+  Separator("horizontal", true),
+  Stack([
+    Button("Back",
+           Action([@Set($step, "shipping")]),
+           "ghost"),
+    Spacer(),
+    Button("Review order",
+           Action([@Set($step, "review")]),
+           "primary")
+  ], "row", "m", "center")
+])
+
+reviewLines = DescriptionList([
+  DescriptionItem("Contact", $email, "envelope"),
+  DescriptionItem("Ship to", $firstName + " " + $lastName + " · " + $address1 + " · " + $city + ", " + $region + " " + $zip, "location-dot"),
+  DescriptionItem("Method",  $shipMethod == "standard" ? "Standard · 5-7 days" : ($shipMethod == "express" ? "Express · 2-3 days" : "Next-day · order before 2pm"), "truck"),
+  DescriptionItem("Payment", $payMethod  == "card"     ? "Card on file"        : ($payMethod  == "paypal"  ? "PayPal"                 : "Apple Pay"), "credit-card")
+])
+
+reviewItems = Table([
+  Col("Item",     @Each($cart, "c", c.title + " · " + c.variant)),
+  Col("Qty",      @Each($cart, "c", "" + c.qty)),
+  Col("Price",    @Each($cart, "c", "$" + c.price)),
+  Col("Subtotal", @Each($cart, "c", "$" + (c.price * c.qty)))
+])
+
+reviewCard = Card([
+  SectionHeader("Review order", "Take one last look — you can still edit any section.", "Step 4 of 4"),
+  reviewLines,
+  Separator("horizontal", true),
+  reviewItems,
+  Separator("horizontal", true),
+  Stack([
+    Button("Back",
+           Action([@Set($step, "payment")]),
+           "ghost"),
+    Spacer(),
+    Button("Edit shipping",
+           Action([@Set($step, "shipping")]),
+           "ghost"),
+    Button("Place order · $" + total,
+           Action([@Set($step, "done"), @ToAssistant("Place the order for " + $email)]),
+           "primary")
+  ], "row", "m", "center")
+])
+
+doneCard = Card([
+  Hero(
+    "Order placed!",
+    "Order #ACME-2491 — receipt sent to " + $email,
+    Button("Track shipment",  Action([@ToAssistant("Track ACME-2491")]),     "primary"),
+    Button("Back to shop",    Action([@ToAssistant("Continue shopping")]),  "secondary"),
+    "Thanks for your order",
+    null,
+    null,
+    "success"
+  ),
+  Stack([
+    StatusDot("Authorising payment",  "success"),
+    StatusDot("Reserving inventory",  "success"),
+    StatusDot("Printing label",       "warning", true),
+    StatusDot("Handing off to carrier","default")
+  ], "column", "s"),
+  DescriptionList([
+    DescriptionItem("Order ID",          "ACME-2491",       "hashtag"),
+    DescriptionItem("Total",             "$" + total,        "sack-dollar"),
+    DescriptionItem("Estimated arrival",  ship.eta + " · " + ($shipMethod == "next-day" ? "Tomorrow" : ($shipMethod == "express" ? "Tue-Wed" : "Mon-Fri next week")), "calendar"),
+    DescriptionItem("Confirmation sent", $email,             "envelope")
+  ])
+])
+
+mainPane = $step == "info" ? infoCard : ($step == "shipping" ? shippingCard : ($step == "payment" ? paymentCard : ($step == "review" ? reviewCard : doneCard)))
+
+cartRows = @Each($cart, "c",
+  Stack([
+    Stack([
+      TextContent(c.title,                 "small-heavy"),
+      TextContent(c.variant,                "small", "muted"),
+      TextContent("Qty " + c.qty + " · $" + c.price + " each", "small", "muted")
+    ], "column", "xs"),
+    Spacer(),
+    TextContent("$" + (c.price * c.qty), "body-heavy")
+  ], "row", "s", "center")
+)
+
+promoNote = $promoApplied == "" ? null : ($promoApplied == "WELCOME10" ? Note("WELCOME10 applied — 10% off your order.", "success", "tags") : ($promoApplied == "SHIPFREE" ? Note("SHIPFREE applied — free shipping.", "success", "truck") : Note("Code \"" + $promoApplied + "\" isn't valid.", "warning", "circle-info")))
+
+orderSummary = Card([
+  SectionHeader("Order summary", "" + itemCount + " items in cart"),
+  Stack(cartRows, "column", "m"),
+  Separator("horizontal", true),
+  Stack([
+    FormControl("Promo code", Input("promo", "WELCOME10 or SHIPFREE", "text", null, $promo)),
+    Button("Apply",
+           Action([@Set($promoApplied, $promo)]),
+           "secondary",
+           "button",
+           "small")
+  ], "row", "s", "end"),
+  promoNote,
+  Separator("horizontal", true),
+  DescriptionList([
+    DescriptionItem("Subtotal", "$" + subtotal,               "tag"),
+    DescriptionItem("Shipping", "$" + shippingPrice + " · " + ship.eta, "truck"),
+    DescriptionItem("Discount", "-$" + discount,              "percent"),
+    DescriptionItem("Total",    "$" + total,                  "sack-dollar")
+  ]),
+  Note("All prices in USD. Taxes calculated at next step where applicable.", "info", "circle-info")
+])
+
+split = $step == "done" ? mainPane : SplitView([mainPane], [orderSummary], "1.5fr")
+
+header = PageHeader(
+  "Checkout",
+  "Step " + (stepIndex + 1) + " of 4",
+  Breadcrumb([BreadcrumbItem("Shop", "#"), BreadcrumbItem("Cart", "#"), BreadcrumbItem("Checkout")]),
+  [Button("Save & continue later",
+          Action([@ToAssistant("Save my cart and email me a checkout link")]),
+          "ghost")],
+  Badge($step == "done" ? "Complete" : "In progress", $step == "done" ? "success" : "info")
+)
+
+trust = Stats([
+  {label: "Free returns",  value: "30 days",  hint: "no questions asked", tone: "success"},
+  {label: "Carbon offset", value: "100%",     hint: "every shipment",     tone: "info"},
+  {label: "Support",       value: "24 / 7",   hint: "live chat",          tone: "primary"},
+  {label: "Secure",        value: "TLS 1.3",  hint: "PCI-DSS 4.0",        tone: "default"}
+])
+
+followUps = FollowUpBlock([
+  FollowUpItem("Apply a promo code"),
+  FollowUpItem("Change shipping address"),
+  FollowUpItem("Use a different card")
+], "Need help?")
+
+root = Stack([header, progress, trust, split, $step == "done" ? null : followUps], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-checkout" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The host wires a single shipping-quote tool</h2>
+      <p class="lede">
+        Everything else is declarative. The host only has to return a price
+        and ETA for the chosen country + method — the renderer recalculates
+        the live total whenever <code>$shipMethod</code> or
+        <code>$country</code> changes.
+      </p>
+      <pre class="example-source"><code>el.setTools({
+  ship_quote: ({ country, method }) =&gt; {
+    const base = country === "us" ? 1 : country === "ca" ? 1.2 : 1.6;
+    const price = method === "standard" ? 4.99 * base
+                : method === "express"  ? 9.99 * base
+                : 19.99 * base;
+    const eta = method === "standard" ? "5-7 business days"
+              : method === "express"  ? "2-3 business days"
+              : "Next business day";
+    return { price: Number(price.toFixed(2)), eta };
+  },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const el = document.getElementById("rui-checkout");
+
+    el.setTools({
+      ship_quote: ({ country, method }) => {
+        const base = country === "us" ? 1 : country === "ca" ? 1.2 : 1.6;
+        const price = method === "standard"
+          ? 4.99 * base
+          : method === "express"
+            ? 9.99 * base
+            : 19.99 * base;
+        const eta = method === "standard"
+          ? "5-7 business days"
+          : method === "express"
+            ? "2-3 business days"
+            : "Next business day";
+        return { price: Number(price.toFixed(2)), eta };
+      },
+    });
+
+    el.setResponse(document.getElementById("src-checkout").textContent);
+  </script>
+</body>
+</html>

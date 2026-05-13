@@ -3,54 +3,851 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Theming · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <title>Themes & customization · streaming-ui-script</title>
+  <meta name="description" content="Seven built-in themes plus a full live token studio — preview, compare, customize, and copy theme tokens for streaming-ui-script." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
   <style>
-    .theme-grid {
+    /* =====================================================================
+       Page-scoped layout (themes + customization combined)
+       The base docs shell handles the sidebar + topbar. This page uses
+       data-wide="true" so we own the content grid (content + sticky TOC).
+       ===================================================================== */
+
+    .page-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 18px;
-      margin: 18px 0 28px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+      align-items: start;
     }
-    .theme-card {
-      background: var(--doc-surface);
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius);
-      padding: 16px;
-      box-shadow: var(--doc-shadow);
+
+    @media (min-width: 1100px) {
+      .page-grid {
+        grid-template-columns: minmax(0, 1fr) 220px;
+      }
+    }
+
+    /* Right-rail sticky TOC (desktop only) */
+    .page-toc {
+      display: none;
+      position: sticky;
+      top: calc(var(--doc-topbar-h) + 24px);
+      max-height: calc(100vh - var(--doc-topbar-h) - 48px);
+      overflow-y: auto;
+      padding: 4px 4px 16px;
+      border-left: 1px solid var(--doc-border);
+      margin-left: -16px;
+      padding-left: 20px;
+    }
+    @media (min-width: 1100px) {
+      .page-toc { display: block; }
+    }
+    .page-toc p {
+      margin: 0 0 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--doc-text-subtle);
+    }
+    .page-toc ol {
+      list-style: none;
+      padding: 0;
+      margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 2px;
     }
-    .theme-card-header {
+    .page-toc li { margin: 0; }
+    .page-toc a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      border-left: 2px solid transparent;
+      margin-left: -2px;
+      font-size: 12.5px;
+      color: var(--doc-text-muted);
+      border-radius: 0;
+      transition: color var(--doc-transition), border-color var(--doc-transition), background var(--doc-transition);
+    }
+    .page-toc a:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
+    .page-toc a.is-active {
+      color: var(--doc-primary);
+      border-color: var(--doc-primary);
+      font-weight: 600;
+    }
+    .page-toc a i { width: 14px; color: var(--doc-text-subtle); }
+    .page-toc a.is-active i { color: var(--doc-primary); }
+
+    /* Mobile / tablet inline jump-to <details> */
+    .toc-mobile {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      padding: 0;
+      margin: 8px 0 24px;
+      box-shadow: var(--doc-shadow-sm);
+    }
+    @media (min-width: 1100px) {
+      .toc-mobile { display: none; }
+    }
+    .toc-mobile summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .toc-mobile summary::-webkit-details-marker { display: none; }
+    .toc-mobile summary i.fa-chevron-down {
+      margin-left: auto;
+      transition: transform var(--doc-transition);
+      color: var(--doc-text-muted);
+    }
+    .toc-mobile[open] summary i.fa-chevron-down { transform: rotate(180deg); }
+    .toc-mobile nav {
+      display: flex;
+      flex-direction: column;
+      padding: 4px 8px 12px;
+      gap: 1px;
+    }
+    .toc-mobile nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--doc-radius-xs);
+      font-size: 13.5px;
+      color: var(--doc-text-muted);
+    }
+    .toc-mobile nav a:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .toc-mobile nav a i { width: 16px; color: var(--doc-text-subtle); }
+
+    /* In-page hero secondary chips (always visible) */
+    .hero-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .hero-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: var(--doc-radius-pill);
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      color: var(--doc-text-muted);
+      transition: color var(--doc-transition), background var(--doc-transition), border-color var(--doc-transition);
+    }
+    .hero-chip:hover {
+      color: var(--doc-text);
+      background: var(--doc-surface);
+      border-color: var(--doc-border-strong);
+    }
+    .hero-chip i { color: var(--doc-primary); }
+
+    /* =====================================================================
+       Sections
+       ===================================================================== */
+
+    .section {
+      margin-top: 48px;
+      scroll-margin-top: calc(var(--doc-topbar-h) + 24px);
+    }
+    .section > h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 0;
+    }
+    .section > h2 i.fa-solid { color: var(--doc-primary); font-size: 0.9em; }
+
+    /* =====================================================================
+       Theme gallery (7 cards with live mini previews)
+       ===================================================================== */
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin: 18px 0 4px;
+    }
+    @media (min-width: 640px) {
+      .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 1280px) {
+      .gallery-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .gallery-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-radius: var(--doc-radius-lg);
+      padding: 16px;
+      min-height: 260px;
+      overflow: hidden;
+      transition: transform var(--doc-transition), box-shadow var(--doc-transition);
+    }
+    .gallery-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--doc-shadow-lg);
+    }
+    .gallery-card header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
     }
-    .theme-card-name {
+    .gallery-card .name {
       font-weight: 700;
-      font-size: 14px;
-      letter-spacing: 0.02em;
+      font-size: 15px;
+      letter-spacing: 0.01em;
     }
-    .theme-card-tag {
+    .gallery-card .tag {
       font-size: 10.5px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--doc-primary-hover);
-      background: rgba(99, 102, 241, 0.10);
-      padding: 2px 10px;
-      border-radius: 999px;
+      padding: 3px 10px;
+      border-radius: var(--doc-radius-pill);
     }
-    .theme-card streaming-ui-script {
+    .gallery-card streaming-ui-script {
       flex: 1;
+      min-height: 200px;
+      display: block;
+    }
+    .gallery-card .try {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: var(--doc-radius-pill);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity var(--doc-transition);
+    }
+
+    /* Per-theme backdrops for the cards so each one feels like the real
+       experience even outside the rendered component. */
+    .gallery-card[data-theme="light"]      { background: #ffffff; border: 1px solid #e2e8f0; }
+    .gallery-card[data-theme="light"] .name { color: #0f172a; }
+    .gallery-card[data-theme="light"] .tag  { color: #4f46e5; background: rgba(99, 102, 241, 0.10); }
+    .gallery-card[data-theme="light"] .try  { color: #4f46e5; background: rgba(99, 102, 241, 0.10); }
+
+    .gallery-card[data-theme="dark"]       { background: #0b1220; border: 1px solid #1f2937; }
+    .gallery-card[data-theme="dark"] .name { color: #f8fafc; }
+    .gallery-card[data-theme="dark"] .tag  { color: #f8fafc; background: rgba(129, 140, 248, 0.18); }
+    .gallery-card[data-theme="dark"] .try  { color: #c7d2fe; background: rgba(129, 140, 248, 0.18); }
+
+    .gallery-card[data-theme="neon"]       { background: #05060f; border: 1px solid #2a2f6b; box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.25); }
+    .gallery-card[data-theme="neon"] .name { color: #f5f3ff; }
+    .gallery-card[data-theme="neon"] .tag  { color: #22d3ee; background: rgba(34, 211, 238, 0.16); }
+    .gallery-card[data-theme="neon"] .try  { color: #f472b6; background: rgba(236, 72, 153, 0.18); }
+
+    .gallery-card[data-theme="pastel"]     { background: #fdf6ff; border: 1px solid #ead8ff; }
+    .gallery-card[data-theme="pastel"] .name { color: #3b1f56; }
+    .gallery-card[data-theme="pastel"] .tag  { color: #6b21a8; background: rgba(167, 139, 250, 0.18); }
+    .gallery-card[data-theme="pastel"] .try  { color: #6b21a8; background: rgba(167, 139, 250, 0.18); }
+
+    .gallery-card[data-theme="glass"]      { background: linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%); border: 1px solid rgba(255, 255, 255, 0.10); }
+    .gallery-card[data-theme="glass"] .name { color: #f1f5ff; }
+    .gallery-card[data-theme="glass"] .tag  { color: #f1f5ff; background: rgba(96, 165, 250, 0.20); }
+    .gallery-card[data-theme="glass"] .try  { color: #f1f5ff; background: rgba(96, 165, 250, 0.20); }
+
+    .gallery-card[data-theme="brutalist"]  { background: #fef9c3; border: 2px solid #0a0a0a; box-shadow: 6px 6px 0 0 #0a0a0a; border-radius: 0; }
+    .gallery-card[data-theme="brutalist"] .name { color: #0a0a0a; text-transform: uppercase; letter-spacing: 0.05em; }
+    .gallery-card[data-theme="brutalist"] .tag  { color: #0a0a0a; background: #fde68a; border: 2px solid #0a0a0a; border-radius: 0; }
+    .gallery-card[data-theme="brutalist"] .try  { color: #fff; background: #1d4ed8; border-radius: 0; border: 2px solid #0a0a0a; }
+    .gallery-card[data-theme="brutalist"]:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 0 #0a0a0a; }
+
+    .gallery-card[data-theme="skyline"]    { background: linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%); border: 1px solid #d6deea; }
+    .gallery-card[data-theme="skyline"] .name { color: #003580; }
+    .gallery-card[data-theme="skyline"] .tag  { color: #003580; background: rgba(0, 53, 128, 0.10); }
+    .gallery-card[data-theme="skyline"] .try  { color: #003580; background: rgba(0, 53, 128, 0.10); }
+
+    /* =====================================================================
+       Picker + live preview
+       ===================================================================== */
+
+    .picker-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      box-shadow: var(--doc-shadow-sm);
+      margin: 14px 0 16px;
+    }
+    .picker-bar .picker-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .picker-bar .picker-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .picker-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: var(--doc-radius-pill);
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      color: var(--doc-text-muted);
+      cursor: pointer;
+      transition: color var(--doc-transition), background var(--doc-transition), border-color var(--doc-transition);
+    }
+    .picker-btn:hover { color: var(--doc-text); border-color: var(--doc-border-strong); }
+    .picker-btn[aria-checked="true"] {
+      color: #fff;
+      background: var(--doc-primary);
+      border-color: var(--doc-primary);
+    }
+
+    .preview-shell {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      overflow: hidden;
+      box-shadow: var(--doc-shadow-sm);
+      background: var(--doc-bg);
+      transition: background 200ms ease;
+    }
+    .preview-shell streaming-ui-script {
+      display: block;
+      min-height: 360px;
+      padding: 18px;
+    }
+
+    .preview-editor {
+      margin: 12px 0 0;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+    }
+    .preview-editor summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .preview-editor summary::-webkit-details-marker { display: none; }
+    .preview-editor summary i.fa-chevron-down {
+      margin-left: auto;
+      transition: transform var(--doc-transition);
+      color: var(--doc-text-muted);
+    }
+    .preview-editor[open] summary i.fa-chevron-down { transform: rotate(180deg); }
+    .preview-editor textarea {
+      width: 100%;
       min-height: 220px;
+      padding: 14px;
+      border: 0;
+      border-top: 1px solid var(--doc-border);
+      background: var(--doc-code-bg);
+      color: var(--doc-code-fg);
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
+    }
+    .preview-editor textarea:focus {
+      box-shadow: inset 0 0 0 2px var(--doc-primary);
+    }
+
+    /* =====================================================================
+       Side-by-side comparison
+       ===================================================================== */
+
+    .compare-controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin: 12px 0 16px;
+    }
+    @media (min-width: 640px) {
+      .compare-controls { grid-template-columns: 1fr 1fr; }
+    }
+    .compare-controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .compare-controls select {
+      padding: 8px 12px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      background: var(--doc-bg-soft);
+      color: var(--doc-text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .compare-controls select:focus {
+      outline: none;
+      border-color: var(--doc-primary);
+      box-shadow: var(--doc-focus-ring);
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 900px) {
+      .compare-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .compare-pane {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      overflow: hidden;
+      box-shadow: var(--doc-shadow-sm);
+      background: var(--doc-bg);
+      transition: background 200ms ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .compare-pane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-text-subtle);
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+    }
+    .compare-pane-body {
+      flex: 1;
+      max-height: 520px;
+      overflow-y: auto;
+      padding: 14px;
+    }
+    .compare-pane streaming-ui-script {
+      display: block;
+    }
+
+    /* =====================================================================
+       Customization studio
+       ===================================================================== */
+
+    .studio {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin: 16px 0 4px;
+      align-items: start;
+    }
+    @media (min-width: 960px) {
+      .studio {
+        grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+      }
+    }
+
+    .studio-panel {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    @media (min-width: 960px) {
+      .studio-panel {
+        position: sticky;
+        top: calc(var(--doc-topbar-h) + 20px);
+        max-height: calc(100vh - var(--doc-topbar-h) - 32px);
+        overflow-y: auto;
+      }
+    }
+    .studio-group {
+      border: 1px solid var(--doc-border-subtle);
+      border-radius: var(--doc-radius-sm);
+      padding: 12px;
+      background: var(--doc-bg-soft);
+    }
+    .studio-group > header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .studio-group h3 {
+      margin: 0;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+    }
+    .studio-group h3 i { color: var(--doc-primary); margin-right: 4px; }
+    .studio-group .group-reset {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--doc-border);
+      color: var(--doc-text-muted);
+      padding: 3px 8px;
+      border-radius: var(--doc-radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .studio-group .group-reset:hover { color: var(--doc-text); background: var(--doc-surface); border-color: var(--doc-border-strong); }
+
+    .studio-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 480px) {
+      .studio-fields { grid-template-columns: 1fr; }
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .field > label {
+      font-weight: 600;
+      color: var(--doc-text);
+      font-size: 12px;
+      font-family: var(--doc-mono);
+    }
+    .field input[type="color"] {
+      width: 100%;
+      height: 30px;
+      padding: 2px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      background: var(--doc-bg);
+    }
+    .field input[type="text"],
+    .field input[type="number"] {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-xs);
+      padding: 5px 8px;
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      width: 100%;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: var(--doc-primary);
+      box-shadow: var(--doc-focus-ring);
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .studio-output {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .studio-preview {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      overflow: hidden;
+      box-shadow: var(--doc-shadow-sm);
+      background: var(--doc-bg);
+      transition: background 200ms ease;
+    }
+    .studio-preview streaming-ui-script {
+      display: block;
+      padding: 18px;
+      min-height: 380px;
+    }
+
+    .snippet {
+      position: relative;
+      background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+      color: #e2e8f0;
+      border-radius: var(--doc-radius-md);
+      padding: 14px 16px;
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      max-height: 280px;
+      box-shadow: var(--doc-shadow-sm);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .snippet pre { margin: 0; white-space: pre; }
+
+    .output-tabs {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: var(--doc-radius-sm);
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+    }
+    .output-tab {
+      background: none;
+      border: 0;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--doc-text-muted);
+      cursor: pointer;
+      border-radius: var(--doc-radius-xs);
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .output-tab[aria-selected="true"] {
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      box-shadow: var(--doc-shadow-sm);
+    }
+
+    .output-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .output-header h3 {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-text-subtle);
+    }
+    .output-header .spacer { flex: 1; }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color var(--doc-transition), background var(--doc-transition);
+      font-family: inherit;
+    }
+    .icon-btn:hover { background: var(--doc-bg-soft); border-color: var(--doc-border-strong); }
+    .icon-btn[data-state="ok"] { color: var(--doc-success); border-color: var(--doc-success); }
+    .icon-btn i { font-size: 11px; }
+
+    /* =====================================================================
+       Reference table
+       ===================================================================== */
+
+    .reference-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      box-shadow: var(--doc-shadow-sm);
+      margin: 12px 0;
+    }
+    .reference-search i { color: var(--doc-text-muted); }
+    .reference-search input {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      color: var(--doc-text);
+      outline: none;
+    }
+    .reference-search .count {
+      font-size: 11.5px;
+      color: var(--doc-text-subtle);
+      font-family: var(--doc-mono);
+    }
+
+    table.reference-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+    table.reference-table th,
+    table.reference-table td {
+      padding: 9px 12px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--doc-border);
+      color: var(--doc-text-muted);
+    }
+    table.reference-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--doc-bg-soft);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--doc-text);
+      z-index: 1;
+    }
+    table.reference-table tbody tr:hover { background: var(--doc-bg-soft); }
+    table.reference-table tbody tr:last-child td { border-bottom: none; }
+    .reference-empty {
+      padding: 22px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+    }
+    .group-row td {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-primary);
+      background: var(--doc-primary-softer);
+    }
+    .group-row td i { margin-right: 6px; }
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .swatch-chip {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--doc-border);
+      background: #fff;
+    }
+
+    /* =====================================================================
+       Mini-utility components
+       ===================================================================== */
+
+    .recipe-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin: 16px 0;
+    }
+    @media (min-width: 720px) {
+      .recipe-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .recipe {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      padding: 16px 18px;
+      box-shadow: var(--doc-shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .recipe-step {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .recipe header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .recipe h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--doc-text);
+    }
+    .recipe p {
+      margin: 0;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 760px) {
+      .section { margin-top: 36px; }
+      .studio-panel { padding: 14px; }
+      .preview-shell streaming-ui-script,
+      .studio-preview streaming-ui-script { min-height: 320px; padding: 14px; }
+      .compare-pane-body { max-height: 360px; }
     }
   </style>
 </head>
-<body>
-  <div class="layout">
+<body data-page="themes">
+  <div class="layout" data-wide="true">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
       <p>Web component runtime for Streaming UI Script</p>
@@ -63,123 +860,282 @@
         <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="routing.html">Routing</a>
         <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Theming</h1>
-      <p>
-        Themes are CSS custom properties applied to the host element. The shadow
-        DOM inherits them, so changing a theme is instant — no re-render
-        required. Built-in themes additionally set
-        <code>data-rui-theme="&lt;name&gt;"</code> on the host so the bundled
-        stylesheet can layer on theme-specific tweaks (fonts, gradients,
-        animations) that go beyond the raw token map.
-      </p>
+      <div class="page-grid">
+        <div class="page-content">
+          <header class="hero">
+            <span class="hero-eyebrow">
+              <i class="fa-solid fa-palette" aria-hidden="true"></i>
+              Theming
+            </span>
+            <h1>Seven themes &mdash; or write your own.</h1>
+            <p class="lead">
+              Themes are just CSS custom properties applied to the host element &mdash;
+              switching one is instant and never re-renders. Preview every built-in
+              theme below, compare two side-by-side, or open the studio to tweak any
+              token and copy the result straight into your app.
+            </p>
+            <div class="hero-chips">
+              <a class="hero-chip" href="#gallery"><i class="fa-solid fa-swatchbook"></i> Gallery</a>
+              <a class="hero-chip" href="#picker"><i class="fa-solid fa-circle-play"></i> Live preview</a>
+              <a class="hero-chip" href="#compare"><i class="fa-solid fa-arrows-left-right"></i> Compare</a>
+              <a class="hero-chip" href="#customization"><i class="fa-solid fa-sliders"></i> Customize</a>
+              <a class="hero-chip" href="#use-from-app"><i class="fa-solid fa-code"></i> Use it</a>
+              <a class="hero-chip" href="#authoring"><i class="fa-solid fa-paintbrush"></i> Authoring</a>
+              <a class="hero-chip" href="#reference"><i class="fa-solid fa-book"></i> Reference</a>
+            </div>
+          </header>
 
-      <h2>Built-in themes</h2>
-      <p>
-        Seven themes ship out of the box. Pass the name via the
-        <code>theme</code> attribute or call <code>setTheme()</code>.
-      </p>
-<pre><code>&lt;streaming-ui-script theme="light"&gt;&lt;/streaming-ui-script&gt;     &lt;!-- crisp default      --&gt;
-&lt;streaming-ui-script theme="dark"&gt;&lt;/streaming-ui-script&gt;      &lt;!-- standard dark      --&gt;
-&lt;streaming-ui-script theme="neon"&gt;&lt;/streaming-ui-script&gt;      &lt;!-- cyberpunk glow     --&gt;
-&lt;streaming-ui-script theme="pastel"&gt;&lt;/streaming-ui-script&gt;    &lt;!-- soft &amp; rounded     --&gt;
-&lt;streaming-ui-script theme="glass"&gt;&lt;/streaming-ui-script&gt;     &lt;!-- frosted glass      --&gt;
-&lt;streaming-ui-script theme="brutalist"&gt;&lt;/streaming-ui-script&gt; &lt;!-- neo-brutalism       --&gt;
-&lt;streaming-ui-script theme="skyline"&gt;&lt;/streaming-ui-script&gt;   &lt;!-- enterprise console  --&gt;</code></pre>
+          <!-- Mobile / tablet jump-to -->
+          <details class="toc-mobile" aria-label="On this page">
+            <summary>
+              <i class="fa-solid fa-bars" aria-hidden="true"></i>
+              Jump to section
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </summary>
+            <nav aria-label="On this page (mobile)">
+              <a href="#gallery"><i class="fa-solid fa-swatchbook"></i> Built-in gallery</a>
+              <a href="#picker"><i class="fa-solid fa-circle-play"></i> Live preview</a>
+              <a href="#compare"><i class="fa-solid fa-arrows-left-right"></i> Compare themes</a>
+              <a href="#customization"><i class="fa-solid fa-sliders"></i> Customization studio</a>
+              <a href="#use-from-app"><i class="fa-solid fa-code"></i> Use from your app</a>
+              <a href="#authoring"><i class="fa-solid fa-paintbrush"></i> Author a brand theme</a>
+              <a href="#reference"><i class="fa-solid fa-book"></i> Token reference</a>
+            </nav>
+          </details>
 
-      <p>Compare them side-by-side:</p>
-      <div class="theme-grid">
-        <div class="theme-card">
-          <div class="theme-card-header">
-            <span class="theme-card-name">Light</span>
-            <span class="theme-card-tag">Default</span>
-          </div>
-          <streaming-ui-script theme="light" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: #111827;">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #f8fafc;">Dark</span>
-            <span class="theme-card-tag" style="color: #f8fafc; background: rgba(248, 250, 252, 0.10);">High contrast</span>
-          </div>
-          <streaming-ui-script theme="dark" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: #05060f;">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #f8fafc;">Neon</span>
-            <span class="theme-card-tag" style="color: #f8fafc; background: rgba(248, 250, 252, 0.10);">Cyberpunk glow</span>
-          </div>
-          <streaming-ui-script theme="neon" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: #fdf6ff;">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #3b1f56;">Pastel</span>
-            <span class="theme-card-tag" style="color: #3b1f56; background: rgba(59, 31, 86, 0.10);">Soft & rounded</span>
-          </div>
-          <streaming-ui-script theme="pastel" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%);">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #f1f5ff;">Glass</span>
-            <span class="theme-card-tag" style="color: #f1f5ff; background: rgba(241, 245, 255, 0.12);">Frosted glass</span>
-          </div>
-          <streaming-ui-script theme="glass" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: #fef9c3; border: 2px solid #0a0a0a; box-shadow: 6px 6px 0 0 #0a0a0a;">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #0a0a0a; text-transform: uppercase; letter-spacing: 0.05em;">Brutalist</span>
-            <span class="theme-card-tag" style="color: #0a0a0a; background: #fde68a; border: 2px solid #0a0a0a; border-radius: 0;">Neo-brutalism</span>
-          </div>
-          <streaming-ui-script theme="brutalist" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-        <div class="theme-card" style="background: linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%); border: 1px solid #d6deea;">
-          <div class="theme-card-header">
-            <span class="theme-card-name" style="color: #003580;">Skyline</span>
-            <span class="theme-card-tag" style="color: #003580; background: rgba(0, 53, 128, 0.10);">Cloud console</span>
-          </div>
-          <streaming-ui-script theme="skyline" transparent data-source-id="src-preview"></streaming-ui-script>
-        </div>
-      </div>
-      <pre id="src-preview" hidden><code>root = Stack([card, kpis, btns])
-card = Card([CardHeader("Theme preview", "Identical content, different palettes")])
-kpis = Stack([
-  StatCard("Active", "1.2k", "up", "+12%"),
-  StatCard("Errors", "8", "down", "-30%")
-], "row", "s", "stretch", "start", true)
-btns = Buttons([
-  Button("Primary"),
-  Button("Secondary", null, "secondary")
-])</code></pre>
+          <!-- =====================================================
+               1. Theme gallery
+               ===================================================== -->
+          <section id="gallery" class="section">
+            <h2><i class="fa-solid fa-swatchbook" aria-hidden="true"></i> Built-in theme gallery</h2>
+            <p>
+              Each card below is a real <code>&lt;streaming-ui-script&gt;</code>
+              running the same tiny program in a different theme. Click <em>Try in
+              preview</em> to load that theme into the live preview further down
+              the page.
+            </p>
 
-      <p>
-        Want to try them on a richer surface? Open the
-        <a href="theme-customization.html">theme customization studio</a> for a
-        live editor that lets you tweak any token and copy the resulting JSON.
-      </p>
+            <div class="gallery-grid" id="gallery-grid">
+              <!-- populated by JS -->
+            </div>
+          </section>
 
-      <h2>Custom token map</h2>
-      <p>Pass a JSON token map directly to the <code>theme</code> attribute or via <code>setTheme()</code>:</p>
+          <!-- =====================================================
+               2. Picker / live preview
+               ===================================================== -->
+          <section id="picker" class="section">
+            <h2><i class="fa-solid fa-circle-play" aria-hidden="true"></i> Theme picker &amp; live preview</h2>
+            <p>
+              Pick a theme &mdash; the preview below updates instantly. Want to test
+              your own program? Expand the editor and paste it in.
+            </p>
+
+            <div class="picker-bar" role="radiogroup" aria-label="Theme picker">
+              <span class="picker-label"><i class="fa-solid fa-palette" aria-hidden="true"></i> Theme</span>
+              <div class="picker-options" id="picker-options">
+                <!-- populated by JS -->
+              </div>
+            </div>
+
+            <div class="preview-shell" id="preview-shell">
+              <streaming-ui-script id="picker-preview" theme="light" transparent></streaming-ui-script>
+            </div>
+
+            <details class="preview-editor" id="preview-editor">
+              <summary>
+                <i class="fa-solid fa-code" aria-hidden="true"></i>
+                Edit preview program
+                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+              </summary>
+              <textarea id="preview-source" spellcheck="false" aria-label="Preview program source"></textarea>
+            </details>
+          </section>
+
+          <!-- =====================================================
+               3. Side-by-side comparison
+               ===================================================== -->
+          <section id="compare" class="section">
+            <h2><i class="fa-solid fa-arrows-left-right" aria-hidden="true"></i> Compare two themes</h2>
+            <p>
+              Pick any two themes and see the same content rendered side-by-side.
+              The panes scroll in sync so it's easy to spot differences in spacing,
+              radii, and surface contrast.
+            </p>
+
+            <div class="compare-controls">
+              <label>
+                <span><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i> Left</span>
+                <select id="compare-left" aria-label="Left theme"></select>
+              </label>
+              <label>
+                <span><i class="fa-solid fa-circle-half-stroke fa-flip-horizontal" aria-hidden="true"></i> Right</span>
+                <select id="compare-right" aria-label="Right theme"></select>
+              </label>
+            </div>
+
+            <div class="compare-grid">
+              <div class="compare-pane" id="compare-pane-left">
+                <div class="compare-pane-header"><span id="compare-label-left">light</span><i class="fa-solid fa-arrow-left"></i></div>
+                <div class="compare-pane-body" data-side="left">
+                  <streaming-ui-script id="compare-preview-left" theme="light" transparent></streaming-ui-script>
+                </div>
+              </div>
+              <div class="compare-pane" id="compare-pane-right">
+                <div class="compare-pane-header"><span id="compare-label-right">dark</span><i class="fa-solid fa-arrow-right"></i></div>
+                <div class="compare-pane-body" data-side="right">
+                  <streaming-ui-script id="compare-preview-right" theme="dark" transparent></streaming-ui-script>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- =====================================================
+               4. Customization studio
+               ===================================================== -->
+          <section id="customization" class="section">
+            <h2><i class="fa-solid fa-sliders" aria-hidden="true"></i> Customization studio</h2>
+            <p>
+              Tweak any token and watch the live preview update in real time. The
+              studio remembers your edits in <code>localStorage</code>, so you can
+              come back later and keep iterating. Copy the result as a
+              <code>setTheme()</code> call, as raw CSS variables, or download the
+              full JSON.
+            </p>
+
+            <div class="studio">
+              <aside class="studio-panel" aria-label="Token controls">
+                <div class="output-header">
+                  <h3><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Studio</h3>
+                  <span class="spacer"></span>
+                  <button class="icon-btn" id="reset-all" type="button" aria-label="Reset all tokens to preset">
+                    <i class="fa-solid fa-rotate-left"></i> Reset all
+                  </button>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-swatchbook"></i> Start from</h3>
+                  </header>
+                  <select id="studio-preset" aria-label="Pick a base theme" style="width:100%;padding:8px 12px;border:1px solid var(--doc-border);border-radius:var(--doc-radius-sm);background:var(--doc-surface);color:var(--doc-text);font:inherit;font-size:13px;cursor:pointer;"></select>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-palette"></i> Surface</h3>
+                    <button class="group-reset" type="button" data-reset="surface" aria-label="Reset surface tokens">
+                      <i class="fa-solid fa-rotate"></i> Reset
+                    </button>
+                  </header>
+                  <div class="studio-fields" id="fields-surface"></div>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-droplet"></i> Brand &amp; semantic</h3>
+                    <button class="group-reset" type="button" data-reset="brand" aria-label="Reset brand tokens">
+                      <i class="fa-solid fa-rotate"></i> Reset
+                    </button>
+                  </header>
+                  <div class="studio-fields" id="fields-brand"></div>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-chart-pie"></i> Chart palette</h3>
+                    <button class="group-reset" type="button" data-reset="chart" aria-label="Reset chart tokens">
+                      <i class="fa-solid fa-rotate"></i> Reset
+                    </button>
+                  </header>
+                  <div class="studio-fields" id="fields-chart"></div>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-text-height"></i> Typography</h3>
+                    <button class="group-reset" type="button" data-reset="type" aria-label="Reset typography tokens">
+                      <i class="fa-solid fa-rotate"></i> Reset
+                    </button>
+                  </header>
+                  <div class="studio-fields" id="fields-type"></div>
+                </div>
+
+                <div class="studio-group">
+                  <header>
+                    <h3><i class="fa-solid fa-ruler-combined"></i> Shape &amp; spacing</h3>
+                    <button class="group-reset" type="button" data-reset="shape" aria-label="Reset shape tokens">
+                      <i class="fa-solid fa-rotate"></i> Reset
+                    </button>
+                  </header>
+                  <div class="studio-fields" id="fields-shape"></div>
+                </div>
+              </aside>
+
+              <div class="studio-output">
+                <div class="studio-preview" id="studio-preview-shell">
+                  <streaming-ui-script id="studio-preview" theme="light" transparent></streaming-ui-script>
+                </div>
+
+                <div class="output-header">
+                  <h3>Copy output</h3>
+                  <div class="output-tabs" role="tablist" aria-label="Output format">
+                    <button class="output-tab" type="button" role="tab" aria-selected="true" data-format="js">
+                      <i class="fa-solid fa-code"></i> JS
+                    </button>
+                    <button class="output-tab" type="button" role="tab" aria-selected="false" data-format="css">
+                      <i class="fa-solid fa-paintbrush"></i> CSS
+                    </button>
+                    <button class="output-tab" type="button" role="tab" aria-selected="false" data-format="json">
+                      <i class="fa-solid fa-file-code"></i> JSON
+                    </button>
+                  </div>
+                  <span class="spacer"></span>
+                  <button class="icon-btn" id="copy-output" type="button" aria-label="Copy snippet">
+                    <i class="fa-solid fa-copy"></i> Copy
+                  </button>
+                  <button class="icon-btn" id="download-output" type="button" aria-label="Download theme JSON">
+                    <i class="fa-solid fa-download"></i> Download JSON
+                  </button>
+                </div>
+
+                <div class="snippet">
+<pre id="snippet-js"></pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- =====================================================
+               5. Use it from your app
+               ===================================================== -->
+          <section id="use-from-app" class="section">
+            <h2><i class="fa-solid fa-code" aria-hidden="true"></i> Use it from your app</h2>
+            <p>
+              Every option below hits the same code path &mdash; pick the one that
+              fits your stack. Built-in names additionally set
+              <code>data-rui-theme</code> on the host so the bundled stylesheet can
+              layer on theme-specific tweaks (fonts, gradients, animations).
+            </p>
+
+            <h3>1. Built-in name (attribute)</h3>
+<pre><code>&lt;streaming-ui-script theme="neon"&gt;&lt;/streaming-ui-script&gt;</code></pre>
+
+            <h3>2. JSON token map (attribute)</h3>
+<pre><code>&lt;streaming-ui-script
+  theme='{"colorPrimary":"#16a34a","radiusMd":"14px"}'&gt;
+&lt;/streaming-ui-script&gt;</code></pre>
+
+            <h3>3. Programmatic <code>setTheme()</code></h3>
 <pre><code>const el = document.querySelector("streaming-ui-script");
+
+el.setTheme("dark");
+
 el.setTheme({
   colorPrimary: "#16a34a",
   colorPrimaryHover: "#15803d",
@@ -187,89 +1143,848 @@ el.setTheme({
   radiusMd: "14px",
 });</code></pre>
 
-      <h2>All available tokens</h2>
-      <table class="signature-table">
-        <thead><tr><th>Token</th><th>CSS variable</th><th>Default (light)</th></tr></thead>
-        <tbody>
-          <tr><td><code>colorBg</code></td><td><code>--rui-color-bg</code></td><td>#ffffff</td></tr>
-          <tr><td><code>colorBgSubtle</code></td><td><code>--rui-color-bg-subtle</code></td><td>#f8fafc</td></tr>
-          <tr><td><code>colorSurface</code></td><td><code>--rui-color-surface</code></td><td>#ffffff</td></tr>
-          <tr><td><code>colorSurfaceMuted</code></td><td><code>--rui-color-surface-muted</code></td><td>#f1f5f9</td></tr>
-          <tr><td><code>colorBorder</code></td><td><code>--rui-color-border</code></td><td>#e2e8f0</td></tr>
-          <tr><td><code>colorText</code></td><td><code>--rui-color-text</code></td><td>#0f172a</td></tr>
-          <tr><td><code>colorTextMuted</code></td><td><code>--rui-color-text-muted</code></td><td>#475569</td></tr>
-          <tr><td><code>colorPrimary</code></td><td><code>--rui-color-primary</code></td><td>#6366f1</td></tr>
-          <tr><td><code>colorPrimaryText</code></td><td><code>--rui-color-primary-text</code></td><td>#ffffff</td></tr>
-          <tr><td><code>colorSuccess / Warning / Danger / Info</code></td><td><code>--rui-color-{success|warning|danger|info}</code></td><td>—</td></tr>
-          <tr><td><code>fontFamily / fontFamilyMono</code></td><td><code>--rui-font-family / --rui-font-family-mono</code></td><td>system-ui / monospace</td></tr>
-          <tr><td><code>radiusSm / Md / Lg</code></td><td><code>--rui-radius-{sm|md|lg}</code></td><td>6px / 10px / 16px</td></tr>
-          <tr><td><code>spacingXs / S / M / L / Xl</code></td><td><code>--rui-spacing-{xs|s|m|l|xl}</code></td><td>4 / 8 / 12 / 20 / 32 px</td></tr>
-          <tr><td><code>chart1 … chart6</code></td><td><code>--rui-chart-{1..6}</code></td><td>palette colors</td></tr>
-        </tbody>
-      </table>
-
-      <div class="callout">
-        <h4>Tip</h4>
-        <p>
-          You can also style the host element from outside (e.g.
-          <code>streaming-ui-script { --rui-color-primary: #16a34a; }</code>). The
-          shadow DOM still uses these variables.
-        </p>
-      </div>
-
-      <h2>Aligning the background with your page</h2>
-      <p>
-        By default the host element fills its background with the theme's
-        <code>colorBg</code> token. When you embed the component inside a page
-        that already has its own background, that produces a visible seam. There
-        are three ways to fix it — pick whichever fits your stack:
-      </p>
-
-      <h3>1. Use the <code>transparent</code> attribute</h3>
-      <p>
-        The simplest option: tell the component to skip painting its own
-        background. The internal cards keep their surface colors, so the UI
-        stays legible on any backdrop.
-      </p>
-<pre><code>&lt;div class="my-themed-page"&gt;
-  &lt;streaming-ui-script theme="dark" transparent&gt;&lt;/streaming-ui-script&gt;
-&lt;/div&gt;</code></pre>
-
-      <h3>2. Override the host background CSS variable</h3>
-      <p>
-        For finer control set <code>--rui-host-bg</code> on the host. It takes
-        precedence over the theme's default background.
-      </p>
+            <h3>4. Host-page CSS variable override</h3>
 <pre><code>streaming-ui-script {
-  --rui-host-bg: transparent;          /* or any color/gradient */
+  --rui-color-primary: #16a34a;
+  --rui-radius-md: 14px;
 }</code></pre>
 
-      <h3>3. Match the outer container to the theme's <code>colorBg</code></h3>
-      <p>
-        Drop the same color on the wrapping container so they blend visually.
-        Useful when you do want the host to keep its background but want the
-        edges to disappear into the page chrome.
-      </p>
-<pre><code>.my-themed-page {
-  background: var(--rui-color-bg, #ffffff);   /* mirror the theme */
-}</code></pre>
-      <p>
-        Programmatically you can read the resolved tokens from
-        <code>builtInThemes[name]</code> and apply them to your own container.
-      </p>
+            <div class="callout">
+              <h4>Partial maps are merged on top of <code>light</code></h4>
+              <p>
+                Only override what you need &mdash; everything else falls back to the
+                default light theme tokens.
+              </p>
+            </div>
+          </section>
+
+          <!-- =====================================================
+               6. Authoring a brand theme
+               ===================================================== -->
+          <section id="authoring" class="section">
+            <h2><i class="fa-solid fa-paintbrush" aria-hidden="true"></i> Author a brand theme</h2>
+            <p>
+              Most brands need to override 4&ndash;6 tokens to feel native. Here's a
+              minimal recipe; the studio above generates the same shape of object.
+            </p>
+
+            <div class="recipe-grid">
+              <div class="recipe">
+                <header><span class="recipe-step">1</span><h3>Pick a base</h3></header>
+                <p>Start from <code>light</code>, <code>dark</code>, or <code>skyline</code> depending on whether you need a light or dark surface.</p>
+              </div>
+              <div class="recipe">
+                <header><span class="recipe-step">2</span><h3>Override 4&ndash;6 tokens</h3></header>
+                <p>Typically <code>colorPrimary</code>, <code>colorPrimaryHover</code>, <code>radiusMd</code>, and 1&ndash;2 chart colors.</p>
+              </div>
+              <div class="recipe">
+                <header><span class="recipe-step">3</span><h3>Name it</h3></header>
+                <p>Save it as a constant in your app so it's importable from anywhere &mdash; e.g. <code>brandTheme</code>.</p>
+              </div>
+              <div class="recipe">
+                <header><span class="recipe-step">4</span><h3>Apply &amp; ship</h3></header>
+                <p>Pass it as the <code>theme</code> attribute, or call <code>el.setTheme(brandTheme)</code> after mount.</p>
+              </div>
+            </div>
+
+<pre><code>// brand-theme.js
+export const brandTheme = {
+  colorPrimary:      "#16a34a",
+  colorPrimaryHover: "#15803d",
+  colorBg:           "#f0fdf4",
+  radiusMd:          "14px",
+  chart1:            "#16a34a",
+  chart2:            "#0ea5e9",
+};
+
+// app.js
+import { brandTheme } from "./brand-theme.js";
+const el = document.querySelector("streaming-ui-script");
+el.setTheme(brandTheme);</code></pre>
+
+            <p>
+              Use the <strong>Download JSON</strong> button in the studio above to
+              export the tokens you just tweaked &mdash; the file drops straight
+              into a JavaScript module like the one above.
+            </p>
+          </section>
+
+          <!-- =====================================================
+               7. Reference table
+               ===================================================== -->
+          <section id="reference" class="section">
+            <h2><i class="fa-solid fa-book" aria-hidden="true"></i> Token reference</h2>
+            <p>
+              Every theme token, its corresponding CSS custom property, and what it
+              affects. Use the search box to filter by name or description.
+            </p>
+
+            <div class="reference-search">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <input
+                type="search"
+                id="reference-input"
+                placeholder="Filter tokens by name, CSS variable, or description…"
+                aria-label="Filter tokens"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <span class="count" id="reference-count" aria-live="polite"></span>
+            </div>
+
+            <div class="table-scroll">
+              <table class="reference-table" id="reference-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Token</th>
+                    <th scope="col">CSS variable</th>
+                    <th scope="col">Current value</th>
+                    <th scope="col">Description</th>
+                  </tr>
+                </thead>
+                <tbody id="reference-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div><!-- /.page-content -->
+
+        <!-- Sticky right-rail TOC (desktop only) -->
+        <aside class="page-toc" aria-label="On this page">
+          <p>On this page</p>
+          <ol>
+            <li><a href="#gallery"><i class="fa-solid fa-swatchbook"></i>Built-in gallery</a></li>
+            <li><a href="#picker"><i class="fa-solid fa-circle-play"></i>Live preview</a></li>
+            <li><a href="#compare"><i class="fa-solid fa-arrows-left-right"></i>Compare</a></li>
+            <li><a href="#customization"><i class="fa-solid fa-sliders"></i>Customize</a></li>
+            <li><a href="#use-from-app"><i class="fa-solid fa-code"></i>Use it</a></li>
+            <li><a href="#authoring"><i class="fa-solid fa-paintbrush"></i>Authoring</a></li>
+            <li><a href="#reference"><i class="fa-solid fa-book"></i>Reference</a></li>
+          </ol>
+        </aside>
+      </div><!-- /.page-grid -->
     </main>
   </div>
+
   <script type="module">
-    import "../dist/streaming-ui-script.js";
-    const sourceMap = new Map();
-    document.querySelectorAll("[id^='src-']").forEach((node) => {
-      sourceMap.set(node.id, node.textContent.trim());
-    });
-    document.querySelectorAll("streaming-ui-script[data-source-id]").forEach((el) => {
-      const text = sourceMap.get(el.getAttribute("data-source-id"));
-      if (text) el.setResponse(text);
-    });
+    import { builtInThemes } from "../dist/streaming-ui-script.js";
+
+    /* -------------------------------------------------------------------
+       Static metadata (single source of truth — copied locally so the
+       page stays self-contained per the build rules).
+       ------------------------------------------------------------------- */
+
+    const STORAGE_KEYS = {
+      custom: "rui:themes:custom",
+      preset: "rui:themes:preset",
+      previewProgram: "rui:themes:preview-program",
+      compareLeft: "rui:themes:compare:left",
+      compareRight: "rui:themes:compare:right",
+    };
+
+    const THEME_NAMES = ["light", "dark", "neon", "pastel", "glass", "brutalist", "skyline"];
+
+    const THEME_META = {
+      light:     { label: "Light",     tag: "Default",         vibe: "Crisp, indigo accent." },
+      dark:      { label: "Dark",      tag: "High contrast",   vibe: "Standard dark surface." },
+      neon:      { label: "Neon",      tag: "Cyberpunk glow",  vibe: "Magenta/cyan, mono headings." },
+      pastel:    { label: "Pastel",    tag: "Soft & rounded",  vibe: "Lavender + mint, large radii." },
+      glass:     { label: "Glass",     tag: "Frosted glass",   vibe: "Translucent surfaces, indigo." },
+      brutalist: { label: "Brutalist", tag: "Neo-brutalism",   vibe: "Hard borders, chunky shadows." },
+      skyline:   { label: "Skyline",   tag: "Cloud console",   vibe: "Navy + cyan, dense layout." },
+    };
+
+    // Tokens grouped by domain, with a CSS variable name and a human
+    // description. Mirrors src/theme/index.ts (kept here intentionally to
+    // satisfy the "self-contained page" rule).
+    const TOKENS = [
+      // Surface
+      { key: "colorBg",            css: "--rui-color-bg",             group: "Surface", desc: "Main background of the host element." },
+      { key: "colorBgSubtle",      css: "--rui-color-bg-subtle",      group: "Surface", desc: "Subtle page background variant (alternating sections)." },
+      { key: "colorSurface",       css: "--rui-color-surface",        group: "Surface", desc: "Card / panel surface color." },
+      { key: "colorSurfaceMuted",  css: "--rui-color-surface-muted",  group: "Surface", desc: "Muted surface (inputs, table headers, etc.)." },
+      { key: "colorBorder",        css: "--rui-color-border",         group: "Surface", desc: "Primary border color." },
+      { key: "colorBorderSubtle",  css: "--rui-color-border-subtle",  group: "Surface", desc: "Hairline border for nested elements." },
+      { key: "colorText",          css: "--rui-color-text",           group: "Surface", desc: "Default body text color." },
+      { key: "colorTextMuted",     css: "--rui-color-text-muted",     group: "Surface", desc: "Secondary text color (labels, captions)." },
+      // Brand
+      { key: "colorPrimary",       css: "--rui-color-primary",        group: "Brand",   desc: "Brand color for primary buttons, links, focus rings." },
+      { key: "colorPrimaryHover",  css: "--rui-color-primary-hover",  group: "Brand",   desc: "Hover state for primary actions." },
+      { key: "colorPrimaryText",   css: "--rui-color-primary-text",   group: "Brand",   desc: "Text color over the primary background." },
+      { key: "colorSuccess",       css: "--rui-color-success",        group: "Brand",   desc: "Success / positive semantic color." },
+      { key: "colorWarning",       css: "--rui-color-warning",        group: "Brand",   desc: "Warning / caution semantic color." },
+      { key: "colorDanger",        css: "--rui-color-danger",         group: "Brand",   desc: "Danger / destructive semantic color." },
+      { key: "colorInfo",          css: "--rui-color-info",           group: "Brand",   desc: "Info / neutral-accent semantic color." },
+      // Chart
+      { key: "chart1", css: "--rui-chart-1", group: "Chart", desc: "First chart series color." },
+      { key: "chart2", css: "--rui-chart-2", group: "Chart", desc: "Second chart series color." },
+      { key: "chart3", css: "--rui-chart-3", group: "Chart", desc: "Third chart series color." },
+      { key: "chart4", css: "--rui-chart-4", group: "Chart", desc: "Fourth chart series color." },
+      { key: "chart5", css: "--rui-chart-5", group: "Chart", desc: "Fifth chart series color." },
+      { key: "chart6", css: "--rui-chart-6", group: "Chart", desc: "Sixth chart series color." },
+      // Typography
+      { key: "fontFamily",     css: "--rui-font-family",      group: "Typography", desc: "Default UI font stack." },
+      { key: "fontFamilyMono", css: "--rui-font-family-mono", group: "Typography", desc: "Monospace font stack (code blocks, kbd)." },
+      // Shape & spacing
+      { key: "radiusSm",  css: "--rui-radius-sm",   group: "Shape",   desc: "Small radius (chips, inputs)." },
+      { key: "radiusMd",  css: "--rui-radius-md",   group: "Shape",   desc: "Medium radius (cards, buttons)." },
+      { key: "radiusLg",  css: "--rui-radius-lg",   group: "Shape",   desc: "Large radius (hero cards, modals)." },
+      { key: "shadowSm",  css: "--rui-shadow-sm",   group: "Shape",   desc: "Subtle elevation shadow." },
+      { key: "shadowMd",  css: "--rui-shadow-md",   group: "Shape",   desc: "Medium elevation shadow." },
+      { key: "spacingXs", css: "--rui-spacing-xs",  group: "Spacing", desc: "Extra-small spacing unit." },
+      { key: "spacingS",  css: "--rui-spacing-s",   group: "Spacing", desc: "Small spacing unit." },
+      { key: "spacingM",  css: "--rui-spacing-m",   group: "Spacing", desc: "Medium spacing unit." },
+      { key: "spacingL",  css: "--rui-spacing-l",   group: "Spacing", desc: "Large spacing unit." },
+      { key: "spacingXl", css: "--rui-spacing-xl",  group: "Spacing", desc: "Extra-large spacing unit." },
+    ];
+
+    const TOKEN_BY_KEY = Object.fromEntries(TOKENS.map((t) => [t.key, t]));
+
+    const COLOR_KEYS = new Set([
+      "colorBg", "colorBgSubtle", "colorSurface", "colorSurfaceMuted",
+      "colorBorder", "colorBorderSubtle", "colorText", "colorTextMuted",
+      "colorPrimary", "colorPrimaryHover", "colorPrimaryText",
+      "colorSuccess", "colorWarning", "colorDanger", "colorInfo",
+      "chart1", "chart2", "chart3", "chart4", "chart5", "chart6",
+    ]);
+
+    /* -------------------------------------------------------------------
+       Token groupings for the studio panel.
+       ------------------------------------------------------------------- */
+
+    const STUDIO_GROUPS = {
+      surface: [
+        "colorBg", "colorBgSubtle", "colorSurface", "colorSurfaceMuted",
+        "colorBorder", "colorText", "colorTextMuted",
+      ],
+      brand: [
+        "colorPrimary", "colorPrimaryHover", "colorPrimaryText",
+        "colorSuccess", "colorWarning", "colorDanger", "colorInfo",
+      ],
+      chart: ["chart1", "chart2", "chart3", "chart4", "chart5", "chart6"],
+      type:  ["fontFamily", "fontFamilyMono"],
+      shape: ["radiusSm", "radiusMd", "radiusLg", "spacingXs", "spacingS", "spacingM", "spacingL", "spacingXl"],
+    };
+
+    /* -------------------------------------------------------------------
+       Preview programs.
+       ------------------------------------------------------------------- */
+
+    const PREVIEW_PROGRAM = `root = Stack([hero, kpis, form, follow])
+hero = Card([
+  CardHeader("Theme preview", "Same content, different palettes"),
+  Markdown("This card lives inside <streaming-ui-script>. Try swapping themes — every component picks up the new tokens instantly, no re-render needed.")
+])
+kpis = Stack([
+  StatCard("Active", "12,540", "up", "+18%"),
+  StatCard("Revenue", "$48.2k", "flat", "0%"),
+  StatCard("Errors", "12", "down", "-32%")
+], "row", "m", "stretch", "start", true)
+form = Card([
+  CardHeader("Quick form"),
+  FormControl("Project", Input("p", "Acme launch", "text", null, "Acme launch")),
+  FormControl("Priority", Select("pri", [SelectItem("low","Low"), SelectItem("med","Medium"), SelectItem("high","High")], null, null, "med")),
+  Buttons([Button("Save"), Button("Cancel", null, "secondary"), Button("Reset", null, "ghost")])
+])
+follow = FollowUpBlock([
+  FollowUpItem("Try the neon theme"),
+  FollowUpItem("Tweak the radius tokens"),
+  FollowUpItem("Customize the chart palette")
+], "Try editing")`;
+
+    const MINI_PROGRAM = `root = Stack([head, kpi, btns])
+head = Card([CardHeader("Theme preview", "Identical content")])
+kpi = Stack([
+  StatCard("Active", "1.2k", "up", "+12%"),
+  StatCard("Errors", "8", "down", "-30%")
+], "row", "s", "stretch", "start", true)
+btns = Buttons([
+  Button("Primary"),
+  Button("Secondary", null, "secondary")
+])`;
+
+    /* -------------------------------------------------------------------
+       Helpers
+       ------------------------------------------------------------------- */
+
+    function isHexColor(value) {
+      return typeof value === "string" && /^#([0-9a-f]{3}){1,2}$/i.test(value);
+    }
+
+    function safeReadStorage(key) {
+      try { return localStorage.getItem(key); } catch { return null; }
+    }
+    function safeWriteStorage(key, value) {
+      try { localStorage.setItem(key, value); } catch { /* ignore */ }
+    }
+    function safeRemoveStorage(key) {
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+    }
+
+    function makeEl(tag, attrs = {}, ...children) {
+      const node = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (v == null || v === false) continue;
+        if (k === "class") node.className = v;
+        else if (k === "html") node.innerHTML = v;
+        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v);
+        else node.setAttribute(k, v === true ? "" : String(v));
+      }
+      for (const child of children) {
+        if (child == null) continue;
+        if (typeof child === "string") node.appendChild(document.createTextNode(child));
+        else node.appendChild(child);
+      }
+      return node;
+    }
+
+    function applyShellBackground(el, tokens) {
+      const bg = tokens.colorBg || "var(--doc-bg)";
+      // Glass uses an rgba surface over a gradient backdrop — set both so the
+      // wrapper feels coherent.
+      el.style.background = bg;
+    }
+
+    /* -------------------------------------------------------------------
+       1. Gallery (7 mini previews)
+       ------------------------------------------------------------------- */
+
+    function buildGallery() {
+      const grid = document.getElementById("gallery-grid");
+      if (!grid) return;
+      grid.replaceChildren();
+
+      for (const name of THEME_NAMES) {
+        const meta = THEME_META[name];
+        const card = makeEl("div", { class: "gallery-card", "data-theme": name });
+        const header = makeEl(
+          "header",
+          {},
+          makeEl("span", { class: "name" }, meta.label),
+          makeEl("span", { class: "tag" }, meta.tag),
+        );
+        const preview = makeEl("streaming-ui-script", { theme: name, transparent: true });
+        const tryBtn = makeEl(
+          "button",
+          {
+            class: "try",
+            type: "button",
+            "aria-label": `Try ${meta.label} in the live preview`,
+          },
+        );
+        tryBtn.appendChild(makeEl("i", { class: "fa-solid fa-circle-play" }));
+        tryBtn.appendChild(document.createTextNode(" Try in preview"));
+        tryBtn.addEventListener("click", () => {
+          selectPickerTheme(name);
+          const anchor = document.getElementById("picker");
+          if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+
+        card.appendChild(header);
+        card.appendChild(preview);
+        card.appendChild(tryBtn);
+        grid.appendChild(card);
+
+        // Defer setResponse so the custom element has upgraded.
+        queueMicrotask(() => {
+          try { preview.setResponse(MINI_PROGRAM); } catch { /* ignore */ }
+        });
+      }
+    }
+
+    /* -------------------------------------------------------------------
+       2. Picker + live preview
+       ------------------------------------------------------------------- */
+
+    let currentPickerTheme = "light";
+
+    function buildPicker() {
+      const options = document.getElementById("picker-options");
+      options.replaceChildren();
+      for (const name of THEME_NAMES) {
+        const btn = makeEl(
+          "button",
+          {
+            class: "picker-btn",
+            type: "button",
+            "data-theme": name,
+            "aria-checked": "false",
+            role: "radio",
+            "aria-label": `Use ${THEME_META[name].label} theme`,
+          },
+        );
+        btn.appendChild(makeEl("i", { class: "fa-solid fa-circle", style: `color: ${builtInThemes[name].colorPrimary};` }));
+        btn.appendChild(document.createTextNode(" " + THEME_META[name].label));
+        btn.addEventListener("click", () => selectPickerTheme(name));
+        options.appendChild(btn);
+      }
+
+      const previewEl = document.getElementById("picker-preview");
+      const sourceEditor = document.getElementById("preview-source");
+      const savedProgram = safeReadStorage(STORAGE_KEYS.previewProgram);
+      sourceEditor.value = savedProgram || PREVIEW_PROGRAM;
+
+      queueMicrotask(() => {
+        try { previewEl.setResponse(sourceEditor.value); } catch { /* ignore */ }
+      });
+
+      sourceEditor.addEventListener("input", () => {
+        const value = sourceEditor.value;
+        safeWriteStorage(STORAGE_KEYS.previewProgram, value);
+        try { previewEl.setResponse(value); } catch { /* ignore */ }
+      });
+
+      const saved = safeReadStorage(STORAGE_KEYS.preset);
+      selectPickerTheme(saved && THEME_META[saved] ? saved : "light");
+    }
+
+    function selectPickerTheme(name) {
+      if (!THEME_META[name]) return;
+      currentPickerTheme = name;
+      safeWriteStorage(STORAGE_KEYS.preset, name);
+
+      const options = document.getElementById("picker-options");
+      options.querySelectorAll(".picker-btn").forEach((btn) => {
+        btn.setAttribute("aria-checked", btn.getAttribute("data-theme") === name ? "true" : "false");
+      });
+
+      const previewEl = document.getElementById("picker-preview");
+      previewEl.setAttribute("theme", name);
+      applyShellBackground(document.getElementById("preview-shell"), builtInThemes[name]);
+    }
+
+    /* -------------------------------------------------------------------
+       3. Side-by-side comparison
+       ------------------------------------------------------------------- */
+
+    function buildCompare() {
+      const left = document.getElementById("compare-left");
+      const right = document.getElementById("compare-right");
+      for (const name of THEME_NAMES) {
+        left.appendChild(makeEl("option", { value: name }, THEME_META[name].label));
+        right.appendChild(makeEl("option", { value: name }, THEME_META[name].label));
+      }
+
+      const savedLeft = safeReadStorage(STORAGE_KEYS.compareLeft);
+      const savedRight = safeReadStorage(STORAGE_KEYS.compareRight);
+      left.value = (savedLeft && THEME_META[savedLeft]) ? savedLeft : "light";
+      right.value = (savedRight && THEME_META[savedRight]) ? savedRight : "dark";
+
+      const apply = () => {
+        const lv = left.value;
+        const rv = right.value;
+        safeWriteStorage(STORAGE_KEYS.compareLeft, lv);
+        safeWriteStorage(STORAGE_KEYS.compareRight, rv);
+
+        const lEl = document.getElementById("compare-preview-left");
+        const rEl = document.getElementById("compare-preview-right");
+        lEl.setAttribute("theme", lv);
+        rEl.setAttribute("theme", rv);
+
+        const lPane = document.getElementById("compare-pane-left");
+        const rPane = document.getElementById("compare-pane-right");
+        applyShellBackground(lPane.querySelector(".compare-pane-body"), builtInThemes[lv]);
+        applyShellBackground(rPane.querySelector(".compare-pane-body"), builtInThemes[rv]);
+
+        document.getElementById("compare-label-left").textContent = THEME_META[lv].label;
+        document.getElementById("compare-label-right").textContent = THEME_META[rv].label;
+      };
+
+      left.addEventListener("change", apply);
+      right.addEventListener("change", apply);
+      apply();
+
+      // Populate both previews with the same program.
+      const lEl = document.getElementById("compare-preview-left");
+      const rEl = document.getElementById("compare-preview-right");
+      queueMicrotask(() => {
+        try { lEl.setResponse(PREVIEW_PROGRAM); rEl.setResponse(PREVIEW_PROGRAM); }
+        catch { /* ignore */ }
+      });
+
+      // Synced scroll between panes.
+      const bodies = [
+        document.querySelector('.compare-pane-body[data-side="left"]'),
+        document.querySelector('.compare-pane-body[data-side="right"]'),
+      ];
+      let active = null;
+      bodies.forEach((body, idx) => {
+        body.addEventListener("scroll", () => {
+          if (active !== null && active !== idx) return;
+          active = idx;
+          const other = bodies[1 - idx];
+          const maxA = body.scrollHeight - body.clientHeight;
+          const maxB = other.scrollHeight - other.clientHeight;
+          if (maxA > 0 && maxB > 0) {
+            const ratio = body.scrollTop / maxA;
+            other.scrollTop = Math.round(ratio * maxB);
+          }
+          window.clearTimeout(body._scrollTimer);
+          body._scrollTimer = window.setTimeout(() => { active = null; }, 120);
+        });
+      });
+    }
+
+    /* -------------------------------------------------------------------
+       4. Customization studio
+       ------------------------------------------------------------------- */
+
+    let studioPreset = "light";
+    let workingTheme = loadWorkingTheme();
+
+    function loadWorkingTheme() {
+      const saved = safeReadStorage(STORAGE_KEYS.custom);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === "object" && parsed.__preset) {
+            studioPreset = THEME_META[parsed.__preset] ? parsed.__preset : "light";
+            const { __preset, ...tokens } = parsed;
+            return { ...builtInThemes[studioPreset], ...tokens };
+          }
+        } catch { /* fall through */ }
+      }
+      return { ...builtInThemes.light };
+    }
+
+    function persistWorkingTheme() {
+      safeWriteStorage(
+        STORAGE_KEYS.custom,
+        JSON.stringify({ __preset: studioPreset, ...workingTheme }),
+      );
+    }
+
+    function buildStudio() {
+      buildStudioFields();
+      bindStudioActions();
+      applyStudio({ initial: true });
+    }
+
+    function buildStudioFields() {
+      const groupContainers = {
+        surface: document.getElementById("fields-surface"),
+        brand:   document.getElementById("fields-brand"),
+        chart:   document.getElementById("fields-chart"),
+        type:    document.getElementById("fields-type"),
+        shape:   document.getElementById("fields-shape"),
+      };
+
+      for (const [groupId, keys] of Object.entries(STUDIO_GROUPS)) {
+        const container = groupContainers[groupId];
+        container.replaceChildren();
+        for (const key of keys) {
+          container.appendChild(buildField(key));
+        }
+      }
+    }
+
+    function buildField(key) {
+      const wrapper = makeEl("div", { class: "field" });
+      const label = makeEl("label", { for: `field-${key}` }, key);
+      wrapper.appendChild(label);
+      const value = workingTheme[key] ?? "";
+
+      if (COLOR_KEYS.has(key) && isHexColor(value)) {
+        const row = makeEl("div", { class: "field-row" });
+        const colorInput = makeEl("input", {
+          type: "color",
+          id: `field-${key}`,
+          value,
+          "aria-label": `${key} color picker`,
+        });
+        const textInput = makeEl("input", {
+          type: "text",
+          value,
+          "aria-label": `${key} hex value`,
+        });
+        colorInput.addEventListener("input", () => {
+          workingTheme[key] = colorInput.value;
+          textInput.value = colorInput.value;
+          applyStudio();
+        });
+        textInput.addEventListener("input", () => {
+          workingTheme[key] = textInput.value;
+          if (isHexColor(textInput.value)) colorInput.value = textInput.value;
+          applyStudio();
+        });
+        row.appendChild(colorInput);
+        row.appendChild(textInput);
+        wrapper.appendChild(row);
+      } else {
+        const input = makeEl("input", {
+          type: "text",
+          id: `field-${key}`,
+          value: String(value),
+          "aria-label": key,
+        });
+        input.addEventListener("input", () => {
+          workingTheme[key] = input.value;
+          applyStudio();
+        });
+        wrapper.appendChild(input);
+      }
+      return wrapper;
+    }
+
+    function bindStudioActions() {
+      const presetSelect = document.getElementById("studio-preset");
+      if (presetSelect) {
+        presetSelect.replaceChildren();
+        for (const name of THEME_NAMES) {
+          presetSelect.appendChild(makeEl("option", { value: name }, THEME_META[name].label));
+        }
+        presetSelect.value = studioPreset;
+        presetSelect.addEventListener("change", () => {
+          studioPreset = presetSelect.value;
+          workingTheme = { ...builtInThemes[studioPreset] };
+          buildStudioFields();
+          applyStudio();
+        });
+      }
+
+      document.getElementById("reset-all").addEventListener("click", () => {
+        workingTheme = { ...builtInThemes[studioPreset] };
+        safeRemoveStorage(STORAGE_KEYS.custom);
+        buildStudioFields();
+        applyStudio({ initial: true });
+      });
+
+      document.querySelectorAll("[data-reset]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const groupId = btn.getAttribute("data-reset");
+          const base = builtInThemes[studioPreset];
+          for (const key of STUDIO_GROUPS[groupId] || []) {
+            workingTheme[key] = base[key];
+          }
+          buildStudioFields();
+          applyStudio();
+        });
+      });
+
+      // Output format tabs
+      document.querySelectorAll(".output-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".output-tab").forEach((t) => {
+            t.setAttribute("aria-selected", t === tab ? "true" : "false");
+          });
+          renderSnippet();
+        });
+      });
+
+      document.getElementById("copy-output").addEventListener("click", copySnippet);
+      document.getElementById("download-output").addEventListener("click", downloadJson);
+    }
+
+    function applyStudio(opts = {}) {
+      const preview = document.getElementById("studio-preview");
+      preview.setTheme(workingTheme);
+      applyShellBackground(document.getElementById("studio-preview-shell"), workingTheme);
+
+      if (opts.initial) {
+        queueMicrotask(() => {
+          try { preview.setResponse(PREVIEW_PROGRAM); } catch { /* ignore */ }
+        });
+      }
+
+      renderSnippet();
+      renderReferenceTable();
+      persistWorkingTheme();
+    }
+
+    function activeOutputFormat() {
+      const active = document.querySelector('.output-tab[aria-selected="true"]');
+      return active ? active.getAttribute("data-format") : "js";
+    }
+
+    function renderSnippet() {
+      const target = document.getElementById("snippet-js");
+      const fmt = activeOutputFormat();
+      if (fmt === "js") {
+        target.textContent =
+          'const el = document.querySelector("streaming-ui-script");\n' +
+          `el.setTheme(${JSON.stringify(workingTheme, null, 2)});`;
+      } else if (fmt === "css") {
+        const lines = ["streaming-ui-script {"];
+        for (const token of TOKENS) {
+          const value = workingTheme[token.key];
+          if (value == null) continue;
+          lines.push(`  ${token.css}: ${value};`);
+        }
+        lines.push("}");
+        target.textContent = lines.join("\n");
+      } else {
+        target.textContent = JSON.stringify(workingTheme, null, 2);
+      }
+    }
+
+    async function copySnippet() {
+      const btn = document.getElementById("copy-output");
+      try {
+        await navigator.clipboard.writeText(document.getElementById("snippet-js").textContent);
+        const original = btn.innerHTML;
+        btn.setAttribute("data-state", "ok");
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+        window.setTimeout(() => {
+          btn.removeAttribute("data-state");
+          btn.innerHTML = original;
+        }, 1500);
+      } catch { /* ignore */ }
+    }
+
+    function downloadJson() {
+      const blob = new Blob([JSON.stringify(workingTheme, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `streaming-ui-script-theme-${studioPreset}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    /* -------------------------------------------------------------------
+       7. Reference table
+       ------------------------------------------------------------------- */
+
+    function renderReferenceTable() {
+      const tbody = document.getElementById("reference-body");
+      const input = document.getElementById("reference-input");
+      const count = document.getElementById("reference-count");
+      const filter = (input?.value || "").trim().toLowerCase();
+      tbody.replaceChildren();
+
+      let lastGroup = null;
+      let visibleCount = 0;
+
+      for (const token of TOKENS) {
+        const matchHaystack = `${token.key} ${token.css} ${token.group} ${token.desc} ${workingTheme[token.key] ?? ""}`.toLowerCase();
+        if (filter && !matchHaystack.includes(filter)) continue;
+
+        if (token.group !== lastGroup) {
+          lastGroup = token.group;
+          const groupRow = makeEl("tr", { class: "group-row" });
+          const groupCell = makeEl("td", { colspan: 4 });
+          const icon = makeEl("i", { class: groupIcon(token.group) });
+          groupCell.appendChild(icon);
+          groupCell.appendChild(document.createTextNode(" " + token.group));
+          groupRow.appendChild(groupCell);
+          tbody.appendChild(groupRow);
+        }
+
+        const tr = makeEl("tr");
+        tr.appendChild(makeEl("td", { html: `<code>${token.key}</code>` }));
+        tr.appendChild(makeEl("td", { html: `<code>${token.css}</code>` }));
+
+        const valueCell = document.createElement("td");
+        const value = workingTheme[token.key] ?? "";
+        if (COLOR_KEYS.has(token.key) && (isHexColor(value) || value.startsWith("rgb"))) {
+          const swatch = makeEl("span", { class: "swatch" });
+          const chip = makeEl("span", { class: "swatch-chip", style: `background: ${value}` });
+          const code = makeEl("code", {}, value);
+          swatch.appendChild(chip);
+          swatch.appendChild(code);
+          valueCell.appendChild(swatch);
+        } else {
+          const code = makeEl("code", {}, String(value));
+          valueCell.appendChild(code);
+        }
+        tr.appendChild(valueCell);
+        tr.appendChild(makeEl("td", {}, token.desc));
+        tbody.appendChild(tr);
+        visibleCount++;
+      }
+
+      if (visibleCount === 0) {
+        const row = makeEl("tr");
+        const cell = makeEl("td", { colspan: 4, class: "reference-empty" }, "No tokens match that filter.");
+        row.appendChild(cell);
+        tbody.appendChild(row);
+      }
+
+      if (count) {
+        count.textContent = `${visibleCount} of ${TOKENS.length}`;
+      }
+    }
+
+    function groupIcon(group) {
+      switch (group) {
+        case "Surface":    return "fa-solid fa-layer-group";
+        case "Brand":      return "fa-solid fa-droplet";
+        case "Chart":      return "fa-solid fa-chart-pie";
+        case "Typography": return "fa-solid fa-text-height";
+        case "Shape":      return "fa-solid fa-ruler-combined";
+        case "Spacing":    return "fa-solid fa-arrows-up-down-left-right";
+        default:           return "fa-solid fa-circle-info";
+      }
+    }
+
+    function bindReferenceSearch() {
+      const input = document.getElementById("reference-input");
+      input.addEventListener("input", renderReferenceTable);
+    }
+
+    /* -------------------------------------------------------------------
+       In-page TOC: scroll-spy for the right rail
+       ------------------------------------------------------------------- */
+
+    function setupTocSpy() {
+      const links = [...document.querySelectorAll(".page-toc a")];
+      if (!links.length) return;
+      const idToLink = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+      const ids = [...idToLink.keys()];
+      const sections = ids.map((id) => document.getElementById(id)).filter(Boolean);
+      const visible = new Set();
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) visible.add(entry.target.id);
+            else visible.delete(entry.target.id);
+          }
+          let first = sections.find((s) => visible.has(s.id));
+          if (!first && sections.length > 0) {
+            // Fall back: pick the section closest to the top of the viewport.
+            first = sections.reduce((best, s) => {
+              const r = s.getBoundingClientRect();
+              return r.top <= 120 && (!best || r.top > best.getBoundingClientRect().top) ? s : best;
+            }, null);
+          }
+          links.forEach((a) => a.classList.remove("is-active"));
+          if (first && idToLink.get(first.id)) idToLink.get(first.id).classList.add("is-active");
+        },
+        { rootMargin: `-${parseInt(getComputedStyle(document.documentElement).getPropertyValue("--doc-topbar-h")) + 24}px 0px -55% 0px`, threshold: [0, 1] },
+      );
+      sections.forEach((s) => observer.observe(s));
+    }
+
+    /* -------------------------------------------------------------------
+       Boot
+       ------------------------------------------------------------------- */
+
+    function boot() {
+      buildGallery();
+      buildPicker();
+      buildCompare();
+      buildStudio();
+      bindReferenceSearch();
+      setupTocSpy();
+
+      // Honour deep links like themes.html#customization (legacy URLs).
+      if (location.hash) {
+        const id = location.hash.slice(1);
+        const node = document.getElementById(id);
+        if (node) {
+          // Wait one tick so layout has settled before scrolling.
+          requestAnimationFrame(() => node.scrollIntoView({ behavior: "instant", block: "start" }));
+        }
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", boot, { once: true });
+    } else {
+      boot();
+    }
   </script>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
 </body>
 </html>

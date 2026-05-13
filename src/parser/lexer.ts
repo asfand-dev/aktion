@@ -74,8 +74,11 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Line comments: //...
-    if (ch === "/" && peek(1) === "/") {
+    // Line comments: //... and #...
+    // Both run to the end of the line and are stripped silently. `#` is a
+    // shell/python-style alternative that lets hand-edited scripts use a
+    // single character — useful in chat-style examples and READMEs.
+    if ((ch === "/" && peek(1) === "/") || ch === "#") {
       while (i < source.length && peek() !== "\n") advance();
       continue;
     }
@@ -135,13 +138,42 @@ export function tokenize(source: string): Token[] {
     }
 
     // Number literal.
-    if (isDigit(ch) || (ch === "-" && isDigit(peek(1) ?? ""))) {
+    //
+    // We accept a leading `-` only when the previous token is empty, a
+    // newline, or a non-value token (operator, punctuation start). That
+    // keeps `$x-1` parseable as `$x - 1` instead of `$x` followed by a
+    // bare `-1` literal (which the parser would reject as two adjacent
+    // values).
+    const lastToken = tokens[tokens.length - 1];
+    const allowSignedNumber =
+      !lastToken ||
+      lastToken.type === "Newline" ||
+      lastToken.type === "Operator" ||
+      (lastToken.type === "Punctuation" &&
+        (lastToken.value === "(" || lastToken.value === "[" ||
+          lastToken.value === "," || lastToken.value === ":" ||
+          lastToken.value === "?" || lastToken.value === "{"));
+    if (isDigit(ch) || (ch === "-" && isDigit(peek(1) ?? "") && allowSignedNumber)) {
       const startLine = line;
       const startCol = column;
       let raw = "";
       if (ch === "-") raw += advance();
-      while (i < source.length && (isDigit(peek() ?? "") || peek() === ".")) {
-        raw += advance();
+      let sawDot = false;
+      while (i < source.length) {
+        const next = peek() ?? "";
+        if (isDigit(next)) {
+          raw += advance();
+          continue;
+        }
+        // Only accept a single decimal point; subsequent dots terminate
+        // the number so identifiers like `arr.length` after a digit-only
+        // member access stay well-formed.
+        if (next === "." && !sawDot && isDigit(peek(1) ?? "")) {
+          sawDot = true;
+          raw += advance();
+          continue;
+        }
+        break;
       }
       push("Number", raw, startLine, startCol);
       continue;

@@ -4,7 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Routing · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <meta name="description" content="Hash-based multi-page UIs via Routes, NavLink, and @Navigate." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <style>
     .routing-grid {
       display: grid;
@@ -79,8 +90,9 @@
       min-height: 220px;
     }
   </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
+<body data-page="routing">
   <div class="layout">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
@@ -97,34 +109,22 @@
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Routing</h1>
-      <p>
-        <code>&lt;streaming-ui-script&gt;</code> ships a tiny, hash-based router
-        that lets an LLM-authored UI span multiple pages. Navigation stays in
-        sync with the URL (<code>#/dashboard</code>, <code>#/users/42</code>),
-        browser back/forward works, and deep links survive a refresh — all
-        without pulling in <code>react-router</code> or any framework-specific
-        dependency.
-      </p>
+      <header class="hero">
+        <span class="hero-eyebrow">Built-in</span>
+        <h1>Routing.</h1>
+        <p class="lead">
+          A tiny, hash-based router lets an LLM-authored UI span multiple
+          pages. Navigation stays in sync with the URL
+          (<code>#/dashboard</code>, <code>#/users/42</code>), browser
+          back/forward works, and deep links survive a refresh — all without
+          <code>react-router</code> or any framework-specific dependency.
+        </p>
+      </header>
 
       <div class="routing-grid">
         <div class="routing-card">
@@ -160,29 +160,28 @@
         </div>
       </div>
 
-      <div class="callout callout--warn">
-        <h4>Routing is off by default</h4>
+      <div class="callout">
+        <h4>Routing is always on</h4>
         <p>
-          Set <code>enable-routes="true"</code> on the
-          <code>&lt;streaming-ui-script&gt;</code> tag to turn the router on.
-          When disabled (the default), routing components fall back to inert
-          rendering and the system prompt omits the routing section entirely —
-          so the LLM never invents URLs in apps that don't want them.
+          Every <code>&lt;streaming-ui-script&gt;</code> renderer starts the
+          built-in router automatically. The default
+          <code>getSystemPrompt()</code> output ("full" mode) includes the
+          routing section so the LLM can confidently emit
+          <code>Routes</code> / <code>NavLink</code> / <code>@Navigate</code>.
+          Pick the lighter <code>{ mode: "chat" }</code> prompt only when you
+          want to skip routing-aware UIs for chat-style replies.
         </p>
       </div>
 
-      <h2>1. Enable the feature</h2>
+      <h2>1. Drop in the renderer</h2>
       <p>
-        Add the <code>enable-routes</code> attribute when you want the LLM to
-        author routes. The element keeps the system prompt in sync — calling
-        <code>getSystemPrompt()</code> on an enabled element produces a prompt
-        that teaches the model how to wire <code>Routes</code> /
-        <code>NavLink</code> / <code>@Navigate</code>.
+        No flags needed — the router is part of the runtime. Calling
+        <code>getSystemPrompt()</code> on the element teaches the model how to
+        wire <code>Routes</code> / <code>NavLink</code> / <code>@Navigate</code>.
       </p>
 <pre><code>&lt;streaming-ui-script
   id="renderer"
   theme="light"
-  enable-routes="true"
 &gt;&lt;/streaming-ui-script&gt;
 
 &lt;script type="module"&gt;
@@ -194,25 +193,19 @@
   });
 &lt;/script&gt;</code></pre>
 
-      <p>You can flip the flag at runtime as well:</p>
-<pre><code>el.enableRoutes = true;    // attach the hashchange listener, expose $route
-el.enableRoutes = false;   // detach, $route stays where it last was</code></pre>
-
       <div class="callout">
         <h4>Heads up: proxy elements</h4>
         If you build the system prompt from a <em>temporary</em>
         <code>&lt;streaming-ui-script&gt;</code> element (a common pattern when
-        each turn renders into its own instance), pass the flag explicitly so
-        the prompt mirrors the renderer:
-<pre><code>const ENABLE_ROUTES = true;
-
-function buildPrompt() {
+        each turn renders into its own instance), just call
+        <code>getSystemPrompt()</code> — routing is part of the default
+        ("full") prompt:
+<pre><code>function buildPrompt() {
   const proxy = document.createElement("streaming-ui-script");
-  return proxy.getSystemPrompt({ enableRoutes: ENABLE_ROUTES });
+  return proxy.getSystemPrompt(); // includes routing by default
 }
 
-const renderer = document.createElement("streaming-ui-script");
-if (ENABLE_ROUTES) renderer.setAttribute("enable-routes", "true");</code></pre>
+const renderer = document.createElement("streaming-ui-script");</code></pre>
       </div>
 
       <h2>2. Anatomy of a multi-page program</h2>
@@ -439,8 +432,6 @@ notFound = Callout("warning", "Not found", "No page matches " + $route)</code></
           <streaming-ui-script
             id="demo-routing-users"
             theme="light"
-            enable-routes="true"
-            enable-javascript="true"
             transparent
           ></streaming-ui-script>
         </div>
@@ -490,7 +481,6 @@ notFound = Callout("warning", "Not found", "No page matches " + $route)</code></
           <streaming-ui-script
             id="demo-routing-settings"
             theme="light"
-            enable-routes="true"
             transparent
           ></streaming-ui-script>
         </div>
@@ -533,16 +523,12 @@ notFound = Callout("warning", "Not found", "No page matches " + $route)</code></
         </thead>
         <tbody>
           <tr>
-            <td><code>el.enableRoutes</code></td>
-            <td>Boolean getter/setter mirroring the <code>enable-routes</code> attribute. Setting it starts/stops the router.</td>
-          </tr>
-          <tr>
             <td><code>el.route</code></td>
             <td>Read-only string with the current path (e.g. <code>"/users/42"</code>).</td>
           </tr>
           <tr>
             <td><code>el.navigate(path)</code></td>
-            <td>Programmatically navigate. Updates <code>window.location.hash</code> when routing is enabled, otherwise no-op.</td>
+            <td>Programmatically navigate by updating <code>window.location.hash</code>.</td>
           </tr>
           <tr>
             <td><code>route-change</code> event</td>
@@ -564,7 +550,7 @@ notFound = Callout("warning", "Not found", "No page matches " + $route)</code></
       </ul>
     </main>
   </div>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
   <script type="module">
     import "../dist/streaming-ui-script.js";
 

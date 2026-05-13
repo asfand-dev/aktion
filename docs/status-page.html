@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Status page · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · status page
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · monitoring &amp; incidents</span>
+      <h1 style="margin-top:10px">A public status page, generated from one program</h1>
+      <p>
+        A full SRE-style status page: incident <code>Banner</code> at the top,
+        <code>PageHeader</code> with refresh, a <code>MetricGrid</code> of
+        uptime KPIs, a <code>LineChart</code> of latency, a list of services
+        with <code>StatusDot</code> pulses, a <code>Timeline</code> of recent
+        incidents, and a subscribe card with two-way bound email + channel
+        toggles. Every section binds to a single
+        <code>Query("status_summary", …)</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Change the range or region and the page re-renders — the chart,
+        services list, and incident timeline all stay in sync. Click an
+        incident to focus it in the right-hand panel.
+      </p>
+      <pre class="example-source"><code id="src-status">$range = "24h"
+$region = "all"
+$focusedIncident = ""
+$email = ""
+$channel = "email"
+
+data = Query("status_summary", {range: $range, region: $region}, {
+  overall: "operational",
+  message: "",
+  uptime: "100%",
+  incidentCount: 0,
+  avgLatency: "0 ms",
+  servicesDown: 0,
+  servicesTotal: 0,
+  latency: {times: [], values: []},
+  services: [],
+  incidents: []
+})
+
+bannerTone = data.overall == "down" ? "danger" : (data.overall == "degraded" ? "warning" : "success")
+bannerIcon = data.overall == "down" ? "circle-xmark" : (data.overall == "degraded" ? "triangle-exclamation" : "circle-check")
+bannerLabel = data.overall == "down" ? "Service disruption" : (data.overall == "degraded" ? "Partial outage" : "All systems operational")
+
+banner = Banner(
+  bannerLabel,
+  data.message,
+  Button("Subscribe to updates", Action([@ToAssistant("Open subscribe form")]), "secondary", "button", "small"),
+  bannerIcon,
+  bannerTone
+)
+
+header = PageHeader(
+  "System status",
+  data.servicesTotal + " services monitored · " + data.servicesDown + " currently affected",
+  Breadcrumb([BreadcrumbItem("Acme", "#"), BreadcrumbItem("Status")]),
+  [
+    Button("History", Action([@ToAssistant("Show full incident history")]), "ghost"),
+    Button("Refresh", Action([@Set($range, $range), @ToAssistant("Force refresh status data")]), "primary")
+  ],
+  StatusDot("Live", "success", true)
+)
+
+rangeToggle = ToggleGroup("range", [
+  {value: "1h",  label: "Last hour"},
+  {value: "24h", label: "Last 24h"},
+  {value: "7d",  label: "Last 7 days"},
+  {value: "30d", label: "Last 30 days"}
+], $range)
+
+regionToggle = ToggleGroup("region", [
+  {value: "all",     label: "All regions",     icon: "globe"},
+  {value: "us-east", label: "US East",         icon: "flag-usa"},
+  {value: "eu-west", label: "EU West",         icon: "earth-europe"},
+  {value: "ap-south", label: "AP South",       icon: "earth-asia"}
+], $region)
+
+filters = Toolbar([rangeToggle], [regionToggle])
+
+kpis = MetricGrid([
+  StatCard("Uptime",        data.uptime,                       "up",   "vs prev period", "gauge-high"),
+  StatCard("Incidents",     "" + data.incidentCount,           "flat", "in window",      "siren-on"),
+  StatCard("Avg response",  data.avgLatency,                   "down", "lower is better", "bolt"),
+  StatCard("Affected",      "" + data.servicesDown + " / " + data.servicesTotal, data.servicesDown == 0 ? "up" : "down", "right now", "satellite-dish")
+])
+
+latencyCard = Card([
+  SectionHeader("Response latency", "p95 across all probes", null, Tag("ms", null, "sm", "info")),
+  LineChart(data.latency.times, [Series("Latency", data.latency.values)])
+])
+
+servicesRows = @Each(data.services, "s",
+  Stack([
+    StatusDot(s.name, s.tone, s.tone == "danger"),
+    Spacer(),
+    Tag(s.region, "location-dot", "sm", "neutral"),
+    Tag(s.uptime + " uptime", null, "sm", s.tone),
+    Button("Details",
+           Action([@ToAssistant("Show details for " + s.name)]),
+           "ghost", "button", "small")
+  ], "row", "m", "center")
+)
+
+servicesEmpty = EmptyState(
+  "No services in this region",
+  "Pick another region or reset the filter to see every service.",
+  "satellite-dish",
+  Button("All regions", Action([@Set($region, "all")]), "secondary")
+)
+
+servicesCard = Card([
+  SectionHeader("Service health", "Status by component", null, Tag("Sync · just now", null, "sm", "success")),
+  @Count(data.services) == 0 ? servicesEmpty : Stack(servicesRows, "column", "s")
+])
+
+incidentItems = @Each(data.incidents, "i",
+  TimelineItem(i.title, i.time, i.description, i.icon, i.tone)
+)
+
+incidentsEmpty = EmptyState(
+  "No incidents in this window",
+  "All systems were stable. Widen the range to see older incidents.",
+  "circle-check",
+  null
+)
+
+incidentsCard = Card([
+  SectionHeader("Recent incidents", "Last " + $range + " · " + data.incidentCount + " total"),
+  @Count(data.incidents) == 0 ? incidentsEmpty : Timeline(incidentItems)
+])
+
+focused = @First(@Filter(data.incidents, "id", "==", $focusedIncident))
+focusedExists = @Count(@Filter(data.incidents, "id", "==", $focusedIncident))
+
+focusedPanel = focusedExists == 0 ? EmptyState(
+  "Pick an incident",
+  "Tap a row to drill into the incident timeline.",
+  "circle-info",
+  null
+) : Stack([
+  PageHeader(focused.title, focused.time, null, null, Tag(focused.status, null, "sm", focused.tone)),
+  DescriptionList([
+    DescriptionItem("Status",     focused.status, focused.icon),
+    DescriptionItem("Severity",   focused.severity, "triangle-exclamation"),
+    DescriptionItem("Components", focused.component, "diagram-project"),
+    DescriptionItem("Owner",      focused.owner, "user")
+  ]),
+  Card([CardHeader("Updates"), Stack(@Each(focused.updates, "u",
+    ChatBubble(u.author, u.body, u.time, null, "agent", "delivered")
+  ), "column", "m")])
+], "column", "m")
+
+incidentTabs = SplitView(
+  [Stack([incidentsCard, Card([
+    SectionHeader("Subscribe to updates", "Get notified the moment status changes"),
+    FormControl("Email", Input("email", "you@company.com", "email", null, $email)),
+    FormControl("Channel", ToggleGroup("channel", [
+      {value: "email", label: "Email",   icon: "envelope"},
+      {value: "slack", label: "Slack",   icon: "slack"},
+      {value: "sms",   label: "SMS",     icon: "mobile-screen-button"},
+      {value: "rss",   label: "RSS",     icon: "rss"}
+    ], $channel)),
+    Buttons([
+      Button("Subscribe",
+             Action([
+               @ToAssistant("Subscribe " + $email + " via " + $channel),
+               @Reset($email)
+             ]),
+             "primary"),
+      Button("Open RSS feed",
+             Action([@OpenUrl("https://example.com/status.rss")]),
+             "ghost")
+    ])
+  ])], "column", "l")],
+  [Card([focusedPanel])],
+  "1.6fr"
+)
+
+selectIncidentRow = @Each(data.incidents, "i",
+  Button(i.title,
+         Action([@Set($focusedIncident, i.id)]),
+         $focusedIncident == i.id ? "primary" : "ghost",
+         "button",
+         "small")
+)
+
+quickJump = Card([
+  SectionHeader("Jump to incident", "Quick filter for the right-hand panel"),
+  Stack(selectIncidentRow, "row", "s")
+])
+
+followUps = FollowUpBlock([
+  FollowUpItem("Open the 90-day uptime report"),
+  FollowUpItem("Subscribe to incident webhooks"),
+  FollowUpItem("Compare regions side by side")
+], "Try next")
+
+root = Stack([banner, header, filters, kpis, latencyCard, servicesCard, @Count(data.incidents) == 0 ? null : quickJump, incidentTabs, followUps], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-status" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The single tool that drives everything</h2>
+      <p class="lede">
+        One <code>Query("status_summary", …)</code> call returns every shape
+        the page needs: overall health, KPI numbers, latency chart points,
+        per-service status, and incident updates. Filters re-trigger the
+        query automatically because <code>$range</code> and
+        <code>$region</code> are passed as bare variables.
+      </p>
+      <pre class="example-source"><code>el.setTools({
+  status_summary: async ({ range, region }) =&gt; {
+    await sleep(220);
+    return buildSummary(range, region);
+  },
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const SERVICES = [
+      { id: "auth",      name: "Auth API",          icon: "shield-halved", regions: ["us-east", "eu-west", "ap-south"] },
+      { id: "api",       name: "Public REST API",   icon: "plug",          regions: ["us-east", "eu-west", "ap-south"] },
+      { id: "dashboard", name: "Dashboard UI",      icon: "table-columns", regions: ["us-east", "eu-west"] },
+      { id: "cdn",       name: "Static CDN",        icon: "earth-asia",    regions: ["us-east", "eu-west", "ap-south"] },
+      { id: "stream",    name: "Streaming gateway", icon: "satellite-dish", regions: ["us-east", "ap-south"] },
+      { id: "billing",   name: "Billing webhooks",  icon: "credit-card",   regions: ["us-east"] },
+      { id: "search",    name: "Search index",      icon: "magnifying-glass", regions: ["us-east", "eu-west"] },
+      { id: "ai",        name: "AI inference",      icon: "robot",         regions: ["us-east", "eu-west"] },
+    ];
+
+    const INCIDENTS = [
+      {
+        id: "inc-2491",
+        title: "Increased latency on EU REST API",
+        time: "15 min ago",
+        description: "p95 latency briefly spiked to 720ms before recovering. Investigating downstream DB.",
+        status: "Monitoring",
+        tone: "warning",
+        icon: "triangle-exclamation",
+        severity: "Sev 3",
+        component: "api · eu-west",
+        owner: "Naomi Rivers",
+        regions: ["eu-west"],
+        offsetMin: 15,
+        updates: [
+          { author: "Naomi Rivers", body: "We're back to p95 under 250ms. Holding the monitoring window for another 30 min.", time: "Just now" },
+          { author: "Pager bot",    body: "Recovered: api-eu-west p95 latency below threshold.", time: "5 min ago" },
+          { author: "Naomi Rivers", body: "Mitigation applied — rerouted to secondary read replica.", time: "10 min ago" },
+        ],
+      },
+      {
+        id: "inc-2487",
+        title: "Streaming gateway dropped packets in AP South",
+        time: "2 h ago",
+        description: "Packet loss to streaming.example.com peaked at 4% for 12 minutes during routing failover.",
+        status: "Resolved",
+        tone: "success",
+        icon: "circle-check",
+        severity: "Sev 2",
+        component: "stream · ap-south",
+        owner: "Linus Torvalds",
+        regions: ["ap-south"],
+        offsetMin: 120,
+        updates: [
+          { author: "Linus Torvalds", body: "Postmortem scheduled for Thursday 11:00 UTC.",                            time: "1 h ago" },
+          { author: "Pager bot",      body: "Resolved: streaming.example.com packet loss back to 0%.",                  time: "1 h 50 min ago" },
+          { author: "Linus Torvalds", body: "Re-converged BGP routes — failover completed.",                            time: "1 h 58 min ago" },
+        ],
+      },
+      {
+        id: "inc-2482",
+        title: "Billing webhooks delayed for 9 minutes",
+        time: "Yesterday",
+        description: "Some Stripe webhooks queued for up to 9 minutes during a worker rollout.",
+        status: "Resolved",
+        tone: "success",
+        icon: "circle-check",
+        severity: "Sev 3",
+        component: "billing · us-east",
+        owner: "Mei Tanaka",
+        regions: ["us-east"],
+        offsetMin: 60 * 24,
+        updates: [
+          { author: "Mei Tanaka", body: "All webhooks drained. No customer-impacting double-charges.", time: "Yesterday · 21:42" },
+          { author: "Pager bot",  body: "Resolved: billing-webhook queue depth back to 0.",            time: "Yesterday · 21:35" },
+        ],
+      },
+      {
+        id: "inc-2475",
+        title: "Search index reindex paused dashboards",
+        time: "3 days ago",
+        description: "Dashboard reports relying on search index showed stale numbers for 1h 12m during reindex.",
+        status: "Resolved",
+        tone: "success",
+        icon: "circle-check",
+        severity: "Sev 4",
+        component: "search · us-east",
+        owner: "Ada Lovelace",
+        regions: ["us-east", "eu-west"],
+        offsetMin: 60 * 24 * 3,
+        updates: [
+          { author: "Ada Lovelace", body: "Reindex complete. Reports back to fresh data.", time: "3 days ago" },
+          { author: "Ada Lovelace", body: "Reindex started — dashboards may briefly lag.", time: "3 days ago" },
+        ],
+      },
+    ];
+
+    function rangeWindowMin(range) {
+      switch (range) {
+        case "1h":  return 60;
+        case "24h": return 60 * 24;
+        case "7d":  return 60 * 24 * 7;
+        case "30d": return 60 * 24 * 30;
+        default:    return 60 * 24;
+      }
+    }
+
+    function buildLatency(range) {
+      const map = { "1h": 12, "24h": 24, "7d": 28, "30d": 30 };
+      const points = map[range] ?? 24;
+      const times = [];
+      const values = [];
+      for (let i = 0; i < points; i++) {
+        const label = range === "1h"
+          ? `${(i * 5).toString().padStart(2, "0")}m`
+          : range === "24h"
+            ? `${i.toString().padStart(2, "0")}:00`
+            : range === "7d"
+              ? `Day ${i + 1}`
+              : `${Math.ceil((i + 1) / 4)}w`;
+        times.push(label);
+        const base = 180 + Math.round(Math.sin(i / 2.4) * 40 + Math.random() * 30);
+        const spike = (range !== "1h" && i === Math.floor(points * 0.55)) ? 240 : 0;
+        values.push(Math.max(120, base + spike));
+      }
+      return { times, values };
+    }
+
+    function buildServices(region) {
+      const all = SERVICES.map((s, idx) => {
+        const inRegion = region === "all" || s.regions.includes(region);
+        if (!inRegion) return null;
+        const offsetIdx = idx + (region === "all" ? 0 : 2);
+        const tone = offsetIdx % 7 === 1 ? "warning" : (offsetIdx % 11 === 0 ? "danger" : "success");
+        const uptimeBase = tone === "danger" ? 96.8 : tone === "warning" ? 99.21 : 99.97;
+        return {
+          id: s.id,
+          name: s.name,
+          icon: s.icon,
+          region: region === "all" ? s.regions[0].replace("-", " ").toUpperCase() : region.replace("-", " ").toUpperCase(),
+          tone,
+          uptime: uptimeBase.toFixed(2) + "%",
+        };
+      }).filter(Boolean);
+      return all;
+    }
+
+    function buildSummary(range, region) {
+      const windowMin = rangeWindowMin(range);
+      const filteredIncidents = INCIDENTS.filter((inc) => {
+        if (inc.offsetMin > windowMin) return false;
+        if (region === "all") return true;
+        return inc.regions.includes(region);
+      });
+      const services = buildServices(region);
+      const servicesDown = services.filter((s) => s.tone !== "success").length;
+      const hasOpen = filteredIncidents.some((inc) => inc.status !== "Resolved");
+      const overall = servicesDown === 0 && !hasOpen
+        ? "operational"
+        : servicesDown > 1 || filteredIncidents.some((i) => i.severity === "Sev 1")
+          ? "down"
+          : "degraded";
+      const message = overall === "operational"
+        ? "All services are operating normally across every monitored region."
+        : overall === "down"
+          ? "Multiple services are reporting failures. We're investigating with highest priority."
+          : (filteredIncidents.find((i) => i.status !== "Resolved")?.description
+              ?? "One or more services are experiencing degraded performance.");
+      const uptime = overall === "operational" ? "99.99%" : overall === "degraded" ? "99.82%" : "99.41%";
+      const avgLatency = overall === "operational" ? "182 ms" : overall === "degraded" ? "264 ms" : "418 ms";
+      return {
+        overall,
+        message,
+        uptime,
+        incidentCount: filteredIncidents.length,
+        avgLatency,
+        servicesDown,
+        servicesTotal: services.length,
+        latency: buildLatency(range),
+        services,
+        incidents: filteredIncidents,
+      };
+    }
+
+    const el = document.getElementById("rui-status");
+
+    el.setTools({
+      status_summary: async ({ range, region }) => {
+        await sleep(220);
+        return buildSummary(range || "24h", region || "all");
+      },
+    });
+
+    el.setResponse(document.getElementById("src-status").textContent);
+  </script>
+</body>
+</html>

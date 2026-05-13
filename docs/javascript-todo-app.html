@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JS demo · Todo app · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body>
   <div class="example-shell">
@@ -36,7 +38,7 @@
         because <code>list_todos</code> re-runs whenever its args change.
       </p>
       <div class="example-output">
-        <streaming-ui-script id="rui-todo" theme="light" enable-javascript="true"></streaming-ui-script>
+        <streaming-ui-script id="rui-todo" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -72,7 +74,7 @@ filterButtons = Buttons([
 
 statusTag = Tag($shortcut, null, "sm", "neutral")
 
-toggleBtn = @Each(data.rows, "t", Button(t.done ? "✓" : "○", Action([@Set($toggleId, t.id), @Run(toggle), @Run(data)]), t.done ? "secondary" : "ghost", "normal", "small"))
+toggleBtn = @Each(data.rows, "t", Button(t.done ? "Done" : "Open", Action([@Set($toggleId, t.id), @Run(toggle), @Run(data)]), t.done ? "secondary" : "ghost", "normal", "small"))
 deleteBtn = @Each(data.rows, "t", Button("Delete", Action([@Set($deleteId, t.id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))
 titleCell  = @Each(data.rows, "t", TextContent(t.title, t.done ? "small" : "body", t.done ? "muted" : null))
 createdCell= @Each(data.rows, "t", TextContent(t.created, "small", "muted"))
@@ -111,7 +113,7 @@ root = Stack([
         when to call them. Add localStorage persistence in one place and
         every <code>Query</code> / <code>Mutation</code> stays in sync.
       </p>
-<pre><code class="example-source">const STORAGE_KEY = "rui-todo-app";
+<pre class="example-source"><code>const STORAGE_KEY = "rui-todo-app";
 const load = () =&gt; JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
 const save = (todos) =&gt; localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
 

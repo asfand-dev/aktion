@@ -5,7 +5,7 @@
 
 import type { ComponentSpec } from "../types.js";
 import { isActionPayload } from "../../runtime/builtins.js";
-import { el, asArray, asString } from "../utils.js";
+import { el, asArray, asBoolean, asString } from "../utils.js";
 
 export const SectionBlock: ComponentSpec = {
   name: "SectionBlock",
@@ -33,7 +33,7 @@ export const ListBlock: ComponentSpec = {
     { name: "ordered", type: "boolean", optional: true },
   ],
   render: (_node, props) => {
-    const tag = asString(props.ordered) === "true" ? "ol" : "ul";
+    const tag = asBoolean(props.ordered) ? "ol" : "ul";
     const root = el(tag as "ul", { class: "rui-list-block" });
     for (const item of asArray(props.items)) {
       root.append(el("li", {}, [asString(item)]));
@@ -68,9 +68,9 @@ const buildFollowUpButton = (
 ): HTMLButtonElement => {
   const { label, message } = extractFollowUp(item);
   const button = el("button", { class: "rui-follow-up-button", type: "button" }, [label]);
-  button.addEventListener("click", () => {
+  button.onclick = () => {
     helpers.runAction({ kind: "Action", steps: [{ kind: "ToAssistant", message }] });
-  });
+  };
   return button;
 };
 
@@ -102,9 +102,9 @@ export const FollowUpItem: ComponentSpec = {
     const label = asString(props.label);
     const message = asString(props.message, label);
     const button = el("button", { class: "rui-follow-up-button", type: "button" }, [label]);
-    button.addEventListener("click", () => {
+    button.onclick = () => {
       helpers.runAction({ kind: "Action", steps: [{ kind: "ToAssistant", message }] });
-    });
+    };
     return button;
   },
 };
@@ -118,10 +118,10 @@ export const ActionLink: ComponentSpec = {
   ],
   render: (_node, props, helpers) => {
     const link = el("a", { class: "rui-action-link", href: "#", role: "button" }, [asString(props.label)]);
-    link.addEventListener("click", (event) => {
+    link.onclick = (event) => {
       event.preventDefault();
       if (isActionPayload(props.action)) helpers.runAction(props.action);
-    });
+    };
     return link;
   },
 };

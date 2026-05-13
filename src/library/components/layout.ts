@@ -5,7 +5,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, sanitiseCssLength } from "../utils.js";
 
 export const Stack: ComponentSpec = {
   name: "Stack",
@@ -199,21 +199,53 @@ export const Tabs: ComponentSpec = {
     const tablist = el("div", { class: "rui-tab-list", role: "tablist" });
     const panels = el("div", { class: "rui-tab-panels" });
 
-    let activeValue = asString(props.defaultValue);
-    if (!activeValue && items.length > 0) {
+    // Compute the falsy-default tab value (LLM-supplied `defaultValue` or
+    // the first item) so we can seed the persistent active slot when the
+    // user has never interacted with this Tabs instance.
+    let fallbackValue = asString(props.defaultValue);
+    if (!fallbackValue && items.length > 0) {
       const first = items[0] as { args?: unknown[] } | undefined;
-      activeValue = asString(first?.args?.[0], "tab-0");
+      fallbackValue = asString(first?.args?.[0], "tab-0");
     }
 
-    const setActive = (next: string) => {
-      activeValue = next;
-      tablist.querySelectorAll<HTMLButtonElement>(".rui-tab-trigger").forEach((b) => {
-        const isActive = b.getAttribute("data-value") === activeValue;
+    // Persist the active tab across re-renders. Without this slot the active
+    // pane would jump back to `defaultValue` every time an unrelated state
+    // change re-renders the tree (e.g. typing into an Input one panel over).
+    const activeSlot = helpers.useInstanceState<string>("activeTab", fallbackValue);
+
+    // If `defaultValue` was changed by the LLM since last render, honour the
+    // new prop. This lets host code drive the active tab via state without
+    // breaking the persistence behaviour for user-initiated clicks.
+    if (asString(props.defaultValue) && asString(props.defaultValue) !== fallbackValue) {
+      activeSlot.set(asString(props.defaultValue));
+    }
+
+    // Make sure the persisted value still refers to a tab that exists —
+    // the LLM may have removed the previously-active tab mid-stream.
+    const validValues = new Set(
+      items.map((item, idx) => asString((item as { args?: unknown[] }).args?.[0], `tab-${idx}`)),
+    );
+    if (!validValues.has(activeSlot.get())) {
+      activeSlot.set(fallbackValue);
+    }
+
+    // setActive walks the LIVE DOM (via the clicked button's ancestor chain)
+    // instead of the local `tablist` / `panels` closure variables. With the
+    // morph reconciler in place, an unrelated re-render may produce a fresh
+    // Tabs subtree whose onclick handlers get copied onto the previously
+    // mounted nodes — the closures' local refs point at the discarded fresh
+    // subtree, but `event.currentTarget` is always the in-DOM button.
+    const setActive = (next: string, originBtn: Element): void => {
+      activeSlot.set(next);
+      const liveRoot = originBtn.closest(".rui-tabs");
+      if (!liveRoot) return;
+      liveRoot.querySelectorAll<HTMLButtonElement>(".rui-tab-trigger").forEach((b) => {
+        const isActive = b.getAttribute("data-value") === next;
         b.setAttribute("aria-selected", isActive ? "true" : "false");
         b.tabIndex = isActive ? 0 : -1;
       });
-      panels.querySelectorAll<HTMLElement>(".rui-tab-content").forEach((p) => {
-        p.setAttribute("data-active", p.getAttribute("data-value") === activeValue ? "true" : "false");
+      liveRoot.querySelectorAll<HTMLElement>(".rui-tab-content").forEach((p) => {
+        p.setAttribute("data-active", p.getAttribute("data-value") === next ? "true" : "false");
       });
     };
 
@@ -221,7 +253,7 @@ export const Tabs: ComponentSpec = {
       const tabNode = item as { name?: string; args?: unknown[] };
       const value = asString(tabNode.args?.[0], `tab-${idx}`);
       const label = asString(tabNode.args?.[1], `Tab ${idx + 1}`);
-      const isActive = value === activeValue;
+      const isActive = value === activeSlot.get();
       const button = el(
         "button",
         {
@@ -234,7 +266,10 @@ export const Tabs: ComponentSpec = {
         },
         [label],
       );
-      button.addEventListener("click", () => setActive(value));
+      button.onclick = (event) => {
+        const origin = (event.currentTarget ?? event.target) as Element;
+        setActive(value, origin);
+      };
       tablist.append(button);
 
       const panel = helpers.renderNode(item) as HTMLElement;
@@ -299,7 +334,7 @@ export const Grid: ComponentSpec = {
       class: "rui-grid",
       "data-columns": columns > 0 ? String(columns) : null,
       "data-gap": asString(props.gap, "m"),
-      style: columns === 0 ? `--rui-grid-min-item:${asString(props.minItemWidth, "220px")}` : null,
+      style: columns === 0 ? `--rui-grid-min-item:${sanitiseCssLength(props.minItemWidth, "220px")}` : null,
     });
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
@@ -351,7 +386,7 @@ export const ScrollArea: ComponentSpec = {
     const root = el("div", {
       class: "rui-scroll-area",
       "data-direction": asString(props.direction, "vertical"),
-      style: `max-height:${asString(props.maxHeight, "320px")};`,
+      style: `max-height:${sanitiseCssLength(props.maxHeight, "320px")};`,
     });
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;

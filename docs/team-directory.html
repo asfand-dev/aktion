@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Team directory · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body>
   <div class="example-shell">
@@ -66,10 +68,10 @@ searchField = FormControl(
 
 departmentToggle = FormControl("Department", ToggleGroup("department", [
   {value: "all",   label: "All"},
-  {value: "eng",   label: "Engineering", icon: "💻"},
-  {value: "ds",    label: "Design",      icon: "🎨"},
-  {value: "ops",   label: "Operations",  icon: "📦"},
-  {value: "sales", label: "Sales",       icon: "📈"}
+  {value: "eng",   label: "Engineering", icon: "laptop-code"},
+  {value: "ds",    label: "Design",      icon: "palette"},
+  {value: "ops",   label: "Operations",  icon: "box"},
+  {value: "sales", label: "Sales",       icon: "chart-line"}
 ], $department))
 
 controls = Stack([searchField, departmentToggle], "row", "m", "stretch", "start", true)
@@ -91,7 +93,7 @@ cardsGrid = Grid(@Each(data.rows, "u",
 emptyState = EmptyState(
   "No matches for your filters",
   "Try a different search term or pick another department.",
-  "🔍",
+  "magnifying-glass",
   Button("Clear filters", Action([@Reset($search), @Reset($department), @Set($page, 1)]), "primary")
 )
 
@@ -162,25 +164,25 @@ root = Stack([header, popularRow, controls, body, pager, detailSheet], "column",
     const PAGE_SIZE = 6;
 
     const MEMBERS = [
-      { id: "u_ada",     name: "Ada Lovelace",       role: "Founding engineer",  department: "eng",   bio: "Designed the streaming evaluator and the action graph.",        tags: ["TypeScript", "Compilers", "DX"],          icon: "💻" },
-      { id: "u_grace",   name: "Grace Hopper",       role: "Component lead",     department: "eng",   bio: "Owns the rich-UI patterns library and the design tokens.",      tags: ["Design systems", "A11y", "Patterns"],     icon: "🎨" },
-      { id: "u_linus",   name: "Linus Torvalds",     role: "Infra & perf",       department: "eng",   bio: "Keeps the bundle under 40 KB and CI under 90 seconds.",         tags: ["Perf", "Infra", "DX"],                    icon: "⚙️" },
-      { id: "u_alan",    name: "Alan Turing",        role: "Director of research", department: "eng", bio: "Steers the long-term agent and DSL strategy.",                  tags: ["Research", "DSLs"],                       icon: "🧠" },
-      { id: "u_marie",   name: "Marie Curie",        role: "Principal designer", department: "ds",    bio: "Drives the visual language and the marketing site.",            tags: ["Brand", "Illustration"],                  icon: "🖌" },
-      { id: "u_pablo",   name: "Pablo Picasso",      role: "Senior designer",    department: "ds",    bio: "Owns the dashboard patterns and chart styling.",                 tags: ["Data viz", "Patterns"],                   icon: "🎨" },
-      { id: "u_henri",   name: "Henri Matisse",      role: "Illustrator",        department: "ds",    bio: "Hand-draws the marketing illustrations for every release.",     tags: ["Illustration", "Branding"],                icon: "✏️" },
-      { id: "u_amelia",  name: "Amelia Earhart",     role: "Head of operations", department: "ops",   bio: "Runs the office, the offsite, and the on-call schedule.",       tags: ["Ops", "Logistics"],                       icon: "📦" },
-      { id: "u_neil",    name: "Neil Armstrong",     role: "Customer success",   department: "sales", bio: "First responder for enterprise migrations and onboarding.",     tags: ["Onboarding", "Migrations"],               icon: "🚀" },
-      { id: "u_sally",   name: "Sally Ride",         role: "Account executive",  department: "sales", bio: "Owns the platform & agent vertical for North America.",         tags: ["Enterprise", "Discovery"],                icon: "📈" },
-      { id: "u_rosa",    name: "Rosa Parks",         role: "People partner",     department: "ops",   bio: "Hiring + onboarding for the engineering org.",                  tags: ["Hiring", "Onboarding"],                   icon: "🤝" },
-      { id: "u_mae",     name: "Mae Jemison",        role: "Solutions engineer", department: "sales", bio: "Embeds with launch customers to land the first integration.",   tags: ["Integrations", "DX"],                     icon: "🧪" },
+      { id: "u_ada",     name: "Ada Lovelace",       role: "Founding engineer",  department: "eng",   bio: "Designed the streaming evaluator and the action graph.",        tags: ["TypeScript", "Compilers", "DX"],          icon: "laptop-code" },
+      { id: "u_grace",   name: "Grace Hopper",       role: "Component lead",     department: "eng",   bio: "Owns the rich-UI patterns library and the design tokens.",      tags: ["Design systems", "A11y", "Patterns"],     icon: "palette" },
+      { id: "u_linus",   name: "Linus Torvalds",     role: "Infra & perf",       department: "eng",   bio: "Keeps the bundle under 40 KB and CI under 90 seconds.",         tags: ["Perf", "Infra", "DX"],                    icon: "gear" },
+      { id: "u_alan",    name: "Alan Turing",        role: "Director of research", department: "eng", bio: "Steers the long-term agent and DSL strategy.",                  tags: ["Research", "DSLs"],                       icon: "brain" },
+      { id: "u_marie",   name: "Marie Curie",        role: "Principal designer", department: "ds",    bio: "Drives the visual language and the marketing site.",            tags: ["Brand", "Illustration"],                  icon: "paintbrush" },
+      { id: "u_pablo",   name: "Pablo Picasso",      role: "Senior designer",    department: "ds",    bio: "Owns the dashboard patterns and chart styling.",                 tags: ["Data viz", "Patterns"],                   icon: "palette" },
+      { id: "u_henri",   name: "Henri Matisse",      role: "Illustrator",        department: "ds",    bio: "Hand-draws the marketing illustrations for every release.",     tags: ["Illustration", "Branding"],                icon: "pen" },
+      { id: "u_amelia",  name: "Amelia Earhart",     role: "Head of operations", department: "ops",   bio: "Runs the office, the offsite, and the on-call schedule.",       tags: ["Ops", "Logistics"],                       icon: "box" },
+      { id: "u_neil",    name: "Neil Armstrong",     role: "Customer success",   department: "sales", bio: "First responder for enterprise migrations and onboarding.",     tags: ["Onboarding", "Migrations"],               icon: "rocket" },
+      { id: "u_sally",   name: "Sally Ride",         role: "Account executive",  department: "sales", bio: "Owns the platform & agent vertical for North America.",         tags: ["Enterprise", "Discovery"],                icon: "chart-line" },
+      { id: "u_rosa",    name: "Rosa Parks",         role: "People partner",     department: "ops",   bio: "Hiring + onboarding for the engineering org.",                  tags: ["Hiring", "Onboarding"],                   icon: "handshake" },
+      { id: "u_mae",     name: "Mae Jemison",        role: "Solutions engineer", department: "sales", bio: "Embeds with launch customers to land the first integration.",   tags: ["Integrations", "DX"],                     icon: "flask" },
     ];
 
     function tagStatsFor(member) {
       return [
-        { label: "PRs merged",   value: "" + (24 + member.name.length),                   trend: "up",   delta: "+8 vs prev", icon: "🚀" },
-        { label: "Reviews",      value: "" + (40 + (member.name.length % 18)),            trend: "flat", delta: "", icon: "👀" },
-        { label: "Mentions",     value: "" + (10 + (member.name.length % 9)),             trend: "up",   delta: "+3", icon: "🔥" },
+        { label: "PRs merged",   value: "" + (24 + member.name.length),                   trend: "up",   delta: "+8 vs prev", icon: "rocket" },
+        { label: "Reviews",      value: "" + (40 + (member.name.length % 18)),            trend: "flat", delta: "", icon: "eye" },
+        { label: "Mentions",     value: "" + (10 + (member.name.length % 9)),             trend: "up",   delta: "+3", icon: "fire" },
       ];
     }
 

@@ -136,7 +136,10 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
 
 /**
  * Best-effort evaluation of literal-only expressions used for $variable
- * defaults. Falls back to undefined for expressions that need a full context.
+ * defaults. Falls back to `null` for expressions that need a full context
+ * — we keep the binding present so `$foo` returns a typed value (null)
+ * instead of `undefined`, which would surface in concatenations as the
+ * string "undefined".
  */
 function evaluateLiteral(expr: Expression): unknown {
   switch (expr.kind) {
@@ -147,7 +150,7 @@ function evaluateLiteral(expr: Expression): unknown {
       for (const prop of expr.properties) obj[prop.key] = evaluateLiteral(prop.value);
       return obj;
     }
-    default: return undefined;
+    default: return null;
   }
 }
 
@@ -346,12 +349,20 @@ function evaluateBuiltinCall(
     const arr = Array.isArray(sourceValue) ? sourceValue : [];
     const varName = varNameArg.kind === "Literal" ? String(varNameArg.value ?? "") : "";
     const out: unknown[] = [];
-    for (const item of arr) {
-      const prev = ctx.loopVars.get(varName);
-      ctx.loopVars.set(varName, item);
-      out.push(evaluate(templateArg, ctx));
-      if (prev === undefined) ctx.loopVars.delete(varName);
-      else ctx.loopVars.set(varName, prev);
+    // Snapshot the prior binding *once* before the loop so we can restore the
+    // outer scope exactly — including the legitimate case where the outer
+    // value is `undefined`. Using `has(...)` instead of `prev === undefined`
+    // prevents an inner @Each from accidentally deleting an outer loop var.
+    const hadPrev = ctx.loopVars.has(varName);
+    const prevValue = ctx.loopVars.get(varName);
+    try {
+      for (const item of arr) {
+        ctx.loopVars.set(varName, item);
+        out.push(evaluate(templateArg, ctx));
+      }
+    } finally {
+      if (hadPrev) ctx.loopVars.set(varName, prevValue);
+      else ctx.loopVars.delete(varName);
     }
     return out;
   }

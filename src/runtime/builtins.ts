@@ -114,8 +114,7 @@ export type ActionStep =
   | { kind: "OpenUrl"; url: string }
   /**
    * Internal hash-based navigation. Updates `window.location.hash` so the
-   * browser back/forward buttons keep working. No-op when the host element
-   * has `enable-routes` off.
+   * browser back/forward buttons keep working.
    */
   | { kind: "Navigate"; path: string }
   /**

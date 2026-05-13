@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Settings app · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
 </head>
 <body>
   <div class="example-shell">
@@ -53,7 +55,7 @@ usage = Query("workspace_usage", {}, {storageUsed: 0, storageMax: 100, seatsUsed
 saveMutation = Mutation("save_settings", {tab: $tab, theme: $theme, density: $density, language: $language})
 deleteMutation = Mutation("delete_workspace", {})
 
-savedBanner = $saveStatus == "saved" ? Banner("Saved", "Your preferences are up to date.", null, "✅", "success") : null
+savedBanner = $saveStatus == "saved" ? Banner("Saved", "Your preferences are up to date.", null, "circle-check", "success") : null
 savingBanner = $saveStatus == "saving" ? Banner("Saving…", "Hang tight while we sync your preferences.", null, "⏳", "info") : null
 
 header = PageHeader(
@@ -70,9 +72,9 @@ header = PageHeader(
 usageCard = Card([
   CardHeader("Workspace usage", "Renews " + usage.renews),
   MetricGrid([
-    StatCard("Storage", "" + usage.storageUsed + " / " + usage.storageMax + " GB", "flat", null, "💾"),
-    StatCard("Seats",   "" + usage.seatsUsed + " / " + usage.seatsMax,             "up",   "+2 this month", "👥"),
-    StatCard("Plan",    usage.planLabel,                                            "flat", null, "🪪")
+    StatCard("Storage", "" + usage.storageUsed + " / " + usage.storageMax + " GB", "flat", null, "database"),
+    StatCard("Seats",   "" + usage.seatsUsed + " / " + usage.seatsMax,             "up",   "+2 this month", "users"),
+    StatCard("Plan",    usage.planLabel,                                            "flat", null, "id-card")
   ], 3),
   Progress(usage.storageUsed, usage.storageMax, "Storage used", "primary", false, true)
 ])
@@ -103,10 +105,10 @@ notificationsCard = Card([
 appearanceCard = Card([
   CardHeader("Appearance"),
   FormControl("Theme", ToggleGroup("theme", [
-    {value: "light",  label: "Light",  icon: "☀"},
-    {value: "dark",   label: "Dark",   icon: "🌙"},
-    {value: "neon",   label: "Neon",   icon: "✨"},
-    {value: "pastel", label: "Pastel", icon: "🎀"}
+    {value: "light",  label: "Light",  icon: "sun"},
+    {value: "dark",   label: "Dark",   icon: "moon"},
+    {value: "neon",   label: "Neon",   icon: "wand-magic-sparkles"},
+    {value: "pastel", label: "Pastel", icon: "ribbon"}
   ], $theme)),
   FormControl("Accent", ToggleGroup("accent", [
     {value: "indigo",  label: "Indigo"},

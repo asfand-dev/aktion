@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>File manager · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · file manager
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · tree + table + preview</span>
+      <h1 style="margin-top:10px">A working cloud file manager, generated from one program</h1>
+      <p>
+        A Dropbox/Drive-style file browser: a <code>Tree</code> sidebar with
+        nested folders, a <code>Toolbar</code> with breadcrumbs and view
+        toggles, a <code>Table</code> of files with owner + size + modified
+        columns, a slide-in <code>Sheet</code> for file previews, and a
+        bottom storage <code>ProgressRing</code>. Selecting a folder or
+        file is just one <code>@Set</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Click a folder in the tree to focus it, search by name, or open the
+        detail sheet on any file. Switch between grid and table layouts
+        with the view toggle.
+      </p>
+      <pre class="example-source"><code id="src-files">$folder = "design"
+$view = "table"
+$selected = ""
+$query = ""
+
+storage = Query("storage_usage", {}, {used: 0, total: 0, percent: 0, label: ""})
+
+$files = [
+  {id: "logo.fig",       name: "Logo.fig",                   folder: "design",    type: "Figma",    size: "4.2 MB",   modified: "2 hours ago",  owner: "Naomi Rivers",  starred: true,  shared: ["You", "Naomi", "Mei"]},
+  {id: "wireframes.fig", name: "Wireframes — onboarding.fig",folder: "design",    type: "Figma",    size: "12.7 MB",  modified: "Yesterday",     owner: "Mei Tanaka",    starred: false, shared: ["You", "Naomi"]},
+  {id: "icons.zip",      name: "Brand icons v2.zip",         folder: "design",    type: "Archive",  size: "28.1 MB",  modified: "3 days ago",    owner: "Naomi Rivers",  starred: false, shared: ["You"]},
+  {id: "cover.png",      name: "Cover hero — fall.png",      folder: "design",    type: "Image",    size: "1.8 MB",   modified: "Last week",     owner: "Linus Torvalds",starred: true,  shared: ["You", "Naomi", "Mei", "Linus"]},
+  {id: "roadmap.doc",    name: "Q3 roadmap.docx",            folder: "docs",      type: "Word",     size: "240 KB",   modified: "1 hour ago",    owner: "Ada Lovelace",  starred: true,  shared: ["You", "Ada"]},
+  {id: "okrs.doc",       name: "OKRs · Engineering.docx",    folder: "docs",      type: "Word",     size: "180 KB",   modified: "Yesterday",     owner: "Ada Lovelace",  starred: false, shared: ["You"]},
+  {id: "brief.pdf",      name: "Customer brief.pdf",         folder: "docs",      type: "PDF",      size: "1.1 MB",   modified: "3 days ago",    owner: "Naomi Rivers",  starred: false, shared: ["You", "Naomi"]},
+  {id: "budget.xlsx",    name: "FY26 budget.xlsx",           folder: "finance",   type: "Excel",    size: "640 KB",   modified: "2 days ago",    owner: "Sam Reyes",     starred: true,  shared: ["You", "Sam"]},
+  {id: "invoices.csv",   name: "Open invoices.csv",          folder: "finance",   type: "CSV",      size: "92 KB",    modified: "5 days ago",    owner: "Sam Reyes",     starred: false, shared: ["You"]},
+  {id: "demo.mov",       name: "Product demo · v2.mov",      folder: "marketing", type: "Video",    size: "184 MB",   modified: "1 week ago",    owner: "Mei Tanaka",    starred: false, shared: ["You", "Mei"]},
+  {id: "launch.key",     name: "Launch deck.key",            folder: "marketing", type: "Keynote",  size: "26 MB",    modified: "2 weeks ago",   owner: "Mei Tanaka",    starred: true,  shared: ["You", "Mei", "Naomi"]},
+  {id: "scripts.zip",    name: "Migration scripts.zip",      folder: "engineering",type: "Archive", size: "8.4 MB",  modified: "Yesterday",     owner: "Linus Torvalds",starred: false, shared: ["You", "Linus"]},
+  {id: "schema.sql",     name: "Schema · v3.sql",            folder: "engineering",type: "SQL",     size: "112 KB",  modified: "Today · 09:24", owner: "Linus Torvalds",starred: true,  shared: ["You"]},
+  {id: "ci.yml",         name: ".github/workflows/ci.yml",   folder: "engineering",type: "YAML",    size: "8 KB",    modified: "Today · 11:02", owner: "Linus Torvalds",starred: false, shared: ["You"]}
+]
+
+folderRows = $folder == "starred" ? @Filter($files, "starred", "==", true) : ($folder == "recent" ? $files : @Filter($files, "folder", "==", $folder))
+
+visibleRows = $query == "" ? folderRows : @Filter(folderRows, "name", "contains", $query)
+visibleCount = @Count(visibleRows)
+totalCount = @Count($files)
+
+selected = @First(@Filter($files, "id", "==", $selected))
+selectedExists = @Count(@Filter($files, "id", "==", $selected))
+
+navTree = Tree([
+  TreeNode("My drive", [
+    TreeNode("Design",      null, "palette",  $folder == "design",      $folder == "design",     "" + @Count(@Filter($files, "folder", "==", "design")),      Action([@Set($folder, "design")])),
+    TreeNode("Docs",        null, "file-lines", $folder == "docs",      $folder == "docs",       "" + @Count(@Filter($files, "folder", "==", "docs")),        Action([@Set($folder, "docs")])),
+    TreeNode("Finance",     null, "sack-dollar", $folder == "finance",  $folder == "finance",    "" + @Count(@Filter($files, "folder", "==", "finance")),     Action([@Set($folder, "finance")])),
+    TreeNode("Marketing",   null, "bullhorn", $folder == "marketing",   $folder == "marketing",  "" + @Count(@Filter($files, "folder", "==", "marketing")),   Action([@Set($folder, "marketing")])),
+    TreeNode("Engineering", null, "code", $folder == "engineering",     $folder == "engineering","" + @Count(@Filter($files, "folder", "==", "engineering")), Action([@Set($folder, "engineering")]))
+  ], "folder-open", true),
+  TreeNode("Shared with me", [
+    TreeNode("From Naomi",  null, "user", false, false, "3", Action([@ToAssistant("Open shared from Naomi")])),
+    TreeNode("From Linus",  null, "user", false, false, "2", Action([@ToAssistant("Open shared from Linus")]))
+  ], "users", false),
+  TreeNode("Starred",     null, "star",    $folder == "starred", $folder == "starred", "" + @Count(@Filter($files, "starred", "==", true)), Action([@Set($folder, "starred")])),
+  TreeNode("Recent",      null, "clock",   $folder == "recent",  $folder == "recent",  "" + totalCount, Action([@Set($folder, "recent")])),
+  TreeNode("Trash",       null, "trash",   false, false, null, Action([@ToAssistant("Open trash")]))
+])
+
+quickActions = Stack([
+  Button("Upload",
+         Action([@ToAssistant("Open the upload dialog")]),
+         "primary",
+         "button",
+         "small"),
+  Button("New folder",
+         Action([@ToAssistant("Create a new folder under " + $folder)]),
+         "secondary",
+         "button",
+         "small"),
+  Button("Invite",
+         Action([@ToAssistant("Invite a teammate to " + $folder)]),
+         "ghost",
+         "button",
+         "small")
+], "column", "s")
+
+storageCard = Card([
+  SectionHeader("Storage", storage.label),
+  ProgressRing(storage.percent, 100, "" + storage.percent + "%", "" + storage.used + " GB used", "primary", "md"),
+  TextContent("" + storage.used + " GB of " + storage.total + " GB used", "small", "muted"),
+  Button("Upgrade plan",
+         Action([@ToAssistant("Open the upgrade flow")]),
+         "primary",
+         "button",
+         "small")
+])
+
+sidePane = Stack([
+  Card([
+    SectionHeader("Locations"),
+    navTree
+  ]),
+  Card([
+    SectionHeader("Quick actions"),
+    quickActions
+  ]),
+  storageCard
+], "column", "m")
+
+folderLabel = $folder == "design" ? "Design" : ($folder == "docs" ? "Docs" : ($folder == "finance" ? "Finance" : ($folder == "marketing" ? "Marketing" : ($folder == "engineering" ? "Engineering" : ($folder == "starred" ? "Starred" : ($folder == "recent" ? "Recent" : "Files"))))))
+
+folderBreadcrumb = Breadcrumb([
+  BreadcrumbItem("My drive", "#"),
+  BreadcrumbItem(folderLabel)
+])
+
+filterToolbar = Toolbar(
+  [
+    SearchBar("file-q", "Search " + folderLabel + "…", $query, "/"),
+    ToggleGroup("view", [
+      {value: "table", label: "Table", icon: "table"},
+      {value: "grid",  label: "Grid",  icon: "grip"}
+    ], $view)
+  ],
+  [
+    Button("Sort: modified",
+           Action([@ToAssistant("Change sort order")]),
+           "ghost",
+           "button",
+           "small"),
+    Button("Filter",
+           Action([@ToAssistant("Open filter sheet")]),
+           "ghost",
+           "button",
+           "small")
+  ]
+)
+
+nameCells = @Each(visibleRows, "f",
+  Stack([
+    Icon(f.type == "Figma" ? "vector-square" : (f.type == "Image" ? "image" : (f.type == "Word" ? "file-word" : (f.type == "PDF" ? "file-pdf" : (f.type == "Excel" ? "file-excel" : (f.type == "CSV" ? "file-csv" : (f.type == "Video" ? "file-video" : (f.type == "Keynote" ? "wand-magic-sparkles" : (f.type == "SQL" ? "database" : (f.type == "Archive" ? "file-zipper" : (f.type == "YAML" ? "file-code" : "file"))))))))))),
+    TextContent(f.name, "body-heavy"),
+    f.starred ? Icon("star", "solid", "sm") : null
+  ], "row", "s", "center")
+)
+
+typeCells   = @Each(visibleRows, "f", Tag(f.type, null, "sm", "neutral"))
+sizeCells   = @Each(visibleRows, "f", TextContent(f.size, "small", "muted"))
+modCells    = @Each(visibleRows, "f", TextContent(f.modified, "small", "muted"))
+ownerCells  = @Each(visibleRows, "f", PersonChip(f.owner, null, null, "sm"))
+actionCells = @Each(visibleRows, "f",
+  Buttons([
+    Button("Preview", Action([@Set($selected, f.id)]), "secondary", "button", "small"),
+    Button("Share",   Action([@ToAssistant("Share " + f.name)]), "ghost", "button", "small")
+  ])
+)
+
+filesTable = Table([
+  Col("Name",     nameCells),
+  Col("Type",     typeCells),
+  Col("Size",     sizeCells),
+  Col("Modified", modCells),
+  Col("Owner",    ownerCells),
+  Col("",         actionCells)
+])
+
+gridCards = Grid(
+  @Each(visibleRows, "f",
+    Card([
+      Stack([
+        Icon(f.type == "Image" ? "image" : (f.type == "Figma" ? "vector-square" : (f.type == "Video" ? "file-video" : (f.type == "Word" ? "file-word" : (f.type == "PDF" ? "file-pdf" : "file")))), "solid", "lg"),
+        TextContent(f.name, "small-heavy"),
+        TextContent(f.size + " · " + f.modified, "small", "muted"),
+        PersonChip(f.owner, null, null, "sm"),
+        Buttons([
+          Button("Open", Action([@Set($selected, f.id)]), "ghost", "button", "small")
+        ])
+      ], "column", "s")
+    ])
+  ),
+  3, "m"
+)
+
+emptyResults = EmptyState(
+  $query == "" ? "Folder is empty" : "No files match",
+  $query == "" ? "Drop files here or click upload to add to " + folderLabel + "." : "Try a different search term or clear the search.",
+  $query == "" ? "folder-open" : "magnifying-glass",
+  $query == "" ? Button("Upload files", Action([@ToAssistant("Open the upload dialog for " + folderLabel)]), "primary") : Button("Clear search", Action([@Reset($query)]), "secondary")
+)
+
+filesView = visibleCount == 0 ? emptyResults : ($view == "table" ? filesTable : gridCards)
+
+resultBar = Stack([
+  TextContent("Showing " + visibleCount + " of " + totalCount + " files" + ($query == "" ? "" : (" · matching \"" + $query + "\"")), "small", "muted"),
+  Spacer(),
+  Stack([
+    StatusDot("Synced",   "success", false),
+    StatusDot("Real-time","info",   true)
+  ], "row", "s")
+], "row", "m", "center")
+
+filesCard = Card([
+  filterToolbar,
+  Separator("horizontal", true),
+  resultBar,
+  filesView
+])
+
+detailEmpty = EmptyState(
+  "No file selected",
+  "Open a file from the table to preview it here.",
+  "file-circle-question",
+  null
+)
+
+detailLoaded = Stack([
+  Stack([
+    Icon(selected.type == "Image" ? "image" : (selected.type == "Figma" ? "vector-square" : (selected.type == "Video" ? "file-video" : (selected.type == "Word" ? "file-word" : (selected.type == "PDF" ? "file-pdf" : (selected.type == "SQL" ? "database" : "file")))))),
+    Stack([
+      TextContent(selected.name, "large-heavy"),
+      TextContent(selected.type + " · " + selected.size,             "small", "muted"),
+      TextContent("Modified " + selected.modified + " by " + selected.owner, "small", "muted")
+    ], "column", "xs")
+  ], "row", "m", "center"),
+  Separator("horizontal", true),
+  DescriptionList([
+    DescriptionItem("Folder",     folderLabel,                "folder"),
+    DescriptionItem("Type",       selected.type,              "file"),
+    DescriptionItem("Size",       selected.size,              "weight-hanging"),
+    DescriptionItem("Modified",   selected.modified,           "clock"),
+    DescriptionItem("Owner",      selected.owner,              "user"),
+    DescriptionItem("Starred",    selected.starred ? "Yes" : "No", "star")
+  ]),
+  Separator("horizontal", true),
+  SectionHeader("Shared with"),
+  AvatarGroup(
+    @Each(selected.shared, "u", Avatar(u, null, "sm")),
+    "sm"
+  ),
+  Separator("horizontal", true),
+  SectionHeader("Activity", "Last 5 events on this file"),
+  Timeline([
+    TimelineItem("File previewed",        "Just now",         "Opened in the file detail sheet.",      "eye",          "info"),
+    TimelineItem("Re-shared with team",   "Yesterday · 16:42","Naomi added Mei to the share list.",   "share-nodes",  "primary"),
+    TimelineItem("Comment added",         "Yesterday · 09:10","Ada: \"Let's lock the gradient by Fri.\"","comment",      "default"),
+    TimelineItem("New version uploaded",  "2 days ago",       "v3 replaced v2. Auto-versioned.",      "cloud-arrow-up","success"),
+    TimelineItem("File created",          "Last week",         "Imported from local Drive.",           "circle-plus",   "default")
+  ])
+], "column", "m")
+
+detailSheet = Sheet(
+  "File detail",
+  $selected != "",
+  [selectedExists == 0 ? detailEmpty : detailLoaded],
+  "right",
+  [Buttons([
+    Button("Download",
+           Action([@OpenUrl("https://example.com/files/" + $selected)]),
+           "primary"),
+    Button("Share",
+           Action([@ToAssistant("Share " + $selected)]),
+           "secondary"),
+    Button("Close",
+           Action([@Set($selected, "")]),
+           "ghost")
+  ])]
+)
+
+splitLayout = SplitView([sidePane], [filesCard], "280px")
+
+header = PageHeader(
+  "Files",
+  "" + totalCount + " files across 5 folders · synced just now",
+  folderBreadcrumb,
+  [
+    Button("New",      Action([@ToAssistant("New folder or file")]),       "primary"),
+    Button("Upload",   Action([@ToAssistant("Open the upload dialog")]),    "secondary")
+  ],
+  Badge("Pro plan", "primary")
+)
+
+storageBanner = storage.percent > 80 ? Banner("Storage almost full", "Free up space or upgrade before uploads pause.", Button("Upgrade", Action([@ToAssistant("Open upgrade")]), "primary", "button", "small"), "triangle-exclamation", "warning") : null
+
+quickStats = MetricGrid([
+  StatCard("Total files",   "" + totalCount,                                           "up",   "+12 this week", "file"),
+  StatCard("Folders",       "5",                                                       "flat", "across drive",  "folder"),
+  StatCard("Starred",       "" + @Count(@Filter($files, "starred", "==", true)),       "up",   "your top picks","star"),
+  StatCard("Shared with you","" + 5,                                                    "flat", "from teammates","share-nodes")
+])
+
+followUps = FollowUpBlock([
+  FollowUpItem("Find files I shared last week"),
+  FollowUpItem("Move scripts to engineering"),
+  FollowUpItem("Empty trash older than 30 days")
+], "Quick filters")
+
+root = Stack([storageBanner, header, quickStats, splitLayout, detailSheet, followUps], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-files" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The single host tool returns storage</h2>
+      <p class="lede">
+        Everything else lives in the program. <code>Tree</code> + <code>Table</code>
+        + <code>Sheet</code> + <code>ProgressRing</code> read directly from
+        <code>$files</code> via <code>@Filter</code> / <code>@First</code> /
+        <code>@Count</code>. The host's only job is to surface a free-tier
+        quota so the storage banner and ring stay accurate.
+      </p>
+      <pre class="example-source"><code>el.setTools({
+  storage_usage: () =&gt; ({
+    used: 12.4,
+    total: 15,
+    percent: 83,
+    label: "Renews March 14 · Pro plan",
+  }),
+});</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const el = document.getElementById("rui-files");
+
+    el.setTools({
+      storage_usage: () => ({
+        used: 12.4,
+        total: 15,
+        percent: 83,
+        label: "Renews March 14 · Pro plan",
+      }),
+    });
+
+    el.setResponse(document.getElementById("src-files").textContent);
+  </script>
+</body>
+</html>

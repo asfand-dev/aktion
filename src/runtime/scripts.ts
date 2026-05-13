@@ -1,8 +1,8 @@
 /**
  * JavaScript interactions runtime.
  *
- * Powers two language features that are opt-in via the `enable-javascript`
- * attribute on `<streaming-ui-script>`:
+ * Powers two language features that are always available on
+ * `<streaming-ui-script>`:
  *
  *   1. `Script("id", "body", deps?)` — behaviour-only component whose JS body
  *      runs after the next render. The body receives a `ctx` object exposing
@@ -99,29 +99,18 @@ interface ScriptInstance {
  *   - `declare(...)` is called by the Script render function as the renderer
  *     walks the tree.
  *   - `flush()` runs newly-mounted / changed scripts and disposes scripts
- *     that no longer appear in the tree. It is a no-op while disabled or
- *     while the host is streaming.
+ *     that no longer appear in the tree. It is a no-op while the host is
+ *     streaming (in-flight chunks may be incomplete bodies).
  *   - `reset()` tears everything down (called when the program text changes).
  */
 export class ScriptRunner {
   private readonly options: ScriptRunnerOptions;
   private readonly instances = new Map<string, ScriptInstance>();
   private pending = new Map<string, ScriptDeclaration>();
-  private enabled = false;
   private streaming = false;
 
   constructor(options: ScriptRunnerOptions) {
     this.options = options;
-  }
-
-  setEnabled(enabled: boolean): void {
-    if (this.enabled === enabled) return;
-    this.enabled = enabled;
-    if (!enabled) this.reset();
-  }
-
-  isEnabled(): boolean {
-    return this.enabled;
   }
 
   setStreaming(streaming: boolean): void {
@@ -134,7 +123,6 @@ export class ScriptRunner {
   }
 
   declare(declaration: ScriptDeclaration): void {
-    if (!this.enabled) return;
     if (!declaration.id) return;
     this.pending.set(declaration.id, declaration);
   }
@@ -144,12 +132,11 @@ export class ScriptRunner {
    * re-run changed ones, and dispose removed ones. Safe to call repeatedly.
    */
   flush(): void {
-    if (!this.enabled || this.streaming) {
-      // While streaming we still cleanup obsolete scripts so a hot reload of
-      // `setResponse(...)` doesn't leak intervals, but we do NOT run new
-      // scripts because the chunk in flight might be a partial body.
-      if (!this.enabled) return;
-    }
+    // While the response is still streaming, partial chunks routinely omit
+    // a Script's declaration before the next chunk lands. Skip the entire
+    // reconciliation pass so mid-stream chunks don't tear down live
+    // listeners / timers only to recreate them milliseconds later.
+    if (this.streaming) return;
 
     // Dispose scripts that vanished from the tree.
     for (const [id, inst] of this.instances) {
@@ -158,8 +145,6 @@ export class ScriptRunner {
         this.instances.delete(id);
       }
     }
-
-    if (this.streaming) return;
 
     for (const [id, declaration] of this.pending) {
       const existing = this.instances.get(id);
@@ -200,7 +185,6 @@ export class ScriptRunner {
    * step to break the whole action.
    */
   runInline(code: string, args: Record<string, unknown> = {}): void {
-    if (!this.enabled) return;
     const trimmed = (code ?? "").trim();
     if (!trimmed) return;
     const abort = new AbortController();
@@ -326,19 +310,7 @@ function depsKeyFor(deps: string[] | null, state: StateStore): string {
 }
 
 function snapshotState(state: StateStore): Record<string, unknown> {
-  // StateStore doesn't expose its internal map, so we reuse the (currently
-  // private) iteration semantics via a manual probe. This stays in sync with
-  // declared names because `state.get` returns `undefined` for unknown keys.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const internal = state as unknown as { values?: Map<string, unknown> };
-  if (internal.values && typeof internal.values.forEach === "function") {
-    const out: Record<string, unknown> = {};
-    internal.values.forEach((value, key) => {
-      out[key] = value;
-    });
-    return out;
-  }
-  return {};
+  return state.snapshot();
 }
 
 function stringify(value: unknown): string {

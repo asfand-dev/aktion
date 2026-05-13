@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Marketing landing · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
 </head>
 <body>
   <div class="example-shell">
@@ -37,9 +39,9 @@
       <pre class="example-source"><code id="src-landing">$plan = "pro"
 
 planToggle = ToggleGroup("plan", [
-  {value: "starter", label: "Starter", icon: "🪴"},
-  {value: "pro",     label: "Pro",     icon: "🚀"},
-  {value: "scale",   label: "Scale",   icon: "🏛"}
+  {value: "starter", label: "Starter", icon: "seedling"},
+  {value: "pro",     label: "Pro",     icon: "rocket"},
+  {value: "scale",   label: "Scale",   icon: "building-columns"}
 ], $plan)
 
 hero = Hero(
@@ -52,12 +54,12 @@ hero = Hero(
 )
 
 features = FeatureGrid([
-  FeatureItem("Framework-agnostic", "Works in React, Vue, Angular, Svelte, or plain HTML.",        "🧩", "primary"),
-  FeatureItem("Streaming-first",    "Render tokens the moment they arrive — never wait for the full response.", "⚡", "info"),
-  FeatureItem("80+ components",     "Layout, forms, charts, kanban, timelines, banners — out of the box.",     "🎁", "success"),
-  FeatureItem("Theming",            "Light, dark, neon, pastel — swap with one attribute.",       "🎨", "warning"),
-  FeatureItem("Routing built-in",   "Multi-page apps with hash routes — no router needed.",        "🧭", "primary"),
-  FeatureItem("Tiny footprint",     "Under 40 KB gzipped with zero runtime dependencies.",         "🪶", "info")
+  FeatureItem("Framework-agnostic", "Works in React, Vue, Angular, Svelte, or plain HTML.",        "puzzle-piece", "primary"),
+  FeatureItem("Streaming-first",    "Render tokens the moment they arrive — never wait for the full response.", "bolt", "info"),
+  FeatureItem("80+ components",     "Layout, forms, charts, kanban, timelines, banners — out of the box.",     "gift", "success"),
+  FeatureItem("Theming",            "Light, dark, neon, pastel — swap with one attribute.",       "palette", "warning"),
+  FeatureItem("Routing built-in",   "Multi-page apps with hash routes — no router needed.",        "compass", "primary"),
+  FeatureItem("Tiny footprint",     "Under 40 KB gzipped with zero runtime dependencies.",         "feather", "info")
 ], 3)
 
 starterCard = Card([
@@ -66,9 +68,9 @@ starterCard = Card([
   TextContent("Free forever — bring your own LLM key.", "small", "muted"),
   Separator("horizontal", true),
   List([
-    ListItem("Up to 3 prompts per day", null, "✓"),
-    ListItem("Community Discord access", null, "✓"),
-    ListItem("Light & dark themes", null, "✓")
+    ListItem("Up to 3 prompts per day", null, "circle-check"),
+    ListItem("Community Discord access", null, "circle-check"),
+    ListItem("Light & dark themes", null, "circle-check")
   ]),
   Buttons([Button("Start free", Action([@ToAssistant("Start the free plan")]), $plan == "starter" ? "primary" : "secondary")])
 ], $plan == "starter" ? "elevated" : "outlined")
@@ -79,10 +81,10 @@ proCard = Card([
   TextContent("per editor / month — billed yearly.", "small", "muted"),
   Separator("horizontal", true),
   List([
-    ListItem("Unlimited prompts", null, "✓"),
-    ListItem("Custom themes + tokens", null, "✓"),
-    ListItem("Routing & multi-page apps", null, "✓"),
-    ListItem("Email support", null, "✓")
+    ListItem("Unlimited prompts", null, "circle-check"),
+    ListItem("Custom themes + tokens", null, "circle-check"),
+    ListItem("Routing & multi-page apps", null, "circle-check"),
+    ListItem("Email support", null, "circle-check")
   ]),
   Buttons([Button("Start Pro trial", Action([@ToAssistant("Start the Pro trial")]), $plan == "pro" ? "primary" : "secondary")])
 ], $plan == "pro" ? "elevated" : "outlined")
@@ -93,10 +95,10 @@ scaleCard = Card([
   TextContent("Per-seat or volume pricing.", "small", "muted"),
   Separator("horizontal", true),
   List([
-    ListItem("Everything in Pro", null, "✓"),
-    ListItem("SSO + audit logs", null, "✓"),
-    ListItem("Dedicated success engineer", null, "✓"),
-    ListItem("SLA & private build", null, "✓")
+    ListItem("Everything in Pro", null, "circle-check"),
+    ListItem("SSO + audit logs", null, "circle-check"),
+    ListItem("Dedicated success engineer", null, "circle-check"),
+    ListItem("SLA & private build", null, "circle-check")
   ]),
   Buttons([Button("Talk to sales", Action([@ToAssistant("Schedule a call with sales")]), $plan == "scale" ? "primary" : "secondary")])
 ], $plan == "scale" ? "elevated" : "outlined")
@@ -136,7 +138,7 @@ closingBanner = Banner(
   "Ready to ship generative UI?",
   "Read the 30-second integration guide and you'll have a streaming UI before your coffee gets cold.",
   Button("Get started", Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]), "primary"),
-  "✨",
+  "wand-magic-sparkles",
   "primary"
 )
 

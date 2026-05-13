@@ -4,7 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Component reference · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <meta name="description" content="Every built-in component with positional signatures, prop tables, and enum values." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <style>
     /* Component reference uses richer cells than the generic signature-table:
        a per-prop list with name, type, optional flag, enum values, and a
@@ -34,8 +45,8 @@
       color: var(--doc-text);
     }
     .component-card-name code {
-      background: rgba(99, 102, 241, 0.10);
-      color: #4338ca;
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
       padding: 2px 10px;
       border-radius: 999px;
       font-size: 13px;
@@ -112,8 +123,12 @@
     .group-heading {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-top: 32px;
+      flex-wrap: wrap;
+      margin-top: 44px;
+      margin-bottom: 8px;
+    }
+    .group-heading h2 {
+      margin: 0;
     }
     .group-heading-tag {
       font-size: 11px;
@@ -151,8 +166,9 @@
       .component-signature { font-size: 11.5px; padding: 10px 12px; }
     }
   </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
+<body data-page="components">
   <div class="layout">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
@@ -169,34 +185,21 @@
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>Component reference</h1>
-      <p>
-        Every component below ships with the default library and is enumerated
-        in the generated system prompt. Each row lists the prop's
-        <strong>name</strong>, <strong>type</strong>, whether it's optional,
-        and — when applicable — the exact <strong>enum values</strong> the
-        prop accepts. Use this as the source of truth when authoring prompts
-        or extending the library.
-      </p>
+      <header class="hero">
+        <span class="hero-eyebrow">Library</span>
+        <h1>Component reference.</h1>
+        <p class="lead">
+          Every component below ships with the default library and is
+          enumerated in the generated system prompt. Each row lists the prop's
+          name, type, whether it's optional, and — when applicable — the exact
+          enum values it accepts.
+        </p>
+      </header>
 
       <div class="callout">
         <h4>Tip</h4>
@@ -407,6 +410,6 @@ el.registerComponents([ProductCard]);</code></pre>
 
     render();
   </script>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
 </body>
 </html>

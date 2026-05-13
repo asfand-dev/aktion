@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JS demo · Pomodoro · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body>
   <div class="example-shell">
@@ -36,7 +38,7 @@
         completed sessions counter increments.
       </p>
       <div class="example-output">
-        <streaming-ui-script id="rui-pomodoro" theme="light" enable-javascript="true"></streaming-ui-script>
+        <streaming-ui-script id="rui-pomodoro" theme="light"></streaming-ui-script>
       </div>
     </article>
 
@@ -109,7 +111,7 @@ root = Stack([header, display, progressTag, controls, settingsHint, ticker, form
         <code>ctx.tools.advance_phase({})</code>. The host implements the
         policy:
       </p>
-<pre><code class="example-source">// Pure host code: derive the next phase from the current one, fire a beep,
+<pre class="example-source"><code>// Pure host code: derive the next phase from the current one, fire a beep,
 // return the new values. The script writes them back into `ctx.state`, which
 // keeps the reactive UI in sync without exposing any private renderer
 // internals. Reset becomes trivial because there's no host-side mutable state

@@ -10,19 +10,22 @@ assistants. Drop one `<script>` tag and one `<streaming-ui-script>` tag into
 any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
 
-- **Live docs and demos:** <https://asfand-dev.github.io/streaming-ui-script/>
+- **Live docs:** <https://asfand-dev.github.io/streaming-ui-script/>
+- **Live examples catalog** (chat, dashboards, commerce, inbox, CRM, pricing, routing, status, checkout, files, calendar, docs…): <https://asfand-dev.github.io/streaming-ui-script/live-examples.html>
 - **CDN bundle (ESM):** <https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js>
-- **System prompt:** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
+- **System prompt (full):** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
+- **System prompt (chat):** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt_chat.txt>
 
 The library bundles everything needed at runtime:
 
-- An **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
-- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, …) plus array shortcuts (`.length`, `.first`, `.last`).
-- A **rich component library** of ~50 components (layout, content, forms, tables, charts, chat composites, …).
-- An **opt-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Off by default.
-- An **opt-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(label, to)`, `@Navigate("/path")`, and reactive `$route` + `params`. Hash-based, framework-agnostic, off by default.
-- **Two built-in themes** (`light`, `dark`) plus full custom-token support via CSS custom properties.
-- A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available.
+- A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
+- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@Round`, `@Floor`, `@Ceil`, `@Abs`, …) plus array shortcuts (`.length`, `.first`, `.last`, and field pluck like `$rows.title`).
+- A **React-like DOM reconciler** that diffs each re-render against the live DOM — text-input value, selection, IME state, scroll positions, `<details>.open`, and stateful primitives like `Tabs` are all preserved across renders. Components that need to hold UI state get a `helpers.useInstanceState(...)` slot keyed by their position in the tree.
+- A **rich component library** of 100+ components — layout, content, forms (including `Slider`, `NumberInput`, `DatePicker`, `FileUpload`, `Combobox`), tables, charts, feedback & media (`Avatar`, `Progress`, `Tooltip`, `HoverCard`, `Popover`, `Toast`, `Toasts`, `Rating`, `ProgressRing`, `ChatBubble`, …), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), hierarchical data (`Tree`, `TreeNode`), chat composites, **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `MetricGrid`, `Toolbar`, `EmptyState`, `Timeline`, `KanbanBoard`, `Testimonial`, `PricingTable`, `MediaCard`, …) and **app-shell composites** (`AppShell`, `Sidebar`, `SplitView`) that render a full SaaS layout in one statement.
+- A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available.
+- A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(label, to)`, `@Navigate("/path")`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always on.
+- **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties.
+- A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available. The build emits two flavours: `system_prompt.txt` (full — every feature) and `system_prompt_chat.txt` (compact — only the surfaces a chat reply needs).
 
 Everything lives inside a Shadow DOM, so the renderer's styles never leak into
 your application — and your application's styles never leak into the
@@ -154,19 +157,17 @@ All members live on the `<streaming-ui-script>` element.
 | `streaming`          | `true` / unset                                        | Hint that text is still being appended. Useful for status indicators in your app.                                                        |
 | `response`           | Streaming UI Script text                             | Sets the program declaratively. Re-renders whenever the attribute changes.                                                               |
 | `showerrors`         | `true` / unset                                        | If present and `true`, displays parse errors in the rendered UI. Defaults to off.                                                        |
-| `enable-javascript`  | `true` / unset                                        | If `true`, allows `Script(...)` + `@Js(...)` to run and the generated system prompt teaches the LLM about them. Defaults to off.         |
-| `enable-routes`      | `true` / unset                                        | If `true`, enables hash-based routing (`Routes` / `Route` / `NavLink` / `@Navigate`) and adds the routing section to the system prompt. Defaults to off. |
+
+`Script(...)` / `@Js(...)` and hash-based routing (`Routes`, `Route`, `NavLink`, `@Navigate`) are always on. To skip them in the generated prompt, build the chat-flavoured prompt via `getSystemPrompt({ mode: "chat" })`.
 
 ### Properties
 
 | Property            | Type                          | Description                                                            |
 |---------------------|-------------------------------|------------------------------------------------------------------------|
 | `response`          | `string`                      | Equivalent to `setResponse`.                                           |
-| `tools`             | `Record<string, Function>`    | Setter equivalent to `setTools(...)`.                                  |
+| `tools`             | `Record<string, Function>`    | Getter returns the currently-registered tools; setter is equivalent to `setTools(...)`. |
 | `streaming`         | `boolean`                     | Reflects the `streaming` attribute.                                    |
 | `showErrors`        | `boolean`                     | Reflects the `showerrors` attribute.                                   |
-| `enableJavascript`  | `boolean`                     | Reflects the `enable-javascript` attribute.                            |
-| `enableRoutes`      | `boolean`                     | Reflects the `enable-routes` attribute.                                |
 | `route`             | `string` (read-only)          | Current path tracked by the router (e.g. `"/users/42"`).               |
 
 ### Methods
@@ -188,7 +189,7 @@ All members live on the `<streaming-ui-script>` element.
 |----------------------|---------------------------------|----------------------------------------------------------------|
 | `assistant-message`  | `{ message: string }`           | When `@ToAssistant("...")` runs (e.g. a follow-up button).     |
 | `error`              | `{ errors: ParseError[] }`      | After each render whose source had parse errors.               |
-| `route-change`       | `{ path, previousPath, params, pattern }` | When the current hash path changes (only fires while routing is enabled). |
+| `route-change`       | `{ path, previousPath, params, pattern }` | When the current hash path changes. |
 
 The `error` event always fires regardless of `showerrors`, so host apps can
 log or report errors even when the in-page banner is suppressed.
@@ -197,12 +198,17 @@ log or report errors even when the in-page banner is suppressed.
 
 ## Themes
 
-Two themes are built in. Pick one with `theme="..."` or pass a custom token map.
+Seven themes are built in. Pick one with `theme="..."` or pass a custom token map.
 
-| Theme       | Vibe                                                  |
-|-------------|-------------------------------------------------------|
-| `light`     | Crisp default, indigo accent.                         |
-| `dark`      | Standard dark surface, indigo accent.                 |
+| Theme        | Vibe                                                                                              |
+|--------------|---------------------------------------------------------------------------------------------------|
+| `light`      | Crisp default, indigo accent.                                                                     |
+| `dark`       | Standard dark surface, indigo accent.                                                             |
+| `neon`       | Cyberpunk-inspired dark mode with magenta/cyan glow, monospace headings, sharp corners.           |
+| `pastel`     | Soft, friendly, light & rounded. Lavender + mint palette, generous radii, gentle shadows.         |
+| `glass`      | Modern glassmorphism — vivid gradient backdrop, frosted translucent surfaces, indigo→cyan accent. |
+| `brutalist`  | Neo-brutalism — hard 2px black borders, chunky offset shadows, loud primary, zero gradients.      |
+| `skyline`    | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.          |
 
 Custom token maps:
 
@@ -228,6 +234,48 @@ A full list of tokens lives in `docs/themes.html` and `src/theme/index.ts`.
 
 ---
 
+## Icons (Font Awesome)
+
+The runtime auto-loads [Font Awesome 6.7.2](https://fontawesome.com/v6/search?o=r&m=free)
+from the public CDN — once into `document.head` and once into each instance's
+shadow root. Host apps do **not** need to add a stylesheet.
+
+- Icon strings are Font Awesome names **without** the `fa-` prefix:
+  `"house"`, `"chart-line"`, `"star"`, `"cart-shopping"`, `"circle-check"`,
+  `"triangle-exclamation"`, `"sack-dollar"`.
+- Optional variant prefix: `"regular:star"`, `"brands:github"`. The default
+  variant is `solid`.
+- Use the dedicated `Icon(name, variant?, size?)` component to render a
+  standalone glyph (`size` ∈ `xs`, `sm`, `md`, `lg`, `xl`).
+- Every component prop named `icon` — `NavLink`, `SidebarItem`, `Banner`,
+  `Notification`, `FeatureItem`, `Tag`, `StatCard`, `ListItem`,
+  `TimelineItem`, `DescriptionItem`, `Tile`, `EmptyState`, …  — now expects a
+  Font Awesome name (or a `variant:name` string).
+- `ProgressRing(value, max?, label?, …)` renders `label` as an icon when it
+  resolves to a Font Awesome name (e.g. `"circle-check"`), and as plain text
+  otherwise — perfect for completion rings.
+- Invisible Unicode glyph modifiers (variation selectors, ZWJ) are stripped
+  silently so `"triangle-exclamation\uFE0F"` (a legacy emoji leftover) still
+  resolves to the proper icon instead of falling back to inline text.
+
+```text
+brandIcon  = Icon("rocket", "solid", "lg")
+homeIcon   = Icon("house")
+profileTab = NavLink("Profile", "/profile", "ghost", false, "user")
+kpis       = MetricGrid([
+  StatCard("Revenue", "$48k", "up",   "+12%", "sack-dollar"),
+  StatCard("Orders",  "1,284","up",   "+8%",  "cart-shopping"),
+  StatCard("Refunds", "12",   "down", "-3",   "rotate-left")
+])
+```
+
+The CDN URL and a tiny `ensureFontAwesomeLoaded(shadow)` helper live in
+[`src/icons/index.ts`](./src/icons/index.ts) and are re-exported as
+`FONT_AWESOME_CDN_URL`. The custom element calls the helper from its
+`connectedCallback` (idempotent — safe to mount multiple instances).
+
+---
+
 ## Streaming UI Script in 60 seconds
 
 ```text
@@ -244,6 +292,7 @@ Highlights:
 - One statement per line: `name = Expression`.
 - `$variables` are reactive — passing one to an Input or Select two-way-binds.
 - Strings come in three flavours: `"double"`, `'single'`, and `` `backtick` `` (multi-line, no escaping required — perfect for JS bodies).
+- Comments are stripped silently: `// line`, `# line` (shell-style), and `/* block */`.
 - `Query("tool", {args}, {defaults}, refreshSec?)` runs immediately and re-runs when its `$variable` args change.
 - `Mutation("tool", {...})` only runs from `@Run(name)` inside an `Action([...])`.
 - `@Each(arr, "row", template)` iterates inline. The loop variable is scoped strictly to `template`.
@@ -275,10 +324,10 @@ The full reference is on the docs site (`docs/language.html`).
 
 ---
 
-## JavaScript interactions (opt-in)
+## JavaScript interactions
 
-Add `enable-javascript="true"` to the element and the LLM may emit two extra
-surfaces:
+`Script(...)` and `@Js(...)` ship with every renderer — no attribute to flip.
+The LLM can author two surfaces whenever the full prompt is in use:
 
 - `Script("id", body, deps?)` — behaviour-only node that runs on mount and
   re-runs whenever any listed `$variable` changes. Lifecycle matches
@@ -290,7 +339,7 @@ surfaces:
   `@Each` loop into a click handler.
 
 ```html
-<streaming-ui-script enable-javascript="true"></streaming-ui-script>
+<streaming-ui-script></streaming-ui-script>
 ```
 
 ```text
@@ -308,23 +357,24 @@ row = Card([Stack([
 
 `body` is a regular string. Use double quotes for one-liners (escape inner
 `"` as `\"` and newlines as `\n`) or backticks for multi-line code (real
-newlines and unescaped `"` are fine). The generated system prompt teaches the
-LLM about these features only when the flag is on, and `getSystemPrompt()`
-always mirrors the live attribute.
+newlines and unescaped `"` are fine). The default (full) system prompt
+teaches the LLM about these features; for chat-style replies where you want
+to keep the LLM purely declarative, build the prompt via
+`getSystemPrompt({ mode: "chat" })` — the chat flavour omits the JS section.
 
 See the [JavaScript interactions guide](https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html)
 or the deeper [`coding-gen-skill.md`](./coding-gen-skill.md) for a full
 end-to-end app walkthrough.
 
-## Routing (opt-in)
+## Routing
 
-Add `enable-routes="true"` to the element and the LLM may emit hash-based
-routes that stay in sync with the URL (`#/dashboard`, `#/users/42`). Browser
+Hash-based routing is built into the runtime. The LLM may emit routes that
+stay in sync with the URL (`#/dashboard`, `#/users/42`). Browser
 back/forward, bookmarks, and deep links all work — and the host page never
 reloads.
 
 ```html
-<streaming-ui-script enable-routes="true"></streaming-ui-script>
+<streaming-ui-script></streaming-ui-script>
 ```
 
 ```text
@@ -364,9 +414,9 @@ notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + "
 - The current path is exposed reactively as `$route`. Inside a matched
   route's content, the captured params land in the `params` loop variable.
 
-The generated system prompt teaches the LLM about routing only when the flag
-is on; with `enable-routes="false"` (the default) the routing section is
-omitted entirely and routing components fall back to inert rendering.
+The default (full) system prompt teaches the LLM about routing. To skip the
+routing section (e.g. for chat-style replies where you don't want the model
+inventing URLs), build the prompt via `getSystemPrompt({ mode: "chat" })`.
 
 See the [routing guide](https://asfand-dev.github.io/streaming-ui-script/routing.html)
 and the [live routing demo](https://asfand-dev.github.io/streaming-ui-script/routing-demo.html)
@@ -376,17 +426,19 @@ for a full end-to-end walkthrough.
 
 | Group              | Components                                                                                                              |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------|
-| Layout             | `Stack`, `Grid`, `Section`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Divider`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Sheet`, `Steps`, `StepsItem`, `AspectRatio`, `ScrollArea` |
-| Content            | `TextContent`, `Header`, `Image`, `Link`, `Badge`, `Tag`, `TagBlock`, `Alert`, `Callout`, `CodeBlock`, `Skeleton`, `Markdown`, `Kbd` |
-| Forms              | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `Toggle`, `ToggleGroup`, `Button`, `Buttons` |
-| Data               | `Table`, `Col`, `List`, `ListItem`, `StatCard`, `Progress`, `Pagination`                                                |
+| Layout             | `Stack`, `Grid`, `Section`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Divider`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Sheet`, `Steps`, `StepsItem`, `AspectRatio`, `ScrollArea` |
+| Content            | `TextContent`, `Header`, `Image`, `Icon`, `Link`, `Badge`, `Tag`, `TagBlock`, `Alert`, `Callout`, `Note`, `Quote`, `CodeBlock`, `Skeleton`, `Markdown`, `Kbd` |
+| Forms              | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `Toggle`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `DatePicker`, `FileUpload`, `Combobox` |
+| Data               | `Table`, `Col`, `List`, `ListItem`, `StatCard`, `Stats`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode` |
 | Charts             | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
-| Feedback & Media   | `Avatar`, `AvatarGroup`, `Tooltip`, `HoverCard`                                                                         |
-| Navigation         | `Breadcrumb`, `BreadcrumbItem`                                                                                          |
-| Chat               | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`                                              |
-| Patterns           | `Hero`, `PageHeader`, `MetricGrid`, `EmptyState`, `Timeline`, `TimelineItem`, `FeatureGrid`, `FeatureItem`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `KanbanBoard`, `KanbanColumn`, `KanbanCard` |
-| Scripting          | `Script` (opt-in via `enable-javascript="true"`)                                                                        |
-| Routing            | `Routes`, `Route`, `NavLink` (opt-in via `enable-routes="true"`)                                                        |
+| Feedback & Media   | `Avatar`, `AvatarGroup`, `PersonChip`, `Tooltip`, `HoverCard`, `Popover`, `Rating`, `Toast`, `Toasts`                   |
+| Navigation         | `Breadcrumb`, `BreadcrumbItem`, `Navbar`, `NavbarItem`                                                                  |
+| Menus              | `DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`                                                                |
+| Chat               | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`, `ChatBubble`                                |
+| Patterns           | `Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Toolbar`, `EmptyState`, `Timeline`, `TimelineItem`, `FeatureGrid`, `FeatureItem`, `MediaCard`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `Notification`, `KanbanBoard`, `KanbanColumn`, `KanbanCard`, `DescriptionList`, `DescriptionItem`, `StatusDot`, `PricingTable`, `PricingCard` |
+| App shell          | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`                                                     |
+| Scripting          | `Script` (always available; `chat` prompt mode omits it)                                                                |
+| Routing            | `Routes`, `Route`, `NavLink` (always available; `chat` prompt mode omits them)                                          |
 
 ### Rich pattern composites
 
@@ -442,17 +494,78 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 ## LLM integration helper
 
 If you're driving the renderer from an agentic LLM (Cursor, Claude Code, etc.)
-two companion documents are kept in sync with the bundle:
+one companion document is kept in sync with the bundle:
 
-- [`SKILL.md`](./SKILL.md) — a focused, hostable agent skill describing **when
-  to reach for this component** and the minimum integration surface (mount,
-  stream, tools, theme).
 - [`coding-gen-skill.md`](./coding-gen-skill.md) — an **extensive knowledge
   base** for building complete applications in Streaming UI Script: mental
   model, every component group, state management, queries/mutations, actions,
-  loops, JavaScript interactions, app patterns (todo list, dashboard, wizard,
-  chat, settings, real-time), and anti-patterns. Treat it as the "deep dive"
-  the model can read once and then author full apps unaided.
+  loops, JavaScript interactions, routing, app patterns (todo list,
+  dashboard, wizard, chat, settings, real-time, status page, checkout flow,
+  file manager, calendar, docs portal), and anti-patterns. Treat it as the
+  "deep dive" the model can read once and then author full apps unaided. It
+  also opens with a short **"When to reach for this library"** section so
+  agents can decide quickly whether `<streaming-ui-script>` is the right
+  tool for the job.
+
+---
+
+## Documentation site
+
+The `docs/` folder is the source for the live documentation site published at
+<https://asfand-dev.github.io/streaming-ui-script/>. Every page is a static
+HTML file that loads the same bundle the rest of the world consumes from the
+CDN.
+
+| Page                                | What's on it                                                                            |
+|-------------------------------------|-----------------------------------------------------------------------------------------|
+| `index.html`                        | Overview, drop-in install, live theme picker.                                           |
+| `get-started.html`                  | Step-by-step integration walkthrough.                                                   |
+| `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
+| `language.html`                     | Full Streaming UI Script language reference.                                            |
+| `components.html`                   | Every built-in component with positional signatures, prop tables, and enum values.      |
+| `javascript-interactions.html`      | `Script(...)` + `@Js(...)` guide — always available at runtime.                         |
+| `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
+| `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio (formerly `theme-customization.html`, now redirected). |
+| `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
+| `playground.html`                   | CodeMirror 6 editor with custom Streaming UI Script highlighting + autocomplete, live preview, share links, persistent layout modes (drag the splitter, collapse the docs sidebar), hover-over component info, signature/argument tooltips with allowed enum values, and an inspection mode that maps rendered DOM back to the source. Powered by [`src/language/`](./src/language/README.md). |
+| `live-examples.html`                | Catalog page linking out to every standalone demo below.                                |
+
+---
+
+## Live examples
+
+Every standalone demo is a single HTML page that you can open directly. They
+double as integration recipes — view source on any of them to see how a real
+host page wires `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
+
+| Demo page                       | Highlights                                                                                                  |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `chat-bot.html`                 | OpenAI-powered chat that streams replies into the renderer. Toggle between the chat-flavoured and full system prompt live. |
+| `tools-example.html`            | Read / write / poll patterns wired to in-page `setTools()` handlers.                                        |
+| `external-data-example.html`    | Live GitHub repository explorer powered by a single tool function.                                          |
+| `support-agent.html`            | AI triage workspace: pick a ticket, the agent suggests priority + draft reply.                              |
+| `analytics-assistant.html`      | Natural-language → charts/KPIs/breakdown.                                                                   |
+| `javascript-todo-app.html`      | Reactive todo list with filters + localStorage persistence via one `Script(...)`.                           |
+| `javascript-pomodoro.html`      | Pomodoro timer with phases, audio chime, and notifications.                                                 |
+| `javascript-stopwatch.html`     | Sub-second stopwatch + laps using `requestAnimationFrame` and proper teardown.                              |
+| `routing-demo.html`             | A four-page app driven by `Routes` + `NavLink` + `@Navigate`, deep links, browser back/forward.             |
+| `app-workspace.html`            | Full SaaS workspace: sticky `Sidebar`, topbar, `MetricGrid`, timeline, `DescriptionList`.                   |
+| `project-dashboard.html`        | Engineering program dashboard: banner, `PageHeader`, KPIs, kanban board, activity timeline.                 |
+| `marketing-landing.html`        | Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ.                                         |
+| `team-directory.html`           | Profile cards, avatar groups, search-with-pagination, empty state, slide-in `Sheet`.                        |
+| `settings-app.html`             | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Sheet`.                         |
+| `ecommerce-product.html`        | Product page with `Cover` hero, `MediaCard` related items, `Rating`, `ProgressRing`, `Stats`, reviews.      |
+| `inbox-app.html`                | Focused mail/chat inbox using `SplitView`, `SearchBar`, `PersonChip`, `Notification`, `ChatBubble`.         |
+| `pricing-page.html`             | Pricing surface: `Cover`, `Stats` trust strip, `PricingTable`, `FeatureGrid`, `Quote`, FAQ, CTA.            |
+| `crm-contacts.html`             | Directory: `SearchBar`, segmented filters, `Tile` quick stats, paginated cards, detail `Sheet`.             |
+| `status-page.html`              | Public SRE status: incident `Banner`, latency `LineChart`, services with `StatusDot`, incident `Timeline`.  |
+| `checkout-flow.html`            | Four-step checkout wizard: `Steps`, `SplitView` cart, promo codes, address + payment + review + confirmation. |
+| `file-manager.html`             | Cloud file browser: `Tree` sidebar, `Toolbar`, files `Table`, preview `Sheet`, storage `ProgressRing`.       |
+| `calendar-app.html`             | Calendar & scheduler: `DatePicker`, category chips, busy-hours ring, agenda `Timeline`, event detail `Sheet`. |
+| `docs-portal.html`              | Help center / knowledge base: `SearchBar`, `Tree` categories, `Markdown` article, `Rating`, FAQ `Accordion`. |
+
+The full catalog with tag filters lives at
+[`docs/live-examples.html`](https://asfand-dev.github.io/streaming-ui-script/live-examples.html).
 
 ---
 
@@ -460,22 +573,48 @@ two companion documents are kept in sync with the bundle:
 
 ```
 .
-├── src/                 # Library source
-│   ├── parser/          # Lexer, parser, AST types
-│   ├── runtime/         # Evaluator, reactive state, queries, actions, builtins
-│   ├── library/         # Component specs and registry
-│   ├── renderer/        # Tree → DOM
-│   ├── theme/           # Token system + injected stylesheet
-│   ├── prompt/          # System prompt generator
-│   ├── element.ts       # The custom element
-│   └── index.ts         # Public entry point
-├── docs/                # Static documentation site (HTML + CSS + JS)
+├── src/                       # Library source
+│   ├── parser/                # Lexer, parser, AST types
+│   ├── runtime/               # Evaluator, reactive state, queries, actions,
+│   │   ├── builtins.ts        #   builtin @-functions and action-step markers
+│   │   ├── evaluator.ts       #   program planner + binding resolver
+│   │   ├── state.ts           #   reactive store (subscribers, two-way binds)
+│   │   ├── queries.ts         #   Query / Mutation registry + auto-refresh
+│   │   ├── actions.ts         #   ActionRunner (@Run, @Set, @Reset, …)
+│   │   ├── scripts.ts         #   ScriptRunner — useEffect-style Script(...)
+│   │   └── router.ts          #   Hash-based router for Routes / NavLink
+│   ├── library/               # Component specs and registry
+│   │   └── components/        #   layout / content / forms / data / charts /
+│   │                          #   chat / feedback / navigation / menu /
+│   │                          #   patterns / scripts / router
+│   ├── renderer/              # Tree → DOM
+│   │   ├── renderer.ts        #   walks the tree, calls component renderers,
+│   │   │                      #   tracks per-instance state by tree path
+│   │   └── morph.ts           #   React-like DOM reconciler — keeps focus,
+│   │                          #   selection, scroll, and <details>.open
+│   ├── theme/                 # Token system + injected stylesheet
+│   │   ├── index.ts           #   Seven built-in themes + custom token merge
+│   │   └── styles.ts          #   Shadow-DOM stylesheet (theme-aware)
+│   ├── prompt/                # System prompt generator
+│   ├── language/              # Reusable language-support module
+│   │   ├── grammar.ts         #   Pure-data tokens + CodeMirror StreamParser
+│   │   ├── components.ts      #   Component catalog (derived from library)
+│   │   ├── builtins.ts        #   @-builtin catalog (sourced from runtime)
+│   │   ├── snippets.ts        #   Ready-to-insert templates for composites
+│   │   └── index.ts           #   `getLanguageSpec()` barrel for editors
+│   ├── element.ts             # The custom element
+│   └── index.ts               # Public entry point
+├── docs/                      # Static documentation site (HTML + CSS + JS)
+├── _docs/                     # Internal design notes and inspirations (not shipped)
 ├── scripts/
-│   ├── emit-prompt.mjs  # Writes dist/system_prompt.txt from the bundle
-│   └── build-docs.mjs   # Assembles ./site/ from docs/ + dist/
-├── tests/               # Vitest unit + element regression tests
-├── dist/                # Built artifacts (created by `npm run build`)
-└── site/                # Deployable static docs (created by `npm run build:docs`)
+│   ├── emit-prompt.mjs        # Writes dist/system_prompt*.txt from the bundle
+│   └── build-docs.mjs         # Assembles ./site/ from docs/ + dist/
+├── tests/                     # Vitest unit + element regression tests
+├── dist/                      # Built artifacts (created by `npm run build`)
+├── site/                      # Deployable static docs (created by `npm run build:docs`)
+├── .github/workflows/         # GitHub Pages deploy pipeline
+├── README.md                  # This file
+└── coding-gen-skill.md        # Deep knowledge base for building full apps
 ```
 
 ---
@@ -504,8 +643,16 @@ Produces:
 dist/streaming-ui-script.js          # ESM bundle
 dist/streaming-ui-script.umd.cjs     # UMD bundle for older bundlers
 dist/streaming-ui-script.iife.js     # IIFE for non-module <script> tags
-dist/system_prompt.txt                # Auto-generated prompt
+dist/system_prompt.txt               # Full prompt — every component, JS, routing
+dist/system_prompt_chat.txt          # Compact chat-focused prompt (lighter, OpenUI-Lang style)
 ```
+
+The two prompt variants exist so host apps can pick the right flavour up
+front: `system_prompt.txt` (or `getSystemPrompt()` with no options) for rich
+generative UI surfaces that need JS and routing, and `system_prompt_chat.txt`
+(or `getSystemPrompt({ mode: "chat" })`) for chat assistants whose replies
+should stay purely declarative. Both are kept in lock-step with the library by
+the build script.
 
 ### Run the test suite
 
@@ -515,11 +662,17 @@ npm test
 
 Includes:
 
-- Parser/lexer correctness.
-- Runtime evaluator + reactive state.
-- Built-in function semantics.
-- Component library smoke tests.
-- Element-level integration tests (Custom Elements + Shadow DOM via happy-dom).
+- Parser / lexer correctness (`tests/parser.test.ts`).
+- Runtime evaluator + reactive state (`tests/runtime.test.ts`).
+- Built-in function semantics (covered across runtime + library tests).
+- JavaScript interactions: `Script(...)` lifecycle + `@Js(...)` (`tests/javascript-integration.test.ts`).
+- Hash-based router and `Routes` / `Route` / `NavLink` (`tests/router.test.ts`).
+- Theme resolution and token application (`tests/theme.test.ts`).
+- Component library smoke tests (`tests/library.test.ts`).
+- Element-level integration tests — Custom Elements + Shadow DOM via happy-dom (`tests/element.test.ts`).
+- System prompt generator output (`tests/prompt.test.ts`).
+- End-to-end demo programs from the docs (`tests/demos.test.ts`).
+- Language support spec for editor / tooling integrations (`tests/language.test.ts`).
 
 ### Build the documentation site
 
@@ -536,6 +689,30 @@ npx serve site
 ```
 
 Then open <http://localhost:4321/index.html>.
+
+---
+
+## Security
+
+The library treats every LLM-supplied attribute as untrusted and runs it
+through a small set of sanitisers before it lands on the DOM:
+
+| Sink | Helper | Effect |
+| --- | --- | --- |
+| Anchor `href` (`Link`, `BreadcrumbItem`, `NavbarItem`, Markdown links) | `sanitiseHref` | Allow-lists `http(s):`, `mailto:`, `tel:`, fragments, root-relative paths. Rejects `javascript:`, `vbscript:`, `data:text/html`, control-char bypasses (`java\tscript:`), protocol-relative `//host/...`. Unsafe URLs collapse to `#`. |
+| Image `src` (`Image`, `Avatar`, `MediaCard`, `Hero`, `Testimonial`, `ChatBubble`) | `sanitiseImageSrc` | Allow-lists `http(s):`, `data:image/*`, `blob:`, plus relative paths. Anything else falls back to an empty string so callers render a placeholder. |
+| Inline `style` lengths (`Container.maxWidth`, `Skeleton.height`, …) | `sanitiseCssLength` | Restricts the alphabet so semicolons / quotes cannot inject extra declarations. |
+| `background-image: url(...)` (`Cover.imageSrc`) | `sanitiseCssUrl` | Drops characters that would close the `url()` literal. |
+| `@OpenUrl("...")` action step | `sanitiseHref` (runtime) | The action runner sanitises the URL before calling `window.open` (or any consumer `onOpenUrl` override). External windows are opened with `noopener,noreferrer`. |
+
+External links rendered by `Link`, `NavbarItem`, and the Markdown renderer
+get `rel="noopener noreferrer"` so the destination cannot read the opener's
+`document.referrer`.
+
+If you embed `<streaming-ui-script>` behind a CSP, the bundle does not use
+`eval`. `Script(...)` bodies are evaluated with `new (Async)Function(...)`
+which requires `'unsafe-eval'` if you want scripting to work; omit the
+attribute (and `@Js` action steps) if you cannot relax CSP.
 
 ---
 

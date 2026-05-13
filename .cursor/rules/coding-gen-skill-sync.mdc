@@ -1,0 +1,73 @@
+---
+description: Always read coding-gen-skill.md before code changes; update it when the change affects anything documented there.
+alwaysApply: true
+---
+
+# Keep coding-gen-skill.md in sync with the codebase
+
+`coding-gen-skill.md` is the **deep knowledge base** that teaches LLMs how to
+author complete applications in Streaming UI Script. It documents every
+component signature, builtin, action step, theme, application pattern, and
+authoring rule the runtime exposes. If it drifts, every LLM consuming this
+library will generate broken or stylistically wrong responses.
+
+## Before any code change
+
+1. **Read `coding-gen-skill.md` first** alongside `README.md`. The README
+   covers integration; this file covers *what the LLM should emit*. Always
+   open the section relevant to the area you're changing (e.g. § 9
+   "Component reference", § 8 "Built-in functions", § 0.5 "Rich layout
+   principles").
+2. Cross-check the **TL;DR rules** (§ 0) and **Self-check list** (§ 17) so
+   your change does not invalidate one of them.
+
+## After (or while making) a code change
+
+If your change affects anything documented in `coding-gen-skill.md`, update
+the file in the same commit. Common triggers:
+
+| If you change…                                                | Update in coding-gen-skill.md                                                                    |
+|---------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `src/library/components/*` — add / remove / rename a component | § 9 "Component reference" (correct category) + intro bullet list + relevant § 11 pattern        |
+| Add a new pattern composite (e.g. `Hero`, `Kanban*`)          | § 9 "Patterns" subsection + add or update an example in § 11                                     |
+| `src/runtime/builtins.ts` — add / remove a `@Builtin`         | § 8 "Built-in functions" + intro bullet list ("20+ built-in `@`-functions")                      |
+| `src/runtime/actions.ts` — add / change an action step         | § 5 "Actions" full step menu + § 8 "Action step builtins"                                        |
+| `src/runtime/scripts.ts` — change `ctx` surface or `Script` API | § 10 "JavaScript layer" — `ctx` bridge table + "Common patterns" + § 17 self-check               |
+| `src/library/components/router.ts` — routing semantics         | § 10.5 "Routing layer" (surfaces, path patterns, idioms, common mistakes) + Pattern H in § 11    |
+| `src/theme/index.ts` / `src/theme/styles.ts` — add / rename theme | § 0.5 "Theme awareness" theme table + intro bullet ("Seven built-in themes")                  |
+| `src/element.ts` — public attributes / properties / events     | § 1 "Mental model" + Quick start snippets if the embed contract changes                          |
+| `src/prompt/generator.ts` — emitted prompt sections / modes    | Intro bullet about the system prompt generator + § 17 self-check if rules tighten                |
+| `docs/*.html` — add / rename a live example                    | "Further reading" → "Live examples by category" + "where do I look?" index in § 16 if relevant   |
+| Add a new authoring rule / lint                                | § 0 TL;DR rules **and** § 17 self-check (both must list it)                                      |
+
+If you are unsure whether a change is skill-worthy, ask: would an LLM reading
+only `coding-gen-skill.md` produce code that fails, crashes, or looks broken
+after this change? If yes, update the file.
+
+## How to update without bloating the file
+
+- **Prefer editing existing sections** over appending new ones. The file is
+  already large; new content should slot into the existing structure.
+- **Reference, don't duplicate.** Link to `README.md` for integration and to
+  docs-site pages for full walkthroughs. The deep knowledge base focuses on
+  *authoring rules and patterns*, not setup.
+- **Keep cross-references intact.** § 16 "where do I look?" index and § 17
+  self-check both reference earlier sections by number — renumber every
+  reference if you insert a new top-level section.
+- **Pattern letters are stable.** Application patterns are labelled A–V.
+  Add new patterns at the end with the next letter; do not renumber
+  existing ones.
+
+## Don't
+
+- Don't ship a new component, builtin, theme, action step, or authoring
+  rule without updating `coding-gen-skill.md`. LLMs cannot discover what is
+  not documented.
+- Don't let intro counts drift ("20+ builtins", "90+ components",
+  "Seven built-in themes"). Re-count after any addition / removal.
+- Don't duplicate `README.md` content here. The audiences are different:
+  README is for humans integrating the library; this file is for LLMs
+  authoring responses.
+- Don't invent component names, builtins, or theme names — cross-check
+  against `src/library/index.ts`, `src/runtime/builtins.ts`, and
+  `src/theme/index.ts` before adding them to the skill file.

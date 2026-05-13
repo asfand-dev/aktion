@@ -4,7 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JavaScript interactions · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/site.css" />
+  <meta name="description" content="Built-in Script() and @Js() — React-style hooks for generative UI." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <style>
     .js-grid {
       display: grid;
@@ -95,8 +106,9 @@
       background: rgba(234, 179, 8, 0.10);
     }
   </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
+<body data-page="javascript">
   <div class="layout">
     <aside class="sidebar">
       <h1>streaming-ui-script</h1>
@@ -113,35 +125,25 @@
         <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html">Playground</a>
-        <span class="nav-section-label">Live demos</span>
-        <a href="chat-bot.html">Chat bot</a>
-        <a href="tools-example.html">Tools integration</a>
-        <a href="external-data-example.html">External data</a>
-        <a href="support-agent.html">Support agent</a>
-        <a href="analytics-assistant.html">Analytics assistant</a>
-        <a href="javascript-todo-app.html">Todo app (JS)</a>
-        <a href="javascript-pomodoro.html">Pomodoro (JS)</a>
-        <a href="javascript-stopwatch.html">Stopwatch (JS)</a>
-        <a href="routing-demo.html">Routing demo</a>
-        <span class="nav-section-label">Pattern demos</span>
-        <a href="project-dashboard.html">Project dashboard</a>
-        <a href="marketing-landing.html">Marketing landing</a>
-        <a href="team-directory.html">Team directory</a>
-        <a href="settings-app.html">Settings app</a>
+        <a href="live-examples.html">Live examples</a>
       </nav>
     </aside>
 
     <main>
-      <h1>JavaScript interactions</h1>
+      <header class="hero">
+        <span class="hero-eyebrow">Built-in</span>
+        <h1>JavaScript interactions.</h1>
+        <p class="lead">
+          Most assistant UIs only need declarative components plus reactive
+          <code>$variables</code>. But sometimes you want React-style effects,
+          Vue-style watchers, or a Svelte-style action — timers, animations,
+          clipboard, focus management, conditional fetch. That's what
+          JavaScript interactions are for.
+        </p>
+      </header>
+
       <p>
-        Most assistant UIs only need declarative components plus reactive
-        <code>$variables</code>. But sometimes you want React-style effects,
-        Vue-style watchers, or a Svelte-style action — anything from timers
-        and animations to clipboard, focus management, and conditional fetch.
-        That's what JavaScript interactions are for.
-      </p>
-      <p>
-        The element ships with two opt-in surfaces that turn Streaming UI Script into a full-fledged frontend framework:
+        The element ships with two built-in surfaces that turn Streaming UI Script into a full-fledged frontend framework:
       </p>
 
       <div class="js-grid">
@@ -170,62 +172,52 @@
         </div>
       </div>
 
-      <div class="callout callout--warn">
-        <h4>JavaScript interactions are off by default</h4>
+      <div class="callout">
+        <h4>JavaScript is part of the runtime</h4>
         <p>
-          Set <code>enable-javascript="true"</code> on the
-          <code>&lt;streaming-ui-script&gt;</code> tag to allow the LLM to
-          execute JavaScript. When disabled (the default), <code>Script(...)</code>
-          and <code>@Js(...)</code> silently no-op, and the system prompt
-          omits the JavaScript section entirely. Only enable it when you
-          trust the source of your model output.
+          <code>Script(...)</code> and <code>@Js(...)</code> are wired up
+          automatically — no attribute to flip. The default ("full")
+          system prompt includes the JavaScript section so the LLM knows
+          when to use them. Use the chat-flavoured prompt
+          (<code>getSystemPrompt({ mode: "chat" })</code>) when you want the
+          model to stick to declarative components for short replies.
         </p>
       </div>
 
-      <h2>1. Enable the feature</h2>
+      <h2>1. Drop in the renderer</h2>
       <p>
-        Add the <code>enable-javascript</code> attribute when you want the LLM
-        to author JavaScript. The element keeps the system prompt in sync —
-        calling <code>getSystemPrompt()</code> on an enabled element produces
-        a prompt that teaches the model how to write scripts.
+        No attribute needed — <code>Script()</code> and <code>@Js()</code>
+        always work. Calling <code>getSystemPrompt()</code> produces a prompt
+        that already teaches the model how to write scripts.
       </p>
 <pre><code>&lt;streaming-ui-script
   id="renderer"
   theme="light"
-  enable-javascript="true"
 &gt;&lt;/streaming-ui-script&gt;
 
 &lt;script type="module"&gt;
   import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
   const el = document.getElementById("renderer");
 
-  // The generated prompt now contains a `## JavaScript interactions` section.
+  // The default ("full") prompt includes the JavaScript interactions section.
   const systemPrompt = el.getSystemPrompt({
     preamble: "You are a UI assistant who can wire up small JS effects.",
   });
 &lt;/script&gt;</code></pre>
 
-      <p>You can flip the flag at runtime as well:</p>
-<pre><code>el.enableJavascript = true;     // turns Script() / @Js() on
-el.enableJavascript = false;    // tears down running scripts and disables further execution</code></pre>
-
       <div class="callout">
         <h4>Heads up: proxy elements</h4>
         If you build the system prompt from a <em>temporary</em>
         <code>&lt;streaming-ui-script&gt;</code> element (a common pattern when
-        each turn renders into its own instance), the proxy has no attributes
-        unless you set them. Always pass the JS flag explicitly so the prompt
-        mirrors the renderer:
-<pre><code>const ENABLE_JS = true;
-
-function buildPrompt() {
+        each turn renders into its own instance), just call
+        <code>getSystemPrompt()</code> — the JavaScript section is part of the
+        default ("full") prompt:
+<pre><code>function buildPrompt() {
   const proxy = document.createElement("streaming-ui-script");
-  return proxy.getSystemPrompt({ enableJavascript: ENABLE_JS });
+  return proxy.getSystemPrompt(); // includes JS interactions by default
 }
 
-// ...then later, when creating the renderer per turn:
-const renderer = document.createElement("streaming-ui-script");
-if (ENABLE_JS) renderer.setAttribute("enable-javascript", "true");</code></pre>
+const renderer = document.createElement("streaming-ui-script");</code></pre>
       </div>
 
       <h2>2. Writing the body string</h2>
@@ -382,7 +374,6 @@ root = Stack([counter, controls, ticker])</code></pre>
           <streaming-ui-script
             id="demo-counter"
             theme="light"
-            enable-javascript="true"
             transparent
           ></streaming-ui-script>
         </div>
@@ -419,7 +410,6 @@ root = Stack([header, status, list, loader])</code></pre>
           <streaming-ui-script
             id="demo-tools"
             theme="light"
-            enable-javascript="true"
             transparent
           ></streaming-ui-script>
         </div>
@@ -484,7 +474,6 @@ root = Stack([snippet])</code></pre>
           <streaming-ui-script
             id="demo-clipboard"
             theme="light"
-            enable-javascript="true"
             transparent
           ></streaming-ui-script>
         </div>
@@ -566,11 +555,10 @@ root = Stack([field, list, search])</code></pre>
         <li>It can only mutate the shadow DOM via <code>ctx.query</code>; it does not get a reference to the parent document by default.</li>
       </ul>
       <p>
-        The single line of defence is the <code>enable-javascript</code>
-        attribute. Treat it like <code>dangerouslySetInnerHTML</code>: leave
-        it off in production unless your prompt + model + transport are all
-        trusted, and consider running untrusted output through a server-side
-        validator (or an iframe sandbox) first.
+        Treat <code>Script(...)</code> and <code>@Js(...)</code> like
+        <code>dangerouslySetInnerHTML</code>: only run them with model output
+        that you trust, and consider validating untrusted output server-side
+        (or rendering it inside an iframe sandbox) first.
       </p>
 
       <div class="callout">
@@ -579,9 +567,10 @@ root = Stack([field, list, search])</code></pre>
           You can intercept scripts by wrapping <code>setResponse</code> /
           <code>appendChunk</code> on the element and stripping any
           <code>Script(...)</code> or <code>@Js(...)</code> lines before
-          they reach the runtime. The reverse is also useful: only flip
-          <code>enableJavascript</code> on for chats coming from a trusted
-          backend.
+          they reach the runtime. Alternatively, switch to the
+          <code>chat</code> prompt flavour
+          (<code>getSystemPrompt({ mode: "chat" })</code>) so the LLM never
+          emits scripts for chat-style replies in the first place.
         </p>
       </div>
 
@@ -626,7 +615,7 @@ root = Stack([field, list, search])</code></pre>
       </p>
     </main>
   </div>
-  <script type="module" src="assets/site.js"></script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
   <script type="module">
     import "../dist/streaming-ui-script.js";
 

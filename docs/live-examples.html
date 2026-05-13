@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live demos · streaming-ui-script</title>
+  <meta name="description" content="Every live example, in one place — chat, dashboards, commerce, routing, JavaScript apps, with source." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <style>
+    /* Page-scoped styles for the live-examples directory.
+       The hero/cards use the global design system; the filter + card pills
+       are bespoke. */
+    .live-section { margin-top: 28px; }
+    .live-section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .live-section h2 { margin: 0; font-size: 22px; }
+    .live-section-meta { font-size: 12.5px; color: var(--doc-text-muted); }
+    .live-section-sub {
+      margin: 0 0 16px;
+      color: var(--doc-text-muted);
+      font-size: 14px;
+      max-width: 70ch;
+    }
+
+    .live-filter {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 14px 0 6px;
+      padding: 3px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+    }
+    .live-filter button {
+      border: none;
+      background: transparent;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--doc-text-muted);
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      transition: background 150ms ease, color 150ms ease;
+    }
+    .live-filter button:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
+    .live-filter button[aria-pressed="true"] {
+      background: var(--doc-bg-soft);
+      color: var(--doc-text);
+      font-weight: 600;
+      box-shadow: var(--doc-shadow-sm);
+    }
+
+    .live-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin: 12px 0 24px;
+    }
+
+    .live-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      padding: 18px 20px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color var(--doc-transition), background var(--doc-transition), transform var(--doc-transition);
+    }
+    .live-card:hover {
+      border-color: var(--doc-border-strong);
+      background: var(--doc-surface-elev);
+      transform: translateY(-1px);
+    }
+    .live-card h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--doc-text); }
+    .live-card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--doc-text-muted);
+      line-height: 1.55;
+      flex: 1;
+    }
+    .live-card-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .live-card-pill {
+      display: inline-flex;
+      align-items: center;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--doc-primary);
+      background: var(--doc-primary-soft);
+      padding: 3px 9px;
+      border-radius: var(--doc-radius-pill);
+    }
+    .live-card-arrow {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--doc-primary);
+      margin-top: 4px;
+    }
+
+    .live-card.is-hidden { display: none; }
+
+    .live-empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      background: var(--doc-surface);
+      border: 1px dashed var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      font-size: 13.5px;
+    }
+
+    @media (max-width: 720px) {
+      .live-grid { gap: 10px; }
+      .live-card { padding: 16px; }
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="live-demos">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar">
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        <a href="routing.html">Routing</a>
+        <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
+        <a href="examples.html">Examples</a>
+        <a href="live-examples.html">Live examples</a>
+        <a href="playground.html">Playground</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Live demos</span>
+        <h1>Every live example, in one place.</h1>
+        <p class="lead">
+          Standalone, full-page demos that exercise the renderer end to end —
+          tools, streaming, multi-page routing, JavaScript interactions, and
+          the rich-layout patterns the LLM should reach for. Each card opens
+          a focused page with editable source.
+        </p>
+      </header>
+
+      <div class="callout">
+        <h4>How to use this page</h4>
+        <p>
+          Filter the catalog by tag (LLM streaming, JavaScript, routing,
+          patterns…) and pop the demo into a new tab. Each demo shows the
+          full Streaming UI Script source, the tools wiring, and the rendered
+          UI — so you can copy any pattern straight into your own app.
+        </p>
+      </div>
+
+      <section class="live-section" data-section="all">
+        <div class="live-section-head">
+          <h2>All live examples</h2>
+          <span class="live-section-meta" id="live-count"></span>
+        </div>
+        <p class="live-section-sub">
+          Tap a tag to narrow the catalog. Reset to "All" to see every demo.
+        </p>
+        <div class="live-filter" role="group" aria-label="Filter live examples">
+          <button type="button" data-tag="all" aria-pressed="true">All</button>
+          <button type="button" data-tag="llm" aria-pressed="false">LLM &amp; streaming</button>
+          <button type="button" data-tag="tools" aria-pressed="false">Tools &amp; data</button>
+          <button type="button" data-tag="patterns" aria-pressed="false">Patterns</button>
+          <button type="button" data-tag="app-shell" aria-pressed="false">App shells</button>
+          <button type="button" data-tag="javascript" aria-pressed="false">JavaScript</button>
+          <button type="button" data-tag="routing" aria-pressed="false">Routing</button>
+          <button type="button" data-tag="commerce" aria-pressed="false">Commerce &amp; content</button>
+        </div>
+        <div class="live-grid" id="live-grid">
+          <a class="live-card" href="chat-bot.html" data-tags="llm tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Streaming</span>
+              <span class="live-card-pill">OpenAI</span>
+            </div>
+            <h3>Chat bot</h3>
+            <p>OpenAI-powered chat that streams replies straight into the renderer. Bring your own API key.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="tools-example.html" data-tags="tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Tools</span>
+            </div>
+            <h3>Tools integration</h3>
+            <p>Read, write, and poll patterns wired to in-page <code>setTools()</code> handlers.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="external-data-example.html" data-tags="tools commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Public API</span>
+            </div>
+            <h3>External data</h3>
+            <p>Live GitHub repository explorer powered by a single tool function.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="support-agent.html" data-tags="llm tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Async tools</span>
+            </div>
+            <h3>Support agent</h3>
+            <p>AI triage workspace: pick a ticket, the agent suggests priority, routing, and a draft reply.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="analytics-assistant.html" data-tags="llm tools patterns">
+            <div class="live-card-pills">
+              <span class="live-card-pill">NL → chart</span>
+            </div>
+            <h3>Analytics assistant</h3>
+            <p>Type a question about revenue, signups, or churn — the renderer composes the right chart, KPIs, and breakdown.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="javascript-todo-app.html" data-tags="javascript">
+            <div class="live-card-pills">
+              <span class="live-card-pill">JS · Script + tools</span>
+            </div>
+            <h3>Todo app (localStorage)</h3>
+            <p>A full reactive todo list with filters, keyboard shortcut, and localStorage persistence — wired via <code>Query</code>, <code>Mutation</code>, and a single <code>Script</code>.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="javascript-pomodoro.html" data-tags="javascript">
+            <div class="live-card-pills">
+              <span class="live-card-pill">JS · timers + audio</span>
+            </div>
+            <h3>Pomodoro timer</h3>
+            <p>Phases, audio chime, and optional notifications. The script owns the countdown; the host owns the policy.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="javascript-stopwatch.html" data-tags="javascript">
+            <div class="live-card-pills">
+              <span class="live-card-pill">JS · rAF + cleanup</span>
+            </div>
+            <h3>Stopwatch + laps</h3>
+            <p>Sub-second precision via <code>requestAnimationFrame</code>, lap splits, and proper teardown when the timer pauses.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="routing-demo.html" data-tags="routing">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Routing · hash-based</span>
+            </div>
+            <h3>Multi-page routing</h3>
+            <p>A four-page app driven by <code>Routes</code> + <code>NavLink</code> + <code>@Navigate</code>. Deep links, browser back/forward, and <code>$route</code> reactivity.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="app-workspace.html" data-tags="patterns app-shell">
+            <div class="live-card-pills">
+              <span class="live-card-pill">App shell</span>
+            </div>
+            <h3>App workspace</h3>
+            <p>A full SaaS workspace with sticky <code>Sidebar</code>, topbar, <code>MetricGrid</code>, status pips, timeline, and a <code>DescriptionList</code> summary — all from one program.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="project-dashboard.html" data-tags="patterns">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Dashboard</span>
+            </div>
+            <h3>Project dashboard</h3>
+            <p>A full engineering program dashboard: banner, <code>PageHeader</code>, KPI strip, kanban board, activity timeline — every section is one pattern.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="marketing-landing.html" data-tags="patterns commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Landing</span>
+            </div>
+            <h3>Marketing landing</h3>
+            <p>Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ, and a closing banner — generated from one program.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="team-directory.html" data-tags="patterns">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Directory</span>
+            </div>
+            <h3>Team directory</h3>
+            <p>Profile cards, avatar groups, search-with-pagination, an empty state, and a slide-in <code>Sheet</code> for full member detail.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="settings-app.html" data-tags="patterns">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Settings</span>
+            </div>
+            <h3>Settings app</h3>
+            <p>Tabs, <code>Switch</code>, <code>ToggleGroup</code>, <code>Progress</code>, <code>Kbd</code>, and a danger-zone confirmation <code>Sheet</code>.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="ecommerce-product.html" data-tags="patterns commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Commerce</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Product detail</h3>
+            <p>An end-to-end product page — <code>Cover</code> hero, <code>MediaCard</code> related items, <code>Rating</code>, <code>ProgressRing</code>, <code>Stats</code>, and review chat bubbles.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="inbox-app.html" data-tags="patterns app-shell">
+            <div class="live-card-pills">
+              <span class="live-card-pill">SplitView</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Inbox app</h3>
+            <p>A focused mail/chat inbox — <code>SplitView</code>, <code>SearchBar</code>, <code>PersonChip</code>, <code>Notification</code>, and a threaded conversation built from <code>ChatBubble</code>s.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="pricing-page.html" data-tags="patterns commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Pricing</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Pricing page</h3>
+            <p>A polished pricing surface: <code>Cover</code>, <code>Stats</code> trust strip, <code>PricingTable</code>, <code>FeatureGrid</code>, <code>Quote</code>, FAQ, and a closing CTA.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="crm-contacts.html" data-tags="patterns tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Directory</span>
+            </div>
+            <h3>CRM contacts</h3>
+            <p>A directory view with <code>SearchBar</code>, segmented filters, <code>Tile</code> quick stats, paginated person cards, and a slide-in detail <code>Sheet</code>.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="status-page.html" data-tags="patterns tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Monitoring</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Status page</h3>
+            <p>A public SRE status page: incident <code>Banner</code>, <code>MetricGrid</code>, latency <code>LineChart</code>, services with <code>StatusDot</code> pulses, and a <code>Timeline</code> of incidents.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="checkout-flow.html" data-tags="patterns commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Checkout</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Checkout flow</h3>
+            <p>A four-step e-commerce checkout (info → shipping → payment → review) with <code>Steps</code>, a live <code>SplitView</code> order summary, and promo codes that recompute totals.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="file-manager.html" data-tags="patterns app-shell">
+            <div class="live-card-pills">
+              <span class="live-card-pill">File browser</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>File manager</h3>
+            <p>A Dropbox-style explorer: <code>Tree</code> sidebar, <code>Toolbar</code> with view toggle, <code>Table</code> of files, slide-in preview <code>Sheet</code>, and a storage <code>ProgressRing</code>.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="calendar-app.html" data-tags="patterns tools">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Calendar</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Calendar &amp; scheduler</h3>
+            <p>Agenda view with <code>DatePicker</code>, category chips, busy-hours <code>ProgressRing</code>, day <code>Timeline</code>, and a detail <code>Sheet</code> with attendees and RSVP.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+          <a class="live-card" href="docs-portal.html" data-tags="patterns commerce">
+            <div class="live-card-pills">
+              <span class="live-card-pill">Help center</span>
+              <span class="live-card-pill">New</span>
+            </div>
+            <h3>Docs portal</h3>
+            <p>A help-center surface: <code>SearchBar</code>, <code>Tree</code> categories, <code>Markdown</code> article body, <code>Rating</code>-driven feedback, related <code>MediaCard</code> grid, and FAQ <code>Accordion</code>.</p>
+            <span class="live-card-arrow">Open demo →</span>
+          </a>
+        </div>
+        <div class="live-empty" id="live-empty" hidden>No live examples match this filter.</div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script>
+    // Tag filter for the live examples grid.
+    (function() {
+      var grid = document.getElementById("live-grid");
+      var empty = document.getElementById("live-empty");
+      var counter = document.getElementById("live-count");
+      var cards = Array.prototype.slice.call(grid.querySelectorAll(".live-card"));
+      var buttons = Array.prototype.slice.call(document.querySelectorAll(".live-filter button"));
+      function updateCount(visible) {
+        counter.textContent = visible + " of " + cards.length + " demos";
+      }
+      function applyFilter(tag) {
+        var visible = 0;
+        cards.forEach(function(card) {
+          var tags = (card.getAttribute("data-tags") || "").split(/\s+/);
+          var matches = tag === "all" || tags.indexOf(tag) !== -1;
+          card.classList.toggle("is-hidden", !matches);
+          if (matches) visible++;
+        });
+        empty.hidden = visible !== 0;
+        updateCount(visible);
+      }
+      buttons.forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          buttons.forEach(function(b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+          applyFilter(btn.getAttribute("data-tag"));
+        });
+      });
+      updateCount(cards.length);
+    })();
+  </script>
+</body>
+</html>

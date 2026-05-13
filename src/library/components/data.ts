@@ -1,9 +1,10 @@
 /**
- * Data components: Table, Col, List, ListItem, StatCard.
+ * Data components: Table, Col, List, ListItem, StatCard, Tree, TreeNode.
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString } from "../utils.js";
+import { isActionPayload } from "../../runtime/builtins.js";
+import { el, asArray, asString, asBoolean, renderIcon } from "../utils.js";
 
 export const Col: ComponentSpec = {
   name: "Col",
@@ -83,12 +84,12 @@ export const ListItem: ComponentSpec = {
   props: [
     { name: "title", type: "string" },
     { name: "description", type: "string", optional: true },
-    { name: "icon", type: "string", optional: true },
+    { name: "icon", type: "string", optional: true, description: "Font Awesome icon name" },
   ],
   render: (_node, props) => {
     const li = el("li", { class: "rui-list-item" });
-    const icon = asString(props.icon);
-    if (icon) li.append(el("span", { class: "rui-list-icon" }, [icon]));
+    const iconNode = renderIcon(props.icon, { className: "rui-list-icon" });
+    if (iconNode) li.append(iconNode);
     const text = el("div", { class: "rui-list-text" });
     text.append(el("div", { class: "rui-list-title" }, [asString(props.title)]));
     const desc = asString(props.description);
@@ -106,7 +107,7 @@ export const List: ComponentSpec = {
     { name: "ordered", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
-    const tag = asString(props.ordered) === "true" ? "ol" : "ul";
+    const tag = asBoolean(props.ordered) ? "ol" : "ul";
     const root = el(tag as "ul", { class: "rui-list" });
     for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
     return root;
@@ -121,13 +122,13 @@ export const StatCard: ComponentSpec = {
     { name: "value", type: "string" },
     { name: "trend", type: "string", optional: true, enum: ["up", "down", "flat"] },
     { name: "delta", type: "string", optional: true, description: "Change vs previous period" },
-    { name: "icon", type: "string", optional: true, description: "Optional emoji shown in a chip beside the label" },
+    { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown in a chip beside the label" },
   ],
   render: (_node, props) => {
     const root = el("div", { class: "rui-stat-card" });
-    const icon = asString(props.icon);
     const labelRow = el("div", { class: "rui-stat-label-row" });
-    if (icon) labelRow.append(el("span", { class: "rui-stat-icon" }, [icon]));
+    const iconNode = renderIcon(props.icon, { className: "rui-stat-icon" });
+    if (iconNode) labelRow.append(iconNode);
     labelRow.append(el("div", { class: "rui-stat-label" }, [asString(props.label)]));
     root.append(labelRow);
     root.append(el("div", { class: "rui-stat-value" }, [asString(props.value)]));
@@ -136,6 +137,94 @@ export const StatCard: ComponentSpec = {
     if (delta || trend) {
       root.append(el("div", { class: "rui-stat-trend", "data-trend": trend || "flat" }, [delta || trendArrow(trend)]));
     }
+    return root;
+  },
+};
+
+export const TreeNode: ComponentSpec = {
+  name: "TreeNode",
+  description:
+    "Single node in a Tree view. When `children` is provided the node " +
+    "renders as an expandable branch with a chevron; otherwise it renders " +
+    "as a leaf. `action` fires on click. Use `active=true` to highlight " +
+    "the current selection.",
+  props: [
+    { name: "label", type: "string" },
+    { name: "children", type: "TreeNode[]", optional: true },
+    { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown before the label" },
+    { name: "expanded", type: "boolean", optional: true, description: "Whether the branch is open by default" },
+    { name: "active", type: "boolean", optional: true, description: "Highlights the row as the current selection" },
+    { name: "badge", type: "string", optional: true, description: "Trailing chip (count or status)" },
+    { name: "action", type: "Action", optional: true, description: "Action fired when the row is clicked" },
+  ],
+  render: (_node, props, helpers) => {
+    const children = asArray<unknown>(props.children);
+    const hasChildren = children.length > 0;
+    const expanded = asBoolean(props.expanded);
+    const active = asBoolean(props.active);
+    const isClickable = isActionPayload(props.action);
+
+    const row = el(isClickable ? "button" : "div" as "div", {
+      type: isClickable ? "button" : null,
+      class: "rui-tree-node-row",
+      role: "treeitem",
+      "data-active": active ? "true" : "false",
+      "aria-expanded": hasChildren ? (expanded ? "true" : "false") : null,
+    });
+
+    if (hasChildren) {
+      const chevron = renderIcon("chevron-right", { className: "rui-tree-node-chevron" });
+      if (chevron) row.append(chevron);
+    } else {
+      row.append(el("span", { class: "rui-tree-node-chevron-spacer", "aria-hidden": "true" }));
+    }
+    const iconNode = renderIcon(props.icon, { className: "rui-tree-node-icon" });
+    if (iconNode) row.append(iconNode);
+    row.append(el("span", { class: "rui-tree-node-label" }, [asString(props.label)]));
+    const badge = asString(props.badge);
+    if (badge) row.append(el("span", { class: "rui-tree-node-badge" }, [badge]));
+
+    if (isClickable) {
+      row.onclick = () => helpers.runAction(props.action);
+    }
+
+    if (!hasChildren) return row;
+
+    // Branch: render as a <details> so expand/collapse is browser-native
+    // (no extra state slot needed) and survives morph reconciliation.
+    const details = el("details", { class: "rui-tree-node" }) as HTMLDetailsElement;
+    if (expanded) details.setAttribute("open", "");
+    const summary = el("summary", { class: "rui-tree-node-summary" });
+    summary.append(row);
+    // When the row is clickable, swallow the summary's default toggle so a
+    // click on the label runs the action without expanding/collapsing. The
+    // chevron still toggles because we wire it explicitly below.
+    if (isClickable) {
+      summary.onclick = (event) => {
+        const target = event.target as Element | null;
+        if (target?.closest(".rui-tree-node-chevron")) return;
+        event.preventDefault();
+      };
+    }
+    details.append(summary);
+
+    const childList = el("div", { class: "rui-tree-node-children", role: "group" });
+    for (const child of children) childList.append(helpers.renderNode(child));
+    details.append(childList);
+    return details;
+  },
+};
+
+export const Tree: ComponentSpec = {
+  name: "Tree",
+  description:
+    "Hierarchical tree view. Children must be TreeNode entries. Use for " +
+    "file browsers, nested navigation, category pickers, and any " +
+    "parent/child structure with arbitrary depth.",
+  props: [{ name: "items", type: "TreeNode[]" }],
+  render: (_node, props, helpers) => {
+    const root = el("div", { class: "rui-tree", role: "tree" });
+    for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
     return root;
   },
 };

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Live demo · Routing · streaming-ui-script</title>
   <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body>
   <div class="example-shell">
@@ -20,10 +22,9 @@
       <span class="tag-pill">Live demo · Routes + NavLink + @Navigate</span>
       <h1 style="margin-top:10px">A multi-page app, in a single Streaming UI Script program</h1>
       <p>
-        One <code>&lt;streaming-ui-script enable-routes="true"&gt;</code>
-        renders a four-page UI synced to the URL hash. Click the nav, use
-        deep links, hit the browser back button — it all stays in sync, with
-        zero framework lock-in.
+        One <code>&lt;streaming-ui-script&gt;</code> tag renders a four-page UI
+        synced to the URL hash. Click the nav, use deep links, hit the browser
+        back button — it all stays in sync, with zero framework lock-in.
       </p>
     </section>
 
@@ -39,8 +40,6 @@
         <streaming-ui-script
           id="rui-routing"
           theme="light"
-          enable-routes="true"
-          enable-javascript="true"
         ></streaming-ui-script>
       </div>
     </article>
@@ -69,17 +68,17 @@ root = Stack([header, nav, main])
 header = Card([
   CardHeader("Acme console", "Routing demo · current path: " + $route),
   Stack([
-    Tag("$route = " + $route, "🧭", "sm", "info"),
-    Tag("visits = " + $visits, "👀", "sm", "neutral")
+    Tag("$route = " + $route, "compass", "sm", "info"),
+    Tag("visits = " + $visits, "eye", "sm", "neutral")
   ], "row", "xs")
 ])
 
 nav = Card([
   Stack([
-    NavLink("Home",      "/",          "ghost", true, "🏠"),
-    NavLink("Dashboard", "/dashboard", "ghost", false, "📊"),
-    NavLink("Users",     "/users",     "ghost", false, "👥"),
-    NavLink("Settings",  "/settings",  "ghost", false, "⚙️")
+    NavLink("Home",      "/",          "ghost", true, "house"),
+    NavLink("Dashboard", "/dashboard", "ghost", false, "chart-pie"),
+    NavLink("Users",     "/users",     "ghost", false, "users"),
+    NavLink("Settings",  "/settings",  "ghost", false, "gear")
   ], "row", "s")
 ])
 
@@ -94,7 +93,7 @@ main = Routes([
 ], "/")
 
 homePage = Card([
-  CardHeader("Welcome 👋", "A multi-page UI in one Streaming UI Script program"),
+  CardHeader("Welcome", "A multi-page UI in one Streaming UI Script program"),
   Markdown("Pick a section above, or jump straight in:"),
   Buttons([
     Button("Open dashboard", Action([@Navigate("/dashboard")]), "primary"),
@@ -165,9 +164,9 @@ notFoundPage = Callout("warning", "Not found", "No page matches " + $route + ". 
       <h2>How it works</h2>
       <ul>
         <li>
-          The element has <code>enable-routes="true"</code>, which starts the
-          built-in router, exposes the reactive <code>$route</code> state, and
-          adds the routing section to the generated system prompt.
+          The renderer always starts the built-in router. The reactive
+          <code>$route</code> state is exposed everywhere, and the routing
+          section is part of the generated system prompt by default.
         </li>
         <li>
           <code>nav</code> is rendered once at the top of <code>root</code> so

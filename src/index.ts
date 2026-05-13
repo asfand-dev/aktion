@@ -16,6 +16,7 @@ export * from "./library/index.js";
 export * from "./renderer/index.js";
 export * from "./prompt/index.js";
 export * from "./theme/index.js";
+export * from "./language/index.js";
 
 declare global {
   interface HTMLElementTagNameMap {

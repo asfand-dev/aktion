@@ -94,7 +94,6 @@ describe("router: navigation", () => {
   it("starts in memory mode and exposes the default path", () => {
     const router = new Router();
     expect(router.getPath()).toBe("/");
-    expect(router.isEnabled()).toBe(false);
   });
 
   it("navigate updates the path and fires listeners", () => {
@@ -114,7 +113,6 @@ describe("router: navigation", () => {
     const router = new Router();
     router.start();
     expect(router.getPath()).toBe("/from-url");
-    expect(router.isEnabled()).toBe(true);
     router.stop();
   });
 
@@ -135,22 +133,20 @@ describe("<streaming-ui-script>: routing", () => {
     if (typeof window !== "undefined") window.location.hash = "";
   });
 
-  const create = (opts: { enableRoutes?: boolean } = {}) => {
+  const create = () => {
     if (typeof window !== "undefined") window.location.hash = "";
     const el = document.createElement("streaming-ui-script");
-    if (opts.enableRoutes) el.setAttribute("enable-routes", "true");
     document.body.appendChild(el);
     return el as HTMLElement & {
       setResponse(text: string): void;
       navigate(path: string): void;
       route: string;
-      enableRoutes: boolean;
       getSystemPrompt(opts?: Record<string, unknown>): string;
     };
   };
 
   it("renders the matching Route's content based on the current path", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     window.location.hash = "#/about";
     // hashchange fires async — give the listener a chance.
     await flush();
@@ -172,7 +168,7 @@ notFoundPage = Callout("warning", "Not found")`);
   });
 
   it("falls back to the default Route when no path matches", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     window.location.hash = "#/nonexistent";
     await flush();
     el.setResponse(`root = Routes([
@@ -187,7 +183,7 @@ aboutPage = Card([CardHeader("About")])`);
   });
 
   it("matches a wildcard catch-all last", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     window.location.hash = "#/anything-goes/here";
     await flush();
     el.setResponse(`root = Routes([
@@ -202,7 +198,7 @@ catchAll = Card([CardHeader("404")])`);
   });
 
   it("injects path params as the `params` loop variable", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     window.location.hash = "#/users/42";
     await flush();
     el.setResponse(`root = Routes([
@@ -217,7 +213,7 @@ notFound = Card([CardHeader("404")])`);
   });
 
   it("re-renders when navigating via @Navigate inside an Action", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     el.setResponse(`root = Stack([nav, outlet])
 nav = Buttons([
   Button("Home", Action([@Navigate("/")])),
@@ -244,7 +240,7 @@ settingsPage = Card([CardHeader("Settings")])`);
   });
 
   it("NavLink reflects data-active for the current path (prefix + exact)", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     window.location.hash = "#/settings/profile";
     await flush();
     el.setResponse(`root = Stack([nav, outlet])
@@ -270,7 +266,7 @@ settings = Card([CardHeader("Settings")])`);
   });
 
   it("dispatches a route-change event when the path changes", async () => {
-    const el = create({ enableRoutes: true });
+    const el = create();
     el.setResponse(`root = Stack([Routes([Route("/", a), Route("/b", b)])])
 a = Card([CardHeader("A")])
 b = Card([CardHeader("B")])`);
@@ -284,45 +280,11 @@ b = Card([CardHeader("B")])`);
     expect(events.length).toBeGreaterThan(0);
     expect(events[events.length - 1]!.path).toBe("/b");
   });
-
-  it("when routes are disabled, Routes still renders the first declared page", async () => {
-    const el = create({ enableRoutes: false });
-    el.setResponse(`root = Routes([
-  Route("/", first),
-  Route("/other", second)
-])
-first = Card([CardHeader("First")])
-second = Card([CardHeader("Second")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
-    const title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
-    // Router is in-memory at "/" — the "/" Route matches first.
-    expect(title).toBe("First");
-  });
-
-  it("when routes are disabled, NavLink clicks are inert (no hash mutation)", async () => {
-    if (typeof window === "undefined") return;
-    const el = create({ enableRoutes: false });
-    window.location.hash = "";
-    el.setResponse(`root = NavLink("Go", "/page")`);
-    for (let i = 0; i < 5; i += 1) await flush();
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(".rui-nav-link")!;
-    expect(link.getAttribute("data-routes-enabled")).toBe("false");
-    // The component still renders an anchor for accessibility; we just don't
-    // call preventDefault when routes are off.
-    expect(link.getAttribute("href")).toBe("#/page");
-  });
 });
 
 describe("system prompt: routing", () => {
-  it("omits the routing section by default", () => {
+  it("includes the routing section in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).not.toContain("## Routing");
-    expect(text).not.toContain("Routes(items");
-    expect(text).not.toContain("### Routing");
-  });
-
-  it("includes the routing section when enabled", () => {
-    const text = generatePrompt(defaultLibrary, { enableRoutes: true });
     expect(text).toContain("## Routing");
     expect(text).toContain("Routes(items");
     expect(text).toContain("Route(path");
@@ -333,11 +295,11 @@ describe("system prompt: routing", () => {
     expect(text).toContain("### Routing");
   });
 
-  it("does not leak routing into the JS section gating", () => {
-    const jsOnly = generatePrompt(defaultLibrary, { enableJavascript: true });
-    expect(jsOnly).not.toContain("## Routing");
-    const both = generatePrompt(defaultLibrary, { enableJavascript: true, enableRoutes: true });
-    expect(both).toContain("## JavaScript interactions");
-    expect(both).toContain("## Routing");
+  it("omits the routing section from the chat-mode prompt", () => {
+    const text = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(text).not.toContain("## Routing");
+    expect(text).not.toContain("Routes(");
+    expect(text).not.toContain("NavLink(");
+    expect(text).not.toContain("@Navigate");
   });
 });

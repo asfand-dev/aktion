@@ -1,6 +1,24 @@
 import type { ComponentLibrary, ComponentSpec } from "./types.js";
 
 /**
+ * Cache of Map<name, spec> indexes keyed by the `components` array reference.
+ * Lets `findComponent` run in O(1) while still treating libraries as
+ * immutable arrays — when the library is replaced (e.g. after
+ * `registerComponents`), the new array gets its own index automatically.
+ */
+const indexCache = new WeakMap<ReadonlyArray<ComponentSpec>, Map<string, ComponentSpec>>();
+
+function getIndex(library: ComponentLibrary): Map<string, ComponentSpec> {
+  let index = indexCache.get(library.components);
+  if (!index) {
+    index = new Map();
+    for (const spec of library.components) index.set(spec.name, spec);
+    indexCache.set(library.components, index);
+  }
+  return index;
+}
+
+/**
  * Combines two libraries by name. Components from `extra` win on collision.
  * Useful when a consumer registers their own components alongside the
  * built-ins via `<streaming-ui-script>.registerComponents([...])`.
@@ -19,6 +37,10 @@ export function mergeLibraries(
   };
 }
 
+/**
+ * Resolve a component spec by name. O(1) thanks to the lazily-built index
+ * cached against the library's `components` array.
+ */
 export function findComponent(library: ComponentLibrary, name: string): ComponentSpec | undefined {
-  return library.components.find((c) => c.name === name);
+  return getIndex(library).get(name);
 }
