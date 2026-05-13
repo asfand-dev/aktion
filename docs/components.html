@@ -160,10 +160,78 @@
       border-radius: var(--doc-radius);
     }
 
+    /* Per-component preview block — reuses the existing .example look so it
+       matches the rest of the docs, but is scoped tighter inside the card. */
+    .component-preview {
+      margin: 0 0 14px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      overflow: hidden;
+      background: var(--doc-surface);
+    }
+    .component-preview-tabs {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: var(--doc-radius-sm);
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      margin: 10px 10px 0;
+    }
+    .component-preview-tab {
+      background: none;
+      border: none;
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      color: var(--doc-text-muted);
+      font-family: inherit;
+      font-weight: 500;
+      transition: background var(--doc-transition), color var(--doc-transition);
+    }
+    .component-preview-tab:hover { color: var(--doc-text); }
+    .component-preview-tab[aria-selected="true"] {
+      color: var(--doc-text);
+      background: var(--doc-bg-soft);
+      font-weight: 600;
+      box-shadow: var(--doc-shadow-sm);
+    }
+    .component-preview-panel { display: none; padding: 10px; }
+    .component-preview-panel[data-active="true"] { display: block; }
+    .component-preview-output {
+      background: var(--doc-bg);
+      border-radius: var(--doc-radius-sm);
+      padding: 16px;
+      border: 1px solid var(--doc-border);
+      /* `transform: translate(0)` makes this box the containing block for any
+         `position: fixed` descendants inside the shadow root (Modal, Sheet,
+         Toasts). Without it those overlays would float over the entire docs
+         page, not just the preview. */
+      position: relative;
+      transform: translate(0);
+      overflow: hidden;
+    }
+    .component-preview-output[data-overlay="true"] { min-height: 320px; }
+    .component-preview-output streaming-ui-script { display: block; }
+    .component-preview-panel[data-key="source"] pre { margin: 0; }
+    .component-preview-empty {
+      padding: 16px;
+      font-size: 12.5px;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg);
+      border-radius: var(--doc-radius-sm);
+      border: 1px dashed var(--doc-border);
+    }
+    :root[data-doc-theme="dark"] .component-preview-output {
+      background: var(--doc-bg-soft);
+    }
+
     @media (max-width: 720px) {
       .component-card { padding: 16px; }
       .prop-table th, .prop-table td { padding: 6px 8px; font-size: 12px; }
       .component-signature { font-size: 11.5px; padding: 10px 12px; }
+      .component-preview-output { padding: 12px; }
     }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
@@ -253,6 +321,830 @@ el.registerComponents([ProductCard]);</code></pre>
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
+    /**
+     * Per-component sample programs. Each value is a self-contained
+     * Streaming UI Script snippet that ends with a `root = ...` statement,
+     * so it can be fed straight into `setResponse()` on a renderer instance.
+     *
+     * Sub-components (e.g. `CardHeader`, `KanbanCard`, `SidebarItem`) are
+     * shown inside their natural parent so the preview matches how the
+     * component is actually consumed.
+     */
+    const SAMPLES = {
+      // Layout
+      Stack: `root = Stack([
+  Badge("First",  "primary"),
+  Badge("Second", "info"),
+  Badge("Third",  "success")
+], "row", "m", "center")`,
+      Grid: `root = Grid([
+  Card([CardHeader("Tile A")]),
+  Card([CardHeader("Tile B")]),
+  Card([CardHeader("Tile C")])
+], 3, "m")`,
+      Section: `root = Section([
+  TextContent("Section body content lives here.")
+], "Section title")`,
+      Container: `root = Container([
+  Card([CardHeader("Centred content", "Wrapped in Container size=md")])
+], "md")`,
+      Spacer: `root = Stack([
+  TextContent("Left edge"),
+  Spacer(),
+  TextContent("Right edge")
+], "row", "m", "center")`,
+      Card: `root = Card([
+  CardHeader("Card title", "With a subtitle"),
+  CardBody([TextContent("Card body content.")]),
+  CardFooter([Button("Action", null, "primary", "button", "small")])
+])`,
+      CardHeader: `root = Card([
+  CardHeader("Card title", "With a subtitle"),
+  TextContent("Body of the card.")
+])`,
+      CardBody: `root = Card([
+  CardHeader("With body"),
+  CardBody([TextContent("Body wrapped in CardBody.")])
+])`,
+      CardFooter: `root = Card([
+  CardHeader("With footer"),
+  TextContent("Card body."),
+  CardFooter([Button("Save", null, "primary", "button", "small")])
+])`,
+      Divider: `root = Stack([
+  TextContent("Above the divider"),
+  Divider("Section break"),
+  TextContent("Below the divider")
+])`,
+      Separator: `root = Stack([
+  TextContent("Above the separator"),
+  Separator("horizontal"),
+  TextContent("Below the separator")
+])`,
+      Tabs: `root = Tabs([
+  TabItem("overview", "Overview", [TextContent("Overview tab content.")]),
+  TabItem("details",  "Details",  [TextContent("Details tab content.")])
+])`,
+      TabItem: `root = Tabs([
+  TabItem("first",  "First",  [TextContent("First tab body.")]),
+  TabItem("second", "Second", [TextContent("Second tab body.")])
+])`,
+      Accordion: `root = Accordion([
+  AccordionItem("Open by default", [Markdown("This **AccordionItem** has open=true.")], true),
+  AccordionItem("Another question",[Markdown("Click to reveal the answer.")]),
+  AccordionItem("And one more",    [Markdown("Stacks as a sequence of disclosures.")])
+])`,
+      AccordionItem: `root = Accordion([
+  AccordionItem("Open by default", [Markdown("This item starts expanded.")], true),
+  AccordionItem("Closed",          [Markdown("Click to expand.")])
+])`,
+      Modal: `root = Modal("Modal title", true, [
+  TextContent("Modal body shown when open=true."),
+  Buttons([
+    Button("Cancel",  null, "ghost",   "button", "small"),
+    Button("Confirm", null, "primary", "button", "small")
+  ])
+])`,
+      Sheet: `root = Sheet("Sheet title", true, [
+  TextContent("Sheet body slides in from the side when open=true."),
+  Buttons([
+    Button("Cancel", null, "ghost",   "button", "small"),
+    Button("Save",   null, "primary", "button", "small")
+  ])
+], "right")`,
+      Steps: `root = Steps([
+  StepsItem("Create account",   "Sign up with your email."),
+  StepsItem("Invite teammates", "Share an invite link."),
+  StepsItem("Connect data",     "Hook up your first source.")
+])`,
+      StepsItem: `root = Steps([
+  StepsItem("Step one",   "Detail copy."),
+  StepsItem("Step two",   "Another detail."),
+  StepsItem("Step three", "Wrap it up.")
+])`,
+      AspectRatio: `root = AspectRatio("16:9", [
+  Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", "Demo image")
+])`,
+      ScrollArea: `root = ScrollArea([
+  Card([CardHeader("Block 1"), TextContent("Body for block 1.")]),
+  Card([CardHeader("Block 2"), TextContent("Body for block 2.")]),
+  Card([CardHeader("Block 3"), TextContent("Body for block 3.")]),
+  Card([CardHeader("Block 4"), TextContent("Body for block 4.")])
+], "200px")`,
+
+      // Content
+      TextContent: `root = Stack([
+  TextContent("Small text.",        "small"),
+  TextContent("Body text.",         "body"),
+  TextContent("Large heavy text.",  "large-heavy"),
+  TextContent("Heading variant.",   "heading", "primary")
+])`,
+      Header: `root = Header("Page heading", "Optional subtitle")`,
+      Image: `root = Image(
+  "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=720&q=80",
+  "Workspace photo",
+  "Photo by Bram Naus on Unsplash"
+)`,
+      Icon: `root = Stack([
+  Icon("house",      "solid",   "lg"),
+  Icon("chart-line", "solid",   "lg"),
+  Icon("star",       "regular", "lg"),
+  Icon("github",     "brands",  "lg")
+], "row", "m", "center")`,
+      Link: `root = Stack([
+  Link("Internal link", "#section"),
+  Link("External link", "https://example.com", true)
+], "row", "m", "center")`,
+      Badge: `root = Stack([
+  Badge("Default"),
+  Badge("Primary", "primary"),
+  Badge("Success", "success"),
+  Badge("Warning", "warning"),
+  Badge("Danger",  "danger"),
+  Badge("Info",    "info")
+], "row", "s", "center")`,
+      Tag: `root = Stack([
+  Tag("Featured", "star",                "sm", "primary"),
+  Tag("Online",   "circle-check",        "md", "success"),
+  Tag("At risk",  "triangle-exclamation","md", "warning")
+], "row", "s", "center")`,
+      TagBlock: `root = TagBlock(["react", "typescript", "ui", "streaming"], "primary", "sm")`,
+      Alert: `root = Alert("Heads up", "Your draft was auto-saved at 10:24 AM.", "success")`,
+      Callout: `root = Callout("info", "Pro tip", "Use $variables for reactive two-way binding.")`,
+      Note: `root = Note("Owner: Mei · ARR $84,000 · renewal in Q3", "tip")`,
+      Quote: `root = Quote(
+  "Streaming-ui-script took our recap email from 4k lines of glue to 40.",
+  "Naomi · last QBR",
+  "primary"
+)`,
+      CodeBlock: `root = CodeBlock("bash", "npm install streaming-ui-script")`,
+      Skeleton: `root = Skeleton(4, 14)`,
+      Markdown: `root = Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\\n\\n- First bullet\\n- Second bullet\\n- Third bullet")`,
+      Kbd: `root = Stack([
+  Kbd(["Cmd", "K"]),
+  Kbd(["Shift", "?"], "sm")
+], "row", "m", "center")`,
+
+      // Forms
+      Form: `$email = ""
+$plan = "pro"
+submit = Button("Save", Action([@ToAssistant("Save profile")]), "primary")
+root = Form("profile", submit, [
+  FormControl("Email", Input("email", "you@example.com", "email", null, $email)),
+  FormControl("Plan",  Select("plan", [
+    SelectItem("free","Free"),
+    SelectItem("pro","Pro"),
+    SelectItem("team","Team")
+  ], null, null, $plan))
+])`,
+      FormControl: `root = FormControl(
+  "Email",
+  Input("email", "you@example.com", "email"),
+  "We'll never share your email."
+)`,
+      Input: `root = Stack([
+  FormControl("Name",  Input("name",  "Your name", "text")),
+  FormControl("Email", Input("email", "you@example.com", "email")),
+  FormControl("Age",   Input("age",   "21", "number"))
+])`,
+      TextArea: `root = FormControl(
+  "Notes",
+  TextArea("notes", "Add a few sentences…", 4)
+)`,
+      Select: `$plan = "pro"
+root = FormControl("Plan", Select("plan", [
+  SelectItem("free", "Free"),
+  SelectItem("pro",  "Pro"),
+  SelectItem("team", "Team")
+], null, "Pick a plan", $plan))`,
+      SelectItem: `$size = "m"
+root = FormControl("Size", Select("size", [
+  SelectItem("s", "Small"),
+  SelectItem("m", "Medium"),
+  SelectItem("l", "Large")
+], null, null, $size))`,
+      Checkbox: `$accepted = false
+root = Checkbox("accept", "I agree to the Terms of Service", $accepted)`,
+      CheckBoxGroup: `$alerts = {email: true, sms: false, push: true}
+root = CheckBoxGroup("alerts", [
+  CheckBoxItem("Email",        "email", "Major product updates",  true),
+  CheckBoxItem("SMS",          "sms",   "Critical alerts only",   false),
+  CheckBoxItem("Push",         "push",  "Real-time notifications",true)
+], $alerts)`,
+      CheckBoxItem: `$alerts = {email: true, sms: false}
+root = CheckBoxGroup("alerts", [
+  CheckBoxItem("Email", "email", "Major product updates", true),
+  CheckBoxItem("SMS",   "sms",   "Critical alerts only",  false)
+], $alerts)`,
+      Radio: `$size = "m"
+root = Radio("size", [
+  SelectItem("s", "Small"),
+  SelectItem("m", "Medium"),
+  SelectItem("l", "Large")
+], $size)`,
+      Switch: `$notify = true
+root = Switch("notify", "Email notifications", $notify, "Receive product updates")`,
+      Toggle: `$bold = true
+root = Toggle("Bold", $bold, "bold", "outline", "md")`,
+      ToggleGroup: `$view = "list"
+root = ToggleGroup("view", [
+  ["list",  "List",  "list"],
+  ["grid",  "Grid",  "grip"],
+  ["board", "Board", "table-cells-large"]
+], $view, "outline", "md")`,
+      Button: `root = Stack([
+  Button("Primary",   null, "primary"),
+  Button("Secondary", null, "secondary"),
+  Button("Ghost",     null, "ghost"),
+  Button("Danger",    null, "danger")
+], "row", "s", "center")`,
+      Buttons: `root = Buttons([
+  Button("Save",   null, "primary"),
+  Button("Cancel", null, "ghost")
+])`,
+      SearchBar: `$q = ""
+root = SearchBar("q", "Search the catalog…", $q, "/")`,
+      Slider: `$volume = 60
+root = Slider("vol", 0, 100, 5, $volume, "Volume", true)`,
+      NumberInput: `$qty = 2
+root = FormControl("Quantity", NumberInput("qty", $qty, 1, 99, 1))`,
+      DatePicker: `$date = "2026-06-01"
+root = DatePicker("date", $date, "Pick a date", "2026-01-01", "2026-12-31")`,
+      FileUpload: `root = FileUpload(
+  "avatar",
+  "Click or drop a PNG / JPG",
+  "Up to 5 MB",
+  "image/*",
+  false
+)`,
+      Combobox: `$country = "us"
+countries = [
+  SelectItem("us", "United States"),
+  SelectItem("uk", "United Kingdom"),
+  SelectItem("ca", "Canada"),
+  SelectItem("de", "Germany"),
+  SelectItem("fr", "France"),
+  SelectItem("jp", "Japan")
+]
+root = Combobox("country", countries, $country, "Search countries…")`,
+
+      // Data
+      Table: `root = Table([
+  Col("Name",  ["Ada Lovelace", "Linus Torvalds", "Grace Hopper"]),
+  Col("Stars", [1820, 2300, 940], "number"),
+  Col("Forks", [220,  412,  80],  "number")
+], "Top contributors")`,
+      Col: `root = Table([
+  Col("Name",  ["Ada", "Linus", "Grace"]),
+  Col("Stars", [1820, 2300, 940], "number")
+])`,
+      List: `root = List([
+  ListItem("Tasks",    "3 active",   "list-check"),
+  ListItem("Calendar", "2 events",   "calendar"),
+  ListItem("Inbox",    "5 unread",   "inbox")
+])`,
+      ListItem: `root = List([
+  ListItem("Tasks",    "3 active", "list-check"),
+  ListItem("Calendar", "2 events", "calendar")
+])`,
+      StatCard: `root = StatCard("Revenue", "$48,230", "up", "+12% vs Q2", "sack-dollar")`,
+      Stats: `root = Stats([
+  {label:"Teams trust it",   value:"2,400+", hint:"In 40 countries",      tone:"primary"},
+  {label:"Uptime SLA",       value:"99.99%", hint:"Multi-region",         tone:"success"},
+  {label:"Time to first UI", value:"<90 s",  hint:"Signup → render",      tone:"info"},
+  {label:"Support reply",    value:"<1 hr",  hint:"Median weekday reply", tone:"warning"}
+], "center")`,
+      Tile: `root = Grid([
+  Tile("Total contacts",   "users",                  "2,481", "+128 this week",            "primary"),
+  Tile("Active deals",     "briefcase",              "47",    "$418k ARR pipeline",        "info"),
+  Tile("At-risk accounts", "triangle-exclamation",   "12",    "Needs follow-up this week", "warning"),
+  Tile("Champions",        "trophy",                 "63",    "NPS 9–10 in last 30d",      "success")
+], 4, "m")`,
+      Progress: `root = Stack([
+  Progress(72,   100, "Upload progress", "primary", false, true),
+  Progress(40,   100, "Quota used",      "warning", false, true),
+  Progress(null, null, "Loading…",       "info",    true)
+])`,
+      ProgressRing: `root = Stack([
+  ProgressRing(72,  100, null,           "In stock", "success"),
+  ProgressRing(28,  100, null,           "Backlog",  "warning"),
+  ProgressRing(100, 100, "circle-check", "Shipped",  "primary")
+], "row", "l", "center")`,
+      Pagination: `$page = 3
+root = Pagination($page, 10, 1)`,
+      Tree: `root = Tree([
+  TreeNode("src", [
+    TreeNode("library", [
+      TreeNode("components.ts", null, "file-code"),
+      TreeNode("registry.ts",   null, "file-code")
+    ], "folder-open", true, false, "2"),
+    TreeNode("index.ts", null, "file-code")
+  ], "folder-open", true),
+  TreeNode("README.md", null, "file-lines")
+])`,
+      TreeNode: `root = Tree([
+  TreeNode("src", [
+    TreeNode("index.ts", null, "file-code"),
+    TreeNode("app.ts",   null, "file-code")
+  ], "folder-open", true),
+  TreeNode("README.md", null, "file-lines")
+])`,
+
+      // Charts
+      BarChart: `root = BarChart(
+  ["Q1", "Q2", "Q3", "Q4"],
+  [Series("Sales", [120, 180, 160, 210]), Series("Refunds", [12, 14, 9, 18])],
+  "Quarterly sales"
+)`,
+      LineChart: `root = LineChart(
+  ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  [Series("Visits", [120, 180, 160, 210, 250]), Series("Signups", [12, 18, 15, 22, 28])]
+)`,
+      PieChart: `root = PieChart(["Free", "Pro", "Team"], [240, 95, 32], "Plan mix")`,
+      Series: `root = BarChart(
+  ["Mon", "Tue", "Wed", "Thu"],
+  [Series("Visits", [120, 180, 160, 210]), Series("Signups", [12, 18, 15, 22])]
+)`,
+
+      // Feedback & Media
+      Avatar: `root = Stack([
+  Avatar("Ada Lovelace",   "https://i.pravatar.cc/64?img=47", "sm", "online"),
+  Avatar("Linus Torvalds", "https://i.pravatar.cc/64?img=11", "md", "busy"),
+  Avatar("Grace Hopper",   null,                              "lg")
+], "row", "m", "center")`,
+      AvatarGroup: `root = AvatarGroup([
+  {name: "Ada",   src: "https://i.pravatar.cc/64?img=47"},
+  {name: "Linus", src: "https://i.pravatar.cc/64?img=11"},
+  {name: "Grace", src: "https://i.pravatar.cc/64?img=32"},
+  {name: "Alan"},
+  {name: "Mei"}
+], 3, "md")`,
+      PersonChip: `root = Stack([
+  PersonChip("Naomi Rivers", "VP Engineering",     "https://i.pravatar.cc/64?img=47", "md", "online"),
+  PersonChip("Marc Lee",     "Head of Data",       "https://i.pravatar.cc/64?img=11", "md", "busy"),
+  PersonChip("Grace Hopper", "Founder · Atlasworks",null,                             "md", "online")
+])`,
+      Tooltip: `root = Stack([
+  TextContent("Hover or focus the button to reveal the tooltip.", "small", "muted"),
+  Tooltip("Tooltip on top", Button("Hover me"), "top")
+])`,
+      HoverCard: `root = Stack([
+  TextContent("Hover or focus to reveal the rich card.", "small", "muted"),
+  HoverCard(
+    Button("Preview Ada"),
+    [
+      Stack([Avatar("Ada Lovelace", "https://i.pravatar.cc/64?img=47", "md"),
+             Stack([TextContent("Ada Lovelace", "body-heavy"), TextContent("Mathematician · 1843", "small", "muted")])],
+            "row", "s", "center", "start"),
+      TextContent("Wrote the first algorithm intended to be processed by a machine.")
+    ],
+    "bottom"
+  )
+])`,
+      Popover: `root = Stack([
+  TextContent("Click the trigger to open the popover.", "small", "muted"),
+  Popover(
+    Button("Open popover"),
+    [
+      TextContent("Rich content inside the popover."),
+      Buttons([
+        Button("Cancel",  null, "ghost",   "button", "small"),
+        Button("Confirm", null, "primary", "button", "small")
+      ])
+    ],
+    "Popover title",
+    "bottom",
+    "start",
+    "280px"
+  )
+])`,
+      Rating: `root = Stack([
+  Rating(4.5, 5, "4.5 of 5", 1284, "md"),
+  Rating(5,   5, null,       null, "sm"),
+  Rating(3,   5, "3 stars",  42,   "lg")
+])`,
+      Toast: `root = Toast(
+  "Changes saved",
+  "Your draft was synced across all devices.",
+  "success",
+  "circle-check"
+)`,
+      Toasts: `root = Toasts([
+  Toast("Changes saved", "Your draft was synced.",            "success", "circle-check"),
+  Toast("Heads up",      "Two reviewers were notified.",      "info",    "circle-info"),
+  Toast("Couldn't save", "Edits queued — retrying.",          "warning", "triangle-exclamation")
+], "top-right")`,
+
+      // Navigation
+      Breadcrumb: `root = Breadcrumb([
+  BreadcrumbItem("Home",        "#", "house"),
+  BreadcrumbItem("Workspace",   "#"),
+  BreadcrumbItem("Engineering")
+])`,
+      BreadcrumbItem: `root = Breadcrumb([
+  BreadcrumbItem("Home",      "#", "house"),
+  BreadcrumbItem("Reports",   "#"),
+  BreadcrumbItem("Q3 results")
+])`,
+      Navbar: `root = Navbar(
+  "Acme",
+  [
+    NavbarItem("Home",    "/",        "house", true),
+    NavbarItem("Docs",    "/docs",    "book"),
+    NavbarItem("Pricing", "/pricing", "tag")
+  ],
+  [
+    Button("Sign in",     null, "ghost"),
+    Button("Get started", null, "primary")
+  ],
+  false,
+  "default"
+)`,
+      NavbarItem: `root = Navbar(
+  "Acme",
+  [
+    NavbarItem("Home", "/",     "house", true),
+    NavbarItem("Docs", "/docs", "book"),
+    NavbarItem("Blog", "/blog", "newspaper")
+  ]
+)`,
+
+      // Menus
+      DropdownMenu: `root = Stack([
+  TextContent("Click the trigger to open the menu.", "small", "muted"),
+  DropdownMenu(
+    Button("Open menu"),
+    [
+      MenuLabel("Account"),
+      MenuItem("Profile",  Action([@ToAssistant("Open profile")]),  "user"),
+      MenuItem("Settings", Action([@ToAssistant("Open settings")]), "gear",     "⌘,"),
+      MenuSeparator(),
+      MenuLabel("Workspace"),
+      MenuItem("Invite teammates", Action([@ToAssistant("Open invite")]), "user-plus"),
+      MenuSeparator(),
+      MenuItem("Sign out", Action([@ToAssistant("Sign out")]), "right-from-bracket", null, "danger")
+    ],
+    "bottom",
+    "start"
+  )
+])`,
+      MenuItem: `root = Stack([
+  MenuItem("Profile",   null, "user",     "⌘P"),
+  MenuItem("Settings",  null, "gear",     "⌘,"),
+  MenuItem("Sign out",  null, "right-from-bracket", null, "danger")
+])`,
+      MenuSeparator: `root = DropdownMenu(
+  Button("Open menu"),
+  [
+    MenuItem("Profile",   null, "user"),
+    MenuItem("Settings",  null, "gear"),
+    MenuSeparator(),
+    MenuItem("Sign out",  null, "right-from-bracket", null, "danger")
+  ]
+)`,
+      MenuLabel: `root = DropdownMenu(
+  Button("Open menu"),
+  [
+    MenuLabel("Account"),
+    MenuItem("Profile",  null, "user"),
+    MenuItem("Settings", null, "gear"),
+    MenuSeparator(),
+    MenuLabel("Workspace"),
+    MenuItem("Invite",   null, "user-plus")
+  ]
+)`,
+
+      // Chat
+      SectionBlock: `root = SectionBlock(
+  "Section block",
+  [TextContent("Body content lives inside the SectionBlock.")],
+  "Optional description shown beneath the title."
+)`,
+      ListBlock: `root = ListBlock([
+  "First step",
+  "Second step",
+  "Third step"
+])`,
+      FollowUpBlock: `root = FollowUpBlock([
+  FollowUpItem("Show me a chart"),
+  FollowUpItem("Add a filter"),
+  FollowUpItem("Export as CSV")
+])`,
+      FollowUpItem: `root = FollowUpBlock([
+  FollowUpItem("Show at-risk projects"),
+  FollowUpItem("Compare to last quarter"),
+  FollowUpItem("Open billing")
+])`,
+      ActionLink: `root = Stack([
+  TextContent("Need help?", "body"),
+  ActionLink("Contact support", Action([@ToAssistant("Open support chat")]))
+])`,
+      ChatBubble: `root = Stack([
+  ChatBubble("Support",
+             "Hi! Tracking shows your package landed in the local hub this morning.",
+             "9:12 AM", null, "agent", "delivered"),
+  ChatBubble("You",
+             "Perfect — I can wait. Thank you!",
+             "9:15 AM", null, "me", "read")
+])`,
+
+      // Patterns
+      Hero: `root = Hero(
+  "Ship faster",
+  "From idea to production in minutes.",
+  Button("Get started", Action([@ToAssistant("Get started")]), "primary"),
+  Button("Live demo",   null, "ghost"),
+  "v2 launch",
+  ["No credit card", "Cancel anytime", "Free for 14 days"]
+)`,
+      Cover: `root = Cover(
+  "Build the future of generative UI",
+  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
+  "From a single LLM prompt to a streaming UI in 90 seconds.",
+  "Spring release",
+  "Cancel anytime · no credit card required",
+  [Button("Get started", null, "primary"), Button("Watch the demo", null, "ghost")],
+  "primary",
+  "260px"
+)`,
+      PageHeader: `root = PageHeader(
+  "Engineering Q3",
+  "12 active · 4 at risk",
+  ["Workspace", "Engineering"],
+  [Button("Export", null, "secondary"), Button("New project", null, "primary")],
+  Badge("On track", "success")
+)`,
+      SectionHeader: `root = Card([
+  SectionHeader(
+    "Daily traffic",
+    "Visits vs signups",
+    "ANALYTICS",
+    Tag("On track", null, "sm", "success"),
+    [Button("View all", null, "ghost", "button", "small")]
+  ),
+  TextContent("Section body content lives below the header.")
+])`,
+      MetricGrid: `root = MetricGrid([
+  StatCard("Active",  "12",   "flat"),
+  StatCard("At risk", "4",    "up",   "+2"),
+  StatCard("Shipped", "8",    "up",   "+3"),
+  StatCard("On-time", "87%",  "down", "-3%")
+])`,
+      Toolbar: `$range = "q3"
+root = Toolbar(
+  [FormControl("Range", Select("range", [
+    SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")
+  ], null, null, $range))],
+  [StatusDot("Live", "success", true),
+   Button("New", null, "primary", "button", "small")]
+)`,
+      EmptyState: `root = EmptyState(
+  "No results found",
+  "Try a different search or clear the active filters.",
+  "magnifying-glass",
+  Button("Clear filters", null, "primary")
+)`,
+      Timeline: `root = Timeline([
+  TimelineItem("Ada merged PR #248",   "5m ago",  "Patterns ready for review",   "code-pull-request",     "primary"),
+  TimelineItem("QA caught regression", "1h ago",  "Quota dashboard double-count","triangle-exclamation",  "warning"),
+  TimelineItem("Tokenizer 2.1 shipped","Yesterday","Latency -14%",               "circle-check",          "success")
+])`,
+      TimelineItem: `root = Timeline([
+  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components.",          "rocket",  "success"),
+  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed dashboard wireframes.",  "palette", "primary"),
+  TimelineItem("Profile updated",      "3 days ago", "",                                "pen")
+])`,
+      FeatureGrid: `root = FeatureGrid([
+  FeatureItem("Streaming-first", "Parse and render token-by-token.",            "bolt",         "primary"),
+  FeatureItem("Themeable",       "Seven built-in themes, custom tokens too.",   "palette",      "success"),
+  FeatureItem("Framework-free",  "One web component, any host stack.",          "puzzle-piece", "info")
+])`,
+      FeatureItem: `root = FeatureGrid([
+  FeatureItem("Fast",    "Streams token-by-token.", "bolt",     "primary"),
+  FeatureItem("Themed",  "Seven themes, any tokens.","palette", "success"),
+  FeatureItem("Portable","One web component.",       "puzzle-piece", "info")
+])`,
+      MediaCard: `root = MediaCard(
+  "Aurora Headphones",
+  "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&q=80",
+  "Studio-grade sound, 40-hour battery.",
+  ["wireless", "ANC"],
+  "$249 · 4.8 stars",
+  [Button("Add to cart", null, "primary"), Button("Details", null, "ghost")],
+  "New"
+)`,
+      Testimonial: `root = Testimonial(
+  "Streaming UI Script saved us weeks of glue code.",
+  "Naomi Rivers",
+  "VP Engineering · Looplog",
+  "https://i.pravatar.cc/64?img=47",
+  5
+)`,
+      ProfileCard: `root = ProfileCard(
+  "Alex Rivera",
+  "Product Designer",
+  "https://i.pravatar.cc/64?img=12",
+  "Designs the future of generative UI at Acme.",
+  ["design", "ux", "typography"],
+  [Button("Follow", null, "primary", "button", "small"),
+   Button("Resume", null, "ghost",   "button", "small")]
+)`,
+      Comment: `root = Stack([
+  Comment("Ada Lovelace",
+          "Loving the new patterns API — it's much cleaner.",
+          "2h ago",
+          "https://i.pravatar.cc/64?img=47",
+          [Button("Reply", null, "ghost", "button", "small"),
+           Button("Like",  null, "ghost", "button", "small")]),
+  Comment("Linus Torvalds",
+          "+1, especially the PageHeader composite.",
+          "1h ago",
+          "https://i.pravatar.cc/64?img=11")
+])`,
+      Banner: `root = Banner(
+  "Spring release",
+  "Streaming UI v2.4 ships with 20 new components.",
+  Button("See what's new", null, "primary"),
+  "sparkles",
+  "primary"
+)`,
+      Notification: `root = Stack([
+  Notification("Stripe receipt",
+               "Receipt for Pro plan — $29.00 charged today.",
+               "10:24 AM", null,
+               "https://i.pravatar.cc/64?img=12",
+               "primary", true,
+               [Button("Open", null, "ghost", "button", "small")]),
+  Notification("GitHub digest",
+               "12 new pull requests waiting for review.",
+               "Yesterday", "code-branch", null,
+               "info", false,
+               [Button("Open", null, "ghost", "button", "small")])
+])`,
+      KanbanBoard: `root = KanbanBoard([
+  KanbanColumn("To do",  [KanbanCard("Migrate auth", "Roll out the new SDK.",  ["auth"],    "Asha")]),
+  KanbanColumn("Doing",  [KanbanCard("Streaming UI v2","20 new components.",   ["frontend"],"Alex", "primary")]),
+  KanbanColumn("Review", [KanbanCard("Mobile onboarding","Awaiting design.",   ["mobile"],  "Wren", "warning")]),
+  KanbanColumn("Done",   [KanbanCard("Activity timeline","Shipped to 100%.",   ["shipped"], "Mira", "success")])
+])`,
+      KanbanColumn: `root = KanbanBoard([
+  KanbanColumn("To do", [KanbanCard("Spec API",    "Outline endpoints.")]),
+  KanbanColumn("Doing", [KanbanCard("Build router","Routes + NavLink.", null, "Alex", "primary")]),
+  KanbanColumn("Done",  [KanbanCard("Hello world", "First render.",     null, "Ada",  "success")])
+])`,
+      KanbanCard: `root = KanbanBoard([
+  KanbanColumn("Doing", [
+    KanbanCard("Migrate auth",   "Roll out the new SDK.", ["auth"],     "Asha"),
+    KanbanCard("Streaming UI v2","20 new components.",    ["frontend"], "Alex", "primary")
+  ])
+])`,
+      DescriptionList: `root = DescriptionList([
+  DescriptionItem("Team",     "Design Systems",       "users"),
+  DescriptionItem("Manager",  "Margaret Hamilton"),
+  DescriptionItem("Location", "Berlin, DE",           "location-dot"),
+  DescriptionItem("Joined",   "Mar 2022"),
+  DescriptionItem("Status",   Tag("Active", null, "sm", "success"))
+], 2)`,
+      DescriptionItem: `root = DescriptionList([
+  DescriptionItem("Plan",   "Pro",       "rocket"),
+  DescriptionItem("Seats",  "12 / 25"),
+  DescriptionItem("Status", Tag("Active", null, "sm", "success"))
+], 1)`,
+      StatusDot: `root = Stack([
+  StatusDot("API",       "success"),
+  StatusDot("Database",  "success"),
+  StatusDot("Webhooks",  "warning"),
+  StatusDot("Streaming", "success", true)
+], "row", "m", "center")`,
+      PricingTable: `root = PricingTable([
+  PricingCard("Starter", "$0",  "/mo", "For hobby projects.",
+    ["1 workspace", "Community support", "1 GB storage"],
+    Button("Get started", null, "secondary"),
+    null, false),
+  PricingCard("Pro", "$29", "/mo", "For teams shipping LLM features.",
+    ["Unlimited workspaces", "Priority support", "100 GB storage", "SOC2 audit logs"],
+    Button("Start trial", null, "primary"),
+    "Most popular", true),
+  PricingCard("Scale", "Talk to us", null, "Custom requirements.",
+    ["SSO + SCIM", "99.99% SLA", "On-prem available"],
+    Button("Contact sales", null, "ghost"),
+    null, false)
+])`,
+      PricingCard: `root = PricingCard(
+  "Pro", "$29", "/mo",
+  "For teams shipping LLM features in production.",
+  ["Unlimited workspaces", "Priority support", "100 GB storage"],
+  Button("Start free trial", null, "primary"),
+  "Most popular",
+  true
+)`,
+
+      // App shell
+      AppShell: `nav = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview", "house",    true),
+    SidebarItem("Projects", "folder",   false, "12"),
+    SidebarItem("Calendar", "calendar")
+  ])
+], "Acme HQ", "Production · v2.3")
+topbar = [StatusDot("Live", "success", true)]
+content = [
+  PageHeader("Overview", "Everything happening across your workspace",
+    null,
+    [Button("New project", null, "primary")]),
+  MetricGrid([
+    StatCard("MRR",      "$48.2k", "up", "+12%"),
+    StatCard("Users",    "2,184",  "up", "+184"),
+    StatCard("Tickets",  "23",     "down","-9")
+  ])
+]
+root = AppShell(nav, content, topbar)`,
+      Sidebar: `root = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview", "house",    true),
+    SidebarItem("Projects", "folder",   false, "12"),
+    SidebarItem("Calendar", "calendar"),
+    SidebarItem("Messages", "comments", false, "3")
+  ]),
+  SidebarSection("Insights", [
+    SidebarItem("Analytics","chart-pie"),
+    SidebarItem("Reports",  "chart-line"),
+    SidebarItem("Billing",  "credit-card")
+  ])
+], "Acme HQ", "Production · v2.3")`,
+      SidebarSection: `root = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Overview", "house",  true),
+    SidebarItem("Projects", "folder", false, "12")
+  ]),
+  SidebarSection("Insights", [
+    SidebarItem("Analytics","chart-pie"),
+    SidebarItem("Reports",  "chart-line")
+  ])
+])`,
+      SidebarItem: `root = Sidebar([
+  SidebarItem("Overview", "house",  true),
+  SidebarItem("Projects", "folder", false, "12"),
+  SidebarItem("Calendar", "calendar")
+])`,
+      SplitView: `primary = Card([
+  CardHeader("Inbox", "3 messages"),
+  List([
+    ListItem("Ada Lovelace",   "Welcome to the team",   "envelope"),
+    ListItem("Linus Torvalds", "Re: perf review",       "envelope"),
+    ListItem("Grace Hopper",   "Q3 planning thoughts",  "envelope")
+  ])
+])
+detail = Card([
+  CardHeader("Welcome to the team", "From Ada Lovelace · 10:24 AM"),
+  TextContent("Hi! Glad you joined. Here's the onboarding checklist and a few quick wins to get you up to speed.")
+])
+root = SplitView([primary], [detail], "280px")`,
+
+      // Scripting
+      Script: `root = Stack([
+  TextContent("Script() is a behaviour-only node — it renders nothing visible.", "small", "muted"),
+  TextContent("Open the browser console to see the log.", "small", "muted"),
+  Script("demo", "console.log('Streaming UI Script — Script() ran on mount');", [])
+])`,
+
+      // Routing
+      Routes: `homePage  = Card([CardHeader("Home"),  TextContent("Default route content.")])
+aboutPage = Card([CardHeader("About"), TextContent("About-page content.")])
+notFound  = Card([CardHeader("Not found"), TextContent("No matching route.")])
+nav = Stack([
+  NavLink("Home",  "/",     "ghost", true),
+  NavLink("About", "/about","ghost"),
+  NavLink("404",   "/oops", "ghost")
+], "row", "s")
+main = Routes([
+  Route("/",      homePage),
+  Route("/about", aboutPage),
+  Route("*",      notFound)
+], "/")
+root = Stack([nav, main])`,
+      Route: `homePage = Card([CardHeader("Home page")])
+docsPage = Card([CardHeader("Docs page")])
+root = Routes([
+  Route("/",     homePage),
+  Route("/docs", docsPage)
+], "/")`,
+      NavLink: `root = Stack([
+  NavLink("Home",    "/",        "ghost",   true,  "house"),
+  NavLink("Docs",    "/docs",    "ghost",   false, "book"),
+  NavLink("Pricing", "/pricing", "primary", false, "tag")
+], "row", "s", "center")`,
+    };
+
+    /**
+     * Components whose previews render `position: fixed` overlays inside the
+     * shadow root (Modal, Sheet, Toasts). The preview output gets a min-height
+     * so the overlay has room to display, and the `transform: translate(0)`
+     * trick on the output container scopes the fixed positioning to that
+     * box instead of the viewport.
+     */
+    const OVERLAY_PREVIEW = new Set(["Modal", "Sheet", "Toasts"]);
+
     function formatSignature(spec) {
       const params = spec.props
         .map((p) => `${p.name}${p.optional ? "?" : ""}: ${formatType(p)}`)
@@ -265,6 +1157,92 @@ el.registerComponents([ProductCard]);</code></pre>
         return prop.enum.map((v) => `"${v}"`).join(" | ");
       }
       return prop.type;
+    }
+
+    function renderPreviewBlock(spec) {
+      const source = SAMPLES[spec.name];
+      const wrap = document.createElement("div");
+      wrap.className = "component-preview";
+
+      if (!source) {
+        // No sample registered — show a friendly note instead of an empty
+        // preview frame, so the gap is obvious and easy to fix later.
+        const empty = document.createElement("div");
+        empty.className = "component-preview-empty";
+        empty.textContent =
+          "No live preview is registered for this component yet. " +
+          "See the signature below for usage.";
+        wrap.appendChild(empty);
+        return wrap;
+      }
+
+      const tabs = document.createElement("div");
+      tabs.className = "component-preview-tabs";
+      tabs.setAttribute("role", "tablist");
+
+      const previewTab = document.createElement("button");
+      previewTab.className = "component-preview-tab";
+      previewTab.type = "button";
+      previewTab.setAttribute("data-target", "preview");
+      previewTab.setAttribute("aria-selected", "true");
+      previewTab.textContent = "Preview";
+
+      const sourceTab = document.createElement("button");
+      sourceTab.className = "component-preview-tab";
+      sourceTab.type = "button";
+      sourceTab.setAttribute("data-target", "source");
+      sourceTab.setAttribute("aria-selected", "false");
+      sourceTab.textContent = "Source";
+
+      tabs.append(previewTab, sourceTab);
+      wrap.appendChild(tabs);
+
+      const previewPanel = document.createElement("div");
+      previewPanel.className = "component-preview-panel";
+      previewPanel.setAttribute("data-key", "preview");
+      previewPanel.setAttribute("data-active", "true");
+
+      const output = document.createElement("div");
+      output.className = "component-preview-output";
+      if (OVERLAY_PREVIEW.has(spec.name)) {
+        output.setAttribute("data-overlay", "true");
+      }
+
+      const renderer = document.createElement("streaming-ui-script");
+      renderer.setAttribute("theme", "light");
+      // Cache the source on a data attribute so we can drive `setResponse`
+      // in one pass after the entire tree is appended, instead of triggering
+      // a render per card mid-build.
+      renderer.dataset.source = source;
+      output.appendChild(renderer);
+      previewPanel.appendChild(output);
+      wrap.appendChild(previewPanel);
+
+      const sourcePanel = document.createElement("div");
+      sourcePanel.className = "component-preview-panel";
+      sourcePanel.setAttribute("data-key", "source");
+      sourcePanel.setAttribute("data-active", "false");
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = source;
+      pre.appendChild(code);
+      sourcePanel.appendChild(pre);
+      wrap.appendChild(sourcePanel);
+
+      const panels = [previewPanel, sourcePanel];
+      const tabButtons = [previewTab, sourceTab];
+      const activate = (target) => {
+        for (const t of tabButtons) {
+          t.setAttribute("aria-selected", t.getAttribute("data-target") === target ? "true" : "false");
+        }
+        for (const p of panels) {
+          p.setAttribute("data-active", p.getAttribute("data-key") === target ? "true" : "false");
+        }
+      };
+      previewTab.addEventListener("click", () => activate("preview"));
+      sourceTab.addEventListener("click", () => activate("source"));
+
+      return wrap;
     }
 
     function renderComponentCard(spec) {
@@ -355,6 +1333,8 @@ el.registerComponents([ProductCard]);</code></pre>
 
       tableScroll.appendChild(table);
       card.appendChild(tableScroll);
+
+      card.appendChild(renderPreviewBlock(spec));
       return card;
     }
 
@@ -391,6 +1371,32 @@ el.registerComponents([ProductCard]);</code></pre>
       }
     }
 
+    function hydratePreviews() {
+      // Activate every preview renderer in one pass after all cards exist.
+      // Doing it post-mount avoids a re-render storm during card construction,
+      // and `requestAnimationFrame` keeps the first paint snappy even on
+      // pages with 100+ components.
+      const renderers = root.querySelectorAll(
+        "streaming-ui-script[data-source]",
+      );
+      const apply = () => {
+        for (const node of renderers) {
+          const text = node.dataset.source ?? "";
+          if (!text) continue;
+          try {
+            node.setResponse(text);
+          } catch (err) {
+            console.warn(`[components] Failed to render preview for`, node, err);
+          }
+        }
+      };
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(apply);
+      } else {
+        apply();
+      }
+    }
+
     function render() {
       const byName = new Map(defaultLibrary.components.map((c) => [c.name, c]));
       root.replaceChildren();
@@ -406,6 +1412,8 @@ el.registerComponents([ProductCard]);</code></pre>
       if (ungrouped.length > 0) {
         renderGroup({ name: "Other", components: ungrouped.map((c) => c.name) }, byName, root);
       }
+
+      hydratePreviews();
     }
 
     render();

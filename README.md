@@ -522,7 +522,7 @@ CDN.
 | `get-started.html`                  | Step-by-step integration walkthrough.                                                   |
 | `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
 | `language.html`                     | Full Streaming UI Script language reference.                                            |
-| `components.html`                   | Every built-in component with positional signatures, prop tables, and enum values.      |
+| `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `javascript-interactions.html`      | `Script(...)` + `@Js(...)` guide — always available at runtime.                         |
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio (formerly `theme-customization.html`, now redirected). |
