@@ -159,6 +159,15 @@ function getSavedDocTheme() {
 
 function applyDocTheme(theme) {
   document.documentElement.setAttribute("data-doc-theme", theme);
+  setTimeout(() => {
+    document.querySelectorAll("streaming-ui-script").forEach((script) => {
+      script.setAttribute("theme", theme);
+    });
+    // example-output
+    document.querySelectorAll(".example-output").forEach((output) => {
+      output.style.background = theme === "light" ? "white" : "black";
+    });
+  }, 500);
   try { localStorage.setItem("doc-theme", theme); } catch { /* ignore */ }
 }
 
