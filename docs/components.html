@@ -10,8 +10,8 @@
       try {
         var saved = localStorage.getItem('doc-theme');
         var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-doc-theme', theme);
+        window.theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', window.theme);
       } catch (_) {}
     })();
   </script>
@@ -1209,7 +1209,7 @@ root = Routes([
       }
 
       const renderer = document.createElement("streaming-ui-script");
-      renderer.setAttribute("theme", "light");
+      renderer.setAttribute("theme", window.theme);
       // Cache the source on a data attribute so we can drive `setResponse`
       // in one pass after the entire tree is appended, instead of triggering
       // a render per card mid-build.
