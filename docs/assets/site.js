@@ -43,6 +43,7 @@ const NAV_GROUPS = [
   {
     label: "Advanced",
     items: [
+      { href: "actions.html", label: "Actions" },
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "routing.html", label: "Routing" },
     ],
@@ -67,7 +68,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "javascript-interactions.html", "routing.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "actions.html", "javascript-interactions.html", "routing.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-customization.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -88,6 +89,7 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "language.html": "syntax expressions state queries mutations builtins",
   "components.html": "props library catalog signatures",
+  "actions.html": "action @set @reset @run @toassistant @openurl @navigate @js button click",
   "javascript-interactions.html": "script @js useeffect hooks",
   "routing.html": "routes navlink navigate hash router",
   "themes.html": "built-in themes light dark neon pastel glass brutalist skyline",

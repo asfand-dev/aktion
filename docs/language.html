@@ -29,6 +29,7 @@
         <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
+        <a href="actions.html">Actions</a>
         <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="routing.html">Routing</a>
         <a href="themes.html">Theming</a>
@@ -129,7 +130,7 @@ data = Query("usage", {days: $days}, {rows: []})</code></pre>
           <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>@Concat(a, b)</code></td></tr>
           <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> is local to <code>template</code></td></tr>
           <tr><td>Array shortcuts</td><td><code>$rows.length</code>, <code>$rows.first</code>, <code>$rows.last</code>, <code>$rows.field</code> (pluck)</td></tr>
-          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url"), @Navigate("/path")</code></td></tr>
+          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url"), @Navigate("/path"), @Js(body, args?)</code> — see the dedicated <a href="actions.html">Actions guide</a>.</td></tr>
         </tbody>
       </table>
 

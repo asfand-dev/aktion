@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Actions · streaming-ui-script</title>
+  <meta name="description" content="Action([...]) — wire button clicks, form submits, and follow-ups to reactive state, queries, mutations, navigation, URLs, and JavaScript." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <style>
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 18px 0 28px;
+    }
+    .actions-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      background: var(--doc-surface);
+      box-shadow: var(--doc-shadow);
+    }
+    .actions-card-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--doc-text);
+    }
+    .actions-card-desc {
+      font-size: 12.5px;
+      color: var(--doc-text-muted);
+      line-height: 1.45;
+    }
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      font-size: 13.5px;
+    }
+    .api-table th,
+    .api-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--doc-border);
+      vertical-align: top;
+    }
+    .api-table th {
+      background: rgba(99, 102, 241, 0.06);
+      font-weight: 700;
+      color: var(--doc-text);
+    }
+    .api-table code {
+      font-size: 12.5px;
+    }
+    .demo-row {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    @media (max-width: 880px) {
+      .demo-row { grid-template-columns: 1fr; }
+    }
+    .demo-source {
+      margin: 0;
+      max-height: 420px;
+      overflow: auto;
+    }
+    .demo-preview {
+      background: var(--doc-bg);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius);
+      padding: 16px;
+      min-height: 220px;
+    }
+    .callout--warn {
+      border: 1px solid rgba(234, 179, 8, 0.45);
+      background: rgba(234, 179, 8, 0.10);
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="actions">
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>streaming-ui-script</h1>
+      <p>Web component runtime for Streaming UI Script</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="actions.html" aria-current="page">Actions</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        <a href="routing.html">Routing</a>
+        <a href="themes.html">Theming</a>
+        <a href="theme-customization.html">Theme customization</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+        <a href="live-examples.html">Live examples</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Built-in</span>
+        <h1>Actions.</h1>
+        <p class="lead">
+          Every interactive control in Streaming UI Script &mdash; buttons,
+          follow-ups, sidebar items, even keyboard shortcuts &mdash; runs an
+          <code>Action([...])</code> payload. Actions are the bridge between
+          the rendered UI and the reactive runtime: they write state, run
+          queries and mutations, navigate, fire follow-ups, open URLs, and
+          (when needed) execute JavaScript.
+        </p>
+      </header>
+
+      <div class="actions-grid">
+        <div class="actions-card">
+          <div class="actions-card-title"><code>Action([@step, @step, &hellip;])</code></div>
+          <p class="actions-card-desc">
+            Sequential step list. Steps execute in order; a failing step
+            short-circuits the rest. Always at least one step.
+          </p>
+        </div>
+        <div class="actions-card">
+          <div class="actions-card-title">Where it goes</div>
+          <p class="actions-card-desc">
+            Drop into <code>Button</code>, <code>NavbarItem</code>,
+            <code>SidebarItem</code>, <code>FollowUpItem</code>,
+            <code>Form</code> submit, and any other prop that takes
+            <code>action</code>.
+          </p>
+        </div>
+        <div class="actions-card">
+          <div class="actions-card-title">Always declarative first</div>
+          <p class="actions-card-desc">
+            Reach for <code>@Set</code> + <code>@Push</code> /
+            <code>@Filter</code> / <code>@Sort</code> before
+            <code>@Js</code>. Most "imperative" UI is a pure data transform.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <h4>Actions are part of the runtime</h4>
+        <p>
+          Every <code>&lt;streaming-ui-script&gt;</code> renderer wires up
+          actions automatically &mdash; no attribute to flip. The default
+          ("full") system prompt teaches the model the entire step menu;
+          the chat-flavoured prompt
+          (<code>getSystemPrompt({ mode: "chat" })</code>) keeps a
+          minimal subset (<code>@ToAssistant</code>, <code>@OpenUrl</code>)
+          for purely conversational replies.
+        </p>
+      </div>
+
+      <h2>1. The full step menu</h2>
+      <p>
+        Seven action steps cover every interaction shape the LLM should
+        reach for. Steps are <code>@</code>-prefixed marker calls that the
+        runtime interprets at click time &mdash; they are <strong>not</strong>
+        evaluated when their containing component renders.
+      </p>
+      <table class="api-table">
+        <thead>
+          <tr><th>Step</th><th>Effect</th><th>Use for</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@Set($name, value)</code></td>
+            <td>Write <code>$name = value</code>. <code>value</code> is
+              evaluated at click time, so it can read other state freely.</td>
+            <td>Local UI state &mdash; toggles, drafts, filters, selected ids,
+              modal open/close.</td>
+          </tr>
+          <tr>
+            <td><code>@Reset($a, $b, &hellip;)</code></td>
+            <td>Reset each named state to its declared default
+              (<code>$x = 0</code> means <code>@Reset($x)</code> &rarr; <code>0</code>).</td>
+            <td>Form clear, modal close + reset draft, "back to defaults".</td>
+          </tr>
+          <tr>
+            <td><code>@Run(ref)</code></td>
+            <td>Execute a <code>Query</code> or <code>Mutation</code> by
+              name. <strong>Awaited</strong> before the next step.</td>
+            <td>Save a record, refresh a list, kick off a poll.</td>
+          </tr>
+          <tr>
+            <td><code>@ToAssistant("text")</code></td>
+            <td>Fire an <code>assistant-message</code> CustomEvent with
+              <code>{ message: "text" }</code>. Host pages typically forward
+              the message back to the LLM.</td>
+            <td>Follow-up prompts, "ask the assistant" buttons, chat replies.</td>
+          </tr>
+          <tr>
+            <td><code>@OpenUrl("https://&hellip;")</code></td>
+            <td>Open a URL in a new tab (sanitised; <code>noopener,noreferrer</code>).
+              Override via <code>onOpenUrl</code> on the host element.</td>
+            <td>External links from buttons, "open docs", "view on GitHub".</td>
+          </tr>
+          <tr>
+            <td><code>@Navigate("/path")</code></td>
+            <td>Push a new hash path through the built-in router. Updates
+              <code>window.location.hash</code>; back/forward keeps working.</td>
+            <td>In-app navigation after a save, "back" buttons, programmatic
+              redirects. See the
+              <a href="routing.html">routing guide</a>.</td>
+          </tr>
+          <tr>
+            <td><code>@Js(body, args?)</code></td>
+            <td>Run an arbitrary JavaScript body. The optional
+              <code>args</code> object is captured at render time and exposed
+              inside the body as <code>ctx.args</code>.</td>
+            <td>One-off side effects (clipboard, focus, audio, animations) and
+              per-row click handlers inside <code>@Each(&hellip;)</code>. See
+              the <a href="javascript-interactions.html">JavaScript guide</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>2. Quick start: a one-step action</h2>
+      <p>
+        The simplest button: write a single state variable on click. Notice
+        that <code>$open</code> is <em>read</em> by the modal expression,
+        <em>written</em> by the action, and the runtime keeps both in sync
+        without any glue code.
+      </p>
+      <div class="demo-row">
+<pre class="demo-source"><code>$open = false
+
+openBtn  = Button("Open dialog", Action([@Set($open, true)]),  "primary")
+closeBtn = Button("Close",       Action([@Set($open, false)]), "ghost")
+
+dialog = Modal("Quick action", $open, [
+  TextContent("Click anywhere outside or press Esc to close."),
+  closeBtn
+])
+
+root = Stack([openBtn, dialog])</code></pre>
+        <div class="demo-preview">
+          <streaming-ui-script
+            id="demo-actions-toggle"
+            theme="light"
+            transparent
+          ></streaming-ui-script>
+        </div>
+      </div>
+
+      <h2>3. Multi-step actions (the real value)</h2>
+      <p>
+        Steps execute sequentially. Combine them to express a full
+        interaction in one statement &mdash; save, then close the modal,
+        then notify the assistant:
+      </p>
+<pre><code>$editing = false
+
+saveBtn = Button("Save & close", Action([
+  @Run(saveMutation),
+  @Set($editing, false),
+  @ToAssistant("Profile saved.")
+]), "primary")</code></pre>
+      <p>
+        Order matters. <code>@Run(saveMutation)</code> is awaited before
+        <code>@Set($editing, false)</code> fires, so the modal stays open
+        while the save is in flight (a spinner state can read the
+        <code>inFlight</code> flag from the mutation).
+      </p>
+
+      <div class="callout">
+        <h4>Failing steps short-circuit</h4>
+        <p>
+          If <code>@Run</code> rejects, the rest of the action is skipped
+          and the error is logged. Use this to your advantage: put the
+          mutation first, then optimistic state writes after &mdash; if the
+          server rejects the change, the UI doesn't lie.
+        </p>
+      </div>
+
+      <h2>4. Default action: send the label to the assistant</h2>
+      <p>
+        Buttons and follow-up items without an explicit
+        <code>Action(&hellip;)</code> automatically fire
+        <code>@ToAssistant(label)</code>. This makes chat-style replies
+        very compact: every "Tell me more" / "Compare alternatives" button
+        forwards its own label to the LLM.
+      </p>
+<pre><code>follow = FollowUpBlock([
+  FollowUpItem("Show me more"),
+  FollowUpItem("Explain this"),
+  FollowUpItem("Try a different angle")
+])
+
+learnMore = Button("Learn more about caching")</code></pre>
+      <p>
+        These four buttons are equivalent to:
+      </p>
+<pre><code>FollowUpItem("Show me more", Action([@ToAssistant("Show me more")]))
+&hellip;
+Button("Learn more about caching", Action([@ToAssistant("Learn more about caching")]))</code></pre>
+
+      <h2>5. Wiring forms with actions</h2>
+      <p>
+        A <code>Form(&hellip;)</code> takes an array of
+        submit-row <code>Buttons</code> &mdash; each one carries its own
+        <code>Action</code>. Pair an "add" button with a
+        <code>FormControl</code> input whose value two-way-binds to a
+        <code>$variable</code>:
+      </p>
+      <div class="demo-row">
+<pre class="demo-source"><code>$todos = [{id: 1, text: "Welcome", done: false}]
+$draft = ""
+
+addBtn = Button("Add", Action([
+  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Reset($draft)
+]), "primary")
+
+clearBtn = Button("Clear", Action([@Reset($todos, $draft)]), "ghost")
+
+list = @Each($todos, "t", row)
+row = ListItem(t.text, t.done ? "Completed" : "Open", t.done ? "circle-check" : "circle")
+
+root = Stack([
+  Card([CardHeader("Mini todo", "Add a task to see actions in action")]),
+  FormControl("New task", Input("draft-input", "What needs doing?", "text", null, $draft)),
+  Buttons([addBtn, clearBtn]),
+  Card([List([list])])
+])</code></pre>
+        <div class="demo-preview">
+          <streaming-ui-script
+            id="demo-actions-form"
+            theme="light"
+            transparent
+          ></streaming-ui-script>
+        </div>
+      </div>
+      <p>
+        Notice how <strong>add</strong> and <strong>clear</strong> are
+        purely declarative. No JavaScript &mdash; <code>@Push</code> +
+        <code>@Set</code> grows the array, <code>@Reset</code> brings every
+        listed state back to its declared default.
+      </p>
+
+      <h2>6. Per-row actions inside <code>@Each(&hellip;)</code></h2>
+      <p>
+        The most common Action pattern is a row-level Delete / Toggle /
+        Open inside an iteration. Two strategies, in order of preference:
+      </p>
+      <ul>
+        <li>
+          <strong>Pure data transform &mdash; no JS.</strong> Use
+          <code>@Filter</code> + <code>@Set</code> to remove an item;
+          <code>@Sort</code> to re-order; <code>@Concat</code> to prepend.
+        </li>
+        <li>
+          <strong>Per-item JS handler.</strong> When no builtin can
+          express the change (toggling one field on one item, optimistic
+          edits, animations), use <code>@Js(body, {id: x.id})</code> and
+          read the captured value as <code>ctx.args.id</code>.
+        </li>
+      </ul>
+<pre><code>$todos = [{id: 1, text: "Buy milk", done: false}, {id: 2, text: "Walk dog", done: true}]
+list = @Each($todos, "t", row)
+row = Card([Stack([
+  Badge(t.done ? "done" : "open", t.done ? "success" : "neutral"),
+  TextContent(t.text),
+  Buttons([
+    Button("Toggle", Action([
+      @Js(`
+        const todos = ctx.state.get('todos') || [];
+        ctx.state.set('todos', todos.map(x =&gt;
+          x.id === ctx.args.id ? Object.assign({}, x, {done: !x.done}) : x
+        ));
+      `, {id: t.id})
+    ])),
+    Button("Delete", Action([
+      @Set($todos, @Filter($todos, "id", "!=", t.id))
+    ]), "ghost")
+  ])
+])])</code></pre>
+      <div class="callout callout--warn">
+        <h4>Don't read loop variables from <code>ctx.state</code></h4>
+        <p>
+          Inside <code>@Each($todos, "t", row)</code>, <code>t</code> is a
+          render-time local &mdash; <strong>not</strong> reactive state.
+          <code>ctx.state.get('t')</code> always returns
+          <code>undefined</code>. Always pass the value through
+          <code>@Js</code>'s second argument: <code>{id: t.id}</code>.
+        </p>
+      </div>
+
+      <h2>7. Combining actions with queries and mutations</h2>
+      <p>
+        <code>Query</code> auto-runs and re-runs when its <code>$variable</code>
+        args change. <code>Mutation</code> only runs from
+        <code>@Run(name)</code> inside an Action. The classic
+        save-then-refresh chain looks like this:
+      </p>
+<pre><code>$draft = ""
+$ver   = 0
+
+list   = Query("list_tickets", {ver: $ver}, {rows: []})
+create = Mutation("create_ticket", {title: $draft})
+
+addBtn = Button("Create ticket", Action([
+  @Run(create),               // POST to the server
+  @Set($ver, $ver + 1),       // bump the cache key &mdash; refetches list
+  @Reset($draft),             // clear the form
+  @ToAssistant("Created.")    // tell the LLM
+]), "primary")
+
+field = FormControl("Title", Input("title", "Bug summary&hellip;", "text", null, $draft))
+table = Table([Col("Title", list.rows.title), Col("Status", list.rows.status)])
+
+root = Stack([CardHeader("Tickets"), field, addBtn, table])</code></pre>
+      <p>
+        The <code>$ver</code> trick is the canonical way to force a
+        <code>Query</code> to refetch when no other arg has changed &mdash;
+        bumping a counter inside the args object marks a new dependency
+        version.
+      </p>
+
+      <h2>8. Programmatic navigation with <code>@Navigate</code></h2>
+      <p>
+        Built-in routing is always wired up. Drop
+        <code>@Navigate("/path")</code> into any action chain to move to
+        another route after a save, submit, or follow-up:
+      </p>
+<pre><code>saveBtn = Button("Save", Action([
+  @Run(saveMutation),
+  @Navigate("/dashboard"),
+  @ToAssistant("Saved &mdash; back on the dashboard.")
+]), "primary")
+
+cancelBtn = Button("Cancel", Action([@Navigate("/dashboard")]), "ghost")</code></pre>
+      <p>
+        Hash paths look like <code>#/dashboard</code> in the URL bar.
+        Browser back / forward, deep links, and bookmarks all work without
+        any host-side router. See the dedicated
+        <a href="routing.html">routing guide</a> for the full surface.
+      </p>
+
+      <h2>9. Opening external URLs safely</h2>
+      <p>
+        <code>@OpenUrl</code> sanitises the URL before opening, so an LLM
+        emitting <code>javascript:</code>, <code>data:text/html</code>,
+        or other unsafe schemes can never execute on click. Every external
+        window is opened with <code>noopener,noreferrer</code>.
+      </p>
+<pre><code>docsBtn = Button("Read the docs", Action([
+  @OpenUrl("https://asfand-dev.github.io/streaming-ui-script/")
+]), "primary")
+
+repoBtn = Button("Star on GitHub", Action([
+  @OpenUrl("https://github.com/asfand-dev/streaming-ui-script")
+]), "ghost", "button", "small", "brands:github")</code></pre>
+      <p>
+        Override how URLs open from the host page (e.g. to log clicks or
+        route through an analytics layer):
+      </p>
+<pre><code>const renderer = document.querySelector("streaming-ui-script");
+renderer.onOpenUrl = (url) =&gt; {
+  trackOutbound(url);
+  window.open(url, "_blank", "noopener,noreferrer");
+};</code></pre>
+
+      <h2>10. <code>@Js</code> for the last 5%</h2>
+      <p>
+        Most click handlers are pure data transforms &mdash; reach for
+        builtins first. <code>@Js</code> is the escape hatch for everything
+        else: clipboard, focus, audio, animations, third-party SDKs,
+        sub-second timers.
+      </p>
+<pre><code>copyBtn = Button("Copy snippet", Action([
+  @Js("await navigator.clipboard?.writeText(ctx.state.get('snippet') ?? '');"),
+  @Set($copied, true),
+  @ToAssistant("Copied!")
+]), "primary")</code></pre>
+      <p>
+        <code>ctx</code> exposes reactive state, registered tools, DOM
+        refs inside the shadow root, lifecycle hooks, and an AbortSignal.
+        See the dedicated
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        page for the full surface.
+      </p>
+
+      <h2>11. Where actions appear</h2>
+      <p>
+        Anything that the user can click, tap, submit, or pick can carry
+        an action. The component reference lists the exact prop name for
+        each (look for <code>action</code>); these are the most-used
+        slots:
+      </p>
+      <table class="api-table">
+        <thead>
+          <tr><th>Component</th><th>Action prop</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Button(label, action?, variant?, &hellip;)</code></td>
+            <td>2nd arg</td>
+            <td>The canonical action carrier. Falls back to
+              <code>@ToAssistant(label)</code> when omitted.</td>
+          </tr>
+          <tr>
+            <td><code>FollowUpItem(label, message?)</code></td>
+            <td>built in</td>
+            <td>Always fires <code>@ToAssistant(message ?? label)</code> &mdash;
+              you don't pass an explicit Action.</td>
+          </tr>
+          <tr>
+            <td><code>SidebarItem(label, icon?, active?, badge?, action?)</code></td>
+            <td>5th arg</td>
+            <td>Click on a sidebar nav row.</td>
+          </tr>
+          <tr>
+            <td><code>NavbarItem(label, to?, href?, icon?, active?, action?)</code></td>
+            <td>6th arg</td>
+            <td>Use <code>to</code> for in-app navigation, <code>href</code> for
+              external URLs, or <code>action</code> for a custom handler.</td>
+          </tr>
+          <tr>
+            <td><code>MenuItem(label, action?, icon?, shortcut?, variant?, disabled?)</code></td>
+            <td>2nd arg</td>
+            <td>Inside a <code>DropdownMenu</code>. Set
+              <code>variant="danger"</code> for destructive items.</td>
+          </tr>
+          <tr>
+            <td><code>Form(name, buttons, fields)</code></td>
+            <td>buttons array</td>
+            <td>Each Button in the row has its own Action.</td>
+          </tr>
+          <tr>
+            <td><code>Tile(label, icon?, value?, description?, tone?, action?)</code></td>
+            <td>6th arg</td>
+            <td>Whole tile becomes clickable when <code>action</code> is set.</td>
+          </tr>
+          <tr>
+            <td><code>Banner / Notification</code></td>
+            <td>action button</td>
+            <td>Pass a Button as the action slot &mdash; that Button carries
+              the action.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>12. Worked example: edit-in-place with optimistic update</h2>
+      <p>
+        A more realistic flow: pick an item from a list, edit it in a
+        modal, save through a mutation, refresh the list, close the modal.
+        Every interaction is a single Action chain.
+      </p>
+      <div class="demo-row">
+<pre class="demo-source"><code>$selectedId = null
+$editing    = false
+$draft      = ""
+$ver        = 0
+
+list = Query("list_tasks", {ver: $ver}, {rows: [
+  {id: 1, title: "Wire up CI",     status: "open"},
+  {id: 2, title: "Refactor parser",status: "doing"},
+  {id: 3, title: "Ship docs site", status: "done"}
+]})
+save = Mutation("update_task", {id: $selectedId, title: $draft})
+
+rows = @Each(list.rows, "t", taskRow)
+taskRow = Card([Stack([
+  Badge(t.status, t.status == "done" ? "success" : (t.status == "doing" ? "primary" : "neutral")),
+  TextContent(t.title),
+  Button("Edit", Action([
+    @Set($selectedId, t.id),
+    @Set($draft,      t.title),
+    @Set($editing,    true)
+  ]), "ghost", "button", "small")
+], "row", "m", "center")])
+
+editor = Modal("Edit task", $editing, [
+  FormControl("Title", Input("draft", "Task title", "text", null, $draft)),
+  Buttons([
+    Button("Save", Action([
+      @Run(save),
+      @Set($ver, $ver + 1),
+      @Set($editing, false),
+      @ToAssistant("Updated.")
+    ]), "primary"),
+    Button("Cancel", Action([@Set($editing, false), @Reset($draft)]), "ghost")
+  ])
+])
+
+root = Stack([CardHeader("Tasks"), rows, editor])</code></pre>
+        <div class="demo-preview">
+          <streaming-ui-script
+            id="demo-actions-edit"
+            theme="light"
+            transparent
+          ></streaming-ui-script>
+        </div>
+      </div>
+      <p>
+        Five actions, each a one-liner: <strong>open</strong> sets three
+        state variables; <strong>save</strong> mutates, refetches, closes
+        the modal, notifies the assistant; <strong>cancel</strong> closes
+        and resets. The list re-renders automatically when
+        <code>$ver</code> bumps the query dependency.
+      </p>
+
+      <h2>13. Best practices</h2>
+      <ul>
+        <li>
+          <strong>Default to declarative.</strong> If
+          <code>Action([@Set, @Run, @Reset, @Push, @Filter, @Sort])</code>
+          can express the change, use it. Reach for <code>@Js</code> only
+          when no builtin can express the mutation.
+        </li>
+        <li>
+          <strong>Order matters.</strong> Steps run sequentially.
+          <code>@Run</code> is <em>awaited</em> &mdash; following steps see
+          the post-mutation state.
+        </li>
+        <li>
+          <strong>Reset what you set.</strong> If a button opens a modal
+          (<code>@Set($open, true)</code>), the close path should
+          <code>@Reset</code> any draft state so the next open starts
+          clean.
+        </li>
+        <li>
+          <strong>Use the implicit <code>@ToAssistant</code>.</strong>
+          For "ask the assistant" buttons, omit <code>Action(&hellip;)</code>
+          entirely &mdash; the label becomes the message.
+        </li>
+        <li>
+          <strong>Pass per-row data through <code>@Js</code> args, never
+          through state.</strong> Loop variables are render-time locals.
+          <code>@Js(body, {id: t.id})</code> is the canonical pattern.
+        </li>
+        <li>
+          <strong>Bump a version counter to refetch.</strong> When a
+          mutation's effect isn't reflected in any query argument, add
+          <code>{ver: $ver}</code> to the query args and
+          <code>@Set($ver, $ver + 1)</code> after the mutation.
+        </li>
+        <li>
+          <strong>Sanitise URLs through <code>@OpenUrl</code>.</strong>
+          Never bypass it with <code>@Js("window.location = &hellip;")</code>
+          &mdash; you lose the runtime's URL allow-list.
+        </li>
+      </ul>
+
+      <h2>14. Common mistakes</h2>
+      <table class="api-table">
+        <thead>
+          <tr><th>Don't</th><th>Do</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Action([@Set($x, 1) @Run(save)])</code> &mdash; missing comma.</td>
+            <td><code>Action([@Set($x, 1), @Run(save)])</code> &mdash; comma-separated.</td>
+          </tr>
+          <tr>
+            <td><code>Action([@Run(save) Enthusiastic])</code> &mdash; stray word.</td>
+            <td>Action arrays contain ONLY action steps. No prose, no labels.</td>
+          </tr>
+          <tr>
+            <td><code>Action([@Js(`ctx.state.set('todos', ctx.state.get('todos').concat(item))`)])</code></td>
+            <td><code>Action([@Set($todos, @Push($todos, item))])</code> &mdash; no JS needed.</td>
+          </tr>
+          <tr>
+            <td><code>Button("Go", "@Run(save)")</code> &mdash; passing the step as a string.</td>
+            <td><code>Button("Go", Action([@Run(save)]))</code> &mdash; always wrap in <code>Action([&hellip;])</code>.</td>
+          </tr>
+          <tr>
+            <td><code>@Js("ctx.state.set('t.id', &hellip;)")</code> reading a loop var as state.</td>
+            <td><code>@Js(body, {id: t.id})</code>, then <code>ctx.args.id</code> inside the body.</td>
+          </tr>
+          <tr>
+            <td><code>@OpenUrl("javascript:alert(1)")</code> &mdash; the runtime collapses this to <code>#</code>.</td>
+            <td>Only allow-listed schemes (<code>http(s)</code>, <code>mailto</code>, <code>tel</code>, fragments, root-relative).</td>
+          </tr>
+          <tr>
+            <td><code>Action([@Set($route, "/x")])</code> &mdash; <code>$route</code> is owned by the router.</td>
+            <td><code>Action([@Navigate("/x")])</code> &mdash; the only correct way to push a route.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>15. <code>chat</code> mode actions</h2>
+      <p>
+        The compact prompt flavour
+        (<code>getSystemPrompt({ mode: "chat" })</code>) keeps the action
+        surface minimal so chat replies stay declarative. In chat mode the
+        LLM only sees:
+      </p>
+      <ul>
+        <li><code>@ToAssistant("text")</code> &mdash; conversational follow-ups.</li>
+        <li><code>@OpenUrl("https://&hellip;")</code> &mdash; external links.</li>
+        <li>The implicit-label fallback for buttons without an explicit
+          <code>Action</code>.</li>
+      </ul>
+      <p>
+        State writes, queries, mutations, navigation, and JS are
+        intentionally hidden &mdash; the chat prompt is a strict subset
+        focused on streaming, conversational UIs. Switch back to the full
+        prompt (<code>getSystemPrompt()</code>) for app-style replies that
+        need state, queries, routing, or JavaScript.
+      </p>
+
+      <h2>16. JavaScript bridge</h2>
+      <p>
+        Want to trigger an action from JS &mdash; e.g. a global keyboard
+        shortcut, a host-page button, or a unit test? Reach for the
+        <code>navigate</code> method on the element (for
+        <code>@Navigate</code>), or fire your own
+        <code>@ToAssistant</code> via the chat host:
+      </p>
+      <table class="api-table">
+        <thead>
+          <tr><th>Action step</th><th>Equivalent host call</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@Navigate("/x")</code></td>
+            <td><code>el.navigate("/x")</code></td>
+          </tr>
+          <tr>
+            <td><code>@ToAssistant("hi")</code></td>
+            <td><code>el.dispatchEvent(new CustomEvent("assistant-message", { detail: { message: "hi" } }))</code></td>
+          </tr>
+          <tr>
+            <td><code>@OpenUrl("https://&hellip;")</code></td>
+            <td><code>window.open("https://&hellip;", "_blank", "noopener,noreferrer")</code></td>
+          </tr>
+          <tr>
+            <td><code>@Set</code> / <code>@Reset</code></td>
+            <td>Inside a <code>Script</code> /
+              <code>@Js</code> body: <code>ctx.state.set(name, value)</code>,
+              <code>ctx.state.reset(&hellip;names)</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Where to next?</h2>
+      <ul>
+        <li><a href="language.html">Language reference</a> &mdash;
+          full syntax, expressions, builtins.</li>
+        <li><a href="javascript-interactions.html">JavaScript interactions</a>
+          &mdash; <code>Script(...)</code> + <code>@Js(...)</code> deep dive.</li>
+        <li><a href="routing.html">Routing</a> &mdash;
+          <code>Routes</code> / <code>Route</code> / <code>NavLink</code> /
+          <code>@Navigate</code>.</li>
+        <li><a href="examples.html">Examples</a> &mdash; copy-paste recipes
+          including a focused Actions playground.</li>
+        <li><a href="live-examples.html">Live examples</a> &mdash; full
+          standalone demos that exercise actions end-to-end.</li>
+      </ul>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    const toggle = document.getElementById("demo-actions-toggle");
+    toggle.setResponse(`$open = false
+openBtn  = Button("Open dialog", Action([@Set($open, true)]),  "primary")
+closeBtn = Button("Close",       Action([@Set($open, false)]), "ghost")
+dialog = Modal("Quick action", $open, [
+  TextContent("Click anywhere outside or press Esc to close."),
+  closeBtn
+])
+root = Stack([openBtn, dialog])`);
+
+    const form = document.getElementById("demo-actions-form");
+    form.setResponse(`$todos = [{id: 1, text: "Welcome", done: false}]
+$draft = ""
+addBtn = Button("Add", Action([
+  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Reset($draft)
+]), "primary")
+clearBtn = Button("Clear", Action([@Reset($todos, $draft)]), "ghost")
+list = @Each($todos, "t", row)
+row = ListItem(t.text, t.done ? "Completed" : "Open", t.done ? "circle-check" : "circle")
+root = Stack([
+  Card([CardHeader("Mini todo", "Add a task to see actions in action")]),
+  FormControl("New task", Input("draft-input", "What needs doing?", "text", null, $draft)),
+  Buttons([addBtn, clearBtn]),
+  Card([List([list])])
+])`);
+
+    const edit = document.getElementById("demo-actions-edit");
+    edit.setTools({
+      list_tasks: async () => ({
+        rows: [
+          { id: 1, title: "Wire up CI",      status: "open" },
+          { id: 2, title: "Refactor parser", status: "doing" },
+          { id: 3, title: "Ship docs site",  status: "done" },
+        ],
+      }),
+      update_task: async ({ id, title }) => {
+        await new Promise((r) => setTimeout(r, 250));
+        return { id, title };
+      },
+    });
+    edit.setResponse(`$selectedId = null
+$editing    = false
+$draft      = ""
+$ver        = 0
+list = Query("list_tasks", {ver: $ver}, {rows: []})
+save = Mutation("update_task", {id: $selectedId, title: $draft})
+rows = @Each(list.rows, "t", taskRow)
+taskRow = Card([Stack([
+  Badge(t.status, t.status == "done" ? "success" : (t.status == "doing" ? "primary" : "neutral")),
+  TextContent(t.title),
+  Button("Edit", Action([@Set($selectedId, t.id), @Set($draft, t.title), @Set($editing, true)]), "ghost", "button", "small")
+], "row", "m", "center")])
+editor = Modal("Edit task", $editing, [
+  FormControl("Title", Input("draft", "Task title", "text", null, $draft)),
+  Buttons([
+    Button("Save", Action([@Run(save), @Set($ver, $ver + 1), @Set($editing, false), @ToAssistant("Updated.")]), "primary"),
+    Button("Cancel", Action([@Set($editing, false), @Reset($draft)]), "ghost")
+  ])
+])
+root = Stack([CardHeader("Tasks"), rows, editor])`);
+  </script>
+</body>
+</html>

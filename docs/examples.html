@@ -29,6 +29,7 @@
         <a href="frameworks.html">Framework integration</a>
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
+        <a href="actions.html">Actions</a>
         <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="routing.html">Routing</a>
         <a href="themes.html">Theming</a>
@@ -50,6 +51,14 @@
         </p>
       </header>
 
+      <p>
+        Looking for a focused tour of <code>Action([...])</code>? The
+        dedicated <a href="actions.html">Actions guide</a> walks through
+        every action step (<code>@Set</code>, <code>@Reset</code>,
+        <code>@Run</code>, <code>@ToAssistant</code>,
+        <code>@OpenUrl</code>, <code>@Navigate</code>,
+        <code>@Js</code>) and the components that accept them.
+      </p>
       <p>
         Need to wire up <em>behaviour</em> (timers, fetch, focus, animations,
         clipboard) inside an assistant response? See the dedicated
@@ -170,6 +179,37 @@ form = Form("ticket", saveBtn, [
 ])
 status = Card([CardHeader("Last saved"), Markdown("`" + $lastSaved + "`")])
 root = Stack([form, status])</code></pre>
+        </div>
+      </div>
+
+      <div class="example">
+        <div class="example-header"><h3>Action chains — every step in one card</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <streaming-ui-script theme="light"></streaming-ui-script>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$count = 0
+$log   = "Click any button below."
+
+incBtn   = Button("@Set: +1",       Action([@Set($count, $count + 1), @Set($log, "@Set wrote " + ($count + 1) + " to $count.")]),                            "primary")
+resetBtn = Button("@Reset",         Action([@Reset($count), @Set($log, "@Reset restored $count to 0.")]),                                                  "secondary")
+chainBtn = Button("Chain (3 steps)",Action([@Set($count, $count + 5), @Set($log, "Chained @Set+@Set ran in order. $count is now " + ($count + 5) + "."),
+                                            @ToAssistant("Bumped count by 5")]),                                                                            "primary")
+askBtn   = Button("@ToAssistant",   Action([@ToAssistant("Tell me more about Action chains."), @Set($log, "@ToAssistant fired an assistant-message event.")]))
+linkBtn  = Button("@OpenUrl",       Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/actions.html"), @Set($log, "@OpenUrl opened a sanitised URL in a new tab.")]),"ghost")
+implicit = Button("Implicit @ToAssistant")
+
+counter = Card([CardHeader("$count = " + $count, "Read by every button below"), Buttons([incBtn, resetBtn, chainBtn])])
+extras  = Card([CardHeader("More steps"), Buttons([askBtn, linkBtn, implicit])])
+status  = Callout("info", "Status", $log, "circle-info")
+
+root = Stack([counter, extras, status], "column", "l")</code></pre>
         </div>
       </div>
 

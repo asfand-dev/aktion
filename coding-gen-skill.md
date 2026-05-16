@@ -709,27 +709,50 @@ addMutation = Mutation("add_todo", {title: $draft})
 ## 5. Actions — wiring buttons, follow-ups, and forms
 
 Every interactive control takes an `Action([...])` payload. Action steps
-execute sequentially; a failing step short-circuits the rest.
+execute sequentially; a failing step (notably an `@Run` that throws)
+short-circuits the rest.
+
+> **Live deep dive:**
+> [`docs/actions.html`](https://asfand-dev.github.io/streaming-ui-script/actions.html)
+> covers every step, every action carrier (Button, FollowUpItem, SidebarItem,
+> NavbarItem, MenuItem, Tile, Form), worked examples, and common mistakes.
 
 ### The full step menu
 
-| Step                          | Effect                                                                 |
-|-------------------------------|------------------------------------------------------------------------|
-| `@Set($name, value)`          | Write `$name = value`. `value` is evaluated at render time.            |
-| `@Reset($a, $b, …)`           | Reset each state to its declared default.                              |
-| `@Run(ref)`                   | Execute a `Query` or `Mutation` by name. Awaited before next step.     |
-| `@ToAssistant("text")`        | Fire `assistant-message` event. Typical for follow-ups.                |
-| `@OpenUrl("https://…")`       | Open a URL (defaults to `window.open` with `noopener`).                |
-| `@Js(body, args?)`            | Run a JavaScript body. Opt-in. See § 10.                               |
+| Step                          | Effect                                                                                |
+|-------------------------------|---------------------------------------------------------------------------------------|
+| `@Set($name, value)`          | Write `$name = value`. `value` is evaluated at click time, so it can read other state.|
+| `@Reset($a, $b, …)`           | Reset each named state to its declared default.                                       |
+| `@Run(ref)`                   | Execute a `Query` or `Mutation` by name. **Awaited** before the next step runs.       |
+| `@ToAssistant("text")`        | Fire `assistant-message` event. Typical for follow-ups and "ask the model" buttons.   |
+| `@OpenUrl("https://…")`       | Open a URL in a new tab. Sanitised; opened with `noopener,noreferrer`.                |
+| `@Navigate("/path")`          | Push a new hash path through the built-in router. See § 10.5.                         |
+| `@Js(body, args?)`            | Run a JavaScript body. Reach for it last — see § 10 for the full surface.             |
+
+### Implicit "ask the assistant"
+
+Buttons and `FollowUpItem`s **without** an explicit `Action(...)` automatically
+fire `@ToAssistant(label)`. This keeps chat-style replies compact:
+
+```text
+follow = FollowUpBlock([
+  FollowUpItem("Show me more"),
+  FollowUpItem("Compare alternatives"),
+  FollowUpItem("Explain this")
+])
+askMore = Button("Why?")     # equivalent to Action([@ToAssistant("Why?")])
+```
 
 ### Multi-step actions
 
+Steps run sequentially. `@Run` is awaited, so subsequent steps see post-mutation state:
+
 ```text
-saveBtn = Button("Save & Close", Action([
+saveBtn = Button("Save & close", Action([
   @Run(saveMutation),
   @Set($editing, false),
   @ToAssistant("Saved.")
-]))
+]), "primary")
 ```
 
 ### Buttons grouped horizontally
@@ -744,8 +767,8 @@ controls = Buttons([
 ### Follow-ups
 
 `FollowUpBlock` accepts plain strings, `{label, message}` objects, or
-`FollowUpItem(label, message?)` calls. Clicking sends the message back to
-the LLM via `@ToAssistant`.
+`FollowUpItem(label, message?)` calls. Clicking sends `message ?? label`
+back to the LLM via `@ToAssistant`.
 
 ```text
 prompts = FollowUpBlock([
@@ -753,6 +776,51 @@ prompts = FollowUpBlock([
   FollowUpItem("Filter to closed deals", "Show only closed deals.")
 ])
 ```
+
+### Save → refresh → close (canonical mutation chain)
+
+When a mutation invalidates a query whose args don't otherwise change, bump a
+version counter to force a refetch:
+
+```text
+$ver = 0
+list   = Query("list_tickets", {ver: $ver}, {rows: []})
+create = Mutation("create_ticket", {title: $draft})
+
+addBtn = Button("Create", Action([
+  @Run(create),               # POST to the server
+  @Set($ver, $ver + 1),       # bumps the dependency, refetches `list`
+  @Reset($draft),             # clears the form
+  @ToAssistant("Created.")
+]), "primary")
+```
+
+### Navigate after a save
+
+`@Navigate` slots cleanly into any chain — wire post-save redirects without JS:
+
+```text
+saveBtn = Button("Save", Action([
+  @Run(saveMutation),
+  @Navigate("/dashboard"),
+  @ToAssistant("Saved.")
+]), "primary")
+
+cancelBtn = Button("Cancel", Action([@Navigate("/dashboard")]), "ghost")
+```
+
+### Where actions appear
+
+| Component                                          | Action prop                              |
+|----------------------------------------------------|------------------------------------------|
+| `Button(label, action?, …)`                        | 2nd arg                                  |
+| `FollowUpItem(label, message?)`                    | implicit `@ToAssistant(message ?? label)`|
+| `SidebarItem(label, icon?, active?, badge?, action?)` | 5th arg                               |
+| `NavbarItem(label, to?, href?, icon?, active?, action?)` | 6th arg                            |
+| `MenuItem(label, action?, icon?, shortcut?, …)`    | 2nd arg                                  |
+| `Tile(label, icon?, value?, description?, tone?, action?)` | 6th arg                          |
+| `Form(name, buttons, fields)`                      | each Button in `buttons`                 |
+| `Banner` / `Notification`                          | pass a Button as the action slot         |
 
 ---
 
@@ -3491,7 +3559,7 @@ const prompt = el.getSystemPrompt({
 | Pick the right top-level shape                        | § 2 "Anatomy of a response"                           |
 | Track user input                                      | § 3 "Reactive state"                                  |
 | Call a backend                                        | § 4 "Tools: Query and Mutation"                       |
-| Wire up a button                                      | § 5 "Actions"                                         |
+| Wire up a button                                      | § 5 "Actions" (deep dive: `docs/actions.html`)        |
 | Render a list                                         | § 6 "Loops & lists"                                   |
 | Filter / count / sort / aggregate                     | § 8 "Built-in functions"                              |
 | Find a component signature                            | § 9 "Component reference"                             |
@@ -3577,6 +3645,7 @@ If you can answer "yes" to all checks, your response is ready.
 - **Framework integration:** <https://asfand-dev.github.io/streaming-ui-script/frameworks.html>
 - **Component reference:** <https://asfand-dev.github.io/streaming-ui-script/components.html>
 - **Language reference:** <https://asfand-dev.github.io/streaming-ui-script/language.html>
+- **Actions guide:** <https://asfand-dev.github.io/streaming-ui-script/actions.html>
 - **JS interactions guide:** <https://asfand-dev.github.io/streaming-ui-script/javascript-interactions.html>
 - **Routing guide:** <https://asfand-dev.github.io/streaming-ui-script/routing.html>
 - **Theming:** <https://asfand-dev.github.io/streaming-ui-script/themes.html>
