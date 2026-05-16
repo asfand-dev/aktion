@@ -1,0 +1,22 @@
+---
+alwaysApply: true
+---
+# Check Runtime TODO Before Wrapping Up
+
+Once you are done with all the tasks and wrapping up, have a look at the `runtime-llm-todo.txt` file if there are any tasks left to complete, if yes then complete them. It might also include changes related to the work you have done in this task or maybe something that I forgot to mention in the initial prompt.
+
+## Procedure
+
+1. After completing the primary task(s) from the user's prompt, before declaring the work finished, read `runtime-llm-todo.txt` from the project root.
+2. If the file does not exist or is empty, proceed to wrap up normally.
+3. If the file contains tasks:
+   - Treat each task as an extension of the original request.
+   - Pay special attention to tasks that relate to the work just performed — they may be follow-up items the user forgot to mention initially.
+   - Complete each task using the same standards as the original prompt.
+4. After completing tasks from `runtime-llm-todo.txt`, re-check the file once more in case its contents were updated during the work.
+5. Summarize what was done from both the original prompt and `runtime-llm-todo.txt` in the final response.
+
+## Notes
+
+- Do not delete or modify `runtime-llm-todo.txt` unless explicitly instructed.
+- If a task in the file is ambiguous or conflicts with the original prompt, ask the user before proceeding.

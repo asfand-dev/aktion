@@ -203,12 +203,12 @@ detailLoaded = Stack([
     DescriptionItem("ARR",      selected.arr),
     DescriptionItem("Renewal",  selected.renewal)
   ]),
-  Note(selected.bio, "info"),
+  Callout("info", selected.bio, null, null, true),
   Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
         selected.name + " · last QBR",
         "primary"),
   Stack(
-    @Each(selected.tags, "t", Tag(t, null, "sm", "info")),
+    @Each(selected.tags, "t", Badge(t, "info", null, "sm")),
     "row", "s"
   )
 ], "column", "m")

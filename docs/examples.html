@@ -128,7 +128,7 @@ follow = FollowUpBlock([
 <pre><code class="example-source">$search = ""
 $sortBy = "stars"
 data = Query("get_repos", {}, {rows: [
-  {name: "ui-lang", stars: 1820, forks: 220},
+  {name: "ui-lang", stars: 120, forks: 220},
   {name: "rich-ui", stars: 940, forks: 80},
   {name: "ai-toolkit", stars: 2300, forks: 412}
 ]})
@@ -200,7 +200,7 @@ kpis = MetricGrid([
   StatCard("Churn",       "2.1%",    "down", "-0.4 pp",    "arrow-trend-down"),
   StatCard("NPS",         "62",      "flat", "+1",         "star")
 ])
-trafficCard = Card([SectionHeader("Daily traffic", "Visits vs signups", null, Tag("On track", null, "sm", "success")),
+trafficCard = Card([SectionHeader("Daily traffic", "Visits vs signups", null, Badge("On track", "success", null, "sm")),
   LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])])
 mixCard = Card([SectionHeader("Plan mix", "Active subscribers by tier", null, null),
   PieChart(["Free","Pro","Team"], [240, 95, 32])])
@@ -209,10 +209,9 @@ topAccounts = Card([SectionHeader("Top accounts", "Largest MRR contributors", nu
   [Button("View all", Action([@ToAssistant("Open the accounts list")]), "ghost", "button", "small")]), Table([
   Col("Account", ["Acme","Globex","Initech"]),
   Col("MRR", [4200, 2400, 1850], "currency"),
-  Col("Plan", [Tag("Team",null,"sm","primary"), Tag("Pro",null,"sm","success"), Tag("Free",null,"sm","neutral")])
+  Col("Plan", [Badge("Team", "primary", null, "sm"), Badge("Pro", "success", null, "sm"), Badge("Free", "neutral", null, "sm")])
 ])])
-follow = FollowUpBlock(["Drill into churn", "Compare to last quarter", "Open billing"])
-root = Stack([header, toolbar, kpis, charts, topAccounts, follow], "column", "l")</code></pre>
+root = Stack([header, toolbar, kpis, charts, topAccounts], "column", "l")</code></pre>
         </div>
       </div>
 
@@ -256,7 +255,7 @@ root = Stack([Card([CardHeader("Operations"), filter, tabs])])</code></pre>
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">root = Stack([header, tags, sep, snippet, group])
 header = CardHeader("Release notes", "v1.2 highlights")
-tags = TagBlock(["new", "tabs", "callout", "separator"], "primary", "sm")
+tags = BadgeList(["new", "tabs", "callout", "separator"], "primary", "sm")
 sep = Separator("horizontal")
 snippet = CodeBlock("ts", "import { defineElement } from \"streaming-ui-script\";\ndefineElement();")
 group = CheckBoxGroup("notifications", [
@@ -330,7 +329,7 @@ projects = Card([SectionHeader("Active projects", null, "WORK", null,
   ])])
 
 systemCard = Card([SectionHeader("System status", null, "OPS",
-  Tag("All normal", null, "sm", "success")),
+  Badge("All normal", "success", null, "sm")),
   Stack([
     StatusDot("API",       "success"),
     StatusDot("Database",  "success"),
@@ -344,8 +343,7 @@ activity = Card([SectionHeader("Recent activity"), Timeline([
   TimelineItem("Tokenizer 2.1 shipped", "Yesterday","Latency -14%",                "circle-check", "success")
 ])])
 
-content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity,
-  FollowUpBlock(["Show at-risk projects", "Open billing", "Invite my team"])]</code></pre>
+content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity]</code></pre>
         </div>
       </div>
 
@@ -365,7 +363,7 @@ content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity,
   ["Team", "Engineering"],
   [Button("Message", Action([@ToAssistant("Open chat with Alex")]), "primary"),
    Button("Edit", Action([@ToAssistant("Edit Alex's profile")]), "ghost")],
-  Tag("Online", "circle-check", "sm", "success"))
+  Badge("Online", "success", "circle-check", "sm"))
 
 profile = ProfileCard("Alex Rivera", "Product Designer", "",
   "Designs the future of generative UI at Acme.",
@@ -379,7 +377,7 @@ details = Card([SectionHeader("Profile details", null, "OVERVIEW"),
     DescriptionItem("Manager",  "Margaret Hamilton"),
     DescriptionItem("Location", "Berlin, DE", "location-dot"),
     DescriptionItem("Joined",   "Mar 2022"),
-    DescriptionItem("Slack",    Tag("@alex", null, "sm", "primary")),
+    DescriptionItem("Slack",    Badge("@alex", "primary", null, "sm")),
     DescriptionItem("Status",   StatusDot("Active", "success"))
   ], 2)])
 
@@ -392,9 +390,7 @@ activity = Card([SectionHeader("Recent activity", "Last 14 days"), Timeline([
 danger = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"),
   Buttons([Button("Delete account", Action([@ToAssistant("Delete Alex's account")]), "danger")])])
 
-follow = FollowUpBlock(["Show Alex's projects", "Open inbox", "Schedule a 1:1"])
-
-root = Stack([header, Grid([profile, details], 2, "l"), activity, danger, follow], "column", "l")</code></pre>
+root = Stack([header, Grid([profile, details], 2, "l"), activity, danger], "column", "l")</code></pre>
         </div>
       </div>
 
@@ -443,9 +439,8 @@ faqs = Card([SectionHeader("Frequently asked questions"), Accordion([
 closing = Banner("Still deciding?", "Talk to a real human about your use case.",
   Button("Book a call", Action([@OpenUrl("/contact")]), "primary"), "comments", "primary")
 
-follow = FollowUpBlock(["Compare to competitors", "Show the enterprise plan", "Open the FAQ"])
 
-root = Stack([hero, pricing, faqs, closing, follow], "column", "xl")</code></pre>
+root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
       </div>
 
@@ -614,7 +609,7 @@ root = Stack([hero, pricing, faqs, closing, follow], "column", "xl")</code></pre
   ], "row", "s", "stretch", "start", true),
   Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
         "Naomi · last QBR", "primary"),
-  Note("Owner: Mei Tanaka · ARR $84,000 · renewal in Q3", "tip")
+  Callout("tip", "Owner: Mei Tanaka · ARR $84,000 · renewal in Q3", null, null, true)
 ], "column", "m")</code></pre>
         </div>
       </div>
@@ -804,7 +799,7 @@ root = Card([
       FormControl("Volume",        Slider("vol",       0, 100,  5,  $volume, null, true))
     ]
   ),
-  Note("Quantity: " + $qty + " · Date: " + $date + " · Volume: " + $volume + "%", "tip")
+  Callout("tip", "Quantity: " + $qty + " · Date: " + $date + " · Volume: " + $volume + "%", null, null, true)
 ])</code></pre>
         </div>
       </div>
@@ -1070,11 +1065,11 @@ hits = @Filter(visible, "name", "contains", $query)
 makeCard = @Each(hits, "p", Card([
   Stack([
     TextContent(p.name, "large-heavy"),
-    Tag(p.badge, null, "sm", "primary")
+    Badge(p.badge, "primary", null, "sm")
   ], "row", "s", "center", "between"),
   TextContent("$" + p.price, "body-heavy", "primary"),
   Stack([
-    Tag(p.category, null, "sm", "neutral"),
+    Badge(p.category, "neutral", null, "sm"),
     Rating(p.rating, 5, "" + p.rating, null, "sm")
   ], "row", "s", "center", "start"),
   Buttons([
@@ -1131,40 +1126,40 @@ releases = Stack([v14, v13, v12, v11])
 v14 = Card([
   Stack([
     TextContent("v1.4.0", "large-heavy"),
-    Tag("Latest", null, "sm", "primary")
+    Badge("Latest", "primary", null, "sm")
   ], "row", "s", "center", "start"),
   TextContent("Released May 8, 2026", "small", "muted"),
-  TagBlock(["new", "themes", "performance"], "primary", "sm"),
+  BadgeList(["new", "themes", "performance"], "primary", "sm"),
   Markdown("- **Two new themes** — `glass` and `brutalist`.\n- **Background alignment** via the new `transparent` attribute.\n- 18% faster initial render on large programs.")
 ])
 
 v13 = Card([
   Stack([
     TextContent("v1.3.0", "large-heavy"),
-    Tag("Stable", null, "sm", "success")
+    Badge("Stable", "success", null, "sm")
   ], "row", "s", "center", "start"),
   TextContent("Released April 14, 2026", "small", "muted"),
-  TagBlock(["responsive", "tables", "inputs"], "info", "sm"),
+  BadgeList(["responsive", "tables", "inputs"], "info", "sm"),
   Markdown("- Phone-first layouts across the entire library.\n- Horizontal scroll on overflowing tables.\n- Fix: text inputs no longer lose focus while streaming.")
 ])
 
 v12 = Card([
   Stack([
     TextContent("v1.2.0", "large-heavy"),
-    Tag("Stable", null, "sm", "success")
+    Badge("Stable", "success", null, "sm")
   ], "row", "s", "center", "start"),
   TextContent("Released March 22, 2026", "small", "muted"),
-  TagBlock(["components", "language"], "info", "sm"),
+  BadgeList(["components", "language"], "info", "sm"),
   Markdown("- Added `Separator`, `TagBlock`, and `CheckBoxGroup`.\n- `Tabs` now switches active panels properly.")
 ])
 
 v11 = Card([
   Stack([
     TextContent("v1.1.0", "large-heavy"),
-    Tag("Archived", null, "sm", "neutral")
+    Badge("Archived", "neutral", null, "sm")
   ], "row", "s", "center", "start"),
   TextContent("Released February 5, 2026", "small", "muted"),
-  TagBlock(["streaming", "errors"], "warning", "sm"),
+  BadgeList(["streaming", "errors"], "warning", "sm"),
   Markdown("- Streaming-friendly parser tolerates partial lines.\n- Optional `showerrors` attribute.")
 ])</code></pre>
         </div>
@@ -1182,7 +1177,7 @@ v11 = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([hero, faq, follow])
+<pre><code class="example-source">root = Stack([hero, faq])
 
 hero = Card([CardHeader("Frequently asked questions", "Can't find an answer? Reach out — we read every message.")])
 
@@ -1198,19 +1193,14 @@ faq = Accordion([
     CodeBlock("bash", "docker run -p 8080:8080 ghcr.io/example/app:latest")
   ]),
   AccordionItem("Which payment methods do you accept?", [
-    TagBlock(["Visa", "Mastercard", "Amex", "Apple Pay", "Google Pay", "ACH", "Wire"], "primary", "sm")
+    BadgeList(["Visa", "Mastercard", "Amex", "Apple Pay", "Google Pay", "ACH", "Wire"], "primary", "sm")
   ]),
   AccordionItem("How is my data protected?", [
     Markdown("All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We're SOC 2 Type II certified."),
     Callout("success", "Compliance", "SOC 2 Type II · ISO 27001 · GDPR · HIPAA available on Enterprise.")
   ])
 ])
-
-follow = FollowUpBlock([
-  FollowUpItem("Talk to sales"),
-  FollowUpItem("See pricing"),
-  FollowUpItem("Read the docs")
-])</code></pre>
+</code></pre>
         </div>
       </div>
 
@@ -1254,10 +1244,10 @@ stats = Stack([
 ], "row", "m", "stretch", "start", true)
 
 statusTags = @Each(filtered, "row",
-  row.status == "delivered" ? Tag("Delivered", null, "sm", "success") :
-  row.status == "shipped"   ? Tag("Shipped",   null, "sm", "info") :
-  row.status == "processing"? Tag("Processing",null, "sm", "warning") :
-                              Tag("Cancelled", null, "sm", "danger"))
+  row.status == "delivered" ? Badge("Delivered", "success", null, "sm") :
+  row.status == "shipped"   ? Badge("Shipped", "info", null, "sm") :
+  row.status == "processing"? Badge("Processing", "warning", null, "sm") :
+                              Badge("Cancelled", "danger", null, "sm"))
 
 actions = @Each(filtered, "row", Buttons([
   Button("View", Action([@ToAssistant("Show order " + row.id)]), "secondary", "normal", "small"),
@@ -1308,7 +1298,7 @@ discount = subtotal > 250 ? @Round(subtotal * 0.10, 2) : 0
 tax = @Round((subtotal - discount) * 0.085, 2)
 total = subtotal + shipping + tax - discount
 
-qtyTags = @Each(cart.items, "i", Tag("× " + i.qty, null, "sm", "neutral"))
+qtyTags = @Each(cart.items, "i", Badge("× " + i.qty, "neutral", null, "sm"))
 remove = @Each(cart.items, "i", Button("Remove", Action([@ToAssistant("Remove " + i.sku + " from cart")]), "ghost", "normal", "small"))
 lineCol = @Each(cart.items, "i", "$" + (i.qty * i.price))
 
@@ -1353,36 +1343,36 @@ root = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([hero, services, sla, follow])
+<pre><code class="example-source">root = Stack([hero, services, sla])
 
 hero = Card([
   CardHeader("Services we offer", "End-to-end product engineering for ambitious teams"),
-  TagBlock(["Strategy","Design","Engineering","Launch","Growth"], "primary", "sm")
+  BadgeList(["Strategy","Design","Engineering","Launch","Growth"], "primary", "sm")
 ])
 
 services = Stack([
   Card([
-    Stack([Tag("01", null, "sm", "primary"), TextContent("Product strategy", "large-heavy")], "row", "s", "center", "start"),
+    Stack([Badge("01", "primary", null, "sm"), TextContent("Product strategy", "large-heavy")], "row", "s", "center", "start"),
     Markdown("Discovery sprints, opportunity mapping, and a roadmap that ships."),
-    TagBlock(["workshops","research","roadmaps"], "info", "sm"),
+    BadgeList(["workshops","research","roadmaps"], "info", "sm"),
     Buttons([Button("Learn more", null, "ghost", "normal", "small")])
   ]),
   Card([
-    Stack([Tag("02", null, "sm", "primary"), TextContent("Design systems", "large-heavy")], "row", "s", "center", "start"),
+    Stack([Badge("02", "primary", null, "sm"), TextContent("Design systems", "large-heavy")], "row", "s", "center", "start"),
     Markdown("From brand foundations to a typed component library your engineers will actually use."),
-    TagBlock(["tokens","figma","components"], "info", "sm"),
+    BadgeList(["tokens","figma","components"], "info", "sm"),
     Buttons([Button("Learn more", null, "ghost", "normal", "small")])
   ]),
   Card([
-    Stack([Tag("03", null, "sm", "primary"), TextContent("Web & mobile engineering", "large-heavy")], "row", "s", "center", "start"),
+    Stack([Badge("03", "primary", null, "sm"), TextContent("Web & mobile engineering", "large-heavy")], "row", "s", "center", "start"),
     Markdown("React, Next.js, Vue, Swift, Kotlin — choose your stack and we ship the app."),
-    TagBlock(["next.js","react native","node"], "info", "sm"),
+    BadgeList(["next.js","react native","node"], "info", "sm"),
     Buttons([Button("Learn more", null, "ghost", "normal", "small")])
   ]),
   Card([
-    Stack([Tag("04", null, "sm", "primary"), TextContent("AI integrations", "large-heavy")], "row", "s", "center", "start"),
+    Stack([Badge("04", "primary", null, "sm"), TextContent("AI integrations", "large-heavy")], "row", "s", "center", "start"),
     Markdown("Production-grade RAG pipelines, agent flows, and evaluation harnesses."),
-    TagBlock(["llm","rag","evals"], "info", "sm"),
+    BadgeList(["llm","rag","evals"], "info", "sm"),
     Buttons([Button("Learn more", null, "ghost", "normal", "small")])
   ])
 ], "row", "m", "stretch", "start", true)
@@ -1394,11 +1384,7 @@ sla = Stack([
   StatCard("Retention", "94%", "up")
 ], "row", "m", "stretch", "start", true)
 
-follow = FollowUpBlock([
-  FollowUpItem("Book a discovery call"),
-  FollowUpItem("See case studies"),
-  FollowUpItem("Request a proposal")
-])</code></pre>
+</code></pre>
         </div>
       </div>
 
@@ -1540,16 +1526,16 @@ done = @Filter(todos.rows, "done", "equals", true)
 visible = $tab == "done" ? done : ($tab == "all" ? todos.rows : active)
 
 priorityTag = @Each(visible, "t",
-  t.priority == "high"  ? Tag("High",   null, "sm", "danger") :
-  t.priority == "medium"? Tag("Medium", null, "sm", "warning") :
-                          Tag("Low",    null, "sm", "neutral"))
+  t.priority == "high"  ? Badge("High", "danger", null, "sm") :
+  t.priority == "medium"? Badge("Medium", "warning", null, "sm") :
+                          Badge("Low", "neutral", null, "sm"))
 
 selectableItems = @Each(visible, "t", CheckBoxItem(t.title, t.id, t.project + " · due " + t.due, t.done))
 
 board = Card([
   Stack([
     TextContent("Today's focus", "large-heavy"),
-    Tag("" + @Count(active) + " open", null, "sm", "primary")
+    Badge("" + @Count(active) + " open", "primary", null, "sm")
   ], "row", "s", "center", "between"),
   CheckBoxGroup("todos", selectableItems, $selected)
 ])

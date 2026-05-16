@@ -145,3 +145,26 @@ export const isActionPayload = (value: unknown): value is ActionPayload => {
     (value as { kind?: unknown }).kind === "Action",
   );
 };
+
+/**
+ * Marker emitted by the `Theme({...})` construct. Carries an arbitrary token
+ * map that the element applies on top of the base theme between render
+ * cycles. Distinct from `ComponentNode` so the renderer can ignore it (it is
+ * a side-effect, not a piece of UI to draw).
+ *
+ * Authors declare a theme like any other top-level binding:
+ *
+ *   theme = Theme({colorPrimary: "#0969da", radiusButton: "6px"})
+ *   root  = Stack([...])
+ */
+export interface ThemeNode {
+  kind: "Theme";
+  tokens: Record<string, string>;
+}
+
+export const isThemeNode = (value: unknown): value is ThemeNode => {
+  return Boolean(
+    value && typeof value === "object" &&
+    (value as { kind?: unknown }).kind === "Theme",
+  );
+};

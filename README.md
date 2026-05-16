@@ -21,10 +21,10 @@ The library bundles everything needed at runtime:
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@Round`, `@Floor`, `@Ceil`, `@Abs`, …) plus array shortcuts (`.length`, `.first`, `.last`, and field pluck like `$rows.title`).
 - A **React-like DOM reconciler** that diffs each re-render against the live DOM — text-input value, selection, IME state, scroll positions, `<details>.open`, and stateful primitives like `Tabs` are all preserved across renders. Components that need to hold UI state get a `helpers.useInstanceState(...)` slot keyed by their position in the tree.
-- A **rich component library** of 100+ components — layout, content, forms (including `Slider`, `NumberInput`, `DatePicker`, `FileUpload`, `Combobox`), tables, charts, feedback & media (`Avatar`, `Progress`, `Tooltip`, `HoverCard`, `Popover`, `Toast`, `Toasts`, `Rating`, `ProgressRing`, `ChatBubble`, …), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), hierarchical data (`Tree`, `TreeNode`), chat composites, **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `MetricGrid`, `Toolbar`, `EmptyState`, `Timeline`, `KanbanBoard`, `Testimonial`, `PricingTable`, `MediaCard`, …) and **app-shell composites** (`AppShell`, `Sidebar`, `SplitView`) that render a full SaaS layout in one statement.
+- A **rich component library** of 130+ components — layout, content (including a Markdown parser with headings/blockquotes/fenced code/numbered lists/images/auto-links and `Spinner`), forms (`Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect`, `SegmentedControl`), tables (with `density`, `striped`, `sticky`, per-column `align`), charts (`BarChart`, `LineChart`, `PieChart`) and inline `Sparkline`, feedback & media (`Avatar`, `Progress` with `segments`/`buffered`, `Tooltip`, `HoverCard`, `Popover`, `Toast`/`Toasts`, `Rating` with `halfStep` + custom icons, `ProgressRing`, `ChatBubble`, …), navigation (`Breadcrumb`, `Pagination` with `total`/`perPage`/`compact`, `Navbar`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), hierarchical data (`Tree`, `TreeNode`), chat composites, **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `MetricGrid`, `Toolbar` with `center` slot, `EmptyState` with multi-action + `illustration`, `Timeline`, `KanbanBoard`, `Testimonial`, `PricingTable`, `MediaCard`, …) and **app-shell composites** (`AppShell`, `Sidebar`, `SplitView`) that render a full SaaS layout in one statement.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available.
 - A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(label, to)`, `@Navigate("/path")`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always on.
-- **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties.
+- **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties. **50+ design tokens** (colors, typography, button styling, radii, shadows, focus rings, motion, charts) make it easy to match any brand. Themes can also be set **from inside the script** with `theme = Theme({...})` so a single response can be branded without touching host config — see the [brand themes live example](https://asfand-dev.github.io/streaming-ui-script/brand-themes.html) (GitHub, Apple, Stripe, IONOS, Notion, Vercel).
 - A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available. The build emits two flavours: `system_prompt.txt` (full — every feature) and `system_prompt_chat.txt` (compact — only the surfaces a chat reply needs).
 
 Everything lives inside a Shadow DOM, so the renderer's styles never leak into
@@ -210,27 +210,72 @@ Seven themes are built in. Pick one with `theme="..."` or pass a custom token ma
 | `brutalist`  | Neo-brutalism — hard 2px black borders, chunky offset shadows, loud primary, zero gradients.      |
 | `skyline`    | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.          |
 
-Custom token maps:
+### Token groups
+
+Themes are a flat object of CSS-valued strings, grouped by domain:
+
+| Group        | Sample tokens                                                                                                                                                                       |
+|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Surface      | `colorBg`, `colorBgSubtle`, `colorSurface`, `colorSurfaceMuted`, `colorBorder`, `colorText`, `colorTextMuted`                                                                       |
+| Brand        | `colorPrimary`, `colorPrimaryHover`, `colorPrimaryText`, `colorAccent`, `colorAccentHover`, `colorFocusRing`                                                                        |
+| Semantic     | `colorSuccess`, `colorWarning`, `colorDanger`, `colorInfo`                                                                                                                          |
+| Typography   | `fontFamily`, `fontFamilyHeading`, `fontFamilyMono`, `fontSizeBase`, `fontSizeHeading`, `fontSizeTitle`, `fontWeightBody`, `fontWeightHeading`, `letterSpacingHeading`, `headingTextTransform` |
+| Shape        | `radiusXs`, `radiusSm`, `radiusMd`, `radiusLg`, `radiusPill`, `radiusButton`, `radiusInput`, `borderWidth`, `shadowSm`, `shadowMd`, `shadowLg`                                       |
+| Spacing      | `spacingXs`, `spacingS`, `spacingM`, `spacingL`, `spacingXl`                                                                                                                        |
+| Buttons      | `buttonFontWeight`, `buttonTextTransform`, `buttonLetterSpacing`, `buttonPaddingY`, `buttonPaddingX`                                                                                |
+| Motion       | `transitionDuration`                                                                                                                                                                |
+| Charts       | `chart1`–`chart6`                                                                                                                                                                   |
+
+### Custom token maps (from the host)
 
 ```js
 el.setTheme({
-  colorPrimary: "#16a34a",
+  colorPrimary:      "#16a34a",
   colorPrimaryHover: "#15803d",
-  colorBg: "#f0fdf4",
-  radiusMd: "14px",
+  colorBg:           "#f0fdf4",
+  fontFamilyHeading: "'Inter', system-ui, sans-serif",
+  radiusButton:      "14px",
+  buttonFontWeight:  "600",
 });
 ```
 
-You can also style the host element from outside:
+### `Theme({...})` from inside a response
+
+A response can also brand itself by assigning a `Theme({...})` call to the
+reserved `theme` binding. The tokens land on the host as CSS variables on
+top of the base theme, so the next render of the same element renders in
+the new palette without a reload:
+
+```text
+theme = Theme({
+  colorPrimary:       "#0969da",
+  fontFamily:         "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamilyHeading:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  radiusButton:       "6px",
+  borderWidth:        "1px",
+  buttonFontWeight:   "500"
+})
+root = Stack([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
+```
+
+Removing the `Theme(...)` line snaps the UI back to the base theme. Unknown
+keys are ignored silently, so typos in an LLM-emitted token map can never
+break the page.
+
+### Host-page CSS variable override
 
 ```css
 streaming-ui-script {
   --rui-color-primary: #16a34a;
-  --rui-radius-md: 14px;
+  --rui-radius-button: 14px;
+  --rui-font-family-heading: 'Inter', system-ui, sans-serif;
 }
 ```
 
-A full list of tokens lives in `docs/themes.html` and `src/theme/index.ts`.
+A full list of tokens lives in `docs/themes.html` and `src/theme/index.ts`,
+and the [brand themes live example](https://asfand-dev.github.io/streaming-ui-script/brand-themes.html)
+ships ready-made GitHub / Apple / Stripe / IONOS / Notion / Vercel token
+maps you can copy.
 
 ---
 
@@ -248,7 +293,7 @@ shadow root. Host apps do **not** need to add a stylesheet.
 - Use the dedicated `Icon(name, variant?, size?)` component to render a
   standalone glyph (`size` ∈ `xs`, `sm`, `md`, `lg`, `xl`).
 - Every component prop named `icon` — `NavLink`, `SidebarItem`, `Banner`,
-  `Notification`, `FeatureItem`, `Tag`, `StatCard`, `ListItem`,
+  `Notification`, `FeatureItem`, `Badge`, `StatCard`, `ListItem`,
   `TimelineItem`, `DescriptionItem`, `Tile`, `EmptyState`, …  — now expects a
   Font Awesome name (or a `variant:name` string).
 - `ProgressRing(value, max?, label?, …)` renders `label` as an icon when it
@@ -426,16 +471,16 @@ for a full end-to-end walkthrough.
 
 | Group              | Components                                                                                                              |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------|
-| Layout             | `Stack`, `Grid`, `Section`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Divider`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Sheet`, `Steps`, `StepsItem`, `AspectRatio`, `ScrollArea` |
-| Content            | `TextContent`, `Header`, `Image`, `Icon`, `Link`, `Badge`, `Tag`, `TagBlock`, `Alert`, `Callout`, `Note`, `Quote`, `CodeBlock`, `Skeleton`, `Markdown`, `Kbd` |
-| Forms              | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `Toggle`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `DatePicker`, `FileUpload`, `Combobox` |
-| Data               | `Table`, `Col`, `List`, `ListItem`, `StatCard`, `Stats`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode` |
+| Layout             | `Stack`, `Grid`, `Section`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardBody`, `CardFooter`, `Separator` (with optional label), `Tabs` (orientation + keyboard nav), `TabItem` (icon + badge), `Accordion`, `AccordionItem`, `Modal` (size + footer + close), `Sheet`, `Steps`, `StepsItem`, `AspectRatio`, `ScrollArea` |
+| Content            | `TextContent`, `Image` (ratio + fit + fallback), `Icon`, `Link`, `Badge`, `BadgeList`, `Callout` (compact), `Quote`, `CodeBlock` (copy + lines + highlight), `Skeleton` (variants), `Spinner`, `Markdown` (headings, fenced code, blockquotes, lists, images, auto-link), `Kbd` |
+| Forms              | `Form`, `FormControl`, `Input`, `TextArea`, `Select`, `SelectItem`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `Button` (sm/md/lg + icon), `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect` |
+| Data               | `Table` (density/striped/sticky/align/emptyLabel), `Col` (align), `List`, `ListItem`, `StatCard` (spark), `Stats` (spark), `Sparkline`, `Tile`, `Progress` (segments + buffered), `ProgressRing`, `Pagination` (total + perPage + compact), `Tree`, `TreeNode` |
 | Charts             | `BarChart`, `LineChart`, `PieChart`, `Series`                                                                           |
-| Feedback & Media   | `Avatar`, `AvatarGroup`, `PersonChip`, `Tooltip`, `HoverCard`, `Popover`, `Rating`, `Toast`, `Toasts`                   |
-| Navigation         | `Breadcrumb`, `BreadcrumbItem`, `Navbar`, `NavbarItem`                                                                  |
+| Feedback & Media   | `Avatar`, `AvatarGroup`, `PersonChip`, `Tooltip`, `HoverCard`, `Popover`, `Rating` (half-step + icon family), `Toast` (standalone via `position`), `Toasts` |
+| Navigation         | `Breadcrumb`, `BreadcrumbItem`, `Pagination` (total + perPage + compact), `Navbar`, `NavbarItem`                       |
 | Menus              | `DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`                                                                |
 | Chat               | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`, `ChatBubble`                                |
-| Patterns           | `Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Toolbar`, `EmptyState`, `Timeline`, `TimelineItem`, `FeatureGrid`, `FeatureItem`, `MediaCard`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `Notification`, `KanbanBoard`, `KanbanColumn`, `KanbanCard`, `DescriptionList`, `DescriptionItem`, `StatusDot`, `PricingTable`, `PricingCard` |
+| Patterns           | `Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Toolbar` (center slot), `EmptyState` (multi-action + illustration), `Timeline`, `TimelineItem`, `FeatureGrid`, `FeatureItem`, `MediaCard`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `Notification`, `KanbanBoard`, `KanbanColumn`, `KanbanCard`, `DescriptionList`, `DescriptionItem`, `StatusDot`, `PricingTable`, `PricingCard` |
 | App shell          | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`                                                     |
 | Scripting          | `Script` (always available; `chat` prompt mode omits it)                                                                |
 | Routing            | `Routes`, `Route`, `NavLink` (always available; `chat` prompt mode omits them)                                          |
@@ -527,7 +572,9 @@ CDN.
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio (formerly `theme-customization.html`, now redirected). |
 | `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
-| `playground.html`                   | CodeMirror 6 editor with custom Streaming UI Script highlighting + autocomplete, live preview, share links, persistent layout modes (drag the splitter, collapse the docs sidebar), hover-over component info, signature/argument tooltips with allowed enum values, and an inspection mode that maps rendered DOM back to the source. Powered by [`src/language/`](./src/language/README.md). |
+| `playground.html`                   | CodeMirror 6 editor with custom Streaming UI Script highlighting + autocomplete, live preview, share links (`?code=` query param + hash), persistent layout modes (drag the splitter, collapse the docs sidebar), hover-over component info, signature/argument tooltips with allowed enum values, and an inspection mode that maps rendered DOM back to the source. Powered by [`src/language/`](./src/language/README.md). |
+| `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes — **Chat Compact** (`system_prompt_chat`), **Chat Full** (`system_prompt`), **Website Builder** (full prompt + landing-page extensions), and **App Builder** (full prompt + routed-app extensions with seeded mock data). Each assistant turn renders both a live preview and a copy-able source view, with one-click *Open in playground* and *Download as standalone HTML*. Picks any built-in theme and any OpenRouter model; obeys the docs light/dark toggle. |
+| `chat-bot-advanced.html`            | Production-grade **LLM pipeline** demo. Every user prompt runs four sequential OpenRouter calls — **(1) Brief** (intent classifier that outputs JSON: intent, industry, audience, brand, app name, tagline, tone, locale, currency, polished prompt), **(2) Blueprint** (information architect that returns JSON pages, navigation, data schemas, 6–15 realistic sample records per schema, KPIs, primary actions, filters, ctaLines, copy), **(3) Brand theme** (returns a tailored `theme = Theme({...})` line keyed to the industry/brand/tone), and **(4) Intent-specific UI generator** — 14+ specialised generators for `dashboard` / `app` / `website` / `landing` / `storefront` / `crm` / `booking` / `directory` / `portfolio` / `docs` / `form` / `data-view` / `profile` / `chat` / `generic` covering essentially every professional/industry use case, each enforcing shared production rules (accessibility, responsive, real copy, working interactions, density, icons, follow-ups). The theme line is prepended to the streaming UI source and rendered live. Per-turn **Refine** flow rewrites the program in place from a change request. Every successful generation auto-saves to a local **Saved-apps gallery** (12 most recent) with quick Playground / HTML download / Rebuild / Remove actions. Settings drawer adds an industry-hint field that biases ambiguous prompts. |
 | `live-examples.html`                | Catalog page linking out to every standalone demo below.                                |
 
 ---
@@ -540,7 +587,6 @@ host page wires `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
 
 | Demo page                       | Highlights                                                                                                  |
 |---------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `chat-bot.html`                 | OpenAI-powered chat that streams replies into the renderer. Toggle between the chat-flavoured and full system prompt live. |
 | `tools-example.html`            | Read / write / poll patterns wired to in-page `setTools()` handlers.                                        |
 | `external-data-example.html`    | Live GitHub repository explorer powered by a single tool function.                                          |
 | `support-agent.html`            | AI triage workspace: pick a ticket, the agent suggests priority + draft reply.                              |
@@ -563,6 +609,7 @@ host page wires `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
 | `file-manager.html`             | Cloud file browser: `Tree` sidebar, `Toolbar`, files `Table`, preview `Sheet`, storage `ProgressRing`.       |
 | `calendar-app.html`             | Calendar & scheduler: `DatePicker`, category chips, busy-hours ring, agenda `Timeline`, event detail `Sheet`. |
 | `docs-portal.html`              | Help center / knowledge base: `SearchBar`, `Tree` categories, `Markdown` article, `Rating`, FAQ `Accordion`. |
+| `brand-themes.html`             | Same UI reskinned with `Theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, and **Vercel** — copy any palette straight into your own response. |
 
 The full catalog with tag filters lives at
 [`docs/live-examples.html`](https://asfand-dev.github.io/streaming-ui-script/live-examples.html).

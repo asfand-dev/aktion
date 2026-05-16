@@ -241,14 +241,14 @@ meiBody = Stack([
 ], "column", "m")
 
 draftBody = Stack([
-  Note("Saved as draft Sunday at 18:42. No recipient has received this yet.", "info"),
+  Callout("info", "Saved as draft Sunday at 18:42. No recipient has received this yet.", null, null, true),
   ChatBubble("You",
              "Hi team, please update my billing address to ACME Inc., 1 Market St, SF.",
              "Sun · draft", null, "me", "sending")
 ], "column", "m")
 
 spamBody = Stack([
-  Note("This message was flagged as spam. Only the preview is shown.", "warning"),
+  Callout("warning", "This message was flagged as spam. Only the preview is shown.", null, null, true),
   ChatBubble("You've won!",
              "Claim your $1,000,000 prize before midnight by replying with your bank details.",
              "Sun", null, "agent", "delivered")
@@ -259,14 +259,14 @@ threadBody = $thread == "billing" ? billingBody : ($thread == "release" ? releas
 threadHeader = Stack([
   PersonChip(selected.from, selected.email, selected.avatar, "md", "online"),
   Spacer(),
-  Tag(selected.tag, null, "sm", selected.tagTone)
+  Badge(selected.tag, selected.tagTone, null, "sm")
 ], "row", "m", "center")
 
 threadFooter = Stack([
   Separator("horizontal", true),
   TextArea("reply", "Type a reply… (markdown supported)", 3, $reply),
   Stack([
-    Tag("Markdown ready", "wand-magic-sparkles", "sm", "info"),
+    Badge("Markdown ready", "info", "wand-magic-sparkles", "sm"),
     Spacer(),
     Buttons([
       Button("Save draft", Action([@ToAssistant("Save the reply as a draft.")]), "secondary"),

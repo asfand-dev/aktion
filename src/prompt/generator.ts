@@ -88,6 +88,7 @@ function generateFullPrompt(library: ComponentLibrary, options: PromptOptions): 
   if (flags.toolCalls || flags.bindings) sections.push(builtinsSection());
   sections.push(javascriptSection());
   sections.push(routingSection());
+  sections.push(themingSection());
   if (flags.inlineMode) sections.push(inlineModeSection());
   if (flags.editMode) sections.push(editModeSection());
   if (options.tools && options.tools.length > 0) {
@@ -173,7 +174,7 @@ function chatSyntaxSection(rootComponent: string): string {
 2. \`root\` is the entry point — every program must define \`root = ${rootComponent}(...)\`.
 3. Expressions are: strings (\`"..."\`), numbers, booleans (\`true\`/\`false\`), \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`.
 4. Prefer references for readability: define \`name = ...\` on one line, then use \`name\` elsewhere.
-5. EVERY variable (except \`root\`) MUST be referenced somewhere. Unreachable definitions silently render nothing.
+5. EVERY variable (except \`root\` and the optional top-level \`theme = Theme({...})\` binding) MUST be referenced somewhere. Unreachable definitions silently render nothing.
 6. Arguments are POSITIONAL (order matters, not names). Write \`Stack([children], "row", "l")\`, NOT \`Stack(children: ..., direction: "row")\`.
 7. Optional arguments can be omitted from the end.
 8. Strings use double quotes with backslash escaping.
@@ -317,7 +318,8 @@ function syntaxSection(rootComponent: string): string {
 - Ternary: \`cond ? a : b\`.
 - Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
 - Comments are stripped by the parser (\`// line\`, \`# line\`, \`/* block */\`). Avoid them in responses — they waste tokens.
-- The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.`;
+- The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.
+- Two top-level identifiers are reserved: \`root\` (the UI entry point) and \`theme\` (optional — assign a \`Theme({...})\` call to brand the response). Neither needs to be referenced from elsewhere; the runtime picks both up by name.`;
 }
 
 function designPrinciplesSection(): string {
@@ -367,7 +369,7 @@ quality from a hand-crafted shadcn/ui layout.
    - \`Rating(value, max?, label?, count?)\` for product / review stars
    - \`ProgressRing(value, max?, label?, caption?, tone?)\` for circular KPI/quota indicators
    - \`Quote(text, cite?)\` for inline pull-quotes (use \`Testimonial\` when you also have an avatar/role)
-   - \`Note(content, tone?)\` for compact tips/warnings (lighter than \`Callout\`)
+   - \`Callout(variant, title, description?, icon?, compact=true)\` for compact tips/warnings inline (drop \`compact\` for a full banner)
    - \`ChatBubble(author, body, time?, from?)\` for chat-style transcripts inside a Card
 2. **Use the App shell for full product surfaces.** When the request implies an
    app (dashboard with nav, settings with sections, admin console, inbox),
@@ -426,13 +428,13 @@ The single most common failure is producing a UI that's too sparse. Use these
 
 | Request type            | Minimum named sections | Required patterns                                                              |
 |-------------------------|------------------------|---------------------------------------------------------------------------------|
-| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`MetricGrid\` + chart Card + table/list + secondary Card + \`FollowUpBlock\` |
-| Landing / marketing     | **5**                  | \`Hero\` + \`FeatureGrid\` + (Testimonial \\| PricingTable) + \`Banner\` CTA + \`FollowUpBlock\` |
-| Detail / profile        | **5**                  | \`PageHeader\` + \`DescriptionList\` Card + secondary content Card + \`Timeline\`/\`Comment\` Card + \`FollowUpBlock\` |
+| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`MetricGrid\` + chart Card + table/list + secondary Card |
+| Landing / marketing     | **5**                  | \`Hero\` + \`FeatureGrid\` + (Testimonial \\| PricingTable) + \`Banner\` CTA |
+| Detail / profile        | **5**                  | \`PageHeader\` + \`DescriptionList\` Card + secondary content Card + \`Timeline\`/\`Comment\` Card |
 | Settings                | **5**                  | \`PageHeader\` + 3+ Section Cards (with \`SectionHeader\`) + danger-zone Card |
 | List / browse           | **5**                  | \`PageHeader\` + \`Toolbar\` + \`MetricGrid\` (optional) + \`Table\`/\`Grid\` + \`Pagination\` |
 | Full app surface        | **4** (inside shell)   | \`AppShell\` wrapping \`Sidebar\` + (PageHeader + sections) |
-| Empty / zero state      | **3**                  | \`PageHeader\` + \`EmptyState\` (with CTA) + \`FollowUpBlock\` |
+| Empty / zero state      | **3**                  | \`PageHeader\` + \`EmptyState\` (with CTA) |
 | Form (compose / submit) | **4**                  | \`PageHeader\` (or \`CardHeader\`) + grouped Card sections + buttons row + status \`Callout\` |
 
 If your response has fewer named sections than the minimum, **add more** —
@@ -503,12 +505,11 @@ kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%", "cart-shopping")
 kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%", "ticket")
 kpiConvRate   = StatCard("Conversion", "3.42%", "down", "-0.7%", "arrow-trend-down")
 dashRow       = Grid([dashChartCard, dashRecent], 2, "l")
-dashChartCard = Card([SectionHeader("Revenue trend", "Daily, last 30 days", null, Tag("Up 12.4%", null, "sm", "success")), dashChart])
+dashChartCard = Card([SectionHeader("Revenue trend", "Daily, last 30 days", null, Badge("Up 12.4%", "success", null, "sm")), dashChart])
 dashChart     = LineChart(metrics.day, [Series("Revenue", metrics.revenue), Series("Orders", metrics.orders)])
 dashRecent    = Card([SectionHeader("Latest orders", null, null, null, dashRecentActions), recentTable])
 dashRecentActions = [Button("View all", Action([@Run(view_orders)]), "ghost", "button", "small")]
 recentTable   = Table([Col("Order", orders.id), Col("Customer", orders.customer), Col("Total", orders.total, "currency"), Col("Status", orders.statusTag)])
-dashFollowUps = FollowUpBlock(["Break down by region", "Compare to last quarter", "Show top customers"])
 
 $range   = "30d"
 $segment = "all"
@@ -520,7 +521,7 @@ orders   = Query("recent_orders", {range: $range}, {id:[], customer:[], total:[]
 Use whenever the request implies a complete product surface (admin console,
 project management view, dashboard with persistent navigation).
 \`\`\`
-root  = AppShell(nav, [pageHeader, kpiStrip, contentGrid, activityCard, followUps], topbar)
+root  = AppShell(nav, [pageHeader, kpiStrip, contentGrid, activityCard], topbar)
 
 nav = Sidebar([
   SidebarSection("Workspace", [
@@ -559,7 +560,7 @@ projectsList = List([
   ListItem("Auth SDK rewrite",   "Linus T · 1 open issue",      "shield-halved"),
   ListItem("Onboarding revamp",  "Grace Hopper · awaiting QA",  "bullseye")
 ])
-statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All systems normal", null, "sm", "success")), statusList])
+statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All systems normal", "success", null, "sm")), statusList])
 statusList = Stack([
   StatusDot("API",       "success"),
   StatusDot("Database",  "success"),
@@ -573,15 +574,14 @@ activityCard = Card([SectionHeader("Recent activity"), Timeline([
   TimelineItem("Tokenizer 2.1 deployed", "Yesterday", "Latency -14%",            "circle-check", "success")
 ])])
 
-followUps = FollowUpBlock(["Show me the at-risk projects", "Open billing", "Invite my team"])
 \`\`\`
 
 ### Detail / profile page (5 sections, with DescriptionList)
 \`\`\`
-root           = Stack([detailHeader, summaryGrid, activityCard, dangerCard, detailFollowUps], "column", "l")
+root           = Stack([detailHeader, summaryGrid, activityCard, dangerCard], "column", "l")
 detailHeader   = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], detailActions, detailStatus)
 detailActions  = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
-detailStatus   = Tag("Online", "circle", "sm", "success")
+detailStatus   = Badge("Online", "success", "circle", "sm")
 
 summaryGrid    = Grid([profileCard, infoCard], 2, "l")
 profileCard    = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.", ["design", "ux", "typography"], [Button("Follow", Action([@Run(follow)]), "primary", "button", "small"), Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "button", "small")])
@@ -591,7 +591,7 @@ profileDescriptions = DescriptionList([
   DescriptionItem("Manager", "Margaret Hamilton"),
   DescriptionItem("Location", "Berlin, DE", "location-dot"),
   DescriptionItem("Joined", "Mar 2022"),
-  DescriptionItem("Slack", Tag("@alex", null, "sm", "primary")),
+  DescriptionItem("Slack", Badge("@alex", "primary", null, "sm")),
   DescriptionItem("Status", StatusDot("Active", "success"))
 ], 2)
 
@@ -602,7 +602,6 @@ activityCard   = Card([SectionHeader("Recent activity", "Last 14 days"), Timelin
 ])])
 
 dangerCard     = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"), Buttons([Button("Delete account", Action([@Run(delete_account)]), "danger")])], "outlined")
-detailFollowUps = FollowUpBlock(["Show projects", "Open inbox", "Schedule a 1:1"])
 \`\`\`
 
 ### Settings page (sectioned form with switches + sidebar nav inside content)
@@ -628,7 +627,7 @@ notificationsCard = Card([SectionHeader("Notifications", "Choose what reaches yo
   FormControl("Push alerts",     Switch("push",   "Mobile push when @-mentioned", $pushAlerts))
 ], "column", "m")])
 
-billingCard = Card([SectionHeader("Billing", null, "PAYMENT", Tag("Pro plan", null, "sm", "primary"), [Button("Manage plan", Action([@Run(manage_plan)]), "ghost", "button", "small")]), DescriptionList([
+billingCard = Card([SectionHeader("Billing", null, "PAYMENT", Badge("Pro plan", "primary", null, "sm"), [Button("Manage plan", Action([@Run(manage_plan)]), "ghost", "button", "small")]), DescriptionList([
   DescriptionItem("Plan", "Pro · monthly"),
   DescriptionItem("Renews", "May 28, 2026"),
   DescriptionItem("Seats", "12 of 25"),
@@ -640,7 +639,7 @@ dangerCard = Card([SectionHeader("Danger zone", "Permanent actions"), Buttons([B
 
 ### Landing / marketing page (Hero + features + pricing + testimonial + CTA)
 \`\`\`
-root            = Stack([landingHero, landingFeatures, pricingBlock, social, landingCta, landingFollowUps], "column", "xl")
+root            = Stack([landingHero, landingFeatures, pricingBlock, social, landingCta], "column", "xl")
 
 landingHero = Hero(
   "Ship generative UI in minutes",
@@ -670,13 +669,12 @@ social = Grid([
 ], 2, "l")
 
 landingCta       = Banner("Ready to ship generative UI?", "Read the 30-second integration guide.", Button("Get started", Action([@OpenUrl("/get-started.html")]), "primary"), "wand-magic-sparkles", "primary")
-landingFollowUps = FollowUpBlock(["Show me the system prompt", "Embed it in my React app", "Wire up tools"])
 \`\`\`
 
 ### List / browse page (filterable, paginated, with stats)
 \`\`\`
 root      = Stack([listHeader, listToolbar, listStats, listTableCard, listPager], "column", "l")
-listHeader = PageHeader("Customers", "Everyone in the CRM", null, [Button("Import", Action([@Run(import_csv)]), "ghost"), Button("Add customer", Action([@Run(new_customer)]), "primary")], Tag("" + data.total + " total", null, "sm", "primary"))
+listHeader = PageHeader("Customers", "Everyone in the CRM", null, [Button("Import", Action([@Run(import_csv)]), "ghost"), Button("Add customer", Action([@Run(new_customer)]), "primary")], Badge("" + data.total + " total", "primary", null, "sm"))
 
 $query  = ""
 $status = "all"
@@ -708,11 +706,10 @@ data      = Query("list_customers", {q: $query, status: $status, page: $page}, {
 
 ### Empty / zero state (3 sections)
 \`\`\`
-root        = Stack([blankHeader, blankBody, blankFollowUps], "column", "l")
+root        = Stack([blankHeader, blankBody], "column", "l")
 blankHeader = PageHeader("Reports", "Generate, schedule, and share insights.", null, blankActions)
 blankActions = [Button("New report", Action([@Run(new_report)]), "primary")]
 blankBody    = EmptyState("No reports yet", "Reports you create or are shared with you will show up here. Try one of the templates to get started.", "chart-pie", Button("Browse templates", Action([@Run(open_templates)]), "primary"))
-blankFollowUps = FollowUpBlock(["Show me a template", "Explain reports", "Open documentation"])
 \`\`\`
 
 ### Master/detail (SplitView, e.g. inbox or file browser)
@@ -730,7 +727,7 @@ inboxList    = Card([List(@Each(data.rows, "m", inboxRow))])
 inboxRow     = ListItem(m.subject, m.preview, m.icon)
 
 selectedCard = Card([
-  SectionHeader(data.selected.subject, null, null, Tag(data.selected.category, null, "sm", "primary"), selectedActions),
+  SectionHeader(data.selected.subject, null, null, Badge(data.selected.category, "primary", null, "sm"), selectedActions),
   PersonChip(data.selected.from, data.selected.email, data.selected.avatar),
   Markdown(data.selected.body),
   Separator,
@@ -746,7 +743,7 @@ data = Query("inbox", {filter: $filter, q: $query, id: $selectedId}, {rows: [], 
 Use when the request implies a content surface that opens with a big image:
 product detail page, blog post, marketing campaign, release announcement.
 \`\`\`
-root = Stack([productCover, productSummary, productStats, relatedHeader, related, reviewsHeader, reviews, productFollowUps], "column", "l")
+root = Stack([productCover, productSummary, productStats, relatedHeader, related, reviewsHeader, reviews], "column", "l")
 
 productCover = Cover(
   "Aurora Headphones",
@@ -761,11 +758,11 @@ productCover = Cover(
 
 productSummary = Grid([summaryCopy, summaryRating], 2, "l")
 summaryCopy    = Card([SectionHeader("Why Aurora", "Engineered for long listening sessions"), Stack([
-  Note("Free returns within 30 days · 2-year warranty included.", "tip"),
+  Callout("info", "Free returns within 30 days · 2-year warranty included.", null, "lightbulb", true),
   Markdown("Active noise cancellation with adaptive transparency. **40-hour** battery on a single charge. Hi-Res certified."),
   Quote("Worth every penny — best balance of clarity, comfort, and battery I've tested.", "— TheVerge")
 ])])
-summaryRating  = Card([SectionHeader("Reviews", null, null, Tag("In stock", null, "sm", "success")), Stack([
+summaryRating  = Card([SectionHeader("Reviews", null, null, Badge("In stock", "success", null, "sm")), Stack([
   Rating(4.6, 5, "4.6 of 5", 1284, "lg"),
   Stats([{label:"Comfort", value:"4.8", tone:"success"}, {label:"Sound", value:"4.7", tone:"primary"}, {label:"Battery", value:"4.5"}], "start"),
   ProgressRing(86, 100, "86%", "Would buy again", "success", "md")
@@ -789,7 +786,6 @@ reviews       = Stack([reviewA, reviewB], "column", "m")
 reviewA       = Card([Stack([PersonChip("Maya R.", "Verified owner", null, "sm"),  Rating(5),    Quote("Comfortable enough to wear all day — the ANC is genuinely impressive."), TextContent("Bought · 12 days ago", "small", "muted")])])
 reviewB       = Card([Stack([PersonChip("Tomás L.", "Verified owner", null, "sm"), Rating(4.5), Quote("Sound is fantastic; only minor gripe is the case is a touch large."), TextContent("Bought · 1 month ago", "small", "muted")])])
 
-productFollowUps = FollowUpBlock(["Compare with the Pro line", "Show me wireless earbuds", "Open my orders"])
 \`\`\``;
 }
 
@@ -797,8 +793,8 @@ function defaultRichExamples(): string[] {
   return [
     // Two anchor examples the LLM can pattern-match against. Both are
     // intentionally dense so "rich" reads as the baseline expectation.
-    `# Project status dashboard (dashboard request → 6+ sections, MetricGrid, Toolbar, Kanban, Timeline, FollowUpBlock)
-root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardGrid, statusFollowUps], "column", "l")
+    `# Project status dashboard (dashboard request → 6+ sections, MetricGrid, Toolbar, Kanban, Timeline)
+root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardGrid], "column", "l")
 statusBanner  = Banner("Quarterly review is open", "Submit your team's update by Friday.", bannerCta, "bullseye", "primary")
 bannerCta     = Button("Submit update", Action([@Run(open_submit)]), "primary", "button", "small")
 dashHeader    = PageHeader("Engineering Q3", "12 active projects · 4 at risk", ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)
@@ -829,7 +825,6 @@ activityCard  = Card([SectionHeader("Recent activity", "Latest events across squ
   TimelineItem("Tokenizer 2.1 deployed",    "Yesterday","Latency improved 14%",              "circle-check", "success"),
   TimelineItem("Security review opened",    "2d ago",  "Awaiting threat model from infosec", "circle-info", "info")
 ])])
-statusFollowUps = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
 $range = "30d"
 $owner = "all"`,
     `# App shell with sidebar nav (full product surface)
@@ -861,13 +856,12 @@ projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Butto
   ListItem("Auth SDK rewrite",    "Linus T · 1 open issue",       "shield-halved"),
   ListItem("Onboarding revamp",   "Grace Hopper · awaiting QA",   "bullseye")
 ])])
-statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All systems normal", null, "sm", "success")), Stack([
+statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All systems normal", "success", null, "sm")), Stack([
   StatusDot("API",       "success"),
   StatusDot("Database",  "success"),
   StatusDot("Webhooks",  "warning"),
   StatusDot("Streaming", "success", true)
-], "column", "s")])
-footerCard = FollowUpBlock(["Show at-risk projects", "Open billing", "Invite my team"])`,
+], "column", "s")])`,
   ];
 }
 
@@ -1020,7 +1014,7 @@ $todos = [{id: 1, text: "Welcome — try editing", done: false}]
 $draft = ""
 $filter = "all"
 
-header = Header("Todos", "Add tasks below")
+header = PageHeader("Todos", "Add tasks below")
 
 composer = Stack([
   Input("draft-input", "What needs doing?", "text", null, $draft),
@@ -1034,7 +1028,7 @@ visible = $filter == "open" ? @Filter($todos, "done", "==", false) : ($filter ==
 list = visible.length == 0 ? Callout("info", "All clear", "No todos match this filter.") : @Each(visible, "t", row)
 
 row = Card([Stack([
-  Tag(t.done ? "done" : "open"),
+  Badge(t.done ? "done" : "open", t.done ? "success" : "neutral"),
   TextContent(t.text),
   Button("Toggle", Action([
     @Js(\`
@@ -1121,7 +1115,7 @@ This is the canonical way to wire delete/toggle/edit buttons on rows. The \`@Js\
 $todos = [{id: 1, text: "Buy milk", done: false}, {id: 2, text: "Walk dog", done: true}]
 list = @Each($todos, "t", row)
 row = Card([Stack([
-  Tag(t.done ? "done" : "open"),
+  Badge(t.done ? "done" : "open", t.done ? "success" : "neutral"),
   TextContent(t.text),
   Buttons([
     Button("Toggle", Action([
@@ -1262,6 +1256,64 @@ notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + "
 - **Forgetting the wildcard.** Without \`Route("*", …)\` (or the \`default\` argument), an unknown URL renders an empty outlet.
 - **Reading \`params\` outside the matched Route.** \`params\` is a loop variable scoped to the matched content, just like \`@Each\`'s var.
 - **Using a regular \`Link(...)\` with \`href="#/path"\`.** That works but doesn't reflect the active state. Prefer \`NavLink\` for in-app navigation; reserve \`Link\` for external URLs.`;
+}
+
+function themingSection(): string {
+  return `## In-script theming
+The runtime exposes \`Theme({...})\` — a meta-construct that writes theme
+tokens to the host element as CSS custom properties on top of the base
+theme. Use it to brand a single response (GitHub blue, Stripe purple,
+Apple system font, IONOS navy, …) without changing the host configuration.
+
+### Usage
+Assign the call to a top-level binding called \`theme\` (the runtime looks for that name) **before** defining \`root\`:
+
+\`\`\`
+theme = Theme({
+  colorPrimary:       "#0969da",
+  colorPrimaryHover:  "#0860c4",
+  colorAccent:        "#1f6feb",
+  colorBg:            "#ffffff",
+  colorText:          "#1f2328",
+  colorTextMuted:     "#656d76",
+  colorBorder:        "#d0d7de",
+  fontFamily:         "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+  fontFamilyHeading:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+  radiusButton:       "6px",
+  radiusInput:        "6px",
+  borderWidth:        "1px",
+  buttonFontWeight:   "500"
+})
+root = Stack([...])
+\`\`\`
+
+### Tokens by domain
+- **Surface** — \`colorBg\`, \`colorBgSubtle\`, \`colorSurface\`, \`colorSurfaceMuted\`, \`colorBorder\`, \`colorBorderSubtle\`, \`colorText\`, \`colorTextMuted\`.
+- **Brand** — \`colorPrimary\`, \`colorPrimaryHover\`, \`colorPrimaryText\`, \`colorAccent\`, \`colorAccentHover\`, \`colorAccentText\`, \`colorFocusRing\`, semantic \`colorSuccess\` / \`colorWarning\` / \`colorDanger\` / \`colorInfo\`.
+- **Typography** — \`fontFamily\`, \`fontFamilyHeading\`, \`fontFamilyMono\`, \`fontSizeBase\` (root), \`fontSizeSm\`, \`fontSizeLg\`, \`fontSizeHeading\`, \`fontSizeTitle\`, \`fontWeightBody\`, \`fontWeightHeading\`, \`lineHeightBody\`, \`lineHeightHeading\`, \`letterSpacingHeading\`, \`headingTextTransform\` (\`"none"\` / \`"uppercase"\`).
+- **Shape** — \`radiusXs\`, \`radiusSm\`, \`radiusMd\`, \`radiusLg\`, \`radiusPill\`, \`radiusButton\`, \`radiusInput\`, \`borderWidth\`, \`shadowSm\`, \`shadowMd\`, \`shadowLg\`.
+- **Spacing** — \`spacingXs\`, \`spacingS\`, \`spacingM\`, \`spacingL\`, \`spacingXl\`.
+- **Buttons** — \`buttonFontWeight\`, \`buttonTextTransform\`, \`buttonLetterSpacing\`, \`buttonPaddingY\`, \`buttonPaddingX\`.
+- **Motion** — \`transitionDuration\`.
+- **Charts** — \`chart1\` … \`chart6\`.
+
+Values are CSS strings (\`"#0969da"\`, \`"6px"\`, \`"'Inter', sans-serif"\`, \`"600"\`). Unknown keys are silently ignored so typos can't break the page.
+
+### Brand recipes
+- **GitHub** — sans-serif \`-apple-system\` stack, blue \`#0969da\` primary, gray-on-white surfaces, 6px radii, weight 500 buttons.
+- **Apple** — SF Pro Display heading, large titles, 14px radii on buttons, very light borders, generous spacing.
+- **Stripe** — Sohne / Inter stack, indigo \`#635bff\` primary, 10px button radius, weight 600 buttons.
+- **IONOS** — Inter stack, navy \`#003580\` primary, cyan \`#0095d6\` accent, 4px button radius, dense spacing.
+
+### When to use it
+- The user explicitly asks for a brand or product feel ("make it look like Linear", "use our company colors").
+- A demo response should sit on a non-default brand surface.
+- A single message wants to ship with a different palette than the rest of the chat.
+
+### When NOT to use it
+- Setting only the response's own card border or text color — that belongs on the individual component.
+- Toggling between light / dark — that is the host's job (\`<streaming-ui-script theme="dark">\`).
+- Sneaking a third-party stylesheet in — \`Theme(...)\` only writes CSS variables, never raw CSS.`;
 }
 
 function inlineModeSection(): string {

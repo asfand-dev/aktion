@@ -936,19 +936,13 @@ function initPlayground(cm) {
   // ---- Functions defined within closure ----
 
   function pickInitialCode() {
-    // 1. #code= hash
-    if (location.hash.startsWith("#code=")) {
-      const encoded = location.hash.slice("#code=".length);
-      // Decode happens async after editor mount — but we want the initial
-      // doc to reflect the link. Use a synchronous best-effort: raw base64.
-      try {
-        const padded = encoded.replace(/-/g, "+").replace(/_/g, "/");
-        const bin = atob(padded + "===".slice((padded.length + 3) % 4));
-        // The bytes are likely gzipped; the synchronous path can't decompress.
-        // We schedule an async hydrate to swap in the decoded content shortly.
-        scheduleHydrateFromHash(encoded);
-        return { code: "// Loading shared snippet…", example: "chat" };
-      } catch { /* fall-through */ }
+    // 1. Shared snippet via `?code=` query string or `#code=` hash. The
+    //    chat-bot opens links as `playground.html?code=...`; older share
+    //    links use the hash. Both formats use the same gzip+base64 codec.
+    const shared = readSharedCode();
+    if (shared) {
+      scheduleHydrateFromHash(shared);
+      return { code: "// Loading shared snippet…", example: "custom" };
     }
     // 2. Saved code
     const saved = lsRead(LS.code, null);
@@ -958,6 +952,16 @@ function initPlayground(cm) {
     }
     // 3. Default example
     return { code: EXAMPLES[DEFAULT_EXAMPLE].code, example: DEFAULT_EXAMPLE };
+  }
+
+  function readSharedCode() {
+    const params = new URLSearchParams(location.search);
+    const queryCode = params.get("code");
+    if (queryCode) return queryCode;
+    if (location.hash.startsWith("#code=")) {
+      return location.hash.slice("#code=".length);
+    }
+    return null;
   }
 
   async function scheduleHydrateFromHash(encoded) {

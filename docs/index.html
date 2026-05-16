@@ -134,7 +134,7 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([welcome, kpis, chart, follow])
+<pre><code class="example-source">root = Stack([welcome, kpis, chart])
 welcome = Card([
   CardHeader("Hello there", "Generative UI rendered from Streaming UI Script"),
   Markdown("This card was streamed in **plain text** and rendered as a real UI.")
@@ -151,11 +151,7 @@ chart = Card([
     Series("Signups",[12,18,15,22,28,21,24])
   ])
 ])
-follow = FollowUpBlock([
-  FollowUpItem("Show conversion funnel"),
-  FollowUpItem("Compare to last month"),
-  FollowUpItem("Send report by email")
-], "Try one of these")</code></pre>
+</code></pre>
         </div>
       </div>
 

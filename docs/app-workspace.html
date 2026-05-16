@@ -77,7 +77,7 @@ topbar = [
 
 header = PageHeader(data.title, data.subtitle, null,
   [Button("New", Action([@ToAssistant("Open the new-item flow on " + $active)]), "primary")],
-  Tag(data.status, null, "sm", "success"))
+  Badge(data.status, "success", null, "sm"))
 
 kpis = MetricGrid(@Each(data.kpis, "k", StatCard(k.label, k.value, k.trend, k.delta, k.icon)))
 
@@ -86,7 +86,7 @@ projectsCard = Card([SectionHeader("Active projects", null, "WORK", null,
   List(@Each(data.projects, "p", ListItem(p.title, p.subtitle, p.icon)))
 ])
 
-statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All normal", null, "sm", "success")),
+statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All normal", "success", null, "sm")),
   Stack(@Each(data.statuses, "s", StatusDot(s.label, s.tone, s.pulse)), "column", "s")
 ])
 

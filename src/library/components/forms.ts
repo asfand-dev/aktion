@@ -10,8 +10,21 @@ import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
-const BUTTON_SIZES = ["small", "normal", "large"] as const;
+const BUTTON_SIZES = ["sm", "md", "lg", "small", "normal", "large"] as const;
 const INPUT_TYPES = ["text", "email", "password", "number", "tel", "url", "date"] as const;
+
+/**
+ * Normalise size tokens to the shared `sm|md|lg` vocabulary. The legacy
+ * `small|normal|large` triple is preserved (suggestion 4.2) so prompts
+ * that mix the old and new names produce consistent visual output.
+ */
+function normaliseButtonSize(value: unknown): string {
+  const v = asString(value).trim().toLowerCase();
+  if (v === "small" || v === "sm") return "sm";
+  if (v === "large" || v === "lg") return "lg";
+  if (v === "normal" || v === "md" || v === "") return "md";
+  return "md";
+}
 
 export const Button: ComponentSpec = {
   name: "Button",
@@ -21,7 +34,8 @@ export const Button: ComponentSpec = {
     { name: "action", type: "Action", optional: true, description: "Action() payload to execute" },
     { name: "variant", type: "string", optional: true, enum: BUTTON_VARIANTS },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
-    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES },
+    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Accepts `sm`/`md`/`lg` (and legacy `small`/`normal`/`large`)" },
+    { name: "icon", type: "string", optional: true, description: "Optional leading Font Awesome icon name" },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -29,9 +43,12 @@ export const Button: ComponentSpec = {
       class: "rui-button",
       type: asString(props.type, "button"),
       "data-variant": asString(props.variant, "primary"),
-      "data-size": asString(props.size, "normal"),
+      "data-size": normaliseButtonSize(props.size),
       disabled: asBoolean(props.disabled) ? "" : null,
-    }, [asString(props.label)]);
+    });
+    const iconNode = renderIcon(props.icon, { className: "rui-button-icon" });
+    if (iconNode) button.append(iconNode);
+    button.append(el("span", { class: "rui-button-label" }, [asString(props.label)]));
     button.onclick = () => {
       if (isActionPayload(props.action)) helpers.runAction(props.action);
     };
@@ -792,6 +809,311 @@ function extractComboboxItems(raw: unknown): Array<{ value: string; label: strin
       return { value, label: value };
     })
     .filter((item) => item.value !== "" || item.label !== "");
+}
+
+export const MultiSelect: ComponentSpec = {
+  name: "MultiSelect",
+  description:
+    "Multi-option searchable dropdown. Type to filter, click an option to " +
+    "add/remove it from the bound array. Renders the selected options as " +
+    "removable chips inside the trigger. Pass a `$variable` (array of " +
+    "values) as `value` for two-way binding.",
+  props: [
+    { name: "id", type: "string" },
+    { name: "items", type: "SelectItem[]", description: "Options; SelectItem(value, label) or {value, label}" },
+    { name: "value", type: "any[]", optional: true, description: "Bound array of selected values (typically $variable)" },
+    { name: "placeholder", type: "string", optional: true },
+    { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no items match the filter" },
+    { name: "max", type: "number", optional: true, description: "Maximum number of selections" },
+    { name: "disabled", type: "boolean", optional: true },
+  ],
+  render: (node, props, helpers) => {
+    const id = asString(props.id);
+    const items = extractComboboxItems(props.items);
+    const placeholder = asString(props.placeholder, "Select…");
+    const emptyLabel = asString(props.emptyLabel, "No matches");
+    const disabled = asBoolean(props.disabled);
+    const max = Math.max(0, Math.floor(Number(props.max ?? 0)));
+    const selected = Array.isArray(props.value)
+      ? (props.value as unknown[]).map((v) => asString(v)).filter(Boolean)
+      : [];
+    const selectedSet = new Set(selected);
+    const stateName = node.argMeta?.[2]?.stateRef;
+
+    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const filterSlot = helpers.useInstanceState<string>("filter", "");
+    const isOpen = openSlot.get();
+
+    const root = el("div", {
+      class: "rui-multiselect",
+      "data-open": isOpen ? "true" : "false",
+      "data-disabled": disabled ? "true" : "false",
+    });
+
+    const triggerBtn = el("button", {
+      type: "button",
+      class: "rui-multiselect-trigger",
+      id,
+      "aria-haspopup": "listbox",
+      "aria-expanded": isOpen ? "true" : "false",
+      disabled: disabled ? "" : null,
+    });
+    const chipRow = el("span", { class: "rui-multiselect-chips" });
+    const writeSelection = (next: string[]): void => {
+      if (!stateName) return;
+      helpers.runAction({
+        kind: "Action",
+        steps: [{ kind: "Set", name: stateName, value: next }],
+      });
+    };
+    if (selected.length === 0) {
+      chipRow.append(el("span", { class: "rui-multiselect-placeholder" }, [placeholder]));
+    } else {
+      for (const value of selected) {
+        const label = items.find((item) => item.value === value)?.label ?? value;
+        const chip = el("span", { class: "rui-multiselect-chip", "data-value": value });
+        chip.append(el("span", { class: "rui-multiselect-chip-label" }, [label]));
+        const removeBtn = el("button", {
+          type: "button",
+          class: "rui-multiselect-chip-remove",
+          "aria-label": `Remove ${label}`,
+        }, ["×"]);
+        removeBtn.onclick = (event) => {
+          event.stopPropagation();
+          const next = selected.filter((v) => v !== value);
+          writeSelection(next);
+        };
+        chip.append(removeBtn);
+        chipRow.append(chip);
+      }
+    }
+    triggerBtn.append(chipRow);
+    const chevron = renderIcon("chevron-down", { className: "rui-multiselect-chevron" });
+    if (chevron) triggerBtn.append(chevron);
+    root.append(triggerBtn);
+
+    const panel = el("div", { class: "rui-multiselect-panel", role: "listbox", "aria-multiselectable": "true" });
+    const filterInput = el("input", {
+      type: "text",
+      class: "rui-multiselect-filter",
+      placeholder: "Filter…",
+      autocomplete: "off",
+      value: filterSlot.get(),
+    }) as HTMLInputElement;
+    panel.append(filterInput);
+    const list = el("div", { class: "rui-multiselect-list" });
+    panel.append(list);
+
+    const renderList = (filter: string): void => {
+      list.replaceChildren();
+      const lower = filter.trim().toLowerCase();
+      const matches = lower === ""
+        ? items
+        : items.filter((item) =>
+            item.label.toLowerCase().includes(lower) ||
+            item.value.toLowerCase().includes(lower),
+          );
+      if (matches.length === 0) {
+        list.append(el("div", { class: "rui-multiselect-empty" }, [emptyLabel]));
+        return;
+      }
+      for (const item of matches) {
+        const isSelected = selectedSet.has(item.value);
+        const atCap = !isSelected && max > 0 && selected.length >= max;
+        const option = el("button", {
+          type: "button",
+          class: "rui-multiselect-option",
+          role: "option",
+          "data-value": item.value,
+          "data-selected": isSelected ? "true" : "false",
+          "aria-selected": isSelected ? "true" : "false",
+          disabled: atCap ? "" : null,
+        });
+        const checkbox = el("span", { class: "rui-multiselect-option-check" });
+        const checkIcon = renderIcon(isSelected ? "check" : "", { className: "rui-multiselect-option-check-icon" });
+        if (checkIcon) checkbox.append(checkIcon);
+        option.append(checkbox);
+        option.append(el("span", { class: "rui-multiselect-option-label" }, [item.label]));
+        option.onclick = (event) => {
+          event.stopPropagation();
+          if (atCap) return;
+          const next = isSelected
+            ? selected.filter((v) => v !== item.value)
+            : [...selected, item.value];
+          writeSelection(next);
+        };
+        list.append(option);
+      }
+    };
+
+    renderList(filterSlot.get());
+
+    filterInput.oninput = (event) => {
+      const target = event.currentTarget as HTMLInputElement;
+      filterSlot.set(target.value);
+      renderList(target.value);
+    };
+
+    triggerBtn.onclick = (event) => {
+      if (disabled) return;
+      event.stopPropagation();
+      const next = !openSlot.get();
+      openSlot.set(next);
+      const live = (event.currentTarget as Element).closest(".rui-multiselect") as HTMLElement | null;
+      live?.setAttribute("data-open", next ? "true" : "false");
+      live?.querySelector(".rui-multiselect-trigger")
+        ?.setAttribute("aria-expanded", next ? "true" : "false");
+      if (!live) return;
+      if (!next) { disposeDismissListeners(live); return; }
+      setTimeout(() => filterInput.focus(), 0);
+      installDismissListeners({
+        liveRoot: live,
+        onDismiss: () => {
+          openSlot.set(false);
+          filterSlot.set("");
+          live.setAttribute("data-open", "false");
+          live.querySelector(".rui-multiselect-trigger")
+            ?.setAttribute("aria-expanded", "false");
+        },
+      });
+    };
+
+    root.append(panel);
+    return root;
+  },
+};
+
+export const DateRangePicker: ComponentSpec = {
+  name: "DateRangePicker",
+  description:
+    "Paired date inputs with a single label, sharing the same min/max " +
+    "range. Pass `$variable` references for both `from` and `to` to " +
+    "two-way-bind a date range (ISO `YYYY-MM-DD` strings).",
+  props: [
+    { name: "id", type: "string" },
+    { name: "from", type: "string", optional: true, description: "ISO date start; typically $variable" },
+    { name: "to", type: "string", optional: true, description: "ISO date end; typically $variable" },
+    { name: "label", type: "string", optional: true },
+    { name: "min", type: "string", optional: true, description: "Earliest selectable ISO date" },
+    { name: "max", type: "string", optional: true, description: "Latest selectable ISO date" },
+    { name: "disabled", type: "boolean", optional: true },
+  ],
+  render: (node, props, helpers) => {
+    const id = asString(props.id);
+    const fromId = `${id}-from`;
+    const toId = `${id}-to`;
+    const min = asString(props.min);
+    const max = asString(props.max);
+    const disabled = asBoolean(props.disabled);
+    const root = el("div", { class: "rui-date-range-picker", "data-disabled": disabled ? "true" : "false" });
+    const label = asString(props.label);
+    if (label) root.append(el("label", { class: "rui-date-range-picker-label", for: fromId }, [label]));
+    const row = el("div", { class: "rui-date-range-picker-row" });
+    const fromInput = el("input", {
+      type: "date",
+      class: "rui-date-range-picker-input",
+      id: fromId,
+      name: fromId,
+      value: asString(props.from),
+      min: min || null,
+      max: max || null,
+      disabled: disabled ? "" : null,
+      "data-role": "from",
+    });
+    row.append(fromInput);
+    row.append(el("span", { class: "rui-date-range-picker-separator", "aria-hidden": "true" }, ["–"]));
+    const toInput = el("input", {
+      type: "date",
+      class: "rui-date-range-picker-input",
+      id: toId,
+      name: toId,
+      value: asString(props.to),
+      min: min || null,
+      max: max || null,
+      disabled: disabled ? "" : null,
+      "data-role": "to",
+    });
+    row.append(toInput);
+    root.append(row);
+    const fromState = node.argMeta?.[1]?.stateRef;
+    const toState = node.argMeta?.[2]?.stateRef;
+    if (fromState) helpers.bindState(fromInput, fromState);
+    if (toState) helpers.bindState(toInput, toState);
+    return root;
+  },
+};
+
+const SEGMENTED_SIZES = ["sm", "md", "lg"] as const;
+
+export const SegmentedControl: ComponentSpec = {
+  name: "SegmentedControl",
+  description:
+    "View-mode picker for short, mutually-exclusive choices (grid / list, " +
+    "day / week / month, light / dark). Pass items as " +
+    "`{value, label, icon?}[]`, `[value, label]` tuples, or plain " +
+    "strings; bind a `$variable` to `value` for two-way binding. " +
+    "Visually distinct from `ToggleGroup` — use this when there are at " +
+    "most ~5 options that all act on the same surface.",
+  props: [
+    { name: "id", type: "string" },
+    { name: "items", type: "any[]", description: "Items: {value, label, icon?} objects, [value, label] tuples, or plain strings" },
+    { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
+    { name: "size", type: "string", optional: true, enum: SEGMENTED_SIZES },
+  ],
+  render: (node, props, helpers) => {
+    const id = asString(props.id);
+    const current = asString(props.value);
+    const size = asString(props.size, "md");
+    const stateName = node.argMeta?.[2]?.stateRef;
+    const root = el("div", {
+      class: "rui-segmented-control",
+      role: "tablist",
+      "data-size": size,
+      id,
+    });
+    for (const raw of asArray<unknown>(props.items)) {
+      const { value, label, icon } = extractSegmentedItem(raw);
+      const isActive = value === current;
+      const btn = el("button", {
+        type: "button",
+        class: "rui-segmented-control-option",
+        role: "tab",
+        "aria-selected": isActive ? "true" : "false",
+        "data-active": isActive ? "true" : "false",
+        "data-value": value,
+      });
+      const iconNode = renderIcon(icon, { className: "rui-segmented-control-icon" });
+      if (iconNode) btn.append(iconNode);
+      btn.append(el("span", { class: "rui-segmented-control-label" }, [label]));
+      if (stateName && !isActive) {
+        btn.onclick = () => {
+          helpers.runAction({
+            kind: "Action",
+            steps: [{ kind: "Set", name: stateName, value }],
+          });
+        };
+      }
+      root.append(btn);
+    }
+    return root;
+  },
+};
+
+function extractSegmentedItem(raw: unknown): { value: string; label: string; icon: string } {
+  if (typeof raw === "string") return { value: raw, label: raw, icon: "" };
+  if (Array.isArray(raw)) {
+    return {
+      value: asString(raw[0]),
+      label: asString(raw[1], asString(raw[0])),
+      icon: asString(raw[2]),
+    };
+  }
+  if (raw && typeof raw === "object") {
+    const r = raw as { value?: unknown; label?: unknown; icon?: unknown };
+    const value = asString(r.value);
+    return { value, label: asString(r.label, value), icon: asString(r.icon) };
+  }
+  return { value: "", label: "", icon: "" };
 }
 
 function clampNumber(value: number, min: number, max: number): number {

@@ -79,7 +79,7 @@ describe("generatePrompt", () => {
     const text = generatePrompt(defaultLibrary);
     for (const name of [
       "Container", "Spacer", "Cover", "MediaCard", "Stats", "Tile",
-      "Notification", "PersonChip", "Quote", "Note", "Rating",
+      "Notification", "PersonChip", "Quote", "Rating",
       "ProgressRing", "ChatBubble", "SearchBar",
     ]) {
       expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);

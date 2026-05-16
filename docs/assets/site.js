@@ -60,6 +60,8 @@ const NAV_GROUPS = [
       { href: "examples.html", label: "Examples" },
       { href: "live-examples.html", label: "Live demos" },
       { href: "playground.html", label: "Playground" },
+      { href: "chat-bot.html", label: "Chat bot", badge: "AI" },
+      { href: "chat-bot-advanced.html", label: "Chat bot · advanced", badge: "AI" },
     ],
   },
 ];
@@ -70,6 +72,7 @@ const PRIMARY_TABS = [
   { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-customization.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
   { href: "playground.html",  label: "Playground", matches: ["playground.html"] },
+  { href: "chat-bot.html",    label: "Chat bot",   matches: ["chat-bot.html", "chat-bot-advanced.html"] },
 ];
 
 const REPO_URL = "https://github.com/asfand-dev/streaming-ui-script";
@@ -92,6 +95,8 @@ const PAGE_KEYWORDS = {
   "examples.html": "recipes copy paste snippets",
   "live-examples.html": "demos catalog showcase",
   "playground.html": "editor preview live",
+  "chat-bot.html": "chat bot llm openrouter generate website builder app builder",
+  "chat-bot-advanced.html": "advanced chat bot pipeline intent theme generator brand",
 };
 
 /* ---------------------------------------------------------------------------
@@ -160,10 +165,12 @@ function getSavedDocTheme() {
 function applyDocTheme(theme) {
   document.documentElement.setAttribute("data-doc-theme", theme);
   setTimeout(() => {
-    document.querySelectorAll("streaming-ui-script").forEach((script) => {
+    // Pages that own their renderer theme (playground, chat bot) set
+    // `data-theme-managed="true"` on each renderer so we don't clobber the
+    // user's chosen theme when they toggle the docs chrome light/dark mode.
+    document.querySelectorAll('streaming-ui-script:not([data-theme-managed])').forEach((script) => {
       script.setAttribute("theme", theme);
     });
-    // example-output
     document.querySelectorAll(".example-output").forEach((output) => {
       output.style.background = theme === "light" ? "white" : "black";
     });
@@ -767,9 +774,13 @@ function safely(name, fn) {
 
 function init() {
   applyDocTheme(resolveInitialDocTheme());
-  safely("topbar", buildTopbar);
-  safely("sidebar", renderSidebar);
-  safely("breadcrumb", renderBreadcrumb);
+
+  if (!window.location.pathname.includes("chat-bot.html") && !window.location.pathname.includes("chat-bot-advanced.html")) {
+    safely("topbar", buildTopbar);
+    safely("sidebar", renderSidebar);
+    safely("breadcrumb", renderBreadcrumb);
+  }
+
   safely("wide-tables", wrapWideTables);
   safely("toc", buildToc);
   safely("copy-buttons", setupCopyButtons);

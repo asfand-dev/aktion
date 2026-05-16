@@ -73,8 +73,8 @@ suggestions = Buttons([
   Button("Top 5 customers",     Action([@Set($question, "Top 5 customers by revenue")]),             "secondary", "normal", "small")
 ])
 
-intentBadge = Tag("Intent: " + result.intent, null, "sm", "primary")
-trendTag = Tag(result.trend, null, "sm", result.trend == "up" ? "success" : result.trend == "down" ? "danger" : "neutral")
+intentBadge = Badge("Intent: " + result.intent, "primary", null, "sm")
+trendTag = Badge(result.trend, result.trend == "up" ? "success" : result.trend == "down" ? "danger" : "neutral", null, "sm")
 
 kpis = Stack([
   StatCard(result.metric, result.delta, result.trend),
@@ -93,7 +93,7 @@ chartTabs = Tabs([
 tbl = Table([
   Col(result.colA, result.rows.label),
   Col(result.colB, result.rows.value, "number"),
-  Col(result.colC, @Each(result.rows, "row", Tag(row.delta, null, "sm", row.deltaVariant)))
+  Col(result.colC, @Each(result.rows, "row", Badge(row.delta, row.deltaVariant, null, "sm")))
 ])
 
 chartCard = Card([CardHeader(result.title, result.summary), kpis, chartTabs])

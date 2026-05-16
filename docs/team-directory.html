@@ -57,7 +57,7 @@ header = PageHeader(
     Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]), "ghost"),
     Button("Invite",     Action([@ToAssistant("Open the invite-by-email form")]), "primary")
   ],
-  Tag("" + data.total + " people", null, "sm", "primary")
+  Badge("" + data.total + " people", "primary", null, "sm")
 )
 
 searchField = FormControl(
@@ -113,7 +113,7 @@ detailSheet = Sheet(
       ], "column", "xs")
     ], "row", "m", "start", "start"),
     Separator("horizontal", true),
-    TagBlock(detail.tags, "primary", "sm"),
+    BadgeList(detail.tags, "primary", "sm"),
     Separator("horizontal", true),
     MetricGrid(@Each(detail.stats, "s",
       StatCard(s.label, s.value, s.trend, s.delta, s.icon)

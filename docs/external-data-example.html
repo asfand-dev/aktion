@@ -57,7 +57,7 @@ chartTabs = Tabs([
 repoTable = Table([
   Col("Repository", data.rows.name),
   Col("Description", data.rows.description),
-  Col("Language", @Each(data.rows, "row", Tag(row.language, null, "sm", "info"))),
+  Col("Language", @Each(data.rows, "row", Badge(row.language, "info", null, "sm"))),
   Col("Stars", data.rows.stars, "number"),
   Col("Forks", data.rows.forks, "number"),
   Col("Open", @Each(data.rows, "row", Button("View", Action([@OpenUrl(row.url)]), "secondary", "normal", "small")))

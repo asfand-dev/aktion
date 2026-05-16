@@ -28,11 +28,11 @@ The library bundles everything needed at runtime:
 
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in `@`-functions — data ops (`@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`, `@Round`, `@Abs`, `@Floor`, `@Ceil`, `@Filter`, `@Sort`, `@Push`, `@Concat`), iteration (`@Each`), and action steps (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`) — plus array shortcuts (`.length`, `.first`, `.last`, array pluck `$rows.title`).
-- A **rich component library** of 100+ components — layout (`Stack`, `Grid`, `Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Note`, `Callout`, `Badge`, `Tag`), forms (`Input`, `TextArea`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `Slider`, `NumberInput`, `DatePicker`, `FileUpload`, `Combobox`), tables and lists (`Table`, `Col`, `List`, `ListItem`, `Pagination`, `Tree`, `TreeNode`), charts (`BarChart`, `LineChart`, `PieChart`, `Series`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar`, `AvatarGroup`, `Progress`, `ProgressRing`, `Rating`, `Tooltip`, `HoverCard`, `Popover`, `Toast`, `Toasts`, `Kbd`, `Skeleton`), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner`, `Notification`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`), and **app-shell composites** (`AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
+- A **rich component library** of 130+ components — layout (`Stack`, `Grid`, `Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator` with `label?`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Callout`, `Spinner`, `Badge`, `BadgeList`), forms (`Input`, `TextArea`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect`), tables and lists (`Table` with `density`/`striped`/`sticky`/`emptyLabel`, `Col` with `align`, `List`, `ListItem`, `Pagination` with `total`/`perPage`/`compact`, `Tree`, `TreeNode`), charts (`BarChart`, `LineChart`, `PieChart`, `Series`, `Sparkline`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar`, `AvatarGroup`, `Progress` with `segments`/`buffered`, `ProgressRing`, `Rating` with `halfStep` + custom icons, `Tooltip`, `HoverCard`, `Popover`, `Toast` (standalone via `position`), `Toasts`, `Kbd`, `Skeleton` (`paragraph`/`card`/`table-row`/`avatar`/`image` variants)), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner`, `Notification`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`), and **app-shell composites** (`AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available; the chat-mode prompt simply hides it from the LLM.
 - A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties.
-- An auto-loaded **Font Awesome 6.7** stylesheet so every `icon` prop (`StatCard`, `Tile`, `FeatureItem`, `SidebarItem`, `Banner`, `Notification`, `TimelineItem`, `KanbanCard`, `Callout`, `Tag`, `BreadcrumbItem`, `DescriptionItem`, …) resolves out of the box. Never emit emoji.
+- An auto-loaded **Font Awesome 6.7** stylesheet so every `icon` prop (`StatCard`, `Tile`, `FeatureItem`, `SidebarItem`, `Banner`, `Notification`, `TimelineItem`, `KanbanCard`, `Callout`, `Badge`, `BreadcrumbItem`, `DescriptionItem`, …) resolves out of the box. Never emit emoji.
 - A **system prompt generator** that emits a clean, ordered prompt teaching the LLM exactly which components, builtins, and tools are available. Two flavours ship: `getSystemPrompt()` returns the full prompt (every feature); `getSystemPrompt({ mode: "chat" })` returns a compact chat-focused prompt without JS or routing.
 
 Everything lives inside a Shadow DOM, so the renderer's styles never leak into
@@ -169,7 +169,7 @@ If you internalise these rules, you will write correct, polished programs:
     for multi-line script bodies.
 11. **Use `Grid`, not `Stack(row, wrap=true)`, for uniform-sized tiles.**
     Use `Stack(direction="row")` only when items have different sizes.
-12. **Add status colour everywhere.** `StatCard(..., trend, delta)`, `Tag`
+12. **Add status colour everywhere.** `StatCard(..., trend, delta)`, `Badge`
     variants, `TimelineItem(status)`, `Banner` — colour conveys meaning.
 13. **`Script(...)` and `@Js(...)` are part of the runtime.** They always
     run when you emit them — no opt-in attribute. The default ("full") system
@@ -202,9 +202,6 @@ If you internalise these rules, you will write correct, polished programs:
     single `Card` reads as a wireframe. The minimums in § 0.5 are the
     baseline — always add a complementary section (related items, recent
     activity, follow-ups) when the draft is short.
-19. **End most responses with a `FollowUpBlock`.** Two to four short prompts
-    keep the conversation moving. Skip only when the page already has
-    obvious next-step buttons (e.g. a checkout flow with "Continue").
 
 ---
 
@@ -244,7 +241,7 @@ Before opening a `Stack`/`Card`, scan this checklist:
 | Circular progress / completion ring       | `ProgressRing(value?, max?, label?, caption?, tone?, size?, indeterminate?)`                          |
 | Inline notification (inbox / feed item)   | `Notification(title, message?, time?, icon?, avatarSrc?, tone?, unread?, actions?)`                   |
 | Person reference in a row / cell          | `PersonChip(name, role?, avatarSrc?, size?, status?, action?)`                                        |
-| Inline tip / footnote                     | `Note(content, tone?, icon?)`                                                                         |
+| Inline tip / footnote                     | `Callout(variant, title, description?, icon?, true)` — pass `compact=true` for a dense one-line note |
 | Pull quote (not a full testimonial)       | `Quote(text, cite?, tone?)`                                                                           |
 | Chat-style message (review, transcript)   | `ChatBubble(author, body, time?, avatarSrc?, from?, status?)`                                         |
 | Centered readable column                  | `Container([content...], size?, maxWidth?, padding?)`                                                 |
@@ -256,7 +253,7 @@ Before opening a `Stack`/`Card`, scan this checklist:
    `StatCard("Revenue","$48k","up","+12%","sack-dollar")` — trend + delta + icon
    together communicate health at a glance.
 2. **Font Awesome icons on every iconable slot.** `StatCard`, `FeatureItem`,
-   `TimelineItem`, `Banner`, `KanbanCard`, `Callout`, `ListItem`, `Tag`,
+   `TimelineItem`, `Banner`, `KanbanCard`, `Callout`, `ListItem`, `Badge`,
    `BreadcrumbItem`, `SidebarItem` all accept an `icon`. Set it to a Free
    Font Awesome name (no `fa-` prefix) such as `"sack-dollar"`,
    `"chart-line"`, `"house"`, `"cart-shopping"`, `"circle-check"`. Optional
@@ -278,17 +275,17 @@ Before opening a `Stack`/`Card`, scan this checklist:
 
 | Page type             | Minimum sections | What sections to include                                                                              |
 |-----------------------|------------------|-------------------------------------------------------------------------------------------------------|
-| Dashboard             | **6**            | `PageHeader` + `Toolbar`/filters + `MetricGrid` + chart Card + table/list Card + `FollowUpBlock`      |
-| Detail / profile      | **5**            | `PageHeader` + `DescriptionList` Card + content Card + activity/timeline Card + `FollowUpBlock`       |
+| Dashboard             | **6**            | `PageHeader` + `Toolbar`/filters + `MetricGrid` + chart Card + table/list Card      |
+| Detail / profile      | **5**            | `PageHeader` + `DescriptionList` Card + content Card + activity/timeline Card       |
 | Settings              | **5**            | `PageHeader` + 3+ Section Cards (each with `SectionHeader`) + danger-zone Card                        |
-| Landing / marketing   | **5**            | `Hero` (or `Cover`) + `FeatureGrid` + (`Testimonial` &#124; `Quote` &#124; `PricingTable`) + closing `Banner` + `FollowUpBlock` |
+| Landing / marketing   | **5**            | `Hero` (or `Cover`) + `FeatureGrid` + (`Testimonial` &#124; `Quote` &#124; `PricingTable`) + closing `Banner` |
 | Product / article     | **6**            | `Cover` + `Stats` trust strip + spec Card / `DescriptionList` + related `MediaCard` grid + reviews (`ChatBubble`/`Testimonial`) + closing `Banner`/`Notification` |
 | Pricing               | **5**            | `Cover` (or `Hero`) + cycle `ToggleGroup` + `PricingTable` + `FeatureGrid` + FAQ `Accordion` + closing `Banner` |
 | Inbox / messaging     | **4**            | `PageHeader` + `SplitView` (list of `Notification` + thread of `ChatBubble`) + composer (`TextArea` + `Buttons`) |
 | Directory / CRM       | **5**            | `PageHeader` + `Tile` quick-stats + `SearchBar` + filter `ToggleGroup` + `ProfileCard` grid + `Pagination` |
 | List / browse         | **5**            | `PageHeader` + `Toolbar` + (optional `MetricGrid`) + `Table`/`Grid` Card + `Pagination`               |
 | Full app surface      | **4 (in shell)** | `AppShell` wrapping a `Sidebar` + (PageHeader + sections)                                              |
-| Empty / zero state    | **3**            | `PageHeader` + `EmptyState` (with CTA) + `FollowUpBlock`                                              |
+| Empty / zero state    | **3**            | `PageHeader` + `EmptyState` (with CTA)                                              |
 
 If your response has fewer named sections than the minimum, **add a
 complementary section** (related items, recent activity, status, follow-ups).
@@ -313,10 +310,10 @@ typography. Use semantic props and let the runtime resolve them.
 
 Rules for theme-friendly authoring:
 
-- **Always pass `variant` / `tone` instead of colour.** `Tag("Active", null, "sm", "success")`,
-  not `Tag("Active", null, "sm", "default")` with manual styling. `Badge`, `Tag`,
+- **Always pass `variant` / `tone` instead of colour.** `Badge("Active", "success", null, "sm")`,
+  not `Badge("Active", "default", null, "sm")` with manual styling. `Badge`,
   `StatCard.trend`, `Banner.tone`, `Callout.variant`, `TimelineItem.tone`,
-  `KanbanCard.tone`, `Note.tone`, `Quote.tone`, `Progress.tone`, `ProgressRing.tone`,
+  `KanbanCard.tone`, `Quote.tone`, `Progress.tone`, `ProgressRing.tone`,
   and `StatusDot.tone` all map to the active theme's palette.
 - **Stick to semantic palette values** — `"default"`, `"primary"`, `"success"`,
   `"warning"`, `"danger"`, `"info"`. Anything else (`"red"`, `"#ff0000"`,
@@ -335,6 +332,79 @@ A correctly-authored response should look polished on `pastel` and `brutalist`
 without changes — if you have to "tweak it for dark mode", you've leaked a
 colour somewhere.
 
+### In-script theming with `Theme({...})`
+
+When the user **explicitly asks for a brand or product feel** ("make it look
+like GitHub", "use our company colours", "I want a Stripe-style page"), the
+LLM may emit a `Theme({...})` declaration on a top-level binding called
+`theme`. The runtime treats `theme` (like `root`) as a reserved name: it
+evaluates the call and writes the resulting token map to the host as CSS
+custom properties — **on top of** whatever base theme the host configured.
+Every component in the rendered tree picks the tokens up instantly.
+
+```
+theme = Theme({
+  colorPrimary:       "#0969da",
+  colorPrimaryHover:  "#0860c4",
+  colorAccent:        "#1f6feb",
+  colorBg:            "#ffffff",
+  colorText:          "#1f2328",
+  colorTextMuted:     "#656d76",
+  colorBorder:        "#d0d7de",
+  fontFamily:         "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamilyHeading:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  radiusButton:       "6px",
+  radiusInput:        "6px",
+  borderWidth:        "1px",
+  buttonFontWeight:   "500"
+})
+root = Stack([...])
+```
+
+**Tokens by domain** (all optional — unknown keys are ignored):
+
+| Group        | Tokens                                                                                                                                       |
+|--------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| Surface      | `colorBg`, `colorBgSubtle`, `colorSurface`, `colorSurfaceMuted`, `colorBorder`, `colorBorderSubtle`, `colorText`, `colorTextMuted`           |
+| Brand        | `colorPrimary`, `colorPrimaryHover`, `colorPrimaryText`, `colorAccent`, `colorAccentHover`, `colorAccentText`, `colorFocusRing`              |
+| Semantic     | `colorSuccess`, `colorWarning`, `colorDanger`, `colorInfo`                                                                                   |
+| Typography   | `fontFamily`, `fontFamilyHeading`, `fontFamilyMono`, `fontSizeBase`, `fontSizeSm`, `fontSizeLg`, `fontSizeHeading`, `fontSizeTitle`, `fontWeightBody`, `fontWeightHeading`, `lineHeightBody`, `lineHeightHeading`, `letterSpacingHeading`, `headingTextTransform` |
+| Shape        | `radiusXs`, `radiusSm`, `radiusMd`, `radiusLg`, `radiusPill`, `radiusButton`, `radiusInput`, `borderWidth`, `shadowSm`, `shadowMd`, `shadowLg` |
+| Spacing      | `spacingXs`, `spacingS`, `spacingM`, `spacingL`, `spacingXl`                                                                                 |
+| Buttons      | `buttonFontWeight`, `buttonTextTransform`, `buttonLetterSpacing`, `buttonPaddingY`, `buttonPaddingX`                                          |
+| Motion       | `transitionDuration`                                                                                                                          |
+| Charts       | `chart1`–`chart6`                                                                                                                            |
+
+Values are CSS strings — colours (`"#0969da"`, `"rgb(99,102,241)"`), lengths
+(`"6px"`, `"1.4em"`), font stacks (`"'Inter', system-ui, sans-serif"`),
+numeric weights (`"600"`), keywords (`"uppercase"`, `"none"`). Numbers are
+auto-stringified.
+
+**Brand recipes the LLM can compose on demand:**
+
+- **GitHub** — sans-serif `-apple-system` stack, blue `#0969da` primary,
+  gray-on-white surfaces, 6 px radii, weight-500 buttons.
+- **Apple** — SF Pro Display heading, large titles, generous spacing,
+  12–14 px button radius, light borders.
+- **Stripe** — Sohne / Inter stack, indigo `#635bff` primary, 10 px button
+  radius, weight-600 buttons with `-0.01em` tracking.
+- **IONOS** — Inter stack, navy `#003580` primary, cyan `#0095d6` accent,
+  4 px button radius, dense spacing.
+
+**Rules for `Theme(...)`:**
+
+- Only emit it when the user **asks for a brand or specific look**. The
+  default themes already cover most replies; don't override them by reflex.
+- Put `theme = Theme({...})` **before** the `root = ...` line so the tokens
+  are visible when the rest of the program streams in.
+- Stick to documented keys. The runtime ignores typos silently — but you
+  also won't get the customisation you wanted.
+- **Don't double-pay tokens.** If a `Theme(...)` already sets `colorPrimary`,
+  do NOT also pass `"primary"` overrides on individual components; rely on
+  the token cascade.
+- Removing the `Theme(...)` line snaps the UI back to the base theme — no
+  manual cleanup required.
+
 ### Anti-patterns (never ship these)
 
 | Wrong                                                                       | Right                                                                                       |
@@ -346,7 +416,7 @@ colour somewhere.
 | Table with no `Toolbar` above it                                           | Wrap in `Card([SectionHeader(...), Toolbar([...], [...]), Table(...)])`                     |
 | Flat form on the page                                                      | Group `FormControl`s inside Cards opened by `SectionHeader`                                 |
 | Settings with no sectioning                                                | A `Stack` of Cards, one per concern (General, Notifications, Billing, Danger zone)          |
-| Plain text for status / priority / count                                   | `Badge`, `Tag`, or `StatusDot`                                                              |
+| Plain text for status / priority / count                                   | `Badge` or `StatusDot`                                                                      |
 | No nav for a multi-page surface                                            | `AppShell(Sidebar(...), [...])` — sidebar stays visible across content                       |
 | Empty list rendered as bare grey text                                      | `EmptyState(title, description, icon, Button(...))`                                          |
 
@@ -364,7 +434,7 @@ Streaming UI Script has three layers that compose into a full application:
 │   state, evaluated only when something downstream needs it.     │
 │                                                                 │
 │       root = Stack([header, body])                              │
-│       header = Header("Hi", "Welcome")                          │
+│       header = PageHeader("Hi", "Welcome")                          │
 │       body = Card([TextContent($message)])                      │
 └─────────────────────────────────────────────────────────────────┘
                               ▲
@@ -702,7 +772,7 @@ The single most error-prone area for LLMs. Read this carefully.
 $todos = [{id: 1, text: "a", done: false}, {id: 2, text: "b", done: true}]
 list = @Each($todos, "t", row)
 row = Card([Stack([
-  Tag(t.done ? "done" : "open"),
+  Badge(t.done ? "done" : "open"),
   TextContent(t.text)
 ])])
 ```
@@ -921,22 +991,34 @@ Card(children, variant?)
 CardHeader(title, subtitle?)
 CardBody(children)
 CardFooter(children)
-Divider(label?)
-Separator(orientation?, decorative?)
+Separator(orientation?, label?, decorative?)
   orientation: "horizontal" | "vertical"
+  label: optional center label (horizontal only).
 
-Tabs(items, defaultValue?)
-TabItem(value, label, children)
+Tabs(items, defaultValue?, orientation?)
+  orientation: "horizontal" (default) | "vertical"
+  Built-in keyboard nav: Left/Right (or Up/Down vertical), Home, End.
+TabItem(value, label, children, badge?, icon?)
+  badge: trailing count chip rendered in the trigger.
+  icon:  leading Font Awesome icon name.
 
 Accordion(items)
 AccordionItem(title, children, open?)
 
-Modal(title, open, children)             # `open` is usually a $variable
+Modal(title, open, children, size?, footer?, closable?, closeOnBackdrop?)
+  open is usually a $variable; clicking the × close button clears it.
+  size: "sm" | "md" (default) | "lg" | "xl" | "full"
+  footer: Node[] — typically a row of action Buttons.
+  closable: true by default (renders the × button).
+  closeOnBackdrop: false by default; opt in to backdrop-click dismissal.
 Sheet(title, open, children, side?, footer?)
   side: "right" (default) | "left" | "top" | "bottom"
 
 Steps(items)
-StepsItem(title, details?)
+  items can be {title, details?, active?} objects (preferred) or
+  StepsItem(...) nodes. Plain strings render as a title-only step.
+StepsItem(title, details?, active?)
+  active=true highlights the current step in a multi-step flow.
 
 AspectRatio(ratio, children)              # ratio: "16:9", "1:1", "4:3", or decimal
 ScrollArea(children, maxHeight?, direction?)
@@ -971,46 +1053,70 @@ Spacer(size?, flex?)
 ### Content
 
 ```text
-TextContent(value, variant?, color?)
+TextContent(value, variant?, tone?)
   variant: "small" | "body" | "body-heavy" | "large" | "large-heavy" | "muted"
-  color: "default" | "muted" | "primary" | "success" | "warning" | "danger"
+  tone: "default" | "muted" | "primary" | "success" | "warning" | "danger"
 
-Header(title, subtitle?)
-Image(src, alt?, caption?)
+Image(src, alt?, caption?, ratio?, fit?, fallback?)
+  ratio: "16:9" | "1:1" | "4:3" | … — self-constrains; no outer AspectRatio needed.
+  fit: "cover" (default) | "contain" | "fill" | "none" | "scale-down"
+  fallback: text label OR Font Awesome icon name shown when src is missing/unsafe.
+
 Icon(name, variant?, size?)
   name: Font Awesome name without the `fa-` prefix ("house", "chart-line", …).
         Accepts an optional `variant:name` form ("regular:star", "brands:github").
   variant: "solid" (default) | "regular" | "brands"
   size: "xs" | "sm" | "md" (default) | "lg" | "xl"
+
 Link(label, href, external?)
-Badge(label, variant?)
-Tag(label, icon?, size?, variant?)
-  size: "sm" | "md" | "lg"
-TagBlock(tags, variant?, size?)         # tags is string[]
-Alert(title, message?, variant?)
-  variant: "info" | "success" | "warning" | "danger"
-Callout(variant?, title, description?, icon?)
-CodeBlock(language?, codeString)
-Skeleton(lines?, height?)
-Markdown(content)                       # **bold**, *italic*, `code`, links
+Badge(label, variant?, icon?, size?)
+  variant: "neutral" (default) | "primary" | "success" | "warning" | "danger" | "info"
+  size: "xs" | "sm" | "md" (default) | "lg" | "xl"
+  icon: optional Font Awesome name rendered before the label.
+BadgeList(labels, variant?, size?)
+  Renders a row of Badge pills from an array of strings.
+
+Callout(variant?, title, description?, icon?, compact?)
+  variant: "neutral" | "info" | "success" | "warning" | "danger" | "error"
+  compact=true renders a single-line note variant (useful for inline tips).
+
+CodeBlock(language?, codeString, showLineNumbers?, highlightLines?)
+  Always renders a copy-to-clipboard button.
+  highlightLines: e.g. "3-5,8" to emphasise specific lines.
+
+Skeleton(variant?, lines?, height?, shape?, width?)
+  variant: "paragraph" (default) | "card" | "table-row" | "avatar" | "image"
+  shape:   "rect" | "circle" — for custom one-off shapes (use with width/height).
+
+Spinner(size?, label?, tone?)
+  Inline indeterminate loader. Pass `label` to render a caption beside
+  the ring (also announced via aria-label). size accepts the shared
+  xs|sm|md|lg|xl enum.
+
+Markdown(content)
+  Hand-rolled renderer with the following surfaces:
+    - Headings (#, ##, ###)
+    - Blockquotes (`>`)
+    - Fenced code blocks (```lang)
+    - Bullet (`-` / `*`) and numbered (`1.`) lists
+    - Inline **bold**, *italic*, `code`
+    - Links `[label](href)` (sanitised, opens in new tab)
+    - Images `![alt](src)` (sanitised src)
+    - Auto-linked bare http/https URLs
 
 Quote(text, cite?, tone?)
   tone: "default" | "primary" | "success" | "warning" | "danger" | "info"
-  Lighter than Testimonial — for inline pull-quotes inside articles, blog
-  posts, or marketing sections.
-Note(content, tone?, icon?)
-  tone: "default" | "info" (default) | "success" | "warning" | "danger" | "tip"
-  Compact inline note for tips, warnings, footnotes, and helper text. Lighter
-  than Callout — sits on a tinted background with a leading icon.
+  Inline pull-quote — lighter than Testimonial.
 ```
 
 ### Forms
 
 ```text
-Button(label, action?, variant?, type?, size?, disabled?)
+Button(label, action?, variant?, type?, size?, icon?, disabled?)
   variant: "primary" | "secondary" | "ghost" | "danger"
   type: "button" | "submit"
-  size: "sm" | "md" | "lg"
+  size: "sm" | "md" (default) | "lg"   (legacy "small"/"normal"/"large" also accepted)
+  icon: Font Awesome name for an inline leading icon.
 Buttons(items, direction?)              # items: Button[]; direction: "row"|"column"
 
 Input(id, placeholder?, type?, validations?, value?)
@@ -1054,22 +1160,52 @@ Combobox(id, items, value?, placeholder?, emptyText?, disabled?)
   Pass a $variable as `value` for two-way binding; picking an option fires
   a Set(name, value) on that variable. Filter state is held locally via
   useInstanceState so typing does not collapse the panel.
+
+MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?, disabled?)
+  Multi-option searchable dropdown. Bind a $variable (array of values) as
+  `value` for two-way binding — picking/removing an option fires a
+  Set(name, [...]) on that variable. The trigger renders selected items as
+  removable chips. max caps the number of selections.
+
+DateRangePicker(id, from?, to?, label?, min?, max?, disabled?)
+  Paired ISO date inputs that share the same min/max. Bind `from` and
+  `to` to separate $variables for a two-way-bound range.
+
+SegmentedControl(id, items, value?, size?)
+  View-mode picker for 2–5 mutually-exclusive options (grid/list,
+  day/week/month, light/dark). items can be {value, label, icon?}
+  objects, [value, label] tuples, or plain strings. Visually distinct
+  from ToggleGroup — use this when all options act on the same surface.
+  size: "sm" | "md" (default) | "lg".
 ```
 
 ### Data
 
 ```text
-Table(columns, caption?)                # columns: Col[]
-Col(header, values, format?)
+Table(columns, caption?, density?, striped?, sticky?, emptyLabel?)
+  columns: Col[]
+  density: "comfortable" (default) | "compact"
+  striped:  zebra-stripe alternating rows
+  sticky:   pin the header row when the wrapper scrolls (use with maxHeight via ScrollArea)
+  emptyLabel: text for the zero-state cell (default "No data")
+
+Col(header, values, format?, align?)
   format: "text" | "number" | "currency" | "date"
+  align:  "left" | "center" | "right"  (per-column alignment)
   values: typically an array pluck (data.rows.title)
 
 List(items, ordered?)
 ListItem(title, description?, icon?)
 
-StatCard(label, value, trend?, delta?, icon?)
+StatCard(label, value, trend?, delta?, icon?, spark?, tone?)
   trend: "up" | "down" | "flat"
-  icon: optional Font Awesome icon name (e.g. "sack-dollar", "bolt")
+  spark: number[] — inline Sparkline rendered beneath the value.
+  tone:  "default" | "primary" | "success" | "warning" | "danger" | "info"
+
+Sparkline(values, tone?)
+  Tiny inline trend chart for KPIs, table cells, and dashboards. Renders
+  an SVG line with a soft fill. Lighter than LineChart — use anywhere
+  you would otherwise inline a single-series chart.
 
 Tree(items)                              # items: TreeNode[]
 TreeNode(label, children?, icon?, expanded?, active?, badge?, action?)
@@ -1114,9 +1250,13 @@ Avatar(name, src?, size?, status?)
 AvatarGroup(items, max?, size?)
   items: Avatar[] | {name, src?}[] | string[]
   max: maximum avatars to show before showing "+N" (default 4)
-Progress(value?, max?, label?, tone?, indeterminate?, showValue?)
+Progress(value?, max?, label?, tone?, indeterminate?, showValue?, segments?, buffered?)
   value: 0..max
   tone: "primary" (default) | "success" | "warning" | "danger" | "info"
+  segments: render N equal segments (steps) instead of a continuous bar —
+            ideal for onboarding flows and multi-step wizards.
+  buffered: secondary value (0..max) drawn behind the bar — downloads,
+            video buffering, "loaded vs played" indicators.
 Switch(id, label?, value?, description?, disabled?)
   value: bound boolean (typically a $variable for two-way binding)
 Toggle(label, value?, icon?, variant?, size?)
@@ -1130,9 +1270,12 @@ Tooltip(label, trigger, side?)         # short hint on hover/focus
 HoverCard(trigger, content, side?)     # rich card on hover/focus
 Kbd(keys, size?)                       # keys: "⌘ K" or string[] (renders chips)
 
-Rating(value, max?, label?, count?, size?, interactive?)
-  0–5 stars with optional numeric badge and review count. Pass a $variable
-  as `value` plus interactive=true to let users rate something.
+Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)
+  0–max stars with optional numeric badge and review count. Pass a $variable
+  as `value` plus interactive=true to let users rate something. halfStep=true
+  lets clicking the left half of a star set a fractional value. icon swaps
+  the glyph family — "star" (default), "heart", "thumb", "fire", "bolt", or
+  any custom Font Awesome name.
 ProgressRing(value?, max?, label?, caption?, tone?, size?, indeterminate?)
   Circular progress indicator. Use for KPIs, quotas, completion rings —
   anything better visualised as a circle than a bar.
@@ -1150,7 +1293,7 @@ Popover(trigger, content, title?, side?, align?, width?)
   Open/closed state is held locally and survives re-renders. Always shows a
   × close button in the header. Clicking the trigger again, clicking outside,
   or pressing Escape also closes the panel.
-Toast(title, message?, tone?, icon?, duration?, action?, onClose?)
+Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)
   Single transient notification card. Always renders a × close button in the
   top-right corner, regardless of whether onClose is set.
   title:    required string.
@@ -1161,6 +1304,9 @@ Toast(title, message?, tone?, icon?, duration?, action?, onClose?)
   action:   optional Button(...) shown beneath the message (e.g. "Undo", "Retry").
   onClose:  Action fired when the toast is dismissed (× button OR auto-dismiss).
             Use it to remove the toast from your reactive list, log analytics, etc.
+  position: pin a STANDALONE Toast to a viewport corner without wrapping it in
+            Toasts(...). Accepts the same values as Toasts.position. Use this
+            for one-off notifications; for grouped/queued toasts use Toasts.
 Toasts(items, position?)
   Fixed-position stack of Toasts.
   items:    Toast[]
@@ -1195,9 +1341,16 @@ MenuLabel(label)                           # small uppercase group heading
 ```text
 Breadcrumb(items, separator?)          # items: BreadcrumbItem[] or string[]
 BreadcrumbItem(label, href?, icon?)    # omit href on the current/leaf page
-Pagination(page, totalPages, siblings?)
+Pagination(page, totalPages, siblings?, total?, perPage?, perPageOptions?, compact?)
   page: typically a $variable for two-way binding
   siblings: page numbers shown either side of current (default 1)
+  total: total record count — when set with perPage, renders the
+         "Showing N–M of T" summary line.
+  perPage: bind a $variable to expose a per-page selector (the bound state
+           absorbs change events). Pass a plain number to render the summary
+           without an editable selector.
+  perPageOptions: number[] — overrides the default 10/20/50/100 dropdown.
+  compact: drop the page-number row; keep Prev / page-counter / Next only.
 
 Navbar(brand?, items?, actions?, sticky?, variant?)
   Horizontal top bar with three slots: brand (left), items (centre), actions
@@ -1225,24 +1378,31 @@ Cover(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)
   side image; Cover is image-first.
 PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)
   breadcrumbs: Breadcrumb OR string[]
-  actions: Node[] — Buttons / Tags shown on the right
-  status: Tag(...) or Badge(...) — small inline status next to title
+  actions: Node[] — Buttons shown on the right
+  status: Badge(...) — small inline status next to title
 SectionHeader(title, subtitle?, eyebrow?, status?, actions?)
   Use inside a Card to introduce a section with eyebrow + status + right-aligned actions.
-Toolbar(left?, right?)
+Toolbar(left?, right?, center?)
   Left slot: search / filter FormControls. Right slot: primary action Buttons.
+  Center slot (optional): centered controls — typically SegmentedControl,
+  a centered search bar, or a date-range pill.
 
 MetricGrid(items, columns?)            # items: StatCard[]
-Stats(items, align?)                    # items: {label, value, hint?, tone?}[]
+Stats(items, align?)                    # items: {label, value, hint?, tone?, spark?}[]
   Compact inline stat strip — lighter than MetricGrid. Use beside a chart,
   in a Toolbar, or beneath a PageHeader for a trust-strip / quick KPIs row.
+  Each item may include `spark: number[]` for an inline Sparkline beside
+  the value.
 Tile(label, icon?, value?, description?, tone?, action?)
   Compact icon + label + optional value tile. Smaller and denser than
   StatCard — ideal for menu grids, quick-action panels, category filters.
   Pass `action` for an Action that fires when the tile is clicked.
-EmptyState(title, description?, icon?, action?)
+EmptyState(title, description?, icon?, illustration?, action?, actions?)
   icon: Font Awesome name (default "inbox")
-  action: Button(...)
+  illustration: image URL — takes precedence over `icon` when provided.
+  action: Button(...) — single CTA (legacy slot).
+  actions: Node[] — preferred over `action` when you need a primary +
+           secondary CTA row.
 Timeline(items)
 TimelineItem(title, time?, description?, icon?, tone?)
   tone: "default" | "primary" | "success" | "warning" | "danger" | "info"
@@ -1279,7 +1439,7 @@ KanbanCard(title, description?, tags?, assignee?, tone?, icon?, action?)
 DescriptionList(items, columns?)        # items: DescriptionItem[]
   columns: 1 or 2 (default 2)
 DescriptionItem(label, value, icon?)
-  value may be a string or any Node (Tag, StatusDot, Link, Avatar, …)
+  value may be a string or any Node (Badge, StatusDot, Link, Avatar, …)
 
 StatusDot(label, tone?, pulse?)
   tone: "default" | "primary" | "success" | "warning" | "danger" | "info"
@@ -1350,6 +1510,31 @@ runtime-owned reactive state `$route` holds the current path everywhere.
 
 `@Navigate("/path")` is the action step for programmatic navigation; see
 § 10.5 for details.
+
+### Theming (always available)
+
+```text
+Theme(tokens)                           # tokens: object literal of theme tokens
+```
+
+`Theme({...})` does not render anything — it captures a partial token map
+that the runtime applies to the host element as CSS custom properties. Use
+it on a top-level binding named `theme` to brand a single response:
+
+```text
+theme = Theme({
+  colorPrimary:      "#0969da",
+  fontFamily:        "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamilyHeading: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  radiusButton:      "6px",
+  buttonFontWeight:  "500"
+})
+root = Stack([...])
+```
+
+See § 0.5 "In-script theming" for the full token taxonomy, brand recipes,
+and when to reach for it. Removing the `Theme(...)` line snaps the UI back
+to the base theme set by the host.
 
 ---
 
@@ -1695,9 +1880,9 @@ form = Form([
   Button("Subscribe", "primary", Action([@Run(saveContact)]))
 ])
 
-state = saveContact.loading ? Note("Submitting…", "info")
-      : saveContact.error   ? Note(saveContact.error, "danger")
-      : saveContact.data    ? Callout("Thanks!", "Check your inbox to confirm.", "success", "circle-check")
+state = saveContact.loading ? Callout("info", "Submitting…", null, null, true)
+      : saveContact.error   ? Callout("danger", saveContact.error, null, null, true)
+      : saveContact.data    ? Callout("success", "Thanks!", "Check your inbox to confirm.", "circle-check")
       : null
 
 root = Stack([form, state])
@@ -1890,7 +2075,7 @@ Always pair a value with a trend and an icon. `trend` is one of `"up"`,
 search = Query("listOrders", {status: $status})
 
 body = search.loading ? Skeleton(96)
-     : search.error   ? Callout("Something went wrong", search.error, "danger", "triangle-exclamation")
+     : search.error   ? Callout("danger", "Something went wrong", search.error, "triangle-exclamation")
      : search.data.length == 0
          ? EmptyState("No orders yet", "Orders will appear here once a customer checks out.", "cart-shopping",
              Button("View products", "primary", @Navigate("/products")))
@@ -1950,7 +2135,7 @@ $todos = [{id: 1, text: "Welcome — try editing", done: false}]
 $draft = ""
 $filter = "all"
 
-header = Header("Todos", "Add tasks below")
+header = PageHeader("Todos", "Add tasks below")
 
 composer = Stack([
   Input("draft-input", "What needs doing?", "text", null, $draft),
@@ -1968,7 +2153,7 @@ list = visible.length == 0
   : @Each(visible, "t", row)
 
 row = Card([Stack([
-  Tag(t.done ? "done" : "open"),
+  Badge(t.done ? "done" : "open"),
   TextContent(t.text),
   Button("Toggle", Action([
     @Js(`
@@ -2006,7 +2191,7 @@ root = Stack([header, controls, kpis, chart, breakdown])
 $days = "30"
 $segment = "all"
 
-header = Header("Analytics", "Live performance metrics")
+header = PageHeader("Analytics", "Live performance metrics")
 controls = Stack([
   FormControl("Range",   Select("range",   [SelectItem("7","7d"), SelectItem("30","30d"), SelectItem("90","90d")], null, null, $days)),
   FormControl("Segment", Select("segment", [SelectItem("all","All"), SelectItem("paid","Paid"), SelectItem("organic","Organic")], null, null, $segment))
@@ -2181,7 +2366,7 @@ ingest = Script("ingest", `
 feed = Section([@Each(data.rows, "m", msgRow)], "Inbox")
 msgRow = Card([
   Stack([
-    Tag(m.kind, m.kind == "alert" ? "triangle-exclamation" : "comments"),
+    Badge(m.kind, null, m.kind == "alert" ? "triangle-exclamation" : "comments"),
     TextContent(m.subject, "body-heavy"),
     TextContent(m.preview, "small", "muted")
   ])
@@ -2302,7 +2487,7 @@ header = PageHeader(
   "Track deliverables across squads",
   Breadcrumb([BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")]),
   [Button("Export", null, "ghost"), Button("New milestone", null, "primary")],
-  Tag("On track", null, "sm", "success")
+  Badge("On track", "success", null, "sm")
 )
 
 # Data — one Query that drives every tile in the dashboard.
@@ -2404,7 +2589,7 @@ data = Query("list_members", {q: $search, page: $page}, {rows: [], total: 0, pag
 
 header = PageHeader("Team", "Everyone in the company directory", null,
   [Button("Invite", null, "primary")],
-  Tag("" + data.total + " people", null, "sm", "primary"))
+  Badge("" + data.total + " people", "primary", null, "sm"))
 
 controls = Stack([
   FormControl("Search", Input("search", "Name, role, team…", "text", null, $search)),
@@ -2541,7 +2726,7 @@ projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Butto
   ListItem("Onboarding revamp",  "Grace Hopper · awaiting QA",  "bullseye")
 ])])
 
-statusCard = Card([SectionHeader("System status", null, "OPS", Tag("All normal", null, "sm", "success")), Stack([
+statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All normal", "success", null, "sm")), Stack([
   StatusDot("API",       "success"),
   StatusDot("Database",  "success"),
   StatusDot("Webhooks",  "warning"),
@@ -2579,7 +2764,7 @@ root           = Stack([detailHeader, summaryGrid, activityCard, dangerCard, det
 
 detailHeader   = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], detailActions, detailStatus)
 detailActions  = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
-detailStatus   = Tag("Online", "circle-check", "sm", "success")
+detailStatus   = Badge("Online", "success", "circle-check", "sm")
 
 summaryGrid    = Grid([profileCard, infoCard], 2, "l")
 profileCard    = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.",
@@ -2592,7 +2777,7 @@ profileDescriptions = DescriptionList([
   DescriptionItem("Manager",  "Margaret Hamilton"),
   DescriptionItem("Location", "Berlin, DE", "location-dot"),
   DescriptionItem("Joined",   "Mar 2022"),
-  DescriptionItem("Slack",    Tag("@alex", null, "sm", "primary")),
+  DescriptionItem("Slack",    Badge("@alex", "primary", null, "sm")),
   DescriptionItem("Status",   StatusDot("Active", "success"))
 ], 2)
 
@@ -2610,7 +2795,7 @@ detailFollowUps = FollowUpBlock(["Show projects", "Open inbox", "Schedule a 1:1"
 
 - `DescriptionList` aligns labels and values automatically — no need to fake
   a key/value table with nested Stacks.
-- `DescriptionItem`'s `value` can be a Tag, StatusDot, Avatar, or any Node —
+- `DescriptionItem`'s `value` can be a Badge, StatusDot, Avatar, or any Node —
   so status and badges appear inline with the data, not as separate sections.
 - `SectionHeader` carries the eyebrow + actions for each Card, so the page
   reads as several distinct concerns rather than one long scroll.
@@ -2675,7 +2860,7 @@ inboxList = Card([List(@Each(data.rows, "m", inboxRow))])
 inboxRow  = ListItem(m.subject, m.preview, m.icon)
 
 selectedCard = Card([
-  SectionHeader(data.selected.subject, data.selected.from, null, Tag(data.selected.category, null, "sm", "primary"),
+  SectionHeader(data.selected.subject, data.selected.from, null, Badge(data.selected.category, "primary", null, "sm"),
     [Button("Reply", Action([@Run(reply)]), "primary"),
      Button("Archive", Action([@Run(archive)]), "ghost")]),
   DescriptionList([
@@ -2831,7 +3016,7 @@ detail = $selected == "" ? null : Sheet(
       DescriptionItem("ARR",     data.selectedArr),
       DescriptionItem("Renewal", data.selectedRenewal)
     ]),
-    Note("Last touch: " + data.selectedLastTouch, "tip"),
+    Callout("tip", "Last touch: " + data.selectedLastTouch, null, null, true),
     Quote(data.selectedQuote, data.selectedQuoteCite, "primary")
   ], "column", "m")],
   "right",
@@ -2855,7 +3040,7 @@ root = Stack([
 
 The `Tile` row gives the page a dense quick-stats strip; clicking a tile
 filters the directory. `SearchBar` provides a polished search input without
-manual styling. The slide-in `Sheet` reuses `PersonChip`, `Note`, and
+manual styling. The slide-in `Sheet` reuses `PersonChip`, `Callout`, and
 `Quote` for a richer detail view than a plain `Card`.
 
 ### Pattern S — E-commerce checkout (multi-step + Stripe-style summary)
@@ -2924,7 +3109,7 @@ paymentStep = Stack([
       FormControl("CVC",    Input($payment.cvc,    "123"))
     ], 2),
     Buttons([Button("Back", "ghost", prev), Button("Review order", "primary", next)])
-  ]) : Note("You'll be redirected to " + $payment.method + " after review.", "info")
+  ]) : Callout("info", "You'll be redirected to " + $payment.method + " after review.", null, null, true)
 ])
 
 reviewStep = Stack([
@@ -2951,10 +3136,10 @@ summary = Card([
     DescriptionItem("Shipping", "Free"),
     DescriptionItem("Tax",      "$0")
   ]),
-  Divider(),
-  Stack([TextContent("Total", "small", "muted"), Header("$" + @Sum($cart, "price"), 3)], "row"),
+  Separator(),
+  Stack([TextContent("Total", "small", "muted"), TextContent("$" + @Sum($cart, "price"), "large-heavy")], "row"),
   placeOrder.loading ? Banner("Processing order…", null, null, "spinner", "info")
-                     : placeOrder.data ? Callout("Order placed!", "Confirmation #" + placeOrder.data.id, "success", "circle-check")
+                     : placeOrder.data ? Callout("success", "Order placed!", "Confirmation #" + placeOrder.data.id, "circle-check")
                      : null
 ])
 ```
@@ -3007,7 +3192,7 @@ welcome = Hero("Aurora docs", "Build streaming UI for any LLM in minutes.",
                Button("Get started", "primary", @Navigate("/docs/intro")),
                Button("Try the playground", "ghost", @OpenUrl("/playground.html")),
                "Docs",
-               ["Streaming-first", "90+ components", "7 themes"])
+               ["Streaming-first", "130+ components", "7 themes"])
 
 picks = FeatureGrid([
   FeatureItem("Quick start",  "Install via CDN or npm.",  "rocket",       "primary"),
@@ -3018,9 +3203,9 @@ picks = FeatureGrid([
 
 article = Stack([
   Breadcrumb([BreadcrumbItem("Docs", "/"), BreadcrumbItem("Article")]),
-  Header(@First(@Filter(articles, "slug", "==", params.slug)).title, 1),
+  PageHeader(@First(@Filter(articles, "slug", "==", params.slug)).title),
   TextContent(@First(@Filter(articles, "slug", "==", params.slug)).body, "lg"),
-  Divider(),
+  Separator(),
   SectionHeader("Was this helpful?"),
   Buttons([Button("👍 Yes", "success", @Run(thumbsUp)), Button("👎 No", "ghost", @Run(thumbsDown))])
 ])
@@ -3064,7 +3249,7 @@ primary = Card([
     [ToggleGroup($view, [{value:"list",label:"List"},{value:"grid",label:"Grid"}])]
   ),
   files.loading ? Skeleton(160)
-   : files.error ? Callout("Couldn't load folder", files.error, "danger", "triangle-exclamation")
+   : files.error ? Callout("danger", "Couldn't load folder", files.error, "triangle-exclamation")
    : files.data.length == 0
        ? EmptyState("Folder is empty", "Drop files here or click Upload.", "folder-open",
                     Button("Upload", "primary"))
@@ -3077,14 +3262,14 @@ primary = Card([
 ])
 
 detail = $selected ? Stack([
-  Stack([Icon("file-lines", null, "lg"), Header($selected.name, 4)], "row", "s"),
+  Stack([Icon("file-lines", null, "lg"), TextContent($selected.name, "large-heavy")], "row", "s"),
   DescriptionList([
     DescriptionItem("Size",     $selected.size,      "weight-hanging"),
     DescriptionItem("Modified", $selected.modified,  "clock"),
     DescriptionItem("Owner",    $selected.owner,     "user"),
     DescriptionItem("Path",     "/" + $path.join("/") + "/" + $selected.name, "folder-tree")
   ], 1),
-  Divider(),
+  Separator(),
   Buttons([Button("Download", "primary", @Js(`window.open(ctx.args.url)`, {url: $selected.url})),
            Button("Share",    "ghost",   @Run(share)),
            Button("Delete",   "danger",  @Set("confirm", $selected.id))])
@@ -3112,7 +3297,7 @@ days = @Each([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,
   Card([
     Stack([TextContent(d, "lg"),
            d == 1 || d == 15 ? StatusDot("event", "primary", true) : null], "row", "s"),
-    d == 13 ? Tag("Today", "info", "sm") : null
+    d == 13 ? Badge("Today", null, "info", "sm") : null
   ], d == $selectedDay ? "primary" : "default"))
 
 events = [
@@ -3185,7 +3370,7 @@ Highlights:
 | Stacking labels above values as `TextContent("Label") + TextContent(value)`.         | Use `DescriptionList([DescriptionItem(label, value, icon?)])`.                                                                    |
 | Building a SaaS UI without persistent navigation.                                    | Wrap the whole layout in `AppShell(Sidebar(...), [content...])`.                                                                  |
 | Hand-rolling a master/detail layout with `Grid(items, 2)`.                           | Use `SplitView([primary...], [detail...], "320px")` — collapses gracefully on mobile.                                              |
-| Showing live status as plain `Tag` everywhere.                                       | Use `StatusDot(label, tone, pulse?)` for inline health pips; reserve `Tag` for categorical labels.                                |
+| Showing live status as plain `Badge` everywhere.                                     | Use `StatusDot(label, tone, pulse?)` for inline health pips; reserve `Badge` for categorical labels.                              |
 | Drawing pricing tiers from raw `Card`s.                                              | Use `PricingTable([PricingCard(...)])` — featured tier, badge, and feature lists are built in.                                    |
 | Filter Selects floating above a table with no grouping.                              | Wrap them in `Toolbar([filters...], [actions...])` — left/right slots produce a clean SaaS toolbar.                                |
 
@@ -3350,7 +3535,7 @@ Walk this list before you send your output:
 4. **For tiles that should all be the same size**, did I use `Grid` instead
    of `Stack(row, wrap=true)`?
 5. **Did I add status colour where it conveys meaning?** Trends on
-   `StatCard`, variants on `Tag` and `Banner`, `tone` on `TimelineItem`,
+   `StatCard`, variants on `Badge` and `Banner`, `tone` on `TimelineItem`,
    `pulse` on `StatusDot` for realtime.
 6. **Is the response theme-safe?** No hard-coded colours, gradients, fonts,
    or pixel values that override theme tokens. Only semantic props
@@ -3405,6 +3590,7 @@ If you can answer "yes" to all checks, your response is ready.
 LLM and tool integrations:
 
 - **Chat bot:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot.html>
+- **Chat bot · advanced pipeline:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot-advanced.html>
 - **Tools integration:** <https://asfand-dev.github.io/streaming-ui-script/tools-example.html>
 - **External data:** <https://asfand-dev.github.io/streaming-ui-script/external-data-example.html>
 - **Support agent:** <https://asfand-dev.github.io/streaming-ui-script/support-agent.html>

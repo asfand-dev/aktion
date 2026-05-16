@@ -69,8 +69,8 @@ phaseColor = $phase == "focus" ? "primary" : ($phase == "short" ? "success" : "i
 header = Card([
   CardHeader(phaseLabel, phaseHint),
   Stack([
-    Tag(phaseLabel, null, "sm", phaseColor),
-    Tag(@Count($completed) + " sessions today", null, "sm", "neutral")
+    Badge(phaseLabel, phaseColor, null, "sm"),
+    Badge(@Count($completed) + " sessions today", "neutral", null, "sm")
   ], "row", "s", "center", "start", true)
 ], "elevated")
 
@@ -96,7 +96,7 @@ controls = Buttons([
 
 progressPct = ($totalSeconds - $remaining) * 100 / $totalSeconds
 progressLabel = "" + @Round(progressPct) + "% of " + phaseLabel + " complete"
-progressTag = Tag(progressLabel, null, "sm", phaseColor)
+progressTag = Badge(progressLabel, phaseColor, null, "sm")
 
 settingsHint = TextContent("Tip: skipping advances to the next phase in the focus / short / focus / short / focus / long cycle.", "small", "muted")
 

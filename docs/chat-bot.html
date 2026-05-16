@@ -4,478 +4,256 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chat bot · streaming-ui-script</title>
-  <link rel="stylesheet" href="assets/example-page.css" />
-  <link rel="stylesheet" href="assets/chat-bot.css" />
-  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <meta name="description" content="Generate complete UIs, websites, and full applications by chatting with an LLM that responds only in Streaming UI Script." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.05.16a" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body>
-  <!-- Setup screen: ask for OpenRouter API key + model. -->
-  <section id="setup-screen" class="setup-screen">
-    <div class="setup-card">
-      <span class="tag-pill">Live demo</span>
-      <h1 style="margin-top:10px">Connect to OpenRouter</h1>
-      <p class="lede">
-        This demo sends your messages to the OpenRouter Chat Completions API. The
-        assistant is instructed to respond <em>only</em> in Streaming UI Script,
-        which is then rendered inline by <code>&lt;streaming-ui-script&gt;</code>.
-      </p>
+<body data-page="chat-bot">
+  <div class="layout" data-wide="true" style="display: block;">
+    <main>
+      <div class="cb-app" id="cb-app">
+        <!-- ========================================================== -->
+        <!--  Setup overlay: API key + model picker                     -->
+        <!-- ========================================================== -->
+        <section class="cb-setup" id="cb-setup">
+          <div class="cb-setup-card">
+            <span class="cb-eyebrow"><i class="fa-solid fa-bolt"></i> Live demo</span>
+            <h1>Connect to OpenRouter</h1>
+            <p class="cb-lede">
+              This demo streams an LLM's response into
+              <code>&lt;streaming-ui-script&gt;</code>. Pick a mode, ask for any
+              UI, and watch a complete interface render in real time. Your key
+              stays in <code>localStorage</code> — it's never sent anywhere
+              except OpenRouter.
+            </p>
 
-      <form id="setup-form">
-        <div class="field">
-          <label for="api-key">OpenRouter API key</label>
-          <input id="api-key" type="password" autocomplete="off" placeholder="sk-..." required />
-          <span class="hint">Stored locally in your browser. Never sent anywhere except OpenRouter.</span>
+            <form id="cb-setup-form" class="cb-form">
+              <div class="cb-field">
+                <label for="cb-setup-key">OpenRouter API key</label>
+                <div class="cb-input-wrap">
+                  <i class="fa-solid fa-key cb-input-icon" aria-hidden="true"></i>
+                  <input id="cb-setup-key" type="password" autocomplete="off" placeholder="sk-or-..." required />
+                  <button type="button" class="cb-input-reveal" id="cb-setup-reveal" aria-label="Show / hide key" title="Show / hide key">
+                    <i class="fa-solid fa-eye"></i>
+                  </button>
+                </div>
+                <span class="cb-hint">
+                  Need one? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Grab a free key from openrouter.ai</a>.
+                </span>
+              </div>
+
+              <div class="cb-field">
+                <label for="cb-setup-model">Model</label>
+                <div class="cb-input-wrap">
+                  <i class="fa-solid fa-microchip cb-input-icon" aria-hidden="true"></i>
+                  <input id="cb-setup-model" type="text" list="cb-model-suggestions" placeholder="google/gemini-3-flash-preview" required />
+                </div>
+                <datalist id="cb-model-suggestions">
+                  <option value="google/gemini-3-flash-preview"></option>
+                  <option value="google/gemini-3.1-flash-lite"></option>
+                  <option value="openai/gpt-5.4-mini"></option>
+                  <option value="openai/gpt-5.3-codex"></option>
+                  <option value="anthropic/claude-sonnet-4.6"></option>
+                  <option value="qwen/qwen3.6-plus"></option>
+                </datalist>
+                <span class="cb-hint">Any chat-completion model your key has access to.</span>
+              </div>
+
+              <div id="cb-setup-error" class="cb-error" hidden></div>
+
+              <div class="cb-setup-actions">
+                <a class="cb-btn cb-btn--ghost" href="live-examples.html">
+                  <i class="fa-solid fa-arrow-left"></i> Browse demos
+                </a>
+                <button class="cb-btn cb-btn--primary" type="submit">
+                  Start building <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </form>
+
+            <ul class="cb-perks" aria-label="What you get">
+              <li><i class="fa-solid fa-circle-check"></i> Four generation modes</li>
+              <li><i class="fa-solid fa-circle-check"></i> Live, streaming UI</li>
+              <li><i class="fa-solid fa-circle-check"></i> Open in playground</li>
+              <li><i class="fa-solid fa-circle-check"></i> Export as standalone HTML</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ========================================================== -->
+        <!--  Chat interface (revealed once API key is set)             -->
+        <!-- ========================================================== -->
+        <div class="cb-chat" id="cb-chat" hidden>
+          <!-- Toolbar with mode tabs + theme/model controls -->
+          <header class="cb-toolbar" role="banner">
+            <div class="cb-toolbar-row cb-toolbar-row--modes">
+              <div class="cb-modes" id="cb-modes" role="tablist" aria-label="Generation mode">
+                <button class="cb-mode" data-mode="chat-compact" role="tab" aria-selected="true">
+                  <i class="fa-solid fa-comments"></i>
+                  <span class="cb-mode-label">Chat <span class="cb-mode-sub">Compact</span></span>
+                </button>
+                <button class="cb-mode" data-mode="chat-full" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-comment-dots"></i>
+                  <span class="cb-mode-label">Chat <span class="cb-mode-sub">Full</span></span>
+                </button>
+                <button class="cb-mode" data-mode="website" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-globe"></i>
+                  <span class="cb-mode-label">Website <span class="cb-mode-sub">Builder</span></span>
+                </button>
+                <button class="cb-mode" data-mode="app" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-shapes"></i>
+                  <span class="cb-mode-label">App <span class="cb-mode-sub">Builder</span></span>
+                </button>
+              </div>
+
+              <div class="cb-toolbar-spacer"></div>
+
+              <div class="cb-toolbar-controls">
+                <div class="cb-select-wrap" title="Renderer theme">
+                  <i class="fa-solid fa-palette" aria-hidden="true"></i>
+                  <select id="cb-theme" aria-label="Renderer theme">
+                    <option value="light">Light</option>
+                    <option value="pastel">Pastel</option>
+                    <option value="brutalist">Brutalist</option>
+                    <option value="skyline">Skyline</option>
+                  </select>
+                </div>
+
+                <div class="cb-select-wrap" title="LLM model">
+                  <i class="fa-solid fa-microchip" aria-hidden="true"></i>
+                  <select id="cb-model" aria-label="LLM model">
+                    <option value="google/gemini-3-flash-preview">gemini-3-flash-preview</option>
+                    <option value="google/gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                    <option value="openai/gpt-5.4-mini">gpt-5.4-mini</option>
+                    <option value="openai/gpt-5.3-codex">gpt-5.3-codex</option>
+                    <option value="anthropic/claude-sonnet-4.6">claude-sonnet-4.6</option>
+                    <option value="qwen/qwen3.6-plus">qwen3.6-plus</option>
+                  </select>
+                </div>
+
+                <button class="cb-iconbtn" id="cb-new-chat" title="Start a new chat" aria-label="New chat">
+                  <i class="fa-solid fa-plus"></i>
+                </button>
+                <button class="cb-iconbtn" id="cb-settings" title="Settings" aria-label="Open settings">
+                  <i class="fa-solid fa-gear"></i>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <!-- Chat stage: welcome screen + history -->
+          <section class="cb-stage" id="cb-stage" aria-live="polite">
+            <div class="cb-welcome" id="cb-welcome">
+              <div class="cb-aurora" aria-hidden="true">
+                <span class="cb-aurora-blob cb-aurora-blob--a"></span>
+                <span class="cb-aurora-blob cb-aurora-blob--b"></span>
+                <span class="cb-aurora-blob cb-aurora-blob--c"></span>
+              </div>
+              <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Live · streaming · generative UI</span>
+              <h2>What should we <span class="cb-grad-text">build</span> today?</h2>
+              <p>
+                Describe any interface — a dashboard, a marketing site, a full
+                SaaS app — and watch the LLM stream it into a live UI. Click a
+                suggestion below or type your own prompt.
+              </p>
+              <div class="cb-welcome-stats" aria-hidden="true">
+                <span class="cb-stat"><i class="fa-solid fa-bolt"></i> Realtime stream</span>
+                <span class="cb-stat"><i class="fa-solid fa-shapes"></i> 60+ components</span>
+                <span class="cb-stat"><i class="fa-solid fa-palette"></i> 7 themes</span>
+                <span class="cb-stat"><i class="fa-solid fa-mobile-screen"></i> Responsive preview</span>
+              </div>
+              <div class="cb-suggestions" id="cb-suggestions"></div>
+            </div>
+
+            <div class="cb-history" id="cb-history"></div>
+          </section>
+
+          <!-- Composer -->
+          <form class="cb-composer" id="cb-composer">
+            <div class="cb-composer-inner">
+              <textarea
+                id="cb-input"
+                placeholder="Build a project dashboard with KPIs, kanban board, and a recent activity feed…"
+                rows="1"
+                aria-label="Message"
+              ></textarea>
+              <div class="cb-composer-actions">
+                <span class="cb-composer-hint" aria-hidden="true">
+                  <kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline
+                </span>
+                <button type="button" class="cb-iconbtn cb-stop" id="cb-stop" title="Stop generating" hidden>
+                  <i class="fa-solid fa-stop"></i>
+                </button>
+                <button class="cb-btn cb-btn--primary cb-send" id="cb-send" type="submit">
+                  <i class="fa-solid fa-paper-plane"></i>
+                  <span>Send</span>
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
-
-        <div class="field">
-          <label for="model">Model</label>
-          <input id="model" type="text" placeholder="google/gemini-3-flash-preview" list="model-suggestions" required />
-          <datalist id="model-suggestions">
-            <option value="google/gemini-3.1-flash-lite"></option>
-            <option value="google/gemini-3-flash-preview"></option>
-            <option value="gpt-4.1-mini"></option>
-          </datalist>
-          <span class="hint">Any chat-completion model your key has access to.</span>
-        </div>
-
-        <div id="setup-error" class="err hidden"></div>
-
-        <p class="privacy">
-          Your key stays in <code>localStorage</code> on this device only. Clear it any time
-          via the “Reset” button in the chat header.
-        </p>
-
-        <div class="actions">
-          <a class="example-back" href="examples.html">← Back to docs</a>
-          <button class="btn" type="submit">Start chatting</button>
-        </div>
-      </form>
-    </div>
-  </section>
-
-  <!-- Chat screen -->
-  <section id="chat-screen" class="chat-shell hidden">
-    <header class="chat-topbar">
-      <a class="example-brand" href="examples.html">
-        <span class="dot"></span>
-        streaming-ui-script · chat bot
-      </a>
-      <div class="chat-meta">
-        <span class="pill">
-          Theme · 
-          <select id="chat-theme-select">
-            <option value="light">light</option>
-            <option value="pastel">pastel</option>
-            <option value="skyline">skyline</option>
-          </select>
-        </span>
-        <span class="pill">
-          Model · 
-          <select id="chat-model-select">
-            <option value="google/gemini-3-flash-preview">google/gemini-3-flash-preview</option>
-            <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
-            <option value="openai/gpt-5.4-mini">openai/gpt-5.4-mini</option>
-            <option value="openai/gpt-5.3-codex">openai/gpt-5.3-codex</option>
-            <option value="anthropic/claude-sonnet-4.6">anthropic/claude-sonnet-4.6</option>
-            <option value="openrouter/owl-alpha">openrouter/owl-alpha</option>
-            <option value="qwen/qwen3.6-plus">qwen/qwen3.6-plus</option>
-            <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
-          </select>
-        </span>
-        <span class="pill">
-          Prompt ·
-          <select id="chat-prompt-mode" title="Pick the system prompt flavour sent to the model">
-            <option value="chat">chat (compact)</option>
-            <option value="full">full (everything)</option>
-          </select>
-        </span>
-        <button id="reset-btn" class="btn btn-ghost" type="button">Reset key</button>
       </div>
-    </header>
 
-    <div class="chat-stage">
-      <div id="chat-history" class="chat-history" aria-live="polite"></div>
+      <!-- ========================================================== -->
+      <!--  Settings drawer                                            -->
+      <!-- ========================================================== -->
+      <div class="cb-drawer-backdrop" id="cb-drawer-backdrop" data-open="false"></div>
+      <aside class="cb-drawer" id="cb-drawer" data-open="false" aria-hidden="true" aria-label="Settings">
+        <header class="cb-drawer-head">
+          <h2><i class="fa-solid fa-sliders"></i> Settings</h2>
+          <button class="cb-iconbtn" id="cb-drawer-close" aria-label="Close settings">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+        <div class="cb-drawer-body">
+          <div class="cb-field">
+            <label for="cb-drawer-key">OpenRouter API key</label>
+            <div class="cb-input-wrap">
+              <i class="fa-solid fa-key cb-input-icon" aria-hidden="true"></i>
+              <input id="cb-drawer-key" type="password" autocomplete="off" />
+              <button type="button" class="cb-input-reveal" id="cb-drawer-reveal" aria-label="Show / hide key" title="Show / hide key">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
+            <span class="cb-hint">Stored locally. Clear with <em>Reset</em> below.</span>
+          </div>
+          <div class="cb-field">
+            <label for="cb-drawer-model">Default model</label>
+            <input id="cb-drawer-model" type="text" list="cb-model-suggestions" />
+          </div>
+          <div class="cb-field">
+            <label for="cb-drawer-history">History size <span id="cb-history-readout" class="cb-history-readout">5 turns</span></label>
+            <input id="cb-drawer-history" type="range" min="1" max="20" step="1" />
+            <span class="cb-hint">Number of past turns sent with each message.</span>
+          </div>
+          <div class="cb-drawer-row">
+            <button class="cb-btn cb-btn--ghost" id="cb-drawer-export" type="button">
+              <i class="fa-solid fa-download"></i> Export chat
+            </button>
+            <button class="cb-btn cb-btn--ghost" id="cb-drawer-reset" type="button">
+              <i class="fa-solid fa-arrow-rotate-left"></i> Reset key
+            </button>
+          </div>
+        </div>
+      </aside>
 
-      <form id="composer" class="chat-composer">
-        <textarea
-          id="chat-input"
-          placeholder="Ask for a dashboard, form, table, or anything…"
-          rows="1"
-          aria-label="Message"
-        ></textarea>
-        <button id="send-btn" class="btn" type="submit">Send</button>
-      </form>
-    </div>
-  </section>
+      <!-- Toast notifications -->
+      <div class="cb-toast" id="cb-toast" role="status" aria-live="polite"></div>
+    </main>
+  </div>
 
-  <script type="module">
-    import "../dist/streaming-ui-script.js";
-
-    const STORAGE_KEYS = {
-      apiKey: "streaming-ui-script.chat.openrouter-key",
-      model: "streaming-ui-script.chat.openrouter-model",
-      theme: "streaming-ui-script.chat.theme",
-      promptMode: "streaming-ui-script.chat.prompt-mode",
-    };
-    const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-    const MAX_HISTORY_TURNS = 5;
-    const PROMPT_MODES = new Set(["chat", "full"]);
-
-    /* -------- Settings -------- */
-    const settings = {
-      get apiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) ?? ""; },
-      get model() { return localStorage.getItem(STORAGE_KEYS.model) ?? ""; },
-      get theme() { return localStorage.getItem(STORAGE_KEYS.theme) ?? "light"; },
-      get promptMode() {
-        // Default to the compact chat prompt — most chat replies don't need
-        // the full design system catalog and the smaller prompt streams faster.
-        const raw = localStorage.getItem(STORAGE_KEYS.promptMode);
-        return PROMPT_MODES.has(raw) ? raw : "chat";
-      },
-      save(apiKey, model, theme) {
-        localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
-        if (model) localStorage.setItem(STORAGE_KEYS.model, model);
-        if (theme) localStorage.setItem(STORAGE_KEYS.theme, theme);
-      },
-      setPromptMode(mode) {
-        const value = PROMPT_MODES.has(mode) ? mode : "chat";
-        localStorage.setItem(STORAGE_KEYS.promptMode, value);
-      },
-      clear() {
-        localStorage.removeItem(STORAGE_KEYS.apiKey);
-        localStorage.removeItem(STORAGE_KEYS.model);
-        localStorage.removeItem(STORAGE_KEYS.theme);
-        localStorage.removeItem(STORAGE_KEYS.promptMode);
-      },
-    };
-
-    /* -------- System prompt -------- */
-    // JavaScript interactions and routing are always available on the
-    // renderer; the only thing we vary here is which flavour of prompt the
-    // LLM sees — the compact chat prompt or the full prompt.
-    function buildSystemPrompt() {
-      const proxy = document.createElement("streaming-ui-script");
-      return proxy.getSystemPrompt({ mode: settings.promptMode });
-    }
-
-    /* -------- OpenRouter streaming -------- */
-    async function* streamCompletion({ apiKey, model, messages, signal }) {
-      const res = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ model, messages, stream: true, temperature: 0.4 }),
-        signal,
-      });
-      if (!res.ok || !res.body) {
-        let detail = "";
-        try {
-          const data = await res.json();
-          detail = data.error?.message ?? "";
-        } catch { /* ignore */ }
-        throw new Error(detail || `OpenRouter request failed (${res.status}). Please check your API key and model.`);
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let boundary;
-        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-          const event = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          for (const line of event.split("\n")) {
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (!payload) continue;
-            if (payload === "[DONE]") return;
-            try {
-              const json = JSON.parse(payload);
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) yield delta;
-            } catch { /* ignore unparseable chunk */ }
-          }
-        }
-      }
-    }
-
-    function stripFences(text) {
-      let out = text.trim();
-      const opening = out.match(/^```[a-zA-Z0-9_-]*\n/);
-      if (opening) out = out.slice(opening[0].length);
-      if (out.endsWith("```")) out = out.slice(0, -3).trimEnd();
-      return out;
-    }
-
-    /* -------- Chat UI -------- */
-    const els = {
-      setup: document.getElementById("setup-screen"),
-      chat: document.getElementById("chat-screen"),
-      setupForm: document.getElementById("setup-form"),
-      apiKey: document.getElementById("api-key"),
-      model: document.getElementById("model"),
-      setupErr: document.getElementById("setup-error"),
-      themeSelect: document.getElementById("chat-theme-select"),
-      modelSelect: document.getElementById("chat-model-select"),
-      promptModeSelect: document.getElementById("chat-prompt-mode"),
-      resetBtn: document.getElementById("reset-btn"),
-      history: document.getElementById("chat-history"),
-      composer: document.getElementById("composer"),
-      input: document.getElementById("chat-input"),
-      sendBtn: document.getElementById("send-btn"),
-    };
-
-    const conversation = [];
-    let inFlightController = null;
-    let systemPrompt = "";
-
-    function showSetup() {
-      els.setup.classList.remove("hidden");
-      els.chat.classList.add("hidden");
-      els.apiKey.value = settings.apiKey;
-      els.model.value = settings.model || "google/gemini-3-flash-preview";
-      els.setupErr.classList.add("hidden");
-      els.apiKey.focus();
-    }
-
-    function showChat() {
-      els.setup.classList.add("hidden");
-      els.chat.classList.remove("hidden");
-      
-      const currentModel = settings.model || "google/gemini-3-flash-preview";
-      els.modelSelect.value = currentModel;
-      // Fallback in case setup screen model isn't in the dropdown
-      if (els.modelSelect.value !== currentModel) {
-        const customOpt = new Option(currentModel, currentModel);
-        els.modelSelect.add(customOpt);
-        els.modelSelect.value = currentModel;
-      }
-      
-      els.themeSelect.value = settings.theme || "light";
-      els.promptModeSelect.value = settings.promptMode;
-      els.input.focus();
-    }
-
-    function appendUserMessage(text) {
-      const wrap = document.createElement("div");
-      wrap.className = "chat-msg user";
-      const role = document.createElement("div");
-      role.className = "role";
-      role.textContent = "You";
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.textContent = text;
-      wrap.append(role, bubble);
-      els.history.append(wrap);
-      scrollToEnd();
-    }
-
-    function appendAssistantMessage() {
-      const wrap = document.createElement("div");
-      wrap.className = "chat-msg assistant";
-
-      const role = document.createElement("div");
-      role.className = "role";
-      role.textContent = "Assistant";
-
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
-
-      const renderer = document.createElement("streaming-ui-script");
-      renderer.setAttribute("transparent", "true");
-      renderer.setAttribute("theme", settings.theme || "light");
-
-      const typing = document.createElement("div");
-      typing.className = "typing";
-      typing.innerHTML = '<span class="blink"></span>Composing UI…';
-
-      bubble.append(typing, renderer);
-
-      const rawBtn = document.createElement("button");
-      rawBtn.type = "button";
-      rawBtn.className = "raw-toggle";
-      rawBtn.textContent = "Show source";
-
-      const raw = document.createElement("pre");
-      raw.className = "raw";
-
-      rawBtn.addEventListener("click", () => {
-        wrap.classList.toggle("show-raw");
-        rawBtn.textContent = wrap.classList.contains("show-raw") ? "Hide source" : "Show source";
-      });
-
-      wrap.append(role, bubble, rawBtn, raw);
-
-      renderer.addEventListener("assistant-message", (event) => {
-        const message = event.detail?.message;
-        if (typeof message === "string" && message.trim()) {
-          sendMessage(message);
-        }
-      });
-
-      els.history.append(wrap);
-      scrollToEnd();
-      return { wrap, renderer, raw, typing };
-    }
-
-    function appendErrorMessage(text) {
-      const wrap = document.createElement("div");
-      wrap.className = "chat-msg assistant";
-      const role = document.createElement("div");
-      role.className = "role";
-      role.textContent = "Assistant";
-      const err = document.createElement("div");
-      err.className = "err";
-      err.textContent = text;
-      wrap.append(role, err);
-      els.history.append(wrap);
-      scrollToEnd();
-    }
-
-    function scrollToEnd() {
-      requestAnimationFrame(() => {
-        els.history.scrollTop = els.history.scrollHeight;
-      });
-    }
-
-    function setBusy(busy) {
-      els.sendBtn.disabled = busy;
-      els.input.disabled = busy;
-      els.sendBtn.textContent = busy ? "Sending…" : "Send";
-    }
-
-    async function sendMessage(text) {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      if (inFlightController) {
-        inFlightController.abort();
-        inFlightController = null;
-      }
-
-      conversation.push({ role: "user", content: trimmed });
-      appendUserMessage(trimmed);
-
-      const turn = appendAssistantMessage();
-      setBusy(true);
-
-      const truncated = conversation.slice(-MAX_HISTORY_TURNS * 2);
-      const messages = [
-        { role: "system", content: systemPrompt },
-        ...truncated,
-      ];
-
-      const controller = new AbortController();
-      inFlightController = controller;
-
-      try {
-        let fullText = "";
-        for await (const delta of streamCompletion({
-          apiKey: settings.apiKey,
-          model: settings.model || "google/gemini-3-flash-preview",
-          messages,
-          signal: controller.signal,
-        })) {
-          fullText += delta;
-          turn.raw.textContent = fullText;
-          turn.renderer.setResponse(stripFences(fullText));
-          scrollToEnd();
-        }
-        turn.typing.remove();
-        conversation.push({ role: "assistant", content: fullText });
-      } catch (err) {
-        if (controller.signal.aborted) {
-          turn.typing.textContent = "Cancelled.";
-          return;
-        }
-        turn.wrap.remove();
-        appendErrorMessage(err.message || "Request failed.");
-        conversation.pop();
-      } finally {
-        setBusy(false);
-        if (inFlightController === controller) inFlightController = null;
-      }
-    }
-
-    /* -------- Wiring -------- */
-    
-    // Theme Select handling
-    els.themeSelect.addEventListener("change", (e) => {
-      const newTheme = e.target.value;
-      settings.save(settings.apiKey, settings.model, newTheme);
-      // Immediately update all existing renderers
-      document.querySelectorAll("streaming-ui-script").forEach(renderer => {
-        renderer.setAttribute("theme", newTheme);
-      });
-    });
-
-    // Model Select handling
-    els.modelSelect.addEventListener("change", (e) => {
-      const newModel = e.target.value;
-      settings.save(settings.apiKey, newModel, settings.theme);
-    });
-
-    // Prompt-mode toggle: rebuild the system prompt for subsequent turns.
-    els.promptModeSelect.addEventListener("change", (e) => {
-      settings.setPromptMode(e.target.value);
-      systemPrompt = buildSystemPrompt();
-    });
-
-    els.setupForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const apiKey = els.apiKey.value.trim();
-      const model = els.model.value.trim() || "google/gemini-3-flash-preview";
-      if (!apiKey) {
-        els.setupErr.textContent = "API key is required.";
-        els.setupErr.classList.remove("hidden");
-        return;
-      }
-      settings.save(apiKey, model, settings.theme);
-      systemPrompt = buildSystemPrompt();
-      showChat();
-    });
-
-    els.resetBtn.addEventListener("click", () => {
-      if (inFlightController) inFlightController.abort();
-      settings.clear();
-      conversation.length = 0;
-      els.history.replaceChildren();
-      showSetup();
-    });
-
-    els.input.addEventListener("input", () => {
-      els.input.style.height = "auto";
-      els.input.style.height = `${Math.min(160, els.input.scrollHeight)}px`;
-    });
-
-    els.input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        els.composer.requestSubmit();
-      }
-    });
-
-    els.composer.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const text = els.input.value;
-      if (!text.trim() || els.sendBtn.disabled) return;
-      els.input.value = "";
-      els.input.style.height = "auto";
-      sendMessage(text);
-    });
-
-    /* -------- Boot -------- */
-    if (settings.apiKey) {
-      systemPrompt = buildSystemPrompt();
-      showChat();
-    } else {
-      showSetup();
-    }
-  </script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module" src="assets/chat-bot.js?v=2026.05.16a"></script>
 </body>
 </html>

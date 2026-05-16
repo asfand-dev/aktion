@@ -161,7 +161,7 @@ freeBlocks = Stack(
     Stack([
       StatusDot(b.label + " · " + b.duration, "success"),
       Spacer(),
-      Tag("Available", "circle-check", "sm", "success"),
+      Badge("Available", "success", "circle-check", "sm"),
       Button("Book",
              Action([@ToAssistant("Book " + b.label + " for focus")]),
              "secondary",
@@ -173,7 +173,7 @@ freeBlocks = Stack(
 )
 
 weekCard = Card([
-  SectionHeader("Week at a glance", "Mon–Fri overview", null, Tag("Week 20", null, "sm", "info")),
+  SectionHeader("Week at a glance", "Mon–Fri overview", null, Badge("Week 20", "info", null, "sm")),
   MetricGrid([
     StatCard("Meetings",       "" + events.weekStats.meetings,                     "down", "-3 vs last week", "users"),
     StatCard("Focus blocks",   "" + events.weekStats.focus,                        "up",   "+2",              "headphones"),
@@ -190,7 +190,7 @@ freePane = Card([
 mainBody = $view == "agenda" ? (eventCount == 0 ? emptyAgenda : agendaList) : ($view == "free" ? freePane : weekCard)
 
 agendaCard = Card([
-  SectionHeader("Agenda", events.day, null, Tag("" + eventCount + " events", null, "sm", "primary")),
+  SectionHeader("Agenda", events.day, null, Badge("" + eventCount + " events", "primary", null, "sm")),
   mainBody,
   Separator("horizontal", true),
   SectionHeader("Day timeline", "Sequential view of every event"),
@@ -235,7 +235,7 @@ detailLoaded = Stack([
     selected.time + " · " + selected.duration + " · " + selected.location,
     null,
     null,
-    Tag(selected.statusLabel, null, "sm", selected.tone)
+    Badge(selected.statusLabel, selected.tone, null, "sm")
   ),
   DescriptionList([
     DescriptionItem("Date",     events.day,        "calendar"),

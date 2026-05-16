@@ -44,6 +44,7 @@ import {
   Router,
   createContext,
   planProgram,
+  isThemeNode,
   type ToolRegistry,
   type RouteChangeDetail,
 } from "./runtime/index.js";
@@ -59,8 +60,12 @@ import {
 } from "./prompt/generator.js";
 import {
   applyTheme,
+  applyPartialTheme,
+  clearTokenOverrides,
   resolveTheme,
+  sanitiseThemeTokens,
   type ThemeInput,
+  type ThemeTokens,
 } from "./theme/index.js";
 import { componentStyles } from "./theme/styles.js";
 import { ensureFontAwesomeLoaded } from "./icons/index.js";
@@ -142,6 +147,13 @@ export class StreamingUiScriptElement extends HTMLElement {
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
   private parseErrors: string[] = [];
+  /**
+   * Token keys most recently applied by an in-script `Theme({...})`
+   * declaration. We remember them so the next render can clear stale
+   * overrides — otherwise switching from a `Theme(...)` block to the
+   * base theme would leave the previous tokens stuck on the host.
+   */
+  private scriptThemeKeys: ReadonlyArray<keyof ThemeTokens> = [];
 
   constructor() {
     super();
@@ -290,6 +302,12 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   setTheme(theme: ThemeInput): void {
     applyTheme(this, resolveTheme(theme));
+    // Setting a new base theme wipes every token CSS variable, so the
+    // tracker for in-script overrides starts fresh — the next render will
+    // reapply any `Theme({...})` from the active program on top of the
+    // freshly-painted base.
+    this.scriptThemeKeys = [];
+    this.scheduleRender();
   }
 
   setTools(tools: ToolRegistry): void {
@@ -422,6 +440,33 @@ export class StreamingUiScriptElement extends HTMLElement {
   private applyThemeFromAttribute(): void {
     const attr = this.getAttribute(ATTRIBUTE_THEME);
     applyTheme(this, resolveTheme(attr));
+    // Reapplying the base theme wipes every token CSS variable, so the
+    // tracker for in-script overrides has to start fresh — the variables
+    // it was tracking just got rewritten by the base layer.
+    this.scriptThemeKeys = [];
+  }
+
+  /**
+   * Look for a `theme = Theme({...})` (or any binding returning a
+   * `ThemeNode`) in the active program. If found, write its tokens to the
+   * host as CSS custom properties so the in-script declaration layers on
+   * top of the attribute / `setTheme()` base. The previous render's keys
+   * are cleared first so removing a `Theme(...)` line snaps the renderer
+   * back to the underlying theme without a reload.
+   */
+  private applyScriptThemeOverrides(): void {
+    if (this.scriptThemeKeys.length > 0) {
+      clearTokenOverrides(this, this.scriptThemeKeys);
+      this.scriptThemeKeys = [];
+    }
+    const themeBinding = this.context.bindings.get("theme");
+    if (!themeBinding) return;
+    let value: unknown;
+    try { value = themeBinding(); } catch { return; }
+    if (!isThemeNode(value)) return;
+    const tokens = sanitiseThemeTokens(value.tokens);
+    if (Object.keys(tokens).length === 0) return;
+    this.scriptThemeKeys = applyPartialTheme(this, tokens);
   }
 
   private scheduleRender(): void {
@@ -441,6 +486,11 @@ export class StreamingUiScriptElement extends HTMLElement {
       this.replan();
       this.programDirty = false;
     }
+
+    // Apply any in-script `Theme({...})` declaration before render so the
+    // tokens are in place when components measure themselves or read CSS
+    // custom properties (charts that grab `--rui-chart-1`, etc.).
+    this.applyScriptThemeOverrides();
 
     const rootBinding = this.context.bindings.get("root");
     let rootValue: unknown = null;

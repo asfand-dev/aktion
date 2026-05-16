@@ -68,8 +68,8 @@ root = Stack([header, nav, main])
 header = Card([
   CardHeader("Acme console", "Routing demo · current path: " + $route),
   Stack([
-    Tag("$route = " + $route, "compass", "sm", "info"),
-    Tag("visits = " + $visits, "eye", "sm", "neutral")
+    Badge("$route = " + $route, "info", "compass", "sm"),
+    Badge("visits = " + $visits, "neutral", "eye", "sm")
   ], "row", "xs")
 ])
 

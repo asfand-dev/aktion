@@ -83,24 +83,34 @@ export const Breadcrumb: ComponentSpec = {
   },
 };
 
+const PER_PAGE_OPTIONS = [10, 20, 50, 100] as const;
+
 export const Pagination: ComponentSpec = {
   name: "Pagination",
   description:
     "Page navigator with Prev/Next, page numbers, and ellipses. Pass a " +
     "`$variable` as `page` for two-way binding — clicking a page button " +
-    "sets that state to the new (1-indexed) value.",
+    "sets that state to the new (1-indexed) value. Add `total` to render " +
+    "a \"Showing N–M of T\" summary, pass `$variable` as `perPage` to " +
+    "expose a per-page selector, or set `compact=true` to drop the " +
+    "page-number row for tight toolbars.",
   props: [
     { name: "page", type: "number", description: "Current page (1-indexed); typically a $variable" },
     { name: "totalPages", type: "number" },
     { name: "siblings", type: "number", optional: true, description: "Number of page links shown around the current page (default 1)" },
+    { name: "total", type: "number", optional: true, description: "Total record count — enables the \"Showing N–M of T\" summary" },
+    { name: "perPage", type: "number", optional: true, description: "Bind a `$variable` to expose a per-page selector" },
+    { name: "perPageOptions", type: "number[]", optional: true, description: "Override the per-page choices (default 10/20/50/100)" },
+    { name: "compact", type: "boolean", optional: true, description: "Hide page numbers — keep Prev / Next only" },
   ],
   render: (node, props, helpers) => {
     const total = Math.max(1, Math.floor(asNumber(props.totalPages, 1)));
     const current = Math.max(1, Math.min(total, Math.floor(asNumber(props.page, 1))));
     const siblings = Math.max(0, Math.floor(asNumber(props.siblings, 1)));
+    const compact = asBoolean(props.compact);
     const stateName = node.argMeta?.[0]?.stateRef;
 
-    const root = el("nav", { class: "rui-pagination", "aria-label": "Pagination" });
+    const root = el("nav", { class: "rui-pagination", "aria-label": "Pagination", "data-compact": compact ? "true" : "false" });
 
     const setPage = (next: number) => {
       if (!stateName) return;
@@ -112,7 +122,26 @@ export const Pagination: ComponentSpec = {
       });
     };
 
-    const button = (label: string, target: number, opts: { active?: boolean; disabled?: boolean; ellipsis?: boolean } = {}) => {
+    // Optional record-count summary ("Showing 21–30 of 123").
+    const totalRecords = props.total != null ? Math.max(0, Math.floor(asNumber(props.total, 0))) : null;
+    const perPageValue = props.perPage != null ? Math.max(1, Math.floor(asNumber(props.perPage, 0))) : null;
+    if (totalRecords !== null && perPageValue && perPageValue > 0) {
+      const start = totalRecords === 0 ? 0 : (current - 1) * perPageValue + 1;
+      const end = Math.min(totalRecords, current * perPageValue);
+      root.append(el("span", { class: "rui-pagination-summary" }, [
+        totalRecords === 0
+          ? "No results"
+          : `Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${totalRecords.toLocaleString()}`,
+      ]));
+    } else if (totalRecords !== null) {
+      root.append(el("span", { class: "rui-pagination-summary" }, [
+        `${totalRecords.toLocaleString()} result${totalRecords === 1 ? "" : "s"}`,
+      ]));
+    }
+
+    const buttonsWrap = el("div", { class: "rui-pagination-buttons" });
+
+    const button = (label: string, target: number, opts: { active?: boolean; disabled?: boolean; ellipsis?: boolean; ariaLabel?: string } = {}) => {
       if (opts.ellipsis) {
         return el("span", { class: "rui-pagination-ellipsis", "aria-hidden": "true" }, [label]);
       }
@@ -121,6 +150,7 @@ export const Pagination: ComponentSpec = {
         class: "rui-pagination-button",
         "data-active": opts.active ? "true" : "false",
         "aria-current": opts.active ? "page" : null,
+        "aria-label": opts.ariaLabel ?? null,
         disabled: opts.disabled ? "" : null,
       }, [label]);
       if (!opts.disabled && !opts.active) {
@@ -129,18 +159,55 @@ export const Pagination: ComponentSpec = {
       return btn;
     };
 
-    root.append(button("‹", current - 1, { disabled: current <= 1 }));
+    buttonsWrap.append(button("‹", current - 1, { disabled: current <= 1, ariaLabel: "Previous page" }));
 
-    const pageNumbers = computePageNumbers(current, total, siblings);
-    for (const entry of pageNumbers) {
-      if (entry === "…") {
-        root.append(button("…", 0, { ellipsis: true }));
-      } else {
-        root.append(button(String(entry), entry, { active: entry === current }));
+    if (!compact) {
+      const pageNumbers = computePageNumbers(current, total, siblings);
+      for (const entry of pageNumbers) {
+        if (entry === "…") {
+          buttonsWrap.append(button("…", 0, { ellipsis: true }));
+        } else {
+          buttonsWrap.append(button(String(entry), entry, { active: entry === current }));
+        }
       }
+    } else {
+      // Compact variant still shows the current page label so callers
+      // know where they are when the numbered row is hidden.
+      buttonsWrap.append(el("span", { class: "rui-pagination-current" }, [`${current} / ${total}`]));
     }
 
-    root.append(button("›", current + 1, { disabled: current >= total }));
+    buttonsWrap.append(button("›", current + 1, { disabled: current >= total, ariaLabel: "Next page" }));
+    root.append(buttonsWrap);
+
+    // Per-page selector — only renders when `perPage` is a $variable so the
+    // bound state can absorb the change. Falls back to a passive label when
+    // perPage is a plain number.
+    const perPageState = node.argMeta?.[4]?.stateRef;
+    if (perPageValue && (perPageState || asArray(props.perPageOptions).length > 0)) {
+      const options = asArray<unknown>(props.perPageOptions).length > 0
+        ? asArray<unknown>(props.perPageOptions).map((v) => Math.max(1, Math.floor(Number(v) || 0))).filter((n) => n > 0)
+        : Array.from(PER_PAGE_OPTIONS);
+      const perPageWrap = el("label", { class: "rui-pagination-per-page" }, [
+        document.createTextNode("Show "),
+      ]);
+      const select = el("select", { class: "rui-pagination-per-page-select" }) as HTMLSelectElement;
+      for (const opt of options) {
+        const optEl = el("option", {
+          value: String(opt),
+          selected: opt === perPageValue ? "" : null,
+        }, [String(opt)]);
+        select.append(optEl);
+      }
+      if (perPageState) {
+        helpers.bindState(select, perPageState, {
+          event: "change",
+          getValue: (n) => Number((n as HTMLSelectElement).value),
+        });
+      }
+      perPageWrap.append(select);
+      perPageWrap.append(document.createTextNode(" per page"));
+      root.append(perPageWrap);
+    }
 
     return root;
   },
