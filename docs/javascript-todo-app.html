@@ -72,7 +72,7 @@ filterButtons = Buttons([
   Button("Completed " + "(" + data.done + ")",   Action([@Set($filter, "done")]),   $filter == "done" ? "primary" : "ghost",   "normal", "small")
 ])
 
-statusTag = Tag($shortcut, null, "sm", "neutral")
+statusTag = Badge($shortcut, "neutral", null, "sm")
 
 toggleBtn = @Each(data.rows, "t", Button(t.done ? "Done" : "Open", Action([@Set($toggleId, t.id), @Run(toggle), @Run(data)]), t.done ? "secondary" : "ghost", "normal", "small"))
 deleteBtn = @Each(data.rows, "t", Button("Delete", Action([@Set($deleteId, t.id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))

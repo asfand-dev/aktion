@@ -130,7 +130,7 @@ shippingCard = Card([
     Switch("saveAddress", "Save this address to my account", $saveAddress)
   ], "column", "m"),
   Separator("horizontal", true),
-  SectionHeader("Shipping method", "Pick a delivery speed.", null, Tag(ship.eta, "truck", "sm", "info")),
+  SectionHeader("Shipping method", "Pick a delivery speed.", null, Badge(ship.eta, "info", "truck", "sm")),
   Radio("shipMethod", [
     SelectItem("standard", "Standard · 5-7 business days"),
     SelectItem("express",  "Express · 2-3 business days"),
@@ -155,18 +155,18 @@ cardFields = Stack([
     FormControl("Expiry", Input("cardExp", "MM / YY", "text", null, $cardExp)),
     FormControl("CVC",    Input("cardCvc", "123",     "text", null, $cardCvc))
   ], 2, "m"),
-  Note("Test cards only. We never store card details — payment is tokenised before it leaves the browser.", "info", "lock")
+  Callout("info", "Test cards only. We never store card details — payment is tokenised before it leaves the browser.", null, "lock", true)
 ], "column", "m")
 
 paypalPanel = Stack([
-  Note("You'll be redirected to PayPal to confirm your payment after placing the order.", "info", "paypal"),
+  Callout("info", "You'll be redirected to PayPal to confirm your payment after placing the order.", null, "paypal", true),
   Buttons([Button("Continue with PayPal",
                    Action([@OpenUrl("https://www.paypal.com")]),
                    "primary")])
 ], "column", "m")
 
 applePayPanel = Stack([
-  Note("Apple Pay works on Safari with Touch ID or Face ID. We don't see your card details.", "info", "apple"),
+  Callout("info", "Apple Pay works on Safari with Touch ID or Face ID. We don't see your card details.", null, "apple", true),
   Buttons([Button("Pay with Apple Pay",
                    Action([@ToAssistant("Trigger Apple Pay")]),
                    "primary")])
@@ -268,7 +268,7 @@ cartRows = @Each($cart, "c",
   ], "row", "s", "center")
 )
 
-promoNote = $promoApplied == "" ? null : ($promoApplied == "WELCOME10" ? Note("WELCOME10 applied — 10% off your order.", "success", "tags") : ($promoApplied == "SHIPFREE" ? Note("SHIPFREE applied — free shipping.", "success", "truck") : Note("Code \"" + $promoApplied + "\" isn't valid.", "warning", "circle-info")))
+promoNote = $promoApplied == "" ? null : ($promoApplied == "WELCOME10" ? Callout("success", "WELCOME10 applied — 10% off your order.", null, "tags", true) : ($promoApplied == "SHIPFREE" ? Callout("success", "SHIPFREE applied — free shipping.", null, "truck", true) : Callout("warning", "Code \"" + $promoApplied + "\" isn't valid.", null, "circle-info", true)))
 
 orderSummary = Card([
   SectionHeader("Order summary", "" + itemCount + " items in cart"),
@@ -290,7 +290,7 @@ orderSummary = Card([
     DescriptionItem("Discount", "-$" + discount,              "percent"),
     DescriptionItem("Total",    "$" + total,                  "sack-dollar")
   ]),
-  Note("All prices in USD. Taxes calculated at next step where applicable.", "info", "circle-info")
+  Callout("info", "All prices in USD. Taxes calculated at next step where applicable.", null, "circle-info", true)
 ])
 
 split = $step == "done" ? mainPane : SplitView([mainPane], [orderSummary], "1.5fr")

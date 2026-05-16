@@ -166,7 +166,7 @@ nameCells = @Each(visibleRows, "f",
   ], "row", "s", "center")
 )
 
-typeCells   = @Each(visibleRows, "f", Tag(f.type, null, "sm", "neutral"))
+typeCells   = @Each(visibleRows, "f", Badge(f.type, "neutral", null, "sm"))
 sizeCells   = @Each(visibleRows, "f", TextContent(f.size, "small", "muted"))
 modCells    = @Each(visibleRows, "f", TextContent(f.modified, "small", "muted"))
 ownerCells  = @Each(visibleRows, "f", PersonChip(f.owner, null, null, "sm"))

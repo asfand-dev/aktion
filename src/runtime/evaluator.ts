@@ -20,6 +20,7 @@ import {
   isActionStep,
   type ActionPayload,
   type ActionStep,
+  type ThemeNode,
 } from "./builtins.js";
 import { matchRoute, type Router, type RouteParams } from "./router.js";
 
@@ -254,6 +255,26 @@ function evaluateComponentCall(
   }
   if (callee === "Routes") {
     return evaluateRoutes(args, ctx, loc);
+  }
+  if (callee === "Theme") {
+    // `Theme({colorPrimary: "...", ...})` — capture an arbitrary token map
+    // to be applied on top of the base theme between render cycles. We do
+    // not render anything; the element picks the value up via the `theme`
+    // binding (or any other binding) and writes the tokens to its host.
+    const tokensArg = args[0];
+    let tokens: Record<string, string> = {};
+    if (tokensArg) {
+      const evaluated = evaluate(tokensArg, ctx);
+      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
+        for (const [key, value] of Object.entries(evaluated as Record<string, unknown>)) {
+          if (value == null) continue;
+          if (typeof value === "string" && value.trim() !== "") tokens[key] = value;
+          else if (typeof value === "number") tokens[key] = String(value);
+        }
+      }
+    }
+    const node: ThemeNode = { kind: "Theme", tokens };
+    return node;
   }
   if (callee === "Action") {
     const stepsArg = args[0];

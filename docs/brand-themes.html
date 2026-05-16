@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Brand themes · streaming-ui-script</title>
+  <meta name="description" content="Same Streaming UI Script program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style Theme() declarations. Copy any brand into your own response." />
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* ----- Brand picker --------------------------------------------------- */
+    .brand-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 4px;
+    }
+    .brand-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--ex-border);
+      background: var(--ex-surface);
+      color: var(--ex-text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+    }
+    .brand-chip:hover { border-color: var(--ex-border-strong); transform: translateY(-1px); }
+    .brand-chip[aria-pressed="true"] {
+      border-color: transparent;
+      color: #fff;
+    }
+    .brand-chip .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .brand-chip[data-brand="github"][aria-pressed="true"]  { background: #0969da; }
+    .brand-chip[data-brand="apple"][aria-pressed="true"]   { background: #1d1d1f; }
+    .brand-chip[data-brand="stripe"][aria-pressed="true"]  { background: #635bff; }
+    .brand-chip[data-brand="ionos"][aria-pressed="true"]   { background: #003580; }
+    .brand-chip[data-brand="notion"][aria-pressed="true"]  { background: #2f3437; }
+    .brand-chip[data-brand="vercel"][aria-pressed="true"]  { background: #000000; }
+
+    /* ----- Layout ---------------------------------------------------------- */
+    .brand-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+    @media (min-width: 1100px) {
+      .brand-grid { grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); }
+    }
+    .brand-preview-shell {
+      border: 1px solid var(--ex-border);
+      border-radius: var(--ex-radius-lg);
+      overflow: hidden;
+      box-shadow: var(--ex-shadow);
+      background: #ffffff;
+      transition: background 220ms ease;
+    }
+    .brand-preview-shell streaming-ui-script {
+      display: block;
+      padding: 22px;
+      min-height: 540px;
+    }
+
+    .brand-side {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .brand-meta-card {
+      background: var(--ex-surface);
+      border: 1px solid var(--ex-border);
+      border-radius: var(--ex-radius);
+      padding: 18px 20px;
+      box-shadow: var(--ex-shadow);
+    }
+    .brand-meta-card h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+    .brand-meta-card p {
+      margin: 0 0 10px;
+      color: var(--ex-text-muted);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+    .brand-tokens {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 6px 14px;
+      font-family: var(--ex-mono);
+      font-size: 12.5px;
+      margin-top: 8px;
+    }
+    .brand-tokens dt {
+      color: var(--ex-text-muted);
+      white-space: nowrap;
+    }
+    .brand-tokens dd {
+      margin: 0;
+      color: var(--ex-text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-tokens dd .color-chip {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.10);
+      flex-shrink: 0;
+    }
+
+    .copy-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--ex-border);
+      background: var(--ex-surface);
+      color: var(--ex-text);
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+    .copy-btn:hover { border-color: var(--ex-border-strong); background: var(--ex-surface-soft); }
+    .copy-btn[data-state="ok"] { color: #0a7d3b; border-color: rgba(10, 125, 59, 0.4); }
+    .copy-btn i { font-size: 11px; }
+
+    .brand-source {
+      background: #0b1020;
+      color: #e2e8f0;
+      border-radius: var(--ex-radius);
+      padding: 14px 16px;
+      font-family: var(--ex-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      max-height: 360px;
+      box-shadow: var(--ex-shadow);
+    }
+    .brand-source pre { margin: 0; white-space: pre; color: inherit; }
+
+    .section-h {
+      margin: 28px 0 6px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ex-text-muted);
+      font-weight: 700;
+    }
+
+    /* Per-brand wrapper backdrops so the demo card "feels" like the brand
+       even outside the rendered component. The body of the preview is the
+       streaming-ui-script element itself which carries the real theme. */
+    .brand-preview-shell[data-brand="github"]  { background: #f6f8fa; }
+    .brand-preview-shell[data-brand="apple"]   { background: #fbfbfd; }
+    .brand-preview-shell[data-brand="stripe"]  { background: linear-gradient(135deg, #f6f9fc 0%, #ffffff 60%, #efe9ff 100%); }
+    .brand-preview-shell[data-brand="ionos"]   { background: #f7f9fc; }
+    .brand-preview-shell[data-brand="notion"]  { background: #ffffff; }
+    .brand-preview-shell[data-brand="vercel"]  { background: #fafafa; }
+  </style>
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · brand themes
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to demos</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · Theme({...})</span>
+      <h1 style="margin-top:10px">Same UI, six brands.</h1>
+      <p>
+        Pick a brand below — the preview reskins to GitHub, Apple, Stripe,
+        IONOS, Notion, or Vercel using only a <code>theme = Theme({...})</code>
+        line at the top of the response. No CSS, no host configuration, no
+        custom components. Copy any token map into your own LLM response to
+        brand a single reply, or feed it through
+        <code>el.setTheme(...)</code> to brand the whole host.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Pick a brand</h2>
+      <p class="lede">
+        Each chip swaps just the <code>Theme({...})</code> block at the top
+        of the program. The rest of the UI Script is identical across every
+        brand — the renderer picks up the new tokens between renders.
+      </p>
+
+      <div class="brand-picker" role="radiogroup" aria-label="Brand picker">
+        <button class="brand-chip" type="button" role="radio" data-brand="github" aria-pressed="true">
+          <span class="swatch" style="background:#0969da"></span> GitHub
+        </button>
+        <button class="brand-chip" type="button" role="radio" data-brand="apple" aria-pressed="false">
+          <span class="swatch" style="background:#1d1d1f"></span> Apple
+        </button>
+        <button class="brand-chip" type="button" role="radio" data-brand="stripe" aria-pressed="false">
+          <span class="swatch" style="background:#635bff"></span> Stripe
+        </button>
+        <button class="brand-chip" type="button" role="radio" data-brand="ionos" aria-pressed="false">
+          <span class="swatch" style="background:#003580"></span> IONOS
+        </button>
+        <button class="brand-chip" type="button" role="radio" data-brand="notion" aria-pressed="false">
+          <span class="swatch" style="background:#2f3437"></span> Notion
+        </button>
+        <button class="brand-chip" type="button" role="radio" data-brand="vercel" aria-pressed="false">
+          <span class="swatch" style="background:#000000"></span> Vercel
+        </button>
+      </div>
+
+      <div class="brand-grid">
+        <div id="brand-preview-shell" class="brand-preview-shell" data-brand="github">
+          <streaming-ui-script id="brand-preview" theme="light"></streaming-ui-script>
+        </div>
+
+        <aside class="brand-side">
+          <div class="brand-meta-card">
+            <h3 id="brand-name">GitHub</h3>
+            <p id="brand-vibe">Sans-serif <code>-apple-system</code> stack, blue <code>#0969da</code> primary, gray-on-white surfaces, 6 px radii, weight 500 buttons.</p>
+            <dl class="brand-tokens" id="brand-tokens"></dl>
+            <div class="copy-row">
+              <button class="copy-btn" id="copy-theme" type="button">
+                <i class="fa-solid fa-copy"></i> Copy Theme({...})
+              </button>
+              <button class="copy-btn" id="copy-program" type="button">
+                <i class="fa-solid fa-file-code"></i> Copy full program
+              </button>
+            </div>
+          </div>
+
+          <div class="brand-meta-card">
+            <h3 style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ex-text-muted);margin:0 0 8px;">Theme source</h3>
+            <div class="brand-source"><pre id="brand-theme-source"></pre></div>
+          </div>
+        </aside>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>The shared UI program</h2>
+      <p class="lede">
+        Every brand renders the same Streaming UI Script source. Only the
+        <code>theme = Theme({...})</code> line at the top changes — the
+        runtime applies the new tokens to the host as CSS custom properties,
+        so the existing components instantly pick up the new palette,
+        typography, and shape.
+      </p>
+      <pre class="example-source"><code id="src-shared">head = PageHeader(
+  "Acme Platform",
+  "All your operations, one workspace.",
+  ["Workspace", "Dashboard"],
+  [
+    Button("Settings", Action([@ToAssistant("Open settings")]), "secondary", "sm", null, "gear"),
+    Button("New project", Action([@ToAssistant("Start a new project")]), "primary", "sm", null, "plus")
+  ],
+  Badge("On track", "success")
+)
+
+kpis = MetricGrid([
+  StatCard("Active deals",     "1,284",  "up",   "+12%", "briefcase"),
+  StatCard("Monthly revenue",  "$48.2k", "up",   "+8%",  "sack-dollar"),
+  StatCard("Open tickets",     "42",     "down", "-15%", "ticket"),
+  StatCard("Churn",            "1.4%",   "flat", "0",    "user-minus")
+])
+
+trendChart = Card([
+  SectionHeader("Revenue trend", "Last 12 weeks", null, null,
+    [Button("Export", Action([@ToAssistant("Export the trend")]), "ghost", "sm", null, "arrow-up-from-bracket")]
+  ),
+  LineChart(
+    ["W1","W2","W3","W4","W5","W6","W7","W8","W9","W10","W11","W12"],
+    [
+      Series("This quarter", [22, 28, 26, 32, 34, 31, 38, 42, 44, 41, 46, 48]),
+      Series("Last quarter", [18, 21, 20, 24, 27, 25, 28, 31, 33, 30, 34, 36])
+    ]
+  )
+])
+
+teamCard = Card([
+  SectionHeader("Team", "6 members", "Engineering"),
+  Stack([
+    PersonChip("Asha Patel",    "Engineering lead",   null, "md", "online"),
+    PersonChip("Linus Wong",    "Senior developer",   null, "md", "online"),
+    PersonChip("Mira Sanchez",  "Product designer",   null, "md", "away"),
+    PersonChip("Sam Reyes",     "QA engineer",        null, "md", "offline")
+  ], "column", "s")
+])
+
+activityCard = Card([
+  SectionHeader("Recent activity", "Last 24h"),
+  Timeline([
+    TimelineItem("Deployed v2.4.1", "12:04", null, "rocket", "primary"),
+    TimelineItem("Closed 4 support tickets", "11:18", null, "circle-check", "success"),
+    TimelineItem("Updated billing API", "10:02", null, "credit-card", "info"),
+    TimelineItem("Investigating latency", "08:47", null, "triangle-exclamation", "warning")
+  ])
+])
+
+planCard = Card([
+  SectionHeader("Workspace plan", "Renews in 12 days"),
+  ProgressRing(72, 100, "12 / 17", "Seats used", "primary"),
+  Buttons([
+    Button("Manage seats", Action([@ToAssistant("Manage seats")]), "secondary", "sm"),
+    Button("Upgrade",      Action([@ToAssistant("Upgrade plan")]),  "primary",   "sm")
+  ])
+])
+
+quickForm = Card([
+  SectionHeader("Quick capture", "Add a new task"),
+  FormControl("Title", Input("title", "Ship the analytics tab", "text")),
+  FormControl("Owner", Select("owner", [
+    SelectItem("asha", "Asha Patel"),
+    SelectItem("linus","Linus Wong"),
+    SelectItem("mira", "Mira Sanchez")
+  ], null, null, "asha")),
+  Buttons([
+    Button("Add task", Action([@ToAssistant("Add the task")]),  "primary"),
+    Button("Cancel",   Action([@ToAssistant("Cancel capture")]), "ghost")
+  ])
+])
+
+bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], 2, "l")
+
+root = Stack([head, kpis, trendChart, bottomGrid], "column", "l")</code></pre>
+    </article>
+
+    <article class="example-card">
+      <h2>Use it from your app</h2>
+      <p class="lede">
+        Three equivalent ways to apply a brand: emit a <code>Theme(...)</code>
+        line from the LLM, call <code>setTheme()</code> from the host page,
+        or set CSS variables on the host element.
+      </p>
+      <pre class="example-source"><code>// 1. Brand a single response from inside the script
+el.setResponse(`theme = Theme({
+  colorPrimary:      "#0969da",
+  fontFamily:        "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  radiusButton:      "6px",
+  buttonFontWeight:  "500"
+})
+root = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
+
+// 2. Or apply the same token map programmatically (host-wide)
+import { brandThemes } from "./brand-themes.js";
+el.setTheme(brandThemes.github);
+
+// 3. Or set CSS variables on the host element
+streaming-ui-script {
+  --rui-color-primary:     #0969da;
+  --rui-radius-button:     6px;
+  --rui-font-family:       -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}</code></pre>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+
+    /* ------------------------------------------------------------------
+       Brand token maps.
+
+       Each entry is a partial `ThemeTokens` object — the runtime merges
+       it on top of the base theme. Keep the maps **focused on the brand**:
+       4–8 colour tokens + 2 font stacks + button/radius shape + maybe a
+       chart palette. Everything else inherits from `light`, which is
+       deliberate (so the brand never has to define every detail).
+       ------------------------------------------------------------------ */
+    const BRAND_THEMES = {
+      github: {
+        label: "GitHub",
+        vibe: "Sans-serif <code>-apple-system</code> stack, blue <code>#0969da</code> primary, gray-on-white surfaces, 6 px radii, weight 500 buttons.",
+        tokens: {
+          colorBg:             "#ffffff",
+          colorBgSubtle:       "#f6f8fa",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#f6f8fa",
+          colorBorder:         "#d0d7de",
+          colorBorderSubtle:   "rgba(31, 35, 40, 0.12)",
+          colorText:           "#1f2328",
+          colorTextMuted:      "#656d76",
+          colorPrimary:        "#1f883d",
+          colorPrimaryHover:   "#1a7f37",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#0969da",
+          colorAccentHover:    "#0860c4",
+          colorAccentText:     "#ffffff",
+          colorFocusRing:      "#0969da",
+          colorSuccess:        "#1a7f37",
+          colorWarning:        "#9a6700",
+          colorDanger:         "#cf222e",
+          colorInfo:           "#0969da",
+          fontFamily:          "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", Helvetica, Arial, sans-serif",
+          fontFamilyHeading:   "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Noto Sans\", Helvetica, Arial, sans-serif",
+          fontFamilyMono:      "ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, monospace",
+          fontSizeBase:        "14px",
+          fontWeightHeading:   "600",
+          letterSpacingHeading: "-0.005em",
+          radiusSm:            "6px",
+          radiusMd:            "6px",
+          radiusLg:            "12px",
+          radiusButton:        "6px",
+          radiusInput:         "6px",
+          borderWidth:         "1px",
+          shadowSm:            "0 1px 0 rgba(31, 35, 40, 0.04)",
+          shadowMd:            "0 8px 24px rgba(140, 149, 159, 0.20)",
+          buttonFontWeight:    "500",
+          buttonPaddingY:      "5px",
+          buttonPaddingX:      "16px",
+          chart1:              "#0969da",
+          chart2:              "#1a7f37",
+          chart3:              "#bf8700",
+          chart4:              "#cf222e",
+          chart5:              "#8250df",
+          chart6:              "#9a6700",
+        },
+        primarySwatch: "#1f883d",
+      },
+      apple: {
+        label: "Apple",
+        vibe: "SF Pro Display heading, neutral grays, 14 px button radius, generous spacing, very light borders.",
+        tokens: {
+          colorBg:             "#ffffff",
+          colorBgSubtle:       "#fbfbfd",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#f5f5f7",
+          colorBorder:         "#d2d2d7",
+          colorBorderSubtle:   "rgba(0, 0, 0, 0.06)",
+          colorText:           "#1d1d1f",
+          colorTextMuted:      "#6e6e73",
+          colorPrimary:        "#0071e3",
+          colorPrimaryHover:   "#0077ed",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#0071e3",
+          colorAccentHover:    "#0077ed",
+          colorAccentText:     "#ffffff",
+          colorFocusRing:      "#0071e3",
+          colorSuccess:        "#34c759",
+          colorWarning:        "#ff9f0a",
+          colorDanger:         "#ff3b30",
+          colorInfo:           "#5ac8fa",
+          fontFamily:          "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+          fontFamilyHeading:   "\"SF Pro Display\", -apple-system, BlinkMacSystemFont, \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+          fontFamilyMono:      "\"SF Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSizeBase:        "14px",
+          fontSizeHeading:     "19px",
+          fontSizeTitle:       "28px",
+          fontWeightHeading:   "600",
+          lineHeightHeading:   "1.1",
+          letterSpacingHeading: "-0.015em",
+          radiusSm:            "8px",
+          radiusMd:            "12px",
+          radiusLg:            "18px",
+          radiusButton:        "980px",
+          radiusInput:         "10px",
+          borderWidth:         "1px",
+          shadowSm:            "0 1px 2px rgba(0, 0, 0, 0.04)",
+          shadowMd:            "0 12px 30px rgba(0, 0, 0, 0.08)",
+          shadowLg:            "0 30px 80px rgba(0, 0, 0, 0.12)",
+          spacingM:            "14px",
+          spacingL:            "22px",
+          spacingXl:           "36px",
+          buttonFontWeight:    "500",
+          buttonPaddingY:      "10px",
+          buttonPaddingX:      "22px",
+          buttonLetterSpacing: "-0.01em",
+          chart1:              "#0071e3",
+          chart2:              "#34c759",
+          chart3:              "#ff9f0a",
+          chart4:              "#ff3b30",
+          chart5:              "#5ac8fa",
+          chart6:              "#af52de",
+        },
+        primarySwatch: "#0071e3",
+      },
+      stripe: {
+        label: "Stripe",
+        vibe: "Inter / Sohne stack, indigo <code>#635bff</code> primary, 10 px button radius, weight 600 buttons with tight tracking.",
+        tokens: {
+          colorBg:             "#ffffff",
+          colorBgSubtle:       "#f6f9fc",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#f1f4fa",
+          colorBorder:         "#e3e8ee",
+          colorBorderSubtle:   "rgba(60, 66, 87, 0.10)",
+          colorText:           "#0a2540",
+          colorTextMuted:      "#425466",
+          colorPrimary:        "#635bff",
+          colorPrimaryHover:   "#4f47e6",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#00d4ff",
+          colorAccentHover:    "#00b8de",
+          colorAccentText:     "#0a2540",
+          colorFocusRing:      "#635bff",
+          colorSuccess:        "#3eb37f",
+          colorWarning:        "#f5a623",
+          colorDanger:         "#ed5f74",
+          colorInfo:           "#00d4ff",
+          fontFamily:          "\"Inter\", \"Sohne\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+          fontFamilyHeading:   "\"Inter\", \"Sohne\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+          fontFamilyMono:      "\"Sohne Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSizeBase:        "15px",
+          fontWeightHeading:   "700",
+          letterSpacingHeading: "-0.018em",
+          radiusSm:            "6px",
+          radiusMd:            "12px",
+          radiusLg:            "20px",
+          radiusButton:        "10px",
+          radiusInput:         "8px",
+          borderWidth:         "1px",
+          shadowSm:            "0 2px 5px rgba(50, 50, 93, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04)",
+          shadowMd:            "0 13px 27px rgba(50, 50, 93, 0.10), 0 8px 16px rgba(0, 0, 0, 0.06)",
+          shadowLg:            "0 30px 60px rgba(50, 50, 93, 0.18)",
+          buttonFontWeight:    "600",
+          buttonPaddingY:      "10px",
+          buttonPaddingX:      "20px",
+          buttonLetterSpacing: "-0.01em",
+          chart1:              "#635bff",
+          chart2:              "#00d4ff",
+          chart3:              "#f5a623",
+          chart4:              "#ed5f74",
+          chart5:              "#3eb37f",
+          chart6:              "#9d6cff",
+        },
+        primarySwatch: "#635bff",
+      },
+      ionos: {
+        label: "IONOS",
+        vibe: "Inter stack, navy <code>#003580</code> primary, cyan <code>#0095d6</code> accent, 4 px button radius, dense enterprise spacing.",
+        tokens: {
+          colorBg:             "#f7f9fc",
+          colorBgSubtle:       "#eef3f8",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#f1f4f9",
+          colorBorder:         "#cdd6e1",
+          colorBorderSubtle:   "rgba(13, 27, 58, 0.08)",
+          colorText:           "#001f4d",
+          colorTextMuted:      "#52617a",
+          colorPrimary:        "#003580",
+          colorPrimaryHover:   "#002a66",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#0095d6",
+          colorAccentHover:    "#0078ad",
+          colorAccentText:     "#ffffff",
+          colorFocusRing:      "#0095d6",
+          colorSuccess:        "#0e8c4a",
+          colorWarning:        "#c47e00",
+          colorDanger:         "#c8362b",
+          colorInfo:           "#0095d6",
+          fontFamily:          "\"Inter\", \"Source Sans 3\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+          fontFamilyHeading:   "\"Inter\", \"Source Sans 3\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+          fontFamilyMono:      "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSizeBase:        "14px",
+          fontWeightHeading:   "700",
+          letterSpacingHeading: "-0.005em",
+          radiusXs:            "2px",
+          radiusSm:            "3px",
+          radiusMd:            "4px",
+          radiusLg:            "8px",
+          radiusButton:        "4px",
+          radiusInput:         "3px",
+          borderWidth:         "1px",
+          shadowSm:            "0 1px 0 rgba(13, 27, 58, 0.04), 0 1px 3px rgba(13, 27, 58, 0.06)",
+          shadowMd:            "0 4px 14px rgba(13, 27, 58, 0.10), 0 1px 3px rgba(13, 27, 58, 0.04)",
+          spacingS:            "8px",
+          spacingM:            "12px",
+          spacingL:            "18px",
+          buttonFontWeight:    "600",
+          buttonPaddingY:      "8px",
+          buttonPaddingX:      "16px",
+          chart1:              "#003580",
+          chart2:              "#0095d6",
+          chart3:              "#0e8c4a",
+          chart4:              "#c47e00",
+          chart5:              "#d43594",
+          chart6:              "#52617a",
+        },
+        primarySwatch: "#003580",
+      },
+      notion: {
+        label: "Notion",
+        vibe: "Off-black ink, near-white surfaces, very subtle borders, generous 14 px line height, 3 px button radius.",
+        tokens: {
+          colorBg:             "#ffffff",
+          colorBgSubtle:       "#f7f6f3",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#f1f1ef",
+          colorBorder:         "#e7e5e2",
+          colorBorderSubtle:   "rgba(55, 53, 47, 0.09)",
+          colorText:           "#37352f",
+          colorTextMuted:      "#787774",
+          colorPrimary:        "#2383e2",
+          colorPrimaryHover:   "#1a76d2",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#2383e2",
+          colorAccentHover:    "#1a76d2",
+          colorAccentText:     "#ffffff",
+          colorFocusRing:      "#2383e2",
+          colorSuccess:        "#0f7b6c",
+          colorWarning:        "#cb912f",
+          colorDanger:         "#e03e3e",
+          colorInfo:           "#2383e2",
+          fontFamily:          "ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, \"Apple Color Emoji\", Arial, sans-serif",
+          fontFamilyHeading:   "ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+          fontFamilyMono:      "\"SFMono-Regular\", Menlo, Consolas, \"PT Mono\", \"Liberation Mono\", Courier, monospace",
+          fontSizeBase:        "15px",
+          fontWeightHeading:   "700",
+          lineHeightBody:      "1.55",
+          letterSpacingHeading: "-0.011em",
+          radiusXs:            "3px",
+          radiusSm:            "3px",
+          radiusMd:            "6px",
+          radiusLg:            "10px",
+          radiusButton:        "3px",
+          radiusInput:         "3px",
+          borderWidth:         "1px",
+          shadowSm:            "0 1px 2px rgba(15, 15, 15, 0.06)",
+          shadowMd:            "0 14px 28px rgba(15, 15, 15, 0.10)",
+          buttonFontWeight:    "500",
+          buttonPaddingY:      "6px",
+          buttonPaddingX:      "12px",
+          chart1:              "#2383e2",
+          chart2:              "#0f7b6c",
+          chart3:              "#cb912f",
+          chart4:              "#e03e3e",
+          chart5:              "#9065b0",
+          chart6:              "#787774",
+        },
+        primarySwatch: "#2383e2",
+      },
+      vercel: {
+        label: "Vercel",
+        vibe: "Near-black ink, pure white surfaces, hard 1 px borders, no shadows, 8 px radii, weight 600 buttons.",
+        tokens: {
+          colorBg:             "#ffffff",
+          colorBgSubtle:       "#fafafa",
+          colorSurface:        "#ffffff",
+          colorSurfaceMuted:   "#fafafa",
+          colorBorder:         "#eaeaea",
+          colorBorderSubtle:   "rgba(0, 0, 0, 0.07)",
+          colorText:           "#000000",
+          colorTextMuted:      "#666666",
+          colorPrimary:        "#000000",
+          colorPrimaryHover:   "#1a1a1a",
+          colorPrimaryText:    "#ffffff",
+          colorAccent:         "#0070f3",
+          colorAccentHover:    "#0061d3",
+          colorAccentText:     "#ffffff",
+          colorFocusRing:      "#0070f3",
+          colorSuccess:        "#0070f3",
+          colorWarning:        "#f5a623",
+          colorDanger:         "#ee0000",
+          colorInfo:           "#7928ca",
+          fontFamily:          "\"Inter\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+          fontFamilyHeading:   "\"Inter\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+          fontFamilyMono:      "\"Geist Mono\", \"SF Mono\", ui-monospace, Menlo, Consolas, monospace",
+          fontSizeBase:        "14px",
+          fontWeightHeading:   "700",
+          letterSpacingHeading: "-0.02em",
+          radiusSm:            "5px",
+          radiusMd:            "8px",
+          radiusLg:            "12px",
+          radiusButton:        "8px",
+          radiusInput:         "8px",
+          borderWidth:         "1px",
+          shadowSm:            "0 0 0 1px rgba(0, 0, 0, 0.04)",
+          shadowMd:            "0 8px 30px rgba(0, 0, 0, 0.08)",
+          buttonFontWeight:    "600",
+          buttonPaddingY:      "8px",
+          buttonPaddingX:      "16px",
+          chart1:              "#0070f3",
+          chart2:              "#7928ca",
+          chart3:              "#f5a623",
+          chart4:              "#ee0000",
+          chart5:              "#79ffe1",
+          chart6:              "#000000",
+        },
+        primarySwatch: "#000000",
+      },
+    };
+
+    /* ------------------------------------------------------------------
+       The shared UI program — lives in the <code id="src-shared"> block
+       above so it stays in lockstep with what's displayed and so the
+       demos smoke-test can find it. Identical across every brand; only
+       the Theme({...}) prefix changes.
+       ------------------------------------------------------------------ */
+
+    // Decode the HTML-escaped entities ripgrep / browsers may have applied.
+    const decodeEntities = (text) =>
+      text
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"');
+
+    const SHARED_PROGRAM = decodeEntities(
+      document.getElementById("src-shared")?.textContent ?? ""
+    ).trim();
+
+    /* ------------------------------------------------------------------
+       Wiring
+       ------------------------------------------------------------------ */
+
+    const previewEl    = document.getElementById("brand-preview");
+    const shellEl      = document.getElementById("brand-preview-shell");
+    const nameEl       = document.getElementById("brand-name");
+    const vibeEl       = document.getElementById("brand-vibe");
+    const tokensEl     = document.getElementById("brand-tokens");
+    const themeSrcEl   = document.getElementById("brand-theme-source");
+    const chips        = Array.from(document.querySelectorAll(".brand-chip"));
+    const copyThemeBtn = document.getElementById("copy-theme");
+    const copyProgBtn  = document.getElementById("copy-program");
+
+    function formatThemeBlock(tokens) {
+      const longest = Math.max(...Object.keys(tokens).map((k) => k.length));
+      const lines = ["theme = Theme({"];
+      const entries = Object.entries(tokens);
+      entries.forEach(([key, value], idx) => {
+        const padded = key.padEnd(longest, " ");
+        const comma = idx < entries.length - 1 ? "," : "";
+        const stringValue = String(value).replace(/"/g, '\\"');
+        lines.push(`  ${padded}: "${stringValue}"${comma}`);
+      });
+      lines.push("})");
+      return lines.join("\n");
+    }
+
+    function buildFullProgram(brandKey) {
+      const block = formatThemeBlock(BRAND_THEMES[brandKey].tokens);
+      return `${block}\n\n${SHARED_PROGRAM}`;
+    }
+
+    function isColorValue(value) {
+      if (typeof value !== "string") return false;
+      const trimmed = value.trim();
+      return /^#[0-9a-f]{3,8}$/i.test(trimmed) || trimmed.startsWith("rgb") || trimmed.startsWith("hsl");
+    }
+
+    function renderTokenList(brandKey) {
+      tokensEl.replaceChildren();
+      const tokens = BRAND_THEMES[brandKey].tokens;
+      // Pick a curated subset for the "at a glance" sidebar. The full source
+      // is shown in the code block beneath.
+      const highlight = [
+        "colorPrimary", "colorAccent", "colorBg", "colorText",
+        "fontFamily", "radiusButton", "buttonFontWeight",
+      ];
+      for (const key of highlight) {
+        if (!(key in tokens)) continue;
+        const dt = document.createElement("dt");
+        dt.textContent = key;
+        const dd = document.createElement("dd");
+        if (isColorValue(tokens[key])) {
+          const chip = document.createElement("span");
+          chip.className = "color-chip";
+          chip.style.background = tokens[key];
+          dd.appendChild(chip);
+        }
+        const value = document.createElement("span");
+        value.textContent = tokens[key];
+        dd.appendChild(value);
+        tokensEl.appendChild(dt);
+        tokensEl.appendChild(dd);
+      }
+    }
+
+    function selectBrand(key) {
+      const brand = BRAND_THEMES[key];
+      if (!brand) return;
+
+      chips.forEach((chip) => {
+        chip.setAttribute("aria-pressed", chip.getAttribute("data-brand") === key ? "true" : "false");
+      });
+
+      shellEl.setAttribute("data-brand", key);
+      nameEl.textContent = brand.label;
+      vibeEl.innerHTML = brand.vibe;
+      renderTokenList(key);
+
+      const themeBlock = formatThemeBlock(brand.tokens);
+      themeSrcEl.textContent = themeBlock;
+
+      // Apply by re-running the program with the Theme(...) prefix. Reusing
+      // setResponse keeps streaming-ui-script as the single source of truth
+      // — every brand exercises the same code path an LLM would hit.
+      previewEl.setResponse(buildFullProgram(key));
+    }
+
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => selectBrand(chip.getAttribute("data-brand")));
+    });
+
+    async function copyText(button, text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = button.innerHTML;
+        button.setAttribute("data-state", "ok");
+        button.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+        window.setTimeout(() => {
+          button.removeAttribute("data-state");
+          button.innerHTML = original;
+        }, 1500);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    copyThemeBtn.addEventListener("click", () => {
+      copyText(copyThemeBtn, themeSrcEl.textContent);
+    });
+    copyProgBtn.addEventListener("click", () => {
+      const active = chips.find((c) => c.getAttribute("aria-pressed") === "true");
+      const key = active?.getAttribute("data-brand") ?? "github";
+      copyText(copyProgBtn, buildFullProgram(key));
+    });
+
+    // Boot.
+    selectBrand("github");
+  </script>
+</body>
+</html>

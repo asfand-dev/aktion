@@ -46,7 +46,7 @@ tbl = Table([
   Col("Name", data.rows.name),
   Col("Email", data.rows.email),
   Col("Role", data.rows.role),
-  Col("Team", @Each(data.rows, "row", Tag(row.team, null, "sm", row.teamColor)))
+  Col("Team", @Each(data.rows, "row", Badge(row.team, row.teamColor, null, "sm")))
 ])
 view = @Count(data.rows) > 0 ? tbl : empty
 root = Stack([Card([CardHeader("Team contacts", "Type to filter" ), searchBox, view])])</code></pre>
@@ -74,7 +74,7 @@ input = FormControl("New todo", Input("newTitle", "Buy milk…", "text", null, $
 form = Stack([input, addBtn], "row", "m", "end")
 
 rowToggle = @Each(list.rows, "t", Button(t.done ? "Mark open" : "Mark done", Action([@Set($toggleId, t.id), @Run(toggle), @Run(list)]), t.done ? "secondary" : "primary", "normal", "small"))
-status = @Each(list.rows, "t", Tag(t.done ? "Done" : "Open", null, "sm", t.done ? "success" : "info"))
+status = @Each(list.rows, "t", Badge(t.done ? "Done" : "Open", t.done ? "success" : "info", null, "sm"))
 
 tbl = Table([
   Col("Title", list.rows.title),

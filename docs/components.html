@@ -371,15 +371,12 @@ el.registerComponents([ProductCard]);</code></pre>
   TextContent("Card body."),
   CardFooter([Button("Save", null, "primary", "button", "small")])
 ])`,
-      Divider: `root = Stack([
-  TextContent("Above the divider"),
-  Divider("Section break"),
-  TextContent("Below the divider")
-])`,
       Separator: `root = Stack([
   TextContent("Above the separator"),
   Separator("horizontal"),
-  TextContent("Below the separator")
+  TextContent("Below the separator"),
+  Separator("horizontal", "OR"),
+  TextContent("After a labelled separator")
 ])`,
       Tabs: `root = Tabs([
   TabItem("overview", "Overview", [TextContent("Overview tab content.")]),
@@ -439,7 +436,6 @@ el.registerComponents([ProductCard]);</code></pre>
   TextContent("Large heavy text.",  "large-heavy"),
   TextContent("Heading variant.",   "heading", "primary")
 ])`,
-      Header: `root = Header("Page heading", "Optional subtitle")`,
       Image: `root = Image(
   "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=720&q=80",
   "Workspace photo",
@@ -463,15 +459,12 @@ el.registerComponents([ProductCard]);</code></pre>
   Badge("Danger",  "danger"),
   Badge("Info",    "info")
 ], "row", "s", "center")`,
-      Tag: `root = Stack([
-  Tag("Featured", "star",                "sm", "primary"),
-  Tag("Online",   "circle-check",        "md", "success"),
-  Tag("At risk",  "triangle-exclamation","md", "warning")
-], "row", "s", "center")`,
-      TagBlock: `root = TagBlock(["react", "typescript", "ui", "streaming"], "primary", "sm")`,
-      Alert: `root = Alert("Heads up", "Your draft was auto-saved at 10:24 AM.", "success")`,
-      Callout: `root = Callout("info", "Pro tip", "Use $variables for reactive two-way binding.")`,
-      Note: `root = Note("Owner: Mei · ARR $84,000 · renewal in Q3", "tip")`,
+      BadgeList: `root = BadgeList(["react", "typescript", "ui", "streaming"], "primary", "sm")`,
+      Callout: `root = Stack([
+  Callout("info",    "Pro tip",      "Use $variables for reactive two-way binding."),
+  Callout("success", "All caught up","Your draft was auto-saved at 10:24 AM.", "circle-check"),
+  Callout("warning", "Heads up",     "Owner: Mei · ARR $84,000 · renewal in Q3", "lightbulb", true)
+], "column", "s")`,
       Quote: `root = Quote(
   "Streaming-ui-script took our recap email from 4k lines of glue to 40.",
   "Naomi · last QBR",
@@ -879,7 +872,7 @@ root = Pagination($page, 10, 1)`,
     "Daily traffic",
     "Visits vs signups",
     "ANALYTICS",
-    Tag("On track", null, "sm", "success"),
+    Badge("On track", "success", null, "sm"),
     [Button("View all", null, "ghost", "button", "small")]
   ),
   TextContent("Section body content lives below the header.")
@@ -1003,12 +996,12 @@ root = Toolbar(
   DescriptionItem("Manager",  "Margaret Hamilton"),
   DescriptionItem("Location", "Berlin, DE",           "location-dot"),
   DescriptionItem("Joined",   "Mar 2022"),
-  DescriptionItem("Status",   Tag("Active", null, "sm", "success"))
+  DescriptionItem("Status",   Badge("Active", "success", null, "sm"))
 ], 2)`,
       DescriptionItem: `root = DescriptionList([
   DescriptionItem("Plan",   "Pro",       "rocket"),
   DescriptionItem("Seats",  "12 / 25"),
-  DescriptionItem("Status", Tag("Active", null, "sm", "success"))
+  DescriptionItem("Status", Badge("Active", "success", null, "sm"))
 ], 1)`,
       StatusDot: `root = Stack([
   StatusDot("API",       "success"),
@@ -1134,6 +1127,86 @@ root = Routes([
   NavLink("Docs",    "/docs",    "ghost",   false, "book"),
   NavLink("Pricing", "/pricing", "primary", false, "tag")
 ], "row", "s", "center")`,
+
+      // New components & refined widgets (May 2026 rollout)
+      Spinner: `root = Stack([
+  Spinner("sm"),
+  Spinner("md", "Loading"),
+  Spinner("lg", "Importing rows", "success")
+], "row", "m", "center")`,
+      Sparkline: `root = Stack([
+  TextContent("Weekly visits", "small"),
+  Sparkline([10, 14, 9, 22, 18, 28, 31], "primary")
+])`,
+      BadgeList: `root = BadgeList(["React", "Vue", "Svelte", "Solid"], "primary", "sm")`,
+      MultiSelect: `$picks = ["ts"]
+root = Stack([
+  TextContent("Pick languages", "small"),
+  MultiSelect("langs",
+    [SelectItem("ts","TypeScript"), SelectItem("js","JavaScript"),
+     SelectItem("py","Python"),      SelectItem("rs","Rust")],
+    $picks, "Pick languages")
+])`,
+      DateRangePicker: `$from = "2026-05-01"
+$to   = "2026-05-15"
+root = DateRangePicker("range", $from, $to, "Reporting window")`,
+      SegmentedControl: `$view = "grid"
+root = SegmentedControl("view",
+  [{value: "grid", label: "Grid", icon: "grip"},
+   {value: "list", label: "List", icon: "list"},
+   {value: "kanban", label: "Board", icon: "table-columns"}],
+  $view)`,
+      Callout: `root = Stack([
+  Callout("success", "Saved", "Your settings were saved."),
+  Callout("warning", "Heads up", "Compact note style", null, null, true)
+])`,
+      Markdown: `root = Markdown("# Streaming UI Script\n\nA **compact**, *declarative* DSL.\n\n- Headings\n- Fenced code\n- Auto-linked URLs: https://example.com\n\n\`\`\`ts\nconst x: number = 1\n\`\`\`")`,
+      CodeBlock: `root = CodeBlock("ts",
+"function greet(name: string) {\n  return \\\`Hello, \\\${name}!\\\`\n}",
+true, "1-2")`,
+      Image: `root = Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
+"Hero photo", "Self-constrained 16:9 image", "16:9", "cover")`,
+      Skeleton: `root = Stack([
+  Skeleton("card"),
+  Stack([Skeleton("avatar"), Skeleton("paragraph", 2)], "row", "m", "center")
+])`,
+      Modal: `root = Modal("Modal title", true, [
+  TextContent("Modal body shown when open=true.")
+], "md", [
+  Button("Cancel", null, "ghost",   "button", "sm"),
+  Button("Save",   null, "primary", "button", "sm")
+])`,
+      Toolbar: `root = Toolbar(
+  [SearchBar("q", "Search…")],
+  [Button("New", null, "primary", "button", "sm", "plus")],
+  [SegmentedControl("v", [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], "grid")])`,
+      Pagination: `$page = 3
+root = Pagination($page, 10, 1, 240, 25)`,
+      Table: `root = Table([
+  Col("Name",  ["Ada", "Linus", "Grace"]),
+  Col("Score", [98, 92, 96], "number", "right")
+], "Top 3", "compact", true)`,
+      Progress: `root = Stack([
+  Progress(60, 100, "Linear", "primary", false, true),
+  Progress(60, 100, "Buffered", "info", false, true, null, 85),
+  Progress(60, 100, "Step 3 of 5", "primary", false, true, 5)
+])`,
+      Rating: `$score = 3.5
+root = Rating($score, 5, "3.5 of 5", 128, "md", true, true, "star")`,
+      Steps: `root = Steps([
+  {title: "Sign up", details: "Free", active: false},
+  {title: "Verify",  details: "Email link", active: true},
+  {title: "Invite"}
+])`,
+      Stats: `root = Stats([
+  {label: "MRR",   value: "$84.2k", hint: "+12%", tone: "success", spark: [12, 14, 18, 22, 28, 31]},
+  {label: "Churn", value: "1.8%",   hint: "-0.4%", tone: "danger",  spark: [2.3, 2.2, 2.0, 1.9, 1.8]}
+])`,
+      StatCard: `root = StatCard("Active users", "12,481", "up", "+8.2%", "users", [42, 50, 55, 60, 71, 80])`,
+      EmptyState: `root = EmptyState(
+  "No projects yet", "Create a project to start tracking work.", "folder", null, null,
+  [Button("Create project", null, "primary", "button", "sm", "plus"),
+   Button("Read the guide",  null, "ghost",   "button", "sm")])`,
     };
 
     /**

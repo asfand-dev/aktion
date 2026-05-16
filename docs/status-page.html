@@ -105,7 +105,7 @@ kpis = MetricGrid([
 ])
 
 latencyCard = Card([
-  SectionHeader("Response latency", "p95 across all probes", null, Tag("ms", null, "sm", "info")),
+  SectionHeader("Response latency", "p95 across all probes", null, Badge("ms", "info", null, "sm")),
   LineChart(data.latency.times, [Series("Latency", data.latency.values)])
 ])
 
@@ -113,8 +113,8 @@ servicesRows = @Each(data.services, "s",
   Stack([
     StatusDot(s.name, s.tone, s.tone == "danger"),
     Spacer(),
-    Tag(s.region, "location-dot", "sm", "neutral"),
-    Tag(s.uptime + " uptime", null, "sm", s.tone),
+    Badge(s.region, "neutral", "location-dot", "sm"),
+    Badge(s.uptime + " uptime", s.tone, null, "sm"),
     Button("Details",
            Action([@ToAssistant("Show details for " + s.name)]),
            "ghost", "button", "small")
@@ -129,7 +129,7 @@ servicesEmpty = EmptyState(
 )
 
 servicesCard = Card([
-  SectionHeader("Service health", "Status by component", null, Tag("Sync · just now", null, "sm", "success")),
+  SectionHeader("Service health", "Status by component", null, Badge("Sync · just now", "success", null, "sm")),
   @Count(data.services) == 0 ? servicesEmpty : Stack(servicesRows, "column", "s")
 ])
 
@@ -158,7 +158,7 @@ focusedPanel = focusedExists == 0 ? EmptyState(
   "circle-info",
   null
 ) : Stack([
-  PageHeader(focused.title, focused.time, null, null, Tag(focused.status, null, "sm", focused.tone)),
+  PageHeader(focused.title, focused.time, null, null, Badge(focused.status, focused.tone, null, "sm")),
   DescriptionList([
     DescriptionItem("Status",     focused.status, focused.icon),
     DescriptionItem("Severity",   focused.severity, "triangle-exclamation"),

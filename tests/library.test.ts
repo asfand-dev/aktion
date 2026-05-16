@@ -24,10 +24,12 @@ import {
   Cover, MediaCard, Stats, Tile, Notification, PersonChip,
 } from "../src/library/components/patterns.js";
 import {
-  Container, Spacer, Quote, Note, Markdown, Image, Link, Skeleton,
+  Container, Spacer, Quote, Markdown, Image, Link, Skeleton,
+  Spinner, Badge, BadgeList, Callout, CodeBlock,
 } from "../src/library/components/content.js";
-import { SearchBar } from "../src/library/components/forms.js";
-import { Grid, AspectRatio } from "../src/library/components/layout.js";
+import { SearchBar, MultiSelect, DateRangePicker, SegmentedControl, Button } from "../src/library/components/forms.js";
+import { Grid, AspectRatio, Modal, Tabs, TabItem, Separator } from "../src/library/components/layout.js";
+import { Sparkline, StatCard, Table, Col } from "../src/library/components/data.js";
 import type { RenderHelpers } from "../src/library/types.js";
 import { defaultLibrary } from "../src/library/index.js";
 import { findComponent } from "../src/library/registry.js";
@@ -96,7 +98,7 @@ describe("default library", () => {
       "AppShell", "Sidebar", "SidebarSection", "SidebarItem", "SplitView",
       // Richer composition primitives
       "Container", "Spacer", "Cover", "MediaCard", "Stats", "Tile",
-      "Notification", "PersonChip", "Quote", "Note", "Rating",
+      "Notification", "PersonChip", "Quote", "Rating",
       "ProgressRing", "ChatBubble", "SearchBar",
       // Menu & overlay primitives
       "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel",
@@ -543,7 +545,7 @@ describe("Rich layout patterns", () => {
         title: "Revenue trend",
         subtitle: "Daily · last 30 days",
         eyebrow: "INSIGHTS",
-        status: makeNode("Tag", ["Up 12%"]),
+        status: makeNode("Badge", ["Up 12%"]),
         actions: [makeNode("Button", ["View"])],
       },
       helpers,
@@ -1162,21 +1164,6 @@ describe("Quote", () => {
     expect(node.getAttribute("data-tone")).toBe("primary");
     expect(node.querySelector(".rui-quote-text")?.textContent).toBe("Generative UI just shipped.");
     expect(node.querySelector(".rui-quote-cite")?.textContent).toBe("Ada Lovelace");
-  });
-});
-
-describe("Note", () => {
-  it("renders content and a tone-based default FA icon", () => {
-    const node = Note.render(
-      makeNode("Note", []),
-      { content: "Free returns within 30 days.", tone: "tip" },
-      helpers,
-    ) as HTMLElement;
-    expect(node.classList.contains("rui-note")).toBe(true);
-    expect(node.getAttribute("data-tone")).toBe("tip");
-    const noteIcon = node.querySelector(".rui-note-icon");
-    expect(noteIcon?.classList.contains("fa-lightbulb")).toBe(true);
-    expect(node.querySelector(".rui-note-text")?.textContent).toBe("Free returns within 30 days.");
   });
 });
 
@@ -1868,5 +1855,425 @@ describe("Navbar & NavbarItem", () => {
     ) as HTMLElement;
     expect(label.classList.contains("rui-menu-label")).toBe(true);
     expect(label.textContent).toBe("Workspace");
+  });
+});
+
+describe("new components — phase 1-4 rollout", () => {
+  it("Spinner renders a ring + optional label and announces via aria-label", () => {
+    const node = Spinner.render(
+      makeNode("Spinner", ["lg", "Loading data"]),
+      { size: "lg", label: "Loading data" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.classList.contains("rui-spinner")).toBe(true);
+    expect(node.getAttribute("data-size")).toBe("lg");
+    expect(node.getAttribute("aria-label")).toBe("Loading data");
+    expect(node.querySelector(".rui-spinner-ring")).not.toBeNull();
+    expect(node.querySelector(".rui-spinner-label")?.textContent).toBe("Loading data");
+  });
+
+  it("Spinner without label defaults to aria-label=\"Loading\"", () => {
+    const node = Spinner.render(
+      makeNode("Spinner", []), {}, helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("aria-label")).toBe("Loading");
+    expect(node.querySelector(".rui-spinner-label")).toBeNull();
+  });
+
+  it("Sparkline renders an SVG line + area for 2+ values", () => {
+    const node = Sparkline.render(
+      makeNode("Sparkline", [[1, 3, 2, 5, 4], "success"]),
+      { values: [1, 3, 2, 5, 4], tone: "success" },
+      helpers,
+    ) as HTMLElement;
+    const svg = node.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.getAttribute("data-tone")).toBe("success");
+    expect(svg?.querySelector(".rui-sparkline-line")).not.toBeNull();
+    expect(svg?.querySelector(".rui-sparkline-area")).not.toBeNull();
+  });
+
+  it("Sparkline renders empty SVG when only one value", () => {
+    const node = Sparkline.render(
+      makeNode("Sparkline", [[42]]),
+      { values: [42] },
+      helpers,
+    ) as HTMLElement;
+    const svg = node.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.querySelector(".rui-sparkline-line")).toBeNull();
+  });
+
+  it("StatCard.spark renders an inline sparkline when given values", () => {
+    const node = StatCard.render(
+      makeNode("StatCard", ["Active", "12", "up", "+2", "users", [1, 2, 3]]),
+      { label: "Active", value: "12", trend: "up", delta: "+2", icon: "users", spark: [1, 2, 3] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-stat-spark svg")).not.toBeNull();
+  });
+
+  it("Badge with size + icon falls back to default tone", () => {
+    const node = Badge.render(
+      makeNode("Badge", ["New", "primary", "star", "sm"]),
+      { label: "New", variant: "primary", icon: "star", size: "sm" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-variant")).toBe("primary");
+    expect(node.getAttribute("data-size")).toBe("sm");
+    expect(node.querySelector(".rui-badge-label")?.textContent).toBe("New");
+  });
+
+  it("BadgeList renders Badge pills from a labels[] array", () => {
+    const list = BadgeList.render(
+      makeNode("BadgeList", [["alpha", "beta"]]),
+      { labels: ["alpha", "beta"] },
+      helpers,
+    ) as HTMLElement;
+    expect(list.classList.contains("rui-badge-list")).toBe(true);
+    expect(list.querySelectorAll(".rui-badge").length).toBe(2);
+    expect(list.querySelectorAll(".rui-badge-label")[0]?.textContent).toBe("alpha");
+  });
+
+  it("Callout(compact=true) marks the wrapper as compact", () => {
+    const node = Callout.render(
+      makeNode("Callout", ["info", "Heads up", "Saved!", null, true]),
+      { variant: "info", title: "Heads up", description: "Saved!", compact: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-compact")).toBe("true");
+    expect(node.querySelector(".rui-callout-description")?.textContent).toBe("Saved!");
+  });
+
+  it("Separator(label) renders the label segment between two lines", () => {
+    const node = Separator.render(
+      makeNode("Separator", ["horizontal", "OR"]),
+      { orientation: "horizontal", label: "OR" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.classList.contains("rui-separator-with-label")).toBe(true);
+    expect(node.querySelector(".rui-separator-label")?.textContent).toBe("OR");
+  });
+
+  it("CodeBlock renders a Copy button and a language label", () => {
+    const node = CodeBlock.render(
+      makeNode("CodeBlock", ["ts", "const x = 1"]),
+      { language: "ts", codeString: "const x = 1" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-code-block-language")?.textContent).toBe("ts");
+    expect(node.querySelector(".rui-code-block-copy")).not.toBeNull();
+    expect(node.querySelector("code")?.textContent).toBe("const x = 1");
+  });
+
+  it("CodeBlock(showLineNumbers + highlightLines) renders a gutter and highlights", () => {
+    const code = "a\nb\nc\nd\ne";
+    const node = CodeBlock.render(
+      makeNode("CodeBlock", ["", code, true, "2-3"]),
+      { codeString: code, showLineNumbers: true, highlightLines: "2-3" },
+      helpers,
+    ) as HTMLElement;
+    const lines = node.querySelectorAll(".rui-code-block-line");
+    expect(lines.length).toBe(5);
+    expect(lines[1]?.getAttribute("data-highlight")).toBe("true");
+    expect(lines[2]?.getAttribute("data-highlight")).toBe("true");
+    expect(lines[0]?.getAttribute("data-highlight")).toBeNull();
+    expect(node.querySelectorAll(".rui-code-block-gutter").length).toBe(5);
+  });
+
+  it("Modal renders a × close button by default and a footer slot when provided", () => {
+    const footerBtn = makeNode("Button", ["OK"]);
+    const node = Modal.render(
+      makeNode("Modal", ["Dialog", true, [], "lg", [footerBtn]], [
+        {}, { stateRef: "open" }, {}, {}, {},
+      ]),
+      { title: "Dialog", open: true, children: [], size: "lg", footer: [footerBtn] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.classList.contains("rui-modal-overlay")).toBe(true);
+    expect(node.querySelector(".rui-modal")?.getAttribute("data-size")).toBe("lg");
+    expect(node.querySelector(".rui-modal-close")).not.toBeNull();
+    expect(node.querySelector(".rui-modal-footer")).not.toBeNull();
+  });
+
+  it("Modal(closable=false) hides the × button", () => {
+    const node = Modal.render(
+      makeNode("Modal", ["t", true, []], [{}, { stateRef: "open" }, {}]),
+      { title: "t", open: true, children: [], closable: false },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-modal-close")).toBeNull();
+  });
+
+  it("Image(ratio,fit) applies aspect-ratio + data-fit and renders a placeholder for missing src", () => {
+    const node = Image.render(
+      makeNode("Image", ["", "alt", "cap", "16:9", "contain", "image"]),
+      { src: "", alt: "alt", caption: "cap", ratio: "16:9", fit: "contain", fallback: "image" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-fit")).toBe("contain");
+    expect(node.getAttribute("style") ?? "").toContain("aspect-ratio:16 / 9");
+    expect(node.querySelector(".rui-image-placeholder")).not.toBeNull();
+    expect(node.querySelector("figcaption")?.textContent).toBe("cap");
+  });
+
+  it("Skeleton variants pick the right shape primitives", () => {
+    const card = Skeleton.render(
+      makeNode("Skeleton", ["card"]),
+      { variant: "card" }, helpers,
+    ) as HTMLElement;
+    expect(card.getAttribute("data-variant")).toBe("card");
+    expect(card.querySelectorAll(".rui-skeleton-line").length).toBe(3);
+    const avatar = Skeleton.render(
+      makeNode("Skeleton", ["avatar", undefined, undefined, undefined, "32px"]),
+      { variant: "avatar", width: "32px" }, helpers,
+    ) as HTMLElement;
+    expect(avatar.querySelector(".rui-skeleton-shape")?.getAttribute("data-shape")).toBe("circle");
+  });
+
+  it("MultiSelect renders chip-trigger + filter + options and selected chips removal", () => {
+    let captured: unknown = null;
+    const localHelpers = { ...helpers, runAction: (p: unknown) => { captured = p; } };
+    const items = [
+      { value: "a", label: "Alpha" },
+      { value: "b", label: "Beta" },
+    ];
+    const node = MultiSelect.render(
+      makeNode("MultiSelect", ["filter", items, ["a"]], [{}, {}, { stateRef: "picks" }]),
+      { id: "filter", items, value: ["a"] },
+      localHelpers,
+    ) as HTMLElement;
+    expect(node.classList.contains("rui-multiselect")).toBe(true);
+    expect(node.querySelector(".rui-multiselect-chip-label")?.textContent).toBe("Alpha");
+    const removeBtn = node.querySelector(".rui-multiselect-chip-remove") as HTMLButtonElement;
+    removeBtn.click();
+    expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toEqual([]);
+  });
+
+  it("SegmentedControl marks the active option + sets the bound state on click", () => {
+    let captured: unknown = null;
+    const localHelpers = { ...helpers, runAction: (p: unknown) => { captured = p; } };
+    const items = [
+      { value: "grid", label: "Grid", icon: "grip" },
+      { value: "list", label: "List" },
+    ];
+    const node = SegmentedControl.render(
+      makeNode("SegmentedControl", ["view", items, "grid"], [{}, {}, { stateRef: "view" }]),
+      { id: "view", items, value: "grid" },
+      localHelpers,
+    ) as HTMLElement;
+    const buttons = node.querySelectorAll<HTMLButtonElement>(".rui-segmented-control-option");
+    expect(buttons.length).toBe(2);
+    expect(buttons[0]?.getAttribute("data-active")).toBe("true");
+    buttons[1]?.click();
+    expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toBe("list");
+  });
+
+  it("DateRangePicker renders two date inputs with shared min/max", () => {
+    const node = DateRangePicker.render(
+      makeNode("DateRangePicker", ["dr", "2026-05-01", "2026-05-15", "Range", "2026-01-01", "2026-12-31"], [
+        {}, { stateRef: "from" }, { stateRef: "to" }, {}, {}, {},
+      ]),
+      { id: "dr", from: "2026-05-01", to: "2026-05-15", label: "Range", min: "2026-01-01", max: "2026-12-31" },
+      helpers,
+    ) as HTMLElement;
+    const inputs = node.querySelectorAll<HTMLInputElement>('input[type="date"]');
+    expect(inputs.length).toBe(2);
+    expect(inputs[0]?.getAttribute("min")).toBe("2026-01-01");
+    expect(inputs[1]?.getAttribute("max")).toBe("2026-12-31");
+  });
+
+  it("Pagination(total,perPage) renders the summary line", () => {
+    const node = Pagination.render(
+      makeNode("Pagination", [2, 5, 1, 123, 25], [{ stateRef: "page" }, {}, {}, {}, { stateRef: "perPage" }]),
+      { page: 2, totalPages: 5, siblings: 1, total: 123, perPage: 25 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-pagination-summary")?.textContent ?? "").toContain("Showing 26");
+    expect(node.querySelector(".rui-pagination-summary")?.textContent ?? "").toContain("of 123");
+    expect(node.querySelector(".rui-pagination-per-page-select")).not.toBeNull();
+  });
+
+  it("Pagination(compact) hides the numbered page row and shows current/total", () => {
+    const node = Pagination.render(
+      makeNode("Pagination", [3, 10, 1, undefined, undefined, undefined, true], [{ stateRef: "p" }, {}, {}, {}, {}, {}, {}]),
+      { page: 3, totalPages: 10, compact: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-compact")).toBe("true");
+    expect(node.querySelector(".rui-pagination-current")?.textContent).toBe("3 / 10");
+  });
+
+  it("Progress(segments) renders an N-segment strip with the right fill count", () => {
+    const node = Progress.render(
+      makeNode("Progress", [60, 100, "Step 3 of 5", "primary", false, true, 5]),
+      { value: 60, max: 100, segments: 5, showValue: true, label: "Step 3 of 5" },
+      helpers,
+    ) as HTMLElement;
+    const segs = node.querySelectorAll<HTMLElement>(".rui-progress-segment");
+    expect(segs.length).toBe(5);
+    expect([...segs].filter((s) => s.getAttribute("data-filled") === "true").length).toBe(3);
+    expect(node.querySelector(".rui-progress-value")?.textContent).toBe("3 / 5");
+  });
+
+  it("Progress(buffered) renders a buffer bar behind the bar", () => {
+    const node = Progress.render(
+      makeNode("Progress", [40, 100, undefined, undefined, false, false, undefined, 75]),
+      { value: 40, max: 100, buffered: 75 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-progress-buffer")).not.toBeNull();
+  });
+
+  it("Table(density,striped,sticky,align,emptyLabel) wires through to the wrapper", () => {
+    const col = makeNode("Col", ["Name", ["Ada"], "text", "right"]);
+    const node = Table.render(
+      makeNode("Table", [[col], "People", "compact", true, true, "Nothing yet"]),
+      { columns: [col], caption: "People", density: "compact", striped: true, sticky: true, emptyLabel: "Nothing yet" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-density")).toBe("compact");
+    expect(node.getAttribute("data-striped")).toBe("true");
+    expect(node.getAttribute("data-sticky")).toBe("true");
+    expect(node.querySelector("td")?.getAttribute("data-align")).toBe("right");
+  });
+
+  it("Table renders the emptyLabel when no rows", () => {
+    const col = makeNode("Col", ["Name", []]);
+    const node = Table.render(
+      makeNode("Table", [[col], undefined, undefined, undefined, undefined, "No people"]),
+      { columns: [col], emptyLabel: "No people" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-table-empty")?.textContent).toBe("No people");
+  });
+
+  it("Rating(halfStep) emits a half value when clicking the left half of a star", () => {
+    let payload: unknown = null;
+    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
+    const node = Rating.render(
+      makeNode("Rating", [0, 5, undefined, undefined, "md", true, true], [{ stateRef: "score" }, {}, {}, {}, {}, {}, {}]),
+      { value: 0, max: 5, interactive: true, halfStep: true },
+      localHelpers,
+    ) as HTMLElement;
+    const star = node.querySelectorAll<HTMLButtonElement>(".rui-rating-star")[2];
+    expect(star).toBeDefined();
+    // Simulate a click on the left half of the 3rd star by faking the bounding rect.
+    if (!star) return;
+    const fakeRect = { left: 0, width: 20 } as DOMRect;
+    star.getBoundingClientRect = () => fakeRect;
+    star.dispatchEvent(new MouseEvent("click", { clientX: 5, bubbles: true }));
+    const step = (payload as { steps?: Array<{ value: unknown }> })?.steps?.[0];
+    expect(step?.value).toBe(2.5);
+  });
+
+  it("Toast(position) marks itself as standalone with the corner anchor", () => {
+    const node = Toast.render(
+      makeNode("Toast", ["Saved", "Doc saved.", "success", undefined, undefined, undefined, undefined, "bottom-right"]),
+      { title: "Saved", message: "Doc saved.", tone: "success", position: "bottom-right" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.classList.contains("rui-toast-standalone")).toBe(true);
+    expect(node.getAttribute("data-position")).toBe("bottom-right");
+  });
+
+  it("EmptyState(actions) renders a CTA row and prefers illustration over icon", () => {
+    const primary = makeNode("Button", ["Create"]);
+    const secondary = makeNode("Button", ["Learn more"]);
+    const node = EmptyState.render(
+      makeNode("EmptyState", ["No projects", "Create your first project.", "folder", "https://example.com/i.png", undefined, [primary, secondary]]),
+      { title: "No projects", description: "Create your first project.", icon: "folder", illustration: "https://example.com/i.png", actions: [primary, secondary] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-empty-state-illustration")).not.toBeNull();
+    expect(node.querySelectorAll(".rui-empty-state-actions > *").length).toBe(2);
+  });
+
+  it("Toolbar(center) renders the center slot when provided", () => {
+    const item = makeNode("Button", ["Filter"]);
+    const node = Toolbar.render(
+      makeNode("Toolbar", [[], [], [item]]),
+      { left: [], right: [], center: [item] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-has-center")).toBe("true");
+    expect(node.querySelector(".rui-toolbar-center")).not.toBeNull();
+  });
+
+  it("Markdown renders headings, fenced code, ordered lists, and auto-linked URLs", () => {
+    const md = [
+      "# Heading",
+      "",
+      "Visit https://example.com today.",
+      "",
+      "1. first",
+      "2. second",
+      "",
+      "```js",
+      "console.log('hi')",
+      "```",
+    ].join("\n");
+    const node = Markdown.render(
+      makeNode("Markdown", [md]),
+      { content: md },
+      helpers,
+    ) as HTMLElement;
+    const html = node.innerHTML;
+    expect(html).toContain("<h1");
+    expect(html).toContain('href="https://example.com"');
+    expect(html).toContain("<ol>");
+    expect(html).toContain('<pre class="rui-markdown-code"');
+  });
+
+  it("Markdown sanitises javascript: links and images", () => {
+    const node = Markdown.render(
+      makeNode("Markdown", ["[bad](javascript:alert(1)) ![x](javascript:1)"]),
+      { content: "[bad](javascript:alert(1)) ![x](javascript:1)" },
+      helpers,
+    ) as HTMLElement;
+    const html = node.innerHTML;
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain('href="#"');
+  });
+
+  it("Steps accepts {title, details, active} objects in addition to StepsItem nodes", async () => {
+    const { Steps } = await import("../src/library/components/layout.js");
+    const node = Steps.render(
+      makeNode("Steps", [[{ title: "Sign up", details: "Free", active: true }, { title: "Verify" }]]),
+      { items: [{ title: "Sign up", details: "Free", active: true }, { title: "Verify" }] },
+      helpers,
+    ) as HTMLElement;
+    const items = node.querySelectorAll<HTMLElement>(".rui-steps-item");
+    expect(items.length).toBe(2);
+    expect(items[0]?.getAttribute("data-active")).toBe("true");
+    expect(items[1]?.getAttribute("data-active")).toBe("false");
+  });
+
+  it("TabItem badge + icon attach to the rendered trigger", () => {
+    const t1 = makeNode("TabItem", ["one", "One", [], "3", "house"]);
+    const t2 = makeNode("TabItem", ["two", "Two", []]);
+    const node = Tabs.render(
+      makeNode("Tabs", [[t1, t2], "one", "horizontal"]),
+      { items: [t1, t2], defaultValue: "one", orientation: "horizontal" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-orientation")).toBe("horizontal");
+    const firstBadge = node.querySelector(".rui-tab-trigger-badge");
+    expect(firstBadge?.textContent).toBe("3");
+  });
+
+  it("Button accepts both legacy and canonical size tokens", () => {
+    const a = Button.render(
+      makeNode("Button", ["Save", null, "primary", "button", "small"]),
+      { label: "Save", variant: "primary", size: "small" },
+      helpers,
+    ) as HTMLElement;
+    const b = Button.render(
+      makeNode("Button", ["Save", null, "primary", "button", "sm"]),
+      { label: "Save", variant: "primary", size: "sm" },
+      helpers,
+    ) as HTMLElement;
+    expect(a.getAttribute("data-size")).toBe("sm");
+    expect(b.getAttribute("data-size")).toBe("sm");
   });
 });

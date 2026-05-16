@@ -1,18 +1,25 @@
 /**
- * Data components: Table, Col, List, ListItem, StatCard, Tree, TreeNode.
+ * Data components: Table, Col, List, ListItem, StatCard, Tree, TreeNode,
+ * Sparkline.
  */
 
 import type { ComponentSpec } from "../types.js";
 import { isActionPayload } from "../../runtime/builtins.js";
-import { el, asArray, asString, asBoolean, renderIcon } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
+import { renderInlineSparkline } from "./patterns.js";
+
+const COL_ALIGN = ["left", "center", "right"] as const;
 
 export const Col: ComponentSpec = {
   name: "Col",
-  description: "Single column inside a Table.",
+  description:
+    "Single column inside a Table. Use `align` for per-column text " +
+    "alignment, `format` for cell rendering (`text|number|currency|date`).",
   props: [
     { name: "header", type: "string" },
     { name: "values", type: "any[]", description: "Column values (use array pluck like data.rows.title)" },
     { name: "format", type: "string", optional: true, enum: ["text", "number", "currency", "date"] },
+    { name: "align", type: "string", optional: true, enum: COL_ALIGN, description: "Per-column horizontal alignment" },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -22,25 +29,52 @@ export const Col: ComponentSpec = {
   },
 };
 
+const TABLE_DENSITY = ["comfortable", "compact"] as const;
+
 export const Table: ComponentSpec = {
   name: "Table",
-  description: "Tabular data view. Children must be Col components.",
+  description:
+    "Tabular data view. Children must be Col components. `density=\"compact\"` " +
+    "tightens row padding for dense data, `striped=true` zebra-stripes the " +
+    "rows, and `sticky=true` pins the header row when the table scrolls. " +
+    "The empty-state row uses `emptyLabel` when set.",
   props: [
     { name: "columns", type: "Col[]" },
     { name: "caption", type: "string", optional: true },
+    { name: "density", type: "string", optional: true, enum: TABLE_DENSITY, description: "Row padding (default `comfortable`)" },
+    { name: "striped", type: "boolean", optional: true, description: "Zebra-stripe alternating rows" },
+    { name: "sticky", type: "boolean", optional: true, description: "Pin the header row when the table scrolls" },
+    { name: "emptyLabel", type: "string", optional: true, description: "Text shown when the table has no rows (default `No data`)" },
   ],
   render: (_node, props, helpers) => {
     const cols = asArray<{ args?: unknown[] }>(props.columns);
-    const wrapper = el("div", { class: "rui-table-wrapper" });
+    const density = asString(props.density, "comfortable");
+    const striped = asBoolean(props.striped);
+    const sticky = asBoolean(props.sticky);
+    const wrapper = el("div", {
+      class: "rui-table-wrapper",
+      "data-density": density,
+      "data-striped": striped ? "true" : "false",
+      "data-sticky": sticky ? "true" : "false",
+    });
     const table = el("table", { class: "rui-table" });
 
     const caption = asString(props.caption);
     if (caption) table.append(el("caption", { class: "rui-table-caption" }, [caption]));
 
+    const aligns = cols.map((col) => {
+      const align = asString(col.args?.[3], "");
+      return (COL_ALIGN as readonly string[]).includes(align) ? align : "";
+    });
+
     const thead = el("thead");
     const headRow = el("tr");
-    for (const col of cols) {
-      headRow.append(el("th", {}, [asString(col.args?.[0])]));
+    for (let c = 0; c < cols.length; c += 1) {
+      const col = cols[c]!;
+      const th = el("th", {
+        "data-align": aligns[c] || null,
+      }, [asString(col.args?.[0])]);
+      headRow.append(th);
     }
     thead.append(headRow);
     table.append(thead);
@@ -55,7 +89,8 @@ export const Table: ComponentSpec = {
       columnValues.forEach((values, c) => {
         const cell = values[r];
         const format = formats[c] ?? "text";
-        const td = el("td", { "data-format": format });
+        const align = aligns[c];
+        const td = el("td", { "data-format": format, "data-align": align || null });
         if (cell !== null && typeof cell === "object" && (cell as { __kind?: string }).__kind === "Component") {
           td.append(helpers.renderNode(cell));
         } else {
@@ -68,7 +103,11 @@ export const Table: ComponentSpec = {
 
     if (rowCount === 0) {
       const emptyRow = el("tr");
-      emptyRow.append(el("td", { colspan: String(cols.length || 1), class: "rui-table-empty" }, ["No data"]));
+      const emptyLabel = asString(props.emptyLabel, "No data");
+      emptyRow.append(el("td", {
+        colspan: String(cols.length || 1),
+        class: "rui-table-empty",
+      }, [emptyLabel]));
       tbody.append(emptyRow);
     }
 
@@ -116,16 +155,22 @@ export const List: ComponentSpec = {
 
 export const StatCard: ComponentSpec = {
   name: "StatCard",
-  description: "Single KPI card with label, value, optional delta, and optional icon.",
+  description:
+    "Single KPI card with label, value, optional delta, optional icon, " +
+    "and optional inline sparkline (`spark=[…numbers]`). Use inside " +
+    "`MetricGrid` for a uniform KPI strip.",
   props: [
     { name: "label", type: "string" },
     { name: "value", type: "string" },
     { name: "trend", type: "string", optional: true, enum: ["up", "down", "flat"] },
     { name: "delta", type: "string", optional: true, description: "Change vs previous period" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown in a chip beside the label" },
+    { name: "spark", type: "number[]", optional: true, description: "Optional inline sparkline values" },
+    { name: "tone", type: "string", optional: true, enum: ["default", "primary", "success", "warning", "danger", "info"] },
   ],
   render: (_node, props) => {
-    const root = el("div", { class: "rui-stat-card" });
+    const tone = asString(props.tone, "default");
+    const root = el("div", { class: "rui-stat-card", "data-tone": tone });
     const labelRow = el("div", { class: "rui-stat-label-row" });
     const iconNode = renderIcon(props.icon, { className: "rui-stat-icon" });
     if (iconNode) labelRow.append(iconNode);
@@ -137,7 +182,33 @@ export const StatCard: ComponentSpec = {
     if (delta || trend) {
       root.append(el("div", { class: "rui-stat-trend", "data-trend": trend || "flat" }, [delta || trendArrow(trend)]));
     }
+    const spark = asArray<unknown>(props.spark).map((v) => asNumber(v));
+    if (spark.length > 1) {
+      const sparkWrap = el("div", { class: "rui-stat-spark" });
+      sparkWrap.append(renderInlineSparkline(spark, tone === "default" ? "primary" : tone));
+      root.append(sparkWrap);
+    }
     return root;
+  },
+};
+
+export const Sparkline: ComponentSpec = {
+  name: "Sparkline",
+  description:
+    "Tiny inline trend chart for KPIs, table cells, and dashboards. " +
+    "Renders an SVG line with a soft fill — use anywhere you would " +
+    "otherwise reach for `LineChart` but a single value series should " +
+    "stay inline with surrounding text.",
+  props: [
+    { name: "values", type: "number[]" },
+    { name: "tone", type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
+  ],
+  render: (_node, props) => {
+    const tone = asString(props.tone, "primary");
+    const values = asArray<unknown>(props.values).map((v) => asNumber(v));
+    const wrap = el("span", { class: "rui-sparkline-wrap" });
+    wrap.append(renderInlineSparkline(values, tone));
+    return wrap;
   },
 };
 

@@ -887,6 +887,7 @@
               <a class="hero-chip" href="#compare"><i class="fa-solid fa-arrows-left-right"></i> Compare</a>
               <a class="hero-chip" href="#customization"><i class="fa-solid fa-sliders"></i> Customize</a>
               <a class="hero-chip" href="#use-from-app"><i class="fa-solid fa-code"></i> Use it</a>
+              <a class="hero-chip" href="#in-script-theme"><i class="fa-solid fa-wand-magic-sparkles"></i> In-script Theme()</a>
               <a class="hero-chip" href="#authoring"><i class="fa-solid fa-paintbrush"></i> Authoring</a>
               <a class="hero-chip" href="#reference"><i class="fa-solid fa-book"></i> Reference</a>
             </div>
@@ -905,6 +906,7 @@
               <a href="#compare"><i class="fa-solid fa-arrows-left-right"></i> Compare themes</a>
               <a href="#customization"><i class="fa-solid fa-sliders"></i> Customization studio</a>
               <a href="#use-from-app"><i class="fa-solid fa-code"></i> Use from your app</a>
+              <a href="#in-script-theme"><i class="fa-solid fa-wand-magic-sparkles"></i> In-script Theme()</a>
               <a href="#authoring"><i class="fa-solid fa-paintbrush"></i> Author a brand theme</a>
               <a href="#reference"><i class="fa-solid fa-book"></i> Token reference</a>
             </nav>
@@ -1159,6 +1161,52 @@ el.setTheme({
           </section>
 
           <!-- =====================================================
+               5b. In-script theming with Theme({...})
+               ===================================================== -->
+          <section id="in-script-theme" class="section">
+            <h2><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> In-script theming with <code>Theme({...})</code></h2>
+            <p>
+              An LLM can brand a <em>single response</em> without touching host
+              code by assigning a <code>Theme({...})</code> call to a reserved
+              top-level identifier named <code>theme</code>. The runtime detects
+              the binding, writes the tokens to the host as CSS custom
+              properties, and reskins the rest of the rendered UI instantly.
+            </p>
+
+<pre><code>theme = Theme({
+  colorPrimary:     "#0969da",
+  colorAccent:      "#1f883d",
+  fontFamily:       "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  radiusButton:     "6px",
+  buttonFontWeight: "500"
+})
+
+root = Stack([
+  CardHeader("Welcome", "Sign in to your workspace"),
+  Buttons([Button("Sign in"), Button("Cancel", null, "secondary")])
+])</code></pre>
+
+            <ul>
+              <li><strong>Reserved name.</strong> Only <code>theme</code> (alongside <code>root</code>) is allowed without being referenced elsewhere. The runtime picks both up by name.</li>
+              <li><strong>Partial maps.</strong> Pass only the tokens you want to brand &mdash; everything else inherits from the base theme set on the host (<code>theme="light"</code>, <code>theme="dark"</code>, …).</li>
+              <li><strong>Live updates.</strong> Streaming a different <code>Theme({...})</code> block on the next render re-applies the override; the previous tokens are cleared first so themes never leak across responses.</li>
+              <li><strong>Same token surface.</strong> Every key in the reference table below works inside <code>Theme(...)</code>. Unknown keys are silently ignored.</li>
+            </ul>
+
+            <div class="callout">
+              <h4>See it in action</h4>
+              <p>
+                Open the
+                <a href="brand-themes.html"><strong>brand-themes</strong> live example</a>
+                to see the same dashboard reskinned as GitHub, Apple, Stripe,
+                IONOS, Notion, and Vercel &mdash; using only this construct.
+                Copy any brand into your own response or feed the token map
+                through <code>setTheme()</code> instead.
+              </p>
+            </div>
+          </section>
+
+          <!-- =====================================================
                6. Authoring a brand theme
                ===================================================== -->
           <section id="authoring" class="section">
@@ -1257,6 +1305,7 @@ el.setTheme(brandTheme);</code></pre>
             <li><a href="#compare"><i class="fa-solid fa-arrows-left-right"></i>Compare</a></li>
             <li><a href="#customization"><i class="fa-solid fa-sliders"></i>Customize</a></li>
             <li><a href="#use-from-app"><i class="fa-solid fa-code"></i>Use it</a></li>
+            <li><a href="#in-script-theme"><i class="fa-solid fa-wand-magic-sparkles"></i>In-script Theme()</a></li>
             <li><a href="#authoring"><i class="fa-solid fa-paintbrush"></i>Authoring</a></li>
             <li><a href="#reference"><i class="fa-solid fa-book"></i>Reference</a></li>
           </ol>
@@ -1310,6 +1359,10 @@ el.setTheme(brandTheme);</code></pre>
       { key: "colorPrimary",       css: "--rui-color-primary",        group: "Brand",   desc: "Brand color for primary buttons, links, focus rings." },
       { key: "colorPrimaryHover",  css: "--rui-color-primary-hover",  group: "Brand",   desc: "Hover state for primary actions." },
       { key: "colorPrimaryText",   css: "--rui-color-primary-text",   group: "Brand",   desc: "Text color over the primary background." },
+      { key: "colorAccent",        css: "--rui-color-accent",         group: "Brand",   desc: "Secondary brand accent (links, callouts, chips)." },
+      { key: "colorAccentHover",   css: "--rui-color-accent-hover",   group: "Brand",   desc: "Hover state for accent elements." },
+      { key: "colorAccentText",    css: "--rui-color-accent-text",    group: "Brand",   desc: "Text color over the accent background." },
+      { key: "colorFocusRing",     css: "--rui-color-focus-ring",     group: "Brand",   desc: "Focus ring color for inputs and interactive elements." },
       { key: "colorSuccess",       css: "--rui-color-success",        group: "Brand",   desc: "Success / positive semantic color." },
       { key: "colorWarning",       css: "--rui-color-warning",        group: "Brand",   desc: "Warning / caution semantic color." },
       { key: "colorDanger",        css: "--rui-color-danger",         group: "Brand",   desc: "Danger / destructive semantic color." },
@@ -1322,19 +1375,46 @@ el.setTheme(brandTheme);</code></pre>
       { key: "chart5", css: "--rui-chart-5", group: "Chart", desc: "Fifth chart series color." },
       { key: "chart6", css: "--rui-chart-6", group: "Chart", desc: "Sixth chart series color." },
       // Typography
-      { key: "fontFamily",     css: "--rui-font-family",      group: "Typography", desc: "Default UI font stack." },
-      { key: "fontFamilyMono", css: "--rui-font-family-mono", group: "Typography", desc: "Monospace font stack (code blocks, kbd)." },
-      // Shape & spacing
-      { key: "radiusSm",  css: "--rui-radius-sm",   group: "Shape",   desc: "Small radius (chips, inputs)." },
-      { key: "radiusMd",  css: "--rui-radius-md",   group: "Shape",   desc: "Medium radius (cards, buttons)." },
-      { key: "radiusLg",  css: "--rui-radius-lg",   group: "Shape",   desc: "Large radius (hero cards, modals)." },
+      { key: "fontFamily",          css: "--rui-font-family",            group: "Typography", desc: "Default UI font stack." },
+      { key: "fontFamilyHeading",   css: "--rui-font-family-heading",    group: "Typography", desc: "Font stack used for headings (Card title, PageHeader, SectionHeader…)." },
+      { key: "fontFamilyMono",      css: "--rui-font-family-mono",       group: "Typography", desc: "Monospace font stack (code blocks, kbd)." },
+      { key: "fontSizeBase",        css: "--rui-font-size-base",         group: "Typography", desc: "Root font size; body text defaults to this." },
+      { key: "fontSizeSm",          css: "--rui-font-size-sm",           group: "Typography", desc: "Small font size (badges, captions, secondary labels)." },
+      { key: "fontSizeLg",          css: "--rui-font-size-lg",           group: "Typography", desc: "Large font size (lead paragraphs, list emphasis)." },
+      { key: "fontSizeHeading",     css: "--rui-font-size-heading",      group: "Typography", desc: "Font size for Card/Section headings." },
+      { key: "fontSizeTitle",       css: "--rui-font-size-title",        group: "Typography", desc: "Font size for page-level titles (PageHeader, Cover, Hero)." },
+      { key: "fontWeightBody",      css: "--rui-font-weight-body",       group: "Typography", desc: "Default font weight for body text." },
+      { key: "fontWeightHeading",   css: "--rui-font-weight-heading",    group: "Typography", desc: "Default font weight for headings." },
+      { key: "lineHeightBody",      css: "--rui-line-height-body",       group: "Typography", desc: "Default line-height for body text." },
+      { key: "lineHeightHeading",   css: "--rui-line-height-heading",    group: "Typography", desc: "Default line-height for headings." },
+      { key: "letterSpacingHeading", css: "--rui-letter-spacing-heading", group: "Typography", desc: "Letter-spacing applied to titles & headings." },
+      { key: "headingTextTransform", css: "--rui-heading-text-transform", group: "Typography", desc: "text-transform applied to titles & headings (e.g. uppercase)." },
+      // Shape
+      { key: "radiusXs",   css: "--rui-radius-xs",     group: "Shape",   desc: "Micro radius (pills, dots, status chips)." },
+      { key: "radiusSm",   css: "--rui-radius-sm",     group: "Shape",   desc: "Small radius (chips, inputs)." },
+      { key: "radiusMd",   css: "--rui-radius-md",     group: "Shape",   desc: "Medium radius (cards, buttons)." },
+      { key: "radiusLg",   css: "--rui-radius-lg",     group: "Shape",   desc: "Large radius (hero cards, modals)." },
+      { key: "radiusPill", css: "--rui-radius-pill",   group: "Shape",   desc: "Fully-rounded radius (badges, follow-up chips)." },
+      { key: "radiusButton", css: "--rui-radius-button", group: "Shape", desc: "Button-specific radius (override radiusSm for buttons only)." },
+      { key: "radiusInput",  css: "--rui-radius-input",  group: "Shape", desc: "Input-specific radius (override radiusSm for form controls only)." },
+      { key: "borderWidth",  css: "--rui-border-width",  group: "Shape", desc: "Width of every solid border (default 1px; brutalist uses 2px)." },
       { key: "shadowSm",  css: "--rui-shadow-sm",   group: "Shape",   desc: "Subtle elevation shadow." },
       { key: "shadowMd",  css: "--rui-shadow-md",   group: "Shape",   desc: "Medium elevation shadow." },
+      { key: "shadowLg",  css: "--rui-shadow-lg",   group: "Shape",   desc: "Large elevation shadow (hero cards, modals)." },
+      // Spacing
       { key: "spacingXs", css: "--rui-spacing-xs",  group: "Spacing", desc: "Extra-small spacing unit." },
       { key: "spacingS",  css: "--rui-spacing-s",   group: "Spacing", desc: "Small spacing unit." },
       { key: "spacingM",  css: "--rui-spacing-m",   group: "Spacing", desc: "Medium spacing unit." },
       { key: "spacingL",  css: "--rui-spacing-l",   group: "Spacing", desc: "Large spacing unit." },
       { key: "spacingXl", css: "--rui-spacing-xl",  group: "Spacing", desc: "Extra-large spacing unit." },
+      // Buttons
+      { key: "buttonFontWeight",    css: "--rui-button-font-weight",    group: "Buttons", desc: "Font weight inside buttons (e.g. 500, 600, 700)." },
+      { key: "buttonTextTransform", css: "--rui-button-text-transform", group: "Buttons", desc: "text-transform inside buttons (e.g. uppercase)." },
+      { key: "buttonLetterSpacing", css: "--rui-button-letter-spacing", group: "Buttons", desc: "Letter-spacing inside buttons." },
+      { key: "buttonPaddingY",      css: "--rui-button-padding-y",      group: "Buttons", desc: "Vertical padding inside buttons." },
+      { key: "buttonPaddingX",      css: "--rui-button-padding-x",      group: "Buttons", desc: "Horizontal padding inside buttons." },
+      // Motion
+      { key: "transitionDuration",  css: "--rui-transition-duration",   group: "Motion",  desc: "Default transition duration for hovers/focus." },
     ];
 
     const TOKEN_BY_KEY = Object.fromEntries(TOKENS.map((t) => [t.key, t]));
@@ -1343,6 +1423,7 @@ el.setTheme(brandTheme);</code></pre>
       "colorBg", "colorBgSubtle", "colorSurface", "colorSurfaceMuted",
       "colorBorder", "colorBorderSubtle", "colorText", "colorTextMuted",
       "colorPrimary", "colorPrimaryHover", "colorPrimaryText",
+      "colorAccent", "colorAccentHover", "colorAccentText", "colorFocusRing",
       "colorSuccess", "colorWarning", "colorDanger", "colorInfo",
       "chart1", "chart2", "chart3", "chart4", "chart5", "chart6",
     ]);
@@ -1358,11 +1439,20 @@ el.setTheme(brandTheme);</code></pre>
       ],
       brand: [
         "colorPrimary", "colorPrimaryHover", "colorPrimaryText",
+        "colorAccent", "colorAccentHover", "colorFocusRing",
         "colorSuccess", "colorWarning", "colorDanger", "colorInfo",
       ],
       chart: ["chart1", "chart2", "chart3", "chart4", "chart5", "chart6"],
-      type:  ["fontFamily", "fontFamilyMono"],
-      shape: ["radiusSm", "radiusMd", "radiusLg", "spacingXs", "spacingS", "spacingM", "spacingL", "spacingXl"],
+      type:  [
+        "fontFamily", "fontFamilyHeading", "fontFamilyMono",
+        "fontSizeBase", "fontSizeHeading", "fontSizeTitle",
+        "fontWeightHeading", "letterSpacingHeading",
+      ],
+      shape: [
+        "radiusSm", "radiusMd", "radiusLg", "radiusButton", "radiusInput", "borderWidth",
+        "buttonFontWeight", "buttonPaddingY", "buttonPaddingX",
+        "spacingS", "spacingM", "spacingL", "spacingXl",
+      ],
     };
 
     /* -------------------------------------------------------------------
@@ -1914,6 +2004,8 @@ btns = Buttons([
         case "Typography": return "fa-solid fa-text-height";
         case "Shape":      return "fa-solid fa-ruler-combined";
         case "Spacing":    return "fa-solid fa-arrows-up-down-left-right";
+        case "Buttons":    return "fa-solid fa-hand-pointer";
+        case "Motion":     return "fa-solid fa-bolt";
         default:           return "fa-solid fa-circle-info";
       }
     }

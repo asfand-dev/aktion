@@ -153,6 +153,22 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  ]), "primary")\n' +
       '])',
   },
+  {
+    name: "Theme",
+    description: "Brand-style theme override applied on top of the base theme.",
+    template:
+      'theme = Theme({\n' +
+      '  colorPrimary:       "${1:#0969da}",\n' +
+      '  colorPrimaryHover:  "${2:#0860c4}",\n' +
+      '  colorBg:            "${3:#ffffff}",\n' +
+      '  colorText:          "${4:#1f2328}",\n' +
+      '  fontFamily:         "${5:-apple-system, BlinkMacSystemFont, \\"Segoe UI\\", sans-serif}",\n' +
+      '  fontFamilyHeading:  "${6:-apple-system, BlinkMacSystemFont, \\"Segoe UI\\", sans-serif}",\n' +
+      '  radiusButton:       "${7:6px}",\n' +
+      '  radiusInput:        "${8:6px}",\n' +
+      '  buttonFontWeight:   "${9:500}"\n' +
+      '})',
+  },
 ];
 
 export function getSnippets(): readonly SnippetEntry[] {

@@ -192,7 +192,7 @@ sidePane = Stack([
 searchToolbar = Card([
   SearchBar("docs-q", "Search the docs…", $query, "/"),
   Stack([
-    TagBlock(["streaming", "themes", "tools", "routing", "javascript", "components"]),
+    BadgeList(["streaming", "themes", "tools", "routing", "javascript", "components"]),
     Spacer(),
     TextContent("Press / to search", "small", "muted")
   ], "row", "m", "center")
@@ -243,7 +243,7 @@ articleHeader = currentExists == 0 ? EmptyState("Pick an article", "Choose a til
     ],
     "primary"
   ),
-  TagBlock(current.tags)
+  BadgeList(current.tags)
 ], "column", "m")
 
 articleBody = currentExists == 0 ? null : Card([
@@ -262,11 +262,11 @@ articleBody = currentExists == 0 ? null : Card([
              $helpful == "no" ? "danger" : "secondary")
     ])
   ], "row", "m", "center"),
-  $helpful == "no" ? Note("Thanks — your feedback opens a short improvement ticket on this article.", "info", "circle-info") : null,
-  $helpful == "yes" ? Note("Glad it helped! Star the article to find it later.", "success", "circle-check") : null
+  $helpful == "no" ? Callout("info", "Thanks — your feedback opens a short improvement ticket on this article.", null, "circle-info", true) : null,
+  $helpful == "yes" ? Callout("success", "Glad it helped! Star the article to find it later.", null, "circle-check", true) : null
 ])
 
-relatedHeader = currentExists == 0 ? null : SectionHeader("Related articles", "Hand-picked next reads in " + categoryLabel, null, Tag("" + @Count(relatedFiltered) + " items", null, "sm", "info"))
+relatedHeader = currentExists == 0 ? null : SectionHeader("Related articles", "Hand-picked next reads in " + categoryLabel, null, Badge("" + @Count(relatedFiltered) + " items", "info", null, "sm"))
 
 relatedGrid = currentExists == 0 ? null : Grid(
   @Each(relatedFiltered, "r",

@@ -109,7 +109,7 @@ export const PageHeader: ComponentSpec = {
     { name: "subtitle", type: "string", optional: true },
     { name: "breadcrumbs", type: "string[] | Breadcrumb", optional: true, description: "Array of strings, or a Breadcrumb(...) node" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / NavLinks shown on the right" },
-    { name: "status", type: "Badge | Tag", optional: true, description: "Optional Badge(...) or Tag(...) rendered next to the title" },
+    { name: "status", type: "Badge", optional: true, description: "Optional Badge(...) rendered next to the title" },
   ],
   render: (_node, props, helpers) => {
     const root = el("header", { class: "rui-page-header" });
@@ -175,24 +175,42 @@ export const MetricGrid: ComponentSpec = {
 export const EmptyState: ComponentSpec = {
   name: "EmptyState",
   description:
-    "Zero-state placeholder for empty lists, searches, dashboards. Renders a " +
-    "centered icon, title, description, and optional CTA. Always preferable to " +
-    "an empty Card with raw text.",
+    "Zero-state placeholder for empty lists, searches, dashboards. Renders " +
+    "a centered icon (or illustration), title, description, and either a " +
+    "single `action` Button or an `actions` row (primary + secondary). " +
+    "Always preferable to an empty Card with raw text.",
   props: [
     { name: "title", type: "string" },
     { name: "description", type: "string", optional: true },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (defaults to \"inbox\")" },
-    { name: "action", type: "Button", optional: true, description: "Optional Button(...) CTA" },
+    { name: "illustration", type: "string", optional: true, description: "Image URL — takes precedence over `icon` when provided" },
+    { name: "action", type: "Button", optional: true, description: "Single CTA (legacy slot)" },
+    { name: "actions", type: "Node[]", optional: true, description: "Row of CTA Buttons / Links — preferred over `action` for primary + secondary affordances" },
   ],
   render: (_node, props, helpers) => {
     const root = el("div", { class: "rui-empty-state" });
-    const iconName = asString(props.icon, "inbox");
-    const iconNode = renderIcon(iconName, { className: "rui-empty-state-icon" });
-    if (iconNode) root.append(iconNode);
+    const illustration = sanitiseImageSrc(props.illustration);
+    if (illustration) {
+      root.append(el("img", {
+        class: "rui-empty-state-illustration",
+        src: illustration,
+        alt: "",
+        loading: "lazy",
+      }));
+    } else {
+      const iconName = asString(props.icon, "inbox");
+      const iconNode = renderIcon(iconName, { className: "rui-empty-state-icon" });
+      if (iconNode) root.append(iconNode);
+    }
     root.append(el("h3", { class: "rui-empty-state-title" }, [asString(props.title)]));
     const desc = asString(props.description);
     if (desc) root.append(el("p", { class: "rui-empty-state-description" }, [desc]));
-    if (props.action) {
+    const actions = asArray<unknown>(props.actions);
+    if (actions.length > 0) {
+      const row = el("div", { class: "rui-empty-state-actions" });
+      for (const item of actions) row.append(helpers.renderNode(item));
+      root.append(row);
+    } else if (props.action) {
       const wrap = el("div", { class: "rui-empty-state-action" });
       wrap.append(helpers.renderNode(props.action));
       root.append(wrap);
@@ -597,18 +615,28 @@ export const Toolbar: ComponentSpec = {
   name: "Toolbar",
   description:
     "Horizontal toolbar for filters, search, view modes, and primary " +
-    "actions. Left and right slots wrap onto separate rows on narrow " +
+    "actions. Left/center/right slots wrap onto separate rows on narrow " +
     "viewports so the bar never overflows. Use ABOVE a Table, List, " +
     "Grid, or Kanban view — never replace `PageHeader` with it.",
   props: [
     { name: "left", type: "Node[]", optional: true, description: "Filters / search inputs / chips" },
     { name: "right", type: "Node[]", optional: true, description: "Primary action buttons" },
+    { name: "center", type: "Node[]", optional: true, description: "Centered controls (e.g. SegmentedControl, search bar)" },
   ],
   render: (_node, props, helpers) => {
-    const root = el("div", { class: "rui-toolbar" });
+    const center = asArray<unknown>(props.center);
+    const root = el("div", {
+      class: "rui-toolbar",
+      "data-has-center": center.length > 0 ? "true" : "false",
+    });
     const left = el("div", { class: "rui-toolbar-side rui-toolbar-left" });
     for (const child of asArray(props.left)) left.append(helpers.renderNode(child));
     root.append(left);
+    if (center.length > 0) {
+      const centerWrap = el("div", { class: "rui-toolbar-side rui-toolbar-center" });
+      for (const child of center) centerWrap.append(helpers.renderNode(child));
+      root.append(centerWrap);
+    }
     const right = el("div", { class: "rui-toolbar-side rui-toolbar-right" });
     for (const child of asArray(props.right)) right.append(helpers.renderNode(child));
     root.append(right);
@@ -1046,28 +1074,77 @@ function parseMediaRatio(input: string): string {
   return Number.isFinite(n) && n > 0 ? `${n} / 1` : "16 / 9";
 }
 
+/**
+ * Render a tiny inline sparkline as an SVG. Shared by `Stats`, `StatCard`,
+ * and the standalone `Sparkline` component so the visual language stays
+ * consistent across surfaces. `tone` maps to a CSS variable so themes can
+ * override the stroke colour.
+ */
+export function renderInlineSparkline(values: number[], tone = "primary"): SVGSVGElement {
+  const width = 80;
+  const height = 24;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("class", "rui-sparkline");
+  svg.setAttribute("data-tone", tone);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("aria-hidden", "true");
+  if (values.length < 2) return svg;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const step = width / (values.length - 1);
+  const points = values.map((value, i) => {
+    const x = i * step;
+    // Bias by 2px padding top/bottom so the stroke is fully visible.
+    const y = 2 + ((max - value) / range) * (height - 4);
+    return [x, y] as const;
+  });
+  const linePath = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+  const area = document.createElementNS(svgNS, "path");
+  area.setAttribute("d", areaPath);
+  area.setAttribute("class", "rui-sparkline-area");
+  svg.appendChild(area);
+  const line = document.createElementNS(svgNS, "path");
+  line.setAttribute("d", linePath);
+  line.setAttribute("class", "rui-sparkline-line");
+  line.setAttribute("fill", "none");
+  svg.appendChild(line);
+  return svg;
+}
+
 export const Stats: ComponentSpec = {
   name: "Stats",
   description:
-    "Compact horizontal stat strip of `{label, value, hint?, tone?}` " +
+    "Compact horizontal stat strip of `{label, value, hint?, tone?, spark?}` " +
     "entries. Lighter than `MetricGrid` — use inside a Card alongside a " +
     "chart, in a Toolbar, or beneath a PageHeader when you need a few " +
-    "inline KPIs without taking over the layout.",
+    "inline KPIs without taking over the layout. Provide `spark` as a " +
+    "number array to render an inline Sparkline beside each value.",
   props: [
-    { name: "items", type: "any[]", description: "Array of {label, value, hint?, tone?} objects" },
+    { name: "items", type: "object[]", description: "Array of {label, value, hint?, tone?, spark?} objects" },
     { name: "align", type: "string", optional: true, enum: ["start", "center", "end"] },
   ],
   render: (_node, props) => {
     const align = asString(props.align, "start");
     const root = el("div", { class: "rui-stats", "data-align": align });
     for (const raw of asArray<unknown>(props.items)) {
-      const item = (raw ?? {}) as { label?: unknown; value?: unknown; hint?: unknown; tone?: unknown };
-      const block = el("div", {
-        class: "rui-stats-item",
-        "data-tone": asString(item.tone, "default"),
-      });
+      const item = (raw ?? {}) as {
+        label?: unknown; value?: unknown; hint?: unknown; tone?: unknown; spark?: unknown;
+      };
+      const tone = asString(item.tone, "default");
+      const block = el("div", { class: "rui-stats-item", "data-tone": tone });
       block.append(el("div", { class: "rui-stats-label" }, [asString(item.label)]));
-      block.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
+      const valueRow = el("div", { class: "rui-stats-value-row" });
+      valueRow.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
+      const sparkValues = asArray<unknown>(item.spark).map((v) => Number(v)).filter((n) => Number.isFinite(n));
+      if (sparkValues.length > 1) {
+        valueRow.append(renderInlineSparkline(sparkValues, tone));
+      }
+      block.append(valueRow);
       const hint = asString(item.hint);
       if (hint) block.append(el("div", { class: "rui-stats-hint" }, [hint]));
       root.append(block);

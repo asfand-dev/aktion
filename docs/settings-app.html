@@ -66,7 +66,7 @@ header = PageHeader(
     Button("Cancel",       Action([@ToAssistant("Discard pending changes")]), "ghost"),
     Button("Save changes", Action([@Set($saveStatus, "saving"), @Run(saveMutation), @Set($saveStatus, "saved")]), "primary")
   ],
-  Tag(usage.planLabel, null, "sm", "primary")
+  Badge(usage.planLabel, "primary", null, "sm")
 )
 
 usageCard = Card([

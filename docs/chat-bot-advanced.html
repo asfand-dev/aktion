@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat bot · advanced pipeline · streaming-ui-script</title>
+  <meta name="description" content="Production-grade LLM pipeline for building hostable apps, websites, dashboards, e-commerce, CRMs, booking systems, directories, portfolios, docs, forms, and more — from a single prompt, in Streaming UI Script." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.05.16a" />
+  <link rel="stylesheet" href="assets/chat-bot-advanced.css?v=2026.05.16a" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="chat-bot" data-variant="advanced">
+  <div class="layout" data-wide="true" style="display: block;">
+    <main>
+      <div class="cb-app" id="cb-app">
+        <!-- ========================================================== -->
+        <!--  Setup overlay: API key + model picker                     -->
+        <!-- ========================================================== -->
+        <section class="cb-setup" id="cb-setup">
+          <div class="cb-setup-card">
+            <span class="cb-eyebrow"><i class="fa-solid fa-diagram-project"></i> Advanced pipeline</span>
+            <h1>Connect to OpenRouter</h1>
+            <p class="cb-lede">
+              A production-grade pipeline that turns one prompt into a
+              hostable product. Four LLM calls: <strong>brief</strong> →
+              <strong>blueprint</strong> (pages + schemas + sample records) →
+              <strong>brand theme</strong> → <strong>specialised
+              generator</strong> for 14+ intents (dashboard, app, website,
+              storefront, CRM, booking, directory, portfolio, docs, …). Your
+              key stays in <code>localStorage</code> — it is sent only to
+              OpenRouter.
+            </p>
+
+            <form id="cba-setup-form" class="cb-form">
+              <div class="cb-field">
+                <label for="cba-setup-key">OpenRouter API key</label>
+                <div class="cb-input-wrap">
+                  <i class="fa-solid fa-key cb-input-icon" aria-hidden="true"></i>
+                  <input id="cba-setup-key" type="password" autocomplete="off" placeholder="sk-or-..." required />
+                  <button type="button" class="cb-input-reveal" id="cba-setup-reveal" aria-label="Show / hide key" title="Show / hide key">
+                    <i class="fa-solid fa-eye"></i>
+                  </button>
+                </div>
+                <span class="cb-hint">
+                  Need one? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Grab a free key from openrouter.ai</a>.
+                </span>
+              </div>
+
+              <div class="cb-field">
+                <label for="cba-setup-model">Model</label>
+                <div class="cb-input-wrap">
+                  <i class="fa-solid fa-microchip cb-input-icon" aria-hidden="true"></i>
+                  <input id="cba-setup-model" type="text" list="cba-model-suggestions" placeholder="google/gemini-3-flash-preview" required />
+                </div>
+                <datalist id="cba-model-suggestions">
+                  <option value="google/gemini-3-flash-preview"></option>
+                  <option value="google/gemini-3.1-flash-lite"></option>
+                  <option value="openai/gpt-5.4-mini"></option>
+                  <option value="openai/gpt-5.3-codex"></option>
+                  <option value="anthropic/claude-sonnet-4.6"></option>
+                  <option value="qwen/qwen3.6-plus"></option>
+                </datalist>
+                <span class="cb-hint">All three pipeline calls use the same model.</span>
+              </div>
+
+              <div id="cba-setup-error" class="cb-error" hidden></div>
+
+              <div class="cb-setup-actions">
+                <a class="cb-btn cb-btn--ghost" href="chat-bot.html">
+                  <i class="fa-solid fa-arrow-left"></i> Classic chat bot
+                </a>
+                <button class="cb-btn cb-btn--primary" type="submit">
+                  Start building <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </form>
+
+            <ul class="cb-perks" aria-label="What you get">
+              <li><i class="fa-solid fa-circle-check"></i> 14+ specialised generators</li>
+              <li><i class="fa-solid fa-circle-check"></i> Pages, schemas + realistic mock data</li>
+              <li><i class="fa-solid fa-circle-check"></i> Auto-branded <code>Theme({...})</code></li>
+              <li><i class="fa-solid fa-circle-check"></i> Refine in place &amp; auto-save gallery</li>
+              <li><i class="fa-solid fa-circle-check"></i> One-click hostable HTML download</li>
+              <li><i class="fa-solid fa-circle-check"></i> Open in playground &amp; share links</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ========================================================== -->
+        <!--  Chat interface (revealed once API key is set)             -->
+        <!-- ========================================================== -->
+        <div class="cb-chat" id="cba-chat" hidden>
+          <!-- Toolbar -->
+          <header class="cb-toolbar" role="banner">
+            <div class="cb-toolbar-row cb-toolbar-row--modes">
+              <div class="cba-toolbar-title">
+                <span class="cba-toolbar-mark">
+                  <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+                </span>
+                <span class="cba-toolbar-text">
+                  <strong>Advanced pipeline</strong>
+                  <span>Brief · Blueprint · Theme · Generator</span>
+                </span>
+              </div>
+
+              <div class="cb-toolbar-spacer"></div>
+
+              <div class="cb-toolbar-controls">
+                <div class="cb-select-wrap" title="LLM model">
+                  <i class="fa-solid fa-microchip" aria-hidden="true"></i>
+                  <select id="cba-model" aria-label="LLM model">
+                    <option value="google/gemini-3-flash-preview">gemini-3-flash-preview</option>
+                    <option value="google/gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                    <option value="openai/gpt-5.4-mini">gpt-5.4-mini</option>
+                    <option value="openai/gpt-5.3-codex">gpt-5.3-codex</option>
+                    <option value="anthropic/claude-sonnet-4.6">claude-sonnet-4.6</option>
+                    <option value="qwen/qwen3.6-plus">qwen3.6-plus</option>
+                  </select>
+                </div>
+
+                <button class="cb-iconbtn" id="cba-new-chat" title="Start a new chat" aria-label="New chat">
+                  <i class="fa-solid fa-plus"></i>
+                </button>
+                <button class="cb-iconbtn" id="cba-settings" title="Settings" aria-label="Open settings">
+                  <i class="fa-solid fa-gear"></i>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <!-- Chat stage: welcome screen + history -->
+          <section class="cb-stage" id="cba-stage" aria-live="polite">
+            <div class="cb-welcome" id="cba-welcome">
+              <div class="cb-aurora" aria-hidden="true">
+                <span class="cb-aurora-blob cb-aurora-blob--a"></span>
+                <span class="cb-aurora-blob cb-aurora-blob--b"></span>
+                <span class="cb-aurora-blob cb-aurora-blob--c"></span>
+              </div>
+              <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Brief · Blueprint · Theme · UI · live pipeline</span>
+              <h2>Ship a <span class="cb-grad-text">real product</span> from a single prompt.</h2>
+              <p>
+                Tell us what you want to build — a SaaS dashboard, a marketing
+                site, a CRM, a booking app, a storefront, a portfolio. The
+                pipeline drafts a polished brief, plans the pages and data
+                schemas, picks a brand theme, then runs a specialised
+                generator that emits a fully-working, hostable program.
+              </p>
+
+              <ol class="cba-pipeline-hint" aria-hidden="true">
+                <li><span>1</span> <b>Brief</b> · intent, industry, persona</li>
+                <li><span>2</span> <b>Blueprint</b> · pages, schemas, sample data</li>
+                <li><span>3</span> <b>Theme</b> · branded <code>Theme({...})</code></li>
+                <li><span>4</span> <b>UI</b> · intent-specific Streaming UI Script</li>
+              </ol>
+
+              <div class="cb-suggestions" id="cba-suggestions"></div>
+
+              <div class="cba-gallery" id="cba-gallery" hidden></div>
+            </div>
+
+            <div class="cb-history" id="cba-history"></div>
+          </section>
+
+          <!-- Composer -->
+          <form class="cb-composer" id="cba-composer">
+            <div class="cb-composer-inner">
+              <textarea
+                id="cba-input"
+                placeholder="Build a savings dashboard for a fintech called Lumen — light minimal brand, weekly summary, recent transactions, a chart, and a small kanban for goals…"
+                rows="1"
+                aria-label="Message"
+              ></textarea>
+              <div class="cb-composer-actions">
+                <span class="cb-composer-hint" aria-hidden="true">
+                  <kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline
+                </span>
+                <button type="button" class="cb-iconbtn cb-stop" id="cba-stop" title="Stop generating" hidden>
+                  <i class="fa-solid fa-stop"></i>
+                </button>
+                <button class="cb-btn cb-btn--primary cb-send" id="cba-send" type="submit">
+                  <i class="fa-solid fa-paper-plane"></i>
+                  <span>Send</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ========================================================== -->
+      <!--  Settings drawer                                            -->
+      <!-- ========================================================== -->
+      <div class="cb-drawer-backdrop" id="cba-drawer-backdrop" data-open="false"></div>
+      <aside class="cb-drawer" id="cba-drawer" data-open="false" aria-hidden="true" aria-label="Settings">
+        <header class="cb-drawer-head">
+          <h2><i class="fa-solid fa-sliders"></i> Settings</h2>
+          <button class="cb-iconbtn" id="cba-drawer-close" aria-label="Close settings">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+        <div class="cb-drawer-body">
+          <div class="cb-field">
+            <label for="cba-drawer-key">OpenRouter API key</label>
+            <div class="cb-input-wrap">
+              <i class="fa-solid fa-key cb-input-icon" aria-hidden="true"></i>
+              <input id="cba-drawer-key" type="password" autocomplete="off" />
+              <button type="button" class="cb-input-reveal" id="cba-drawer-reveal" aria-label="Show / hide key" title="Show / hide key">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
+            <span class="cb-hint">Stored locally. Clear with <em>Reset</em> below.</span>
+          </div>
+          <div class="cb-field">
+            <label for="cba-drawer-model">Default model</label>
+            <input id="cba-drawer-model" type="text" list="cba-model-suggestions" />
+          </div>
+          <div class="cb-field cba-drawer-toggle">
+            <label for="cba-drawer-mock">
+              <span>Seed realistic mock data</span>
+              <input id="cba-drawer-mock" type="checkbox" />
+            </label>
+            <span class="cb-hint">When the user does not provide data, the blueprint seeds 6–15 sample rows per schema with believable names, dates, and statuses.</span>
+          </div>
+          <div class="cb-field">
+            <label for="cba-drawer-industry">Industry hint <span class="cb-hint" style="margin-left:auto;font-size:11px;">optional</span></label>
+            <input id="cba-drawer-industry" type="text" placeholder="e.g. fintech, healthcare, education, e-commerce" list="cba-industry-suggestions" />
+            <datalist id="cba-industry-suggestions">
+              <option value="fintech"></option>
+              <option value="healthcare"></option>
+              <option value="education"></option>
+              <option value="e-commerce"></option>
+              <option value="real-estate"></option>
+              <option value="saas"></option>
+              <option value="hospitality"></option>
+              <option value="travel"></option>
+              <option value="legal"></option>
+              <option value="hr"></option>
+              <option value="logistics"></option>
+              <option value="media"></option>
+              <option value="gaming"></option>
+              <option value="developer-tools"></option>
+              <option value="manufacturing"></option>
+              <option value="non-profit"></option>
+              <option value="government"></option>
+              <option value="insurance"></option>
+            </datalist>
+            <span class="cb-hint">Biases ambiguous prompts toward your default industry vertical.</span>
+          </div>
+          <div class="cb-drawer-row">
+            <button class="cb-btn cb-btn--ghost" id="cba-drawer-gallery" type="button">
+              <i class="fa-solid fa-trash"></i> Clear saved generations
+            </button>
+            <button class="cb-btn cb-btn--ghost" id="cba-drawer-reset" type="button">
+              <i class="fa-solid fa-arrow-rotate-left"></i> Reset key
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Toast notifications -->
+      <div class="cb-toast" id="cba-toast" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module" src="assets/chat-bot-advanced.js?v=2026.05.16a"></script>
+</body>
+</html>

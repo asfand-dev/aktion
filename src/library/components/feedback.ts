@@ -103,9 +103,11 @@ export const AvatarGroup: ComponentSpec = {
 export const Progress: ComponentSpec = {
   name: "Progress",
   description:
-    "Linear progress bar. `value` is clamped between 0 and `max` (default 100). " +
-    "Set `indeterminate=true` to render a looping animation when the total is " +
-    "unknown.",
+    "Linear progress bar. `value` is clamped between 0 and `max` (default " +
+    "100). `indeterminate=true` renders a looping animation when the total " +
+    "is unknown. Provide `segments` to render a segmented progress strip " +
+    "(steps in an onboarding flow), or `buffered` for a secondary " +
+    "buffer indicator (downloads, video buffering).",
   props: [
     { name: "value", type: "number", optional: true, description: "Current progress; ignored when indeterminate" },
     { name: "max", type: "number", optional: true, description: "Upper bound (default 100)" },
@@ -113,12 +115,16 @@ export const Progress: ComponentSpec = {
     { name: "tone", type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
     { name: "indeterminate", type: "boolean", optional: true },
     { name: "showValue", type: "boolean", optional: true, description: "Show the numeric value on the right" },
+    { name: "segments", type: "number", optional: true, description: "Render N equal segments (filled by current step)" },
+    { name: "buffered", type: "number", optional: true, description: "Secondary value (0..max) drawn behind the bar" },
   ],
   render: (_node, props) => {
     const max = Math.max(1, asNumber(props.max, 100));
     const indeterminate = asBoolean(props.indeterminate);
     const value = Math.max(0, Math.min(max, asNumber(props.value, 0)));
     const percent = Math.round((value / max) * 100);
+    const segments = Math.max(0, Math.floor(asNumber(props.segments, 0)));
+    const buffered = props.buffered != null ? Math.max(0, Math.min(max, asNumber(props.buffered, 0))) : null;
     const root = el("div", { class: "rui-progress", "data-tone": asString(props.tone, "primary") });
     const label = asString(props.label);
     const showValue = asBoolean(props.showValue);
@@ -126,10 +132,33 @@ export const Progress: ComponentSpec = {
       const head = el("div", { class: "rui-progress-head" });
       head.append(el("span", { class: "rui-progress-label" }, [label]));
       if (showValue && !indeterminate) {
-        head.append(el("span", { class: "rui-progress-value" }, [`${percent}%`]));
+        const display = segments > 0
+          ? `${Math.min(segments, Math.round((value / max) * segments))} / ${segments}`
+          : `${percent}%`;
+        head.append(el("span", { class: "rui-progress-value" }, [display]));
       }
       root.append(head);
     }
+
+    if (segments > 0 && !indeterminate) {
+      const trackRoot = el("div", {
+        class: "rui-progress-segments",
+        role: "progressbar",
+        "aria-valuemin": "0",
+        "aria-valuemax": String(segments),
+        "aria-valuenow": String(Math.min(segments, Math.round((value / max) * segments))),
+      });
+      const filled = Math.min(segments, Math.round((value / max) * segments));
+      for (let i = 0; i < segments; i += 1) {
+        trackRoot.append(el("span", {
+          class: "rui-progress-segment",
+          "data-filled": i < filled ? "true" : "false",
+        }));
+      }
+      root.append(trackRoot);
+      return root;
+    }
+
     const track = el("div", {
       class: "rui-progress-track",
       role: "progressbar",
@@ -138,6 +167,14 @@ export const Progress: ComponentSpec = {
       "aria-valuenow": indeterminate ? null : String(value),
       "data-indeterminate": indeterminate ? "true" : "false",
     });
+    if (buffered !== null) {
+      const bufferedPercent = Math.round((buffered / max) * 100);
+      track.append(el("div", {
+        class: "rui-progress-buffer",
+        style: `width:${bufferedPercent}%`,
+        "aria-hidden": "true",
+      }));
+    }
     track.append(el("div", {
       class: "rui-progress-bar",
       style: indeterminate ? "" : `width:${percent}%`,
@@ -362,42 +399,55 @@ export const HoverCard: ComponentSpec = {
   },
 };
 
+const RATING_ICONS: Record<string, { full: string; half: string; empty: string }> = {
+  star: { full: "star", half: "star-half-stroke", empty: "regular:star" },
+  heart: { full: "heart", half: "heart", empty: "regular:heart" },
+  thumb: { full: "thumbs-up", half: "thumbs-up", empty: "regular:thumbs-up" },
+  fire: { full: "fire", half: "fire", empty: "regular:fire" },
+  bolt: { full: "bolt", half: "bolt", empty: "regular:bolt" },
+};
+
 export const Rating: ComponentSpec = {
   name: "Rating",
   description:
     "Compact 0–5 star rating with optional numeric badge and review " +
     "count. Use in product cards, testimonials, reviews, and KPI rows. " +
     "Pass `interactive=true` and a `$variable` as `value` to let users " +
-    "rate something.",
+    "rate something; with `halfStep=true` clicking the left half of a " +
+    "star sets a fractional value. `icon` swaps the glyph family — " +
+    "`star` (default), `heart`, `thumb`, `fire`, `bolt`, or any custom " +
+    "Font Awesome name.",
   props: [
-    { name: "value", type: "number", description: "0–5 stars; can be a $variable when interactive" },
+    { name: "value", type: "number", description: "0–max; can be a $variable when interactive" },
     { name: "max", type: "number", optional: true, description: "Maximum number of stars (default 5)" },
     { name: "label", type: "string", optional: true, description: "Inline text shown after the stars (e.g. \"4.2 of 5\")" },
     { name: "count", type: "number", optional: true, description: "Review/voter count rendered in parentheses" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
     { name: "interactive", type: "boolean", optional: true, description: "Allow clicking a star to set the value" },
+    { name: "halfStep", type: "boolean", optional: true, description: "Allow half-star resolution when interactive" },
+    { name: "icon", type: "string", optional: true, description: "Icon family — `star` (default), `heart`, `thumb`, `fire`, `bolt`, or any FA name" },
   ],
   render: (node, props, helpers) => {
     const max = Math.max(1, Math.floor(asNumber(props.max, 5)));
     const raw = Math.max(0, Math.min(max, asNumber(props.value, 0)));
     const size = asString(props.size, "md");
     const interactive = asBoolean(props.interactive);
+    const halfStep = asBoolean(props.halfStep);
     const stateName = node.argMeta?.[0]?.stateRef;
+    const iconChoice = resolveRatingIcons(asString(props.icon));
     const root = el("div", {
       class: "rui-rating",
       "data-size": size,
       "data-interactive": interactive && stateName ? "true" : "false",
+      "data-half-step": interactive && stateName && halfStep ? "true" : "false",
       role: "img",
-      "aria-label": `${raw} of ${max} stars`,
+      "aria-label": `${raw} of ${max}`,
     });
     const stars = el("span", { class: "rui-rating-stars" });
     for (let i = 1; i <= max; i += 1) {
       const fill = Math.max(0, Math.min(1, raw - (i - 1)));
-      // Use Font Awesome's dedicated half-star glyph; the previous CSS
-      // background-clip trick only worked on text content (★ / ☆) and
-      // produced a broken/half-cut glyph for FA pseudo-element icons.
       const iconName =
-        fill >= 1 ? "star" : fill > 0 ? "star-half-stroke" : "regular:star";
+        fill >= 1 ? iconChoice.full : fill > 0 ? iconChoice.half : iconChoice.empty;
       const iconClasses = resolveIconClasses(iconName).join(" ");
       const star = el(interactive && stateName ? "button" : "span", {
         class: `rui-rating-star ${iconClasses}`.trim(),
@@ -407,10 +457,24 @@ export const Rating: ComponentSpec = {
         "aria-hidden": interactive && stateName ? null : "true",
       });
       if (interactive && stateName) {
-        (star as HTMLButtonElement).onclick = () => {
+        const fullValue = i;
+        const halfValue = i - 0.5;
+        (star as HTMLButtonElement).onclick = (event) => {
+          let next: number = fullValue;
+          if (halfStep) {
+            // Determine which half of the star was clicked. Resolve from
+            // the live element via the event so the handler still works
+            // after the morph reconciler keeps the previous DOM.
+            const evt = event as MouseEvent;
+            const target = (evt.currentTarget ?? evt.target) as HTMLElement;
+            const rect = target.getBoundingClientRect();
+            if (rect.width > 0 && evt.clientX - rect.left < rect.width / 2) {
+              next = halfValue;
+            }
+          }
           helpers.runAction({
             kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value: i }],
+            steps: [{ kind: "Set", name: stateName, value: next }],
           });
         };
       }
@@ -426,6 +490,15 @@ export const Rating: ComponentSpec = {
     return root;
   },
 };
+
+function resolveRatingIcons(icon: string): { full: string; half: string; empty: string } {
+  const key = icon.trim().toLowerCase();
+  if (!key) return RATING_ICONS.star!;
+  if (RATING_ICONS[key]) return RATING_ICONS[key]!;
+  // Custom icon name (e.g. "circle") — fill/half/empty reuse the same glyph
+  // and rely on the data-fill attribute for visual differentiation in CSS.
+  return { full: key, half: key, empty: `regular:${key}` };
+}
 
 export const ProgressRing: ComponentSpec = {
   name: "ProgressRing",
@@ -721,14 +794,21 @@ const installPopoverDismiss = (
 
 const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
 
+const TOASTS_POSITIONS = [
+  "top-right", "top-left", "top-center",
+  "bottom-right", "bottom-left", "bottom-center",
+] as const;
+
 export const Toast: ComponentSpec = {
   name: "Toast",
   description:
     "Single transient notification card. Always shows a close (×) button " +
     "that removes the toast from the DOM (and fires `onClose` if set). " +
-    "Pass `duration` (ms) to auto-dismiss. Use inside `Toasts` for a " +
-    "stack — for top-of-page announcements prefer `Banner`, for permanent " +
-    "inbox entries prefer `Notification`.",
+    "Pass `duration` (ms) to auto-dismiss, or `position` for a standalone " +
+    "one-off toast (the renderer will pin it to the viewport corner so " +
+    "you do not have to wrap a single notification in `Toasts(...)`). " +
+    "Use `Toasts` for grouped stacks; prefer `Banner` for top-of-page " +
+    "announcements and `Notification` for permanent inbox entries.",
   props: [
     { name: "title", type: "string" },
     { name: "message", type: "string", optional: true },
@@ -737,14 +817,17 @@ export const Toast: ComponentSpec = {
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: true, description: "Optional inline action Button(...) shown above the message" },
     { name: "onClose", type: "Action", optional: true, description: "Action fired when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
+    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Toasts(...)`" },
   ],
   render: (_node, props, helpers) => {
     const tone = asString(props.tone, "default");
+    const position = asString(props.position);
     const root = el("div", {
-      class: "rui-toast",
+      class: position ? "rui-toast rui-toast-standalone" : "rui-toast",
       role: "status",
       "aria-live": tone === "danger" ? "assertive" : "polite",
       "data-tone": tone,
+      "data-position": position || null,
     });
     const iconName = asString(props.icon) || defaultToastIcon(tone);
     const iconNode = renderIcon(iconName, { className: "rui-toast-icon" });
@@ -853,11 +936,6 @@ export const Toast: ComponentSpec = {
     return root;
   },
 };
-
-const TOASTS_POSITIONS = [
-  "top-right", "top-left", "top-center",
-  "bottom-right", "bottom-left", "bottom-center",
-] as const;
 
 export const Toasts: ComponentSpec = {
   name: "Toasts",

@@ -5,7 +5,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber, sanitiseCssLength } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength } from "../utils.js";
 
 export const Stack: ComponentSpec = {
   name: "Stack",
@@ -105,31 +105,34 @@ export const CardFooter: ComponentSpec = {
   },
 };
 
-export const Divider: ComponentSpec = {
-  name: "Divider",
-  description: "Horizontal divider.",
-  props: [{ name: "label", type: "string", optional: true }],
-  render: (_node, props) => {
-    const label = asString(props.label);
-    if (!label) return el("hr", { class: "rui-divider" });
-    return el("div", { class: "rui-divider rui-divider-with-label" }, [
-      el("span", { class: "rui-divider-line" }),
-      el("span", { class: "rui-divider-label" }, [label]),
-      el("span", { class: "rui-divider-line" }),
-    ]);
-  },
-};
-
 export const Separator: ComponentSpec = {
   name: "Separator",
-  description: "Visual divider between content sections. Supports horizontal or vertical orientation.",
+  description:
+    "Visual divider between content sections. Supports horizontal or " +
+    "vertical orientation, and an optional center `label` (lifted from " +
+    "the legacy `Divider`). Use `decorative=false` to expose the " +
+    "separator to assistive tech.",
   props: [
     { name: "orientation", type: "string", optional: true, enum: ["horizontal", "vertical"] },
-    { name: "decorative", type: "boolean", optional: true, description: "Hides the separator from assistive tech when true." },
+    { name: "label", type: "string", optional: true, description: "Optional label rendered in the middle (horizontal only)" },
+    { name: "decorative", type: "boolean", optional: true, description: "Hides the separator from assistive tech when true (default)" },
   ],
   render: (_node, props) => {
     const orientation = asString(props.orientation, "horizontal");
     const decorative = asBoolean(props.decorative, true);
+    const label = asString(props.label);
+    if (label && orientation === "horizontal") {
+      return el("div", {
+        class: "rui-separator rui-separator-with-label",
+        "data-orientation": orientation,
+        role: decorative ? "presentation" : "separator",
+        "aria-orientation": decorative ? null : orientation,
+      }, [
+        el("span", { class: "rui-separator-line" }),
+        el("span", { class: "rui-separator-label" }, [label]),
+        el("span", { class: "rui-separator-line" }),
+      ]);
+    }
     return el("div", {
       class: "rui-separator",
       "data-orientation": orientation,
@@ -139,40 +142,74 @@ export const Separator: ComponentSpec = {
   },
 };
 
+const renderStepLi = (title: string, details: string, active = false): HTMLElement => {
+  const root = el("li", {
+    class: "rui-steps-item",
+    "data-active": active ? "true" : "false",
+  });
+  root.append(el("div", { class: "rui-steps-title" }, [title]));
+  if (details) root.append(el("div", { class: "rui-steps-details" }, [details]));
+  return root;
+};
+
 export const StepsItem: ComponentSpec = {
   name: "StepsItem",
-  description: "Single step inside a Steps guide.",
+  description:
+    "Single step inside a Steps guide. Optional — `Steps([{title, details}])` " +
+    "is the canonical (object-based) shape; this component is kept for " +
+    "back-compat with prompts that emit `Steps([StepsItem(...), ...])`.",
   props: [
     { name: "title", type: "string" },
     { name: "details", type: "string", optional: true },
+    { name: "active", type: "boolean", optional: true, description: "Highlights this step as the current one" },
   ],
-  render: (_node, props) => {
-    const root = el("li", { class: "rui-steps-item" });
-    root.append(el("div", { class: "rui-steps-title" }, [asString(props.title)]));
-    const details = asString(props.details);
-    if (details) root.append(el("div", { class: "rui-steps-details" }, [details]));
-    return root;
-  },
+  render: (_node, props) =>
+    renderStepLi(asString(props.title), asString(props.details), asBoolean(props.active)),
 };
 
 export const Steps: ComponentSpec = {
   name: "Steps",
-  description: "Numbered step-by-step guide. Children must be StepsItem components.",
-  props: [{ name: "items", type: "StepsItem[]" }],
+  description:
+    "Numbered step-by-step guide. Items can be `{title, details?, active?}` " +
+    "objects (preferred) or `StepsItem(...)` nodes. Use `active` to mark " +
+    "the current step in a multi-step flow.",
+  props: [
+    { name: "items", type: "StepsItem[] | object[]" },
+  ],
   render: (_node, props, helpers) => {
     const root = el("ol", { class: "rui-steps" });
-    for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
+    for (const item of asArray<unknown>(props.items)) {
+      if (item && typeof item === "object" && (item as { __kind?: string }).__kind === "Component") {
+        root.append(helpers.renderNode(item));
+        continue;
+      }
+      if (item && typeof item === "object") {
+        const data = item as { title?: unknown; details?: unknown; active?: unknown };
+        root.append(renderStepLi(
+          asString(data.title),
+          asString(data.details),
+          asBoolean(data.active),
+        ));
+        continue;
+      }
+      // Plain string falls back to a title-only step.
+      root.append(renderStepLi(asString(item), ""));
+    }
     return root;
   },
 };
 
 export const TabItem: ComponentSpec = {
   name: "TabItem",
-  description: "Single tab definition (used inside Tabs).",
+  description:
+    "Single tab definition (used inside Tabs). Add `badge` for a count " +
+    "chip in the tab trigger, and `icon` for a leading Font Awesome icon.",
   props: [
     { name: "value", type: "string", description: "Stable identifier for the tab" },
     { name: "label", type: "string", description: "Display label" },
     { name: "children", type: "Node[]", description: "Tab content" },
+    { name: "badge", type: "string", optional: true, description: "Trailing chip rendered in the tab trigger (count / status)" },
+    { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name shown before the label" },
   ],
   render: (_node, props, helpers) => {
     const wrapper = el("div", {
@@ -188,15 +225,24 @@ export const TabItem: ComponentSpec = {
 
 export const Tabs: ComponentSpec = {
   name: "Tabs",
-  description: "Tabbed container. Children must be TabItem components.",
+  description:
+    "Tabbed container. Children must be TabItem components. Supports " +
+    "`orientation=\"vertical\"` for sidebar-style tabs and built-in " +
+    "keyboard navigation (←/→ or ↑/↓, Home, End).",
   props: [
     { name: "items", type: "TabItem[]", description: "Tab definitions" },
     { name: "defaultValue", type: "string", optional: true, description: "Initially active tab value" },
+    { name: "orientation", type: "string", optional: true, enum: ["horizontal", "vertical"], description: "Layout direction (default `horizontal`)" },
   ],
   render: (_node, props, helpers) => {
     const items = asArray<unknown>(props.items);
-    const root = el("div", { class: "rui-tabs" });
-    const tablist = el("div", { class: "rui-tab-list", role: "tablist" });
+    const orientation = asString(props.orientation, "horizontal");
+    const root = el("div", { class: "rui-tabs", "data-orientation": orientation });
+    const tablist = el("div", {
+      class: "rui-tab-list",
+      role: "tablist",
+      "aria-orientation": orientation,
+    });
     const panels = el("div", { class: "rui-tab-panels" });
 
     // Compute the falsy-default tab value (LLM-supplied `defaultValue` or
@@ -253,6 +299,8 @@ export const Tabs: ComponentSpec = {
       const tabNode = item as { name?: string; args?: unknown[] };
       const value = asString(tabNode.args?.[0], `tab-${idx}`);
       const label = asString(tabNode.args?.[1], `Tab ${idx + 1}`);
+      const badge = asString(tabNode.args?.[3]);
+      const icon = asString(tabNode.args?.[4]);
       const isActive = value === activeSlot.get();
       const button = el(
         "button",
@@ -264,11 +312,43 @@ export const Tabs: ComponentSpec = {
           "aria-selected": isActive ? "true" : "false",
           tabindex: isActive ? "0" : "-1",
         },
-        [label],
       );
+      // We use the icon helper without falling back to inline emoji so that
+      // an unset icon prop renders the trigger as label-only.
+      const iconNode = icon ? renderIconForTab(icon) : null;
+      if (iconNode) button.append(iconNode);
+      button.append(el("span", { class: "rui-tab-trigger-label" }, [label]));
+      if (badge) button.append(el("span", { class: "rui-tab-trigger-badge" }, [badge]));
       button.onclick = (event) => {
         const origin = (event.currentTarget ?? event.target) as Element;
         setActive(value, origin);
+      };
+      // Keyboard navigation between tabs (ArrowLeft/Right/Up/Down/Home/End)
+      // resolves the next focusable trigger from the live DOM so it survives
+      // morph reconciliation.
+      button.onkeydown = (event) => {
+        const e = event as KeyboardEvent;
+        const horizontal = orientation !== "vertical";
+        const isNext = horizontal ? e.key === "ArrowRight" : e.key === "ArrowDown";
+        const isPrev = horizontal ? e.key === "ArrowLeft" : e.key === "ArrowUp";
+        if (!isNext && !isPrev && e.key !== "Home" && e.key !== "End") return;
+        e.preventDefault();
+        const origin = (e.currentTarget ?? e.target) as Element;
+        const liveList = origin.closest(".rui-tab-list");
+        if (!liveList) return;
+        const triggers = Array.from(liveList.querySelectorAll<HTMLButtonElement>(".rui-tab-trigger"));
+        if (triggers.length === 0) return;
+        const currentIdx = triggers.indexOf(origin as HTMLButtonElement);
+        let nextIdx = currentIdx;
+        if (e.key === "Home") nextIdx = 0;
+        else if (e.key === "End") nextIdx = triggers.length - 1;
+        else if (isNext) nextIdx = (currentIdx + 1) % triggers.length;
+        else if (isPrev) nextIdx = (currentIdx - 1 + triggers.length) % triggers.length;
+        const target = triggers[nextIdx];
+        if (!target) return;
+        target.focus();
+        const nextValue = target.getAttribute("data-value") ?? "";
+        if (nextValue) setActive(nextValue, target);
       };
       tablist.append(button);
 
@@ -282,6 +362,12 @@ export const Tabs: ComponentSpec = {
     return root;
   },
 };
+
+function renderIconForTab(iconName: string): HTMLElement | null {
+  // Tab triggers use the standard rui-icon helper class so consumers can
+  // override icon spacing via theme tokens without touching the trigger.
+  return renderIcon(iconName, { className: "rui-tab-trigger-icon" });
+}
 
 export const AccordionItem: ComponentSpec = {
   name: "AccordionItem",
@@ -393,22 +479,76 @@ export const ScrollArea: ComponentSpec = {
   },
 };
 
+const MODAL_SIZES = ["sm", "md", "lg", "xl", "full"] as const;
+
 export const Modal: ComponentSpec = {
   name: "Modal",
-  description: "Dialog overlay shown when `open` is true.",
+  description:
+    "Dialog overlay shown when `open` is true. Pass a `$variable` as " +
+    "`open` to control it. The header always renders a × close button " +
+    "(disable via `closable=false`); the optional `footer` slot is the " +
+    "canonical place for action buttons. `closeOnBackdrop=true` opts in " +
+    "to backdrop-click dismissal.",
   props: [
     { name: "title", type: "string" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
     { name: "children", type: "Node[]" },
+    { name: "size", type: "string", optional: true, enum: MODAL_SIZES, description: "Width preset (default `md`)" },
+    { name: "footer", type: "Node[]", optional: true, description: "Footer slot — typically a row of action Buttons" },
+    { name: "closable", type: "boolean", optional: true, description: "Render the header × button (default true)" },
+    { name: "closeOnBackdrop", type: "boolean", optional: true, description: "Close when the overlay is clicked (default false)" },
   ],
-  render: (_node, props, helpers) => {
-    const overlay = el("div", { class: "rui-modal-overlay", "data-open": asBoolean(props.open) ? "true" : "false" });
-    const dialog = el("div", { class: "rui-modal", role: "dialog", "aria-modal": "true" });
-    dialog.append(el("h3", { class: "rui-modal-title" }, [asString(props.title)]));
+  render: (node, props, helpers) => {
+    const size = asString(props.size, "md");
+    const closable = props.closable === undefined ? true : asBoolean(props.closable);
+    const overlay = el("div", {
+      class: "rui-modal-overlay",
+      "data-open": asBoolean(props.open) ? "true" : "false",
+    });
+    const dialog = el("div", {
+      class: "rui-modal",
+      role: "dialog",
+      "aria-modal": "true",
+      "data-size": size,
+    });
+    const header = el("header", { class: "rui-modal-header" });
+    header.append(el("h3", { class: "rui-modal-title" }, [asString(props.title)]));
+    const stateName = node.argMeta?.[1]?.stateRef;
+    const closeModal = () => {
+      if (!stateName) return;
+      helpers.runAction({
+        kind: "Action",
+        steps: [{ kind: "Set", name: stateName, value: false }],
+      });
+    };
+    if (closable) {
+      const closeBtn = el("button", {
+        type: "button",
+        class: "rui-modal-close",
+        "aria-label": "Close dialog",
+      }, ["×"]);
+      closeBtn.onclick = (event) => {
+        event.stopPropagation();
+        closeModal();
+      };
+      header.append(closeBtn);
+    }
+    dialog.append(header);
     const body = el("div", { class: "rui-modal-body" });
     for (const child of asArray(props.children)) body.append(helpers.renderNode(child));
     dialog.append(body);
+    const footer = asArray<unknown>(props.footer);
+    if (footer.length > 0) {
+      const footRow = el("footer", { class: "rui-modal-footer" });
+      for (const item of footer) footRow.append(helpers.renderNode(item));
+      dialog.append(footRow);
+    }
     overlay.append(dialog);
+    if (asBoolean(props.closeOnBackdrop) && stateName) {
+      overlay.onclick = (event) => {
+        if (event.target === overlay) closeModal();
+      };
+    }
     return overlay;
   },
 };
