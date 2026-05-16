@@ -2217,8 +2217,6 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 /* Container */
 .rui-container {
   width: 100%;
-  margin-left: auto;
-  margin-right: auto;
 }
 .rui-container[data-size="sm"]  { max-width: 640px; }
 .rui-container[data-size="md"]  { max-width: 820px; }
