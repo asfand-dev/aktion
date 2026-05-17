@@ -82,7 +82,7 @@ follow = FollowUpBlock([
   dashboard: {
     label: "Project dashboard",
     code: `# Highlights: macro for KanbanCard, @Each with destructuring, template literals.
-root = Stack([header, kpis, board])
+root = Stack([header, kpis, board, follow])
 header = PageHeader("Engineering Q3", \`\${@Count(projects)} active · \${@Count(atRisk)} at risk\`, ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
 headerActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
 kpis = MetricGrid([
@@ -107,7 +107,8 @@ projects = [
   {title:"Mobile onboarding", summary:"Awaiting design review.", tags:["mobile"],   owner:"Wren",  tone:"warning", icon:"mobile-screen",       stage:"review"},
   {title:"Activity timeline", summary:"Shipped to everyone.",    tags:["shipped"],  owner:"Mira",  tone:"success", icon:"circle-check",        stage:"done"}
 ]
-atRisk = @Filter(projects, "tone", "==", "warning")`,
+atRisk = @Filter(projects, "tone", "==", "warning")
+follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
   },
   todo: {
     label: "Reactive todo",

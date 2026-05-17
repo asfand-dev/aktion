@@ -103,7 +103,7 @@ brandSection = Card([
   FieldSet("Visual",
     [FormControl("Accent",   ColorPicker("brand", $brand, "Pick a colour", ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])),
      FormControl("Phone",    MaskedInput("phone", "(999) 999-9999", $phone, "(415) 555-0114")),
-     FormControl("Password", PasswordInput("pwd",  $pwd, "Choose a strong password", true))],
+     FormControl("Password", PasswordInput("pwd",  $pwd, "Choose a strong password", null, true))],
     "Used for callouts and CTA buttons in the published post.")
 ])
 

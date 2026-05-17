@@ -35,9 +35,7 @@ function renderPin(
   const root = el("div", {
     class: "rui-pin-input",
     "data-disabled": disabled ? "true" : "false",
-    "data-pin-id": id || `pin-${Math.random().toString(36).slice(2, 8)}`,
   });
-  const groupId = root.getAttribute("data-pin-id") as string;
   const inputs: HTMLInputElement[] = [];
   for (let i = 0; i < length; i += 1) {
     const input = el("input", {
@@ -48,43 +46,13 @@ function renderPin(
       inputmode: type === "numeric" ? "numeric" : "text",
       type: mask ? "password" : "text",
       "aria-label": `Digit ${i + 1}`,
-      "data-pin-index": String(i),
       value: value.charAt(i) || "",
       disabled: disabled ? "" : null,
     }) as HTMLInputElement;
     inputs.push(input);
     root.append(input);
   }
-
-  // Re-renders replace the DOM, so we look up the current live slot by
-  // (group id, slot index) every time we want to move focus. This keeps
-  // auto-advance / backspace working after the state-driven re-render that
-  // `onChange` triggers.
-  const focusSlot = (idx: number, clear = false): void => {
-    if (idx < 0 || idx >= length) return;
-    const apply = (): void => {
-      const live = document.querySelector<HTMLInputElement>(
-        `[data-pin-id="${groupId}"] [data-pin-index="${idx}"]`,
-      );
-      if (!live) return;
-      if (clear) live.value = "";
-      live.focus();
-      live.setSelectionRange(live.value.length, live.value.length);
-    };
-    apply();
-    // After a state-driven re-render, the DOM is rebuilt later in the same
-    // microtask. Re-apply focus once the new nodes are in place so the
-    // caret lands on the next slot reliably.
-    if (typeof queueMicrotask === "function") queueMicrotask(apply);
-    else setTimeout(apply, 0);
-  };
-
-  const collect = (): string => {
-    const live = document.querySelectorAll<HTMLInputElement>(`[data-pin-id="${groupId}"] .rui-pin-input-slot`);
-    const slots = live.length > 0 ? Array.from(live) : inputs;
-    return slots.map((i) => i.value).join("").slice(0, length);
-  };
-
+  const collect = (): string => inputs.map((i) => i.value).join("").slice(0, length);
   inputs.forEach((input, idx) => {
     input.oninput = (event) => {
       const target = event.currentTarget as HTMLInputElement;
@@ -99,37 +67,27 @@ function renderPin(
           if (next) next.value = c;
         });
         const lastFilled = Math.min(idx + chars.length, length - 1);
-        onChange?.(collect());
-        focusSlot(lastFilled);
+        inputs[lastFilled]?.focus();
       } else {
         target.value = v;
-        onChange?.(collect());
-        if (v && idx < length - 1) focusSlot(idx + 1);
+        if (v && idx < length - 1) inputs[idx + 1]?.focus();
       }
+      onChange?.(collect());
     };
     input.onkeydown = (event) => {
       const e = event as KeyboardEvent;
-      if (e.key === "Backspace") {
-        if (input.value) {
-          // Clear the current slot but stay focused so the user can retype.
-          e.preventDefault();
-          input.value = "";
-          onChange?.(collect());
-          focusSlot(idx);
-        } else if (idx > 0) {
-          // Empty slot + backspace — clear the previous slot and move there.
-          e.preventDefault();
-          const prev = inputs[idx - 1];
-          if (prev) prev.value = "";
-          onChange?.(collect());
-          focusSlot(idx - 1);
-        }
+      if (e.key === "Backspace" && !input.value && idx > 0) {
+        e.preventDefault();
+        inputs[idx - 1]?.focus();
+        const prev = inputs[idx - 1];
+        if (prev) prev.value = "";
+        onChange?.(collect());
       } else if (e.key === "ArrowLeft" && idx > 0) {
         e.preventDefault();
-        focusSlot(idx - 1);
+        inputs[idx - 1]?.focus();
       } else if (e.key === "ArrowRight" && idx < length - 1) {
         e.preventDefault();
-        focusSlot(idx + 1);
+        inputs[idx + 1]?.focus();
       }
     };
   });

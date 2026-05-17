@@ -835,14 +835,9 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   background: var(--rui-color-surface);
 }
 .rui-chart-title { font-weight: 600; font-size: 14px; }
-.rui-chart-svg { width: 100%; height: auto; }
-.rui-chart-svg text {
-  fill: var(--rui-color-text-muted);
-  font-family: var(--rui-font-family);
-  font-size: 12px;
-}
-.rui-chart-svg .rui-chart-label { font-size: 13px; }
-.rui-chart-svg .rui-chart-tick { font-size: 11px; }
+.rui-chart-svg { width: 100%; height: auto; max-height: 240px; }
+.rui-chart-svg text { fill: var(--rui-color-text-muted); font-size: 12px; font-family: var(--rui-font-family); }
+.rui-chart-tick { font-size: 10px; }
 .rui-chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -5321,17 +5316,16 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(96px, 1fr);
   gap: 1px;
   background: var(--rui-color-border);
   border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
 }
-.rui-calendar[data-view="week"] .rui-calendar-grid { grid-auto-rows: minmax(140px, 1fr); }
+.rui-calendar[data-view="week"] .rui-calendar-grid { grid-template-rows: minmax(120px, 1fr); }
 .rui-calendar-day {
   background: var(--rui-color-surface, var(--rui-color-bg));
-  min-height: 0;
+  min-height: 88px;
   padding: 6px;
   text-align: left;
   display: flex;
@@ -6467,8 +6461,6 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-multi-step-form-steps {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
   gap: 0;
   list-style: none;
   margin: 0;
@@ -6477,36 +6469,22 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
-  counter-reset: rui-steps;
 }
 .rui-multi-step-form-steps .rui-steps-item {
-  flex: 1 1 140px;
-  min-width: 0;
-  padding: 14px 16px 14px 56px;
+  flex: 1;
+  padding: 12px 16px 12px 52px;
   border-right: 1px solid var(--rui-color-border);
   position: relative;
   color: var(--rui-color-text-muted);
   font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
 }
 .rui-multi-step-form-steps .rui-steps-item:last-child { border-right: none; }
 .rui-multi-step-form-steps .rui-steps-item::before {
-  content: counter(rui-steps);
-  position: absolute;
-  left: 14px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   width: 28px;
   height: 28px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
   background: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
   color: var(--rui-color-text-muted);
 }
@@ -6522,18 +6500,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   font-weight: 700;
   color: inherit;
   margin: 0;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rui-multi-step-form-steps .rui-steps-item .rui-steps-details {
-  margin: 0;
-  font-size: 12px;
-  color: var(--rui-color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 .rui-multi-step-form-steps .rui-steps-item .rui-steps-details {
   font-size: 12px;
@@ -6574,8 +6541,8 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-chart { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .rui-chart-title { font-size: 13px; font-weight: 600; color: var(--rui-color-text); }
 .rui-chart-svg { display: block; width: 100%; height: auto; }
-.rui-chart-label { fill: var(--rui-color-text-muted, #64748b); }
-.rui-chart-tick { fill: var(--rui-color-text-muted, #64748b); }
+.rui-chart-label { font-size: 11px; fill: var(--rui-color-text-muted, #64748b); }
+.rui-chart-tick { font-size: 10.5px; fill: var(--rui-color-text-muted, #64748b); }
 .rui-chart-empty {
   padding: 24px;
   text-align: center;
