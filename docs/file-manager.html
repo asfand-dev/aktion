@@ -38,10 +38,10 @@
         detail sheet on any file. Switch between grid and table layouts
         with the view toggle.
       </p>
-      <pre class="example-source"><code id="src-files">$folder = "design"
-$view = "table"
-$selected = ""
-$query = ""
+      <pre class="example-source"><code id="src-files">$$folder   = "design"
+$$view     = "table"
+$$selected = ""
+$query     = ""
 
 storage = Query("storage_usage", {}, {used: 0, total: 0, percent: 0, label: ""})
 
@@ -62,59 +62,48 @@ $files = [
   {id: "ci.yml",         name: ".github/workflows/ci.yml",   folder: "engineering",type: "YAML",    size: "8 KB",    modified: "Today · 11:02", owner: "Linus Torvalds",starred: false, shared: ["You"]}
 ]
 
-folderRows = $folder == "starred" ? @Filter($files, "starred", "==", true) : ($folder == "recent" ? $files : @Filter($files, "folder", "==", $folder))
+folderRows = @Switch($$folder, {
+  starred: @Filter($files, "starred", "==", true),
+  recent:  $files
+}, @Filter($files, "folder", "==", $$folder))
 
-visibleRows = $query == "" ? folderRows : @Filter(folderRows, "name", "contains", $query)
+visibleRows  = @If($query == "", folderRows, @Filter(folderRows, "name", "contains", $query))
 visibleCount = @Count(visibleRows)
-totalCount = @Count($files)
+totalCount   = @Count($files)
 
-selected = @First(@Filter($files, "id", "==", $selected))
-selectedExists = @Count(@Filter($files, "id", "==", $selected))
+selected       = @First(@Filter($files, "id", "==", $$selected))
+selectedExists = @Count(@Filter($files, "id", "==", $$selected))
+
+FolderRow(key, label, icon) = TreeNode(label, null, icon, $$folder == key, $$folder == key, `${@Count(@Filter($files, "folder", "==", key))}`, Action([@Set($$folder, key)]))
 
 navTree = Tree([
   TreeNode("My drive", [
-    TreeNode("Design",      null, "palette",  $folder == "design",      $folder == "design",     "" + @Count(@Filter($files, "folder", "==", "design")),      Action([@Set($folder, "design")])),
-    TreeNode("Docs",        null, "file-lines", $folder == "docs",      $folder == "docs",       "" + @Count(@Filter($files, "folder", "==", "docs")),        Action([@Set($folder, "docs")])),
-    TreeNode("Finance",     null, "sack-dollar", $folder == "finance",  $folder == "finance",    "" + @Count(@Filter($files, "folder", "==", "finance")),     Action([@Set($folder, "finance")])),
-    TreeNode("Marketing",   null, "bullhorn", $folder == "marketing",   $folder == "marketing",  "" + @Count(@Filter($files, "folder", "==", "marketing")),   Action([@Set($folder, "marketing")])),
-    TreeNode("Engineering", null, "code", $folder == "engineering",     $folder == "engineering","" + @Count(@Filter($files, "folder", "==", "engineering")), Action([@Set($folder, "engineering")]))
+    FolderRow("design",      "Design",      "palette"),
+    FolderRow("docs",        "Docs",        "file-lines"),
+    FolderRow("finance",     "Finance",     "sack-dollar"),
+    FolderRow("marketing",   "Marketing",   "bullhorn"),
+    FolderRow("engineering", "Engineering", "code")
   ], "folder-open", true),
   TreeNode("Shared with me", [
     TreeNode("From Naomi",  null, "user", false, false, "3", Action([@ToAssistant("Open shared from Naomi")])),
     TreeNode("From Linus",  null, "user", false, false, "2", Action([@ToAssistant("Open shared from Linus")]))
   ], "users", false),
-  TreeNode("Starred",     null, "star",    $folder == "starred", $folder == "starred", "" + @Count(@Filter($files, "starred", "==", true)), Action([@Set($folder, "starred")])),
-  TreeNode("Recent",      null, "clock",   $folder == "recent",  $folder == "recent",  "" + totalCount, Action([@Set($folder, "recent")])),
-  TreeNode("Trash",       null, "trash",   false, false, null, Action([@ToAssistant("Open trash")]))
+  TreeNode("Starred", null, "star",  $$folder == "starred", $$folder == "starred", `${@Count(@Filter($files, "starred", "==", true))}`, Action([@Set($$folder, "starred")])),
+  TreeNode("Recent",  null, "clock", $$folder == "recent",  $$folder == "recent",  `${totalCount}`, Action([@Set($$folder, "recent")])),
+  TreeNode("Trash",   null, "trash", false,              false,              null,              Action([@ToAssistant("Open trash")]))
 ])
 
 quickActions = Stack([
-  Button("Upload",
-         Action([@ToAssistant("Open the upload dialog")]),
-         "primary",
-         "button",
-         "small"),
-  Button("New folder",
-         Action([@ToAssistant("Create a new folder under " + $folder)]),
-         "secondary",
-         "button",
-         "small"),
-  Button("Invite",
-         Action([@ToAssistant("Invite a teammate to " + $folder)]),
-         "ghost",
-         "button",
-         "small")
+  Button("Upload",     Action([@ToAssistant("Open the upload dialog")]),                           "primary",   "button", "small"),
+  Button("New folder", Action([@ToAssistant(`Create a new folder under ${$$folder}`)]),            "secondary", "button", "small"),
+  Button("Invite",     Action([@ToAssistant(`Invite a teammate to ${$$folder}`)]),                 "ghost",     "button", "small")
 ], "column", "s")
 
 storageCard = Card([
   SectionHeader("Storage", storage.label),
-  ProgressRing(storage.percent, 100, "" + storage.percent + "%", "" + storage.used + " GB used", "primary", "md"),
-  TextContent("" + storage.used + " GB of " + storage.total + " GB used", "small", "muted"),
-  Button("Upgrade plan",
-         Action([@ToAssistant("Open the upgrade flow")]),
-         "primary",
-         "button",
-         "small")
+  ProgressRing(storage.percent, 100, `${storage.percent}%`, `${storage.used} GB used`, "primary", "md"),
+  TextContent(`${storage.used} GB of ${storage.total} GB used`, "small", "muted"),
+  Button("Upgrade plan", Action([@ToAssistant("Open the upgrade flow")]), "primary", "button", "small")
 ])
 
 sidePane = Stack([
@@ -129,7 +118,15 @@ sidePane = Stack([
   storageCard
 ], "column", "m")
 
-folderLabel = $folder == "design" ? "Design" : ($folder == "docs" ? "Docs" : ($folder == "finance" ? "Finance" : ($folder == "marketing" ? "Marketing" : ($folder == "engineering" ? "Engineering" : ($folder == "starred" ? "Starred" : ($folder == "recent" ? "Recent" : "Files"))))))
+folderLabel = @Switch($$folder, {
+  design:      "Design",
+  docs:        "Docs",
+  finance:     "Finance",
+  marketing:   "Marketing",
+  engineering: "Engineering",
+  starred:     "Starred",
+  recent:      "Recent"
+}, "Files")
 
 folderBreadcrumb = Breadcrumb([
   BreadcrumbItem("My drive", "#"),
@@ -138,42 +135,52 @@ folderBreadcrumb = Breadcrumb([
 
 filterToolbar = Toolbar(
   [
-    SearchBar("file-q", "Search " + folderLabel + "…", $query, "/"),
+    SearchBar("file-q", `Search ${folderLabel}…`, $query, "/"),
     ToggleGroup("view", [
       {value: "table", label: "Table", icon: "table"},
       {value: "grid",  label: "Grid",  icon: "grip"}
-    ], $view)
+    ], $$view)
   ],
   [
-    Button("Sort: modified",
-           Action([@ToAssistant("Change sort order")]),
-           "ghost",
-           "button",
-           "small"),
-    Button("Filter",
-           Action([@ToAssistant("Open filter sheet")]),
-           "ghost",
-           "button",
-           "small")
+    Button("Sort: modified", Action([@ToAssistant("Change sort order")]),  "ghost", "button", "small"),
+    Button("Filter",         Action([@ToAssistant("Open filter sheet")]),   "ghost", "button", "small")
   ]
 )
 
-nameCells = @Each(visibleRows, "f",
+typeIconName(type) = @Switch(type, {
+  Figma:   "vector-square",
+  Image:   "image",
+  Word:    "file-word",
+  PDF:     "file-pdf",
+  Excel:   "file-excel",
+  CSV:     "file-csv",
+  Video:   "file-video",
+  Keynote: "wand-magic-sparkles",
+  SQL:     "database",
+  Archive: "file-zipper",
+  YAML:    "file-code"
+}, "file")
+
+TypeIcon(type, size)   = Icon(typeIconName(type), "solid", size)
+TypeIconSm(type)       = TypeIcon(type, "md")
+TypeIconLg(type)       = TypeIcon(type, "lg")
+
+nameCells = @Each(visibleRows, "{name, type, starred}",
   Stack([
-    Icon(f.type == "Figma" ? "vector-square" : (f.type == "Image" ? "image" : (f.type == "Word" ? "file-word" : (f.type == "PDF" ? "file-pdf" : (f.type == "Excel" ? "file-excel" : (f.type == "CSV" ? "file-csv" : (f.type == "Video" ? "file-video" : (f.type == "Keynote" ? "wand-magic-sparkles" : (f.type == "SQL" ? "database" : (f.type == "Archive" ? "file-zipper" : (f.type == "YAML" ? "file-code" : "file"))))))))))),
-    TextContent(f.name, "body-heavy"),
-    f.starred ? Icon("star", "solid", "sm") : null
+    TypeIconSm(type),
+    TextContent(name, "body-heavy"),
+    @If(starred, Icon("star", "solid", "sm"))
   ], "row", "s", "center")
 )
 
-typeCells   = @Each(visibleRows, "f", Badge(f.type, "neutral", null, "sm"))
-sizeCells   = @Each(visibleRows, "f", TextContent(f.size, "small", "muted"))
-modCells    = @Each(visibleRows, "f", TextContent(f.modified, "small", "muted"))
-ownerCells  = @Each(visibleRows, "f", PersonChip(f.owner, null, null, "sm"))
-actionCells = @Each(visibleRows, "f",
+typeCells   = @Each(visibleRows, "{type}",     Badge(type, "neutral", null, "sm"))
+sizeCells   = @Each(visibleRows, "{size}",     TextContent(size,     "small", "muted"))
+modCells    = @Each(visibleRows, "{modified}", TextContent(modified, "small", "muted"))
+ownerCells  = @Each(visibleRows, "{owner}",    PersonChip(owner, null, null, "sm"))
+actionCells = @Each(visibleRows, "{id, name}",
   Buttons([
-    Button("Preview", Action([@Set($selected, f.id)]), "secondary", "button", "small"),
-    Button("Share",   Action([@ToAssistant("Share " + f.name)]), "ghost", "button", "small")
+    Button("Preview", Action([@Set($$selected, id)]),                  "secondary", "button", "small"),
+    Button("Share",   Action([@ToAssistant(`Share ${name}`)]),         "ghost",     "button", "small")
   ])
 )
 
@@ -186,38 +193,35 @@ filesTable = Table([
   Col("",         actionCells)
 ])
 
-gridCards = Grid(
-  @Each(visibleRows, "f",
-    Card([
-      Stack([
-        Icon(f.type == "Image" ? "image" : (f.type == "Figma" ? "vector-square" : (f.type == "Video" ? "file-video" : (f.type == "Word" ? "file-word" : (f.type == "PDF" ? "file-pdf" : "file")))), "solid", "lg"),
-        TextContent(f.name, "small-heavy"),
-        TextContent(f.size + " · " + f.modified, "small", "muted"),
-        PersonChip(f.owner, null, null, "sm"),
-        Buttons([
-          Button("Open", Action([@Set($selected, f.id)]), "ghost", "button", "small")
-        ])
-      ], "column", "s")
+FileTile(f) = Card([
+  Stack([
+    TypeIconLg(f.type),
+    TextContent(f.name, "small-heavy"),
+    TextContent(`${f.size} · ${f.modified}`, "small", "muted"),
+    PersonChip(f.owner, null, null, "sm"),
+    Buttons([
+      Button("Open", Action([@Set($$selected, f.id)]), "ghost", "button", "small")
     ])
-  ),
-  3, "m"
+  ], "column", "s")
+])
+
+gridCards = Grid(@Each(visibleRows, "f", FileTile(f)), {sm: 1, md: 2, lg: 3}, "m")
+
+emptyResults = @If($query == "",
+  EmptyState("Folder is empty", `Drop files here or click upload to add to ${folderLabel}.`, "folder-open",
+             Button("Upload files", Action([@ToAssistant(`Open the upload dialog for ${folderLabel}`)]), "primary")),
+  EmptyState("No files match", "Try a different search term or clear the search.", "magnifying-glass",
+             Button("Clear search", Action([@Reset($query)]), "secondary"))
 )
 
-emptyResults = EmptyState(
-  $query == "" ? "Folder is empty" : "No files match",
-  $query == "" ? "Drop files here or click upload to add to " + folderLabel + "." : "Try a different search term or clear the search.",
-  $query == "" ? "folder-open" : "magnifying-glass",
-  $query == "" ? Button("Upload files", Action([@ToAssistant("Open the upload dialog for " + folderLabel)]), "primary") : Button("Clear search", Action([@Reset($query)]), "secondary")
-)
-
-filesView = visibleCount == 0 ? emptyResults : ($view == "table" ? filesTable : gridCards)
+filesView = @If(visibleCount == 0, emptyResults, @Switch($$view, {table: filesTable, grid: gridCards}, filesTable))
 
 resultBar = Stack([
-  TextContent("Showing " + visibleCount + " of " + totalCount + " files" + ($query == "" ? "" : (" · matching \"" + $query + "\"")), "small", "muted"),
+  TextContent(`Showing ${visibleCount} of ${totalCount} files${@If($query == "", "", ` · matching "${$query}"`)}`, "small", "muted"),
   Spacer(),
   Stack([
-    StatusDot("Synced",   "success", false),
-    StatusDot("Real-time","info",   true)
+    StatusDot("Synced",    "success", false),
+    StatusDot("Real-time", "info",    true)
   ], "row", "s")
 ], "row", "m", "center")
 
@@ -237,54 +241,45 @@ detailEmpty = EmptyState(
 
 detailLoaded = Stack([
   Stack([
-    Icon(selected.type == "Image" ? "image" : (selected.type == "Figma" ? "vector-square" : (selected.type == "Video" ? "file-video" : (selected.type == "Word" ? "file-word" : (selected.type == "PDF" ? "file-pdf" : (selected.type == "SQL" ? "database" : "file")))))),
+    TypeIconLg(selected.type),
     Stack([
       TextContent(selected.name, "large-heavy"),
-      TextContent(selected.type + " · " + selected.size,             "small", "muted"),
-      TextContent("Modified " + selected.modified + " by " + selected.owner, "small", "muted")
+      TextContent(`${selected.type} · ${selected.size}`,                         "small", "muted"),
+      TextContent(`Modified ${selected.modified} by ${selected.owner}`,          "small", "muted")
     ], "column", "xs")
   ], "row", "m", "center"),
   Separator("horizontal", true),
   DescriptionList([
-    DescriptionItem("Folder",     folderLabel,                "folder"),
-    DescriptionItem("Type",       selected.type,              "file"),
-    DescriptionItem("Size",       selected.size,              "weight-hanging"),
-    DescriptionItem("Modified",   selected.modified,           "clock"),
-    DescriptionItem("Owner",      selected.owner,              "user"),
-    DescriptionItem("Starred",    selected.starred ? "Yes" : "No", "star")
+    DescriptionItem("Folder",   folderLabel,                              "folder"),
+    DescriptionItem("Type",     selected.type,                            "file"),
+    DescriptionItem("Size",     selected.size,                            "weight-hanging"),
+    DescriptionItem("Modified", selected.modified,                        "clock"),
+    DescriptionItem("Owner",    selected.owner,                           "user"),
+    DescriptionItem("Starred",  @If(selected.starred, "Yes", "No"),       "star")
   ]),
   Separator("horizontal", true),
   SectionHeader("Shared with"),
-  AvatarGroup(
-    @Each(selected.shared, "u", Avatar(u, null, "sm")),
-    "sm"
-  ),
+  AvatarGroup(@Each(selected.shared, "u", Avatar(u, null, "sm")), "sm"),
   Separator("horizontal", true),
   SectionHeader("Activity", "Last 5 events on this file"),
   Timeline([
-    TimelineItem("File previewed",        "Just now",         "Opened in the file detail sheet.",      "eye",          "info"),
-    TimelineItem("Re-shared with team",   "Yesterday · 16:42","Naomi added Mei to the share list.",   "share-nodes",  "primary"),
-    TimelineItem("Comment added",         "Yesterday · 09:10","Ada: \"Let's lock the gradient by Fri.\"","comment",      "default"),
-    TimelineItem("New version uploaded",  "2 days ago",       "v3 replaced v2. Auto-versioned.",      "cloud-arrow-up","success"),
-    TimelineItem("File created",          "Last week",         "Imported from local Drive.",           "circle-plus",   "default")
+    TimelineItem("File previewed",       "Just now",          "Opened in the file detail sheet.",         "eye",            "info"),
+    TimelineItem("Re-shared with team",  "Yesterday · 16:42", "Naomi added Mei to the share list.",       "share-nodes",    "primary"),
+    TimelineItem("Comment added",        "Yesterday · 09:10", "Ada: \"Let's lock the gradient by Fri.\"",  "comment",        "default"),
+    TimelineItem("New version uploaded", "2 days ago",        "v3 replaced v2. Auto-versioned.",          "cloud-arrow-up", "success"),
+    TimelineItem("File created",         "Last week",         "Imported from local Drive.",               "circle-plus",    "default")
   ])
 ], "column", "m")
 
 detailSheet = Sheet(
   "File detail",
-  $selected != "",
-  [selectedExists == 0 ? detailEmpty : detailLoaded],
+  $$selected != "",
+  [@If(selectedExists == 0, detailEmpty, detailLoaded)],
   "right",
   [Buttons([
-    Button("Download",
-           Action([@OpenUrl("https://example.com/files/" + $selected)]),
-           "primary"),
-    Button("Share",
-           Action([@ToAssistant("Share " + $selected)]),
-           "secondary"),
-    Button("Close",
-           Action([@Set($selected, "")]),
-           "ghost")
+    Button("Download", Action([@OpenUrl(`https://example.com/files/${$$selected}`)]), "primary"),
+    Button("Share",    Action([@ToAssistant(`Share ${$$selected}`)]),                 "secondary"),
+    Button("Close",    Action([@Set($$selected, "")]),                                "ghost")
   ])]
 )
 
@@ -292,22 +287,25 @@ splitLayout = SplitView([sidePane], [filesCard], "280px")
 
 header = PageHeader(
   "Files",
-  "" + totalCount + " files across 5 folders · synced just now",
+  `${totalCount} files across 5 folders · synced just now`,
   folderBreadcrumb,
   [
-    Button("New",      Action([@ToAssistant("New folder or file")]),       "primary"),
-    Button("Upload",   Action([@ToAssistant("Open the upload dialog")]),    "secondary")
+    Button("New",    Action([@ToAssistant("New folder or file")]),     "primary"),
+    Button("Upload", Action([@ToAssistant("Open the upload dialog")]),  "secondary")
   ],
   Badge("Pro plan", "primary")
 )
 
-storageBanner = storage.percent > 80 ? Banner("Storage almost full", "Free up space or upgrade before uploads pause.", Button("Upgrade", Action([@ToAssistant("Open upgrade")]), "primary", "button", "small"), "triangle-exclamation", "warning") : null
+storageBanner = @If(storage.percent > 80,
+  Banner("Storage almost full", "Free up space or upgrade before uploads pause.",
+         Button("Upgrade", Action([@ToAssistant("Open upgrade")]), "primary", "button", "small"),
+         "triangle-exclamation", "warning"))
 
 quickStats = MetricGrid([
-  StatCard("Total files",   "" + totalCount,                                           "up",   "+12 this week", "file"),
-  StatCard("Folders",       "5",                                                       "flat", "across drive",  "folder"),
-  StatCard("Starred",       "" + @Count(@Filter($files, "starred", "==", true)),       "up",   "your top picks","star"),
-  StatCard("Shared with you","" + 5,                                                    "flat", "from teammates","share-nodes")
+  StatCard("Total files",     `${totalCount}`,                                                "up",   "+12 this week",   "file"),
+  StatCard("Folders",          "5",                                                            "flat", "across drive",    "folder"),
+  StatCard("Starred",         `${@Count(@Filter($files, "starred", "==", true))}`,            "up",   "your top picks",  "star"),
+  StatCard("Shared with you",  "5",                                                            "flat", "from teammates",  "share-nodes")
 ])
 
 followUps = FollowUpBlock([

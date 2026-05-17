@@ -54,28 +54,28 @@
         else.
       </p>
 <pre class="example-source"><code id="src-routing">$users = [
-  {id: "ada",   name: "Ada Lovelace",   role: "Founding engineer", joined: "2019-04-02"},
-  {id: "grace", name: "Grace Hopper",   role: "Compiler researcher", joined: "2020-01-15"},
-  {id: "lin",   name: "Lin-Manuel",     role: "Product designer", joined: "2021-08-21"},
-  {id: "ken",   name: "Ken Thompson",   role: "Platform engineer", joined: "2018-11-04"}
+  {id: "ada",   name: "Ada Lovelace", role: "Founding engineer",   joined: "2019-04-02"},
+  {id: "grace", name: "Grace Hopper", role: "Compiler researcher", joined: "2020-01-15"},
+  {id: "lin",   name: "Lin-Manuel",   role: "Product designer",    joined: "2021-08-21"},
+  {id: "ken",   name: "Ken Thompson", role: "Platform engineer",   joined: "2018-11-04"}
 ]
 
-$visits = 0
-$lastEdited = "—"
+$$visits     = 0
+$$lastEdited = "—"
 
 root = Stack([header, nav, main])
 
 header = Card([
-  CardHeader("Acme console", "Routing demo · current path: " + $route),
+  CardHeader("Acme console", `Routing demo · current path: ${$route}`),
   Stack([
-    Badge("$route = " + $route, "info", "compass", "sm"),
-    Badge("visits = " + $visits, "neutral", "eye", "sm")
+    Badge(`$route = ${$route}`,   "info",    "compass", "sm"),
+    Badge(`visits = ${$$visits}`, "neutral", "eye",     "sm")
   ], "row", "xs")
 ])
 
 nav = Card([
   Stack([
-    NavLink("Home",      "/",          "ghost", true, "house"),
+    NavLink("Home",      "/",          "ghost", true,  "house"),
     NavLink("Dashboard", "/dashboard", "ghost", false, "chart-pie"),
     NavLink("Users",     "/users",     "ghost", false, "users"),
     NavLink("Settings",  "/settings",  "ghost", false, "gear")
@@ -96,50 +96,48 @@ homePage = Card([
   CardHeader("Welcome", "A multi-page UI in one Streaming UI Script program"),
   Markdown("Pick a section above, or jump straight in:"),
   Buttons([
-    Button("Open dashboard", Action([@Navigate("/dashboard")]), "primary"),
-    Button("Browse users",   Action([@Navigate("/users")]),     "secondary"),
-    Button("Open Ada",       Action([@Navigate("/users/ada")]), "ghost")
+    Button("Open dashboard", Action([@Navigate("/dashboard")]),  "primary"),
+    Button("Browse users",   Action([@Navigate("/users")]),      "secondary"),
+    Button("Open Ada",       Action([@Navigate("/users/ada")]),  "ghost")
   ])
 ])
 
 dashboardPage = Card([
   CardHeader("Dashboard", "Reactive across routes"),
   Stack([
-    StatCard("Users",   "" + @Count($users), "up", "+2 this month"),
-    StatCard("Visits",  "" + $visits,        "up", "this session"),
-    StatCard("Last edit", $lastEdited)
+    StatCard("Users",     `${@Count($users)}`, "up", "+2 this month"),
+    StatCard("Visits",    `${$$visits}`,        "up", "this session"),
+    StatCard("Last edit", $$lastEdited)
   ], "row", "m", "stretch", "start", true),
   Buttons([
-    Button("Track a visit", Action([@Set($visits, $visits + 1)]), "primary"),
-    Button("Back to home",  Action([@Navigate("/")]),            "ghost")
+    Button("Track a visit", Action([@Set($$visits, $$visits + 1)]), "primary"),
+    Button("Back to home",  Action([@Navigate("/")]),               "ghost")
   ])
 ])
 
-usersListPage = Card([
-  CardHeader("Users", "Click a row to deep-link into the detail page"),
-  Stack([@Each($users, "u", userRow)])
-])
-
-userRow = Card([
+UserRow(id, name, role, joined) = Card([
   Stack([
     Stack([
-      TextContent(u.name, "body-heavy"),
-      TextContent(u.role + " · joined " + u.joined, "small", "muted")
+      TextContent(name, "body-heavy"),
+      TextContent(`${role} · joined ${joined}`, "small", "muted")
     ]),
-    Buttons([Button("Open", Action([@Js("ctx.host.navigate('/users/' + ctx.args.id)", {id: u.id})]), "ghost")])
+    Buttons([Button("Open", Action([@Js("ctx.host.navigate('/users/' + ctx.args.id)", {id: id})]), "ghost")])
   ], "row", "m", "center", "between")
 ], "outlined")
 
-userDetailPage = Card([
-  CardHeader("User " + params.id, "Deep-linkable detail page"),
-  detailRow,
-  Buttons([
-    Button("Back to users", Action([@Navigate("/users")]),                                     "ghost"),
-    Button("Mark edited",   Action([@Set($lastEdited, params.id), @Navigate("/dashboard")]), "primary")
-  ])
+usersListPage = Card([
+  CardHeader("Users", "Click a row to deep-link into the detail page"),
+  Stack(@Each($users, "{id, name, role, joined}", UserRow(id, name, role, joined)))
 ])
 
-detailRow = Markdown("Path parameter: **" + params.id + "** · open URL: `#/users/" + params.id + "`")
+userDetailPage = Card([
+  CardHeader(`User ${params.id}`, "Deep-linkable detail page"),
+  Markdown(`Path parameter: **${params.id}** · open URL: \`#/users/${params.id}\``),
+  Buttons([
+    Button("Back to users", Action([@Navigate("/users")]),                                          "ghost"),
+    Button("Mark edited",   Action([@Set($$lastEdited, params.id), @Navigate("/dashboard")]),       "primary")
+  ])
+])
 
 settingsHomePage = Card([
   CardHeader("Settings", "Wildcard nested route below"),
@@ -151,13 +149,14 @@ settingsHomePage = Card([
   TextContent("Pick a sub-section above — it's matched by /settings/*.", "small", "muted")
 ])
 
+# `params._` holds whatever comes after `/settings/`.
 settingsAreaPage = Card([
-  CardHeader("Settings · " + params._, "Sub-section captured by wildcard"),
-  TextContent("params._ = " + params._),
+  CardHeader(`Settings · ${params._}`, "Sub-section captured by wildcard"),
+  TextContent(`params._ = ${params._}`),
   Buttons([Button("Back to settings", Action([@Navigate("/settings")]), "ghost")])
 ])
 
-notFoundPage = Callout("warning", "Not found", "No page matches " + $route + ". Use the nav above or go back to /.")</code></pre>
+notFoundPage = Callout("warning", "Not found", `No page matches ${$route}. Use the nav above or go back to /.`)</code></pre>
     </article>
 
     <article class="example-card">

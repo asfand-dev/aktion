@@ -37,12 +37,12 @@
         <code>PricingTable</code> recompute via a ternary on
         <code>$cycle</code>.
       </p>
-      <pre class="example-source"><code id="src-pricing">$cycle = "annual"
+      <pre class="example-source"><code id="src-pricing">$$cycle = "annual"
 
 cycleToggle = ToggleGroup("cycle", [
-  {value: "monthly", label: "Monthly",         icon: "calendar"},
+  {value: "monthly", label: "Monthly",          icon: "calendar"},
   {value: "annual",  label: "Annual · 20% off", icon: "party-horn"}
-], $cycle)
+], $$cycle)
 
 cover = Cover(
   "Pricing built for shipping teams",
@@ -76,9 +76,11 @@ starterTier = PricingCard(
   false
 )
 
+proPrice = @Switch($$cycle, {monthly: "$29"}, "$23")
+
 proTier = PricingCard(
   "Pro",
-  $cycle == "annual" ? "$23" : "$29",
+  proPrice,
   "/editor/month",
   "For teams shipping production apps with the LLM.",
   ["Unlimited prompts",
@@ -105,16 +107,16 @@ scaleTier = PricingCard(
   false
 )
 
-pricingGrid = PricingTable([starterTier, proTier, scaleTier], 3)
+pricingGrid = PricingTable([starterTier, proTier, scaleTier], {sm: 1, md: 3})
 
 differentiators = FeatureGrid([
-  FeatureItem("Streaming-first",        "Render tokens the moment they arrive.",                "bolt", "primary"),
-  FeatureItem("Framework-agnostic",     "React, Vue, Angular, Svelte, plain HTML.",             "puzzle-piece", "info"),
-  FeatureItem("Production themes",      "Light, dark, neon, pastel — all responsive.",          "palette", "warning"),
-  FeatureItem("100+ patterns",          "Hero, Cover, MediaCard, Kanban, Timeline, more.",      "gift", "success"),
-  FeatureItem("Routing built in",       "Multi-page apps via hash routes — no extra router.",   "compass", "primary"),
-  FeatureItem("Tiny footprint",         "Under 40 KB gzipped, zero runtime dependencies.",      "feather", "info")
-], 3)
+  FeatureItem("Streaming-first",    "Render tokens the moment they arrive.",              "bolt",         "primary"),
+  FeatureItem("Framework-agnostic", "React, Vue, Angular, Svelte, plain HTML.",           "puzzle-piece", "info"),
+  FeatureItem("Production themes",  "Light, dark, neon, pastel — all responsive.",        "palette",      "warning"),
+  FeatureItem("100+ patterns",      "Hero, Cover, MediaCard, Kanban, Timeline, more.",    "gift",         "success"),
+  FeatureItem("Routing built in",   "Multi-page apps via hash routes — no extra router.", "compass",      "primary"),
+  FeatureItem("Tiny footprint",     "Under 40 KB gzipped, zero runtime dependencies.",    "feather",      "info")
+], {sm: 1, md: 2, lg: 3})
 
 socialQuote = Quote(
   "This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.",

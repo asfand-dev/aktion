@@ -36,23 +36,25 @@
         re-bind the price card and the "Add to cart" CTA. Open the
         "Specifications" tab for the full data sheet.
       </p>
-      <pre class="example-source"><code id="src-product">$variant = "midnight"
-$qty     = "1"
-$tab     = "overview"
+      <pre class="example-source"><code id="src-product">$$variant = "midnight"
+$$qty     = "1"
+$$tab     = "overview"
 
 imgMidnight = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1400&q=80"
 imgSunset   = "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=1400&q=80"
 imgLagoon   = "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=1400&q=80"
 
-heroSrc = $variant == "midnight" ? imgMidnight : ($variant == "sunset" ? imgSunset : imgLagoon)
+heroSrc = @Switch($$variant, {midnight: imgMidnight, sunset: imgSunset}, imgLagoon)
 
-heroImage = Card([Image(heroSrc, "Aurora Wireless Headphones — " + $variant, null)], "elevated")
+heroImage = Card([Image(heroSrc, `Aurora Wireless Headphones — ${$$variant}`, null)], "elevated")
+
+VariantTile(label, icon, desc, key) = Tile(label, icon, null, desc, @If($$variant == key, "primary", "default"), Action([@Set($$variant, key)]))
 
 thumbStrip = Grid([
-  Tile("Midnight", "moon", null, "Stealth black",      $variant == "midnight" ? "primary" : "default", Action([@Set($variant, "midnight")])),
-  Tile("Sunset",   "sun", null, "Warm copper",        $variant == "sunset"   ? "primary" : "default", Action([@Set($variant, "sunset")])),
-  Tile("Lagoon",   "water", null, "Cool ocean blue",    $variant == "lagoon"   ? "primary" : "default", Action([@Set($variant, "lagoon")]))
-], 3, "s")
+  VariantTile("Midnight", "moon",  "Stealth black",    "midnight"),
+  VariantTile("Sunset",   "sun",   "Warm copper",       "sunset"),
+  VariantTile("Lagoon",   "water", "Cool ocean blue",   "lagoon")
+], {sm: 3, md: 3}, "s")
 
 gallery = Stack([
   heroImage,
@@ -77,7 +79,7 @@ variantPicker = FormControl(
     {value: "midnight", label: "Midnight", icon: "moon"},
     {value: "sunset",   label: "Sunset",   icon: "sun"},
     {value: "lagoon",   label: "Lagoon",   icon: "water"}
-  ], $variant),
+  ], $$variant),
   null
 )
 
@@ -88,7 +90,7 @@ qtyPicker = FormControl(
     SelectItem("2", "2"),
     SelectItem("3", "3"),
     SelectItem("5", "5")
-  ], null, null, $qty),
+  ], null, null, $$qty),
   null
 )
 
@@ -99,16 +101,12 @@ stockBadge = Stack([
 ], "row", "m", "center")
 
 ctaButtons = Stack([
-  Button("Add " + $qty + " to cart",
-         Action([@ToAssistant("Add " + $qty + " Aurora (" + $variant + ") to my cart")]),
-         "primary",
-         "button",
-         "large"),
+  Button(`Add ${$$qty} to cart`,
+         Action([@ToAssistant(`Add ${$$qty} Aurora (${$$variant}) to my cart`)]),
+         "primary", "button", "large"),
   Button("Buy now",
-         Action([@ToAssistant("Buy " + $qty + " Aurora (" + $variant + ") now")]),
-         "secondary",
-         "button",
-         "large")
+         Action([@ToAssistant(`Buy ${$$qty} Aurora (${$$variant}) now`)]),
+         "secondary", "button", "large")
 ], "column", "s")
 
 perks = Stack([
@@ -216,11 +214,11 @@ faqTab = Stack([
 ], "column", "m")
 
 productTabs = Tabs([
-  TabItem("overview", "Overview",       [overviewTab]),
-  TabItem("specs",    "Specifications", [specsTab]),
-  TabItem("reviews",  "Reviews (1,284)",[reviewsTab]),
-  TabItem("faq",      "FAQ",            [faqTab])
-], "overview")
+  TabItem("overview", "Overview",        [overviewTab]),
+  TabItem("specs",    "Specifications",  [specsTab]),
+  TabItem("reviews",  "Reviews (1,284)", [reviewsTab]),
+  TabItem("faq",      "FAQ",             [faqTab])
+], $$tab)
 
 related = Grid([
   MediaCard("Aurora ANC Earbuds",
@@ -228,7 +226,7 @@ related = Grid([
             "Same DAC, in-ear comfort.",
             ["wireless", "in-ear"],
             "$149 · 4.7 stars",
-            [Button("View", Action([@ToAssistant("Show me the Aurora earbuds")]), "secondary")]),
+            [Button("View", Action([@ToAssistant("Show me the Aurora earbuds")]),     "secondary")]),
   MediaCard("Aurora Travel Case",
             "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=900&q=80",
             "Hard shell, magnetic clasp.",
@@ -240,8 +238,8 @@ related = Grid([
             "USB-C, 3.5 mm, airplane adapter.",
             ["accessory"],
             "$19 · 4.8 stars",
-            [Button("View", Action([@ToAssistant("Show me the Aurora cable kit")]), "secondary")])
-], 3, "m")
+            [Button("View", Action([@ToAssistant("Show me the Aurora cable kit")]),   "secondary")])
+], {sm: 1, md: 2, lg: 3}, "m")
 
 closing = Notification(
   "Free Aurora app",

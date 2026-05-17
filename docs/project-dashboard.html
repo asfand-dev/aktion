@@ -38,11 +38,11 @@
         Change the range or owner and the whole dashboard re-renders.
         Click a kanban card to mark it as the active item.
       </p>
-      <pre class="example-source"><code id="src-dashboard">$range = "30d"
-$assignee = "everyone"
+      <pre class="example-source"><code id="src-dashboard">$$range    = "30d"
+$$assignee = "everyone"
 $focusedCard = ""
 
-data = Query("program_summary", {range: $range, assignee: $assignee}, {
+data = Query("program_summary", {range: $$range, assignee: $$assignee}, {
   shipped: 0, inReview: 0, blocked: 0, velocity: 0,
   deltas: {shipped: "", review: "", blocked: "", velocity: ""},
   columns: [], events: [], blockers: []
@@ -60,53 +60,54 @@ rangeField = FormControl("Range", Select("range", [
   SelectItem("7d",  "Last 7 days"),
   SelectItem("30d", "Last 30 days"),
   SelectItem("90d", "Last quarter")
-], null, null, $range))
+], null, null, $$range))
 
 assigneeField = FormControl("Assignee", Select("assignee", [
   SelectItem("everyone", "Everyone"),
   SelectItem("ada",      "Ada Lovelace"),
   SelectItem("grace",    "Grace Hopper"),
   SelectItem("linus",    "Linus Torvalds")
-], null, null, $assignee))
+], null, null, $$assignee))
 
-controlsRow = Stack([rangeField, assigneeField], "row", "m", "stretch", "start", true)
+controlsRow = Toolbar([rangeField, assigneeField])
 
 header = PageHeader(
   "Engineering · Q3 program",
-  "Track deliverables across squads",
+  `Track deliverables across squads · filter: ${@Titlecase($$assignee)} · ${@Uppercase($$range)}`,
   Breadcrumb([BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")]),
   [Button("Export", Action([@ToAssistant("Export the dashboard as PDF")]), "ghost"), Button("New milestone", Action([@ToAssistant("Open the new milestone form")]), "primary")],
   Badge("On track", "success", null, "sm")
 )
 
 metrics = MetricGrid([
-  StatCard("Shipped this week", "" + data.shipped,           "up",   data.deltas.shipped,  "rocket"),
-  StatCard("In review",         "" + data.inReview,          "flat", data.deltas.review,   "eye"),
-  StatCard("Blocked",           "" + data.blocked,           "down", data.deltas.blocked,  "circle-stop"),
-  StatCard("Velocity",          "" + data.velocity + " pts", "up",   data.deltas.velocity, "bolt")
+  StatCard("Shipped this week", `${data.shipped}`,        "up",   data.deltas.shipped,  "rocket"),
+  StatCard("In review",         `${data.inReview}`,       "flat", data.deltas.review,   "eye"),
+  StatCard("Blocked",           `${data.blocked}`,        "down", data.deltas.blocked,  "circle-stop"),
+  StatCard("Velocity",          `${data.velocity} pts`,   "up",   data.deltas.velocity, "bolt")
 ])
 
-board = KanbanBoard(@Each(data.columns, "col",
-  KanbanColumn(col.title, @Each(col.cards, "c",
-    KanbanCard(c.title, c.description, c.tags, c.assignee, c.tone, c.icon, Action([@Set($focusedCard, c.title), @ToAssistant("Open card: " + c.title)]))
-  ), col.tone)
+BoardCard(c) = KanbanCard(c.title, c.description, c.tags, c.assignee, c.tone, c.icon, Action([@Set($focusedCard, c.title), @ToAssistant(`Open card: ${c.title}`)]))
+
+board = KanbanBoard(@Each(data.columns, "{title, cards, tone}",
+  KanbanColumn(title, @Each(cards, "c", BoardCard(c)), tone)
 ))
+
+ActivityRow(e) = TimelineItem(e.title, e.time, e.description, e.icon, e.tone)
+BlockerRow(b)  = ListItem(b.title, b.owner, b.icon)
 
 timelineCard = Card([
   CardHeader("Recent activity", "Latest events across all squads"),
-  Timeline(@Each(data.events, "e",
-    TimelineItem(e.title, e.time, e.description, e.icon, e.tone)
-  ))
+  Timeline(@Each(data.events, "e", ActivityRow(e)))
 ])
 
 blockersList = Card([
-  CardHeader("Top blockers", "Need a decision this week"),
-  List(@Each(data.blockers, "b", ListItem(b.title, b.owner, b.icon)))
+  CardHeader("Top blockers", `${@Count(data.blockers)} need a decision this week`),
+  List(@Each(data.blockers, "b", BlockerRow(b)))
 ])
 
-bottomGrid = Grid([timelineCard, blockersList], 2, "l")
+bottomGrid = Grid([timelineCard, blockersList], {sm: 1, md: 2}, "l")
 
-focusedNote = $focusedCard == "" ? null : Callout("info", "Focused card", $focusedCard)
+focusedNote = @If($focusedCard != "", Callout("info", "Focused card", $focusedCard, "thumbtack"))
 
 followUps = FollowUpBlock([
   FollowUpItem("Drill into blocked items"),

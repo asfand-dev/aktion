@@ -36,13 +36,13 @@
         Every visual section below is one statement. Use the toggle group to
         switch the pricing focus.
       </p>
-      <pre class="example-source"><code id="src-landing">$plan = "pro"
+      <pre class="example-source"><code id="src-landing">$$plan = "pro"
 
 planToggle = ToggleGroup("plan", [
   {value: "starter", label: "Starter", icon: "seedling"},
   {value: "pro",     label: "Pro",     icon: "rocket"},
   {value: "scale",   label: "Scale",   icon: "building-columns"}
-], $plan)
+], $$plan)
 
 hero = Hero(
   "Ship generative UI in a single tag",
@@ -53,80 +53,49 @@ hero = Hero(
   ["Framework-agnostic", "Streaming-first", "Themeable"]
 )
 
-features = FeatureGrid([
-  FeatureItem("Framework-agnostic", "Works in React, Vue, Angular, Svelte, or plain HTML.",        "puzzle-piece", "primary"),
-  FeatureItem("Streaming-first",    "Render tokens the moment they arrive — never wait for the full response.", "bolt", "info"),
-  FeatureItem("80+ components",     "Layout, forms, charts, kanban, timelines, banners — out of the box.",     "gift", "success"),
-  FeatureItem("Theming",            "Light, dark, neon, pastel — swap with one attribute.",       "palette", "warning"),
-  FeatureItem("Routing built-in",   "Multi-page apps with hash routes — no router needed.",        "compass", "primary"),
-  FeatureItem("Tiny footprint",     "Under 40 KB gzipped with zero runtime dependencies.",         "feather", "info")
-], 3)
+FeatureRow(f) = FeatureItem(f.title, f.desc, f.icon, f.tone)
+featureList = [
+  {title:"Framework-agnostic", desc:"Works in React, Vue, Angular, Svelte, or plain HTML.",        icon:"puzzle-piece", tone:"primary"},
+  {title:"Streaming-first",    desc:"Render tokens the moment they arrive — never wait for the full response.", icon:"bolt", tone:"info"},
+  {title:"80+ components",     desc:"Layout, forms, charts, kanban, timelines, banners — out of the box.",      icon:"gift", tone:"success"},
+  {title:"Theming",            desc:"Light, dark, neon, pastel — swap with one attribute.",                      icon:"palette", tone:"warning"},
+  {title:"Routing built-in",   desc:"Multi-page apps with hash routes — no router needed.",                      icon:"compass", tone:"primary"},
+  {title:"Tiny footprint",     desc:"Under 40 KB gzipped with zero runtime dependencies.",                       icon:"feather", tone:"info"}
+]
+features = FeatureGrid(@Each(featureList, "f", FeatureRow(f)), 3)
 
-starterCard = Card([
-  CardHeader("Starter", "For weekend hackers"),
-  TextContent("$0", "large-heavy"),
-  TextContent("Free forever — bring your own LLM key.", "small", "muted"),
+PricingTier(p) = Card([
+  CardHeader(p.label, p.subtitle),
+  TextContent(p.price, "large-heavy"),
+  TextContent(p.priceHint, "small", "muted"),
   Separator("horizontal", true),
-  List([
-    ListItem("Up to 3 prompts per day", null, "circle-check"),
-    ListItem("Community Discord access", null, "circle-check"),
-    ListItem("Light & dark themes", null, "circle-check")
-  ]),
-  Buttons([Button("Start free", Action([@ToAssistant("Start the free plan")]), $plan == "starter" ? "primary" : "secondary")])
-], $plan == "starter" ? "elevated" : "outlined")
+  List(@Each(p.features, "f", ListItem(f, null, "circle-check"))),
+  Buttons([Button(p.cta, Action([@ToAssistant(p.ctaMsg)]), @If($$plan == p.key, "primary", "secondary"))])
+], @If($$plan == p.key, "elevated", "outlined"))
 
-proCard = Card([
-  CardHeader("Pro", "For shipping teams"),
-  TextContent("$29", "large-heavy"),
-  TextContent("per editor / month — billed yearly.", "small", "muted"),
-  Separator("horizontal", true),
-  List([
-    ListItem("Unlimited prompts", null, "circle-check"),
-    ListItem("Custom themes + tokens", null, "circle-check"),
-    ListItem("Routing & multi-page apps", null, "circle-check"),
-    ListItem("Email support", null, "circle-check")
-  ]),
-  Buttons([Button("Start Pro trial", Action([@ToAssistant("Start the Pro trial")]), $plan == "pro" ? "primary" : "secondary")])
-], $plan == "pro" ? "elevated" : "outlined")
+plans = [
+  {key:"starter", label:"Starter", subtitle:"For weekend hackers", price:"$0",     priceHint:"Free forever — bring your own LLM key.", features:["Up to 3 prompts per day","Community Discord access","Light & dark themes"],         cta:"Start free",     ctaMsg:"Start the free plan"},
+  {key:"pro",     label:"Pro",     subtitle:"For shipping teams",  price:"$29",    priceHint:"per editor / month — billed yearly.",     features:["Unlimited prompts","Custom themes + tokens","Routing & multi-page apps","Email support"], cta:"Start Pro trial", ctaMsg:"Start the Pro trial"},
+  {key:"scale",   label:"Scale",   subtitle:"For platforms & agents", price:"Custom", priceHint:"Per-seat or volume pricing.",         features:["Everything in Pro","SSO + audit logs","Dedicated success engineer","SLA & private build"], cta:"Talk to sales",   ctaMsg:"Schedule a call with sales"}
+]
 
-scaleCard = Card([
-  CardHeader("Scale", "For platforms & agents"),
-  TextContent("Custom", "large-heavy"),
-  TextContent("Per-seat or volume pricing.", "small", "muted"),
-  Separator("horizontal", true),
-  List([
-    ListItem("Everything in Pro", null, "circle-check"),
-    ListItem("SSO + audit logs", null, "circle-check"),
-    ListItem("Dedicated success engineer", null, "circle-check"),
-    ListItem("SLA & private build", null, "circle-check")
-  ]),
-  Buttons([Button("Talk to sales", Action([@ToAssistant("Schedule a call with sales")]), $plan == "scale" ? "primary" : "secondary")])
-], $plan == "scale" ? "elevated" : "outlined")
+pricingGrid = Grid(@Each(plans, "p", PricingTier(p)), {sm: 1, md: 3}, "l")
 
-pricingGrid = Grid([starterCard, proCard, scaleCard], 3, "l")
+TestimonialRow(t) = Testimonial(t.body, t.name, t.role, null, t.stars)
+testimonials = [
+  {body:"This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.", name:"Jordan Patel", role:"Founder, Looplog",        stars:5},
+  {body:"Our weekly recap email is generated end-to-end by an LLM. The renderer made the front-end stop being a bottleneck.", name:"Mei Tanaka", role:"Eng lead, Atlasworks", stars:5},
+  {body:"Switching from a hand-rolled DSL to streaming-ui-script removed 4,000 lines of glue code from our copilot.",  name:"Sam Reyes",    role:"Staff engineer, Northwind", stars:4}
+]
+socialGrid = Grid(@Each(testimonials, "t", TestimonialRow(t)), {sm: 1, md: 2, lg: 3}, "m")
 
-testimonialA = Testimonial(
-  "This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.",
-  "Jordan Patel", "Founder, Looplog", null, 5
-)
-
-testimonialB = Testimonial(
-  "Our weekly recap email is generated end-to-end by an LLM. The renderer made the front-end stop being a bottleneck.",
-  "Mei Tanaka", "Eng lead, Atlasworks", null, 5
-)
-
-testimonialC = Testimonial(
-  "Switching from a hand-rolled DSL to streaming-ui-script removed 4,000 lines of glue code from our copilot.",
-  "Sam Reyes", "Staff engineer, Northwind", null, 4
-)
-
-socialGrid = Grid([testimonialA, testimonialB, testimonialC], 3, "m")
-
-teamGrid = Grid([
-  ProfileCard("Ada Lovelace",   "Founding engineer",       null, "Designed the streaming evaluator and the action graph.", ["TypeScript", "Compilers"], null),
-  ProfileCard("Grace Hopper",   "Component lead",          null, "Owns the rich-UI patterns and the theming system.",      ["Design systems", "A11y"], null),
-  ProfileCard("Linus Torvalds", "Infra & performance",     null, "Keeps the bundle under 40 KB and CI under 90 seconds.",  ["Perf", "DX"], null)
-], 3, "m")
+TeamMember(m) = ProfileCard(m.name, m.role, null, m.bio, m.skills, null)
+team = [
+  {name:"Ada Lovelace",   role:"Founding engineer",   bio:"Designed the streaming evaluator and the action graph.", skills:["TypeScript", "Compilers"]},
+  {name:"Grace Hopper",   role:"Component lead",      bio:"Owns the rich-UI patterns and the theming system.",      skills:["Design systems", "A11y"]},
+  {name:"Linus Torvalds", role:"Infra & performance", bio:"Keeps the bundle under 40 KB and CI under 90 seconds.",  skills:["Perf", "DX"]}
+]
+teamGrid = Grid(@Each(team, "m", TeamMember(m)), {sm: 1, md: 3}, "m")
 
 faq = Accordion([
   AccordionItem("Does it work without React?", [TextContent("Yes — it's a web component. Drop in one script tag and a streaming-ui-script tag, and you're done. React, Vue, Angular, Svelte all work because they all support custom elements.")]),

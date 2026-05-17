@@ -38,13 +38,13 @@
         a table, a stars-by-repo chart, and a quick KPI summary.
       </p>
       <pre class="example-source"><code id="src-github">$user = "thesysdev"
-data = Query("github_repos", {user: $user}, {rows: [], total: 0, status: "idle"})
+data  = Query("github_repos", {user: $user}, {rows: [], total: 0, status: "idle"})
 
 userField = FormControl("GitHub user", Input("user", "vercel, anthropic, thesysdev…", "text", null, $user))
 
 errBanner = Callout("error", "Couldn't load repos", "Check the username and try again. The GitHub API may also be rate-limiting unauthenticated requests.")
-loading = TextContent("Loading repositories…", "small", "muted")
-emptyMsg = TextContent("No public repositories found.", "small", "muted")
+loading   = TextContent("Loading repositories…",   "small", "muted")
+emptyMsg  = TextContent("No public repositories found.", "small", "muted")
 
 starsChart = BarChart(data.rows.name, [Series("Stars", data.rows.stars)])
 forksChart = BarChart(data.rows.name, [Series("Forks", data.rows.forks)])
@@ -55,21 +55,27 @@ chartTabs = Tabs([
 ])
 
 repoTable = Table([
-  Col("Repository", data.rows.name),
+  Col("Repository",  data.rows.name),
   Col("Description", data.rows.description),
-  Col("Language", @Each(data.rows, "row", Badge(row.language, "info", null, "sm"))),
-  Col("Stars", data.rows.stars, "number"),
-  Col("Forks", data.rows.forks, "number"),
-  Col("Open", @Each(data.rows, "row", Button("View", Action([@OpenUrl(row.url)]), "secondary", "normal", "small")))
+  Col("Language",    @Each(data.rows, "{language}", Badge(language, "info", null, "sm"))),
+  Col("Stars",       data.rows.stars, "number"),
+  Col("Forks",       data.rows.forks, "number"),
+  Col("Open",        @Each(data.rows, "{url}",       Button("View", Action([@OpenUrl(url)]), "secondary", "normal", "small")))
 ])
 
 stats = Stack([
-  StatCard("Repos shown", "" + @Count(data.rows)),
-  StatCard("Total stars", "" + @Sum(data.rows.stars), "up"),
-  StatCard("Total forks", "" + @Sum(data.rows.forks), "up")
+  StatCard("Repos shown", `${@Count(data.rows)}`),
+  StatCard("Total stars", `${@FormatNumber(@Sum(data.rows.stars))}`, "up"),
+  StatCard("Total forks", `${@FormatNumber(@Sum(data.rows.forks))}`, "up")
 ], "row", "m", "stretch", "start", true)
 
-view = data.status == "error" ? errBanner : data.status == "loading" ? loading : @Count(data.rows) > 0 ? Stack([stats, Card([CardHeader("Top repositories"), repoTable]), Card([CardHeader("Comparison chart"), chartTabs])]) : emptyMsg
+# Default branch handles "ok" with actual data (or the empty message).
+view = @Switch(data.status, {
+  error:   errBanner,
+  loading: loading
+}, @If(@Count(data.rows) > 0,
+       Stack([stats, Card([CardHeader("Top repositories"), repoTable]), Card([CardHeader("Comparison chart"), chartTabs])]),
+       emptyMsg))
 
 root = Stack([Card([CardHeader("GitHub explorer", "Live data via api.github.com"), userField]), view])</code></pre>
       <div class="example-output">

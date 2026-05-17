@@ -38,44 +38,46 @@
         progress bar animates and a banner confirms. "Delete workspace"
         opens a confirmation sheet.
       </p>
-      <pre class="example-source"><code id="src-settings">$tab = "general"
-$theme = "light"
-$accent = "indigo"
-$density = "comfortable"
-$notifications = true
-$autosave = true
-$weeklyDigest = true
-$mentionEmails = false
-$shareUsage = true
-$language = "en"
-$deleting = false
-$saveStatus = "idle"
+      <pre class="example-source"><code id="src-settings">$$tab           = "general"
+$$theme         = "light"
+$$accent        = "indigo"
+$$density       = "comfortable"
+$$language      = "en"
+$notifications  = true
+$autosave       = true
+$weeklyDigest   = true
+$mentionEmails  = false
+$shareUsage     = true
+$deleting       = false
+$saveStatus     = "idle"
 
-usage = Query("workspace_usage", {}, {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""})
-saveMutation = Mutation("save_settings", {tab: $tab, theme: $theme, density: $density, language: $language})
+usage          = Query("workspace_usage", {}, {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""})
+saveMutation   = Mutation("save_settings",    {tab: $$tab, theme: $$theme, density: $$density, language: $$language})
 deleteMutation = Mutation("delete_workspace", {})
 
-savedBanner = $saveStatus == "saved" ? Banner("Saved", "Your preferences are up to date.", null, "circle-check", "success") : null
-savingBanner = $saveStatus == "saving" ? Banner("Saving…", "Hang tight while we sync your preferences.", null, "⏳", "info") : null
+saveBanner = @Switch($saveStatus, {
+  saving: Banner("Saving…", "Hang tight while we sync your preferences.", null, "spinner", "info"),
+  saved:  Banner("Saved",    "Your preferences are up to date.",           null, "circle-check", "success")
+})
 
 header = PageHeader(
   "Settings",
   "Personalise your workspace",
   Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Settings")]),
   [
-    Button("Cancel",       Action([@ToAssistant("Discard pending changes")]), "ghost"),
+    Button("Cancel",       Action([@ToAssistant("Discard pending changes")]),                                "ghost"),
     Button("Save changes", Action([@Set($saveStatus, "saving"), @Run(saveMutation), @Set($saveStatus, "saved")]), "primary")
   ],
   Badge(usage.planLabel, "primary", null, "sm")
 )
 
 usageCard = Card([
-  CardHeader("Workspace usage", "Renews " + usage.renews),
+  CardHeader("Workspace usage", `Renews ${usage.renews}`),
   MetricGrid([
-    StatCard("Storage", "" + usage.storageUsed + " / " + usage.storageMax + " GB", "flat", null, "database"),
-    StatCard("Seats",   "" + usage.seatsUsed + " / " + usage.seatsMax,             "up",   "+2 this month", "users"),
-    StatCard("Plan",    usage.planLabel,                                            "flat", null, "id-card")
-  ], 3),
+    StatCard("Storage", `${usage.storageUsed} / ${usage.storageMax} GB`, "flat", null,             "database"),
+    StatCard("Seats",   `${usage.seatsUsed} / ${usage.seatsMax}`,         "up",   "+2 this month", "users"),
+    StatCard("Plan",    usage.planLabel,                                   "flat", null,             "id-card")
+  ], {sm: 1, md: 3}),
   Progress(usage.storageUsed, usage.storageMax, "Storage used", "primary", false, true)
 ])
 
@@ -86,7 +88,7 @@ generalCard = Card([
     SelectItem("fr", "Français"),
     SelectItem("de", "Deutsch"),
     SelectItem("ja", "日本語")
-  ], null, null, $language)),
+  ], null, null, $$language)),
   Separator("horizontal", true),
   Switch("notifications", "Enable desktop notifications", $notifications, "We'll ping you when a build finishes or someone @mentions you."),
   Switch("autosave",      "Autosave every 30 seconds",     $autosave),
@@ -109,18 +111,18 @@ appearanceCard = Card([
     {value: "dark",   label: "Dark",   icon: "moon"},
     {value: "neon",   label: "Neon",   icon: "wand-magic-sparkles"},
     {value: "pastel", label: "Pastel", icon: "ribbon"}
-  ], $theme)),
+  ], $$theme)),
   FormControl("Accent", ToggleGroup("accent", [
     {value: "indigo",  label: "Indigo"},
     {value: "emerald", label: "Emerald"},
     {value: "rose",    label: "Rose"},
     {value: "amber",   label: "Amber"}
-  ], $accent)),
+  ], $$accent)),
   FormControl("Density", ToggleGroup("density", [
     {value: "compact",     label: "Compact"},
     {value: "comfortable", label: "Comfortable"},
     {value: "spacious",    label: "Spacious"}
-  ], $density))
+  ], $$density))
 ])
 
 shortcutsCard = Card([
@@ -146,7 +148,7 @@ tabs = Tabs([
   TabItem("notifications", "Notifications", [notificationsCard]),
   TabItem("shortcuts",     "Shortcuts",     [shortcutsCard]),
   TabItem("danger",        "Danger zone",   [dangerCard])
-], $tab)
+], $$tab)
 
 confirmSheet = Sheet(
   "Delete workspace?",
@@ -158,12 +160,12 @@ confirmSheet = Sheet(
   ],
   "right",
   [
-    Button("Cancel", Action([@Set($deleting, false)]), "ghost"),
-    Button("Permanently delete", Action([@Run(deleteMutation), @Set($deleting, false), @ToAssistant("Workspace deleted")]), "danger")
+    Button("Cancel",             Action([@Set($deleting, false)]),                                                                       "ghost"),
+    Button("Permanently delete", Action([@Run(deleteMutation), @Set($deleting, false), @ToAssistant("Workspace deleted")]),               "danger")
   ]
 )
 
-root = Stack([header, savingBanner, savedBanner, tabs, confirmSheet], "column", "l")</code></pre>
+root = Stack([header, saveBanner, tabs, confirmSheet], "column", "l")</code></pre>
       <div class="example-output">
         <streaming-ui-script id="rui-settings" theme="light"></streaming-ui-script>
       </div>

@@ -39,36 +39,38 @@
         details. Replying or escalating fires a <code>Mutation</code> that updates
         the in-memory store.
       </p>
-      <pre class="example-source"><code id="src-support">$status = "open"
-$selectedId = "T-1042"
-$reply = ""
+      <pre class="example-source"><code id="src-support">$$status     = "open"
+$$selectedId = "T-1042"
+$reply       = ""
 
-inbox = Query("list_tickets", {status: $status}, {rows: []})
-detail = Query("get_ticket", {id: $selectedId}, {id: "", subject: "", from: "", channel: "", body: "", waiting: 0, plan: ""})
-triage = Query("triage_ticket", {id: $selectedId}, {priority: "", category: "", confidence: 0, draft: "", routing: "", tags: []})
+inbox  = Query("list_tickets",   {status: $$status},   {rows: []})
+detail = Query("get_ticket",     {id: $$selectedId},   {id: "", subject: "", from: "", channel: "", body: "", waiting: 0, plan: ""})
+triage = Query("triage_ticket",  {id: $$selectedId},   {priority: "", category: "", confidence: 0, draft: "", routing: "", tags: []})
 
 statusFilter = FormControl("Inbox", Select("status", [
-  SelectItem("open", "Open"),
-  SelectItem("waiting", "Waiting on customer"),
+  SelectItem("open",     "Open"),
+  SelectItem("waiting",  "Waiting on customer"),
   SelectItem("resolved", "Resolved")
-], "open", $status))
+], "open", $$status))
 
-ticketRow = @Each(inbox.rows, "t",
-  Card([
-    Stack([Badge(t.priority, t.priorityVariant, null, "sm"), TextContent(t.waiting + "h ago", "small", "muted")], "row", "s", "center", "between"),
-    TextContent(t.subject, "body-heavy"),
-    TextContent(t.from + " · " + t.channel, "small", "muted"),
-    Buttons([Button(t.id == $selectedId ? "Selected" : "Open", Action([@Set($selectedId, t.id)]), t.id == $selectedId ? "primary" : "secondary", "normal", "small")])
-  ], "outlined")
+TicketRow(id, priority, priorityVariant, waiting, subject, from, channel) = Card([
+  Stack([Badge(priority, priorityVariant, null, "sm"), TextContent(`${waiting}h ago`, "small", "muted")], "row", "s", "center", "between"),
+  TextContent(subject, "body-heavy"),
+  TextContent(`${from} · ${channel}`, "small", "muted"),
+  Buttons([Button(@If(id == $$selectedId, "Selected", "Open"), Action([@Set($$selectedId, id)]), @If(id == $$selectedId, "primary", "secondary"), "normal", "small")])
+], "outlined")
+
+ticketRows = @Each(inbox.rows, "{id, priority, priorityVariant, waiting, subject, from, channel}",
+  TicketRow(id, priority, priorityVariant, waiting, subject, from, channel)
 )
 
-empty = TextContent("Inbox zero. Take a coffee break.", "small", "muted")
-inboxList = @Count(inbox.rows) > 0 ? Stack(ticketRow, "column", "s") : empty
+empty     = TextContent("Inbox zero. Take a coffee break.", "small", "muted")
+inboxList = @If(@Count(inbox.rows) > 0, Stack(ticketRows, "column", "s"), empty)
 
 inboxStats = Stack([
-  StatCard("Open",     "" + @Count(inbox.rows)),
-  StatCard("Avg wait", "" + @Round(@Avg(inbox.rows.waiting)) + "h"),
-  StatCard("SLA risk", "" + @Count(inbox.rows.slaRisk))
+  StatCard("Open",     `${@Count(inbox.rows)}`),
+  StatCard("Avg wait", `${@Round(@Avg(inbox.rows.waiting))}h`),
+  StatCard("SLA risk", `${@Count(inbox.rows.slaRisk)}`)
 ], "row", "m", "stretch", "start", true)
 
 leftPane = Card([
@@ -78,39 +80,43 @@ leftPane = Card([
   inboxList
 ])
 
-confidenceTag = Badge("Confidence " + @Round(triage.confidence * 100) + "%", triage.confidence >= 0.7 ? "success" : triage.confidence >= 0.4 ? "warning" : "danger", null, "sm")
-priorityTag = Badge(triage.priority, triage.priority == "Urgent" ? "danger" : triage.priority == "High" ? "warning" : "info", null, "sm")
+confidenceTone = @If(triage.confidence >= 0.7, "success", @If(triage.confidence >= 0.4, "warning", "danger"))
+priorityTone   = @Switch(triage.priority, {Urgent: "danger", High: "warning"}, "info")
+planTone       = @Switch(detail.plan,     {Enterprise: "primary", Pro: "success"}, "neutral")
+
+confidenceTag = Badge(`Confidence ${@Round(triage.confidence * 100)}%`, confidenceTone, null, "sm")
+priorityTag   = Badge(triage.priority, priorityTone, null, "sm")
 
 triageHeader = Stack([priorityTag, Badge(triage.category, "primary", null, "sm"), confidenceTag], "row", "s", "center", "start", true)
 
-routingCallout = Callout(triage.priority == "Urgent" ? "danger" : "info", "Routing suggestion", triage.routing)
+routingCallout = Callout(@If(triage.priority == "Urgent", "danger", "info"), "Routing suggestion", triage.routing)
 
 draftField = FormControl("Suggested reply", TextArea("reply", triage.draft, $reply))
 
 ticketHeader = Card([
-  Stack([Badge(detail.plan, detail.plan == "Enterprise" ? "primary" : detail.plan == "Pro" ? "success" : "neutral", null, "sm"), TextContent("Waiting " + detail.waiting + "h", "small", "muted")], "row", "s", "center", "between"),
-  TextContent(detail.subject, "large-heavy"),
-  TextContent(detail.from + " · " + detail.channel, "small", "muted"),
+  Stack([Badge(detail.plan, planTone, null, "sm"), TextContent(`Waiting ${detail.waiting}h`, "small", "muted")], "row", "s", "center", "between"),
+  TextContent(detail.subject,                              "large-heavy"),
+  TextContent(`${detail.from} · ${detail.channel}`,        "small", "muted"),
   Separator("horizontal", true),
   TextContent(detail.body, "body")
 ], "elevated")
 
 actions = Buttons([
-  Button("Send reply",  Action([@Run(reply), @Run(inbox)]), "primary"),
-  Button("Escalate",    Action([@Run(escalate), @Run(inbox)]), "secondary"),
-  Button("Mark waiting",Action([@Run(markWaiting), @Run(inbox)]), "ghost"),
-  Button("Resolve",     Action([@Run(resolve), @Run(inbox)]), "ghost")
+  Button("Send reply",   Action([@Run(reply),       @Run(inbox)]), "primary"),
+  Button("Escalate",     Action([@Run(escalate),    @Run(inbox)]), "secondary"),
+  Button("Mark waiting", Action([@Run(markWaiting), @Run(inbox)]), "ghost"),
+  Button("Resolve",      Action([@Run(resolve),     @Run(inbox)]), "ghost")
 ])
 
-reply = Mutation("send_reply", {id: $selectedId, body: $reply})
-escalate = Mutation("escalate", {id: $selectedId})
-markWaiting = Mutation("set_status", {id: $selectedId, status: "waiting"})
-resolve = Mutation("set_status", {id: $selectedId, status: "resolved"})
+reply       = Mutation("send_reply", {id: $$selectedId, body: $reply})
+escalate    = Mutation("escalate",   {id: $$selectedId})
+markWaiting = Mutation("set_status", {id: $$selectedId, status: "waiting"})
+resolve     = Mutation("set_status", {id: $$selectedId, status: "resolved"})
 
 tagsRow = BadgeList(triage.tags)
 
 rightPane = Card([
-  CardHeader("Triage · " + detail.id, "AI suggestion based on history, plan, and content"),
+  CardHeader(`Triage · ${detail.id}`, "AI suggestion based on history, plan, and content"),
   triageHeader,
   routingCallout,
   ticketHeader,

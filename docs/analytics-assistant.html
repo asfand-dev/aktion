@@ -38,9 +38,9 @@
         <code>data</code> looks like.
       </p>
       <pre class="example-source"><code id="src-analytics">$question = "How is revenue trending this quarter?"
-$range = "90d"
+$$range   = "90d"
 
-result = Query("analytics_query", {q: $question, range: $range}, {
+result = Query("analytics_query", {q: $question, range: $$range}, {
   intent: "loading",
   title: "Loading…",
   summary: "",
@@ -58,48 +58,52 @@ result = Query("analytics_query", {q: $question, range: $range}, {
 questionField = FormControl("Ask a question", Input("question", "Try: how is revenue trending this quarter?", "text", null, $question))
 
 rangeField = FormControl("Range", Select("range", [
-  SelectItem("30d", "Last 30 days"),
-  SelectItem("90d", "Last 90 days"),
+  SelectItem("30d",  "Last 30 days"),
+  SelectItem("90d",  "Last 90 days"),
   SelectItem("365d", "Last year")
-], "90d", $range))
+], "90d", $$range))
 
 queryRow = Stack([questionField, rangeField], "row", "m", "stretch")
 
+SuggestionBtn(label, prompt) = Button(label, Action([@Set($question, prompt)]), "secondary", "normal", "small")
+
 suggestions = Buttons([
-  Button("Revenue trend",       Action([@Set($question, "How is revenue trending this quarter?")]),  "secondary", "normal", "small"),
-  Button("Daily signups",       Action([@Set($question, "Daily signups in the last 30 days"), @Set($range, "30d")]), "secondary", "normal", "small"),
-  Button("Plan mix",            Action([@Set($question, "Show me the plan mix")]),                   "secondary", "normal", "small"),
-  Button("Recent churn",        Action([@Set($question, "Which customers churned recently?")]),      "secondary", "normal", "small"),
-  Button("Top 5 customers",     Action([@Set($question, "Top 5 customers by revenue")]),             "secondary", "normal", "small")
+  SuggestionBtn("Revenue trend",   "How is revenue trending this quarter?"),
+  Button("Daily signups",          Action([@Set($question, "Daily signups in the last 30 days"), @Set($$range, "30d")]), "secondary", "normal", "small"),
+  SuggestionBtn("Plan mix",        "Show me the plan mix"),
+  SuggestionBtn("Recent churn",    "Which customers churned recently?"),
+  SuggestionBtn("Top 5 customers", "Top 5 customers by revenue")
 ])
 
-intentBadge = Badge("Intent: " + result.intent, "primary", null, "sm")
-trendTag = Badge(result.trend, result.trend == "up" ? "success" : result.trend == "down" ? "danger" : "neutral", null, "sm")
+trendTone = @Switch(result.trend, {up: "success", down: "danger"}, "neutral")
+
+intentBadge = Badge(`Intent: ${result.intent}`, "primary", null, "sm")
+trendTag    = Badge(result.trend,               trendTone, null, "sm")
 
 kpis = Stack([
-  StatCard(result.metric, result.delta, result.trend),
-  StatCard("Detected intent", result.intent),
-  StatCard("Time range", $range)
+  StatCard(result.metric,      result.delta,   result.trend),
+  StatCard("Detected intent",  result.intent),
+  StatCard("Time range",       $$range)
 ], "row", "m", "stretch", "start", true)
 
 chartLine = LineChart(result.labels, [Series(result.metric, result.series)], "natural", "Date", result.metric)
-chartBar  = BarChart(result.labels, [Series(result.metric, result.series)])
+chartBar  = BarChart(result.labels,  [Series(result.metric, result.series)])
 
 chartTabs = Tabs([
-  TabItem("trend", "Trend",   [chartLine]),
-  TabItem("bars",  "Bars",    [chartBar])
+  TabItem("trend", "Trend", [chartLine]),
+  TabItem("bars",  "Bars",  [chartBar])
 ])
 
 tbl = Table([
   Col(result.colA, result.rows.label),
   Col(result.colB, result.rows.value, "number"),
-  Col(result.colC, @Each(result.rows, "row", Badge(row.delta, row.deltaVariant, null, "sm")))
+  Col(result.colC, @Each(result.rows, "{delta, deltaVariant}", Badge(delta, deltaVariant, null, "sm")))
 ])
 
-chartCard = Card([CardHeader(result.title, result.summary), kpis, chartTabs])
+chartCard     = Card([CardHeader(result.title, result.summary),  kpis, chartTabs])
 breakdownCard = Card([CardHeader("Breakdown", "Detail rows used to build the chart"), tbl])
 
-view = result.intent == "loading" ? Skeleton(4) : Stack([chartCard, breakdownCard])
+view = @If(result.intent == "loading", Skeleton(4), Stack([chartCard, breakdownCard]))
 
 root = Stack([
   Card([

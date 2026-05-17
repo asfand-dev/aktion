@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense tracker · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · expense tracker
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · personal finance</span>
+      <h1 style="margin-top:10px">A personal finance dashboard, charts &amp; all</h1>
+      <p>
+        Income, budgets, category breakdowns, a 6-month
+        <code>LineChart</code>, a <code>BarChart</code> by category, and
+        every <code>ProgressRing</code>/<code>Progress</code> bar driven
+        by live <code>@Sum</code> and <code>@Filter</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Filter by category — every metric, every chart, and the
+        transaction list recompute. The current view persists across
+        reloads via <code>$$</code> state.
+      </p>
+      <pre class="example-source"><code id="src-expenses">$$range    = "month"
+$$category = "all"
+$$selected = ""
+
+transactions = [
+  {id: "t01", date: "May 14", merchant: "Whole Foods",     category: "groceries",    amount: 86.42,  icon: "basket-shopping", note: "Weekly run"},
+  {id: "t02", date: "May 13", merchant: "Spotify",         category: "subscriptions",amount: 11.99,  icon: "music",           note: "Family plan"},
+  {id: "t03", date: "May 12", merchant: "Uber",            category: "transport",    amount: 23.50,  icon: "car",             note: "Airport ride"},
+  {id: "t04", date: "May 12", merchant: "Bistro Vibrato",  category: "dining",       amount: 64.20,  icon: "utensils",        note: "Anniversary dinner"},
+  {id: "t05", date: "May 11", merchant: "Acme Energy",     category: "utilities",    amount: 92.30,  icon: "bolt",            note: "April bill"},
+  {id: "t06", date: "May 11", merchant: "Amazon",          category: "shopping",     amount: 34.99,  icon: "cart-shopping",   note: "USB-C cable"},
+  {id: "t07", date: "May 10", merchant: "Trader Joe's",    category: "groceries",    amount: 41.18,  icon: "basket-shopping", note: "Mid-week refill"},
+  {id: "t08", date: "May 09", merchant: "Lyft",            category: "transport",    amount: 14.20,  icon: "car",             note: "To the office"},
+  {id: "t09", date: "May 08", merchant: "Netflix",         category: "subscriptions",amount: 17.99,  icon: "film",            note: "Standard plan"},
+  {id: "t10", date: "May 07", merchant: "Sushi Park",      category: "dining",       amount: 38.50,  icon: "utensils",        note: "Lunch with Mei"},
+  {id: "t11", date: "May 06", merchant: "Verizon",         category: "utilities",    amount: 65.00,  icon: "wifi",            note: "Internet"},
+  {id: "t12", date: "May 05", merchant: "Apple",           category: "shopping",     amount: 129.00, icon: "apple",           note: "AirPods replacement"},
+  {id: "t13", date: "May 04", merchant: "Whole Foods",     category: "groceries",    amount: 52.71,  icon: "basket-shopping", note: "Weekly run"},
+  {id: "t14", date: "May 03", merchant: "Notion",          category: "subscriptions",amount: 10.00,  icon: "pen-to-square",   note: "Personal plan"},
+  {id: "t15", date: "May 02", merchant: "Cinema City",     category: "entertainment",amount: 22.50,  icon: "ticket",          note: "Movie night"},
+  {id: "t16", date: "May 01", merchant: "Local Cafe",      category: "dining",       amount: 8.75,   icon: "mug-hot",         note: "Morning coffee"}
+]
+
+budgets = [
+  {category: "groceries",     label: "Groceries",     budget: 250, icon: "basket-shopping"},
+  {category: "dining",        label: "Dining out",    budget: 200, icon: "utensils"},
+  {category: "transport",     label: "Transport",     budget: 120, icon: "car"},
+  {category: "subscriptions", label: "Subscriptions", budget: 60,  icon: "music"},
+  {category: "utilities",     label: "Utilities",     budget: 200, icon: "bolt"},
+  {category: "shopping",      label: "Shopping",      budget: 200, icon: "cart-shopping"},
+  {category: "entertainment", label: "Entertainment", budget: 80,  icon: "ticket"}
+]
+
+categoryRows = @If($$category == "all", transactions, @Filter(transactions, "category", "==", $$category))
+
+totalSpent  = @Sum(categoryRows.amount)
+monthBudget = @Sum(budgets.budget)
+totalCount  = @Count(transactions)
+income      = 4250
+remaining   = income - @Sum(transactions.amount)
+savingsRate = @Round((remaining / income) * 100, 0)
+
+categoryLabel = @Switch($$category, {
+  groceries:     "Groceries",
+  dining:        "Dining out",
+  transport:     "Transport",
+  subscriptions: "Subscriptions",
+  utilities:     "Utilities",
+  shopping:      "Shopping",
+  entertainment: "Entertainment"
+}, "All categories")
+
+header = PageHeader(
+  "Personal finance",
+  `May 2026 · ${@FormatCurrency(income, "USD")} in · ${@FormatCurrency(@Sum(transactions.amount), "USD")} out`,
+  ["Money", categoryLabel],
+  [Button("Add transaction", Action([@ToAssistant("Add a new transaction")]),     "primary"),
+   Button("Export CSV",      Action([@ToAssistant("Export this month as CSV")]),  "secondary")],
+  Badge(`${savingsRate}% saved`, @If(savingsRate >= 25, "success", @If(savingsRate >= 10, "warning", "danger")), null, "sm")
+)
+
+kpis = MetricGrid([
+  StatCard("Income",     @FormatCurrency(income, "USD"),                    "flat", "Monthly net",                            "sack-dollar"),
+  StatCard("Spent",      @FormatCurrency(@Sum(transactions.amount), "USD"), "up",   `${totalCount} ${@Plural(totalCount, "txn", "txns")}`, "receipt"),
+  StatCard("Remaining",  @FormatCurrency(remaining, "USD"),                  "down", `${savingsRate}% savings rate`,           "piggy-bank"),
+  StatCard("Top cat.",   "Groceries",                                        "up",   "$180 spent · 22% of budget",             "basket-shopping")
+])
+
+trendCard = Card([
+  SectionHeader("6-month trend", "Income vs. spending"),
+  LineChart(
+    ["Dec", "Jan", "Feb", "Mar", "Apr", "May"],
+    [
+      Series("Income",   [4200, 4250, 4250, 4250, 4250, 4250]),
+      Series("Spending", [3120, 3260, 3450, 2980, 3380, 3260])
+    ]
+  )
+])
+
+byCategoryBars = BarChart(
+  ["Groceries", "Dining", "Transport", "Subs", "Utilities", "Shop", "Fun"],
+  [Series("Spent",  [180, 112, 38, 40, 157, 164, 23]),
+   Series("Budget", [250, 200, 120, 60, 200, 200, 80])]
+)
+
+barsCard = Card([
+  SectionHeader("Category spend vs. budget", "May 2026"),
+  byCategoryBars
+])
+
+BudgetBar(category, label, budget, icon) = Stack([
+  Stack([
+    Icon(icon, "solid", "md"),
+    TextContent(label, "small-heavy"),
+    Spacer(),
+    TextContent(`${@FormatCurrency(@Sum(@Filter(transactions, "category", "==", category).amount), "USD")} / ${@FormatCurrency(budget, "USD")}`, "small", "muted")
+  ], "row", "s", "center"),
+  Progress(@Round(@Sum(@Filter(transactions, "category", "==", category).amount) / budget * 100, 0), 100, @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget, "danger", @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget * 0.8, "warning", "success")), "sm")
+], "column", "xs")
+
+budgetCard = Card([
+  SectionHeader("Budgets", "Tap a row to filter the transaction list"),
+  Stack(@Each(budgets, "{category, label, budget, icon}", BudgetBar(category, label, budget, icon)), "column", "m")
+])
+
+savingsCard = Card([
+  SectionHeader("Savings goal", "Vacation fund · July"),
+  ProgressRing(remaining, 1500, @FormatCurrency(remaining, "USD"), `of ${@FormatCurrency(1500, "USD")}`, @If(remaining > 750, "success", "warning"), "lg"),
+  Stats([
+    {label: "This month", value: @FormatCurrency(remaining, "USD"), tone: "success"},
+    {label: "Last month", value: @FormatCurrency(870, "USD"),       tone: "info"},
+    {label: "Target",     value: @FormatCurrency(1500, "USD"),       tone: "primary"}
+  ])
+])
+
+categoryToggle = ToggleGroup("cat", [
+  {value: "all",           label: "All",           icon: "circle"},
+  {value: "groceries",     label: "Groceries",     icon: "basket-shopping"},
+  {value: "dining",        label: "Dining",        icon: "utensils"},
+  {value: "transport",     label: "Transport",     icon: "car"},
+  {value: "subscriptions", label: "Subs",          icon: "music"},
+  {value: "utilities",     label: "Utilities",     icon: "bolt"},
+  {value: "shopping",      label: "Shopping",      icon: "cart-shopping"},
+  {value: "entertainment", label: "Fun",           icon: "ticket"}
+], $$category)
+
+CategoryBadge(c) = @Switch(c, {
+  groceries:     Badge("Groceries",     "success", "basket-shopping", "sm"),
+  dining:        Badge("Dining",        "warning", "utensils",        "sm"),
+  transport:     Badge("Transport",     "info",    "car",             "sm"),
+  subscriptions: Badge("Subscriptions", "primary", "music",           "sm"),
+  utilities:     Badge("Utilities",     "danger",  "bolt",            "sm"),
+  shopping:      Badge("Shopping",      "neutral", "cart-shopping",   "sm")
+}, Badge("Fun", "info", "ticket", "sm"))
+
+TxnRow(id, date, merchant, category, amount, icon, note) = Card([
+  Stack([
+    Icon(icon, "solid", "lg"),
+    Stack([
+      TextContent(merchant, "body-heavy"),
+      TextContent(`${date} · ${note}`, "small", "muted")
+    ], "column", "xs"),
+    Spacer(),
+    CategoryBadge(category),
+    TextContent(`-${@FormatCurrency(amount, "USD")}`, "body-heavy", "danger"),
+    Button(@If(id == $$selected, "Selected", "Detail"),
+           Action([@Set($$selected, id)]),
+           @If(id == $$selected, "primary", "ghost"),
+           "button", "small")
+  ], "row", "m", "center")
+], "outlined")
+
+txnRows = @Each(categoryRows, "{id, date, merchant, category, amount, icon, note}",
+  TxnRow(id, date, merchant, category, amount, icon, note))
+
+emptyTxns = EmptyState(
+  "No transactions for this category",
+  "Pick a different category, or import this month's spending.",
+  "receipt",
+  Button("Reset filter", Action([@Set($$category, "all")]), "primary")
+)
+
+txnList = Card([
+  SectionHeader(`${categoryLabel}`, `${@Count(categoryRows)} ${@Plural(@Count(categoryRows), "transaction", "transactions")} · ${@FormatCurrency(totalSpent, "USD")}`, null, null,
+    [Button("Sort by date",   Action([@ToAssistant("Sort by date")]),   "ghost", "button", "small"),
+     Button("Sort by amount", Action([@ToAssistant("Sort by amount")]), "ghost", "button", "small")]),
+  categoryToggle,
+  @If(@Count(categoryRows) == 0, emptyTxns, Stack(txnRows, "column", "s"))
+])
+
+selectedTxn       = @First(@Filter(transactions, "id", "==", $$selected))
+selectedTxnExists = @Count(@Filter(transactions, "id", "==", $$selected))
+
+detailLoaded = Stack([
+  Stack([
+    Icon(selectedTxn.icon, "solid", "lg"),
+    Stack([
+      TextContent(selectedTxn.merchant, "large-heavy"),
+      TextContent(`${selectedTxn.date} · ${selectedTxn.note}`, "small", "muted")
+    ], "column", "xs"),
+    Spacer(),
+    TextContent(`-${@FormatCurrency(selectedTxn.amount, "USD")}`, "large-heavy", "danger")
+  ], "row", "m", "center"),
+  CategoryBadge(selectedTxn.category),
+  DescriptionList([
+    DescriptionItem("Category", categoryLabel,                   "tag"),
+    DescriptionItem("Date",     selectedTxn.date,                "calendar"),
+    DescriptionItem("Amount",   @FormatCurrency(selectedTxn.amount, "USD"), "dollar-sign"),
+    DescriptionItem("Note",     selectedTxn.note,                "comment")
+  ]),
+  Buttons([
+    Button("Recategorise", Action([@ToAssistant(`Move ${selectedTxn.merchant} to a different category`)]), "primary"),
+    Button("Split",        Action([@ToAssistant(`Split ${selectedTxn.merchant}`)]),                          "secondary"),
+    Button("Delete",       Action([@ToAssistant(`Delete the ${selectedTxn.merchant} transaction`)]),         "ghost")
+  ])
+], "column", "m")
+
+detailEmpty = EmptyState(
+  "No transaction selected",
+  "Click a row to inspect that purchase, recategorise it, or split it.",
+  "receipt",
+  null
+)
+
+detailSheet = Sheet(
+  "Transaction detail",
+  $$selected != "",
+  [@If(selectedTxnExists == 0, detailEmpty, detailLoaded)],
+  "right",
+  [Buttons([
+    Button("Close", Action([@Set($$selected, "")]), "secondary"),
+    Button("Add a similar", Action([@ToAssistant(`Add another ${selectedTxn.merchant} entry`)]), "primary")
+  ])]
+)
+
+chartsGrid    = Grid([trendCard,  barsCard],   {sm: 1, md: 2}, "l")
+budgetGrid    = Grid([budgetCard, savingsCard], {sm: 1, md: 2}, "l")
+
+followUps = FollowUpBlock([
+  FollowUpItem("Forecast next month's spending"),
+  FollowUpItem("Find subscriptions I forgot about"),
+  FollowUpItem("Compare to last year")
+], "Try next")
+
+root = Stack([
+  header,
+  kpis,
+  chartsGrid,
+  budgetGrid,
+  txnList,
+  followUps,
+  detailSheet
+], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-expenses" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        One <code>BudgetBar</code> macro generates every progress bar in
+        the budgets card — and its colour comes from the data itself,
+        comparing actual <code>@Sum</code> against the configured budget.
+        The category toggle drives the transaction list, the page badge,
+        and the breadcrumb in <code>PageHeader</code> — all from one
+        <code>$$category</code> read.
+      </p>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-expenses");
+    el.setResponse(document.getElementById("src-expenses").textContent);
+  </script>
+</body>
+</html>

@@ -39,26 +39,28 @@
         Click a sidebar entry to switch the focused page — the workspace
         re-renders with that page's KPIs, project list, and activity feed.
       </p>
-      <pre class="example-source"><code id="src-workspace">$active = "overview"
+      <pre class="example-source"><code id="src-workspace">$$active = "overview"
 
-data = Query("workspace_overview", {page: $active}, {
+data = Query("workspace_overview", {page: $$active}, {
   title: "", subtitle: "", status: "",
   kpis: [], projects: [], statuses: [], activity: [], summary: []
 })
 
 root = AppShell(nav, content, topbar)
 
+NavRow(label, icon, key, badge) = SidebarItem(label, icon, $$active == key, badge, Action([@Set($$active, key)]))
+
 nav = Sidebar([
   SidebarSection("Workspace", [
-    SidebarItem("Overview",  "house", $active == "overview", null,  Action([@Set($active, "overview")])),
-    SidebarItem("Projects",  "folder", $active == "projects", "12",  Action([@Set($active, "projects")])),
-    SidebarItem("Calendar",  "calendar", $active == "calendar", null,  Action([@Set($active, "calendar")])),
-    SidebarItem("Messages",  "comments", $active == "messages", "3",   Action([@Set($active, "messages")]))
+    NavRow("Overview", "house",    "overview", null),
+    NavRow("Projects", "folder",   "projects", "12"),
+    NavRow("Calendar", "calendar", "calendar", null),
+    NavRow("Messages", "comments", "messages", "3")
   ]),
   SidebarSection("Insights", [
-    SidebarItem("Analytics", "chart-pie", $active == "analytics", null, Action([@Set($active, "analytics")])),
-    SidebarItem("Reports",   "chart-line", $active == "reports",   null, Action([@Set($active, "reports")])),
-    SidebarItem("Billing",   "credit-card", $active == "billing",   null, Action([@Set($active, "billing")]))
+    NavRow("Analytics", "chart-pie",   "analytics", null),
+    NavRow("Reports",   "chart-line",  "reports",   null),
+    NavRow("Billing",   "credit-card", "billing",   null)
   ])
 ], "Acme HQ", "Production · v2.3", [
   Stack([
@@ -70,36 +72,40 @@ nav = Sidebar([
 topbar = [
   StatusDot("Realtime", "success", true),
   Buttons([
-    Button("Invite",  Action([@ToAssistant("Invite a teammate")]), "ghost",   "button", "small"),
-    Button("Upgrade", Action([@ToAssistant("Open the upgrade flow")]), "primary", "button", "small")
+    Button("Invite",  Action([@ToAssistant("Invite a teammate")]),       "ghost",   "button", "small"),
+    Button("Upgrade", Action([@ToAssistant("Open the upgrade flow")]),   "primary", "button", "small")
   ])
 ]
 
 header = PageHeader(data.title, data.subtitle, null,
-  [Button("New", Action([@ToAssistant("Open the new-item flow on " + $active)]), "primary")],
+  [Button("New", Action([@ToAssistant(`Open the new-item flow on ${$$active}`)]), "primary")],
   Badge(data.status, "success", null, "sm"))
 
-kpis = MetricGrid(@Each(data.kpis, "k", StatCard(k.label, k.value, k.trend, k.delta, k.icon)))
+kpis = MetricGrid(@Each(data.kpis, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon)))
 
-projectsCard = Card([SectionHeader("Active projects", null, "WORK", null,
-  [Button("View all", Action([@ToAssistant("View all projects")]), "ghost", "button", "small")]),
-  List(@Each(data.projects, "p", ListItem(p.title, p.subtitle, p.icon)))
+projectsCard = Card([
+  SectionHeader("Active projects", null, "WORK", null,
+    [Button("View all", Action([@ToAssistant("View all projects")]), "ghost", "button", "small")]),
+  List(@Each(data.projects, "{title, subtitle, icon}", ListItem(title, subtitle, icon)))
 ])
 
-statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All normal", "success", null, "sm")),
-  Stack(@Each(data.statuses, "s", StatusDot(s.label, s.tone, s.pulse)), "column", "s")
+statusCard = Card([
+  SectionHeader("System status", null, "OPS", Badge("All normal", "success", null, "sm")),
+  Stack(@Each(data.statuses, "{label, tone, pulse}", StatusDot(label, tone, pulse)), "column", "s")
 ])
 
-activityCard = Card([SectionHeader("Recent activity"),
-  Timeline(@Each(data.activity, "e", TimelineItem(e.title, e.time, e.description, e.icon, e.tone)))
+activityCard = Card([
+  SectionHeader("Recent activity"),
+  Timeline(@Each(data.activity, "{title, time, description, icon, tone}", TimelineItem(title, time, description, icon, tone)))
 ])
 
-summaryCard = Card([SectionHeader("Workspace summary", null, "AT A GLANCE"),
-  DescriptionList(@Each(data.summary, "d", DescriptionItem(d.label, d.value, d.icon)), 2)
+summaryCard = Card([
+  SectionHeader("Workspace summary", null, "AT A GLANCE"),
+  DescriptionList(@Each(data.summary, "{label, value, icon}", DescriptionItem(label, value, icon)), 2)
 ])
 
-contentGrid = Grid([projectsCard, statusCard], 2, "l")
-detailGrid  = Grid([activityCard, summaryCard], 2, "l")
+contentGrid = Grid([projectsCard, statusCard], {sm: 1, md: 2}, "l")
+detailGrid  = Grid([activityCard, summaryCard], {sm: 1, md: 2}, "l")
 followUps   = FollowUpBlock([
   FollowUpItem("Show at-risk projects"),
   FollowUpItem("Open billing"),

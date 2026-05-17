@@ -268,30 +268,53 @@ Before finishing, walk your output and verify:
 
 function defaultChatExamples(): ReadonlyArray<string> {
   return [
-    `# Table reply
-root = Stack([title, tbl, follow])
-title = TextContent("Top Languages", "large-heavy")
-tbl = Table([Col("Language", langs), Col("Users (M)", users), Col("Year", years)])
-langs = ["Python", "JavaScript", "Java", "TypeScript", "Go"]
-users = [15.7, 14.2, 12.1, 8.5, 5.2]
-years = [1991, 1995, 1995, 2012, 2009]
+    `# Table reply with derived totals (template literal + @Sum)
+root = Stack([title, tbl, totals, follow])
+title  = TextContent("Top Languages by users", "large-heavy")
+tbl    = Table([Col("Language", langs.name), Col("Users (M)", langs.users, "number"), Col("Year", langs.year, "number")])
+totals = Callout("info", \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, null, "chart-line", true)
+langs  = [
+  {name:"Python",     users:15.7, year:1991},
+  {name:"JavaScript", users:14.2, year:1995},
+  {name:"Java",       users:12.1, year:1995},
+  {name:"TypeScript", users:8.5,  year:2012},
+  {name:"Go",         users:5.2,  year:2009}
+]
 follow = FollowUpBlock(["Sort by users", "Show this as a chart", "Tell me about TypeScript"])`,
     `# Bar chart reply
 root = Stack([title, chart, follow])
-title = TextContent("Q4 Revenue", "large-heavy")
-chart = BarChart(labels, [s1, s2])
+title  = TextContent("Q4 Revenue", "large-heavy")
+chart  = BarChart(labels, [Series("Product A", a), Series("Product B", b)])
 labels = ["Oct", "Nov", "Dec"]
-s1 = Series("Product A", [120, 150, 180])
-s2 = Series("Product B", [90, 110, 140])
-follow = FollowUpBlock(["Compare to Q3", "Break down by region"])`,
-    `# Inline form
-root = Stack([title, form])
-title = TextContent("Contact us", "large-heavy")
-form = Form("contact", btns, [nameField, emailField, msgField])
-nameField = FormControl("Name", Input("name", "Your name", "text"))
-emailField = FormControl("Email", Input("email", "you@example.com", "email"))
-msgField = FormControl("Message", TextArea("message", "Tell us more...", 4))
-btns = Buttons([Button("Submit", Action([@ToAssistant("Submit")]), "primary"), Button("Cancel", Action([@ToAssistant("Cancel")]), "ghost")])`,
+a = [120, 150, 180]
+b = [90,  110, 140]
+follow = FollowUpBlock([\`Compare to Q3 (\${@Sum(a) + @Sum(b)} total)\`, "Break down by region"])`,
+    `# Inline form with live preview (template literal + ?? for unset)
+$name    = ""
+$email   = ""
+$message = ""
+root    = Stack([title, form, preview])
+title   = TextContent("Contact us", "large-heavy")
+form    = Form("contact", btns, [
+  FormControl("Name",    Input("name",  "Your name",        "text",  null, $name)),
+  FormControl("Email",   Input("email", "you@example.com",  "email", null, $email)),
+  FormControl("Message", TextArea("message", "Tell us more...", 4, null, $message))
+])
+btns    = Buttons([Button("Submit", Action([@ToAssistant("Submit")]), "primary"), Button("Cancel", Action([@ToAssistant("Cancel")]), "ghost")])
+preview = Callout("info", "Preview", \`Hi \${$name ?? "there"}, we'll reach you at \${$email ?? "your email"}.\`, "envelope", true)`,
+    `# Lazy branching with @Switch (replaces nested ternaries)
+$tab = "overview"
+root = Stack([Tabs([
+  TabItem("overview",  "Overview",  [activePanel]),
+  TabItem("billing",   "Billing",   [activePanel]),
+  TabItem("security",  "Security",  [activePanel])
+])])
+# Branches are only evaluated when their key matches — safe with loop vars / heavy builtins.
+activePanel = @Switch($tab, {
+  "overview": Card([CardHeader("Overview"),  TextContent("Snapshot of the workspace.")]),
+  "billing":  Card([CardHeader("Billing"),   DescriptionList([DescriptionItem("Plan","Pro"), DescriptionItem("Renews","May 28")], 2)]),
+  "security": Card([CardHeader("Security"),  Callout("success","All checks passed","SOC2 audit · MFA enforced", "shield-halved")])
+}, Card([CardHeader("Overview"), TextContent("Pick a tab above.")]))`,
   ];
 }
 
@@ -797,77 +820,152 @@ reviewB       = Card([Stack([PersonChip("Tomás L.", "Verified owner", null, "sm
 
 function defaultRichExamples(): string[] {
   return [
-    // Two anchor examples the LLM can pattern-match against. Both are
-    // intentionally dense so "rich" reads as the baseline expectation.
+    // Three anchor examples the LLM can pattern-match against. They are
+    // intentionally dense so "rich" reads as the baseline expectation, and
+    // they showcase the modern language features (template literals,
+    // responsive prop maps, $$persistent state, @Switch, @Each with
+    // destructuring, custom component macros, @If for lazy branches).
     `# Project status dashboard (dashboard request → 6+ sections, MetricGrid, Toolbar, Kanban, Timeline)
-root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardGrid], "column", "l")
-statusBanner  = Banner("Quarterly review is open", "Submit your team's update by Friday.", bannerCta, "bullseye", "primary")
+root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardArea], "column", "l")
+statusBanner  = Banner("Quarterly review is open", \`Submit by Friday — \${@Count(atRiskCards)} projects need attention.\`, bannerCta, "bullseye", "primary")
 bannerCta     = Button("Submit update", Action([@Run(open_submit)]), "primary", "button", "small")
-dashHeader    = PageHeader("Engineering Q3", "12 active projects · 4 at risk", ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)
+dashHeader    = PageHeader("Engineering Q3", \`\${@Count(allCards)} active projects · \${@Count(atRiskCards)} at risk\`, ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)
 dashActions   = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
 dashStatus    = Badge("On track", "success")
-dashToolbar   = Toolbar([rangeFilter, ownerFilter], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
-rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","7d"), SelectItem("30d","30d"), SelectItem("90d","90d")], null, null, $range))
+dashToolbar   = Toolbar([rangeFilter, ownerFilter, viewToggle], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
+rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","7d"), SelectItem("30d","30d"), SelectItem("90d","90d")], null, null, $$range))
 ownerFilter   = FormControl("Owner", Select("owner", [SelectItem("all","Everyone"), SelectItem("ada","Ada"), SelectItem("linus","Linus")], null, null, $owner))
-kpis          = MetricGrid([kpiOpen, kpiAtRisk, kpiDone, kpiOnTime])
-kpiOpen       = StatCard("Active",  "12",   "flat", "0 vs last week",  "folder")
-kpiAtRisk     = StatCard("At risk", "4",    "up",   "+2 vs last week", "triangle-exclamation")
-kpiDone       = StatCard("Shipped", "8",    "up",   "+3 vs last week", "rocket")
-kpiOnTime     = StatCard("On-time", "87%",  "down", "-3% vs last week","clock")
-boardGrid     = Grid([projectsBoard, activityCard], 2, "l")
-projectsBoard = Card([SectionHeader("Active board", null, "WORK", null, [Button("View board", Action([@Run(open_board)]), "ghost", "button", "small")]), KanbanBoard([colTodo, colDoing, colReview, colDone])])
-colTodo       = KanbanColumn("To do",      [cardA, cardB], "default")
-colDoing      = KanbanColumn("In progress",[cardC],        "primary")
-colReview     = KanbanColumn("In review",  [cardD],        "warning")
-colDone       = KanbanColumn("Done",       [cardE],        "success")
-cardA         = KanbanCard("Migrate auth to new SDK", "Track auth → SDK rollout across services.", ["auth","p1"], "Asha P.", "primary",  "shield-halved")
-cardB         = KanbanCard("Spike: vector search",    "Compare pgvector vs Qdrant.",                ["research"], "Diego",   "default",  "flask")
-cardC         = KanbanCard("Streaming UI v2",         "Add 20 components & rich prompt patterns.", ["frontend"], "Alex",    "primary",  "wand-magic-sparkles")
-cardD         = KanbanCard("Mobile onboarding",       "Awaiting design review.",                    ["mobile"],  "Wren",    "warning",  "mobile-screen")
-cardE         = KanbanCard("Activity timeline",       "Shipped to 100% of users.",                  ["shipped"], "Mira",    "success",  "circle-check")
-activityCard  = Card([SectionHeader("Recent activity", "Latest events across squads"), Timeline([
-  TimelineItem("Ada merged #2491",          "5m ago",  "Streaming UI patterns ready",        "code-pull-request", "primary"),
-  TimelineItem("QA caught regression",      "1h ago",  "Quota dashboard double-counts",      "triangle-exclamation", "warning"),
-  TimelineItem("Tokenizer 2.1 deployed",    "Yesterday","Latency improved 14%",              "circle-check", "success"),
-  TimelineItem("Security review opened",    "2d ago",  "Awaiting threat model from infosec", "circle-info", "info")
-])])
-$range = "30d"
-$owner = "all"`,
+viewToggle    = ToggleGroup("view", [{value:"board",label:"Board",icon:"table-columns"},{value:"timeline",label:"Activity",icon:"clock-rotate-left"}], $$view)
+kpis          = MetricGrid([
+  StatCard("Active",  \`\${@Count(allCards)}\`,    "flat", "0 vs last week",                                "folder"),
+  StatCard("At risk", \`\${@Count(atRiskCards)}\`, "up",   \`+\${@Count(atRiskCards) - 2} vs last week\`,    "triangle-exclamation"),
+  StatCard("Shipped", "8",                          "up",   "+3 vs last week",                               "rocket"),
+  StatCard("On-time", "87%",                        "down", "-3% vs last week",                              "clock")
+])
+boardArea     = Grid([boardPanel, activityCard], {sm: 1, md: 2}, "l")
+boardPanel    = @Switch($$view, {board: projectsBoard, timeline: activityCard}, projectsBoard)
+projectsBoard = Card([SectionHeader("Active board", null, "WORK", null, [Button("Add card", Action([@Run(open_new_card)]), "ghost", "button", "small")]), KanbanBoard([colTodo, colDoing, colReview, colDone])])
+BoardCard(c)  = KanbanCard(c.title, c.summary, c.tags, c.owner, c.tone, c.icon)
+colTodo       = KanbanColumn("To do",       @Each(@Filter(allCards, "stage", "==", "todo"),    "c", BoardCard(c)), "default")
+colDoing      = KanbanColumn("In progress", @Each(@Filter(allCards, "stage", "==", "doing"),   "c", BoardCard(c)), "primary")
+colReview     = KanbanColumn("In review",   @Each(@Filter(allCards, "stage", "==", "review"),  "c", BoardCard(c)), "warning")
+colDone       = KanbanColumn("Done",        @Each(@Filter(allCards, "stage", "==", "done"),    "c", BoardCard(c)), "success")
+activityCard  = Card([SectionHeader("Recent activity", "Latest events across squads"), Timeline(@Each(events, "{when, text, detail, icon, tone}", TimelineItem(text, when, detail, icon, tone)))])
+
+allCards    = [
+  {id:"k1", title:"Migrate auth to new SDK", summary:"Track auth → SDK rollout across services.", tags:["auth","p1"], owner:"Asha P.", tone:"primary",  icon:"shield-halved",         stage:"doing"},
+  {id:"k2", title:"Spike: vector search",     summary:"Compare pgvector vs Qdrant.",                tags:["research"], owner:"Diego",   tone:"default",  icon:"flask",                 stage:"todo"},
+  {id:"k3", title:"Streaming UI v2",          summary:"Add 20 components & rich prompt patterns.",  tags:["frontend"], owner:"Alex",    tone:"primary",  icon:"wand-magic-sparkles",   stage:"doing"},
+  {id:"k4", title:"Mobile onboarding",        summary:"Awaiting design review.",                    tags:["mobile"],   owner:"Wren",    tone:"warning",  icon:"mobile-screen",         stage:"review"},
+  {id:"k5", title:"Activity timeline",        summary:"Shipped to 100% of users.",                  tags:["shipped"],  owner:"Mira",    tone:"success",  icon:"circle-check",          stage:"done"},
+  {id:"k6", title:"Pricing page refresh",     summary:"At risk — blocked on legal copy.",           tags:["growth"],   owner:"Tomás",   tone:"warning",  icon:"file-invoice-dollar",   stage:"todo"}
+]
+atRiskCards = @Filter(allCards, "tone", "==", "warning")
+events = [
+  {when:"5m ago",    text:"Ada merged #2491",        detail:"Streaming UI patterns ready",        icon:"code-pull-request",   tone:"primary"},
+  {when:"1h ago",    text:"QA caught regression",    detail:"Quota dashboard double-counts",      icon:"triangle-exclamation",tone:"warning"},
+  {when:"Yesterday", text:"Tokenizer 2.1 deployed",  detail:"Latency improved 14%",               icon:"circle-check",         tone:"success"},
+  {when:"2d ago",    text:"Security review opened",  detail:"Awaiting threat model from infosec", icon:"circle-info",          tone:"info"}
+]
+
+$$range = "30d"
+$$view  = "board"
+$owner  = "all"`,
     `# App shell with sidebar nav (full product surface)
-root  = AppShell(nav, [headerCard, kpiStrip, contentGrid, footerCard], topbar)
+root  = AppShell(nav, [headerCard, kpiStrip, contentGrid, activityCard], topbar)
+
+NavRow(label, icon, badge) = SidebarItem(label, icon, label == ($$lastNav ?? "Overview"), badge, Action([@Set($$lastNav, label)]))
+
 nav   = Sidebar([
   SidebarSection("Workspace", [
-    SidebarItem("Overview",  "house", true),
-    SidebarItem("Projects",  "folder", false, "12", Action([@ToAssistant("Open projects")])),
-    SidebarItem("Calendar",  "calendar"),
-    SidebarItem("Messages",  "comments", false, "3", Action([@ToAssistant("Open messages")]))
+    NavRow("Overview", "house",    null),
+    NavRow("Projects", "folder",   "12"),
+    NavRow("Calendar", "calendar", null),
+    NavRow("Messages", "comments", "3")
   ]),
   SidebarSection("Insights", [
-    SidebarItem("Analytics", "chart-pie"),
-    SidebarItem("Reports",   "chart-line"),
-    SidebarItem("Billing",   "credit-card")
+    NavRow("Analytics", "chart-pie",   null),
+    NavRow("Reports",   "chart-line",  null),
+    NavRow("Billing",   "credit-card", null)
   ])
-], "Acme HQ", "Production · v2.3", [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")])
+], "Acme HQ", "Production · v2.3", sidebarFooter)
+sidebarFooter = [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")]
+
 topbar = [StatusDot("Realtime", "success", true), Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])]
-headerCard = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
+headerCard = PageHeader(\`\${$$lastNav ?? "Overview"}\`, "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
 kpiStrip = MetricGrid([
   StatCard("MRR",          "$48.2k", "up",   "+12% vs last month", "sack-dollar"),
   StatCard("Active users", "2,184",  "up",   "+184",               "users"),
   StatCard("Open tickets", "23",     "down", "-9",                 "ticket"),
   StatCard("NPS",          "62",     "flat", "+1",                 "star")
 ])
-contentGrid = Grid([projectsCard, statusCard], 2, "l")
-projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), List([
-  ListItem("Streaming UI v2.4",   "Ada Lovelace · 3 open issues", "rocket"),
-  ListItem("Auth SDK rewrite",    "Linus T · 1 open issue",       "shield-halved"),
-  ListItem("Onboarding revamp",   "Grace Hopper · awaiting QA",   "bullseye")
-])])
+contentGrid = Grid([projectsCard, statusCard], {sm: 1, md: 2}, "l")
+ProjectRow(p) = ListItem(p.title, \`\${p.owner} · \${p.status}\`, p.icon)
+projects = [
+  {title:"Streaming UI v2.4", owner:"Ada Lovelace", status:"3 open issues",  icon:"rocket"},
+  {title:"Auth SDK rewrite",  owner:"Linus T",      status:"1 open issue",   icon:"shield-halved"},
+  {title:"Onboarding revamp", owner:"Grace Hopper", status:"awaiting QA",    icon:"bullseye"}
+]
+projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), List(@Each(projects, "p", ProjectRow(p)))])
 statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All systems normal", "success", null, "sm")), Stack([
   StatusDot("API",       "success"),
   StatusDot("Database",  "success"),
   StatusDot("Webhooks",  "warning"),
   StatusDot("Streaming", "success", true)
-], "column", "s")])`,
+], "column", "s")])
+activityCard = Card([SectionHeader("Recent activity"), Timeline([
+  TimelineItem("Ada merged PR #248",   "5m ago",   "Patterns ready for review",    "code-pull-request",     "primary"),
+  TimelineItem("QA caught regression", "1h ago",   "Quota dashboard double-count", "triangle-exclamation",  "warning"),
+  TimelineItem("Tokenizer 2.1 shipped","Yesterday","Latency -14%",                 "circle-check",          "success")
+])])`,
+    `# Reactive product catalog (search + filter + sort, with $$persistent prefs)
+root        = Stack([catalogHeader, toolbar, summary, body], "column", "l")
+catalogHeader = PageHeader("Storefront", \`\${@Count(products)} curated essentials\`, null, [Button("New product", Action([@Run(new_product)]), "primary")])
+
+toolbar     = Toolbar([
+  FormControl("Search", SearchBar("q", "Name, tag…", $query, "/")),
+  FormControl("Category", Select("cat", catOptions, null, null, $category)),
+  FormControl("Sort",    Select("sort", sortOptions, null, null, $$sort)),
+  ToggleGroup("view", [{value:"grid",label:"Grid",icon:"th"},{value:"list",label:"List",icon:"list"}], $$view)
+])
+catOptions  = [SelectItem("all","All"), ...@Each(@Unique(products, "category"), "{category}", SelectItem(category, @Titlecase(category)))]
+sortOptions = [SelectItem("price-asc","Price ↑"), SelectItem("price-desc","Price ↓"), SelectItem("rating","Top rated")]
+
+byCategory  = @If($category == "all", products, @Filter(products, "category", "==", $category))
+matches     = @Filter(byCategory, "name", "contains", $query)
+sorted      = @Switch($$sort, {
+  "price-asc":  @Sort(matches, "price", "asc"),
+  "price-desc": @Sort(matches, "price", "desc"),
+  "rating":     @Sort(matches, "rating", "desc")
+}, matches)
+
+summary     = Stats([
+  {label:"Showing", value: \`\${@Count(sorted)} of \${@Count(products)}\`, hint: \`@\${@Count(@Filter(sorted, "badge", "==", "Sale"))} on sale\`, tone:"primary"},
+  {label:"Avg price",  value: @FormatCurrency(@Avg(sorted.price), "USD"), tone:"info"},
+  {label:"Avg rating", value: \`\${@Round(@Avg(sorted.rating), 1)} ★\`,        tone:"success"}
+], "start")
+
+body        = @If(@Count(sorted) > 0, productGrid, emptyState)
+emptyState  = EmptyState("No results", \`Nothing matches "\${$query}" in \${$category}.\`, "magnifying-glass", Button("Reset filters", Action([@Reset($query, $category)]), "primary"))
+
+ProductCard(p) = MediaCard(p.name, p.image, p.summary, p.tags, \`\${@FormatCurrency(p.price, "USD")} · \${p.rating} ★\`, [Button("Add to cart", Action([@Push($$cart, p.id), @ToAssistant(\`Added \${p.name} to cart\`)]), "primary", "button", "small")], @If(p.badge == "Sale", Badge("Sale","danger","tag","sm"), null))
+
+productGrid = Grid(@Each(sorted, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "l")
+
+products = [
+  {id:"aur-01", name:"Aurora Headphones", category:"audio",     price:249, rating:4.8, image:"https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=600", summary:"Studio-grade sound · 40h battery", tags:["wireless","ANC"], badge:"New"},
+  {id:"lum-02", name:"Lumen Desk Lamp",   category:"home",      price:79,  rating:4.5, image:"https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600",  summary:"Warm, dimmable, USB-C powered",     tags:["lighting"],         badge:""},
+  {id:"nim-03", name:"Nimbus Backpack",   category:"travel",    price:119, rating:4.8, image:"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600",  summary:"30L · weather-sealed",              tags:["travel"],           badge:"Bestseller"},
+  {id:"pul-04", name:"Pulse Smartwatch",  category:"wearables", price:229, rating:4.4, image:"https://images.unsplash.com/photo-1517059224940-d4af9eec41e3?w=600",  summary:"7-day battery · always-on AMOLED",  tags:["fitness"],          badge:""},
+  {id:"ech-05", name:"Echo BT Speaker",   category:"audio",     price:89,  rating:4.6, image:"https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=600", summary:"Stereo pairing · IP67",             tags:["wireless"],         badge:"Sale"},
+  {id:"dri-06", name:"Drift Travel Pillow", category:"travel",  price:29,  rating:4.3, image:"https://images.unsplash.com/photo-1581090700227-1e8e4c95e3e3?w=600", summary:"Memory foam · machine washable",    tags:["travel"],           badge:"Sale"}
+]
+
+$query    = ""
+$category = "all"
+$$sort    = "price-asc"
+$$view    = "grid"
+$$cart    = []`,
   ];
 }
 

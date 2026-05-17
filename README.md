@@ -616,6 +616,9 @@ host page wires `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
 | `file-manager.html`             | Cloud file browser: `Tree` sidebar, `Toolbar`, files `Table`, preview `Sheet`, storage `ProgressRing`.       |
 | `calendar-app.html`             | Calendar & scheduler: `DatePicker`, category chips, busy-hours ring, agenda `Timeline`, event detail `Sheet`. |
 | `docs-portal.html`              | Help center / knowledge base: `SearchBar`, `Tree` categories, `Markdown` article, `Rating`, FAQ `Accordion`. |
+| `issue-tracker.html`            | Linear-style tracker: `KanbanBoard`, priority/assignee filters, activity `Timeline`, squad `AvatarGroup`, detail `Sheet`. |
+| `expense-tracker.html`          | Personal finance: 6-month `LineChart`, category `BarChart`, savings `ProgressRing`, per-budget `Progress` bars, transaction list. |
+| `polls-app.html`                | Multiple-choice polls with live results: per-option `Progress` bars, leader `ProgressRing`, 7-day `LineChart`, comments thread. |
 | `brand-themes.html`             | Same UI reskinned with `Theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, and **Vercel** — copy any palette straight into your own response. |
 
 The full catalog with tag filters lives at

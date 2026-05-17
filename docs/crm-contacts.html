@@ -36,9 +36,9 @@
         Tap a stat tile to filter, type into the search bar, or click
         "View profile" on any card to open the detail sheet.
       </p>
-      <pre class="example-source"><code id="src-crm">$segment  = "all"
-$query    = ""
-$selected = ""
+      <pre class="example-source"><code id="src-crm">$$segment  = "all"
+$$selected = ""
+$query     = ""
 
 $contacts = [
   {id: "naomi",
@@ -131,64 +131,49 @@ $contacts = [
    renewal: "Q3 · Sep 14"}
 ]
 
-segmentRows = $segment == "all" ? $contacts : @Filter($contacts, "segment", "==", $segment)
-visibleRows = $query == "" ? segmentRows : @Filter(segmentRows, "name", "contains", $query)
+segmentRows  = @If($$segment == "all", $contacts, @Filter($contacts, "segment", "==", $$segment))
+visibleRows  = @If($query == "",       segmentRows, @Filter(segmentRows, "name", "contains", $query))
 visibleCount = @Count(visibleRows)
-totalCount = @Count($contacts)
+totalCount   = @Count($contacts)
 
 searchBar = SearchBar("crm-q", "Search contacts by name…", $query, "/")
 
 segments = ToggleGroup("segment", [
-  {value: "all",        label: "All",        icon: "users"},
-  {value: "customers",  label: "Customers",  icon: "handshake"},
-  {value: "prospects",  label: "Prospects",  icon: "seedling"},
-  {value: "champions",  label: "Champions",  icon: "trophy"},
-  {value: "at-risk",    label: "At-risk",    icon: "triangle-exclamation"}
-], $segment)
+  {value: "all",       label: "All",       icon: "users"},
+  {value: "customers", label: "Customers", icon: "handshake"},
+  {value: "prospects", label: "Prospects", icon: "seedling"},
+  {value: "champions", label: "Champions", icon: "trophy"},
+  {value: "at-risk",   label: "At-risk",   icon: "triangle-exclamation"}
+], $$segment)
+
+StatTile(label, icon, value, hint, tone, seg) = Tile(label, icon, value, hint, tone, Action([@Set($$segment, seg)]))
 
 statTiles = Grid([
-  Tile("Total contacts",   "users", "2,481", "+128 this week",            "primary", Action([@Set($segment, "all")])),
-  Tile("Active deals",     "briefcase", "47",    "$418k ARR pipeline",        "info",    Action([@Set($segment, "customers")])),
-  Tile("At-risk accounts", "triangle-exclamation", "12",    "Needs follow-up this week", "warning", Action([@Set($segment, "at-risk")])),
-  Tile("Champions",        "trophy", "63",    "NPS 9 or 10 in last 30d",   "success", Action([@Set($segment, "champions")]))
-], 4, "m")
+  StatTile("Total contacts",   "users",                "2,481", "+128 this week",            "primary", "all"),
+  StatTile("Active deals",     "briefcase",            "47",    "$418k ARR pipeline",         "info",    "customers"),
+  StatTile("At-risk accounts", "triangle-exclamation", "12",    "Needs follow-up this week",  "warning", "at-risk"),
+  StatTile("Champions",        "trophy",               "63",    "NPS 9 or 10 in last 30d",    "success", "champions")
+], {sm: 1, md: 2, lg: 4}, "m")
 
-filterRow = Stack([
-  searchBar,
-  segments
-], "column", "m")
+filterRow = Stack([searchBar, segments], "column", "m")
 
 emptyResults = EmptyState(
   "No contacts match",
   "Adjust the segment or clear the search to see more results.",
   "magnifying-glass",
-  Button("Reset filters",
-         Action([@Set($segment, "all"), @Reset($query)]),
-         "secondary")
+  Button("Reset filters", Action([@Set($$segment, "all"), @Reset($query)]), "secondary")
 )
 
-contactGrid = Grid(
-  @Each(visibleRows, "c",
-    ProfileCard(
-      c.name,
-      c.role,
-      c.avatar,
-      c.bio,
-      c.tags,
-      [Button("View profile",
-              Action([@Set($selected, c.id)]),
-              "secondary",
-              "button",
-              "small")]
-    )
-  ),
-  4, "m"
-)
+ContactCard(c) = ProfileCard(c.name, c.role, c.avatar, c.bio, c.tags, [
+  Button("View profile", Action([@Set($$selected, c.id)]), "secondary", "button", "small")
+])
 
-cards = visibleCount == 0 ? emptyResults : contactGrid
+contactGrid = Grid(@Each(visibleRows, "c", ContactCard(c)), {sm: 1, md: 2, lg: 4}, "m")
 
-selected = @First(@Filter($contacts, "id", "==", $selected))
-selectedExists = @Count(@Filter($contacts, "id", "==", $selected))
+cards = @If(visibleCount == 0, emptyResults, contactGrid)
+
+selected       = @First(@Filter($contacts, "id", "==", $$selected))
+selectedExists = @Count(@Filter($contacts, "id", "==", $$selected))
 
 detailGeneric = EmptyState("Profile not loaded",
                             "Pick a contact card on the left to see their details here.",
@@ -198,40 +183,33 @@ detailGeneric = EmptyState("Profile not loaded",
 detailLoaded = Stack([
   PersonChip(selected.name, selected.role, selected.avatar, "lg", "online"),
   DescriptionList([
-    DescriptionItem("Company",  selected.company),
-    DescriptionItem("Owner",    selected.owner),
-    DescriptionItem("ARR",      selected.arr),
-    DescriptionItem("Renewal",  selected.renewal)
+    DescriptionItem("Company", selected.company),
+    DescriptionItem("Owner",   selected.owner),
+    DescriptionItem("ARR",     selected.arr),
+    DescriptionItem("Renewal", selected.renewal)
   ]),
   Callout("info", selected.bio, null, null, true),
   Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
-        selected.name + " · last QBR",
+        `${selected.name} · last QBR`,
         "primary"),
-  Stack(
-    @Each(selected.tags, "t", Badge(t, "info", null, "sm")),
-    "row", "s"
-  )
+  Stack(@Each(selected.tags, "t", Badge(t, "info", null, "sm")), "row", "s")
 ], "column", "m")
 
-detailBody = selectedExists == 0 ? detailGeneric : detailLoaded
+detailBody = @If(selectedExists == 0, detailGeneric, detailLoaded)
 
 detailSheet = Sheet(
   "Contact detail",
-  $selected != "",
+  $$selected != "",
   [detailBody],
   "right",
   [Buttons([
-    Button("Close",
-           Action([@Set($selected, "")]),
-           "secondary"),
-    Button("Open in CRM",
-           Action([@ToAssistant("Open " + $selected + " in the CRM")]),
-           "primary")
+    Button("Close",       Action([@Set($$selected, "")]),                                 "secondary"),
+    Button("Open in CRM", Action([@ToAssistant(`Open ${$$selected} in the CRM`)]),         "primary")
   ])]
 )
 
 resultSummary = TextContent(
-  "Showing " + visibleCount + " of " + totalCount + " contacts" + ($query == "" ? "" : (" · matching \"" + $query + "\"")),
+  `Showing ${visibleCount} of ${totalCount} contacts${@If($query == "", "", ` · matching "${$query}"`)}`,
   "small",
   "muted"
 )

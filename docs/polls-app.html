@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polls &amp; surveys · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · polls &amp; surveys
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · polls</span>
+      <h1 style="margin-top:10px">Cast a vote, watch the results redraw live</h1>
+      <p>
+        Three polls in one program — pick an option, the per-option
+        <code>Progress</code> bars, leader badge, and KPI strip all
+        update because the vote tally is a single
+        <code>@Sum</code> recomputed on every read.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Your selections persist across reloads via <code>$$</code>
+        state. Switch the active poll from the toggle — the
+        leaderboard, comments, and follow-ups all stay in sync.
+      </p>
+      <pre class="example-source"><code id="src-polls">$$poll        = "framework"
+$$voteFw      = ""
+$$voteEditor  = ""
+$$voteDeploy  = ""
+$comment      = ""
+
+polls = [
+  {id: "framework", title: "Which frontend framework do you reach for in 2026?",
+   subtitle: "1,284 votes · closes Friday", icon: "code", tone: "primary",
+   options: [
+     {id: "react",   label: "React",   votes: 612, color: "primary"},
+     {id: "vue",     label: "Vue",     votes: 215, color: "success"},
+     {id: "svelte",  label: "Svelte",  votes: 188, color: "warning"},
+     {id: "solid",   label: "Solid",   votes: 124, color: "info"},
+     {id: "angular", label: "Angular", votes:  87, color: "danger"},
+     {id: "qwik",    label: "Qwik",    votes:  58, color: "neutral"}
+   ]},
+  {id: "editor", title: "What's your daily editor?",
+   subtitle: "962 votes · closes Sunday", icon: "pen-to-square", tone: "info",
+   options: [
+     {id: "vscode",   label: "VS Code",    votes: 481, color: "primary"},
+     {id: "cursor",   label: "Cursor",     votes: 209, color: "info"},
+     {id: "neovim",   label: "Neovim",     votes: 137, color: "success"},
+     {id: "zed",      label: "Zed",        votes:  76, color: "warning"},
+     {id: "jetbrains",label: "JetBrains",  votes:  59, color: "neutral"}
+   ]},
+  {id: "deploy", title: "Where do you host your apps?",
+   subtitle: "1,041 votes · closes next Tuesday", icon: "cloud", tone: "warning",
+   options: [
+     {id: "vercel",  label: "Vercel",        votes: 384, color: "primary"},
+     {id: "fly",     label: "Fly.io",        votes: 211, color: "success"},
+     {id: "render",  label: "Render",        votes: 178, color: "warning"},
+     {id: "aws",     label: "AWS direct",    votes: 152, color: "danger"},
+     {id: "cf",      label: "Cloudflare",    votes: 116, color: "info"}
+   ]}
+]
+
+activePoll = @First(@Filter(polls, "id", "==", $$poll))
+totalVotes = @Sum(activePoll.options.votes)
+leader     = @First(@Sort(activePoll.options, "votes", "desc"))
+
+activeVote = @Switch($$poll, {
+  framework: $$voteFw,
+  editor:    $$voteEditor,
+  deploy:    $$voteDeploy
+}, "")
+
+pollToggle = ToggleGroup("poll", [
+  {value: "framework", label: "Framework", icon: "code"},
+  {value: "editor",    label: "Editor",    icon: "pen-to-square"},
+  {value: "deploy",    label: "Hosting",   icon: "cloud"}
+], $$poll)
+
+VoteRow(id, label, votes, color, voteAction) = Card([
+  Stack([
+    Stack([
+      Stack([
+        TextContent(label, "body-heavy"),
+        @If(id == leader.id, Badge("Leading", "success", "trophy", "sm"))
+      ], "row", "s", "center"),
+      TextContent(`${votes} ${@Plural(votes, "vote", "votes")} · ${@Round(votes / totalVotes * 100, 1)}%`, "small", "muted")
+    ], "column", "xs"),
+    Spacer(),
+    Button(@If(id == activeVote, "Your vote", "Vote"),
+           voteAction,
+           @If(id == activeVote, "primary", "secondary"),
+           "button", "small")
+  ], "row", "m", "center"),
+  Progress(@Round(votes / totalVotes * 100, 0), 100, color, "md")
+], "outlined")
+
+voteAction(optionId) = @Switch($$poll, {
+  framework: Action([@Set($$voteFw,     optionId), @ToAssistant(`Recorded vote for ${optionId} in the framework poll`)]),
+  editor:    Action([@Set($$voteEditor, optionId), @ToAssistant(`Recorded vote for ${optionId} in the editor poll`)])
+}, Action([@Set($$voteDeploy, optionId), @ToAssistant(`Recorded vote for ${optionId} in the hosting poll`)]))
+
+pollOptions = @Each(activePoll.options, "{id, label, votes, color}",
+  VoteRow(id, label, votes, color, voteAction(id)))
+
+leaderboard = Card([
+  SectionHeader(activePoll.title, activePoll.subtitle, null, Badge(`${totalVotes} votes`, "info", null, "sm"),
+    [Button("Share poll",  Action([@ToAssistant("Share this poll")]),  "ghost", "button", "small"),
+     Button("Export CSV",  Action([@ToAssistant("Export poll as CSV")]),"ghost", "button", "small")]),
+  Stack(pollOptions, "column", "m"),
+  @If(activeVote == "",
+      Callout("info",    "You haven't voted yet.", "Tap an option above to cast your vote.",                "circle-info",   true),
+      Callout("success", "Vote recorded.",         `Thanks — your choice is "${activeVote}". You can change it any time.`, "circle-check", true))
+])
+
+leaderTrend = LineChart(
+  ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  @Switch($$poll, {
+    framework: [Series("React", [410, 460, 495, 530, 568, 590, 612]),
+                Series("Vue",   [120, 138, 152, 170, 188, 204, 215]),
+                Series("Svelte",[ 95, 112, 130, 148, 164, 178, 188])],
+    editor:    [Series("VS Code",[300, 340, 375, 405, 432, 460, 481]),
+                Series("Cursor", [120, 140, 156, 174, 190, 200, 209]),
+                Series("Neovim", [ 70,  85,  95, 108, 118, 128, 137])]
+  }, [Series("Vercel", [240, 270, 290, 315, 340, 365, 384]),
+      Series("Fly.io", [130, 150, 165, 178, 190, 202, 211]),
+      Series("Render", [115, 130, 142, 155, 165, 172, 178])])
+)
+
+trendCard = Card([
+  SectionHeader("7-day momentum", "Top 3 options"),
+  leaderTrend
+])
+
+byOptionBars = BarChart(
+  @Each(activePoll.options, "{label}", label),
+  [Series("Votes", @Each(activePoll.options, "{votes}", votes))]
+)
+
+barsCard = Card([
+  SectionHeader("Total votes", "All options")
+  , byOptionBars
+])
+
+kpis = MetricGrid([
+  StatCard("Votes",     `${totalVotes}`,                                                  "up",   "+47 today",                                                          "users"),
+  StatCard("Leader",    leader.label,                                                      "up",   `${@Round(leader.votes / totalVotes * 100, 1)}% share`,               "trophy"),
+  StatCard("Options",   `${@Count(activePoll.options)}`,                                  "flat", "Multiple choice",                                                    "list-check"),
+  StatCard("Your vote", @If(activeVote == "", "—", activeVote),                            "flat", @If(activeVote == "", "Not yet recorded", "Click an option to change"),"check-double")
+])
+
+comments = [
+  {author: "Naomi", body: "Honestly torn between Svelte and Solid these days.", time: "12m ago", avatar: "https://i.pravatar.cc/64?img=47"},
+  {author: "Marc",  body: "Still love Vue 3 — composition API is excellent.",    time: "1h ago",  avatar: "https://i.pravatar.cc/64?img=11"},
+  {author: "Ada",   body: "React's ecosystem is impossible to beat at scale.",   time: "3h ago",  avatar: "https://i.pravatar.cc/64?img=20"},
+  {author: "Linus", body: "Qwik on the comeback trail — resumability ftw.",      time: "Yest.",   avatar: "https://i.pravatar.cc/64?img=12"}
+]
+
+commentBubbles = @Each(comments, "{author, body, time}",
+  ChatBubble(author, body, time, null, "agent", "delivered"))
+
+commentsCard = Card([
+  SectionHeader("Discussion", `${@Count(comments)} ${@Plural(@Count(comments), "comment", "comments")}`),
+  Stack(commentBubbles, "column", "m"),
+  Stack([
+    FormControl("Add a comment", Input("c", "Share your reasoning…", "text", null, $comment)),
+    Button("Post", Action([@ToAssistant(`Add comment: ${$comment}`), @Reset($comment)]), "primary", "button", "small")
+  ], "row", "s", "end")
+])
+
+shareCard = Card([
+  SectionHeader("Share", "Send this poll to your team"),
+  Stack([
+    Buttons([
+      Button("Copy link",  Action([@ToAssistant("Copy poll link to clipboard")]),                       "primary"),
+      Button("Slack",      Action([@OpenUrl("https://slack.com")]),                                     "secondary"),
+      Button("Email",      Action([@OpenUrl("mailto:?subject=Vote%20in%20the%20poll")]),                "secondary")
+    ]),
+    Kbd("⌘ + K", "lg")
+  ], "column", "m")
+])
+
+leaderRing = Card([
+  SectionHeader("Leader share", `${leader.label} leads with ${@Round(leader.votes / totalVotes * 100, 1)}%`),
+  ProgressRing(leader.votes, totalVotes, `${@Round(leader.votes / totalVotes * 100, 0)}%`, leader.label, "primary", "lg")
+])
+
+pollHeader = PageHeader(
+  "Community polls",
+  `${@Count(polls)} active polls · ${@Sum(@Each(polls, "{options}", @Sum(options.votes)))} total votes`,
+  ["Community", activePoll.title],
+  [Button("Create poll",  Action([@ToAssistant("Create a new poll")]),       "primary"),
+   Button("Past results", Action([@ToAssistant("Show past poll results")]),  "secondary")],
+  Badge(activePoll.subtitle, "info", null, "sm")
+)
+
+followUps = FollowUpBlock([
+  FollowUpItem("Break this down by region"),
+  FollowUpItem("Show me last quarter's results"),
+  FollowUpItem("Notify me when this poll closes")
+], "Try next")
+
+chartsGrid = Grid([trendCard, barsCard], {sm: 1, md: 2}, "l")
+sideGrid   = Grid([leaderRing, shareCard], {sm: 1, md: 2}, "l")
+
+root = Stack([
+  pollHeader,
+  pollToggle,
+  kpis,
+  leaderboard,
+  chartsGrid,
+  sideGrid,
+  commentsCard,
+  followUps
+], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-polls" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        The leader, percentages, leader badge, and ring chart are all
+        derived from one <code>@Sum(activePoll.options.votes)</code> and
+        one <code>@Sort(...)</code> — no manual book-keeping. Switching
+        between three polls keeps the <em>same</em> layout, just by
+        re-binding <code>activePoll</code>. The user's vote per poll is
+        stored in three independent <code>$$</code> variables so the
+        choices persist across reloads.
+      </p>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-polls");
+    el.setResponse(document.getElementById("src-polls").textContent);
+  </script>
+</body>
+</html>

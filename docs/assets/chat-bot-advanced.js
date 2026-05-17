@@ -240,12 +240,19 @@ Hard rules:
 const SHARED_PRODUCTION_RULES = [
   "PRODUCTION QUALITY — the generated UI must be ready to host as a real product, not a demo. Real microcopy, plausible mock data, working interactions, polished typography and spacing.",
   "ACCESSIBILITY — every Input/Select/TextArea has a label via `FormControl(...)`. Every Image carries an alt sentence. Icon-only buttons get an aria-label-style `tooltip` prop where the component supports one. Never use color alone to convey state — pair with text/icon.",
-  "RESPONSIVE BY DEFAULT — use `Grid(..., cols, gap)` with sensible breakpoints. Wrap reading surfaces in `Container(content, 'lg'|'md')`. Reserve `Stack(direction='row')` for asymmetric content. Tables are horizontally scrollable.",
+  "RESPONSIVE BY DEFAULT — prefer **responsive prop maps** on layout components: `Grid(items, {sm: 1, md: 2, lg: 4}, \"l\")` and `Stack(children, {sm: \"column\", md: \"row\"}, \"m\")`. Wrap reading surfaces in `Container(content, 'lg'|'md')`. Tables are horizontally scrollable.",
   "WORKING INTERACTIONS — every visible button has an `Action([...])` (or routes via `@Navigate`). Forms submit into `$state`. No dead buttons. Use `Script(\"id\", body)` for derived/computed values.",
   "REAL COPY — never write Lorem Ipsum. Hero headlines, feature descriptions, testimonials, sample table rows are believable and on-brand for the industry.",
   "ICONS — every `StatCard`/`FeatureItem`/`Banner`/`Tile`/`SidebarItem` carries a Font Awesome icon name (no `fa-` prefix). Status conveyed via `Badge`/`Tag`/`StatusDot`.",
   "DENSITY — match the page-type minimum: dashboards 6+ sections, app pages 5+, marketing pages 5+. A single Card is never enough for a page-shaped request.",
   "FOLLOW-UPS — end the response with a `FollowUpBlock` of 3–4 short prompts the user can click to iterate (e.g. \"Add a pricing page\", \"Switch to dark mode\", \"Translate to Spanish\").",
+  // Modern-language nudges (these prevent the LLM from emitting verbose, hard-to-stream patterns).
+  "PERSIST USER PREFERENCES — anything the user expects to find again after a reload (`$$theme`, `$$sidebarCollapsed`, `$$lastRoute`, `$$selectedId`, `$$cart`, `$$sort`, draft form values) uses the `$$variable` sigil so it survives via `localStorage`. Same read/write surface as `$`.",
+  "LAZY CONTROL FLOW — replace nested ternaries with `@Switch(value, {key1: branch1, key2: branch2}, default)` for tabs/views, and `@If(cond, then, else?)` for empty states. Branches are evaluated lazily so loop variables stay safe.",
+  "TEMPLATE LITERALS — any string that mixes copy with values uses backtick interpolation: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@FormatCurrency(@Sum(rows.total), \"USD\")}` ``. Never write `\"…\" + … + \"…\"` concatenation.",
+  "MACROS FOR REPEATED CARDS/ROWS — define once, call many times. Example: `RowCard(p) = Card([Avatar(p.name), TextContent(p.role)])` then `@Each($people, \"p\", RowCard(p))`. Macros are the cleanest way to keep a list of cards visually consistent.",
+  "DESTRUCTURE LOOP VARS — `@Each($users, \"{id, name, role}\", row)` exposes fields directly inside `row`, no `u.` prefix. Use it whenever a row template touches 2+ fields.",
+  "FORMATTING BUILTINS — use `@FormatCurrency(n, code)`, `@FormatNumber(n)`, `@FormatDate(d, mode)`, `@Plural(n, sing, pl)`, `@Titlecase(s)`/`@Uppercase(s)` to keep numbers/dates/text locale-friendly and consistent.",
 ];
 
 const INTENT_GENERATORS = {

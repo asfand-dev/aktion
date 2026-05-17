@@ -38,11 +38,11 @@
         left, or click a related article to swap the body. The "Was this
         helpful" rating fires a follow-up message to the assistant.
       </p>
-      <pre class="example-source"><code id="src-docs">$category = "all"
-$article = "stream-llm"
-$query = ""
-$helpful = ""
-$rating = 0
+      <pre class="example-source"><code id="src-docs">$$category     = "all"
+$$article      = "stream-llm"
+$query         = ""
+$helpful       = ""
+$rating        = 0
 $contactReason = "general"
 
 $articles = [
@@ -127,26 +127,35 @@ $articles = [
    body: "Tools receive whatever object the call site emits. If the LLM emits `{q: \"\" + $search}` and `$search` is empty, the tool sees `{ q: \"\" }`. Always default inside the tool with `?? \"\"` rather than relying on absence."}
 ]
 
-categoryRows = $category == "all" ? $articles : @Filter($articles, "category", "==", $category)
-visibleRows = $query == "" ? categoryRows : @Filter(categoryRows, "title", "contains", $query)
+categoryRows = @If($$category == "all", $articles, @Filter($articles, "category", "==", $$category))
+visibleRows  = @If($query == "",        categoryRows, @Filter(categoryRows, "title", "contains", $query))
 visibleCount = @Count(visibleRows)
-totalCount = @Count($articles)
+totalCount   = @Count($articles)
 
-current = @First(@Filter($articles, "id", "==", $article))
-currentExists = @Count(@Filter($articles, "id", "==", $article))
+current       = @First(@Filter($articles, "id", "==", $$article))
+currentExists = @Count(@Filter($articles, "id", "==", $$article))
 
-related = $query == "" ? @Filter($articles, "category", "==", current.category) : visibleRows
-relatedFiltered = @Filter(related, "id", "!=", $article)
+related         = @If($query == "", @Filter($articles, "category", "==", current.category), visibleRows)
+relatedFiltered = @Filter(related, "id", "!=", $$article)
 
-categoryLabel = $category == "getting-started" ? "Getting started" : ($category == "guides" ? "Guides" : ($category == "api" ? "API reference" : ($category == "billing" ? "Billing & plans" : ($category == "troubleshooting" ? "Troubleshooting" : "All categories"))))
+categoryLabel = @Switch($$category, {
+  "getting-started": "Getting started",
+  guides:            "Guides",
+  api:               "API reference",
+  billing:           "Billing & plans",
+  troubleshooting:   "Troubleshooting"
+}, "All categories")
+
+categoryCount(key) = @If(key == "all", totalCount, @Count(@Filter($articles, "category", "==", key)))
+CategoryRow(key, label, icon) = TreeNode(label, null, icon, $$category == key, $$category == key, `${categoryCount(key)}`, Action([@Set($$category, key)]))
 
 navTree = Tree([
-  TreeNode("All articles",        null, "book-open",      $category == "all",             $category == "all",             "" + totalCount,                                            Action([@Set($category, "all")])),
-  TreeNode("Getting started",     null, "rocket",         $category == "getting-started", $category == "getting-started", "" + @Count(@Filter($articles, "category", "==", "getting-started")), Action([@Set($category, "getting-started")])),
-  TreeNode("Guides",              null, "compass",        $category == "guides",          $category == "guides",          "" + @Count(@Filter($articles, "category", "==", "guides")),          Action([@Set($category, "guides")])),
-  TreeNode("API reference",       null, "plug",           $category == "api",             $category == "api",             "" + @Count(@Filter($articles, "category", "==", "api")),             Action([@Set($category, "api")])),
-  TreeNode("Billing & plans",     null, "credit-card",    $category == "billing",         $category == "billing",         "" + @Count(@Filter($articles, "category", "==", "billing")),         Action([@Set($category, "billing")])),
-  TreeNode("Troubleshooting",     null, "screwdriver-wrench", $category == "troubleshooting", $category == "troubleshooting", "" + @Count(@Filter($articles, "category", "==", "troubleshooting")), Action([@Set($category, "troubleshooting")]))
+  CategoryRow("all",             "All articles",     "book-open"),
+  CategoryRow("getting-started", "Getting started",  "rocket"),
+  CategoryRow("guides",          "Guides",           "compass"),
+  CategoryRow("api",             "API reference",    "plug"),
+  CategoryRow("billing",         "Billing & plans",  "credit-card"),
+  CategoryRow("troubleshooting", "Troubleshooting",  "screwdriver-wrench")
 ])
 
 quickLinksCard = Card([
@@ -162,21 +171,15 @@ quickLinksCard = Card([
 contactCard = Card([
   SectionHeader("Still stuck?", "We answer in 2 hours on business days."),
   FormControl("What's it about?", Select("contactReason", [
-    SelectItem("general",  "General question"),
-    SelectItem("bug",      "Bug or unexpected behaviour"),
-    SelectItem("billing",  "Billing or invoices"),
-    SelectItem("feature",  "Feature request")
+    SelectItem("general", "General question"),
+    SelectItem("bug",     "Bug or unexpected behaviour"),
+    SelectItem("billing", "Billing or invoices"),
+    SelectItem("feature", "Feature request")
   ], null, null, $contactReason)),
   Buttons([
-    Button("Open live chat",
-           Action([@ToAssistant("Open live chat for " + $contactReason)]),
-           "primary"),
-    Button("Email support",
-           Action([@OpenUrl("mailto:support@example.com")]),
-           "secondary"),
-    Button("Community Slack",
-           Action([@OpenUrl("https://slack.example.com")]),
-           "ghost")
+    Button("Open live chat",  Action([@ToAssistant(`Open live chat for ${$contactReason}`)]), "primary"),
+    Button("Email support",   Action([@OpenUrl("mailto:support@example.com")]),                "secondary"),
+    Button("Community Slack", Action([@OpenUrl("https://slack.example.com")]),                 "ghost")
   ])
 ])
 
@@ -202,91 +205,89 @@ resultListEmpty = EmptyState(
   "No articles match",
   "Try a different search or clear the category filter.",
   "magnifying-glass",
-  Button("Reset filters",
-         Action([@Set($category, "all"), @Reset($query)]),
-         "secondary")
+  Button("Reset filters", Action([@Set($$category, "all"), @Reset($query)]), "secondary")
 )
 
-searchResultsRow = @Each(visibleRows, "a",
+searchResultsRow = @Each(visibleRows, "{id, title, excerpt, readMin, updated}",
   Notification(
-    a.title,
-    a.excerpt,
-    "" + a.readMin + " min · " + a.updated,
+    title,
+    excerpt,
+    `${readMin} min · ${updated}`,
     "book",
     null,
     "info",
     false,
-    [Button("Read",
-            Action([@Set($article, a.id), @Reset($query)]),
-            "secondary",
-            "button",
-            "small")]
+    [Button("Read", Action([@Set($$article, id), @Reset($query)]), "secondary", "button", "small")]
   )
 )
 
-searchResults = $query == "" ? null : Card([
-  SectionHeader("Search results", "" + visibleCount + " matches for \"" + $query + "\""),
-  visibleCount == 0 ? resultListEmpty : Stack(searchResultsRow, "column", "s")
-])
-
-articleHeader = currentExists == 0 ? EmptyState("Pick an article", "Choose a tile on the left to read.", "book", null) : Stack([
-  Breadcrumb([BreadcrumbItem("Help center", "#"), BreadcrumbItem(categoryLabel, "#"), BreadcrumbItem(current.title)]),
-  Cover(
-    current.title,
-    current.image,
-    current.excerpt,
-    categoryLabel,
-    current.readMin + " min read · " + current.updated,
-    [
-      Button("Print",         Action([@ToAssistant("Print " + current.title)]),         "secondary"),
-      Button("Share article", Action([@OpenUrl("https://example.com/help/" + current.id)]), "ghost")
-    ],
-    "primary"
-  ),
-  BadgeList(current.tags)
-], "column", "m")
-
-articleBody = currentExists == 0 ? null : Card([
-  Markdown(current.body),
-  Separator("horizontal", true),
-  SectionHeader("Was this helpful?", "Your feedback shapes which articles we prioritise."),
-  Stack([
-    Rating($rating, 5, null, null, "md", true),
-    Spacer(),
-    Buttons([
-      Button("👍 Yes",
-             Action([@Set($helpful, "yes"), @ToAssistant("User found the article useful: " + current.title)]),
-             $helpful == "yes" ? "primary" : "secondary"),
-      Button("👎 No",
-             Action([@Set($helpful, "no"), @ToAssistant("User didn't find the article useful: " + current.title)]),
-             $helpful == "no" ? "danger" : "secondary")
-    ])
-  ], "row", "m", "center"),
-  $helpful == "no" ? Callout("info", "Thanks — your feedback opens a short improvement ticket on this article.", null, "circle-info", true) : null,
-  $helpful == "yes" ? Callout("success", "Glad it helped! Star the article to find it later.", null, "circle-check", true) : null
-])
-
-relatedHeader = currentExists == 0 ? null : SectionHeader("Related articles", "Hand-picked next reads in " + categoryLabel, null, Badge("" + @Count(relatedFiltered) + " items", "info", null, "sm"))
-
-relatedGrid = currentExists == 0 ? null : Grid(
-  @Each(relatedFiltered, "r",
-    MediaCard(
-      r.title,
-      r.image,
-      r.excerpt,
-      r.tags,
-      "" + r.readMin + " min · " + r.updated,
-      [Button("Read",
-              Action([@Set($article, r.id)]),
-              "secondary",
-              "button",
-              "small")]
-    )
-  ),
-  3, "m"
+searchResults = @If($query != "",
+  Card([
+    SectionHeader("Search results", `${visibleCount} matches for "${$query}"`),
+    @If(visibleCount == 0, resultListEmpty, Stack(searchResultsRow, "column", "s"))
+  ])
 )
 
-contentCard = currentExists == 0 ? Card([articleHeader]) : Stack([articleHeader, articleBody, relatedHeader, relatedGrid], "column", "l")
+articleHeader = @If(currentExists == 0,
+  EmptyState("Pick an article", "Choose a tile on the left to read.", "book", null),
+  Stack([
+    Breadcrumb([BreadcrumbItem("Help center", "#"), BreadcrumbItem(categoryLabel, "#"), BreadcrumbItem(current.title)]),
+    Cover(
+      current.title,
+      current.image,
+      current.excerpt,
+      categoryLabel,
+      `${current.readMin} min read · ${current.updated}`,
+      [
+        Button("Print",         Action([@ToAssistant(`Print ${current.title}`)]),                   "secondary"),
+        Button("Share article", Action([@OpenUrl(`https://example.com/help/${current.id}`)]),       "ghost")
+      ],
+      "primary"
+    ),
+    BadgeList(current.tags)
+  ], "column", "m"))
+
+feedbackNote = @Switch($helpful, {
+  no:  Callout("info",    "Thanks — your feedback opens a short improvement ticket on this article.", null, "circle-info",   true),
+  yes: Callout("success", "Glad it helped! Star the article to find it later.",                       null, "circle-check",  true)
+})
+
+articleBody = @If(currentExists != 0,
+  Card([
+    Markdown(current.body),
+    Separator("horizontal", true),
+    SectionHeader("Was this helpful?", "Your feedback shapes which articles we prioritise."),
+    Stack([
+      Rating($rating, 5, null, null, "md", true),
+      Spacer(),
+      Buttons([
+        Button("👍 Yes",
+               Action([@Set($helpful, "yes"), @ToAssistant(`User found the article useful: ${current.title}`)]),
+               @If($helpful == "yes", "primary", "secondary")),
+        Button("👎 No",
+               Action([@Set($helpful, "no"),  @ToAssistant(`User didn't find the article useful: ${current.title}`)]),
+               @If($helpful == "no", "danger", "secondary"))
+      ])
+    ], "row", "m", "center"),
+    feedbackNote
+  ]))
+
+relatedHeader = @If(currentExists != 0,
+  SectionHeader("Related articles", `Hand-picked next reads in ${categoryLabel}`, null,
+                Badge(`${@Count(relatedFiltered)} items`, "info", null, "sm")))
+
+relatedGrid = @If(currentExists != 0,
+  Grid(@Each(relatedFiltered, "{id, title, image, excerpt, tags, readMin, updated}",
+    MediaCard(
+      title, image, excerpt, tags,
+      `${readMin} min · ${updated}`,
+      [Button("Read", Action([@Set($$article, id)]), "secondary", "button", "small")]
+    )
+  ), {sm: 1, md: 2, lg: 3}, "m"))
+
+contentCard = @If(currentExists == 0,
+  Card([articleHeader]),
+  Stack([articleHeader, articleBody, relatedHeader, relatedGrid], "column", "l"))
 
 popularFaqs = Card([
   SectionHeader("Popular FAQs", "Quick answers without leaving the page"),
@@ -307,24 +308,20 @@ splitLayout = SplitView([contentCard], [sidePane], "1.5fr")
 
 header = PageHeader(
   "Help center",
-  "" + totalCount + " articles · last updated " + (currentExists == 0 ? "today" : current.updated),
+  `${totalCount} articles · last updated ${@If(currentExists == 0, "today", current.updated)}`,
   Breadcrumb([BreadcrumbItem("Product", "#"), BreadcrumbItem("Help center")]),
   [
-    Button("Status",
-           Action([@OpenUrl("https://status.example.com")]),
-           "ghost"),
-    Button("Contact support",
-           Action([@ToAssistant("Open the contact form")]),
-           "primary")
+    Button("Status",          Action([@OpenUrl("https://status.example.com")]),  "ghost"),
+    Button("Contact support", Action([@ToAssistant("Open the contact form")]),    "primary")
   ],
   Badge("Live", "success")
 )
 
 stats = Stats([
-  {label: "Articles",  value: "" + totalCount,                    hint: "across 5 categories", tone: "primary"},
-  {label: "Reading time", value: currentExists == 0 ? "—" : ("" + current.readMin + " min"), hint: "current article", tone: "info"},
-  {label: "Helpful",   value: "94%",                              hint: "rated useful",         tone: "success"},
-  {label: "Response",  value: "2 hours",                          hint: "support reply time",   tone: "default"}
+  {label: "Articles",     value: `${totalCount}`,                                                       hint: "across 5 categories", tone: "primary"},
+  {label: "Reading time", value: @If(currentExists == 0, "—", `${current.readMin} min`),                hint: "current article",     tone: "info"},
+  {label: "Helpful",      value: "94%",                                                                 hint: "rated useful",        tone: "success"},
+  {label: "Response",     value: "2 hours",                                                             hint: "support reply time",  tone: "default"}
 ])
 
 followUps = FollowUpBlock([

@@ -39,10 +39,10 @@
         right — <code>$reply</code> binds to the textarea and the send
         button.
       </p>
-      <pre class="example-source"><code id="src-inbox">$thread = "billing"
-$folder = "inbox"
-$query  = ""
-$reply  = ""
+      <pre class="example-source"><code id="src-inbox">$$thread = "billing"
+$$folder = "inbox"
+$query   = ""
+$reply   = ""
 
 $messages = [
   {id: "billing",
@@ -143,32 +143,32 @@ $messages = [
    priority: false}
 ]
 
-folderRows = @Filter($messages, "folder", "==", $folder)
-visibleRows = $query == "" ? folderRows : @Filter(folderRows, "subject", "contains", $query)
+folderRows  = @Filter($messages, "folder", "==", $$folder)
+visibleRows = @If($query == "", folderRows, @Filter(folderRows, "subject", "contains", $query))
 
-unreadCount = @Count(@Filter($messages, "unread", "==", true))
+unreadCount   = @Count(@Filter($messages, "unread",   "==", true))
 priorityCount = @Count(@Filter($messages, "priority", "==", true))
-visibleCount = @Count(visibleRows)
+visibleCount  = @Count(visibleRows)
 
 folderChips = ToggleGroup("folder", [
   {value: "inbox",   label: "Inbox",   icon: "inbox"},
   {value: "starred", label: "Starred", icon: "star"},
   {value: "sent",    label: "Sent",    icon: "paper-plane"},
   {value: "spam",    label: "Spam",    icon: "ban"}
-], $folder)
+], $$folder)
 
 searchBar = SearchBar("inbox-q", "Search subject…", $query, "/")
 
-threadRows = @Each(visibleRows, "m",
+threadRows = @Each(visibleRows, "{id, from, preview, time, avatar, unread}",
   Notification(
-    m.from,
-    m.preview,
-    m.time,
+    from,
+    preview,
+    time,
     null,
-    m.avatar,
-    $thread == m.id ? "primary" : "default",
-    m.unread,
-    [Button("Open", Action([@Set($thread, m.id)]), "ghost", "button", "small")]
+    avatar,
+    @If($$thread == id, "primary", "default"),
+    unread,
+    [Button("Open", Action([@Set($$thread, id)]), "ghost", "button", "small")]
   )
 )
 
@@ -177,14 +177,14 @@ emptyList = EmptyState(
   "Adjust the folder or clear the search to see more messages.",
   "magnifying-glass",
   Button("Clear filters",
-         Action([@Reset($query), @Set($folder, "inbox")]),
+         Action([@Reset($query), @Set($$folder, "inbox")]),
          "secondary")
 )
 
-threadList = visibleCount == 0 ? emptyList : Stack(threadRows, "column", "s")
+threadList = @If(visibleCount == 0, emptyList, Stack(threadRows, "column", "s"))
 
-selected = @First(@Filter($messages, "id", "==", $thread))
-selectedExists = @Count(@Filter($messages, "id", "==", $thread))
+selected       = @First(@Filter($messages, "id", "==", $$thread))
+selectedExists = @Count(@Filter($messages, "id", "==", $$thread))
 
 billingBody = Stack([
   ChatBubble("Stripe Receipts",
@@ -254,7 +254,15 @@ spamBody = Stack([
              "Sun", null, "agent", "delivered")
 ], "column", "m")
 
-threadBody = $thread == "billing" ? billingBody : ($thread == "release" ? releaseBody : ($thread == "github" ? githubBody : ($thread == "perf" ? perfBody : ($thread == "ada" ? adaBody : ($thread == "mei" ? meiBody : ($thread == "draft1" ? draftBody : spamBody))))))
+threadBody = @Switch($$thread, {
+  billing: billingBody,
+  release: releaseBody,
+  github:  githubBody,
+  perf:    perfBody,
+  ada:     adaBody,
+  mei:     meiBody,
+  draft1:  draftBody
+}, spamBody)
 
 threadHeader = Stack([
   PersonChip(selected.from, selected.email, selected.avatar, "md", "online"),
@@ -271,7 +279,7 @@ threadFooter = Stack([
     Buttons([
       Button("Save draft", Action([@ToAssistant("Save the reply as a draft.")]), "secondary"),
       Button("Send reply",
-             Action([@ToAssistant("Send the reply: " + $reply), @Reset($reply)]),
+             Action([@ToAssistant(`Send the reply: ${$reply}`), @Reset($reply)]),
              "primary")
     ])
   ], "row", "m", "center")
@@ -300,7 +308,7 @@ rightPane = Card([
 root = Stack([
   PageHeader(
     "Inbox",
-    unreadCount + " unread · " + priorityCount + " priority",
+    `${unreadCount} unread · ${priorityCount} priority · ${visibleCount} shown`,
     null,
     [Button("Compose",
             Action([@ToAssistant("Compose a new message.")]),
@@ -309,7 +317,7 @@ root = Stack([
   ),
   SplitView(
     [leftPane],
-    [selectedExists == 0 ? emptyDetail : rightPane],
+    [@If(selectedExists == 0, emptyDetail, rightPane)],
     "360px"
   )
 ], "column", "l")</code></pre>

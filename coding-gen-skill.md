@@ -3877,6 +3877,9 @@ Pattern-driven applications:
 - **File manager (Tree + preview):** <https://asfand-dev.github.io/streaming-ui-script/file-manager.html>
 - **Calendar & scheduler:** <https://asfand-dev.github.io/streaming-ui-script/calendar-app.html>
 - **Docs portal (help center):** <https://asfand-dev.github.io/streaming-ui-script/docs-portal.html>
+- **Issue tracker (Kanban + filters):** <https://asfand-dev.github.io/streaming-ui-script/issue-tracker.html>
+- **Expense tracker (finance + charts):** <https://asfand-dev.github.io/streaming-ui-script/expense-tracker.html>
+- **Polls & surveys (voting + results):** <https://asfand-dev.github.io/streaming-ui-script/polls-app.html>
 
 ### Build artefacts
 

@@ -37,15 +37,15 @@
         and click "View profile" to open a detail sheet. Reset the search to
         see the empty-state CTA.
       </p>
-      <pre class="example-source"><code id="src-team">$search = ""
-$department = "all"
-$page = 1
-$selectedId = ""
+      <pre class="example-source"><code id="src-team">$search       = ""
+$$department  = "all"
+$page         = 1
+$$selectedId  = ""
 
-data = Query("list_members", {q: $search, department: $department, page: $page}, {
+data   = Query("list_members", {q: $search, department: $$department, page: $page}, {
   rows: [], total: 0, pages: 1, popular: []
 })
-detail = Query("get_member", {id: $selectedId}, {
+detail = Query("get_member",   {id: $$selectedId}, {
   id: "", name: "", role: "", bio: "", tags: [], stats: [], avatar: ""
 })
 
@@ -54,10 +54,10 @@ header = PageHeader(
   "Everyone at Acme Robotics, searchable in one place",
   Breadcrumb([BreadcrumbItem("Company", "#"), BreadcrumbItem("People")]),
   [
-    Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]), "ghost"),
+    Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]),   "ghost"),
     Button("Invite",     Action([@ToAssistant("Open the invite-by-email form")]), "primary")
   ],
-  Badge("" + data.total + " people", "primary", null, "sm")
+  Badge(`${data.total} people`, "primary", null, "sm")
 )
 
 searchField = FormControl(
@@ -72,7 +72,7 @@ departmentToggle = FormControl("Department", ToggleGroup("department", [
   {value: "ds",    label: "Design",      icon: "palette"},
   {value: "ops",   label: "Operations",  icon: "box"},
   {value: "sales", label: "Sales",       icon: "chart-line"}
-], $department))
+], $$department))
 
 controls = Stack([searchField, departmentToggle], "row", "m", "stretch", "start", true)
 
@@ -81,48 +81,48 @@ popularRow = Card([
   AvatarGroup(data.popular, 6, "lg")
 ])
 
-cardsGrid = Grid(@Each(data.rows, "u",
-  Card([
-    ProfileCard(u.name, u.role, u.avatar, u.bio, u.tags, [
-      Button("View profile", Action([@Set($selectedId, u.id)]), "secondary", "button", "small"),
-      Button("Message",      Action([@ToAssistant("Open a DM thread with " + u.name)]), "ghost", "button", "small")
-    ])
+MemberTile(u) = Card([
+  ProfileCard(u.name, u.role, u.avatar, u.bio, u.tags, [
+    Button("View profile", Action([@Set($$selectedId, u.id)]),                       "secondary", "button", "small"),
+    Button("Message",      Action([@ToAssistant(`Open a DM thread with ${u.name}`)]), "ghost",     "button", "small")
   ])
-), 3, "m")
+])
+
+cardsGrid = Grid(@Each(data.rows, "u", MemberTile(u)), {sm: 1, md: 2, lg: 3}, "m")
 
 emptyState = EmptyState(
   "No matches for your filters",
   "Try a different search term or pick another department.",
   "magnifying-glass",
-  Button("Clear filters", Action([@Reset($search), @Reset($department), @Set($page, 1)]), "primary")
+  Button("Clear filters", Action([@Reset($search), @Set($$department, "all"), @Set($page, 1)]), "primary")
 )
 
-body = @Count(data.rows) > 0 ? cardsGrid : emptyState
+body = @If(@Count(data.rows) > 0, cardsGrid, emptyState)
 
 pager = Pagination($page, data.pages, 1)
 
+statTiles = @Each(detail.stats, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon))
+
 detailSheet = Sheet(
-  detail.name == "" ? "Loading…" : detail.name,
-  $selectedId != "",
+  @If(detail.name == "", "Loading…", detail.name),
+  $$selectedId != "",
   [
     Stack([
       Avatar(detail.name, detail.avatar, "xl"),
       Stack([
         TextContent(detail.role, "body-heavy"),
-        TextContent(detail.bio, "body", "muted")
+        TextContent(detail.bio,  "body", "muted")
       ], "column", "xs")
     ], "row", "m", "start", "start"),
     Separator("horizontal", true),
     BadgeList(detail.tags, "primary", "sm"),
     Separator("horizontal", true),
-    MetricGrid(@Each(detail.stats, "s",
-      StatCard(s.label, s.value, s.trend, s.delta, s.icon)
-    ), 3)
+    MetricGrid(statTiles, {sm: 1, md: 3})
   ],
   "right",
   [
-    Button("Close",   Action([@Reset($selectedId)]), "ghost"),
-    Button("Message", Action([@ToAssistant("Open a DM thread with " + detail.name), @Reset($selectedId)]), "primary")
+    Button("Close",   Action([@Reset($$selectedId)]),                                                                    "ghost"),
+    Button("Message", Action([@ToAssistant(`Open a DM thread with ${detail.name}`), @Reset($$selectedId)]),              "primary")
   ]
 )
 

@@ -38,18 +38,18 @@
         changes, the <code>list_contacts</code> tool runs again — same flow you'd
         get talking to a real backend.
       </p>
-      <pre class="example-source"><code id="src-contacts">$search = ""
-data = Query("list_contacts", {q: $search}, {rows: []})
+      <pre class="example-source"><code id="src-contacts">$search   = ""
+data      = Query("list_contacts", {q: $search}, {rows: []})
 searchBox = FormControl("Search", Input("search", "Filter by name, email, or role…", "text", null, $search))
-empty = TextContent("No contacts match your filter.", "small", "muted")
-tbl = Table([
-  Col("Name", data.rows.name),
+empty     = TextContent("No contacts match your filter.", "small", "muted")
+tbl       = Table([
+  Col("Name",  data.rows.name),
   Col("Email", data.rows.email),
-  Col("Role", data.rows.role),
-  Col("Team", @Each(data.rows, "row", Badge(row.team, row.teamColor, null, "sm")))
+  Col("Role",  data.rows.role),
+  Col("Team",  @Each(data.rows, "{team, teamColor}", Badge(team, teamColor, null, "sm")))
 ])
-view = @Count(data.rows) > 0 ? tbl : empty
-root = Stack([Card([CardHeader("Team contacts", "Type to filter" ), searchBox, view])])</code></pre>
+view = @If(@Count(data.rows) > 0, tbl, empty)
+root = Stack([Card([CardHeader("Team contacts", "Type to filter"), searchBox, view])])</code></pre>
       <div class="example-output">
         <streaming-ui-script id="rui-contacts" theme="light"></streaming-ui-script>
       </div>
@@ -63,28 +63,35 @@ root = Stack([Card([CardHeader("Team contacts", "Type to filter" ), searchBox, v
         <code>@Run(list)</code> to refresh the view. Adding an item also resets the
         input via <code>@Reset($newTitle)</code>.
       </p>
-      <pre class="example-source"><code id="src-todos">$newTitle = ""
-list = Query("list_todos", {}, {rows: []})
-add = Mutation("add_todo", {title: $newTitle})
-toggle = Mutation("toggle_todo", {id: $toggleId})
+      <pre class="example-source"><code id="src-todos"># @Each destructuring + @If keep the per-row toggle and status cells one-line.
+$newTitle = ""
 $toggleId = ""
 
-addBtn = Button("Add", Action([@Run(add), @Run(list), @Reset($newTitle)]), "primary")
-input = FormControl("New todo", Input("newTitle", "Buy milk…", "text", null, $newTitle))
-form = Stack([input, addBtn], "row", "m", "end")
+list   = Query("list_todos",   {},                {rows: []})
+add    = Mutation("add_todo",    {title: $newTitle})
+toggle = Mutation("toggle_todo", {id: $toggleId})
 
-rowToggle = @Each(list.rows, "t", Button(t.done ? "Mark open" : "Mark done", Action([@Set($toggleId, t.id), @Run(toggle), @Run(list)]), t.done ? "secondary" : "primary", "normal", "small"))
-status = @Each(list.rows, "t", Badge(t.done ? "Done" : "Open", t.done ? "success" : "info", null, "sm"))
+addBtn = Button("Add", Action([@Run(add), @Run(list), @Reset($newTitle)]), "primary")
+input  = FormControl("New todo", Input("newTitle", "Buy milk…", "text", null, $newTitle))
+form   = Stack([input, addBtn], "row", "m", "end")
+
+rowToggle = @Each(list.rows, "{id, done}",
+  Button(@If(done, "Mark open", "Mark done"),
+         Action([@Set($toggleId, id), @Run(toggle), @Run(list)]),
+         @If(done, "secondary", "primary"), "normal", "small"))
+
+status = @Each(list.rows, "{done}",
+  Badge(@If(done, "Done", "Open"), @If(done, "success", "info"), null, "sm"))
 
 tbl = Table([
-  Col("Title", list.rows.title),
-  Col("Status", status),
+  Col("Title",   list.rows.title),
+  Col("Status",  status),
   Col("Actions", rowToggle)
 ])
 
 empty = TextContent("Nothing on the list yet — add your first todo above.", "small", "muted")
-view = @Count(list.rows) > 0 ? tbl : empty
-root = Stack([Card([CardHeader("Todos", "Stored in memory in this page"), form, view])])</code></pre>
+view  = @If(@Count(list.rows) > 0, tbl, empty)
+root  = Stack([Card([CardHeader("Todos", "Stored in memory in this page"), form, view])])</code></pre>
       <div class="example-output">
         <streaming-ui-script id="rui-todos" theme="light"></streaming-ui-script>
       </div>

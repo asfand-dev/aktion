@@ -39,13 +39,13 @@
         services list, and incident timeline all stay in sync. Click an
         incident to focus it in the right-hand panel.
       </p>
-      <pre class="example-source"><code id="src-status">$range = "24h"
-$region = "all"
+      <pre class="example-source"><code id="src-status">$$range          = "24h"
+$$region         = "all"
 $focusedIncident = ""
-$email = ""
-$channel = "email"
+$email           = ""
+$channel         = "email"
 
-data = Query("status_summary", {range: $range, region: $region}, {
+data = Query("status_summary", {range: $$range, region: $$region}, {
   overall: "operational",
   message: "",
   uptime: "100%",
@@ -58,9 +58,9 @@ data = Query("status_summary", {range: $range, region: $region}, {
   incidents: []
 })
 
-bannerTone = data.overall == "down" ? "danger" : (data.overall == "degraded" ? "warning" : "success")
-bannerIcon = data.overall == "down" ? "circle-xmark" : (data.overall == "degraded" ? "triangle-exclamation" : "circle-check")
-bannerLabel = data.overall == "down" ? "Service disruption" : (data.overall == "degraded" ? "Partial outage" : "All systems operational")
+bannerTone  = @Switch(data.overall, {down: "danger",       degraded: "warning"},               "success")
+bannerIcon  = @Switch(data.overall, {down: "circle-xmark", degraded: "triangle-exclamation"}, "circle-check")
+bannerLabel = @Switch(data.overall, {down: "Service disruption", degraded: "Partial outage"}, "All systems operational")
 
 banner = Banner(
   bannerLabel,
@@ -72,11 +72,11 @@ banner = Banner(
 
 header = PageHeader(
   "System status",
-  data.servicesTotal + " services monitored · " + data.servicesDown + " currently affected",
+  `${data.servicesTotal} services monitored · ${data.servicesDown} currently affected`,
   Breadcrumb([BreadcrumbItem("Acme", "#"), BreadcrumbItem("Status")]),
   [
-    Button("History", Action([@ToAssistant("Show full incident history")]), "ghost"),
-    Button("Refresh", Action([@Set($range, $range), @ToAssistant("Force refresh status data")]), "primary")
+    Button("History", Action([@ToAssistant("Show full incident history")]),                          "ghost"),
+    Button("Refresh", Action([@Set($$range, $$range), @ToAssistant("Force refresh status data")]),    "primary")
   ],
   StatusDot("Live", "success", true)
 )
@@ -86,22 +86,22 @@ rangeToggle = ToggleGroup("range", [
   {value: "24h", label: "Last 24h"},
   {value: "7d",  label: "Last 7 days"},
   {value: "30d", label: "Last 30 days"}
-], $range)
+], $$range)
 
 regionToggle = ToggleGroup("region", [
-  {value: "all",     label: "All regions",     icon: "globe"},
-  {value: "us-east", label: "US East",         icon: "flag-usa"},
-  {value: "eu-west", label: "EU West",         icon: "earth-europe"},
-  {value: "ap-south", label: "AP South",       icon: "earth-asia"}
-], $region)
+  {value: "all",      label: "All regions", icon: "globe"},
+  {value: "us-east",  label: "US East",     icon: "flag-usa"},
+  {value: "eu-west",  label: "EU West",     icon: "earth-europe"},
+  {value: "ap-south", label: "AP South",    icon: "earth-asia"}
+], $$region)
 
 filters = Toolbar([rangeToggle], [regionToggle])
 
 kpis = MetricGrid([
-  StatCard("Uptime",        data.uptime,                       "up",   "vs prev period", "gauge-high"),
-  StatCard("Incidents",     "" + data.incidentCount,           "flat", "in window",      "siren-on"),
-  StatCard("Avg response",  data.avgLatency,                   "down", "lower is better", "bolt"),
-  StatCard("Affected",      "" + data.servicesDown + " / " + data.servicesTotal, data.servicesDown == 0 ? "up" : "down", "right now", "satellite-dish")
+  StatCard("Uptime",       data.uptime,                                        "up",                                            "vs prev period",  "gauge-high"),
+  StatCard("Incidents",    `${data.incidentCount}`,                            "flat",                                          "in window",       "siren-on"),
+  StatCard("Avg response", data.avgLatency,                                    "down",                                          "lower is better", "bolt"),
+  StatCard("Affected",     `${data.servicesDown} / ${data.servicesTotal}`,     @If(data.servicesDown == 0, "up", "down"),       "right now",       "satellite-dish")
 ])
 
 latencyCard = Card([
@@ -109,15 +109,13 @@ latencyCard = Card([
   LineChart(data.latency.times, [Series("Latency", data.latency.values)])
 ])
 
-servicesRows = @Each(data.services, "s",
+servicesRows = @Each(data.services, "{name, region, uptime, tone}",
   Stack([
-    StatusDot(s.name, s.tone, s.tone == "danger"),
+    StatusDot(name, tone, tone == "danger"),
     Spacer(),
-    Badge(s.region, "neutral", "location-dot", "sm"),
-    Badge(s.uptime + " uptime", s.tone, null, "sm"),
-    Button("Details",
-           Action([@ToAssistant("Show details for " + s.name)]),
-           "ghost", "button", "small")
+    Badge(region,            "neutral", "location-dot", "sm"),
+    Badge(`${uptime} uptime`, tone,     null,           "sm"),
+    Button("Details", Action([@ToAssistant(`Show details for ${name}`)]), "ghost", "button", "small")
   ], "row", "m", "center")
 )
 
@@ -125,16 +123,16 @@ servicesEmpty = EmptyState(
   "No services in this region",
   "Pick another region or reset the filter to see every service.",
   "satellite-dish",
-  Button("All regions", Action([@Set($region, "all")]), "secondary")
+  Button("All regions", Action([@Set($$region, "all")]), "secondary")
 )
 
 servicesCard = Card([
   SectionHeader("Service health", "Status by component", null, Badge("Sync · just now", "success", null, "sm")),
-  @Count(data.services) == 0 ? servicesEmpty : Stack(servicesRows, "column", "s")
+  @If(@Count(data.services) == 0, servicesEmpty, Stack(servicesRows, "column", "s"))
 ])
 
-incidentItems = @Each(data.incidents, "i",
-  TimelineItem(i.title, i.time, i.description, i.icon, i.tone)
+incidentItems = @Each(data.incidents, "{title, time, description, icon, tone}",
+  TimelineItem(title, time, description, icon, tone)
 )
 
 incidentsEmpty = EmptyState(
@@ -145,64 +143,51 @@ incidentsEmpty = EmptyState(
 )
 
 incidentsCard = Card([
-  SectionHeader("Recent incidents", "Last " + $range + " · " + data.incidentCount + " total"),
-  @Count(data.incidents) == 0 ? incidentsEmpty : Timeline(incidentItems)
+  SectionHeader("Recent incidents", `Last ${$$range} · ${data.incidentCount} total`),
+  @If(@Count(data.incidents) == 0, incidentsEmpty, Timeline(incidentItems))
 ])
 
-focused = @First(@Filter(data.incidents, "id", "==", $focusedIncident))
+focused       = @First(@Filter(data.incidents, "id", "==", $focusedIncident))
 focusedExists = @Count(@Filter(data.incidents, "id", "==", $focusedIncident))
 
-focusedPanel = focusedExists == 0 ? EmptyState(
-  "Pick an incident",
-  "Tap a row to drill into the incident timeline.",
-  "circle-info",
-  null
-) : Stack([
-  PageHeader(focused.title, focused.time, null, null, Badge(focused.status, focused.tone, null, "sm")),
-  DescriptionList([
-    DescriptionItem("Status",     focused.status, focused.icon),
-    DescriptionItem("Severity",   focused.severity, "triangle-exclamation"),
-    DescriptionItem("Components", focused.component, "diagram-project"),
-    DescriptionItem("Owner",      focused.owner, "user")
-  ]),
-  Card([CardHeader("Updates"), Stack(@Each(focused.updates, "u",
-    ChatBubble(u.author, u.body, u.time, null, "agent", "delivered")
-  ), "column", "m")])
-], "column", "m")
+updateBubbles = @Each(focused.updates, "{author, body, time}", ChatBubble(author, body, time, null, "agent", "delivered"))
+
+focusedPanel = @If(focusedExists == 0,
+  EmptyState("Pick an incident", "Tap a row to drill into the incident timeline.", "circle-info", null),
+  Stack([
+    PageHeader(focused.title, focused.time, null, null, Badge(focused.status, focused.tone, null, "sm")),
+    DescriptionList([
+      DescriptionItem("Status",     focused.status,    focused.icon),
+      DescriptionItem("Severity",   focused.severity,  "triangle-exclamation"),
+      DescriptionItem("Components", focused.component, "diagram-project"),
+      DescriptionItem("Owner",      focused.owner,     "user")
+    ]),
+    Card([CardHeader("Updates"), Stack(updateBubbles, "column", "m")])
+  ], "column", "m"))
 
 incidentTabs = SplitView(
   [Stack([incidentsCard, Card([
     SectionHeader("Subscribe to updates", "Get notified the moment status changes"),
     FormControl("Email", Input("email", "you@company.com", "email", null, $email)),
     FormControl("Channel", ToggleGroup("channel", [
-      {value: "email", label: "Email",   icon: "envelope"},
-      {value: "slack", label: "Slack",   icon: "slack"},
-      {value: "sms",   label: "SMS",     icon: "mobile-screen-button"},
-      {value: "rss",   label: "RSS",     icon: "rss"}
+      {value: "email", label: "Email", icon: "envelope"},
+      {value: "slack", label: "Slack", icon: "slack"},
+      {value: "sms",   label: "SMS",   icon: "mobile-screen-button"},
+      {value: "rss",   label: "RSS",   icon: "rss"}
     ], $channel)),
     Buttons([
       Button("Subscribe",
-             Action([
-               @ToAssistant("Subscribe " + $email + " via " + $channel),
-               @Reset($email)
-             ]),
+             Action([@ToAssistant(`Subscribe ${$email} via ${$channel}`), @Reset($email)]),
              "primary"),
-      Button("Open RSS feed",
-             Action([@OpenUrl("https://example.com/status.rss")]),
-             "ghost")
+      Button("Open RSS feed", Action([@OpenUrl("https://example.com/status.rss")]), "ghost")
     ])
   ])], "column", "l")],
   [Card([focusedPanel])],
   "1.6fr"
 )
 
-selectIncidentRow = @Each(data.incidents, "i",
-  Button(i.title,
-         Action([@Set($focusedIncident, i.id)]),
-         $focusedIncident == i.id ? "primary" : "ghost",
-         "button",
-         "small")
-)
+IncidentBtn(id, title) = Button(title, Action([@Set($focusedIncident, id)]), @If($focusedIncident == id, "primary", "ghost"), "button", "small")
+selectIncidentRow = @Each(data.incidents, "{id, title}", IncidentBtn(id, title))
 
 quickJump = Card([
   SectionHeader("Jump to incident", "Quick filter for the right-hand panel"),
@@ -215,7 +200,7 @@ followUps = FollowUpBlock([
   FollowUpItem("Compare regions side by side")
 ], "Try next")
 
-root = Stack([banner, header, filters, kpis, latencyCard, servicesCard, @Count(data.incidents) == 0 ? null : quickJump, incidentTabs, followUps], "column", "l")</code></pre>
+root = Stack([banner, header, filters, kpis, latencyCard, servicesCard, @If(@Count(data.incidents) > 0, quickJump), incidentTabs, followUps], "column", "l")</code></pre>
       <div class="example-output">
         <streaming-ui-script id="rui-status" theme="light"></streaming-ui-script>
       </div>

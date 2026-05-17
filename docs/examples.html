@@ -134,26 +134,27 @@ follow = FollowUpBlock([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$search = ""
-$sortBy = "stars"
+<pre><code class="example-source"># Highlights: template literal subtitle, @If for the empty branch, $$persistent sort.
+$search = ""
+$$sortBy = "stars"
 data = Query("get_repos", {}, {rows: [
-  {name: "ui-lang", stars: 120, forks: 220},
-  {name: "rich-ui", stars: 940, forks: 80},
+  {name: "ui-lang",    stars: 120,  forks: 220},
+  {name: "rich-ui",    stars: 940,  forks: 80},
   {name: "ai-toolkit", stars: 2300, forks: 412}
 ]})
 filtered = @Filter(data.rows, "name", "contains", $search)
-sorted = @Sort(filtered, $sortBy, "desc")
-searchBox = FormControl("Search", Input("search", "Filter repos...", "text", null, $search))
-sortSelect = FormControl("Sort by", Select("sortBy", [SelectItem("stars","Stars"), SelectItem("forks","Forks")], null, null, $sortBy))
-controls = Stack([searchBox, sortSelect], "row", "m")
+sorted   = @Sort(filtered, $$sortBy, "desc")
+searchBox  = FormControl("Search",  SearchBar("search", "Filter repos…", $search, "/"))
+sortSelect = FormControl("Sort by", Select("sortBy", [SelectItem("stars","Stars"), SelectItem("forks","Forks")], null, null, $$sortBy))
+controls = Toolbar([searchBox, sortSelect])
 tbl = Table([
-  Col("Name", sorted.name),
+  Col("Name",  sorted.name),
   Col("Stars", sorted.stars, "number"),
   Col("Forks", sorted.forks, "number")
 ])
-empty = TextContent("No results match your search.", "small", "muted")
-view = @Count(filtered) &gt; 0 ? tbl : empty
-root = Stack([Card([CardHeader("Repositories"), controls, view])])</code></pre>
+empty = EmptyState("No matches", `Nothing matches "${$search}".`, "magnifying-glass")
+view  = @If(@Count(filtered) &gt; 0, tbl, empty)
+root  = Card([CardHeader("Repositories", `${@Count(filtered)} of ${@Count(data.rows)}`), controls, view])</code></pre>
         </div>
       </div>
 
@@ -169,15 +170,19 @@ root = Stack([Card([CardHeader("Repositories"), controls, view])])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$title = ""
-$priority = "medium"
+<pre><code class="example-source"># Highlights: template literals replace "" + $title + "…" concatenation.
+$title     = ""
+$priority  = "medium"
 $lastSaved = "Nothing yet"
-saveBtn = Button("Save", Action([@Set($lastSaved, "" + $title + " (" + $priority + ")"), @Reset($title, $priority)]), "primary")
+saveBtn = Button("Save", Action([
+  @Set($lastSaved, `${$title} (${$priority})`),
+  @Reset($title, $priority)
+]), "primary")
 form = Form("ticket", saveBtn, [
-  FormControl("Title", Input("title", "Short summary", "text", ["required","minLength:3"], $title)),
+  FormControl("Title",    Input("title",    "Short summary", "text", ["required","minLength:3"], $title)),
   FormControl("Priority", Select("priority", [SelectItem("low","Low"), SelectItem("medium","Medium"), SelectItem("high","High")], null, null, $priority))
 ])
-status = Card([CardHeader("Last saved"), Markdown("`" + $lastSaved + "`")])
+status = Card([CardHeader("Last saved"), Markdown(`\`${$lastSaved}\``)])
 root = Stack([form, status])</code></pre>
         </div>
       </div>
@@ -194,20 +199,36 @@ root = Stack([form, status])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$count = 0
+<pre><code class="example-source"># Highlights: template literals throughout, ?? to default the log line.
+$count = 0
 $log   = "Click any button below."
 
-incBtn   = Button("@Set: +1",       Action([@Set($count, $count + 1), @Set($log, "@Set wrote " + ($count + 1) + " to $count.")]),                            "primary")
-resetBtn = Button("@Reset",         Action([@Reset($count), @Set($log, "@Reset restored $count to 0.")]),                                                  "secondary")
-chainBtn = Button("Chain (3 steps)",Action([@Set($count, $count + 5), @Set($log, "Chained @Set+@Set ran in order. $count is now " + ($count + 5) + "."),
-                                            @ToAssistant("Bumped count by 5")]),                                                                            "primary")
-askBtn   = Button("@ToAssistant",   Action([@ToAssistant("Tell me more about Action chains."), @Set($log, "@ToAssistant fired an assistant-message event.")]))
-linkBtn  = Button("@OpenUrl",       Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/actions.html"), @Set($log, "@OpenUrl opened a sanitised URL in a new tab.")]),"ghost")
+incBtn   = Button("@Set: +1", Action([
+  @Set($count, $count + 1),
+  @Set($log,   `@Set wrote ${$count + 1} to $count.`)
+]), "primary")
+resetBtn = Button("@Reset", Action([
+  @Reset($count),
+  @Set($log, "@Reset restored $count to 0.")
+]), "secondary")
+chainBtn = Button("Chain (3 steps)", Action([
+  @Set($count, $count + 5),
+  @Set($log,   `Chained @Set+@Set ran in order. $count is now ${$count + 5}.`),
+  @ToAssistant("Bumped count by 5")
+]), "primary")
+askBtn   = Button("@ToAssistant", Action([
+  @ToAssistant("Tell me more about Action chains."),
+  @Set($log, "@ToAssistant fired an assistant-message event.")
+]))
+linkBtn  = Button("@OpenUrl", Action([
+  @OpenUrl("https://asfand-dev.github.io/streaming-ui-script/actions.html"),
+  @Set($log, "@OpenUrl opened a sanitised URL in a new tab.")
+]), "ghost")
 implicit = Button("Implicit @ToAssistant")
 
-counter = Card([CardHeader("$count = " + $count, "Read by every button below"), Buttons([incBtn, resetBtn, chainBtn])])
+counter = Card([CardHeader(`$count = ${$count}`, "Read by every button below"), Buttons([incBtn, resetBtn, chainBtn])])
 extras  = Card([CardHeader("More steps"), Buttons([askBtn, linkBtn, implicit])])
-status  = Callout("info", "Status", $log, "circle-info")
+status  = Callout("info", "Status", $log ?? "(no events yet)", "circle-info")
 
 root = Stack([counter, extras, status], "column", "l")</code></pre>
         </div>
@@ -225,31 +246,39 @@ root = Stack([counter, extras, status], "column", "l")</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$range = "q3"
-header = PageHeader("Q3 performance", "Updated nightly · all amounts in USD",
+<pre><code class="example-source"># Highlights: @FormatCurrency, responsive Grid for the chart row, $$persistent range, @Each macro for accounts.
+$$range = "q3"
+header = PageHeader("Q3 performance", `Updated nightly · all amounts in USD · range ${@Uppercase($$range)}`,
   ["Workspace", "Analytics", "Q3"],
   [Button("Export", Action([@ToAssistant("Export Q3 performance as PDF")]), "secondary"),
    Button("Schedule digest", Action([@ToAssistant("Schedule a weekly digest")]), "primary")],
   Badge("Live", "success"))
 toolbar = Toolbar([
-  FormControl("Range", Select("range", [SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")], null, null, $range))
+  FormControl("Range", Select("range", [SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")], null, null, $$range))
 ], [StatusDot("Streaming", "success", true)])
 kpis = MetricGrid([
-  StatCard("Revenue",     "$48,230", "up",   "+12% vs Q2", "sack-dollar"),
-  StatCard("Active users","12,540",  "up",   "+8% vs Q2",  "users"),
-  StatCard("Churn",       "2.1%",    "down", "-0.4 pp",    "arrow-trend-down"),
-  StatCard("NPS",         "62",      "flat", "+1",         "star")
+  StatCard("Revenue",      @FormatCurrency(48230, "USD"), "up",   "+12% vs Q2", "sack-dollar"),
+  StatCard("Active users", @FormatNumber(12540),          "up",   "+8% vs Q2",  "users"),
+  StatCard("Churn",        "2.1%",                         "down", "-0.4 pp",    "arrow-trend-down"),
+  StatCard("NPS",          "62",                           "flat", "+1",         "star")
 ])
 trafficCard = Card([SectionHeader("Daily traffic", "Visits vs signups", null, Badge("On track", "success", null, "sm")),
   LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])])
-mixCard = Card([SectionHeader("Plan mix", "Active subscribers by tier", null, null),
+mixCard = Card([SectionHeader("Plan mix", "Active subscribers by tier"),
   PieChart(["Free","Pro","Team"], [240, 95, 32])])
-charts = Grid([trafficCard, mixCard], 2, "l")
-topAccounts = Card([SectionHeader("Top accounts", "Largest MRR contributors", null, null,
+charts = Grid([trafficCard, mixCard], {sm: 1, md: 2}, "l")
+
+PlanBadge(p) = @Switch(p, {Team: Badge("Team","primary",null,"sm"), Pro: Badge("Pro","success",null,"sm")}, Badge("Free","neutral",null,"sm"))
+accounts = [
+  {name:"Acme",    mrr:4200, plan:"Team"},
+  {name:"Globex",  mrr:2400, plan:"Pro"},
+  {name:"Initech", mrr:1850, plan:"Free"}
+]
+topAccounts = Card([SectionHeader("Top accounts", `Largest MRR contributors · ${@FormatCurrency(@Sum(accounts.mrr), "USD")} combined`, null, null,
   [Button("View all", Action([@ToAssistant("Open the accounts list")]), "ghost", "button", "small")]), Table([
-  Col("Account", ["Acme","Globex","Initech"]),
-  Col("MRR", [4200, 2400, 1850], "currency"),
-  Col("Plan", [Badge("Team", "primary", null, "sm"), Badge("Pro", "success", null, "sm"), Badge("Free", "neutral", null, "sm")])
+  Col("Account", accounts.name),
+  Col("MRR",     accounts.mrr, "currency"),
+  Col("Plan",    @Each(accounts, "{plan}", PlanBadge(plan)))
 ])])
 root = Stack([header, toolbar, kpis, charts, topAccounts], "column", "l")</code></pre>
         </div>
@@ -267,17 +296,18 @@ root = Stack([header, toolbar, kpis, charts, topAccounts], "column", "l")</code>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$days = "7"
-filter = FormControl("Range", Select("days", [SelectItem("7","7d"), SelectItem("14","14d"), SelectItem("30","30d")], null, null, $days))
+<pre><code class="example-source"># Highlights: $$days persists the selected range, template literal in Markdown.
+$$days = "7"
+filter = FormControl("Range", Select("days", [SelectItem("7","7d"), SelectItem("14","14d"), SelectItem("30","30d")], null, null, $$days))
 overview = TabItem("overview", "Overview", [
-  Markdown("Showing data for the last **" + $days + " days**."),
+  Markdown(`Showing data for the last **${$$days} days**.`),
   LineChart(["d1","d2","d3","d4","d5"], [Series("Events",[400,500,460,520,580])])
 ])
 errors = TabItem("errors", "Errors", [
   Callout("success", "System healthy", "No incidents in the selected range.")
 ])
 tabs = Tabs([overview, errors])
-root = Stack([Card([CardHeader("Operations"), filter, tabs])])</code></pre>
+root = Card([CardHeader("Operations"), filter, tabs])</code></pre>
         </div>
       </div>
 
@@ -994,14 +1024,15 @@ root = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$name = ""
-$email = ""
+<pre><code class="example-source"># Highlights: template literal status message, ?? for graceful defaults.
+$name     = ""
+$email    = ""
 $password = ""
-$plan = "starter"
+$plan     = "starter"
 $accepted = false
-$status = "Fill in the form to create your account."
+$status   = "Fill in the form to create your account."
 
-submit = Button("Create account", Action([@Set($status, "Account created for " + $name + " on the " + $plan + " plan.")]), "primary")
+submit = Button("Create account", Action([@Set($status, `Account created for ${$name ?? "you"} on the ${$plan} plan.`)]), "primary")
 
 form = Form("signup", submit, [
   FormControl("Full name", Input("name", "Ada Lovelace", "text", ["required","minLength:2"], $name)),
@@ -1037,12 +1068,13 @@ root = Stack([card])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$email = ""
+<pre><code class="example-source"># Highlights: template literal welcome line + @If for the success Callout.
+$email    = ""
 $password = ""
 $remember = true
-$msg = ""
+$msg      = ""
 
-login = Button("Sign in", Action([@Set($msg, "Welcome back, " + $email + "!")]), "primary")
+login = Button("Sign in", Action([@Set($msg, `Welcome back, ${$email}!`)]), "primary")
 
 actions = Buttons([
   login,
@@ -1067,7 +1099,7 @@ card = Card([
   Separator("horizontal", true),
   actions,
   footer,
-  $msg == "" ? null : Callout("success", "Signed in", $msg)
+  @If($msg != "", Callout("success", "Signed in", $msg))
 ])
 
 root = Stack([card])</code></pre>
@@ -1086,40 +1118,40 @@ root = Stack([card])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$query = ""
+<pre><code class="example-source">$query    = ""
 $category = "all"
+$$cart    = []
 
 products = Query("list_products", {}, {rows: [
-  {name: "Aurora Headphones", price: 149, category: "audio", rating: 4.7, badge: "New"},
-  {name: "Lumen Desk Lamp", price: 79, category: "home", rating: 4.5, badge: ""},
-  {name: "Nimbus Backpack", price: 119, category: "travel", rating: 4.8, badge: "Bestseller"},
-  {name: "Pulse Smartwatch", price: 229, category: "wearables", rating: 4.4, badge: ""},
-  {name: "Echo Bluetooth Speaker", price: 89, category: "audio", rating: 4.6, badge: ""},
-  {name: "Drift Travel Pillow", price: 29, category: "travel", rating: 4.3, badge: "Sale"}
+  {name: "Aurora Headphones",      price: 149, category: "audio",     rating: 4.7, badge: "New"},
+  {name: "Lumen Desk Lamp",        price: 79,  category: "home",      rating: 4.5, badge: ""},
+  {name: "Nimbus Backpack",        price: 119, category: "travel",    rating: 4.8, badge: "Bestseller"},
+  {name: "Pulse Smartwatch",       price: 229, category: "wearables", rating: 4.4, badge: ""},
+  {name: "Echo Bluetooth Speaker", price: 89,  category: "audio",     rating: 4.6, badge: ""},
+  {name: "Drift Travel Pillow",    price: 29,  category: "travel",    rating: 4.3, badge: "Sale"}
 ]})
 
-filtered = @Filter(products.rows, "category", "equals", $category)
-visible = $category == "all" ? products.rows : filtered
-hits = @Filter(visible, "name", "contains", $query)
+visible = @If($category == "all", products.rows, @Filter(products.rows, "category", "==", $category))
+hits    = @Filter(visible, "name", "contains", $query)
 
-makeCard = @Each(hits, "p", Card([
+ProductCard(p) = Card([
   Stack([
     TextContent(p.name, "large-heavy"),
-    Badge(p.badge, "primary", null, "sm")
+    @If(p.badge != "", Badge(p.badge, "primary", null, "sm"))
   ], "row", "s", "center", "between"),
-  TextContent("$" + p.price, "body-heavy", "primary"),
+  TextContent(@FormatCurrency(p.price, "USD"), "body-heavy", "primary"),
   Stack([
-    Badge(p.category, "neutral", null, "sm"),
-    Rating(p.rating, 5, "" + p.rating, null, "sm")
+    Badge(@Titlecase(p.category), "neutral", null, "sm"),
+    Rating(p.rating, 5, `${p.rating}`, null, "sm")
   ], "row", "s", "center", "start"),
   Buttons([
-    Button("Add to cart", Action([@ToAssistant("Add " + p.name + " to my cart")]), "primary", "normal", "small"),
+    Button("Add to cart", Action([@Push($$cart, p.name), @ToAssistant(`Add ${p.name} to my cart`)]), "primary", "normal", "small"),
     Button("Details", null, "secondary", "normal", "small")
   ])
-]))
+])
 
-filters = Stack([
-  FormControl("Search", Input("q", "Search products", "text", null, $query)),
+filters = Toolbar([
+  FormControl("Search",   SearchBar("q", "Search products", $query, "/")),
   FormControl("Category", Select("cat", [
     SelectItem("all","All"),
     SelectItem("audio","Audio"),
@@ -1127,20 +1159,21 @@ filters = Stack([
     SelectItem("travel","Travel"),
     SelectItem("wearables","Wearables")
   ], null, null, $category))
-], "row", "m", "stretch", "start", true)
+])
 
-stats = Stack([
-  StatCard("Showing", "" + @Count(hits)),
-  StatCard("Avg rating", "" + @Avg(hits.rating)),
-  StatCard("Avg price", "$" + @Avg(hits.price))
-], "row", "m", "stretch", "start", true)
+stats = Stats([
+  {label:"Showing",    value: `${@Count(hits)} of ${@Count(products.rows)}`, hint: `${@Count($$cart)} in cart`, tone:"primary"},
+  {label:"Avg rating", value: `${@Round(@Avg(hits.rating), 1)} ★`,            tone:"success"},
+  {label:"Avg price",  value: @FormatCurrency(@Avg(hits.price), "USD"),        tone:"info"}
+], "start")
 
-grid = Stack([makeCard], "row", "m", "stretch", "start", true)
+grid  = Grid(@Each(hits, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "m")
+empty = EmptyState("No matches", "Try a different search or category.", "magnifying-glass")
 
 root = Stack([
   Card([CardHeader("Storefront", "Curated essentials"), filters]),
   stats,
-  @Count(hits) > 0 ? grid : Callout("info", "No matches", "Try a different search or category.")
+  @If(@Count(hits) &gt; 0, grid, empty)
 ])</code></pre>
         </div>
       </div>
@@ -1256,18 +1289,19 @@ faq = Accordion([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$status = "all"
+<pre><code class="example-source"># Highlights: fixed "equals" → "==", @Switch replaces 4-way ternary, $$persistent filter,
+$$status = "all"
 
 orders = Query("list_orders", {}, {rows: [
-  {id: "ORD-2041", date: "May 6", customer: "Ada Lovelace", items: 3, total: 142.40, status: "shipped"},
-  {id: "ORD-2040", date: "May 5", customer: "Grace Hopper", items: 1, total: 49.00, status: "processing"},
-  {id: "ORD-2039", date: "May 5", customer: "Linus Torvalds", items: 2, total: 88.50, status: "delivered"},
+  {id: "ORD-2041", date: "May 6", customer: "Ada Lovelace",      items: 3, total: 142.40, status: "shipped"},
+  {id: "ORD-2040", date: "May 5", customer: "Grace Hopper",      items: 1, total: 49.00,  status: "processing"},
+  {id: "ORD-2039", date: "May 5", customer: "Linus Torvalds",    items: 2, total: 88.50,  status: "delivered"},
   {id: "ORD-2038", date: "May 4", customer: "Margaret Hamilton", items: 5, total: 312.99, status: "shipped"},
-  {id: "ORD-2037", date: "May 3", customer: "Alan Turing", items: 1, total: 19.95, status: "cancelled"},
+  {id: "ORD-2037", date: "May 3", customer: "Alan Turing",       items: 1, total: 19.95,  status: "cancelled"},
   {id: "ORD-2036", date: "May 2", customer: "Katherine Johnson", items: 4, total: 240.00, status: "delivered"}
 ]})
 
-filtered = $status == "all" ? orders.rows : @Filter(orders.rows, "status", "equals", $status)
+filtered = @If($$status == "all", orders.rows, @Filter(orders.rows, "status", "==", $$status))
 
 statusFilter = FormControl("Filter", Select("status", [
   SelectItem("all","All orders"),
@@ -1275,39 +1309,40 @@ statusFilter = FormControl("Filter", Select("status", [
   SelectItem("shipped","Shipped"),
   SelectItem("delivered","Delivered"),
   SelectItem("cancelled","Cancelled")
-], null, null, $status))
+], null, null, $$status))
 
-stats = Stack([
-  StatCard("Orders", "" + @Count(filtered)),
-  StatCard("Revenue", "$" + @Sum(filtered.total), "up"),
-  StatCard("Avg ticket", "$" + @Round(@Avg(filtered.total), 2))
-], "row", "m", "stretch", "start", true)
+stats = MetricGrid([
+  StatCard("Orders",     `${@Count(filtered)}`,                                  "flat", `${@Plural(@Count(filtered), "match", "matches")}`, "list-check"),
+  StatCard("Revenue",    @FormatCurrency(@Sum(filtered.total), "USD"),            "up",   "this filter",                                     "sack-dollar"),
+  StatCard("Avg ticket", @FormatCurrency(@Round(@Avg(filtered.total), 2), "USD"), "flat", "per order",                                       "receipt")
+])
 
-statusTags = @Each(filtered, "row",
-  row.status == "delivered" ? Badge("Delivered", "success", null, "sm") :
-  row.status == "shipped"   ? Badge("Shipped", "info", null, "sm") :
-  row.status == "processing"? Badge("Processing", "warning", null, "sm") :
-                              Badge("Cancelled", "danger", null, "sm"))
+StatusBadge(s) = @Switch(s, {
+  delivered:  Badge("Delivered",  "success", null, "sm"),
+  shipped:    Badge("Shipped",    "info",    null, "sm"),
+  processing: Badge("Processing", "warning", null, "sm")
+}, Badge("Cancelled", "danger", null, "sm"))
 
-actions = @Each(filtered, "row", Buttons([
-  Button("View", Action([@ToAssistant("Show order " + row.id)]), "secondary", "normal", "small"),
-  Button("Reorder", Action([@ToAssistant("Reorder " + row.id)]), "ghost", "normal", "small")
+statusTags = @Each(filtered, "{status}", StatusBadge(status))
+actions    = @Each(filtered, "{id}", Buttons([
+  Button("View",    Action([@ToAssistant(`Show order ${id}`)]),    "secondary", "normal", "small"),
+  Button("Reorder", Action([@ToAssistant(`Reorder ${id}`)]),       "ghost",     "normal", "small")
 ]))
 
 table = Table([
-  Col("Order", filtered.id),
-  Col("Date", filtered.date),
+  Col("Order",    filtered.id),
+  Col("Date",     filtered.date),
   Col("Customer", filtered.customer),
-  Col("Items", filtered.items, "number"),
-  Col("Total", filtered.total, "currency"),
-  Col("Status", statusTags),
-  Col("Actions", actions)
+  Col("Items",    filtered.items, "number"),
+  Col("Total",    filtered.total, "currency"),
+  Col("Status",   statusTags),
+  Col("Actions",  actions)
 ])
 
 root = Stack([
   Card([CardHeader("Order history", "Last 30 days"), statusFilter]),
   stats,
-  Card([CardHeader("Orders"), @Count(filtered) > 0 ? table : Callout("info", "Nothing here", "No orders match this filter.")])
+  Card([CardHeader("Orders"), @If(@Count(filtered) &gt; 0, table, EmptyState("Nothing here", "No orders match this filter.", "inbox"))])
 ])</code></pre>
         </div>
       </div>
@@ -1324,48 +1359,51 @@ root = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">cart = Query("get_cart", {}, {items: [
+<pre><code class="example-source"># Highlights: @Each destructuring, template literals, @FormatCurrency, @If for the discount row.
+cart = Query("get_cart", {}, {items: [
   {sku: "AUR-01", name: "Aurora Headphones", qty: 1, price: 149.00},
-  {sku: "LUM-02", name: "Lumen Desk Lamp", qty: 2, price: 79.00},
-  {sku: "NIM-03", name: "Nimbus Backpack", qty: 1, price: 119.00}
+  {sku: "LUM-02", name: "Lumen Desk Lamp",   qty: 2, price: 79.00},
+  {sku: "NIM-03", name: "Nimbus Backpack",   qty: 1, price: 119.00}
 ]})
 
-lineTotals = @Each(cart.items, "i", i.qty * i.price)
+lineTotals = @Each(cart.items, "{qty, price}", qty * price)
 
 subtotal = @Sum(lineTotals)
-shipping = subtotal > 200 ? 0 : 12
-discount = subtotal > 250 ? @Round(subtotal * 0.10, 2) : 0
-tax = @Round((subtotal - discount) * 0.085, 2)
-total = subtotal + shipping + tax - discount
+shipping = @If(subtotal &gt; 200, 0,  12)
+discount = @If(subtotal &gt; 250, @Round(subtotal * 0.10, 2), 0)
+tax      = @Round((subtotal - discount) * 0.085, 2)
+total    = subtotal + shipping + tax - discount
 
-qtyTags = @Each(cart.items, "i", Badge("× " + i.qty, "neutral", null, "sm"))
-remove = @Each(cart.items, "i", Button("Remove", Action([@ToAssistant("Remove " + i.sku + " from cart")]), "ghost", "normal", "small"))
-lineCol = @Each(cart.items, "i", "$" + (i.qty * i.price))
+qtyTags = @Each(cart.items, "{qty}",            Badge(`× ${qty}`,           "neutral", null, "sm"))
+remove  = @Each(cart.items, "{sku}",            Button("Remove", Action([@ToAssistant(`Remove ${sku} from cart`)]), "ghost", "normal", "small"))
+lineCol = @Each(cart.items, "{qty, price}",     @FormatCurrency(qty * price, "USD"))
 
 table = Table([
-  Col("Item", cart.items.name),
-  Col("Qty", qtyTags),
-  Col("Unit", cart.items.price, "currency"),
-  Col("Line total", lineCol, "currency"),
-  Col("", remove)
+  Col("Item",       cart.items.name),
+  Col("Qty",        qtyTags),
+  Col("Unit",       cart.items.price, "currency"),
+  Col("Line total", lineCol),
+  Col("",           remove)
 ])
+
+Row(label, value, tone) = Stack([TextContent(label, "small", tone), TextContent(value, "small-heavy", tone)], "row", "s", "center", "between")
 
 summary = Card([
   CardHeader("Order summary"),
-  Stack([TextContent("Subtotal", "small"), TextContent("$" + subtotal, "small-heavy")], "row", "s", "center", "between"),
-  Stack([TextContent("Shipping", "small"), TextContent(shipping == 0 ? "Free" : "$" + shipping, "small-heavy")], "row", "s", "center", "between"),
-  Stack([TextContent("Tax (8.5%)", "small"), TextContent("$" + tax, "small-heavy")], "row", "s", "center", "between"),
-  discount > 0 ? Stack([TextContent("Discount", "small", "success"), TextContent("- $" + discount, "small-heavy", "success")], "row", "s", "center", "between") : null,
+  Row("Subtotal",   @FormatCurrency(subtotal, "USD"), "muted"),
+  Row("Shipping",   @If(shipping == 0, "Free", @FormatCurrency(shipping, "USD")), "muted"),
+  Row("Tax (8.5%)", @FormatCurrency(tax, "USD"), "muted"),
+  @If(discount &gt; 0, Row("Discount", `- ${@FormatCurrency(discount, "USD")}`, "success")),
   Separator("horizontal", true),
-  Stack([TextContent("Total", "large-heavy"), TextContent("$" + total, "large-heavy", "primary")], "row", "s", "center", "between"),
+  Stack([TextContent("Total", "large-heavy"), TextContent(@FormatCurrency(total, "USD"), "large-heavy", "primary")], "row", "s", "center", "between"),
   Buttons([
-    Button("Checkout", Action([@ToAssistant("Proceed to checkout")]), "primary"),
+    Button("Checkout",    Action([@ToAssistant("Proceed to checkout")]), "primary"),
     Button("Apply coupon", null, "secondary")
   ])
 ])
 
 root = Stack([
-  Card([CardHeader("Your cart", @Count(cart.items) + " items"), table]),
+  Card([CardHeader("Your cart", `${@Count(cart.items)} ${@Plural(@Count(cart.items), "item", "items")}`), table]),
   summary
 ])</code></pre>
         </div>
@@ -1549,47 +1587,47 @@ root = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$tab = "active"
-$selected = {t1: true, t6: true}
+<pre><code class="example-source">$$tab      = "active"
+$$selected = {t1: true, t6: true}
 
 todos = Query("list_todos", {}, {rows: [
-  {id: "t1", title: "Draft the launch announcement", project: "Marketing", due: "Today", priority: "high", done: true},
-  {id: "t2", title: "Review pull requests", project: "Engineering", due: "Today", priority: "medium", done: false},
-  {id: "t3", title: "Sync with design on cart UX", project: "Product", due: "Tomorrow", priority: "high", done: false},
-  {id: "t4", title: "Update onboarding checklist", project: "Customer success", due: "Fri", priority: "low", done: false},
-  {id: "t5", title: "Migrate analytics dashboard", project: "Engineering", due: "Next week", priority: "medium", done: false},
-  {id: "t6", title: "Send weekly investor update", project: "Operations", due: "Last week", priority: "low", done: true}
+  {id: "t1", title: "Draft the launch announcement",  project: "Marketing",        due: "Today",     priority: "high",   done: true},
+  {id: "t2", title: "Review pull requests",           project: "Engineering",      due: "Today",     priority: "medium", done: false},
+  {id: "t3", title: "Sync with design on cart UX",    project: "Product",          due: "Tomorrow",  priority: "high",   done: false},
+  {id: "t4", title: "Update onboarding checklist",    project: "Customer success", due: "Fri",       priority: "low",    done: false},
+  {id: "t5", title: "Migrate analytics dashboard",    project: "Engineering",      due: "Next week", priority: "medium", done: false},
+  {id: "t6", title: "Send weekly investor update",    project: "Operations",       due: "Last week", priority: "low",    done: true}
 ]})
 
-active = @Filter(todos.rows, "done", "equals", false)
-done = @Filter(todos.rows, "done", "equals", true)
-visible = $tab == "done" ? done : ($tab == "all" ? todos.rows : active)
+active = @Filter(todos.rows, "done", "==", false)
+done   = @Filter(todos.rows, "done", "==", true)
 
-priorityTag = @Each(visible, "t",
-  t.priority == "high"  ? Badge("High", "danger", null, "sm") :
-  t.priority == "medium"? Badge("Medium", "warning", null, "sm") :
-                          Badge("Low", "neutral", null, "sm"))
+visible = @Switch($$tab, {done: done, all: todos.rows}, active)
 
-selectableItems = @Each(visible, "t", CheckBoxItem(t.title, t.id, t.project + " · due " + t.due, t.done))
+PriorityBadge(p) = @Switch(p, {high: Badge("High","danger",null,"sm"), medium: Badge("Medium","warning",null,"sm")}, Badge("Low","neutral",null,"sm"))
+priorityTags     = @Each(visible, "{priority}", PriorityBadge(priority))
+
+selectableItems = @Each(visible, "{id, title, project, due, done}",
+  CheckBoxItem(title, id, `${project} · due ${due}`, done))
 
 board = Card([
   Stack([
     TextContent("Today's focus", "large-heavy"),
-    Badge("" + @Count(active) + " open", "primary", null, "sm")
+    Badge(`${@Count(active)} open`, "primary", null, "sm")
   ], "row", "s", "center", "between"),
-  CheckBoxGroup("todos", selectableItems, $selected)
+  CheckBoxGroup("todos", selectableItems, $$selected)
 ])
 
-stats = Stack([
-  StatCard("Open", "" + @Count(active)),
-  StatCard("Done", "" + @Count(done), "up"),
-  StatCard("High priority", "" + @Count(@Filter(active, "priority", "equals", "high")))
-], "row", "m", "stretch", "start", true)
+stats = MetricGrid([
+  StatCard("Open",          `${@Count(active)}`,                                    "flat", "to do",    "list-check"),
+  StatCard("Done",          `${@Count(done)}`,                                      "up",   "complete", "circle-check"),
+  StatCard("High priority", `${@Count(@Filter(active, "priority", "==", "high"))}`, "flat", "urgent",   "fire")
+])
 
 filter = Tabs([
   TabItem("active", "Active", [board]),
-  TabItem("done", "Done", [board]),
-  TabItem("all", "All", [board])
+  TabItem("done",   "Done",   [board]),
+  TabItem("all",    "All",    [board])
 ])
 
 addRow = Stack([
@@ -1598,7 +1636,7 @@ addRow = Stack([
 ], "row", "s", "center", "stretch", true)
 
 root = Stack([
-  Card([CardHeader("Todos", "Snapshot of your week"), addRow]),
+  Card([CardHeader("Todos", "Snapshot of your week · persists across reloads"), addRow]),
   stats,
   Card([CardHeader("Inbox"), filter])
 ])</code></pre>

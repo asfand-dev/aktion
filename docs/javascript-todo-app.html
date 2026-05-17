@@ -49,35 +49,37 @@
         (focus, keyboard shortcut, status pill). State and data flow stay
         declarative.
       </p>
-<pre class="example-source"><code id="src-todo">$filter = "all"
-$draft = ""
-$ver = 0
+<pre class="example-source"><code id="src-todo">$$filter  = "all"
+$draft    = ""
+$ver      = 0
 $shortcut = "⌘ Enter to add"
 
-data = Query("list_todos", {filter: $filter, ver: $ver}, {rows: [], total: 0, active: 0, done: 0})
-add = Mutation("add_todo", {title: $draft})
-toggle = Mutation("toggle_todo", {id: $toggleId})
-remove = Mutation("delete_todo", {id: $deleteId})
+data      = Query("list_todos", {filter: $$filter, ver: $ver}, {rows: [], total: 0, active: 0, done: 0})
+add       = Mutation("add_todo",       {title: $draft})
+toggle    = Mutation("toggle_todo",    {id: $toggleId})
+remove    = Mutation("delete_todo",    {id: $deleteId})
 clearDone = Mutation("clear_completed", {})
 $toggleId = ""
 $deleteId = ""
 
 inputField = FormControl("New task", Input("draft", "What needs doing?", "text", null, $draft))
-addBtn = Button("Add", Action([@Run(add), @Run(data), @Reset($draft)]), "primary")
-form = Stack([inputField, addBtn], "row", "m", "end")
+addBtn     = Button("Add", Action([@Run(add), @Run(data), @Reset($draft)]), "primary")
+form       = Stack([inputField, addBtn], "row", "m", "end")
+
+FilterBtn(label, key, count) = Button(`${label} (${count})`, Action([@Set($$filter, key)]), @If($$filter == key, "primary", "ghost"), "normal", "small")
 
 filterButtons = Buttons([
-  Button("All " + "(" + data.total + ")",        Action([@Set($filter, "all")]),    $filter == "all" ? "primary" : "ghost",    "normal", "small"),
-  Button("Active " + "(" + data.active + ")",    Action([@Set($filter, "active")]), $filter == "active" ? "primary" : "ghost", "normal", "small"),
-  Button("Completed " + "(" + data.done + ")",   Action([@Set($filter, "done")]),   $filter == "done" ? "primary" : "ghost",   "normal", "small")
+  FilterBtn("All",       "all",    data.total),
+  FilterBtn("Active",    "active", data.active),
+  FilterBtn("Completed", "done",   data.done)
 ])
 
 statusTag = Badge($shortcut, "neutral", null, "sm")
 
-toggleBtn = @Each(data.rows, "t", Button(t.done ? "Done" : "Open", Action([@Set($toggleId, t.id), @Run(toggle), @Run(data)]), t.done ? "secondary" : "ghost", "normal", "small"))
-deleteBtn = @Each(data.rows, "t", Button("Delete", Action([@Set($deleteId, t.id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))
-titleCell  = @Each(data.rows, "t", TextContent(t.title, t.done ? "small" : "body", t.done ? "muted" : null))
-createdCell= @Each(data.rows, "t", TextContent(t.created, "small", "muted"))
+toggleBtn  = @Each(data.rows, "{id, done}",        Button(@If(done, "Done", "Open"), Action([@Set($toggleId, id), @Run(toggle), @Run(data)]), @If(done, "secondary", "ghost"), "normal", "small"))
+deleteBtn  = @Each(data.rows, "{id}",              Button("Delete", Action([@Set($deleteId, id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))
+titleCell  = @Each(data.rows, "{title, done}",     TextContent(title, @If(done, "small", "body"), @If(done, "muted", null)))
+createdCell= @Each(data.rows, "{created}",         TextContent(created, "small", "muted"))
 
 tbl = Table([
   Col("",        toggleBtn),
@@ -86,18 +88,18 @@ tbl = Table([
   Col("",        deleteBtn)
 ])
 
-empty = TextContent($filter == "done" ? "Nothing completed yet." : ($filter == "active" ? "All clear!" : "No tasks. Add your first one above."), "small", "muted")
-list = @Count(data.rows) > 0 ? tbl : empty
+emptyCopy = @Switch($$filter, {done: "Nothing completed yet.", active: "All clear!"}, "No tasks. Add your first one above.")
+list = @If(@Count(data.rows) > 0, tbl, EmptyState("Nothing here", emptyCopy, "list-check"))
 
 footer = Stack([
-  TextContent("" + data.active + " active · " + data.done + " done", "small", "muted"),
+  TextContent(`${data.active} active · ${data.done} done · ${@Plural(data.total, "task", "tasks")} total`, "small", "muted"),
   Button("Clear completed", Action([@Run(clearDone), @Run(data)]), "ghost", "normal", "small")
 ], "row", "m", "center", "between")
 
 shortcutScript = Script("shortcut", "const onKey = async (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); const draft = (ctx.state.get('draft') ?? '').trim(); if (!draft) return; await ctx.tools.add_todo({ title: draft }); if (ctx.signal.aborted) return; ctx.state.set('draft', ''); ctx.state.set('ver', (ctx.state.get('ver') ?? 0) + 1); } }; window.addEventListener('keydown', onKey); ctx.cleanup(() => window.removeEventListener('keydown', onKey));")
 
 root = Stack([
-  Card([CardHeader("Things to do", "Persisted to localStorage")]),
+  Card([CardHeader("Things to do", "Persisted to localStorage · filter persists too")]),
   Card([form]),
   Card([Stack([filterButtons, statusTag], "row", "m", "center", "between")]),
   Card([list]),

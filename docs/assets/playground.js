@@ -66,11 +66,11 @@ const EXAMPLES = {
     code: `root = Stack([greeting, sample, follow])
 greeting = Card([CardHeader("Hello, world", "Edit this text and watch it update")])
 sample = Card([
-  CardHeader("Sample stat"),
+  CardHeader("Sample stats"),
   MetricGrid([
-    StatCard("Active users", "12,540", "up", "+12% vs last week"),
-    StatCard("Revenue", "$48.2k", "flat"),
-    StatCard("Errors", "12", "down", "-32%")
+    StatCard("Active users", \`\${@FormatNumber(12540)}\`, "up", "+12% vs last week", "users"),
+    StatCard("Revenue",      \`\${@FormatCurrency(48230, "USD")}\`, "flat", "stable", "sack-dollar"),
+    StatCard("Errors",       "12", "down", "-32%", "triangle-exclamation")
   ])
 ])
 follow = FollowUpBlock([
@@ -81,50 +81,67 @@ follow = FollowUpBlock([
   },
   dashboard: {
     label: "Project dashboard",
-    code: `root = Stack([header, kpis, board, follow])
-header = PageHeader("Engineering Q3", "12 active · 4 at risk", ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
+    code: `# Highlights: macro for KanbanCard, @Each with destructuring, template literals.
+root = Stack([header, kpis, board, follow])
+header = PageHeader("Engineering Q3", \`\${@Count(projects)} active · \${@Count(atRisk)} at risk\`, ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
 headerActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
 kpis = MetricGrid([
-  StatCard("Active", "12", "flat"),
-  StatCard("At risk", "4", "up", "+2"),
-  StatCard("Shipped", "8", "up", "+3"),
-  StatCard("On-time", "87%", "down", "-3%")
+  StatCard(\`Active\`,  \`\${@Count(projects)}\`, "flat", "0 vs last week",                          "folder"),
+  StatCard(\`At risk\`, \`\${@Count(atRisk)}\`,   "up",   \`+\${@Count(atRisk) - 2} vs last week\`,    "triangle-exclamation"),
+  StatCard("Shipped", "8",                     "up",   "+3 vs last week",                          "rocket"),
+  StatCard("On-time", "87%",                   "down", "-3% vs last week",                         "clock")
 ])
+
+Card2(p) = KanbanCard(p.title, p.summary, p.tags, p.owner, p.tone, p.icon)
+
 board = KanbanBoard([
-  KanbanColumn("To do",  [KanbanCard("Migrate auth", "Roll out the new SDK.", ["auth"], "Asha")]),
-  KanbanColumn("Doing",  [KanbanCard("Streaming UI v2", "20 new components.", ["frontend"], "Alex", "primary")]),
-  KanbanColumn("Review", [KanbanCard("Mobile onboarding", "Awaiting design.", ["mobile"], "Wren", "warning")]),
-  KanbanColumn("Done",   [KanbanCard("Activity timeline", "Shipped.", ["shipped"], "Mira", "success")])
+  KanbanColumn("To do",  @Each(@Filter(projects, "stage", "==", "todo"),   "p", Card2(p))),
+  KanbanColumn("Doing",  @Each(@Filter(projects, "stage", "==", "doing"),  "p", Card2(p)), "primary"),
+  KanbanColumn("Review", @Each(@Filter(projects, "stage", "==", "review"), "p", Card2(p)), "warning"),
+  KanbanColumn("Done",   @Each(@Filter(projects, "stage", "==", "done"),   "p", Card2(p)), "success")
 ])
+
+projects = [
+  {title:"Migrate auth",      summary:"Roll out the new SDK.",   tags:["auth"],     owner:"Asha",  tone:"default", icon:"shield-halved",       stage:"todo"},
+  {title:"Streaming UI v2",   summary:"20 new components.",      tags:["frontend"], owner:"Alex",  tone:"primary", icon:"wand-magic-sparkles", stage:"doing"},
+  {title:"Mobile onboarding", summary:"Awaiting design review.", tags:["mobile"],   owner:"Wren",  tone:"warning", icon:"mobile-screen",       stage:"review"},
+  {title:"Activity timeline", summary:"Shipped to everyone.",    tags:["shipped"],  owner:"Mira",  tone:"success", icon:"circle-check",        stage:"done"}
+]
+atRisk = @Filter(projects, "tone", "==", "warning")
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
   },
   todo: {
     label: "Reactive todo",
-    code: `$todos = [{id: 1, text: "Welcome — try editing", done: false}]
-$draft = ""
+    code: `# Highlights: $$persistent todos, template literals, @Each destructuring, @If for empty state.
+$$todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done: false}]
+$draft  = ""
 
 addBtn = Button("Add", Action([
-  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Set($$todos, @Push($$todos, {id: $$todos.length + 1, text: $draft, done: false})),
   @Reset($draft)
 ]), "primary")
 
-row = Card([Stack([
-  TextContent(t.text),
-  Button("Delete", Action([@Set($todos, @Filter($todos, "id", "!=", t.id))]), "ghost")
+# Destructure each row — \`id\`, \`text\` are bound directly inside \`row\`, no \`t.\` prefix.
+row  = Card([Stack([
+  TextContent(text),
+  Button("Delete", Action([@Set($$todos, @Filter($$todos, "id", "!=", id))]), "ghost", "button", "small")
 ], "row", "s", "center", "between")])
 
-list = @Each($todos, "t", row)
+list = @Each($$todos, "{id, text}", row)
+body = @If($$todos.length > 0, list, EmptyState("Nothing to do", "Add a task above to get started.", "list-check"))
+
 root = Stack([
-  Card([CardHeader("Todo list", "Add / delete without writing JavaScript")]),
+  Card([CardHeader("Todo list", \`\${@Count($$todos)} \${@Plural(@Count($$todos), "task", "tasks")} · persisted across reloads\`)]),
   Input("draft-input", "What needs doing?", "text", null, $draft),
   addBtn,
-  list
+  body
 ])`,
   },
   routing: {
     label: "Routing demo",
-    code: `root = Stack([nav, main])
-nav = Stack([
+    code: `# Highlights: template literals replace string concatenation, ?? for fallbacks.
+root = Stack([nav, main])
+nav  = Stack([
   NavLink("Home",      "/",          "ghost", true),
   NavLink("Dashboard", "/dashboard", "ghost"),
   NavLink("Users",     "/users",     "ghost")
@@ -138,45 +155,49 @@ main = Routes([
 ], "/")
 
 homePage     = Card([CardHeader("Welcome", "Click a link above to navigate")])
-dashPage     = Card([CardHeader("Dashboard"), TextContent("Live route is " + $route)])
-userPage     = Card([CardHeader("User profile"), TextContent("Looking at user " + params.id)])
-notFoundPage = Callout("warning", "Not found", "Nothing here at " + $route + ".")`,
+dashPage     = Card([CardHeader("Dashboard"), TextContent(\`Live route is \${$route}\`)])
+userPage     = Card([CardHeader("User profile"), TextContent(\`Looking at user \${params.id ?? "(none)"}\`)])
+notFoundPage = Callout("warning", "Not found", \`Nothing here at \${$route}.\`)`,
   },
   counter: {
     label: "JS counter",
-    code: `$count = 0
+    code: `# Highlights: template literal label, @Clamp for safe arithmetic, optional chaining via ??.
+$count = 0
 
 root = Card([
   CardHeader("JS counter", "Powered by a single @Js action."),
   Stack([
-    TextContent("Current: " + $count),
+    TextContent(\`Current: \${@Clamp($count, -99, 99)}\`),
     Stack([
-      Button("-", Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") || 0) - 1)\`)])),
+      Button("-",     Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") ?? 0) - 1)\`)])),
       Button("Reset", Action([@Reset($count)]), "ghost"),
-      Button("+", Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") || 0) + 1)\`)]), "primary")
+      Button("+",     Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") ?? 0) + 1)\`)]), "primary")
     ], "row", "s")
   ])
 ])`,
   },
   chart: {
     label: "Chart + metrics",
-    code: `$range = "7"
-root = Stack([header, kpis, trend])
-header = PageHeader("Analytics", "Daily traffic last week")
-kpis = MetricGrid([
-  StatCard("Sessions", "12,540", "up", "+12%"),
-  StatCard("Avg. duration", "3m 12s", "flat"),
-  StatCard("Bounce rate", "32%", "down", "-2%")
+    code: `# Highlights: derived totals via @Sum + template literals, responsive Grid for chart row.
+$range = "7"
+root   = Stack([header, kpis, trendRow])
+header = PageHeader("Analytics", \`Daily traffic last \${$range} days\`)
+kpis   = MetricGrid([
+  StatCard("Sessions",     \`\${@FormatNumber(@Sum(thisWk))}\`, "up",   \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, "chart-line"),
+  StatCard("Avg. duration","3m 12s",                          "flat", "stable", "clock"),
+  StatCard("Bounce rate",  "32%",                             "down", "-2%",    "arrow-trend-down")
 ])
+trendRow = Grid([trend, breakdown], {sm: 1, md: 2}, "l")
 trend = Card([
   CardHeader("Sessions"),
-  CardBody([
-    LineChart(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"], [
-      Series("This week", [820, 1240, 1500, 1180, 1310, 980, 740]),
-      Series("Last week", [780, 1180, 1420, 1090, 1240, 920, 690])
-    ])
-  ])
-])`,
+  CardBody([LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"], [Series("This week", thisWk), Series("Last week", lastWk)])])
+])
+breakdown = Card([
+  CardHeader("By channel"),
+  CardBody([PieChart(["Organic","Direct","Referral"], [60, 25, 15])])
+])
+thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
+lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]`,
   },
 };
 

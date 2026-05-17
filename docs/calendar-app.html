@@ -39,13 +39,13 @@
         focus" follow-up demonstrates how the LLM can chain new events
         into the day with a single follow-up.
       </p>
-      <pre class="example-source"><code id="src-calendar">$date = "2026-05-13"
-$view = "agenda"
-$category = "all"
-$selected = ""
-$rsvp = "yes"
+      <pre class="example-source"><code id="src-calendar">$$date     = "2026-05-13"
+$$view     = "agenda"
+$$category = "all"
+$$selected = ""
+$rsvp      = "yes"
 
-events = Query("agenda_for", {date: $date, category: $category}, {
+events = Query("agenda_for", {date: $$date, category: $$category}, {
   day: "",
   busyMinutes: 0,
   totalMinutes: 480,
@@ -55,21 +55,17 @@ events = Query("agenda_for", {date: $date, category: $category}, {
   weekStats: {meetings: 0, focus: 0, deepWork: "0h", attendees: 0}
 })
 
-eventCount = @Count(events.rows)
-selected = @First(@Filter(events.rows, "id", "==", $selected))
-selectedExists = @Count(@Filter(events.rows, "id", "==", $selected))
+eventCount     = @Count(events.rows)
+selected       = @First(@Filter(events.rows, "id", "==", $$selected))
+selectedExists = @Count(@Filter(events.rows, "id", "==", $$selected))
 
 header = PageHeader(
   "Calendar",
-  events.day + " · " + eventCount + " events scheduled",
+  `${events.day} · ${eventCount} ${@Plural(eventCount, "event", "events")} scheduled`,
   Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Calendar")]),
   [
-    Button("Today",
-           Action([@Set($date, "2026-05-13")]),
-           "ghost"),
-    Button("Create event",
-           Action([@ToAssistant("Open the create-event form")]),
-           "primary")
+    Button("Today",        Action([@Set($$date, "2026-05-13")]),                 "ghost"),
+    Button("Create event", Action([@ToAssistant("Open the create-event form")]), "primary")
   ],
   Badge("Synced just now", "success")
 )
@@ -77,18 +73,18 @@ header = PageHeader(
 dateBar = Card([
   Stack([
     Stack([
-      DatePicker("anchor", $date, "Focused day", "2026-05-01", "2026-05-31"),
+      DatePicker("anchor", $$date, "Focused day", "2026-05-01", "2026-05-31"),
       Buttons([
-        Button("◀",  Action([@ToAssistant("Go to previous day")]),  "ghost", "button", "small"),
-        Button("▶",  Action([@ToAssistant("Go to next day")]),      "ghost", "button", "small")
+        Button("◀", Action([@ToAssistant("Go to previous day")]), "ghost", "button", "small"),
+        Button("▶", Action([@ToAssistant("Go to next day")]),     "ghost", "button", "small")
       ])
     ], "row", "s", "end"),
     Spacer(),
     ToggleGroup("view", [
-      {value: "agenda", label: "Agenda",       icon: "list-ul"},
-      {value: "week",   label: "Week",          icon: "calendar-week"},
-      {value: "free",   label: "Find time",     icon: "magnifying-glass"}
-    ], $view),
+      {value: "agenda", label: "Agenda",    icon: "list-ul"},
+      {value: "week",   label: "Week",      icon: "calendar-week"},
+      {value: "free",   label: "Find time", icon: "magnifying-glass"}
+    ], $$view),
     Spacer(),
     ToggleGroup("category", [
       {value: "all",      label: "All",       icon: "circle"},
@@ -96,53 +92,39 @@ dateBar = Card([
       {value: "focus",    label: "Focus",     icon: "headphones"},
       {value: "personal", label: "Personal",  icon: "mug-hot"},
       {value: "team",     label: "Team",      icon: "building-user"}
-    ], $category)
+    ], $$category)
   ], "row", "m", "center")
 ])
 
+busyTone = @If(events.busyPercent > 75, "danger", @If(events.busyPercent > 50, "warning", "success"))
+
 busyRing = Card([
   SectionHeader("Day load", "How packed is today?"),
-  ProgressRing(events.busyPercent, 100, "" + events.busyPercent + "%", "Busy", events.busyPercent > 75 ? "danger" : (events.busyPercent > 50 ? "warning" : "success"), "lg"),
+  ProgressRing(events.busyPercent, 100, `${events.busyPercent}%`, "Busy", busyTone, "lg"),
   Stats([
-    {label: "Busy",   value: "" + events.busyMinutes + "m",                 tone: events.busyPercent > 75 ? "danger" : "primary"},
-    {label: "Free",   value: "" + (events.totalMinutes - events.busyMinutes) + "m", tone: "success"},
-    {label: "Meetings", value: "" + @Count(@Filter(events.rows, "category", "==", "meetings")), tone: "info"},
-    {label: "Focus",  value: "" + @Count(@Filter(events.rows, "category", "==", "focus")),     tone: "default"}
+    {label: "Busy",     value: `${events.busyMinutes}m`,                                                tone: @If(events.busyPercent > 75, "danger", "primary")},
+    {label: "Free",     value: `${events.totalMinutes - events.busyMinutes}m`,                          tone: "success"},
+    {label: "Meetings", value: `${@Count(@Filter(events.rows, "category", "==", "meetings"))}`,         tone: "info"},
+    {label: "Focus",    value: `${@Count(@Filter(events.rows, "category", "==", "focus"))}`,             tone: "default"}
   ])
 ])
 
-agendaTimeline = Timeline(
-  @Each(events.rows, "e",
-    TimelineItem(
-      e.time + " · " + e.title,
-      e.duration + " · " + e.location,
-      e.summary,
-      e.icon,
-      e.tone
-    )
-  )
-)
+agendaTimeline = Timeline(@Each(events.rows, "{time, title, duration, location, summary, icon, tone}",
+  TimelineItem(`${time} · ${title}`, `${duration} · ${location}`, summary, icon, tone)
+))
 
-agendaList = Stack(@Each(events.rows, "e",
+agendaList = Stack(@Each(events.rows, "{id, time, title, location, duration, attendeeSummary, relative, icon, tone, unread, joinUrl}",
   Notification(
-    e.time + " · " + e.title,
-    e.location + " · " + e.duration + " · " + e.attendeeSummary,
-    e.relative,
-    e.icon,
+    `${time} · ${title}`,
+    `${location} · ${duration} · ${attendeeSummary}`,
+    relative,
+    icon,
     null,
-    e.tone,
-    e.unread,
+    tone,
+    unread,
     [
-      Button("Open",
-             Action([@Set($selected, e.id)]),
-             "secondary",
-             "button",
-             "small"),
-      Button("Join",
-             Action([@OpenUrl(e.joinUrl)]),
-             "primary",
-             "button",
-             "small")
+      Button("Open", Action([@Set($$selected, id)]),  "secondary", "button", "small"),
+      Button("Join", Action([@OpenUrl(joinUrl)]),     "primary",   "button", "small")
     ]
   )
 ), "column", "s")
@@ -151,60 +133,58 @@ emptyAgenda = EmptyState(
   "Nothing scheduled",
   "You have the whole day free. Block focus time or invite the team.",
   "mug-hot",
-  Button("Block 2h of focus",
-         Action([@ToAssistant("Block 2 hours of focus time on " + $date)]),
-         "primary")
+  Button("Block 2h of focus", Action([@ToAssistant(`Block 2 hours of focus time on ${$$date}`)]), "primary")
 )
 
-freeBlocks = Stack(
-  @Each(events.freeBlocks, "b",
-    Stack([
-      StatusDot(b.label + " · " + b.duration, "success"),
-      Spacer(),
-      Badge("Available", "success", "circle-check", "sm"),
-      Button("Book",
-             Action([@ToAssistant("Book " + b.label + " for focus")]),
-             "secondary",
-             "button",
-             "small")
-    ], "row", "s", "center")
-  ),
-  "column", "s"
-)
+freeBlocks = Stack(@Each(events.freeBlocks, "{label, duration}",
+  Stack([
+    StatusDot(`${label} · ${duration}`, "success"),
+    Spacer(),
+    Badge("Available", "success", "circle-check", "sm"),
+    Button("Book", Action([@ToAssistant(`Book ${label} for focus`)]), "secondary", "button", "small")
+  ], "row", "s", "center")
+), "column", "s")
 
 weekCard = Card([
   SectionHeader("Week at a glance", "Mon–Fri overview", null, Badge("Week 20", "info", null, "sm")),
   MetricGrid([
-    StatCard("Meetings",       "" + events.weekStats.meetings,                     "down", "-3 vs last week", "users"),
-    StatCard("Focus blocks",   "" + events.weekStats.focus,                        "up",   "+2",              "headphones"),
-    StatCard("Deep work",      events.weekStats.deepWork,                           "up",   "longest in 3 wks","clock"),
-    StatCard("Total attendees","" + events.weekStats.attendees,                     "flat", "across meetings", "user-group")
+    StatCard("Meetings",        `${events.weekStats.meetings}`,  "down", "-3 vs last week",  "users"),
+    StatCard("Focus blocks",    `${events.weekStats.focus}`,     "up",   "+2",                "headphones"),
+    StatCard("Deep work",       events.weekStats.deepWork,        "up",   "longest in 3 wks",  "clock"),
+    StatCard("Total attendees", `${events.weekStats.attendees}`,  "flat", "across meetings",   "user-group")
   ])
 ])
 
 freePane = Card([
-  SectionHeader("Free time", "30+ minute blocks on " + events.day),
-  @Count(events.freeBlocks) == 0 ? EmptyState("No free slots today", "Try tomorrow or shorten a meeting.", "circle-info", null) : freeBlocks
+  SectionHeader("Free time", `30+ minute blocks on ${events.day}`),
+  @If(@Count(events.freeBlocks) == 0,
+      EmptyState("No free slots today", "Try tomorrow or shorten a meeting.", "circle-info", null),
+      freeBlocks)
 ])
 
-mainBody = $view == "agenda" ? (eventCount == 0 ? emptyAgenda : agendaList) : ($view == "free" ? freePane : weekCard)
+mainBody = @Switch($$view, {
+  agenda: @If(eventCount == 0, emptyAgenda, agendaList),
+  free:   freePane
+}, weekCard)
 
 agendaCard = Card([
-  SectionHeader("Agenda", events.day, null, Badge("" + eventCount + " events", "primary", null, "sm")),
+  SectionHeader("Agenda", events.day, null, Badge(`${eventCount} events`, "primary", null, "sm")),
   mainBody,
   Separator("horizontal", true),
   SectionHeader("Day timeline", "Sequential view of every event"),
-  eventCount == 0 ? TextContent("No events to plot.", "small", "muted") : agendaTimeline
+  @If(eventCount == 0, TextContent("No events to plot.", "small", "muted"), agendaTimeline)
 ])
+
+QuickDateBtn(label, isoDate) = Button(label, Action([@Set($$date, isoDate)]), @If($$date == isoDate, "primary", "ghost"), "button", "small")
 
 quickPicker = Card([
   SectionHeader("Jump to date", "Quick picks for this week"),
   Buttons([
-    Button("Mon · 12 May", Action([@Set($date, "2026-05-12")]), $date == "2026-05-12" ? "primary" : "ghost", "button", "small"),
-    Button("Tue · 13 May", Action([@Set($date, "2026-05-13")]), $date == "2026-05-13" ? "primary" : "ghost", "button", "small"),
-    Button("Wed · 14 May", Action([@Set($date, "2026-05-14")]), $date == "2026-05-14" ? "primary" : "ghost", "button", "small"),
-    Button("Thu · 15 May", Action([@Set($date, "2026-05-15")]), $date == "2026-05-15" ? "primary" : "ghost", "button", "small"),
-    Button("Fri · 16 May", Action([@Set($date, "2026-05-16")]), $date == "2026-05-16" ? "primary" : "ghost", "button", "small")
+    QuickDateBtn("Mon · 12 May", "2026-05-12"),
+    QuickDateBtn("Tue · 13 May", "2026-05-13"),
+    QuickDateBtn("Wed · 14 May", "2026-05-14"),
+    QuickDateBtn("Thu · 15 May", "2026-05-15"),
+    QuickDateBtn("Fri · 16 May", "2026-05-16")
   ])
 ])
 
@@ -229,67 +209,61 @@ detailEmpty = EmptyState(
   null
 )
 
+AttendeeChip(a) = PersonChip(a.name, a.role, a.avatar, "md", @If(a.online, "online", null))
+
 detailLoaded = Stack([
   PageHeader(
     selected.title,
-    selected.time + " · " + selected.duration + " · " + selected.location,
+    `${selected.time} · ${selected.duration} · ${selected.location}`,
     null,
     null,
     Badge(selected.statusLabel, selected.tone, null, "sm")
   ),
   DescriptionList([
-    DescriptionItem("Date",     events.day,        "calendar"),
-    DescriptionItem("Time",     selected.time + " (" + selected.duration + ")", "clock"),
-    DescriptionItem("Location", selected.location, "location-dot"),
-    DescriptionItem("Host",     selected.host,     "user-tie"),
-    DescriptionItem("Calendar", selected.calendar, "tag")
+    DescriptionItem("Date",     events.day,                                     "calendar"),
+    DescriptionItem("Time",     `${selected.time} (${selected.duration})`,       "clock"),
+    DescriptionItem("Location", selected.location,                              "location-dot"),
+    DescriptionItem("Host",     selected.host,                                  "user-tie"),
+    DescriptionItem("Calendar", selected.calendar,                              "tag")
   ]),
   Separator("horizontal", true),
   SectionHeader("Agenda", "Topics planned for this meeting"),
   List(@Each(selected.agenda, "topic", ListItem(topic, null, "circle-check"))),
   Separator("horizontal", true),
-  SectionHeader("Attendees", "" + @Count(selected.attendees) + " invited"),
-  Stack(@Each(selected.attendees, "a",
-    PersonChip(a.name, a.role, a.avatar, "md", a.online ? "online" : null)
-  ), "column", "s"),
+  SectionHeader("Attendees", `${@Count(selected.attendees)} invited`),
+  Stack(@Each(selected.attendees, "a", AttendeeChip(a)), "column", "s"),
   Separator("horizontal", true),
   SectionHeader("Your RSVP"),
   Radio("rsvp", [
-    SelectItem("yes",    "Yes — I'll be there"),
-    SelectItem("maybe",  "Maybe"),
-    SelectItem("no",     "Decline")
+    SelectItem("yes",   "Yes — I'll be there"),
+    SelectItem("maybe", "Maybe"),
+    SelectItem("no",    "Decline")
   ], $rsvp),
   Stack([
     Spacer(),
     Buttons([
-      Button("Reschedule",
-             Action([@ToAssistant("Reschedule " + selected.title)]),
-             "secondary"),
-      Button("Send RSVP",
-             Action([@ToAssistant("RSVP " + $rsvp + " for " + selected.title)]),
-             "primary")
+      Button("Reschedule", Action([@ToAssistant(`Reschedule ${selected.title}`)]),                 "secondary"),
+      Button("Send RSVP",  Action([@ToAssistant(`RSVP ${$rsvp} for ${selected.title}`)]),          "primary")
     ])
   ], "row", "m", "center")
 ], "column", "m")
 
 eventSheet = Sheet(
   "Event detail",
-  $selected != "",
-  [selectedExists == 0 ? detailEmpty : detailLoaded],
+  $$selected != "",
+  [@If(selectedExists == 0, detailEmpty, detailLoaded)],
   "right",
   [Buttons([
-    Button("Close", Action([@Set($selected, "")]), "ghost"),
-    Button("Join now",
-           Action([@OpenUrl("https://meet.example.com/" + $selected)]),
-           "primary")
+    Button("Close",    Action([@Set($$selected, "")]),                                            "ghost"),
+    Button("Join now", Action([@OpenUrl(`https://meet.example.com/${$$selected}`)]),              "primary")
   ])]
 )
 
 dayStats = Stats([
-  {label: events.day, value: "" + eventCount + " events", hint: "today",          tone: "primary"},
-  {label: "Busy",     value: "" + events.busyMinutes + " min", hint: "" + events.busyPercent + "% of day", tone: events.busyPercent > 75 ? "danger" : "info"},
-  {label: "Free",     value: "" + (events.totalMinutes - events.busyMinutes) + " min", hint: "longest block",  tone: "success"},
-  {label: "Focus",    value: "" + @Count(@Filter(events.rows, "category", "==", "focus")), hint: "blocks scheduled", tone: "default"}
+  {label: events.day, value: `${eventCount} events`,                                          hint: "today",            tone: "primary"},
+  {label: "Busy",     value: `${events.busyMinutes} min`,                                     hint: `${events.busyPercent}% of day`, tone: @If(events.busyPercent > 75, "danger", "info")},
+  {label: "Free",     value: `${events.totalMinutes - events.busyMinutes} min`,                hint: "longest block",   tone: "success"},
+  {label: "Focus",    value: `${@Count(@Filter(events.rows, "category", "==", "focus"))}`,    hint: "blocks scheduled", tone: "default"}
 ])
 
 followUps = FollowUpBlock([
