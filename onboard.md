@@ -140,11 +140,16 @@ is just data — Streaming UI Script never asks you to write HTML by hand.
 > **Try this.** Add a third child to the card: `Badge("New", "primary")`.
 > The badge will appear inside the card, below the header.
 
-You now know enough to make the most common mistake (and avoid it):
+You now know enough to make the most common mistake (and avoid it). Wrong:
 
 ```text
-root = Card(CardHeader("Hi"), TextContent("Bye"))     ✘ Card expects ONE array
-root = Card([CardHeader("Hi"), TextContent("Bye")])    ✓ children go in []
+root = Card(CardHeader("Hi"), TextContent("Bye"))
+```
+
+Right:
+
+```text
+root = Card([CardHeader("Hi"), TextContent("Bye")])
 ```
 
 Whenever a component's signature says "children", pass them as a single
@@ -418,13 +423,13 @@ label   = @Plural($todos.length, "task")      # "1 task" / "3 tasks"
 You can mix and match freely — every builtin is a pure function of its
 arguments, so you can chain them: `@FormatCurrency(@Sum($invoices.amount))`.
 
-> **Try this.** Combine what you've learned: render only the *open* todos
-> from chapter 6, sorted by title.
->
-> ```text
-> visible = @Sort(@Filter($todos, "done", "==", false), "title", "asc")
-> list = @Each(visible, "t", row)
-> ```
+**Try this.** Combine what you've learned: render only the *open* todos
+from chapter 6, sorted by title.
+
+```text
+visible = @Sort(@Filter($todos, "done", "==", false), "title", "asc")
+list = @Each(visible, "t", row)
+```
 
 ---
 
@@ -503,17 +508,18 @@ root = EmptyState("No items", "Add your first one below.", "inbox",
 everything, applies muted typography for the description, and pairs the
 CTA with the right spacing — all for free.
 
-> **Try this.** Replace the counter from chapter 4 with a `MetricGrid`:
->
-> ```text
-> kpis = MetricGrid([
->   StatCard("Tasks",     "" + $count,      "up"),
->   StatCard("Streak",    "5 days",         "up", "+1"),
->   StatCard("Focus",     "2h 18m",         "flat")
-> ])
-> ```
-> Add it to your root and you've turned a one-button counter into a
-> dashboard-ready stat strip.
+**Try this.** Replace the counter from chapter 4 with a `MetricGrid`:
+
+```text
+kpis = MetricGrid([
+  StatCard("Tasks",     "" + $count,      "up"),
+  StatCard("Streak",    "5 days",         "up", "+1"),
+  StatCard("Focus",     "2h 18m",         "flat")
+])
+```
+
+Add it to your root and you've turned a one-button counter into a
+dashboard-ready stat strip.
 
 ---
 
