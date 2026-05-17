@@ -7,6 +7,7 @@ import type { ComponentSpec } from "../types.js";
 import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { renderInlineSparkline } from "./patterns.js";
+import { pickIconForLabel } from "./_internal.js";
 
 const COL_ALIGN = ["left", "center", "right"] as const;
 
@@ -172,9 +173,11 @@ export const StatCard: ComponentSpec = {
     const tone = asString(props.tone, "default");
     const root = el("div", { class: "rui-stat-card", "data-tone": tone });
     const labelRow = el("div", { class: "rui-stat-label-row" });
-    const iconNode = renderIcon(props.icon, { className: "rui-stat-icon" });
+    const label = asString(props.label);
+    const iconName = asString(props.icon) || pickIconForLabel(label) || "";
+    const iconNode = renderIcon(iconName, { className: "rui-stat-icon" });
     if (iconNode) labelRow.append(iconNode);
-    labelRow.append(el("div", { class: "rui-stat-label" }, [asString(props.label)]));
+    labelRow.append(el("div", { class: "rui-stat-label" }, [label]));
     root.append(labelRow);
     root.append(el("div", { class: "rui-stat-value" }, [asString(props.value)]));
     const delta = asString(props.delta);

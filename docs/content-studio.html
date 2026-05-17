@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Content studio · streaming-ui-script</title>
+  <link rel="stylesheet" href="assets/example-page.css" />
+  <script type="module" src="assets/example-page.js?v=2026.05.13"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body>
+  <div class="example-shell">
+    <header class="example-topbar">
+      <a class="example-brand" href="live-examples.html">
+        <span class="dot"></span>
+        streaming-ui-script · content studio
+      </a>
+      <a class="example-back" href="live-examples.html">← Back to live examples</a>
+    </header>
+
+    <section class="example-hero">
+      <span class="tag-pill">Live demo · editors + advanced forms</span>
+      <h1 style="margin-top:10px">A CMS-style studio: RichTextEditor, CodeEditor, MultiStepForm, and every advanced input</h1>
+      <p>
+        A complete content authoring surface — write the body in
+        <code>RichTextEditor</code>, paste a snippet into
+        <code>CodeEditor</code>, pick a brand colour with
+        <code>ColorPicker</code>, manage tags with <code>TagInput</code>,
+        mention teammates via <code>MentionInput</code>, run a release
+        wizard with <code>MultiStepForm</code>, and gate publish with
+        <code>PinInput</code>/<code>OtpInput</code>. The whole form is
+        validated through <code>ValidationSummary</code>, grouped by
+        <code>FormSection</code>/<code>FieldSet</code>, and wrapped in
+        the new <code>TopBar</code>+<code>BreadcrumbPageHeader</code>.
+      </p>
+    </section>
+
+    <article class="example-card">
+      <h2>Live preview</h2>
+      <p class="lede">
+        Every input writes back into a <code>$variable</code>, so the
+        preview card on the right reflects the document in real time.
+        Switch wizard steps with the <code>MultiStepForm</code> stepper —
+        each step's content is just an array of controls.
+      </p>
+      <pre class="example-source"><code id="src-studio">$title       = "Streaming UI v3 — release notes"
+$body        = "&lt;h2&gt;What's new&lt;/h2&gt;&lt;p&gt;Thirty new components — &lt;b&gt;DataGrid&lt;/b&gt;, &lt;b&gt;CalendarView&lt;/b&gt;, &lt;b&gt;RichTextEditor&lt;/b&gt;, six charts, and a media stack.&lt;/p&gt;&lt;p&gt;Read on for the highlights.&lt;/p&gt;"
+$snippet     = "import { defineStreamingUI } from 'streaming-ui-script'\n\ndefineStreamingUI()\n"
+$tags        = ["release", "ui", "v3"]
+$mention     = "Heads up @"
+$brand       = "#6366f1"
+$pin         = ""
+$otp         = ""
+$pwd         = ""
+$phone       = ""
+$publishAt   = "2026-06-01T09:00"
+$slot        = "09:30"
+$step        = 0
+$published   = false
+
+topbar = TopBar(
+  "Acme CMS · Studio",
+  "Draft · autosaved 12s ago",
+  [Badge("v3 release", "primary", "tag", "sm"), StatusDot("Realtime", "success", true)],
+  [SearchBar("q", "Search posts, drafts, schedules…", null, "/")],
+  [Button("Preview", Action([@ToAssistant("Preview the draft")]), "ghost",   "button", "small", "eye"),
+   Button("Publish", Action([@Set($published, true), @ToAssistant("Publish the post")]), "primary", "button", "small", "rocket")]
+)
+
+header = BreadcrumbPageHeader(
+  ["Workspace", "Content", "Drafts", $title],
+  "Compose, brand, schedule, and gate the release in one place.",
+  [Button("Save draft", Action([@ToAssistant("Save draft")]), "ghost",   "button", "small", "floppy-disk"),
+   Button("Discard",    Action([@Reset($title, $body, $tags, $snippet)]),"danger",  "button", "small", "trash")]
+)
+
+teammates = [
+  {name: "Ada Lovelace",   handle: "ada",     role: "Engineering"},
+  {name: "Linus Torvalds", handle: "linus",   role: "Kernel"},
+  {name: "Grace Hopper",   handle: "grace",   role: "Compilers"},
+  {name: "Margaret Hamilton", handle: "margaret", role: "Apollo"}
+]
+
+bodyEditor = Card([
+  SectionHeader("Body", "Rich text — drag images, paste markdown, mention people", "EDITOR"),
+  FormSection("Post copy",
+    [
+      FormControl("Title", Input("title", "Catchy headline…", "text", null, $title)),
+      FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "260px")),
+      FormControl("Tags",  TagInput("tags", $tags, "Press enter to add a tag", 10)),
+      FormControl("Mention", MentionInput("mention", teammates, $mention, "Type @ to ping someone…"))
+    ],
+    "All fields stream into the preview pane below.")
+])
+
+snippetEditor = Card([
+  SectionHeader("Code snippet", "Embedded in the release notes", "CODE"),
+  CodeEditor("snippet", $snippet, "javascript", "// type your code…", "200px")
+])
+
+brandSection = Card([
+  SectionHeader("Brand", "Choose the accent for this release", "DESIGN"),
+  FieldSet("Visual",
+    [FormControl("Accent",   ColorPicker("brand", $brand, "Pick a colour", ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])),
+     FormControl("Phone",    MaskedInput("phone", "(999) 999-9999", $phone, "(415) 555-0114")),
+     FormControl("Password", PasswordInput("pwd",  $pwd, "Choose a strong password", true))],
+    "Used for callouts and CTA buttons in the published post.")
+])
+
+scheduleSection = Card([
+  SectionHeader("Schedule", "When should this go live?", "TIMING"),
+  Stack([
+    FormControl("Publish at", DateTimePicker("publishAt", $publishAt, "Launch window")),
+    FormControl("Daily slot", TimePicker("slot", $slot, "Newsletter time"))
+  ], "row", "m")
+])
+
+gateSection = Card([
+  SectionHeader("Two-factor publish", "Confirm with a one-time code", "GATE",
+    Badge("Required", "warning", "shield-halved", "sm")),
+  Stack([
+    FormControl("4-digit PIN", PinInput("pin", 4, $pin, "numeric")),
+    FormControl("OTP from authenticator", OtpInput("otp", $otp, 6))
+  ], "column", "m")
+])
+
+formErrors = [
+  @If($title == "",                       {label: "title",   message: "Title is required."}, null),
+  @If($pin.length != 4,                   {label: "pin",     message: "PIN must be 4 digits."}, null),
+  @If($otp.length != 6,                   {label: "otp",     message: "Enter the 6-digit OTP."}, null)
+]
+
+validationCard = @If(@Count(@Filter(formErrors, "label", "!=", null)) > 0,
+  Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), "Fix these before publishing")]),
+  Card([Callout("success", "Ready to publish", "All gates passed — hit Publish to go live.", "circle-check", true)]))
+
+wizardSteps = [
+  {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
+  {title: "Brand",    details: "Accent + contact",  content: [brandSection]},
+  {title: "Schedule", details: "Pick a window",      content: [scheduleSection]},
+  {title: "Confirm",  details: "PIN + OTP",          content: [gateSection, validationCard]}
+]
+
+wizard = MultiStepForm(wizardSteps, $step, Action([@Set($published, true), @ToAssistant("Wizard submitted")]))
+
+tagBadges = Stack(@Each($tags, "t", Badge(t, "primary", "tag", "sm")), "row", "xs")
+
+previewCard = Card([
+  SectionHeader("Live preview", $title, "OUTPUT",
+    Badge(`Accent ${$brand}`, "primary", "palette", "sm")),
+  tagBadges,
+  Separator("horizontal"),
+  TextContent($body, "body")
+])
+
+teammateChips = Stack(
+  @Each(teammates, "{name, handle, role}",
+    PersonChip(name, role, null, "sm")),
+  "row", "s"
+)
+
+teammatesCard = Card([
+  SectionHeader("Available reviewers", "Mention them in the body", "PEOPLE"),
+  teammateChips
+])
+
+publishedBanner = @If($published,
+  Banner("Published!", `${$title} went live.`, Button("View live post", Action([@OpenUrl("/blog")]), "primary", "button", "small"), "rocket", "success"),
+  null)
+
+contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], "column", "l")], {sm: 1, lg: 2}, "l")
+
+followUps = FollowUpBlock([
+  FollowUpItem("Generate a summary for social"),
+  FollowUpItem("Translate to French"),
+  FollowUpItem("Add a hero image")
+], "Try next")
+
+root = Stack([
+  topbar,
+  header,
+  publishedBanner,
+  contentGrid,
+  followUps
+], "column", "l")</code></pre>
+      <div class="example-output">
+        <streaming-ui-script id="rui-studio" theme="light"></streaming-ui-script>
+      </div>
+    </article>
+
+    <article class="example-card">
+      <h2>What's powerful here</h2>
+      <p class="lede">
+        <code>MultiStepForm</code> renders the four-step wizard, manages
+        previous/next via the <code>$step</code> variable, and submits
+        through one <code>Action</code>. <code>ValidationSummary</code>
+        derives its messages from a single <code>@Filter</code> chain —
+        no manual error wiring. <code>RichTextEditor</code> and
+        <code>CodeEditor</code> are real contenteditable/textarea editors
+        with the design system's chrome, so they look at home in the same
+        page as the inputs. <code>TopBar</code> +
+        <code>BreadcrumbPageHeader</code> replace the ad-hoc topbar +
+        breadcrumb hand-roll seen in earlier examples.
+      </p>
+    </article>
+  </div>
+
+  <script type="module">
+    import "../dist/streaming-ui-script.js";
+    const el = document.getElementById("rui-studio");
+    el.setResponse(document.getElementById("src-studio").textContent);
+  </script>
+</body>
+</html>

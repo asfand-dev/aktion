@@ -141,3 +141,96 @@ export function disposeDismissListeners(liveRoot: HTMLElement | null | undefined
   const existing = DISMISS_REGISTRY.get(liveRoot);
   if (existing) existing.dispose();
 }
+
+/**
+ * Map a free-text label to a sensible Font Awesome icon. Used by
+ * "self-decorating" defaults — e.g. StatCard auto-pick from label,
+ * EmptyState auto-pick from title, Banner auto-pick from tone.
+ *
+ * Returns `null` when no rule matches so callers can fall back to whatever
+ * default they prefer.
+ */
+const ICON_KEYWORD_RULES: Array<{ match: RegExp; icon: string }> = [
+  { match: /\b(revenue|sales|sale|income|payment|charges?|invoices?|billing)\b/i, icon: "sack-dollar" },
+  { match: /\b(profit|earnings?|margin|roi)\b/i, icon: "chart-line" },
+  { match: /\b(customers?|clients?|users?|members?|people|accounts?)\b/i, icon: "users" },
+  { match: /\b(visitors?|sessions?|traffic|page-?views?|impressions?)\b/i, icon: "chart-line" },
+  { match: /\b(orders?|carts?|purchases?|transactions?)\b/i, icon: "cart-shopping" },
+  { match: /\b(products?|inventory|sku|stock|items?)\b/i, icon: "box" },
+  { match: /\b(subscriptions?|plans?|tiers?|pricing)\b/i, icon: "credit-card" },
+  { match: /\b(emails?|messages?|inbox|threads?|mail)\b/i, icon: "envelope" },
+  { match: /\b(notifications?|alerts?|reminders?)\b/i, icon: "bell" },
+  { match: /\b(growth|trend|increase|up)\b/i, icon: "arrow-trend-up" },
+  { match: /\b(decline|drop|down|decrease|loss)\b/i, icon: "arrow-trend-down" },
+  { match: /\b(reports?|analytics|insights?|dashboards?|metrics?|stats?|kpis?)\b/i, icon: "chart-pie" },
+  { match: /\b(charts?|graphs?)\b/i, icon: "chart-column" },
+  { match: /\b(tasks?|todos?|backlog|kanban|sprint)\b/i, icon: "list-check" },
+  { match: /\b(projects?|workspaces?)\b/i, icon: "folder-open" },
+  { match: /\b(files?|folders?|documents?|docs?|attachments?)\b/i, icon: "folder-open" },
+  { match: /\b(images?|photos?|gallery|albums?)\b/i, icon: "image" },
+  { match: /\b(videos?|clips?|recordings?)\b/i, icon: "video" },
+  { match: /\b(audio|music|podcasts?|sounds?)\b/i, icon: "music" },
+  { match: /\b(calendars?|schedule|events?|meetings?|appointments?)\b/i, icon: "calendar-days" },
+  { match: /\b(comments?|replies|feedback|reviews?|ratings?)\b/i, icon: "comments" },
+  { match: /\b(settings?|preferences?|config|configuration|options?)\b/i, icon: "gear" },
+  { match: /\b(security|privacy|password|locks?|secure)\b/i, icon: "shield-halved" },
+  { match: /\b(api|integrations?|webhooks?|connections?)\b/i, icon: "plug" },
+  { match: /\b(database|storage|backups?|servers?)\b/i, icon: "database" },
+  { match: /\b(speed|performance|latency|response\s?time)\b/i, icon: "gauge-high" },
+  { match: /\b(uptime|availability|status|health)\b/i, icon: "heart-pulse" },
+  { match: /\b(errors?|bugs?|failures?|exceptions?|incidents?)\b/i, icon: "circle-exclamation" },
+  { match: /\b(success|complete|done|approved)\b/i, icon: "circle-check" },
+  { match: /\b(warnings?|caution)\b/i, icon: "triangle-exclamation" },
+  { match: /\b(search|results?|queries)\b/i, icon: "magnifying-glass" },
+  { match: /\b(downloads?|exports?)\b/i, icon: "download" },
+  { match: /\b(uploads?|imports?)\b/i, icon: "upload" },
+  { match: /\b(time|hours?|duration|elapsed)\b/i, icon: "clock" },
+  { match: /\b(locations?|maps?|addresses?|countries?|regions?)\b/i, icon: "location-dot" },
+  { match: /\b(stars?|favourites?|favorites?|highlights?)\b/i, icon: "star" },
+  { match: /\b(trophy|awards?|achievements?|badges?|gold)\b/i, icon: "trophy" },
+  { match: /\b(targets?|goals?|objectives?|quotas?)\b/i, icon: "bullseye" },
+  { match: /\b(teams?|departments?|orgs?|organisations?|organizations?)\b/i, icon: "people-group" },
+  { match: /\b(tickets?|issues?|bugs?|requests?)\b/i, icon: "ticket" },
+  { match: /\b(deploys?|builds?|releases?|versions?)\b/i, icon: "rocket" },
+];
+
+export function pickIconForLabel(label: string | null | undefined): string | null {
+  if (!label) return null;
+  for (const rule of ICON_KEYWORD_RULES) {
+    if (rule.match.test(label)) return rule.icon;
+  }
+  return null;
+}
+
+/**
+ * Map a tone keyword (`primary`, `success`, `warning`, …) to a sensible
+ * default icon, used by Banner / Callout when the LLM omits `icon`.
+ */
+const TONE_ICONS: Record<string, string> = {
+  default: "circle-info",
+  info: "circle-info",
+  primary: "bolt",
+  success: "circle-check",
+  warning: "triangle-exclamation",
+  danger: "circle-exclamation",
+  error: "circle-exclamation",
+  neutral: "circle-info",
+};
+
+export function pickIconForTone(tone: string | null | undefined): string | null {
+  if (!tone) return null;
+  return TONE_ICONS[tone.toLowerCase()] ?? null;
+}
+
+/**
+ * Build a deterministic DiceBear avatar URL for a person name.
+ *
+ * Used as the fallback when the LLM passes a name but omits `src`.
+ * `style` defaults to `initials` which is bulletproof (no network face-art),
+ * but callers can pass `shapes`, `avataaars`, etc. for fancier looks.
+ */
+export function dicebearUrlFor(name: string, style: string = "shapes"): string {
+  const seed = name.trim() || "anon";
+  const safeStyle = /^[a-z0-9-]+$/i.test(style) ? style : "shapes";
+  return `https://api.dicebear.com/9.x/${safeStyle}/svg?seed=${encodeURIComponent(seed)}`;
+}

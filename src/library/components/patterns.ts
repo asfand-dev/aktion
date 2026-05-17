@@ -17,7 +17,8 @@ import {
   el, asArray, asString, asBoolean, renderIcon,
   sanitiseCssLength, sanitiseCssUrl, sanitiseImageSrc,
 } from "../utils.js";
-import { renderAvatar } from "./_internal.js";
+import { renderAvatar, pickIconForLabel, pickIconForTone } from "./_internal.js";
+import { SearchBar } from "./forms.js";
 
 const SURFACE_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
 
@@ -31,6 +32,31 @@ const renderActionsRow = (
   for (const item of items) row.append(helpers.renderNode(item));
   return row;
 };
+
+/**
+ * Pick a short eyebrow tag for a Hero based on intent keywords in its title
+ * or subtitle. Returns the empty string when no rule matches so the caller
+ * can decide whether to render the band at all.
+ */
+const HERO_EYEBROW_RULES: Array<{ match: RegExp; label: string }> = [
+  { match: /\bbeta\b/i, label: "Beta" },
+  { match: /\b(early\s?access|preview)\b/i, label: "Preview" },
+  { match: /\b(introduc(?:ing|e)|launch(?:ed|ing)?|announcing)\b/i, label: "Introducing" },
+  { match: /\b(welcome\b|get(?:ting)?\s?started)/i, label: "Welcome" },
+  { match: /\b(new\b|whats\s?new|now\b)/i, label: "What's new" },
+  { match: /\bfree\b/i, label: "Free trial" },
+  { match: /\bupgrade\b/i, label: "Upgrade" },
+  { match: /\b(sale|discount|deal)\b/i, label: "Limited time" },
+];
+
+function deriveHeroEyebrow(title: string, subtitle: string): string {
+  const haystack = `${title} ${subtitle}`.trim();
+  if (!haystack) return "";
+  for (const rule of HERO_EYEBROW_RULES) {
+    if (rule.match.test(haystack)) return rule.label;
+  }
+  return "";
+}
 
 export const Hero: ComponentSpec = {
   name: "Hero",
@@ -61,13 +87,15 @@ export const Hero: ComponentSpec = {
     });
     const body = el("div", { class: "rui-hero-body" });
 
-    const eyebrow = asString(props.eyebrow);
+    const heroTitle = asString(props.title);
+    const heroSubtitle = asString(props.subtitle);
+    const explicitEyebrow = asString(props.eyebrow);
+    const eyebrow = explicitEyebrow || deriveHeroEyebrow(heroTitle, heroSubtitle);
     if (eyebrow) body.append(el("span", { class: "rui-hero-eyebrow" }, [eyebrow]));
 
-    body.append(el("h1", { class: "rui-hero-title" }, [asString(props.title)]));
+    body.append(el("h1", { class: "rui-hero-title" }, [heroTitle]));
 
-    const subtitle = asString(props.subtitle);
-    if (subtitle) body.append(el("p", { class: "rui-hero-subtitle" }, [subtitle]));
+    if (heroSubtitle) body.append(el("p", { class: "rui-hero-subtitle" }, [heroSubtitle]));
 
     const highlights = asArray<unknown>(props.highlights);
     if (highlights.length > 0) {
@@ -103,18 +131,29 @@ export const PageHeader: ComponentSpec = {
   description:
     "Page-level header with breadcrumbs, title, subtitle, status tag, and a " +
     "right-aligned actions row. The canonical first child for any dashboard, " +
-    "settings, or detail page — replaces ad-hoc Stack+Header+Buttons stitching.",
+    "settings, or detail page — replaces ad-hoc Stack+Header+Buttons stitching. " +
+    "If `breadcrumbs` is omitted the component auto-derives `[\"Home\", title]` " +
+    "so the page never lacks a trail. Pass `breadcrumbs=false` to opt out.",
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true },
-    { name: "breadcrumbs", type: "string[] | Breadcrumb", optional: true, description: "Array of strings, or a Breadcrumb(...) node" },
+    { name: "breadcrumbs", type: "string[] | Breadcrumb | false", optional: true, description: "Array of strings, a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / NavLinks shown on the right" },
     { name: "status", type: "Badge", optional: true, description: "Optional Badge(...) rendered next to the title" },
   ],
   render: (_node, props, helpers) => {
     const root = el("header", { class: "rui-page-header" });
 
-    const crumbs = props.breadcrumbs;
+    const title = asString(props.title);
+    // Default: auto-derive ["Home", title] when caller omits breadcrumbs.
+    // Pass `breadcrumbs=false` to suppress (handy for sign-in screens).
+    let crumbs: unknown = props.breadcrumbs;
+    if (crumbs === undefined || crumbs === null) {
+      if (title) crumbs = ["Home", title];
+    } else if (crumbs === false || crumbs === "false") {
+      crumbs = null;
+    }
+
     if (crumbs) {
       const crumbWrap = el("div", { class: "rui-page-header-breadcrumbs" });
       if (Array.isArray(crumbs)) {
@@ -131,7 +170,7 @@ export const PageHeader: ComponentSpec = {
     const titleRow = el("div", { class: "rui-page-header-title-row" });
     const titleBlock = el("div", { class: "rui-page-header-title-block" });
     const titleLine = el("div", { class: "rui-page-header-title-line" });
-    titleLine.append(el("h1", { class: "rui-page-header-title" }, [asString(props.title)]));
+    titleLine.append(el("h1", { class: "rui-page-header-title" }, [title]));
     if (props.status) titleLine.append(helpers.renderNode(props.status));
     titleBlock.append(titleLine);
 
@@ -198,7 +237,12 @@ export const EmptyState: ComponentSpec = {
         loading: "lazy",
       }));
     } else {
-      const iconName = asString(props.icon, "inbox");
+      const title = asString(props.title);
+      const description = asString(props.description);
+      const iconName =
+        asString(props.icon) ||
+        pickIconForLabel(`${title} ${description}`) ||
+        "inbox";
       const iconNode = renderIcon(iconName, { className: "rui-empty-state-icon" });
       if (iconNode) root.append(iconNode);
     }
@@ -446,11 +490,13 @@ export const Banner: ComponentSpec = {
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
   ],
   render: (_node, props, helpers) => {
+    const tone = asString(props.tone, "primary");
     const root = el("aside", {
       class: "rui-banner",
-      "data-tone": asString(props.tone, "primary"),
+      "data-tone": tone,
     });
-    const iconNode = renderIcon(props.icon, { className: "rui-banner-icon" });
+    const iconName = asString(props.icon) || pickIconForTone(tone) || "";
+    const iconNode = renderIcon(iconName, { className: "rui-banner-icon" });
     if (iconNode) root.append(iconNode);
     const body = el("div", { class: "rui-banner-body" });
     body.append(el("strong", { class: "rui-banner-title" }, [asString(props.title)]));
@@ -616,12 +662,17 @@ export const Toolbar: ComponentSpec = {
   description:
     "Horizontal toolbar for filters, search, view modes, and primary " +
     "actions. Left/center/right slots wrap onto separate rows on narrow " +
-    "viewports so the bar never overflows. Use ABOVE a Table, List, " +
-    "Grid, or Kanban view — never replace `PageHeader` with it.",
+    "viewports so the bar never overflows. Pass `searchable=true` to " +
+    "auto-mount a SearchBar in the left slot (bind `searchValue` to a " +
+    "`$variable`). Use ABOVE a Table, List, Grid, or Kanban view — never " +
+    "replace `PageHeader` with it.",
   props: [
     { name: "left", type: "Node[]", optional: true, description: "Filters / search inputs / chips" },
     { name: "right", type: "Node[]", optional: true, description: "Primary action buttons" },
     { name: "center", type: "Node[]", optional: true, description: "Centered controls (e.g. SegmentedControl, search bar)" },
+    { name: "searchable", type: "boolean", optional: true, description: "Auto-mount a SearchBar at the start of the left slot" },
+    { name: "searchPlaceholder", type: "string", optional: true, description: "Placeholder for the auto-mounted SearchBar" },
+    { name: "searchValue", type: "string", optional: true, description: "$variable bound to the auto-mounted SearchBar" },
   ],
   render: (_node, props, helpers) => {
     const center = asArray<unknown>(props.center);
@@ -630,6 +681,17 @@ export const Toolbar: ComponentSpec = {
       "data-has-center": center.length > 0 ? "true" : "false",
     });
     const left = el("div", { class: "rui-toolbar-side rui-toolbar-left" });
+    if (asBoolean(props.searchable)) {
+      left.append(SearchBar.render(
+        { __kind: "Component", name: "SearchBar", args: [], argMeta: [] },
+        {
+          id: "toolbar-search",
+          placeholder: asString(props.searchPlaceholder, "Search…"),
+          value: props.searchValue,
+        },
+        helpers,
+      ));
+    }
     for (const child of asArray(props.left)) left.append(helpers.renderNode(child));
     root.append(left);
     if (center.length > 0) {
@@ -697,16 +759,20 @@ export const Sidebar: ComponentSpec = {
   name: "Sidebar",
   description:
     "Vertical app navigation panel. Supports a brand header, navigation " +
-    "items (`SidebarItem` or `SidebarSection`), and an optional footer. " +
-    "Use inside `AppShell` for SaaS-style left navigation.",
+    "items (`SidebarItem` or `SidebarSection`), an optional footer, and a " +
+    "`collapsed` mode that hides labels to leave just an icon rail. Use " +
+    "inside `AppShell` for SaaS-style left navigation.",
   props: [
     { name: "items", type: "(SidebarItem | SidebarSection)[]" },
     { name: "brand", type: "string", optional: true, description: "Product name / workspace label at the top" },
     { name: "tagline", type: "string", optional: true },
     { name: "footer", type: "Node[]", optional: true, description: "Footer block (Avatar + name, upgrade CTA, …)" },
+    { name: "collapsed", type: "boolean", optional: true, description: "Render as an icon-only rail (hides labels/badges)" },
   ],
   render: (_node, props, helpers) => {
+    const collapsed = asBoolean(props.collapsed);
     const root = el("aside", { class: "rui-sidebar" });
+    if (collapsed) root.dataset.collapsed = "true";
     const brand = asString(props.brand);
     const tagline = asString(props.tagline);
     if (brand || tagline) {
@@ -734,20 +800,49 @@ export const AppShell: ComponentSpec = {
     "Canonical SaaS application shell: optional top bar, fixed left " +
     "Sidebar, and scrollable main content. Reach for this whenever a " +
     "response represents a full product surface (dashboard with nav, " +
-    "settings + sections, admin panels). Collapses to a single column on " +
-    "narrow viewports.",
+    "settings + sections, admin panels). Pass `collapsible=true` to render " +
+    "a hamburger that turns the sidebar into a slide-over drawer on narrow " +
+    "viewports.",
   props: [
     { name: "sidebar", type: "Sidebar", description: "Pass a Sidebar(...) node" },
     { name: "content", type: "Node[]", description: "Main content (typically starts with a PageHeader)" },
     { name: "topbar", type: "Node[]", optional: true, description: "Optional thin top bar above the content" },
+    { name: "collapsible", type: "boolean", optional: true, description: "Show a hamburger that toggles the sidebar drawer on mobile" },
+    { name: "sidebarOpen", type: "boolean", optional: true, description: "$variable controlling whether the mobile drawer is open" },
   ],
   render: (_node, props, helpers) => {
+    const collapsible = asBoolean(props.collapsible);
+    const sidebarOpen = asBoolean(props.sidebarOpen);
     const root = el("div", { class: "rui-app-shell" });
-    root.append(helpers.renderNode(props.sidebar));
+    if (collapsible) root.dataset.collapsible = "true";
+    if (sidebarOpen) root.dataset.sidebarOpen = "true";
+    const sidebarHost = el("div", { class: "rui-app-shell-sidebar" });
+    sidebarHost.append(helpers.renderNode(props.sidebar));
+    root.append(sidebarHost);
+    if (collapsible) {
+      const scrim = el("div", { class: "rui-app-shell-scrim", "aria-hidden": "true" });
+      scrim.addEventListener("click", () => {
+        delete root.dataset.sidebarOpen;
+      });
+      root.append(scrim);
+    }
     const main = el("div", { class: "rui-app-shell-main" });
     const topbar = asArray<unknown>(props.topbar);
-    if (topbar.length > 0) {
+    if (topbar.length > 0 || collapsible) {
       const bar = el("div", { class: "rui-app-shell-topbar" });
+      if (collapsible) {
+        const toggle = el("button", {
+          class: "rui-app-shell-toggle",
+          type: "button",
+          "aria-label": "Toggle navigation",
+        });
+        toggle.append(renderIcon("bars", { size: "md" }) ?? document.createTextNode("≡"));
+        toggle.addEventListener("click", () => {
+          if (root.dataset.sidebarOpen) delete root.dataset.sidebarOpen;
+          else root.dataset.sidebarOpen = "true";
+        });
+        bar.append(toggle);
+      }
       for (const item of topbar) bar.append(helpers.renderNode(item));
       main.append(bar);
     }

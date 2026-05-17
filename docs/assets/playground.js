@@ -82,7 +82,7 @@ follow = FollowUpBlock([
   dashboard: {
     label: "Project dashboard",
     code: `# Highlights: macro for KanbanCard, @Each with destructuring, template literals.
-root = Stack([header, kpis, board, follow])
+root = Stack([header, kpis, board])
 header = PageHeader("Engineering Q3", \`\${@Count(projects)} active · \${@Count(atRisk)} at risk\`, ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
 headerActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
 kpis = MetricGrid([
@@ -107,8 +107,7 @@ projects = [
   {title:"Mobile onboarding", summary:"Awaiting design review.", tags:["mobile"],   owner:"Wren",  tone:"warning", icon:"mobile-screen",       stage:"review"},
   {title:"Activity timeline", summary:"Shipped to everyone.",    tags:["shipped"],  owner:"Mira",  tone:"success", icon:"circle-check",        stage:"done"}
 ]
-atRisk = @Filter(projects, "tone", "==", "warning")
-follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
+atRisk = @Filter(projects, "tone", "==", "warning")`,
   },
   todo: {
     label: "Reactive todo",
@@ -198,6 +197,229 @@ breakdown = Card([
 ])
 thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
 lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]`,
+  },
+  dataGrid: {
+    label: "DataGrid + bulk actions",
+    code: `# Highlights: sortable DataGrid, per-column filter chips, $$persistent selection, bulk-action toolbar.
+$$sort        = {key: "Score", direction: "desc"}
+$$selectedIds = []
+$$page        = 1
+
+people = [
+  {id: "u01", name: "Ada Lovelace",   team: "Compilers",  score: 98, commits: 412},
+  {id: "u02", name: "Linus Torvalds", team: "Kernel",     score: 96, commits: 380},
+  {id: "u03", name: "Grace Hopper",   team: "Compilers",  score: 95, commits: 358},
+  {id: "u04", name: "Margaret Hamilton", team: "Apollo",  score: 94, commits: 340},
+  {id: "u05", name: "Donald Knuth",   team: "Algorithms", score: 93, commits: 322},
+  {id: "u06", name: "Anita Borg",     team: "Systems",    score: 91, commits: 296},
+  {id: "u07", name: "Tim Berners-Lee","team":"Web",        score: 90, commits: 284},
+  {id: "u08", name: "Barbara Liskov", team: "Compilers",  score: 89, commits: 272}
+]
+
+bulkBar = @If(@Count($$selectedIds) > 0,
+  Toolbar(
+    [Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
+    [Button("Email",  Action([@ToAssistant("Email selected")]),   "ghost",   "button", "small", "envelope"),
+     Button("Export", Action([@ToAssistant("Export selected")]),   "secondary","button", "small", "file-csv"),
+     Button("Clear",  Action([@Reset($$selectedIds)]),             "ghost",   "button", "small")]
+  ), null)
+
+root = Stack([
+  PageHeader("Top contributors", \`\${@Count(people)} engineers · sorted by \${$$sort.key} \${$$sort.direction}\`, ["Workspace","Engineering"]),
+  bulkBar,
+  Card([
+    SectionHeader("Leaderboard", null, "DATAGRID", Badge("Live", "success", "circle", "sm")),
+    DataGrid([
+      Col("Id",    people.id,      "text",   "left",  false, false),
+      Col("Name",  people.name,    "text",   "left",  true,  true),
+      Col("Team",  people.team,    "text",   "left",  true,  true),
+      Col("Score", people.score,   "number", "right", true,  false),
+      Col("Commits", people.commits, "number","right", true,  false)
+    ], people.id, null, $$sort, $$selectedIds, true, $$page, 5, "No people match")
+  ])
+])`,
+  },
+  calendar: {
+    label: "CalendarView planner",
+    code: `# Highlights: CalendarView grid, OnboardingChecklist with $$persistent state, ActivityLog timeline.
+$selectedDate = "2026-05-17"
+$$ob1 = false
+$$ob2 = false
+$$ob3 = false
+
+obDone = @If($$ob1, 1, 0) + @If($$ob2, 1, 0) + @If($$ob3, 1, 0)
+
+events = [
+  {date: "2026-05-04", title: "Sprint planning", time: "09:00", tone: "primary"},
+  {date: "2026-05-12", title: "Standup",          time: "09:00", tone: "primary"},
+  {date: "2026-05-12", title: "1:1 · Ada",        time: "16:00", tone: "info"},
+  {date: "2026-05-15", title: "Release window",   time: "10:00", tone: "success"},
+  {date: "2026-05-17", title: "Demo day",          time: "14:30", tone: "success"},
+  {date: "2026-05-22", title: "Retro",             time: "16:00", tone: "info"}
+]
+
+root = Stack([
+  PageHeader("May 2026", \`\${@Count(events)} events · \${obDone}/3 onboarding\`),
+  Grid([
+    Card([
+      SectionHeader("Calendar", "Focus a day to see details", "PLANNER"),
+      CalendarView($selectedDate, "2026-05", events, "month")
+    ]),
+    Stack([
+      Card([
+        SectionHeader("Onboarding", "Finish setup to enable publishing", "SETUP"),
+        OnboardingChecklist([
+          {title: "Connect calendar",      description: "Sync with Google.",     done: $$ob1, action: Action([@Set($$ob1, true)]), cta: "Connect"},
+          {title: "Invite teammates",      description: "Share an invite link.", done: $$ob2, action: Action([@Set($$ob2, true)]), cta: "Invite"},
+          {title: "Schedule first event",  description: "Pick a slot.",          done: $$ob3, action: Action([@Set($$ob3, true)]), cta: "Schedule"}
+        ])
+      ]),
+      Card([
+        SectionHeader("Activity"),
+        ActivityLog([
+          {actor: "Ada",   title: "rescheduled All-hands",  time: "5m",  icon: "calendar-plus", tone: "primary"},
+          {actor: "Linus", title: "RSVPed to Demo day",     time: "1h",  icon: "circle-check",  tone: "success"},
+          {actor: "Grace", title: "added release window",   time: "1d",  icon: "rocket",        tone: "info"}
+        ])
+      ])
+    ], "column", "l")
+  ], {sm: 1, lg: 2}, "l")
+])`,
+  },
+  media: {
+    label: "Media gallery + Map",
+    code: `# Highlights: Carousel hero, Gallery wired to Lightbox via $variable, VideoPlayer + AudioPlayer + Map.
+$slide        = 0
+$lightboxOpen = false
+$lightboxIdx  = 0
+
+photos = [
+  {src: "https://picsum.photos/seed/aurora-cliffs/1200/700",  caption: "Cliffs at dawn"},
+  {src: "https://picsum.photos/seed/aurora-village/1200/700", caption: "Fishing village"},
+  {src: "https://picsum.photos/seed/aurora-forest/1200/700",  caption: "Boreal forest"},
+  {src: "https://picsum.photos/seed/aurora-lake/1200/700",    caption: "Glacier lake"},
+  {src: "https://picsum.photos/seed/aurora-fjord/1200/700",   caption: "Fjord"},
+  {src: "https://picsum.photos/seed/aurora-aurora/1200/700",  caption: "Northern lights"}
+]
+
+root = Stack([
+  PageHeader("Aurora Expedition", "Iceland · Aug 2026", ["Trips", "Aurora"]),
+  Card([
+    SectionHeader("Highlights"),
+    Carousel(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), $slide, "16:9", true)
+  ]),
+  Card([
+    SectionHeader("Photos", "Tap a thumbnail to zoom"),
+    Gallery(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), 3,
+      Action([@Set($lightboxIdx, 0), @Set($lightboxOpen, true)]))
+  ]),
+  Grid([
+    Card([SectionHeader("Trailer"), VideoPlayer(
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+      null, true, false, false, false, "Aurora Expedition trailer", "16:9")]),
+    Card([SectionHeader("Soundtrack"), AudioPlayer(
+      "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+      null, "Northern Skies", "Aurora Strings")])
+  ], {sm: 1, md: 2}, "l"),
+  Card([
+    SectionHeader("Itinerary", "Six stops"),
+    Map(65.0, -16.0, 5, [
+      {lat: 64.1466, lng: -21.9426, label: "Reykjavík"},
+      {lat: 64.7140, lng: -19.0608, label: "Highlands"},
+      {lat: 65.6839, lng: -18.0907, label: "Akureyri"}
+    ], "320px")
+  ]),
+  Lightbox($lightboxOpen, $lightboxIdx, photos)
+])`,
+  },
+  wizard: {
+    label: "MultiStepForm wizard",
+    code: `# Highlights: MultiStepForm steps, RichTextEditor, ColorPicker, PinInput, ValidationSummary.
+$step  = 0
+$title = "Streaming UI v3 — release notes"
+$body  = "<h2>What's new</h2><p>Thirty new components — DataGrid, CalendarView, RichTextEditor, six charts.</p>"
+$tags  = ["release", "ui", "v3"]
+$brand = "#6366f1"
+$pin   = ""
+
+errors = @Filter([
+  @If($title == "", {label: "title", message: "Title is required."}, null),
+  @If($pin.length != 4, {label: "pin",   message: "PIN must be 4 digits."}, null)
+], "label", "!=", null)
+
+publishGate = @If(@Count(errors) > 0,
+  Card([ValidationSummary(errors, "Fix these before publishing")]),
+  Card([Callout("success", "Ready to publish", "All gates passed.", "circle-check", true)]))
+
+root = Stack([
+  BreadcrumbPageHeader(["Content", "Drafts", $title], "Compose, brand, gate, publish."),
+  MultiStepForm([
+    {title: "Compose", details: "Title, body, tags", content: [
+      Card([SectionHeader("Body", null, "EDITOR"), FormSection("Post",
+        [FormControl("Title", Input("title", "Headline…", "text", null, $title)),
+         FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "200px")),
+         FormControl("Tags",  TagInput("tags", $tags, "Press enter to add"))],
+        "All fields stream into the preview.")])
+    ]},
+    {title: "Brand",   details: "Pick an accent", content: [
+      Card([SectionHeader("Brand"), ColorPicker("brand", $brand, "Accent",
+        ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])])
+    ]},
+    {title: "Gate",    details: "4-digit PIN", content: [
+      Card([SectionHeader("Two-factor publish", null, "GATE"),
+        FormControl("PIN", PinInput("pin", 4, $pin, "numeric")),
+        publishGate])
+    ]}
+  ], $step, Action([@ToAssistant("Publish the draft")]))
+])`,
+  },
+  advancedCharts: {
+    label: "Gauge, Heatmap, Radar, Scatter",
+    code: `# Highlights: every new chart primitive in one dashboard.
+root = Stack([
+  PageHeader("Engineering analytics", "Quarterly view"),
+  MetricGrid([
+    StatCard("SLA",    "99.3%", "up",   "+0.2 pp", "shield-halved"),
+    StatCard("P95",    "112ms", "down", "-12 ms",  "gauge-high"),
+    StatCard("Errors", "0.42%", "flat", "stable",  "circle-exclamation"),
+    StatCard("MRR",    "$84k",  "up",   "+12%",    "sack-dollar")
+  ]),
+  Grid([
+    Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
+    Card([SectionHeader("P95 latency"), Gauge(112, 0, 250, "ms",             "primary", "lg")]),
+    Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,  "% requests",     "warning", "lg")])
+  ], {sm: 1, md: 3}, "l"),
+  Card([
+    SectionHeader("Signups · last 7 days", "Stacked by source"),
+    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
+       Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
+       Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])
+  ]),
+  Grid([
+    Card([SectionHeader("Office capacity"),
+      Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
+        [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])
+    ]),
+    Card([SectionHeader("Vendor scorecard"),
+      RadarChart(["Speed","Quality","Cost","Coverage","Trust"],
+        [Series("Atlas Cloud", [80,70,60,75,85]),
+         Series("Northwind",   [60,85,70,65,80])])
+    ])
+  ], {sm: 1, md: 2}, "l"),
+  Grid([
+    Card([SectionHeader("Sessions vs conversions"),
+      ScatterChart(
+        [Series("Cohort A", [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
+         Series("Cohort B", [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])],
+        "Sessions (k)", "Conversions")
+    ]),
+    Card([SectionHeader("Response time"),
+      Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], null, 6)
+    ])
+  ], {sm: 1, md: 2}, "l")
+])`,
   },
 };
 

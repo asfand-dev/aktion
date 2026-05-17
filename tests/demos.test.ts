@@ -121,6 +121,10 @@ describe("standalone pattern demos", () => {
     { file: "issue-tracker.html",     codeId: "src-issues",    expectSelector: ".rui-page-header-title" },
     { file: "expense-tracker.html",   codeId: "src-expenses",  expectSelector: ".rui-page-header-title" },
     { file: "polls-app.html",         codeId: "src-polls",     expectSelector: ".rui-page-header-title" },
+    { file: "data-explorer.html",     codeId: "src-explorer",  expectSelector: ".rui-page-header-title" },
+    { file: "media-gallery.html",     codeId: "src-media",     expectSelector: ".rui-cover-title" },
+    { file: "content-studio.html",    codeId: "src-studio",    expectSelector: ".rui-topbar" },
+    { file: "scheduler.html",         codeId: "src-scheduler", expectSelector: ".rui-page-header-title" },
   ];
 
   for (const { file, codeId, expectSelector } of demos) {

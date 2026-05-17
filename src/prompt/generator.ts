@@ -815,6 +815,178 @@ reviews       = Stack([reviewA, reviewB], "column", "m")
 reviewA       = Card([Stack([PersonChip("Maya R.", "Verified owner", null, "sm"),  Rating(5),    Quote("Comfortable enough to wear all day — the ANC is genuinely impressive."), TextContent("Bought · 12 days ago", "small", "muted")])])
 reviewB       = Card([Stack([PersonChip("Tomás L.", "Verified owner", null, "sm"), Rating(4.5), Quote("Sound is fantastic; only minor gripe is the case is a touch large."), TextContent("Bought · 1 month ago", "small", "muted")])])
 
+\`\`\`
+
+### Data explorer (DataGrid + advanced charts + audit + state cards)
+Use when the request asks for an analytics surface, admin console, BI
+dashboard, or anything that combines a tabular view with charts.
+\`\`\`
+$$sort        = {key: "Score", direction: "desc"}
+$$selectedIds = []
+$$page        = 1
+
+bulkBar = @If(@Count($$selectedIds) > 0,
+  Toolbar([Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
+          [Button("Email",  Action([@Run(email_selected)]),  "ghost",    "button", "small", "envelope"),
+           Button("Export", Action([@Run(export_selected)]), "secondary","button", "small", "file-csv"),
+           Button("Clear",  Action([@Reset($$selectedIds)]), "ghost",    "button", "small")]), null)
+
+gridCard = Card([SectionHeader("Top contributors", null, "DATAGRID"),
+  bulkBar,
+  DataGrid([
+    Col("Id",    rows.id,      "text",   "left",  false, false),
+    Col("Name",  rows.name,    "text",   "left",  true,  true),
+    Col("Team",  rows.team,    "text",   "left",  true,  true),
+    Col("Score", rows.score,   "number", "right", true,  false)
+  ], rows.id, null, $$sort, $$selectedIds, true, $$page, 8, "No rows match")
+])
+
+gaugeRow = Grid([
+  Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
+  Card([SectionHeader("P95 latency"), Gauge(112, 0, 250,  "ms",            "primary", "lg")]),
+  Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,   "% requests",    "warning", "lg")])
+], {sm: 1, md: 3}, "l")
+
+chartRow = Grid([
+  Card([SectionHeader("Signups"),
+    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      [Series("Organic",  [40, 52, 65, 78, 92, 105, 124]),
+       Series("Referral", [20, 28, 35, 42, 50, 60,  72])])]),
+  Card([SectionHeader("Capacity"),
+    Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
+      [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])])
+], {sm: 1, md: 2}, "l")
+
+auditCard = Card([SectionHeader("Audit trail", "Last 7 days", "AUDIT"),
+  AuditTrail([
+    {actor:"system", title:"Rotated signing key",   time:"08:14",     icon:"key",           tone:"primary"},
+    {actor:"admin",  title:"Granted Owner role",    time:"yesterday", icon:"user-shield",   tone:"success"},
+    {actor:"scanner",title:"Blocked sign-in",       time:"2d ago",    icon:"shield-halved", tone:"danger"}
+  ])])
+
+root = Stack([PageHeader("Engineering analytics","Quarterly view",["Workspace","Analytics"]), gaugeRow, gridCard, chartRow, auditCard], "column","l")
+
+rows = Query("contributors", {sort: $$sort.key, page: $$page}, {id:[], name:[], team:[], score:[]})
+\`\`\`
+
+### Scheduler / planner (CalendarView + onboarding + state cards)
+Use whenever the request implies a date-centred workflow (booking, content
+calendar, sprint planner) — CalendarView is richer than DatePicker when the
+user needs the whole month at a glance.
+\`\`\`
+$selectedDate = "2026-05-17"
+$view         = "ready"
+$$ob1 = false
+$$ob2 = false
+$$ob3 = false
+
+events = [
+  {date:"2026-05-12", title:"Standup",         time:"09:00", tone:"primary"},
+  {date:"2026-05-15", title:"Release window",  time:"10:00", tone:"success"},
+  {date:"2026-05-17", title:"Demo day",         time:"14:30", tone:"success"},
+  {date:"2026-05-22", title:"Retro",            time:"16:00", tone:"info"}
+]
+
+calendarCard = Card([
+  SectionHeader("May 2026", \`\${@Count(events)} events\`, "PLANNER", Badge("Live","success","circle","sm")),
+  CalendarView($selectedDate, "2026-05", events, "month")
+])
+
+onboardingCard = Card([
+  SectionHeader("Onboarding", "Finish setup", "SETUP"),
+  OnboardingChecklist([
+    {title:"Connect calendar",     description:"Sync with Google.",     done:$$ob1, action:Action([@Set($$ob1, true)]), cta:"Connect"},
+    {title:"Invite teammates",     description:"Share an invite link.", done:$$ob2, action:Action([@Set($$ob2, true)]), cta:"Invite"},
+    {title:"Schedule first event", description:"Pick a slot.",          done:$$ob3, action:Action([@Set($$ob3, true)]), cta:"Schedule"}
+  ])
+])
+
+# LoadingState / ErrorState / SuccessState replace ad-hoc "loading…" stack of TextContent.
+statePane = @Switch($view, {
+  "ready":   SuccessState("All systems go", "Onboarding complete and your calendar is synced.", [Button("Open workspace", Action([@Run(open_ws)]), "primary","button","small","house")]),
+  "loading": LoadingState("Syncing your calendar…", "Pulling events · about 5 seconds."),
+  "error":   ErrorState("We couldn't reach your calendar", "Sync token expired.", [Button("Reconnect", Action([@Run(reconnect)]), "primary","button","small","rotate-right")])
+}, SuccessState("Ready", "All set."))
+
+root = Stack([
+  BreadcrumbPageHeader(["Workspace","Calendar","May"], "Plan the week."),
+  Grid([calendarCard, Stack([onboardingCard, Card([statePane])], "column","l")], {sm:1, lg:2}, "l")
+], "column","l")
+\`\`\`
+
+### Media + map surface (Carousel + Gallery + Lightbox + Map + VideoPlayer)
+Use for travel itineraries, real-estate listings, product galleries, event
+recaps — anywhere a wall of photos beats a wall of text.
+\`\`\`
+$slide        = 0
+$lightboxOpen = false
+$lightboxIdx  = 0
+
+photos = [
+  {src:"https://picsum.photos/seed/a/1200/700", caption:"Cliffs"},
+  {src:"https://picsum.photos/seed/b/1200/700", caption:"Village"},
+  {src:"https://picsum.photos/seed/c/1200/700", caption:"Forest"},
+  {src:"https://picsum.photos/seed/d/1200/700", caption:"Lake"}
+]
+
+root = Stack([
+  PageHeader("Aurora Expedition","Iceland · Aug 2026"),
+  Card([SectionHeader("Highlights"),
+    Carousel(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), $slide, "16:9", true)]),
+  Card([SectionHeader("Photos","Tap a thumbnail"),
+    Gallery(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), 3,
+      Action([@Set($lightboxIdx, 0), @Set($lightboxOpen, true)]))]),
+  Grid([
+    Card([SectionHeader("Trailer"), VideoPlayer("https://example.com/trailer.mp4", null, null, true, false, false, false, "Aurora trailer", "16:9")]),
+    Card([SectionHeader("Itinerary"),
+      Map(65.0, -16.0, 5,
+        [{lat:64.1466, lng:-21.9426, label:"Reykjavík"},
+         {lat:65.6839, lng:-18.0907, label:"Akureyri"}],
+        "320px")])
+  ], {sm:1, md:2}, "l"),
+  Lightbox($lightboxOpen, $lightboxIdx, photos)
+], "column","l")
+\`\`\`
+
+### Multi-step wizard / authoring (MultiStepForm + RichTextEditor + advanced inputs)
+Use for sign-up flows, checkout (consider \`checkout-flow.html\` first),
+content authoring, configuration wizards — anywhere a single page would
+overwhelm.
+\`\`\`
+$step  = 0
+$title = ""
+$body  = ""
+$tags  = []
+$brand = "#6366f1"
+$pin   = ""
+
+errors = @Filter([
+  @If($title == "",     {label:"title", message:"Title is required."}, null),
+  @If($pin.length != 4, {label:"pin",   message:"PIN must be 4 digits."}, null)
+], "label", "!=", null)
+
+publishGate = @If(@Count(errors) > 0,
+  Card([ValidationSummary(errors, "Fix these before publishing")]),
+  Card([Callout("success","Ready","All gates passed.","circle-check", true)]))
+
+root = Stack([
+  BreadcrumbPageHeader(["Content","Drafts"], "Compose, brand, gate, publish."),
+  MultiStepForm([
+    {title:"Compose", details:"Title + body", content:[
+      Card([SectionHeader("Body",null,"EDITOR"),
+        FormSection("Post",
+          [FormControl("Title", Input("title", "Headline…", "text", null, $title)),
+           FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "240px")),
+           FormControl("Tags",  TagInput("tags", $tags, "Press enter"))],
+          "Streams into the preview.")])]},
+    {title:"Brand", details:"Pick an accent", content:[
+      Card([SectionHeader("Brand"),
+        ColorPicker("brand", $brand, "Accent", ["#6366f1","#10b981","#f59e0b","#ef4444"])])]},
+    {title:"Gate", details:"4-digit PIN", content:[
+      Card([SectionHeader("Two-factor publish",null,"GATE"),
+        FormControl("PIN", PinInput("pin", 4, $pin, "numeric")), publishGate])]}
+  ], $step, Action([@Run(publish)]))
+], "column","l")
 \`\`\``;
 }
 
@@ -966,6 +1138,99 @@ $category = "all"
 $$sort    = "price-asc"
 $$view    = "grid"
 $$cart    = []`,
+    `# Data explorer (DataGrid + advanced charts + state cards + audit trail)
+root = Stack([explorerHeader, kpiStrip, gaugeRow, gridCard, chartRow, chartRow2, bottomRow], "column", "l")
+
+explorerHeader = PageHeader("Engineering analytics", \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`, ["Workspace","Engineering","Analytics"], explorerActions, Badge("Realtime", "success", "circle", "sm"))
+explorerActions = [Button("Export PDF", Action([@Run(export_pdf)]), "secondary"), Button("Share view", Action([@Run(share)]), "primary")]
+
+kpiStrip = MetricGrid([
+  StatCard("Contributors", \`\${@Count(contributors)}\`,                       "up",   "+2 this week", "users"),
+  StatCard("Commits",      \`\${@FormatNumber(@Sum(contributors.commits))}\`,  "up",   "+184 today",   "code-commit"),
+  StatCard("Avg latency",  \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`,  "down", "-12 ms",       "gauge-high"),
+  StatCard("Top score",    \`\${@Max(contributors.score)}\`,                   "flat", "Ada Lovelace", "trophy")
+])
+
+gaugeRow = Grid([
+  Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
+  Card([SectionHeader("P95 latency"), Gauge(112, 0, 250,  "ms",            "primary", "lg")]),
+  Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,   "% requests",    "warning", "lg")])
+], {sm: 1, md: 3}, "l")
+
+# DataGrid: sortable headers, per-column filter chips, selectable rows, sticky header,
+# bulk-action toolbar that only appears when @Count($$selectedIds) > 0, built-in pagination.
+bulkBar = @If(@Count($$selectedIds) > 0,
+  Toolbar([Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
+          [Button("Email",  Action([@Run(email_selected)]),  "ghost",   "button", "small", "envelope"),
+           Button("Export", Action([@Run(export_selected)]), "secondary","button","small", "file-csv"),
+           Button("Clear",  Action([@Reset($$selectedIds)]), "ghost",   "button", "small")]), null)
+
+gridCard = Card([
+  SectionHeader("Top contributors", \`sorted by \${$$sort.key}\`, "DATAGRID", Badge("Live", "success", "circle", "sm")),
+  bulkBar,
+  DataGrid([
+    Col("Id",      contributors.id,        "text",   "left",  false, false),
+    Col("Name",    contributors.name,      "text",   "left",  true,  true),
+    Col("Team",    contributors.team,      "text",   "left",  true,  true),
+    Col("Score",   contributors.score,     "number", "right", true,  false),
+    Col("Commits", contributors.commits,   "number", "right", true,  false)
+  ], contributors.id, null, $$sort, $$selectedIds, true, $$page, 6, "No contributors match")
+])
+
+# Six chart primitives share Series(...) shape — swap in Query() results to make them live.
+chartRow = Grid([
+  Card([SectionHeader("Signups · last 7 days", "Stacked by source"),
+    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+      [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
+       Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
+       Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])]),
+  Card([SectionHeader("Office capacity"),
+    Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
+      [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])])
+], {sm: 1, md: 2}, "l")
+
+chartRow2 = Grid([
+  Card([SectionHeader("Vendor scorecard"),
+    RadarChart(["Speed","Quality","Cost","Coverage","Trust"],
+      [Series("Atlas Cloud",   [80,70,60,75,85]),
+       Series("Northwind SaaS",[60,85,70,65,80])])]),
+  Card([SectionHeader("Sessions vs conversions"),
+    ScatterChart(
+      [Series("Cohort A", [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
+       Series("Cohort B", [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])],
+      "Sessions (k)","Conversions")]),
+  Card([SectionHeader("Response time"),
+    Histogram(contributors.latencyMs, null, 8)])
+], {sm: 1, md: 3}, "l")
+
+bottomRow = Grid([
+  Card([SectionHeader("Recent activity"), InfiniteList([
+    ListItem("Ada merged PR #142",         "Streaming UI v3 components.", "code-merge"),
+    ListItem("Linus opened ticket #2049",  "Kernel scheduler regression.", "circle-exclamation"),
+    ListItem("Grace deployed compiler 4.2", "Latency improved 8%.",        "rocket")
+  ], Action([@Run(load_more_activity)]), false, true)]),
+  Card([SectionHeader("Audit trail", "Privileged actions, last 7d", "AUDIT", Badge("Compliance","primary","shield-halved","sm")),
+    AuditTrail([
+      {actor: "system",  title: "Rotated signing key",       time: "08:14",      icon: "key",           tone: "primary", meta: "kid=abc123"},
+      {actor: "admin",   title: "Granted Owner role to Ada", time: "yesterday",  icon: "user-shield",   tone: "success", meta: "actor=u_8132"},
+      {actor: "scanner", title: "Blocked suspicious sign-in",time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless"}
+    ])])
+], {sm: 1, md: 2}, "l")
+
+contributors = [
+  {id:"u01", name:"Ada Lovelace",   team:"Compilers", score:98, commits:412, latencyMs: 84},
+  {id:"u02", name:"Linus Torvalds", team:"Kernel",    score:96, commits:380, latencyMs:112},
+  {id:"u03", name:"Grace Hopper",   team:"Compilers", score:95, commits:358, latencyMs: 78},
+  {id:"u04", name:"Margaret Hamilton", team:"Apollo", score:94, commits:340, latencyMs: 95},
+  {id:"u05", name:"Donald Knuth",   team:"Algorithms",score:93, commits:322, latencyMs:110},
+  {id:"u06", name:"Anita Borg",     team:"Systems",   score:91, commits:296, latencyMs: 88},
+  {id:"u07", name:"Tim Berners-Lee","team":"Web",     score:90, commits:284, latencyMs:124},
+  {id:"u08", name:"Barbara Liskov", team:"Compilers", score:89, commits:272, latencyMs: 90}
+]
+
+$$sort        = {key: "Score", direction: "desc"}
+$$selectedIds = []
+$$page        = 1`,
   ];
 }
 

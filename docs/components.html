@@ -920,7 +920,7 @@ root = Toolbar(
 ])`,
       MediaCard: `root = MediaCard(
   "Aurora Headphones",
-  "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&q=80",
+  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=600&q=80",
   "Studio-grade sound, 40-hour battery.",
   ["wireless", "ANC"],
   "$249 · 4.8 stars",
@@ -1208,6 +1208,335 @@ root = Rating($score, 5, "3.5 of 5", 128, "md", true, true, "star")`,
   "No projects yet", "Create a project to start tracking work.", "folder", null, null,
   [Button("Create project", null, "primary", "button", "sm", "plus"),
    Button("Read the guide",  null, "ghost",   "button", "sm")])`,
+
+      // -------------------------------------------------------------------
+      // Advanced data
+      // -------------------------------------------------------------------
+      DataGrid: `$page = 1
+$sort = {column: "score", direction: "desc"}
+$selectedIds = []
+root = DataGrid(
+  [
+    Col("Id",    [1, 2, 3, 4]),
+    Col("Name",  ["Ada Lovelace", "Linus Torvalds", "Grace Hopper", "Margaret Hamilton"], "text", null, true, true),
+    Col("Score", [98, 92, 96, 94], "number", "right", true),
+    Col("Team",  ["Compilers", "Kernel", "Compilers", "Apollo"], "text", null, true, true)
+  ],
+  [1, 2, 3, 4],
+  "Top contributors",
+  $sort,
+  $selectedIds,
+  true,
+  $page,
+  3,
+  "No matching rows"
+)`,
+      CalendarView: `$selected = "2026-05-17"
+root = CalendarView(
+  $selected,
+  "2026-05",
+  [
+    {date: "2026-05-12", title: "Standup",    time: "09:00", tone: "primary"},
+    {date: "2026-05-17", title: "Demo day",   time: "14:30", tone: "success"},
+    {date: "2026-05-22", title: "Retro",      time: "16:00", tone: "info"}
+  ],
+  "month"
+)`,
+      ActivityLog: `root = ActivityLog([
+  {actor: "Ada",   title: "merged PR #142",        description: "Streaming UI v2 components.", time: "2m",  icon: "code-merge", tone: "success"},
+  {actor: "Linus", title: "opened ticket #2049",   description: "Kernel scheduler regression.", time: "1h",  icon: "circle-exclamation", tone: "warning"},
+  {actor: "Grace", title: "deployed compiler 4.2", time: "yesterday", icon: "rocket",          tone: "primary"}
+], "Recent activity")`,
+      AuditTrail: `root = AuditTrail([
+  {actor: "system",  title: "Rotated signing key",          time: "08:14",      icon: "key",     tone: "primary", meta: "kid=abc123 ip=10.0.0.4"},
+  {actor: "admin",   title: "Granted Owner role to Ada",    time: "yesterday", icon: "user-shield", tone: "success", meta: "actor=u_8132 ip=82.32.1.7"},
+  {actor: "scanner", title: "Blocked suspicious sign-in",    time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless ip=tor"}
+], "Audit trail")`,
+      ComparisonTable: `root = ComparisonTable(
+  ["Free", "Pro", "Enterprise"],
+  [
+    {label: "Projects",   values: ["3", "Unlimited", "Unlimited"]},
+    {label: "Collaborators", values: ["1", "10", "Unlimited"]},
+    {label: "SSO",        values: [false, false, true]},
+    {label: "Audit log",  values: [false, true,  true]},
+    {label: "Priority support", values: [false, true, true]}
+  ],
+  1
+)`,
+      InfiniteList: `$pages = 2
+root = InfiniteList(
+  [
+    ListItem("Build component library", "Add 30+ new primitives.", "code"),
+    ListItem("Ship docs site",          "Update components.html.", "book"),
+    ListItem("Write tests",             "Smoke + integration coverage.", "vial"),
+    ListItem("Cut release",             "Tag + publish.", "tag")
+  ],
+  Action([@Set($pages = $pages + 1)]),
+  false,
+  true
+)`,
+
+      // -------------------------------------------------------------------
+      // Media
+      // -------------------------------------------------------------------
+      VideoPlayer: `root = VideoPlayer(
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+  null, true, false, false, false,
+  "Big Buck Bunny — sample clip",
+  "16:9"
+)`,
+      AudioPlayer: `root = AudioPlayer(
+  "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+  null,
+  "Cello Suite No. 1",
+  "J. S. Bach",
+  true
+)`,
+      Carousel: `root = Carousel([
+  {src: "https://picsum.photos/seed/streaming1/640/360", alt: "Slide 1", caption: "Launch your product"},
+  {src: "https://picsum.photos/seed/streaming2/640/360", alt: "Slide 2", caption: "Onboard customers"},
+  {src: "https://picsum.photos/seed/streaming3/640/360", alt: "Slide 3", caption: "Grow your team"}
+], 0, "16:9", true)`,
+      Gallery: `root = Gallery([
+  {src: "https://picsum.photos/seed/gallery1/320/320", alt: "City",  caption: "City"},
+  {src: "https://picsum.photos/seed/gallery2/320/320", alt: "Beach", caption: "Beach"},
+  {src: "https://picsum.photos/seed/gallery3/320/320", alt: "Forest",caption: "Forest"},
+  {src: "https://picsum.photos/seed/gallery4/320/320", alt: "Hills", caption: "Hills"}
+], 4)`,
+      Lightbox: `$open = false
+$index = 0
+root = Stack([
+  Gallery([
+    {src: "https://picsum.photos/seed/lb1/640/400", caption: "Photo 1"},
+    {src: "https://picsum.photos/seed/lb2/640/400", caption: "Photo 2"},
+    {src: "https://picsum.photos/seed/lb3/640/400", caption: "Photo 3"}
+  ]),
+  Lightbox($open, $index, [
+    {src: "https://picsum.photos/seed/lb1/1200/800", caption: "Photo 1"},
+    {src: "https://picsum.photos/seed/lb2/1200/800", caption: "Photo 2"},
+    {src: "https://picsum.photos/seed/lb3/1200/800", caption: "Photo 3"}
+  ])
+])`,
+      Map: `root = Map(
+  48.8566, 2.3522, 12,
+  [
+    {lat: 48.8584, lng: 2.2945, label: "Eiffel Tower"},
+    {lat: 48.8606, lng: 2.3376, label: "Louvre"},
+    {lat: 48.8530, lng: 2.3499, label: "Notre-Dame"}
+  ],
+  "320px",
+  "Three Paris landmarks"
+)`,
+
+      // -------------------------------------------------------------------
+      // Editors & overlays
+      // -------------------------------------------------------------------
+      RichTextEditor: `$body = "<h2>Email draft</h2><p>Hi <b>Ada</b>, just confirming our <i>demo</i> on Friday.</p>"
+root = RichTextEditor("draft", $body, "Start composing…", "200px")`,
+      CodeEditor: `$code = "function greet(name) {\\n  return \`Hello, \${name}!\`\\n}\\n"
+root = CodeEditor("snippet", $code, "javascript", "// type your code…", "200px")`,
+      ContextMenu: `root = ContextMenu(
+  Card([CardHeader("Right-click anywhere on this card", "ContextMenu attaches here")]),
+  [
+    {label: "Open",       icon: "arrow-up-right-from-square"},
+    {label: "Duplicate",  icon: "copy"},
+    MenuSeparator(),
+    {label: "Delete",     icon: "trash", variant: "danger"}
+  ]
+)`,
+      ColorPicker: `$brand = "#6366f1"
+root = ColorPicker("brand", $brand, "Brand colour",
+  ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6"])`,
+
+      // -------------------------------------------------------------------
+      // Advanced charts
+      // -------------------------------------------------------------------
+      AreaChart: `root = AreaChart(
+  ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+  [Series("Revenue", [12, 18, 22, 28, 32, 41]),
+   Series("Expenses", [8, 12, 14, 18, 20, 24])],
+  "First half"
+)`,
+      Gauge: `root = Gauge(78, 0, 100, "Uptime", "success", "md")`,
+      Heatmap: `root = Heatmap(
+  ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  ["9am", "12pm", "3pm", "6pm"],
+  [
+    [3, 8, 12, 6],
+    [4, 9, 14, 7],
+    [5, 11, 16, 9],
+    [3, 7, 13, 10],
+    [2, 5, 10, 12]
+  ],
+  "Office capacity"
+)`,
+      RadarChart: `root = RadarChart(
+  ["Speed", "Quality", "Cost", "Coverage", "Trust"],
+  [Series("Plan A", [80, 70, 60, 75, 85]),
+   Series("Plan B", [60, 85, 70, 65, 80])],
+  "Vendor comparison"
+)`,
+      ScatterChart: `root = ScatterChart(
+  [Series("Cohort A", [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}]),
+   Series("Cohort B", [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}])],
+  "Sessions",
+  "Conversions",
+  "Cohort behaviour"
+)`,
+      Histogram: `root = Histogram(
+  [1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 8, 9],
+  null, 6,
+  "Response time (s)"
+)`,
+
+      // -------------------------------------------------------------------
+      // Advanced forms
+      // -------------------------------------------------------------------
+      PinInput: `$pin = ""
+root = PinInput("pin", 4, $pin, "numeric")`,
+      OtpInput: `$otp = ""
+root = OtpInput("otp", $otp)`,
+      PasswordInput: `$pw = "Hunter2!"
+root = PasswordInput("pw", $pw, "Choose a strong password", "Password", true)`,
+      TagInput: `$tags = ["streaming", "ui", "library"]
+root = TagInput("tags", $tags, "Add a tag and press Enter", "Tags", 8)`,
+      MentionInput: `$note = "Heads up @"
+root = MentionInput("note",
+  [
+    {name: "Ada Lovelace",   handle: "ada",   role: "Engineering"},
+    {name: "Linus Torvalds", handle: "linus", role: "Kernel"},
+    {name: "Grace Hopper",   handle: "grace", role: "Compilers"}
+  ],
+  $note, "Type @ to mention someone…")`,
+      TimePicker: `$time = "09:30"
+root = TimePicker("time", $time, "Meeting time")`,
+      DateTimePicker: `$when = "2026-05-17T14:30"
+root = DateTimePicker("when", $when, "Launch window")`,
+      MaskedInput: `$phone = ""
+root = MaskedInput("phone", "(999) 999-9999", $phone, "(415) 555-0114", "Phone number")`,
+      FormSection: `root = FormSection("Account",
+  [
+    FormControl("Email",    Input("email", "you@example.com", "email")),
+    FormControl("Username", Input("user",  "ada-lovelace"))
+  ],
+  "Used to sign in and send notifications.")`,
+      FieldSet: `root = FieldSet("Notifications",
+  [
+    Checkbox("email-news",  "Product updates",  true),
+    Checkbox("email-promo", "Offers & promos", false),
+    Checkbox("email-tips",  "Tips & guides",    true)
+  ],
+  "We never share your email address.")`,
+      ValidationSummary: `root = ValidationSummary(
+  [
+    {label: "email",    message: "Email is required."},
+    {label: "password", message: "Password must be at least 8 characters."}
+  ],
+  "Please fix the following before continuing"
+)`,
+      MultiStepForm: `$step = 0
+root = MultiStepForm([
+  {title: "Account", details: "Email & password",
+    content: [FormControl("Email", Input("email", "you@example.com", "email"))]},
+  {title: "Profile", details: "Tell us about you",
+    content: [FormControl("Name", Input("name", "Your name"))]},
+  {title: "Done",    details: "Review",
+    content: [Banner("Almost there", "Click Submit to finish.", null, "circle-info", "success")]}
+], $step, Action([@ToAssistant("Wizard submitted")]))`,
+
+      // -------------------------------------------------------------------
+      // Advanced patterns
+      // -------------------------------------------------------------------
+      InboxPanel: `root = InboxPanel([
+  {title: "New comment on PR #142",    message: "Ada: looks great, two nits inline.", time: "2m",  icon: "comment",  unread: true},
+  {title: "Build #482 succeeded",       message: "Tests passed in 2m31s.",            time: "12m", icon: "circle-check", tone: "success", unread: true},
+  {title: "Weekly report",              message: "This week's metrics digest.",       time: "1d",  icon: "chart-pie"},
+  {title: "Subscription renewed",       message: "Pro plan billed $29.",              time: "1w",  icon: "credit-card"}
+], "Notifications")`,
+      OnboardingChecklist: `root = OnboardingChecklist([
+  {title: "Create your workspace", description: "Pick a name and slug.",         done: true},
+  {title: "Invite teammates",      description: "Share an invite link.",         done: true},
+  {title: "Connect a data source", description: "Hook up GitHub / Postgres / S3.", done: false, action: Action([@ToAssistant("Connect source")]), cta: "Connect"},
+  {title: "Ship your first board", description: "Publish a dashboard.",          done: false}
+], "Get started", "Most teams finish setup in under 10 minutes.")`,
+      LoadingState: `root = LoadingState("Loading projects…", "Hang tight, fetching your workspaces.")`,
+      ErrorState: `root = ErrorState(
+  "We couldn't load that project",
+  "There was a problem reaching the server. Try again in a moment.",
+  [Button("Retry", null, "primary", "button", "sm", "rotate-right"),
+   Button("Contact support", null, "ghost", "button", "sm", "life-ring")]
+)`,
+      SuccessState: `root = SuccessState(
+  "Order placed!",
+  "Your invoice will arrive by email shortly.",
+  [Button("View receipt", null, "primary", "button", "sm", "file-invoice"),
+   Button("Back to dashboard", null, "ghost", "button", "sm")]
+)`,
+      Tour: `$step = 0
+root = Tour([
+  {title: "Welcome",   description: "Take a 30-second tour of the workspace."},
+  {title: "Sidebar",   description: "Switch between projects from the left rail."},
+  {title: "Inspector", description: "Inspect any record by clicking a row."}
+], $step)`,
+      Spotlight: `root = Spotlight(
+  "Try the new filter bar",
+  "Press F to focus the filter bar or click any column header to sort.",
+  Button("Got it", null, "primary", "button", "sm")
+)`,
+      Sticky: `root = ScrollArea([
+  Sticky([Banner("Sticky banner", "Stays pinned while you scroll.", null, "thumbtack", "primary")], "top"),
+  Stack([
+    Card([CardHeader("Block 1"), TextContent("Scroll down to see the banner stay put.")]),
+    Card([CardHeader("Block 2"), TextContent("More content.")]),
+    Card([CardHeader("Block 3"), TextContent("Keep scrolling.")]),
+    Card([CardHeader("Block 4"), TextContent("Almost done.")])
+  ])
+], "260px")`,
+      ResizablePanels: `root = ResizablePanels(
+  [Card([CardHeader("Files"), List([
+    ListItem("README.md", "Edited 2m ago"),
+    ListItem("package.json", "Edited 1h ago"),
+    ListItem("src/index.ts", "Edited 3h ago")
+  ])])],
+  [Card([CardHeader("Preview"), CodeBlock("typescript", "const greet = (name) => \\\`Hello, \\\${name}!\\\`\\n\\ngreet('Ada')")])],
+  "240px"
+)`,
+      MasonryGrid: `root = MasonryGrid([
+  Card([CardHeader("Short note"), TextContent("Just a line.")]),
+  Card([CardHeader("Longer note"), TextContent("This note has a bit more content to demonstrate uneven heights.")]),
+  Card([CardHeader("Another"), TextContent("Masonry packs them efficiently.")]),
+  Card([CardHeader("Medium"), TextContent("Two sentences here. Just enough to look different.")]),
+  Card([CardHeader("Tiny")])
+], 3)`,
+      Drawer: `root = Drawer("Filter results", true, [
+  FormControl("Status", Select("status", [
+    SelectItem("all",    "All"),
+    SelectItem("open",   "Open"),
+    SelectItem("closed", "Closed")
+  ])),
+  FormControl("Owner", Combobox("owner", [
+    SelectItem("ada",   "Ada Lovelace"),
+    SelectItem("linus", "Linus Torvalds")
+  ])),
+  Buttons([
+    Button("Reset", null, "ghost",   "button", "sm"),
+    Button("Apply", null, "primary", "button", "sm")
+  ])
+], "right")`,
+      TopBar: `root = TopBar(
+  "Project Atlas",
+  "12 active issues",
+  [Badge("v0.4", "info")],
+  [SearchBar("q", "Search Atlas…")],
+  [Button("New issue", null, "primary", "button", "sm", "plus")]
+)`,
+      BreadcrumbPageHeader: `root = BreadcrumbPageHeader(
+  ["Workspace", "Engineering", "Q3 plan"],
+  "Roadmap, OKRs, and budget for Q3",
+  [Button("Share", null, "ghost", "button", "sm", "share"),
+   Button("Export", null, "primary", "button", "sm", "file-export")]
+)`,
     };
 
     /**
@@ -1217,7 +1546,16 @@ root = Rating($score, 5, "3.5 of 5", 128, "md", true, true, "star")`,
      * trick on the output container scopes the fixed positioning to that
      * box instead of the viewport.
      */
-    const OVERLAY_PREVIEW = new Set(["Modal", "Sheet", "Toasts"]);
+    const OVERLAY_PREVIEW = new Set([
+      "Modal",
+      "Sheet",
+      "Drawer",
+      "Toasts",
+      "Lightbox",
+      "Tour",
+      "Spotlight",
+      "ContextMenu",
+    ]);
 
     function formatSignature(spec) {
       const params = spec.props

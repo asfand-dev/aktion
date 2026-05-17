@@ -103,15 +103,43 @@ export const BarChart: ComponentSpec = {
 
 export const LineChart: ComponentSpec = {
   name: "LineChart",
-  description: "Line chart. `labels` define the x-axis, each Series is a line.",
+  description:
+    "Line chart. `labels` define the x-axis, each Series is a line. As a " +
+    "shortcut you can pass `data=[{x: \"Jan\", revenue: 12, signups: 4}, …]` " +
+    "and the labels + series will be derived automatically (one line per " +
+    "non-`x` key). Use `data` when the dataset is already row-shaped; use " +
+    "`series` when you have explicit Series objects.",
   props: [
-    { name: "labels", type: "string[]" },
-    { name: "series", type: "Series[]" },
+    { name: "labels", type: "string[]", optional: true },
+    { name: "series", type: "Series[]", optional: true },
+    { name: "data", type: "{x: string, [key: string]: number}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived" },
     { name: "title", type: "string", optional: true },
   ],
   render: (_node, props) => {
-    const labels = asArray<unknown>(props.labels).map((l) => asString(l));
-    const series = readSeries(asArray<unknown>(props.series));
+    let labels = asArray<unknown>(props.labels).map((l) => asString(l));
+    let series = readSeries(asArray<unknown>(props.series));
+    // Row-shaped shorthand: pull labels from `x` and one Series per other key.
+    const rows = asArray<unknown>(props.data);
+    if (rows.length > 0 && (labels.length === 0 || series.length === 0)) {
+      const derivedLabels: string[] = [];
+      const seriesByKey = new Map<string, number[]>();
+      for (const raw of rows) {
+        const row = raw as Record<string, unknown> | null;
+        if (!row || typeof row !== "object") continue;
+        derivedLabels.push(asString(row.x ?? row.label ?? ""));
+        for (const [k, v] of Object.entries(row)) {
+          if (k === "x" || k === "label") continue;
+          const num = asNumber(v);
+          if (Number.isNaN(num)) continue;
+          if (!seriesByKey.has(k)) seriesByKey.set(k, []);
+          seriesByKey.get(k)!.push(num);
+        }
+      }
+      if (labels.length === 0) labels = derivedLabels;
+      if (series.length === 0) {
+        series = [...seriesByKey.entries()].map(([name, values]) => ({ name, values }));
+      }
+    }
     const root = el("div", { class: "rui-chart rui-line-chart" });
     if (asString(props.title)) root.append(el("div", { class: "rui-chart-title" }, [asString(props.title)]));
 

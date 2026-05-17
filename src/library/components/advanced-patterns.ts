@@ -1,0 +1,624 @@
+/**
+ * Advanced pattern composites that round out the catalogue:
+ *
+ *   - InboxPanel — Grouped notification card list (read / unread).
+ *   - OnboardingChecklist — Step-by-step product checklist.
+ *   - LoadingState / ErrorState / SuccessState — Full-card status panels.
+ *   - Tour / Spotlight — Light-weight product-tour primitives.
+ *   - Sticky / Affix — Pin a child to the top while scrolling.
+ *   - ResizablePanels — Two-pane drag-to-resize split.
+ *   - MasonryGrid — Pinterest-style column grid.
+ *   - TopBar / BreadcrumbPageHeader — Convenience composites.
+ *   - Drawer — Sheet alias (industry-standard naming).
+ */
+
+import type { ComponentSpec } from "../types.js";
+import { isActionPayload } from "../../runtime/builtins.js";
+import {
+  el, asArray, asString, asBoolean, asNumber, renderIcon,
+  sanitiseCssLength,
+} from "../utils.js";
+import { Sheet } from "./navigation.js";
+import { Notification, PageHeader } from "./patterns.js";
+
+/* ----------------------------------------------------------------------- *
+ * InboxPanel
+ * ----------------------------------------------------------------------- */
+
+interface InboxEntry {
+  title: string;
+  message: string;
+  time: string;
+  icon: string;
+  tone: string;
+  unread: boolean;
+  avatarSrc: string;
+  action: unknown;
+}
+
+function readInboxEntries(raw: unknown): InboxEntry[] {
+  return asArray<unknown>(raw)
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const r = entry as Record<string, unknown>;
+      return {
+        title: asString(r.title),
+        message: asString(r.message),
+        time: asString(r.time),
+        icon: asString(r.icon),
+        tone: asString(r.tone, "default"),
+        unread: asBoolean(r.unread),
+        avatarSrc: asString(r.avatarSrc),
+        action: r.action,
+      };
+    })
+    .filter((e): e is InboxEntry => e !== null);
+}
+
+export const InboxPanel: ComponentSpec = {
+  name: "InboxPanel",
+  description:
+    "Grouped notification list — entries are grouped into Unread/Earlier " +
+    "sections, with a count chip on each group header. Pass `items` as " +
+    "`{title, message, time, icon?, tone?, unread?, avatarSrc?, action?}` " +
+    "objects. Pair with a `SectionHeader` for the panel title (the " +
+    "component does not render its own title to avoid duplication). Use " +
+    "for top-bar notification trays, activity drawers, and alert center " +
+    "pages.",
+  props: [
+    { name: "items", type: "object[]" },
+    { name: "emptyLabel", type: "string", optional: true, description: "Text shown when there are no notifications" },
+    { name: "onMarkAllRead", type: "Action", optional: true, description: "Action fired by the \"Mark all as read\" button" },
+  ],
+  render: (_node, props, helpers) => {
+    const entries = readInboxEntries(props.items);
+    const unread = entries.filter((e) => e.unread);
+    const read = entries.filter((e) => !e.unread);
+    const root = el("div", { class: "rui-inbox-panel" });
+    if (isActionPayload(props.onMarkAllRead) && unread.length > 0) {
+      const toolbar = el("div", { class: "rui-inbox-panel-toolbar" });
+      const btn = el("button", { type: "button", class: "rui-inbox-panel-mark-all" }, ["Mark all as read"]);
+      btn.onclick = () => helpers.runAction(props.onMarkAllRead);
+      toolbar.append(btn);
+      root.append(toolbar);
+    }
+    if (entries.length === 0) {
+      root.append(el("div", { class: "rui-inbox-panel-empty" }, [asString(props.emptyLabel, "You're all caught up.")]));
+      return root;
+    }
+    const renderGroup = (label: string, items: InboxEntry[]) => {
+      if (items.length === 0) return;
+      const group = el("section", { class: "rui-inbox-panel-group" });
+      const groupHead = el("header", { class: "rui-inbox-panel-group-head" });
+      groupHead.append(el("span", { class: "rui-inbox-panel-group-label" }, [label]));
+      groupHead.append(el("span", { class: "rui-inbox-panel-group-count" }, [String(items.length)]));
+      group.append(groupHead);
+      for (const entry of items) {
+        const card = Notification.render(
+          { __kind: "Component", name: "Notification", args: [], argMeta: [] },
+          {
+            title: entry.title,
+            message: entry.message,
+            time: entry.time,
+            icon: entry.icon,
+            tone: entry.tone,
+            avatarSrc: entry.avatarSrc,
+            unread: entry.unread,
+          },
+          helpers,
+        ) as HTMLElement;
+        if (isActionPayload(entry.action)) {
+          card.setAttribute("data-clickable", "true");
+          card.onclick = () => helpers.runAction(entry.action);
+        }
+        group.append(card);
+      }
+      root.append(group);
+    };
+    renderGroup(`Unread (${unread.length})`, unread);
+    renderGroup("Earlier", read);
+    return root;
+  },
+};
+
+/* ----------------------------------------------------------------------- *
+ * OnboardingChecklist
+ * ----------------------------------------------------------------------- */
+
+interface ChecklistItem {
+  title: string;
+  description: string;
+  done: boolean;
+  action: unknown;
+  cta: string;
+}
+
+function readChecklistItems(raw: unknown): ChecklistItem[] {
+  return asArray<unknown>(raw)
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const r = entry as Record<string, unknown>;
+      return {
+        title: asString(r.title),
+        description: asString(r.description),
+        done: asBoolean(r.done),
+        action: r.action,
+        cta: asString(r.cta, "Start"),
+      };
+    })
+    .filter((c): c is ChecklistItem => c !== null);
+}
+
+export const OnboardingChecklist: ComponentSpec = {
+  name: "OnboardingChecklist",
+  description:
+    "Step-by-step product checklist with completion progress at the top. " +
+    "Pass `items` as `{title, description?, done?, action?, cta?}` " +
+    "objects. The progress percentage is computed automatically from " +
+    "`done`. Use on first-run dashboards, empty workspaces, and " +
+    "\"complete your profile\" surfaces.",
+  props: [
+    { name: "items", type: "object[]" },
+    { name: "title", type: "string", optional: true, description: "Heading (default \"Getting started\")" },
+    { name: "subtitle", type: "string", optional: true },
+  ],
+  render: (_node, props, helpers) => {
+    const items = readChecklistItems(props.items);
+    const completed = items.filter((i) => i.done).length;
+    const total = Math.max(1, items.length);
+    const pct = Math.round((completed / total) * 100);
+    const root = el("div", { class: "rui-onboarding-checklist" });
+    const head = el("header", { class: "rui-onboarding-checklist-header" });
+    head.append(el("h3", { class: "rui-onboarding-checklist-title" }, [
+      asString(props.title, "Getting started"),
+    ]));
+    const subtitle = asString(props.subtitle);
+    if (subtitle) head.append(el("p", { class: "rui-onboarding-checklist-subtitle" }, [subtitle]));
+    head.append(el("div", { class: "rui-onboarding-checklist-progress" }, [
+      el("div", { class: "rui-onboarding-checklist-bar" }, [
+        el("div", {
+          class: "rui-onboarding-checklist-fill",
+          style: `width:${pct}%`,
+        }),
+      ]),
+      el("span", { class: "rui-onboarding-checklist-meta" }, [`${completed}/${items.length} complete`]),
+    ]));
+    root.append(head);
+    const list = el("ol", { class: "rui-onboarding-checklist-list" });
+    for (const item of items) {
+      const li = el("li", {
+        class: "rui-onboarding-checklist-item",
+        "data-done": item.done ? "true" : "false",
+      });
+      const marker = el("span", { class: "rui-onboarding-checklist-marker" });
+      const iconNode = renderIcon(item.done ? "circle-check" : "circle", { className: "rui-onboarding-checklist-marker-icon" });
+      if (iconNode) marker.append(iconNode);
+      li.append(marker);
+      const body = el("div", { class: "rui-onboarding-checklist-body" });
+      body.append(el("div", { class: "rui-onboarding-checklist-item-title" }, [item.title]));
+      if (item.description) body.append(el("p", { class: "rui-onboarding-checklist-item-description" }, [item.description]));
+      li.append(body);
+      if (!item.done && isActionPayload(item.action)) {
+        const btn = el("button", {
+          type: "button",
+          class: "rui-button",
+          "data-variant": "secondary",
+          "data-size": "sm",
+        }, [item.cta]);
+        btn.onclick = () => helpers.runAction(item.action);
+        li.append(btn);
+      }
+      list.append(li);
+    }
+    root.append(list);
+    return root;
+  },
+};
+
+/* ----------------------------------------------------------------------- *
+ * LoadingState / ErrorState / SuccessState
+ * ----------------------------------------------------------------------- */
+
+function renderStateCard(opts: {
+  klass: string;
+  iconName: string;
+  iconClass: string;
+  title: string;
+  description: string;
+  actions: unknown;
+  helpers: { renderNode: (n: unknown) => Node };
+}): HTMLElement {
+  const root = el("div", { class: `rui-${opts.klass}` });
+  if (opts.iconName) {
+    const icon = renderIcon(opts.iconName, { className: opts.iconClass });
+    if (icon) root.append(icon);
+  }
+  if (opts.title) root.append(el("h3", { class: `rui-${opts.klass}-title` }, [opts.title]));
+  if (opts.description) root.append(el("p", { class: `rui-${opts.klass}-description` }, [opts.description]));
+  const items = asArray<unknown>(opts.actions);
+  if (items.length > 0) {
+    const row = el("div", { class: `rui-${opts.klass}-actions` });
+    for (const item of items) row.append(opts.helpers.renderNode(item));
+    root.append(row);
+  }
+  return root;
+}
+
+export const LoadingState: ComponentSpec = {
+  name: "LoadingState",
+  description:
+    "Full-card loading state — large spinner + title + description. Use " +
+    "while a query is in flight or while a long-running tool runs. For " +
+    "tiny inline loaders prefer `Spinner`; for skeleton placeholders " +
+    "prefer `Skeleton`.",
+  props: [
+    { name: "title", type: "string", optional: true, description: "Default \"Loading…\"" },
+    { name: "description", type: "string", optional: true },
+  ],
+  render: (_node, props) => {
+    const root = el("div", { class: "rui-loading-state" });
+    const spinner = el("span", { class: "rui-spinner", "data-size": "lg", "data-tone": "primary" });
+    spinner.append(el("span", { class: "rui-spinner-ring", "aria-hidden": "true" }));
+    root.append(spinner);
+    root.append(el("h3", { class: "rui-loading-state-title" }, [asString(props.title, "Loading…")]));
+    const description = asString(props.description);
+    if (description) root.append(el("p", { class: "rui-loading-state-description" }, [description]));
+    return root;
+  },
+};
+
+export const ErrorState: ComponentSpec = {
+  name: "ErrorState",
+  description:
+    "Full-card error placeholder. Pairs a danger icon with title, " +
+    "description, and a row of recovery actions (Retry / Contact " +
+    "support / Go home). Pass `actions` as Button(...) entries.",
+  props: [
+    { name: "title", type: "string", optional: true, description: "Default \"Something went wrong\"" },
+    { name: "description", type: "string", optional: true },
+    { name: "actions", type: "Node[]", optional: true },
+    { name: "icon", type: "string", optional: true, description: "Font Awesome icon (default `circle-exclamation`)" },
+  ],
+  render: (_node, props, helpers) => renderStateCard({
+    klass: "error-state",
+    iconName: asString(props.icon, "circle-exclamation"),
+    iconClass: "rui-error-state-icon",
+    title: asString(props.title, "Something went wrong"),
+    description: asString(props.description),
+    actions: props.actions,
+    helpers,
+  }),
+};
+
+export const SuccessState: ComponentSpec = {
+  name: "SuccessState",
+  description:
+    "Full-card success placeholder. Use for confirmation screens " +
+    "(\"Order placed\", \"Payment succeeded\", \"Account verified\") at " +
+    "the end of a flow. Pass `actions` for follow-up CTAs.",
+  props: [
+    { name: "title", type: "string" },
+    { name: "description", type: "string", optional: true },
+    { name: "actions", type: "Node[]", optional: true },
+    { name: "icon", type: "string", optional: true, description: "Default `circle-check`" },
+  ],
+  render: (_node, props, helpers) => renderStateCard({
+    klass: "success-state",
+    iconName: asString(props.icon, "circle-check"),
+    iconClass: "rui-success-state-icon",
+    title: asString(props.title),
+    description: asString(props.description),
+    actions: props.actions,
+    helpers,
+  }),
+};
+
+/* ----------------------------------------------------------------------- *
+ * Tour / Spotlight
+ * ----------------------------------------------------------------------- */
+
+interface TourStep {
+  title: string;
+  description: string;
+  target: string;
+}
+
+export const Tour: ComponentSpec = {
+  name: "Tour",
+  description:
+    "Product-tour controller — renders the current step's title, " +
+    "description, and a Prev/Next/Skip row. Bind `current` to a " +
+    "`$variable` (0-indexed). Pass `steps` as `{title, description, " +
+    "target?}` objects; the optional `target` is a CSS selector that " +
+    "renders alongside the step for designers to reference.",
+  props: [
+    { name: "steps", type: "object[]" },
+    { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
+    { name: "open", type: "boolean", optional: true, description: "Whether the tour is visible" },
+    { name: "onComplete", type: "Action", optional: true },
+  ],
+  render: (node, props, helpers) => {
+    const steps: TourStep[] = asArray<unknown>(props.steps).map((entry) => {
+      if (!entry || typeof entry !== "object") return { title: asString(entry), description: "", target: "" };
+      const r = entry as Record<string, unknown>;
+      return { title: asString(r.title), description: asString(r.description), target: asString(r.target) };
+    });
+    const isOpen = props.open === undefined ? true : asBoolean(props.open);
+    const total = steps.length;
+    const current = Math.max(0, Math.min(total - 1, Math.floor(asNumber(props.current, 0))));
+    const stateName = node.argMeta?.[1]?.stateRef;
+    const overlay = el("div", { class: "rui-tour", "data-open": isOpen ? "true" : "false" });
+    if (!isOpen || total === 0) return overlay;
+    const step = steps[current];
+    if (!step) return overlay;
+    const card = el("div", { class: "rui-tour-card", role: "dialog", "aria-modal": "false" });
+    card.append(el("div", { class: "rui-tour-step" }, [`Step ${current + 1} of ${total}`]));
+    card.append(el("h3", { class: "rui-tour-title" }, [step.title]));
+    if (step.description) card.append(el("p", { class: "rui-tour-description" }, [step.description]));
+    if (step.target) card.append(el("div", { class: "rui-tour-target" }, [`Target: ${step.target}`]));
+    const footer = el("div", { class: "rui-tour-footer" });
+    const skip = el("button", { type: "button", class: "rui-button", "data-variant": "ghost" }, ["Skip"]);
+    skip.onclick = () => {
+      if (isActionPayload(props.onComplete)) helpers.runAction(props.onComplete);
+    };
+    const prev = el("button", {
+      type: "button",
+      class: "rui-button",
+      "data-variant": "secondary",
+      disabled: current <= 0 ? "" : null,
+    }, ["Back"]);
+    if (stateName && current > 0) {
+      prev.onclick = () => {
+        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current - 1 }] });
+      };
+    }
+    const isLast = current >= total - 1;
+    const next = el("button", { type: "button", class: "rui-button", "data-variant": "primary" }, [isLast ? "Finish" : "Next"]);
+    next.onclick = () => {
+      if (isLast) {
+        if (isActionPayload(props.onComplete)) helpers.runAction(props.onComplete);
+      } else if (stateName) {
+        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current + 1 }] });
+      }
+    };
+    footer.append(skip, prev, next);
+    card.append(footer);
+    overlay.append(card);
+    return overlay;
+  },
+};
+
+export const Spotlight: ComponentSpec = {
+  name: "Spotlight",
+  description:
+    "Single-step product highlight — a dimmed full-page overlay with a " +
+    "ring around the focused area and a small explainer card. Use for " +
+    "one-off feature reveals (\"Try the new commands menu\"). Bind " +
+    "`open` to a `$variable` to dismiss.",
+  props: [
+    { name: "title", type: "string" },
+    { name: "open", type: "boolean", description: "Whether the spotlight is visible — typically a $variable" },
+    { name: "description", type: "string", optional: true },
+    { name: "actions", type: "Node[]", optional: true },
+  ],
+  render: (node, props, helpers) => {
+    const isOpen = asBoolean(props.open);
+    const overlay = el("div", { class: "rui-spotlight", "data-open": isOpen ? "true" : "false" });
+    if (!isOpen) return overlay;
+    const card = el("div", { class: "rui-spotlight-card" });
+    card.append(el("h3", { class: "rui-spotlight-title" }, [asString(props.title)]));
+    const description = asString(props.description);
+    if (description) card.append(el("p", { class: "rui-spotlight-description" }, [description]));
+    const actions = asArray<unknown>(props.actions);
+    if (actions.length > 0) {
+      const row = el("div", { class: "rui-spotlight-actions" });
+      for (const item of actions) row.append(helpers.renderNode(item));
+      card.append(row);
+    }
+    const stateName = node.argMeta?.[1]?.stateRef;
+    if (stateName) {
+      overlay.onclick = (event) => {
+        if (event.target !== overlay) return;
+        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: false }] });
+      };
+    }
+    overlay.append(card);
+    return overlay;
+  },
+};
+
+/* ----------------------------------------------------------------------- *
+ * Sticky / ResizablePanels / MasonryGrid / Drawer / TopBar
+ * ----------------------------------------------------------------------- */
+
+export const Sticky: ComponentSpec = {
+  name: "Sticky",
+  description:
+    "Wraps content in a `position: sticky` container so it pins to the " +
+    "top (or bottom) of the nearest scrollable ancestor. Use for " +
+    "toolbar action rows above tables, in-page navs, status banners.",
+  props: [
+    { name: "children", type: "Node[]" },
+    { name: "side", type: "string", optional: true, enum: ["top", "bottom"] },
+    { name: "offset", type: "string", optional: true, description: "CSS offset (default 0)" },
+    { name: "zIndex", type: "number", optional: true, description: "Z-index (default 10)" },
+  ],
+  render: (_node, props, helpers) => {
+    const side = asString(props.side, "top");
+    const offset = sanitiseCssLength(props.offset, "0");
+    const z = Math.max(0, Math.floor(asNumber(props.zIndex, 10)));
+    const styles = `position:sticky;${side}:${offset};z-index:${z};`;
+    const root = el("div", { class: "rui-sticky", style: styles });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
+export const ResizablePanels: ComponentSpec = {
+  name: "ResizablePanels",
+  description:
+    "Two-pane horizontal split with a draggable divider. The user can " +
+    "drag the divider to resize the primary pane; defaults respect the " +
+    "starting width. Use for code editors, file browsers, master/detail " +
+    "layouts that need user-controllable proportions.",
+  props: [
+    { name: "primary", type: "Node[]" },
+    { name: "secondary", type: "Node[]" },
+    { name: "initialPrimaryWidth", type: "string", optional: true, description: "CSS width for the primary pane (default 40%)" },
+    { name: "minPrimaryWidth", type: "string", optional: true, description: "Min width (default 240px)" },
+  ],
+  render: (_node, props, helpers) => {
+    const initial = sanitiseCssLength(props.initialPrimaryWidth, "40%");
+    const minWidth = sanitiseCssLength(props.minPrimaryWidth, "240px");
+    const root = el("div", {
+      class: "rui-resizable-panels",
+      style: `--rui-resizable-primary:${initial};--rui-resizable-min:${minWidth};`,
+    });
+    const primary = el("div", { class: "rui-resizable-panel rui-resizable-panel-primary" });
+    for (const child of asArray(props.primary)) primary.append(helpers.renderNode(child));
+    const divider = el("div", {
+      class: "rui-resizable-divider",
+      role: "separator",
+      "aria-orientation": "vertical",
+      tabindex: "0",
+    });
+    const secondary = el("div", { class: "rui-resizable-panel rui-resizable-panel-secondary" });
+    for (const child of asArray(props.secondary)) secondary.append(helpers.renderNode(child));
+    root.append(primary, divider, secondary);
+
+    divider.onpointerdown = (event) => {
+      const e = event as PointerEvent;
+      const target = e.currentTarget as HTMLElement;
+      target.setPointerCapture(e.pointerId);
+      const live = target.closest(".rui-resizable-panels") as HTMLElement | null;
+      if (!live) return;
+      const rect = live.getBoundingClientRect();
+      const onMove = (moveEvent: PointerEvent) => {
+        const ratio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+        const clamped = Math.max(15, Math.min(85, ratio));
+        live.style.setProperty("--rui-resizable-primary", `${clamped}%`);
+      };
+      const onUp = (upEvent: PointerEvent) => {
+        target.releasePointerCapture(upEvent.pointerId);
+        target.removeEventListener("pointermove", onMove);
+        target.removeEventListener("pointerup", onUp);
+      };
+      target.addEventListener("pointermove", onMove);
+      target.addEventListener("pointerup", onUp);
+    };
+
+    return root;
+  },
+};
+
+export const MasonryGrid: ComponentSpec = {
+  name: "MasonryGrid",
+  description:
+    "Pinterest-style column grid. Children flow into columns that reflow " +
+    "on viewport changes. Use for galleries, social-style feeds, and " +
+    "mixed-height card walls. Prefer `Grid` when children should share " +
+    "the same height per row.",
+  props: [
+    { name: "items", type: "Node[]" },
+    { name: "columns", type: "number", optional: true, description: "Preferred column count (default 3)" },
+    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"] },
+  ],
+  render: (_node, props, helpers) => {
+    const columns = Math.max(1, Math.min(6, Math.floor(asNumber(props.columns, 3))));
+    const gap = asString(props.gap, "m");
+    const root = el("div", {
+      class: "rui-masonry-grid",
+      "data-columns": String(columns),
+      "data-gap": gap,
+    });
+    for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
+    return root;
+  },
+};
+
+export const Drawer: ComponentSpec = {
+  name: "Drawer",
+  description:
+    "Industry-standard alias for `Sheet`. Side-overlay panel — same " +
+    "props (title, open, children, side, footer). Prefer this name in " +
+    "new responses; `Sheet` is kept for backwards compatibility.",
+  props: Sheet.props,
+  render: (node, props, helpers) => Sheet.render(node, props, helpers),
+};
+
+export const TopBar: ComponentSpec = {
+  name: "TopBar",
+  description:
+    "Compact header strip that pairs a title (or breadcrumb) with " +
+    "search and action slots. Use INSTEAD of hand-rolling a " +
+    "`Stack(direction=\"row\")` above a page. For full SaaS shells use " +
+    "`Navbar` (links) or `AppShell` (sidebar + topbar + content).",
+  props: [
+    { name: "title", type: "string", optional: true },
+    { name: "subtitle", type: "string", optional: true },
+    { name: "left", type: "Node[]", optional: true, description: "Leading slot (breadcrumbs, brand, status)" },
+    { name: "center", type: "Node[]", optional: true, description: "Centered slot (search bar, segmented control)" },
+    { name: "right", type: "Node[]", optional: true, description: "Trailing slot (actions, avatar)" },
+    { name: "sticky", type: "boolean", optional: true },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("header", {
+      class: "rui-topbar",
+      "data-sticky": asBoolean(props.sticky) ? "true" : "false",
+    });
+    const left = el("div", { class: "rui-topbar-side rui-topbar-left" });
+    const title = asString(props.title);
+    if (title) {
+      const titleBlock = el("div", { class: "rui-topbar-title-block" });
+      titleBlock.append(el("h2", { class: "rui-topbar-title" }, [title]));
+      const subtitle = asString(props.subtitle);
+      if (subtitle) titleBlock.append(el("p", { class: "rui-topbar-subtitle" }, [subtitle]));
+      left.append(titleBlock);
+    }
+    for (const child of asArray(props.left)) left.append(helpers.renderNode(child));
+    root.append(left);
+    const center = asArray<unknown>(props.center);
+    if (center.length > 0) {
+      const centerWrap = el("div", { class: "rui-topbar-side rui-topbar-center" });
+      for (const child of center) centerWrap.append(helpers.renderNode(child));
+      root.append(centerWrap);
+    }
+    const right = el("div", { class: "rui-topbar-side rui-topbar-right" });
+    for (const child of asArray(props.right)) right.append(helpers.renderNode(child));
+    root.append(right);
+    return root;
+  },
+};
+
+export const BreadcrumbPageHeader: ComponentSpec = {
+  name: "BreadcrumbPageHeader",
+  description:
+    "Convenience composite — renders a `PageHeader` with the breadcrumbs " +
+    "slot auto-derived from the `path` array. The last segment of the " +
+    "path becomes the title; everything before it is the breadcrumb " +
+    "trail. Equivalent to `PageHeader(lastSegment, subtitle, path, " +
+    "actions, status)` but reads naturally when you already have a " +
+    "breadcrumb array on hand.",
+  props: [
+    { name: "path", type: "string[]", description: "Breadcrumb labels, e.g. `[\"Workspace\", \"Reports\", \"Q3\"]`. Last segment is used as the title." },
+    { name: "subtitle", type: "string", optional: true },
+    { name: "actions", type: "Node[]", optional: true },
+    { name: "status", type: "Badge", optional: true },
+  ],
+  render: (_node, props, helpers) => {
+    const path = Array.isArray(props.path) ? (props.path as unknown[]).map(String) : [];
+    const title = path.length > 0 ? path[path.length - 1] : "";
+    return PageHeader.render(
+      { __kind: "Component", name: "PageHeader", args: [], argMeta: [] },
+      {
+        title,
+        subtitle: props.subtitle,
+        breadcrumbs: path,
+        actions: props.actions,
+        status: props.status,
+      },
+      helpers,
+    );
+  },
+};
+

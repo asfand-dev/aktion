@@ -15,21 +15,32 @@ import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength, sanitiseImageSrc,
 } from "../utils.js";
-import { initialsFor, installDismissListeners, disposeDismissListeners } from "./_internal.js";
+import { initialsFor, installDismissListeners, disposeDismissListeners, dicebearUrlFor } from "./_internal.js";
 import { resolveIconClasses } from "../../icons/index.js";
 
 const AVATAR_SIZES = ["sm", "md", "lg", "xl"] as const;
 
+const AVATAR_FALLBACKS = ["initials", "dicebear"] as const;
+
 export const Avatar: ComponentSpec = {
   name: "Avatar",
   description:
-    "User avatar. Shows the image at `src`, falling back to initials computed " +
-    "from `name` if the image is missing or fails to load.",
+    "User avatar. Shows the image at `src`. When `src` is missing, falls back " +
+    "to a deterministic DiceBear illustration seeded by `name` (pass " +
+    "`fallback=\"initials\"` to render two-letter initials instead). If the " +
+    "image errors at runtime the avatar gracefully degrades to initials.",
   props: [
     { name: "name", type: "string", description: "Used for alt text + initials fallback" },
     { name: "src", type: "string", optional: true, description: "Image URL" },
     { name: "size", type: "string", optional: true, enum: AVATAR_SIZES },
     { name: "status", type: "string", optional: true, enum: ["online", "offline", "busy", "away"] },
+    {
+      name: "fallback",
+      type: "string",
+      optional: true,
+      enum: AVATAR_FALLBACKS,
+      description: "How to render when `src` is missing (default: dicebear illustration; pass `initials` for the two-letter pill)",
+    },
   ],
   render: (_node, props) => {
     const size = asString(props.size, "md");
@@ -39,11 +50,14 @@ export const Avatar: ComponentSpec = {
       role: "img",
     });
     const name = asString(props.name);
-    const src = sanitiseImageSrc(props.src);
+    const fallback = asString(props.fallback, "dicebear") as (typeof AVATAR_FALLBACKS)[number];
+    const explicitSrc = sanitiseImageSrc(props.src);
+    const generated = !explicitSrc && fallback === "dicebear" && name
+      ? sanitiseImageSrc(dicebearUrlFor(name))
+      : "";
+    const src = explicitSrc || generated;
     if (src) {
       const img = el("img", { src, alt: name, loading: "lazy" });
-      // Resolve the live image from the event so this handler still works
-      // after the morph reconciler copies it onto a kept DOM node.
       img.onerror = (event) => {
         const ev = event as Event;
         const live = (ev.currentTarget ?? ev.target) as Element;

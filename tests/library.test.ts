@@ -123,13 +123,26 @@ describe("default library", () => {
 });
 
 describe("Avatar", () => {
-  it("renders initials as fallback when src is missing", () => {
+  it("falls back to a deterministic DiceBear illustration when src is missing", () => {
     const node = Avatar.render(
       makeNode("Avatar", ["Alex Rivera"]),
       { name: "Alex Rivera" },
       helpers,
     ) as HTMLElement;
     expect(node.classList.contains("rui-avatar")).toBe(true);
+    const img = node.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toContain("api.dicebear.com");
+    expect(img?.getAttribute("src")).toContain("seed=Alex%20Rivera");
+  });
+
+  it("renders initials when fallback=\"initials\" and src is missing", () => {
+    const node = Avatar.render(
+      makeNode("Avatar", ["Alex Rivera"]),
+      { name: "Alex Rivera", fallback: "initials" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector("img")).toBeNull();
     expect(node.textContent).toBe("AR");
   });
 
@@ -2277,3 +2290,465 @@ describe("new components — phase 1-4 rollout", () => {
     expect(b.getAttribute("data-size")).toBe("sm");
   });
 });
+
+/* ----------------------------------------------------------------------- *
+ * Advanced components (DataGrid, CalendarView, Carousel, MultiStepForm, …)
+ * ----------------------------------------------------------------------- */
+
+import {
+  DataGrid, CalendarView, ComparisonTable, ActivityLog, AuditTrail, InfiniteList,
+} from "../src/library/components/advanced-data.js";
+import {
+  Carousel, Gallery, Lightbox, VideoPlayer, AudioPlayer, Map as MapComponent,
+} from "../src/library/components/media.js";
+import { RichTextEditor, CodeEditor, ContextMenu, ColorPicker } from "../src/library/components/editors.js";
+import {
+  AreaChart, Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
+} from "../src/library/components/advanced-charts.js";
+import {
+  PinInput, OtpInput, PasswordInput, TagInput, MentionInput,
+  TimePicker, DateTimePicker, MaskedInput, FormSection, FieldSet,
+  ValidationSummary, MultiStepForm,
+} from "../src/library/components/advanced-forms.js";
+import {
+  InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
+  Tour, Spotlight, ResizablePanels, MasonryGrid, Drawer, TopBar,
+  BreadcrumbPageHeader, Sticky,
+} from "../src/library/components/advanced-patterns.js";
+
+/** Smoke-test every newly-added component renders without crashing. */
+const ADVANCED_SMOKE_TESTS: Array<{
+  name: string;
+  spec: import("../src/library/types.js").ComponentSpec;
+  props: Record<string, unknown>;
+  rootClass: string;
+}> = [
+  {
+    name: "DataGrid",
+    spec: DataGrid,
+    props: {
+      cols: [makeNode("Col", ["Name", ["Alice", "Bob"], undefined, undefined, true])],
+      page: 1,
+      perPage: 5,
+      selectedIds: [],
+    },
+    rootClass: "rui-data-grid",
+  },
+  {
+    name: "CalendarView",
+    spec: CalendarView,
+    props: { month: "2026-05", value: "2026-05-17", events: [] },
+    rootClass: "rui-calendar",
+  },
+  {
+    name: "ComparisonTable",
+    spec: ComparisonTable,
+    props: {
+      columns: ["Free", "Pro"],
+      rows: [{ label: "SSO", values: [false, true] }],
+    },
+    rootClass: "rui-comparison-table",
+  },
+  {
+    name: "InfiniteList",
+    spec: InfiniteList,
+    props: { items: [makeNode("ListItem", ["one"])], hasMore: true },
+    rootClass: "rui-infinite-list",
+  },
+  {
+    name: "Carousel",
+    spec: Carousel,
+    props: { items: [{ src: "a.png" }, { src: "b.png" }, { src: "c.png" }] },
+    rootClass: "rui-carousel",
+  },
+  {
+    name: "Gallery",
+    spec: Gallery,
+    props: { items: [{ src: "a.png", caption: "A" }] },
+    rootClass: "rui-gallery",
+  },
+  {
+    name: "Lightbox",
+    spec: Lightbox,
+    props: { open: true, index: 0, items: [{ src: "a.png" }] },
+    rootClass: "rui-lightbox-overlay",
+  },
+  {
+    name: "VideoPlayer",
+    spec: VideoPlayer,
+    props: { src: "https://example.com/clip.mp4" },
+    rootClass: "rui-video-player",
+  },
+  {
+    name: "AudioPlayer",
+    spec: AudioPlayer,
+    props: { src: "https://example.com/track.mp3" },
+    rootClass: "rui-audio-player",
+  },
+  {
+    name: "Map",
+    spec: MapComponent,
+    props: { lat: 48.85, lng: 2.35, zoom: 12 },
+    rootClass: "rui-map",
+  },
+  {
+    name: "RichTextEditor",
+    spec: RichTextEditor,
+    props: { id: "editor", value: "<p>hi</p>" },
+    rootClass: "rui-rich-text",
+  },
+  {
+    name: "CodeEditor",
+    spec: CodeEditor,
+    props: { id: "code", value: "a\nb\nc" },
+    rootClass: "rui-code-editor",
+  },
+  {
+    name: "ContextMenu",
+    spec: ContextMenu,
+    props: { target: makeNode("Card", []), items: [{ label: "Open" }] },
+    rootClass: "rui-context-menu",
+  },
+  {
+    name: "ColorPicker",
+    spec: ColorPicker,
+    props: { id: "color", value: "#ff00aa", swatches: ["#ff0000"] },
+    rootClass: "rui-color-picker",
+  },
+  {
+    name: "AreaChart",
+    spec: AreaChart,
+    props: {
+      labels: ["Jan", "Feb", "Mar"],
+      series: [makeNode("Series", ["Revenue", [10, 20, 30]])],
+    },
+    rootClass: "rui-chart",
+  },
+  {
+    name: "Gauge",
+    spec: Gauge,
+    props: { value: 70, min: 0, max: 100, label: "Score" },
+    rootClass: "rui-gauge",
+  },
+  {
+    name: "Heatmap",
+    spec: Heatmap,
+    props: { xLabels: ["Mon", "Tue"], yLabels: ["AM", "PM"], values: [[1, 2], [3, 4]] },
+    rootClass: "rui-heatmap",
+  },
+  {
+    name: "RadarChart",
+    spec: RadarChart,
+    props: { axes: ["A", "B", "C"], series: [makeNode("Series", ["P", [80, 70, 60]])] },
+    rootClass: "rui-radar-chart",
+  },
+  {
+    name: "ScatterChart",
+    spec: ScatterChart,
+    props: { series: [makeNode("Series", ["A", [{ x: 1, y: 2 }, { x: 3, y: 4 }]])] },
+    rootClass: "rui-scatter-chart",
+  },
+  {
+    name: "Histogram",
+    spec: Histogram,
+    props: { values: [1, 2, 2, 3, 3, 3, 4, 4, 5], binCount: 4 },
+    rootClass: "rui-histogram",
+  },
+  {
+    name: "PinInput",
+    spec: PinInput,
+    props: { id: "pin", length: 4 },
+    rootClass: "rui-pin-input",
+  },
+  {
+    name: "OtpInput",
+    spec: OtpInput,
+    props: { id: "otp" },
+    rootClass: "rui-pin-input",
+  },
+  {
+    name: "PasswordInput",
+    spec: PasswordInput,
+    props: { id: "pw", strengthMeter: true, value: "Sup3r$ecret" },
+    rootClass: "rui-password-input",
+  },
+  {
+    name: "TagInput",
+    spec: TagInput,
+    props: { id: "tags", value: ["alpha", "beta"] },
+    rootClass: "rui-tag-input",
+  },
+  {
+    name: "MentionInput",
+    spec: MentionInput,
+    props: { id: "msg", people: [{ name: "Alice" }], value: "Hello" },
+    rootClass: "rui-mention-input",
+  },
+  {
+    name: "TimePicker",
+    spec: TimePicker,
+    props: { id: "t" },
+    rootClass: "rui-time-picker",
+  },
+  {
+    name: "DateTimePicker",
+    spec: DateTimePicker,
+    props: { id: "dt" },
+    rootClass: "rui-datetime-picker",
+  },
+  {
+    name: "MaskedInput",
+    spec: MaskedInput,
+    props: { id: "phone", mask: "(999) 999-9999" },
+    rootClass: "rui-masked-input",
+  },
+  {
+    name: "FormSection",
+    spec: FormSection,
+    props: { label: "Contact", helper: "How to reach you", children: [makeNode("Input", ["email"])] },
+    rootClass: "rui-form-section",
+  },
+  {
+    name: "FieldSet",
+    spec: FieldSet,
+    props: { legend: "Notifications", children: [] },
+    rootClass: "rui-fieldset",
+  },
+  {
+    name: "ValidationSummary",
+    spec: ValidationSummary,
+    props: { errors: [{ label: "email", message: "Invalid email" }] },
+    rootClass: "rui-validation-summary",
+  },
+  {
+    name: "MultiStepForm",
+    spec: MultiStepForm,
+    props: {
+      steps: [
+        { title: "Account", content: [makeNode("Input", ["email"])] },
+        { title: "Profile", content: [makeNode("Input", ["name"])] },
+      ],
+      current: 0,
+    },
+    rootClass: "rui-multi-step-form",
+  },
+  {
+    name: "ActivityLog",
+    spec: ActivityLog,
+    props: {
+      entries: [{ actor: "Alice", title: "merged PR #42", time: "2m" }],
+    },
+    rootClass: "rui-activity-log",
+  },
+  {
+    name: "AuditTrail",
+    spec: AuditTrail,
+    props: {
+      entries: [{ actor: "system", title: "rotated key", meta: "kid=abc123" }],
+    },
+    rootClass: "rui-audit-trail",
+  },
+  {
+    name: "InboxPanel",
+    spec: InboxPanel,
+    props: {
+      items: [
+        { title: "New comment", unread: true },
+        { title: "Old comment", unread: false },
+      ],
+    },
+    rootClass: "rui-inbox-panel",
+  },
+  {
+    name: "OnboardingChecklist",
+    spec: OnboardingChecklist,
+    props: {
+      items: [
+        { title: "Invite team", done: true },
+        { title: "Connect repo", done: false },
+      ],
+    },
+    rootClass: "rui-onboarding-checklist",
+  },
+  {
+    name: "LoadingState",
+    spec: LoadingState,
+    props: { title: "Loading projects…" },
+    rootClass: "rui-loading-state",
+  },
+  {
+    name: "ErrorState",
+    spec: ErrorState,
+    props: { title: "Something went wrong" },
+    rootClass: "rui-error-state",
+  },
+  {
+    name: "SuccessState",
+    spec: SuccessState,
+    props: { title: "Saved" },
+    rootClass: "rui-success-state",
+  },
+  {
+    name: "Tour",
+    spec: Tour,
+    props: {
+      steps: [{ title: "Welcome", description: "Get started" }, { title: "Settings" }],
+      current: 0,
+    },
+    rootClass: "rui-tour",
+  },
+  {
+    name: "Spotlight",
+    spec: Spotlight,
+    props: { title: "Try the new filter", description: "Press F" },
+    rootClass: "rui-spotlight",
+  },
+  {
+    name: "Sticky",
+    spec: Sticky,
+    props: { children: [makeNode("Card", [])], side: "top", offset: "16px" },
+    rootClass: "rui-sticky",
+  },
+  {
+    name: "ResizablePanels",
+    spec: ResizablePanels,
+    props: { primary: [], secondary: [], initialPrimaryWidth: "320px" },
+    rootClass: "rui-resizable-panels",
+  },
+  {
+    name: "MasonryGrid",
+    spec: MasonryGrid,
+    props: { items: [makeNode("Card", []), makeNode("Card", []), makeNode("Card", [])], columns: 3 },
+    rootClass: "rui-masonry-grid",
+  },
+  {
+    name: "Drawer",
+    spec: Drawer,
+    props: { title: "Filters", open: true, children: [] },
+    rootClass: "rui-sheet-overlay",
+  },
+  {
+    name: "TopBar",
+    spec: TopBar,
+    props: { title: "Dashboard", right: [makeNode("Button", ["Save"])] },
+    rootClass: "rui-topbar",
+  },
+  {
+    name: "BreadcrumbPageHeader",
+    spec: BreadcrumbPageHeader,
+    props: { path: ["Workspace", "Reports", "Q3"], subtitle: "Quarterly revenue" },
+    rootClass: "rui-page-header",
+  },
+];
+
+describe("Advanced components render", () => {
+  for (const t of ADVANCED_SMOKE_TESTS) {
+    it(`${t.name} renders with .${t.rootClass}`, () => {
+      const node = t.spec.render(
+        makeNode(t.name, []),
+        t.props,
+        helpers,
+      ) as HTMLElement;
+      expect(node).not.toBeNull();
+      // Some components return a fragment-like root with no class
+      // (e.g. ContextMenu when no target is supplied). Skip the class
+      // assertion only if the component explicitly returned nothing.
+      if ((node as Element).classList) {
+        expect(node.classList.contains(t.rootClass)).toBe(true);
+      }
+    });
+  }
+});
+
+describe("self-decorating defaults", () => {
+  it("PageHeader auto-derives breadcrumbs from the title when omitted", () => {
+    const node = PageHeader.render(
+      makeNode("PageHeader", ["Revenue"]),
+      { title: "Revenue" },
+      helpers,
+    ) as HTMLElement;
+    const crumbs = node.querySelectorAll(".rui-page-header-crumb");
+    expect(crumbs.length).toBe(2);
+    expect(crumbs[0]?.textContent).toBe("Home");
+    expect(crumbs[1]?.textContent).toBe("Revenue");
+  });
+
+  it("PageHeader breadcrumbs=false suppresses the auto-derived trail", () => {
+    const node = PageHeader.render(
+      makeNode("PageHeader", ["Sign in"]),
+      { title: "Sign in", breadcrumbs: false },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-page-header-breadcrumbs")).toBeNull();
+  });
+
+  it("StatCard picks an icon from the label when omitted", () => {
+    const node = StatCard.render(
+      makeNode("StatCard", ["Monthly revenue", "$48,200"]),
+      { label: "Monthly revenue", value: "$48,200" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-stat-icon")).not.toBeNull();
+  });
+
+  it("Banner picks an icon from the tone when omitted", () => {
+    const node = Banner.render(
+      makeNode("Banner", ["Heads up", "Maintenance tonight", null, undefined, "warning"]),
+      { title: "Heads up", message: "Maintenance tonight", tone: "warning" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-banner-icon")).not.toBeNull();
+  });
+
+  it("Hero auto-derives an eyebrow from intent keywords in the title", () => {
+    const node = Hero.render(
+      makeNode("Hero", ["Introducing Bolt for Teams"]),
+      { title: "Introducing Bolt for Teams" },
+      helpers,
+    ) as HTMLElement;
+    const eyebrow = node.querySelector(".rui-hero-eyebrow");
+    expect(eyebrow).not.toBeNull();
+    expect(eyebrow?.textContent).toBe("Introducing");
+  });
+
+  it("EmptyState picks an icon from the title when omitted", () => {
+    const node = EmptyState.render(
+      makeNode("EmptyState", ["No messages yet"]),
+      { title: "No messages yet" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-empty-state-icon")).not.toBeNull();
+  });
+
+  it("Toolbar(searchable=true) auto-mounts a SearchBar", () => {
+    const node = Toolbar.render(
+      makeNode("Toolbar", []),
+      { searchable: true },
+      helpers,
+    ) as HTMLElement;
+    // SearchBar renders an input — confirm one made it into the left slot.
+    const inputs = node.querySelectorAll("input");
+    expect(inputs.length).toBeGreaterThan(0);
+  });
+});
+
+describe("LineChart row-shaped shorthand", () => {
+  it("accepts data=[{x, …series}] and derives labels + series", async () => {
+    const { LineChart } = await import("../src/library/components/charts.js");
+    const node = LineChart.render(
+      makeNode("LineChart", []),
+      {
+        data: [
+          { x: "Jan", revenue: 10, signups: 4 },
+          { x: "Feb", revenue: 14, signups: 5 },
+          { x: "Mar", revenue: 18, signups: 9 },
+        ],
+      },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector("svg")).not.toBeNull();
+    // 2 series -> 2 polyline paths drawn inside the SVG.
+    expect(node.querySelectorAll("svg path").length).toBeGreaterThanOrEqual(2);
+  });
+});
+

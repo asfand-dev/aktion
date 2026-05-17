@@ -19,7 +19,7 @@ any HTML page — React, Vue, Angular, Svelte, plain HTML, or no framework at
 all — and you have a streaming, interactive renderer for an LLM's response.
 
 - **Live docs and demos:** <https://asfand-dev.github.io/streaming-ui-script/>
-- **Live examples catalog** (chat, dashboards, commerce, inbox, CRM, pricing, routing, status, checkout, files, calendar, docs…): <https://asfand-dev.github.io/streaming-ui-script/live-examples.html>
+- **Live examples catalog** (chat, dashboards, commerce, inbox, CRM, pricing, routing, status, checkout, files, calendar, docs, **data explorer**, **media gallery**, **content studio**, **scheduler**…): <https://asfand-dev.github.io/streaming-ui-script/live-examples.html>
 - **CDN bundle (ESM):** <https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js>
 - **System prompt (full):** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt>
 - **System prompt (chat):** <https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt_chat.txt>
@@ -28,7 +28,7 @@ The library bundles everything needed at runtime:
 
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
 - An **evaluator with reactive state** (including `$$persistent` variables that survive page reloads via `localStorage`), template literals (`` `Hi ${$user.name}` ``), spread (`[...$a, ...$b]`, `{...$cur, key: v}`), optional chaining (`obj?.prop`), nullish coalescing (`name ?? "Guest"`), `@Each` destructuring (`"{id, name}"`), DSL-level component macros (`MyCard(user) = Card([…])`), lazy `@If` / `@Switch`, queries, mutations, actions, and **40+ built-in `@`-functions** — data ops (`@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`, `@Filter`, `@Sort`, `@Find`, `@Map`, `@GroupBy`, `@Slice`, `@Take`, `@Unique`, `@Reverse`, `@Range`, `@Repeat`, `@Pick`, `@Push`, `@Concat`), numeric (`@Round`, `@Abs`, `@Floor`, `@Ceil`, `@Clamp`), formatting (`@Format`, `@FormatCurrency`, `@FormatNumber`, `@FormatDate`, `@Plural`, casing helpers `@Capitalize`/`@Lowercase`/`@Uppercase`/`@Titlecase`/`@Camelcase`/`@Snakecase`/`@Kebabcase`/`@Pascalcase`), dates (`@Now`, `@Today`, `@AddDays`), iteration (`@Each`, `@If`, `@Switch`), and action steps (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`) — plus array shortcuts (`.length`, `.first`, `.last`, array pluck `$rows.title`).
-- A **rich component library** of 130+ components — layout (`Stack`, `Grid`, `Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator` with `label?`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Callout`, `Spinner`, `Badge`, `BadgeList`), forms (`Input`, `TextArea`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect`), tables and lists (`Table` with `density`/`striped`/`sticky`/`emptyLabel`, `Col` with `align`, `List`, `ListItem`, `Pagination` with `total`/`perPage`/`compact`, `Tree`, `TreeNode`), charts (`BarChart`, `LineChart`, `PieChart`, `Series`, `Sparkline`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar`, `AvatarGroup`, `Progress` with `segments`/`buffered`, `ProgressRing`, `Rating` with `halfStep` + custom icons, `Tooltip`, `HoverCard`, `Popover`, `Toast` (standalone via `position`), `Toasts`, `Kbd`, `Skeleton` (`paragraph`/`card`/`table-row`/`avatar`/`image` variants)), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner`, `Notification`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`), and **app-shell composites** (`AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
+- A **rich component library** of 180+ components — layout (`Stack`, `Grid`, `Drawer`/`Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator` with `label?`, `Sticky`, `ResizablePanels`, `MasonryGrid`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Callout`, `Spinner`, `Badge`, `BadgeList`), forms (`Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `Combobox`, `MultiSelect`, `PinInput`, `OtpInput`, `MultiStepForm`), tables and lists (`Table` with `density`/`striped`/`sticky`/`emptyLabel`, `Col` with `align`, the advanced `DataGrid` for sort + filter + selection + pagination + sticky first column, `List`, `ListItem`, `Pagination` with `total`/`perPage`/`compact`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList`), charts (`BarChart`, `LineChart` with `data=` row-shaped shorthand, `AreaChart`, `PieChart`, `RadarChart`, `ScatterChart`, `Histogram`, `Heatmap`, `Gauge`, `Series`, `Sparkline`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar` with DiceBear fallback, `AvatarGroup`, `Progress` with `segments`/`buffered`, `ProgressRing`, `Rating` with `halfStep` + custom icons, `Tooltip`, `HoverCard`, `Popover`, `Toast` (standalone via `position`), `Toasts`, `Kbd`, `Skeleton` (`paragraph`/`card`/`table-row`/`avatar`/`image` variants), `VideoPlayer`, `AudioPlayer`, `Carousel`, `Gallery`, `Lightbox`, `Map`), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`, `TopBar`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`, `ContextMenu`), editors (`RichTextEditor`, `CodeEditor`), **high-level pattern composites** (`Hero` with auto-eyebrow, `Cover`, `PageHeader` with auto-breadcrumbs, `BreadcrumbPageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar` with `searchable=true`, `EmptyState` with auto-icon, `Timeline`, `ActivityLog`, `AuditTrail`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner` with auto-icon-from-tone, `Notification`, `InboxPanel`, `OnboardingChecklist`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`, `LoadingState`, `ErrorState`, `SuccessState`, `Tour`, `Spotlight`), and **app-shell composites** (`AppShell` with optional mobile drawer, `Sidebar` with `collapsed` rail, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available; the chat-mode prompt simply hides it from the LLM.
 - A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties.
@@ -220,6 +220,29 @@ If you internalise these rules, you will write correct, polished programs:
 22. **Use responsive prop maps for full pages.** `Grid(items, {sm: 1, md: 2, lg: 4}, "l")`
     and `Stack(children, {sm: "column", md: "row"})` work out of the box.
     Plain numbers / strings still work for simple sections.
+23. **Self-decorating defaults are real — drop the obvious props.** Several
+    components auto-pick the most-likely value when a prop is omitted, so the
+    *minimum useful version* already looks rich. Don't fight it:
+    - `StatCard(label, value)` auto-picks an icon from the label
+      (`"Revenue"` → `sack-dollar`, `"Customers"` → `users`,
+      `"Uptime"` → `heart-pulse`, …). Pass `icon` only when you want to
+      override.
+    - `PageHeader(title)` auto-derives `["Home", title]` as breadcrumbs.
+      Pass `breadcrumbs=false` to suppress, or an explicit array to override.
+    - `Banner(title, message, action, undefined, tone)` auto-picks an icon
+      from `tone` (`primary` → `bolt`, `success` → `circle-check`, …).
+    - `Hero(title, subtitle)` auto-derives an eyebrow from intent keywords
+      ("introducing"/"announcing"/"launch" → "Introducing",
+      "beta" → "Beta", "welcome" → "Welcome", "free" → "Free trial", …).
+    - `EmptyState(title)` auto-picks an icon from the title
+      ("messages" → `inbox`, "files" → `folder-open`,
+      "analytics" → `chart-pie`).
+    - `Avatar(name)` falls back to a deterministic DiceBear illustration
+      (`fallback="initials"` reverts to the two-letter pill).
+    - `LineChart` accepts `data=[{x, …series}]` row-shaped shorthand —
+      labels + series are derived automatically.
+    - `Toolbar(searchable=true)` auto-mounts a SearchBar at the start of
+      the left slot (pass `searchValue: $q` to bind it).
 
 ---
 
@@ -1418,6 +1441,68 @@ SegmentedControl(id, items, value?, size?)
   objects, [value, label] tuples, or plain strings. Visually distinct
   from ToggleGroup — use this when all options act on the same surface.
   size: "sm" | "md" (default) | "lg".
+
+# ----- Advanced inputs ----------------------------------------------------
+PasswordInput(id, value?, placeholder?, label?, strengthMeter?, disabled?, autoComplete?)
+  Wraps Input(type="password") with a show/hide toggle. Pass strengthMeter=true
+  to render a 4-step strength meter under the field. Prefer this over Input
+  for sign-up / password-change flows.
+
+PinInput(id, length?, value?, type?, autoFocus?)
+  type: "numeric" (default) | "text"
+  Renders N per-digit fields with auto-advance, paste support, and masking.
+  Default length is 4. Bind `value` to a $variable holding a string.
+
+OtpInput(id, value?, length?)
+  Specialised 6-digit PinInput pre-tuned for SMS / 2FA codes.
+
+TagInput(id, value?, placeholder?, label?, max?, disabled?)
+  Add comma- or Enter-separated chips bound to a $variable array. Backspace
+  on an empty input removes the trailing chip.
+
+MentionInput(id, people, value?, placeholder?, label?, rows?, disabled?)
+  people: {name, handle?, role?, avatarSrc?}[]
+  Textarea with inline @-mention suggestions. Use for comments, task notes,
+  chat composers.
+
+MaskedInput(id, mask, value?, placeholder?, label?, disabled?)
+  Mask alphabet: 9=digit, A=letter, *=any, other characters are literal
+  (e.g. "(999) 999-9999", "AAA-9999"). Use for phone numbers, postal codes,
+  serial numbers, license plates.
+
+TimePicker(id, value?, label?, min?, max?, step?, disabled?)
+  Native time input ("HH:MM"). Bind `value` to a $variable for two-way binding.
+
+DateTimePicker(id, value?, label?, min?, max?, step?, disabled?)
+  Native datetime-local input ("YYYY-MM-DDTHH:MM"). Bind `value` for two-way
+  binding.
+
+ColorPicker(id, value?, label?, swatches?, showHex?, disabled?)
+  swatches: hex string[] — preset row of one-click colors.
+  Pairs a native <input type="color"> with a hex text input. Bind `value`
+  to a $variable holding a hex color.
+
+# ----- Form grouping -----------------------------------------------------
+FormSection(label, children, helper?)
+  Visual grouping wrapper with a heading + optional helper text. Reach for
+  this INSTEAD of nesting fields in `Card` + `SectionHeader` by hand.
+
+FieldSet(legend, children, helper?, disabled?)
+  Accessible <fieldset>/<legend> wrapper for radio/checkbox groups (where
+  semantics matter). Use FormSection for purely visual grouping.
+
+ValidationSummary(errors, title?, tone?)
+  errors: {label?, message}[]
+  Aggregate error panel rendered at the top of the form. tone defaults to
+  "danger"; pass "warning" for non-blocking issues.
+
+# ----- Multi-step wizard -------------------------------------------------
+MultiStepForm(steps, current?, onSubmit?, prevLabel?, nextLabel?, submitLabel?)
+  steps: {title, details?, content}[]
+  current: bound $variable holding the 0-indexed step (the component manages
+           Prev/Next clicks). On the final step the Next button becomes Submit
+           and fires `onSubmit`.
+  Replaces ad-hoc `Steps` + content + manual prev/next wiring.
 ```
 
 ### Data
@@ -1455,15 +1540,71 @@ TreeNode(label, children?, icon?, expanded?, active?, badge?, action?)
   and `expanded=true` to open it by default. Leaf nodes render as a button
   that fires `action` (typically @Navigate or @Set). Use for file trees, org
   charts, sidebar category browsers, settings outlines.
+
+DataGrid(cols, rowIds?, caption?, sort?, selectedIds?, selectable?, page?, perPage?,
+         emptyLabel?, onRowClick?, bulkActions?, density?, striped?)
+  Advanced Table with built-in client-side sort, per-column filters, row selection
+  (checkboxes bound to $selectedIds), sticky header + first column, pagination,
+  and an optional bulk-action toolbar. Reach for this whenever a user needs to
+  sort/filter/page through a list. Mark sortable columns with `sortable=true` on
+  Col, filterable columns with `filterable=true`, and bind the `sort`, `page`,
+  and `selectedIds` props to `$variables` for round-tripping.
+
+CalendarView(value?, month?, events?, view?, firstDay?, onSelect?, onPrev?, onNext?)
+  view: "month" (default) | "week"
+  events: {date: "YYYY-MM-DD", title, tone?, time?}[]
+  Full month/week calendar grid for scheduling apps. Bind `value` to a $variable
+  for the currently-selected ISO date. Distinct from `DatePicker` (input).
+
+ComparisonTable(columns, rows, highlightColumn?)
+  columns: string[]
+  rows: {label, values, hint?, group?}[]
+  values can be boolean (renders ✓/—), string, or a Node.
+  Generic counterpart of `PricingTable` — use for feature comparisons, spec
+  sheets, plan grids.
+
+InfiniteList(items, onLoadMore?, loading?, hasMore?, sentinel?)
+  items: Node[]
+  onLoadMore: Action fired when the sentinel scrolls into view (or the button is clicked)
+  Scroll-to-load list. Renders a button fallback when IntersectionObserver is
+  unavailable.
 ```
 
 ### Charts
 
 ```text
-Series(name, values)                    # values: number[]
+Series(name, values)                    # values: number[] (or {x, y}[] for ScatterChart)
 BarChart(labels, series, title?)        # series: Series[]
-LineChart(labels, series, title?)
+LineChart(labels, series, title?, data?)
+  data: {x, [seriesKey]: number}[] — row-shaped shorthand. When provided, the
+        labels and Series are derived automatically (one line per non-`x` key).
+        Use when the dataset is already row-shaped; use `series` when you have
+        explicit Series objects.
 PieChart(labels, values, title?)        # parallel arrays
+
+AreaChart(labels, series, title?, stacked?)
+  Like LineChart but with filled areas. Pass `stacked=true` to stack series.
+
+RadarChart(axes, series, title?)
+  axes: string[] (one per spoke)
+  series: Series[] — each `values` array must match `axes.length`
+  Multi-axis polygon chart for scorecards / capability profiles.
+
+ScatterChart(series, xLabel?, yLabel?, title?)
+  series: Series[] where each values array is {x, y, label?}[]
+  XY scatter plot — correlations, performance vs cost, etc.
+
+Histogram(values?, binCount?, bins?, title?)
+  values: number[] — raw data, auto-binned
+  bins:   [{label, count}] — pre-computed bins (overrides values + binCount)
+  Frequency distribution chart.
+
+Heatmap(xLabels, yLabels, values, title?)
+  values: number[][] (rows x cols matching yLabels x xLabels)
+  Color-intensity matrix — calendar heatmaps, correlation grids, schedule density.
+
+Gauge(value, min?, max?, label?, tone?, size?)
+  Half-doughnut KPI indicator for thresholds (uptime %, score, NPS).
 ```
 
 ### Chat composites
@@ -1691,18 +1832,147 @@ PricingCard(plan, price, period?, description?, features?, action?, badge?, feat
   features: string[] of bullet items
   badge: optional eyebrow chip above the plan name
   featured: true highlights the tier (raised card + badge)
+
+# ----- Specialised Timeline siblings ---------------------------------------
+ActivityLog(entries, title?, dense?)
+  entries: {actor, title, description?, time?, icon?, tone?, avatarSrc?}[]
+  Purpose-built feed of user actions. Prefer over hand-rolled `Timeline`
+  for product activity streams.
+
+AuditTrail(entries, title?)
+  entries: {actor, title, time?, meta?, icon?, tone?}[]
+  Sibling of `ActivityLog` rendered in a monospace voice for security /
+  admin trails. Adds an optional `meta` field per entry for IPs, IDs,
+  browsers.
+
+# ----- Notification panel / onboarding -----------------------------------
+InboxPanel(items, title?, onMarkAllRead?, emptyLabel?)
+  items: Notification[] | {title, message?, time?, icon?, avatarSrc?, tone?, unread?, actions?}[]
+  Renders Notification cards grouped into "Unread" and "Earlier" sections
+  with a shared mark-all-read action.
+
+OnboardingChecklist(items, title?, description?)
+  items: {title, description?, done?, action?, cta?}[]
+  Renders a step-by-step checklist with progress indication and clickable
+  CTAs for incomplete steps.
+
+# ----- Async state cards -------------------------------------------------
+LoadingState(title?, description?)        # default title: "Loading…"
+ErrorState(title?, description?, actions?, icon?)
+  default title: "Something went wrong"
+  Use for failed queries, network errors, 4xx/5xx surfaces.
+SuccessState(title, description?, actions?, icon?)
+  Use for confirmation screens at the end of a flow.
+
+# ----- Product tour ------------------------------------------------------
+Tour(steps, current?, onFinish?, onSkip?)
+  steps: {title, description, image?, target?}[]
+  current: bound $variable holding the 0-indexed step
+  Renders the current step title + description with Prev / Next / Skip
+  controls and a progress dot row.
+
+Spotlight(title?, description?, action?, icon?)
+  Single highlighted call-out (callout-style) used to spotlight a new
+  feature or surface.
+
+# ----- Convenience composites --------------------------------------------
+BreadcrumbPageHeader(path, subtitle?, actions?, status?)
+  path: string[] — the last segment becomes the title, the rest become
+        the breadcrumb trail.
+  Convenience wrapper around `PageHeader` that lets you skip the
+  separate `breadcrumbs` argument.
+
+TopBar(title?, subtitle?, left?, center?, right?, sticky?)
+  Compact header strip for embedded surfaces (panels, dialogs, drawers).
+  Use `AppShell` when you need a full sidebar; use `TopBar` for narrower
+  headers above scrolling content.
+```
+
+### Layout primitives (new)
+
+```text
+Sticky(children, side?, offset?, zIndex?)
+  side: "top" (default) | "bottom"
+  offset: CSS length (default 0)
+  Pins content to the top/bottom of the nearest scrollable ancestor.
+
+ResizablePanels(primary, secondary, initialPrimaryWidth?, minPrimaryWidth?)
+  Two-pane horizontal split with a draggable divider. Useful for
+  code-editors, file browsers, master/detail layouts that need
+  user-controllable proportions.
+
+MasonryGrid(items, columns?, gap?)
+  Pinterest-style column grid. Children flow into N columns and reflow on
+  viewport changes. Prefer `Grid` when rows should share a height.
+
+Drawer(title, open, children, side?, footer?)
+  Industry-standard alias for `Sheet` — same props. Prefer this name in
+  new responses.
+```
+
+### Editors & overlays (new)
+
+```text
+RichTextEditor(id, value?, placeholder?, minHeight?, disabled?)
+  contenteditable WYSIWYG editor with a built-in toolbar (bold / italic /
+  underline / strike / heading / lists / link). Bind `value` to a
+  $variable holding HTML.
+
+CodeEditor(id, value?, language?, placeholder?, minHeight?, disabled?, tabSize?)
+  Lightweight <textarea> + line-number gutter editor. Use for snippet
+  panels, prompt sandboxes, settings JSON. `language` is exposed as a
+  data attribute so the host can apply syntax highlighting.
+
+ContextMenu(target, items)
+  Attaches a right-click menu to any node. `items` are `MenuItem` nodes
+  or `{label, action?, icon?, shortcut?, variant?, disabled?}` objects;
+  pass `MenuSeparator()` to split groups.
+```
+
+### Media (new)
+
+```text
+VideoPlayer(src?, poster?, sources?, controls?, autoplay?, loop?, muted?, caption?, ratio?)
+  Native <video> wrapper with consistent styling. Pass either `src` or
+  `sources: [{src, type}]`.
+
+AudioPlayer(src?, sources?, title?, artist?, controls?, autoplay?, loop?)
+  Native <audio> wrapper with consistent styling and an optional
+  title + artist label.
+
+Carousel(items, activeIndex?, ratio?, dots?, autoPlay?, intervalMs?)
+  items: {src, alt?, caption?}[] or Node[]
+  Horizontal slider with prev/next arrows and dot navigation. Use for
+  image galleries, onboarding steps, hero rotators.
+
+Gallery(items, columns?, onSelect?)
+  items: {src, alt?, caption?}[]
+  Responsive image grid. Pass `onSelect` to open a Lightbox or detail
+  panel when a tile is clicked.
+
+Lightbox(open, index?, items?, onClose?)
+  Full-viewport image viewer. `open` and `index` are typically bound
+  $variables driven by Gallery / Carousel clicks.
+
+Map(lat, lng, zoom?, markers?, height?, caption?)
+  Static OpenStreetMap embed in a sandboxed <iframe>. Pass markers as
+  `{lat, lng, label?}[]` for an inline legend underneath the map.
 ```
 
 ### App shell (full SaaS layouts in one statement)
 
 ```text
-AppShell(sidebar, content, topbar?)
+AppShell(sidebar, content, topbar?, collapsible?, sidebarOpen?)
   sidebar: a Sidebar(...) node
   content: Node[] — main pane (usually starts with PageHeader)
   topbar: optional Node[] — thin top bar above the content
+  collapsible: true to enable a mobile hamburger that turns the sidebar
+               into a slide-over drawer on narrow viewports.
+  sidebarOpen: optional $variable controlling that drawer.
 
-Sidebar(items, brand?, tagline?, footer?)
+Sidebar(items, brand?, tagline?, footer?, collapsed?)
   items: (SidebarItem | SidebarSection)[]
+  collapsed: true → render as an icon-only rail (hides labels/badges)
 SidebarSection(label, items)            # group nav links
 SidebarItem(label, icon?, active?, badge?, action?)
   active=true highlights the current page
@@ -3880,6 +4150,10 @@ Pattern-driven applications:
 - **Issue tracker (Kanban + filters):** <https://asfand-dev.github.io/streaming-ui-script/issue-tracker.html>
 - **Expense tracker (finance + charts):** <https://asfand-dev.github.io/streaming-ui-script/expense-tracker.html>
 - **Polls & surveys (voting + results):** <https://asfand-dev.github.io/streaming-ui-script/polls-app.html>
+- **Data explorer (DataGrid + advanced charts):** <https://asfand-dev.github.io/streaming-ui-script/data-explorer.html>
+- **Media gallery (Carousel + Gallery + Lightbox + Map):** <https://asfand-dev.github.io/streaming-ui-script/media-gallery.html>
+- **Content studio (RichTextEditor + MultiStepForm + advanced inputs):** <https://asfand-dev.github.io/streaming-ui-script/content-studio.html>
+- **Scheduler (CalendarView + OnboardingChecklist + state cards):** <https://asfand-dev.github.io/streaming-ui-script/scheduler.html>
 
 ### Build artefacts
 
