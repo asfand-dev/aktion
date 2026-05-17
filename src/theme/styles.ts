@@ -650,7 +650,9 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   max-height: calc(100vh - 2 * var(--rui-spacing-l));
   overflow-y: auto;
 }
+.rui-modal-header { display: flex;justify-content: space-between; }
 .rui-modal-title { margin: 0; font-size: 18px; }
+.rui-modal-close { background: none; border: none; padding: 5px; margin: 0; cursor: pointer; font-size: 18px; color: var(--rui-color-primary); }
 
 /* Forms */
 .rui-form { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
