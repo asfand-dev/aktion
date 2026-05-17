@@ -27,7 +27,7 @@ all — and you have a streaming, interactive renderer for an LLM's response.
 The library bundles everything needed at runtime:
 
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
-- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in `@`-functions — data ops (`@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`, `@Round`, `@Abs`, `@Floor`, `@Ceil`, `@Filter`, `@Sort`, `@Push`, `@Concat`), iteration (`@Each`), and action steps (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`) — plus array shortcuts (`.length`, `.first`, `.last`, array pluck `$rows.title`).
+- An **evaluator with reactive state** (including `$$persistent` variables that survive page reloads via `localStorage`), template literals (`` `Hi ${$user.name}` ``), spread (`[...$a, ...$b]`, `{...$cur, key: v}`), optional chaining (`obj?.prop`), nullish coalescing (`name ?? "Guest"`), `@Each` destructuring (`"{id, name}"`), DSL-level component macros (`MyCard(user) = Card([…])`), lazy `@If` / `@Switch`, queries, mutations, actions, and **40+ built-in `@`-functions** — data ops (`@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`, `@Filter`, `@Sort`, `@Find`, `@Map`, `@GroupBy`, `@Slice`, `@Take`, `@Unique`, `@Reverse`, `@Range`, `@Repeat`, `@Pick`, `@Push`, `@Concat`), numeric (`@Round`, `@Abs`, `@Floor`, `@Ceil`, `@Clamp`), formatting (`@Format`, `@FormatCurrency`, `@FormatNumber`, `@FormatDate`, `@Plural`, casing helpers `@Capitalize`/`@Lowercase`/`@Uppercase`/`@Titlecase`/`@Camelcase`/`@Snakecase`/`@Kebabcase`/`@Pascalcase`), dates (`@Now`, `@Today`, `@AddDays`), iteration (`@Each`, `@If`, `@Switch`), and action steps (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`) — plus array shortcuts (`.length`, `.first`, `.last`, array pluck `$rows.title`).
 - A **rich component library** of 130+ components — layout (`Stack`, `Grid`, `Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator` with `label?`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Callout`, `Spinner`, `Badge`, `BadgeList`), forms (`Input`, `TextArea`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect`), tables and lists (`Table` with `density`/`striped`/`sticky`/`emptyLabel`, `Col` with `align`, `List`, `ListItem`, `Pagination` with `total`/`perPage`/`compact`, `Tree`, `TreeNode`), charts (`BarChart`, `LineChart`, `PieChart`, `Series`, `Sparkline`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar`, `AvatarGroup`, `Progress` with `segments`/`buffered`, `ProgressRing`, `Rating` with `halfStep` + custom icons, `Tooltip`, `HoverCard`, `Popover`, `Toast` (standalone via `position`), `Toasts`, `Kbd`, `Skeleton` (`paragraph`/`card`/`table-row`/`avatar`/`image` variants)), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar`, `EmptyState`, `Timeline`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner`, `Notification`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`), and **app-shell composites** (`AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available; the chat-mode prompt simply hides it from the LLM.
 - A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always wired up.
@@ -166,7 +166,9 @@ If you internalise these rules, you will write correct, polished programs:
    toggling one field on one item).
 10. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use them
-    for multi-line script bodies.
+    for multi-line script bodies, and add `${expression}` interpolation
+    when you need to splice values in (`` `Hello ${$user.name}` ``). Without
+    `${...}` they stay as plain strings — perfect for raw JS bodies.
 11. **Use `Grid`, not `Stack(row, wrap=true)`, for uniform-sized tiles.**
     Use `Stack(direction="row")` only when items have different sizes.
 12. **Add status colour everywhere.** `StatCard(..., trend, delta)`, `Badge`
@@ -202,6 +204,22 @@ If you internalise these rules, you will write correct, polished programs:
     single `Card` reads as a wireframe. The minimums in § 0.5 are the
     baseline — always add a complementary section (related items, recent
     activity, follow-ups) when the draft is short.
+19. **Use `$$persistent` for anything the user expects to find after a
+    refresh.** Theme picks, sidebar collapsed state, draft form input,
+    "recently viewed", multi-step wizard cursor — every "real app" UI has
+    at least one. Read/write surface is identical to `$`; the runtime
+    stores values via `localStorage`, keyed per element id, so two
+    `<streaming-ui-script>` instances on the same page never collide.
+20. **Reach for `@If` / `@Switch` instead of nested ternaries.** Both are
+    lazy — only the chosen branch is evaluated, which keeps loop variables
+    in scope from leaking into branches that aren't being rendered.
+21. **Factor repeated trees with macros (`Name(args) = Expression`).**
+    Define once at the top of the response, call anywhere — including
+    inside `@Each`. Parameters are scoped to the body, exactly like
+    `@Each` loop vars.
+22. **Use responsive prop maps for full pages.** `Grid(items, {sm: 1, md: 2, lg: 4}, "l")`
+    and `Stack(children, {sm: "column", md: "row"})` work out of the box.
+    Plain numbers / strings still work for simple sections.
 
 ---
 
@@ -605,6 +623,33 @@ incBtn   = Button("+1",    Action([@Set($count, $count + 1)]))
 `@Set(name, value)` evaluates `value` at render time and bakes it into the
 step. `@Reset(...)` returns each named state to its declared default.
 
+### Persistent state (`$$variable`)
+
+For values the user expects to survive page reloads (theme preference, cart
+contents, sidebar collapsed state, draft form text, recently viewed item,
+multi-step wizard cursor), declare with the **double-dollar sigil**:
+
+```text
+$$theme        = "dark"
+$$cart         = []
+$$lastVisited  = "/dashboard"
+$$sidebarOpen  = true
+```
+
+- The runtime persists every change via the host's storage (`localStorage`
+  by default), keyed by the element id + variable name so two
+  `<streaming-ui-script>` elements on the same page don't collide.
+- Read / write / reset uses **the same surface as `$`** — `$$cart`,
+  `@Set($$cart, …)`, `@Reset($$cart)`. The only thing that changes is the
+  sigil.
+- Persistent and non-persistent names live in separate namespaces — `$theme`
+  and `$$theme` are unrelated. Pick one flavour per variable.
+- The declared default is the **seed** — used only when no stored value
+  exists yet. On every subsequent mount, the stored value wins.
+
+This is critical for any "real app" UI. A todo list, settings page, or
+shopping cart that resets on refresh feels broken.
+
 ### Two-way binding
 
 Forms two-way-bind when you pass a `$variable` as the value prop:
@@ -913,19 +958,67 @@ arr      = [1, "two", true, null]
 obj      = {label: "X", value: 1, nested: {ok: true}}
 ```
 
+### Template literals
+
+Backtick strings support `${expression}` interpolation when at least one
+`${...}` block is present:
+
+```text
+greeting = `Hello ${$user.name}, you have ${$todos.length} todos`
+summary  = `Filtered ${@Filter($rows, "active", "==", true).length}/${$rows.length}`
+```
+
+Cleaner than `"Hello " + $user.name + ", you have " + $todos.length + " todos"`.
+Plain backtick strings without `${...}` stay as regular strings — perfect for
+multi-line JS bodies inside `Script(...)` / `@Js(...)`. To embed a literal
+`${` in a JS body, escape it as `\${`.
+
 ### Operators (in precedence order)
 
-| Group          | Operators                                     |
-|----------------|-----------------------------------------------|
-| Unary          | `!a`, `-a`                                    |
-| Multiplicative | `*`, `/`, `%`                                 |
-| Additive       | `+`, `-`                                      |
-| Comparison     | `==`, `!=`, `<`, `<=`, `>`, `>=`              |
-| Logical        | `&&`, `\|\|`                                  |
-| Conditional    | `cond ? a : b` (ternary)                      |
+| Group          | Operators                                                   |
+|----------------|-------------------------------------------------------------|
+| Unary          | `!a`, `-a`                                                  |
+| Multiplicative | `*`, `/`, `%`                                               |
+| Additive       | `+`, `-`                                                    |
+| Comparison     | `==`, `!=`, `<`, `<=`, `>`, `>=`                            |
+| Logical        | `&&`, `\|\|`, `??` (nullish — returns left unless null/undefined) |
+| Conditional    | `cond ? a : b` (ternary)                                    |
 
 `+` is string-concatenation when either operand is a string, otherwise
 numeric. Coerce to string explicitly with `"" + value` when in doubt.
+
+`??` is distinct from `||`: it short-circuits **only** on `null` /
+`undefined`. Use it for "default when missing" without accidentally
+discarding `0`, `false`, or `""`:
+
+```text
+total  = $count ?? 0          # 0 stays 0, undefined becomes 0
+label  = $title ?? "Untitled" # "" stays "", null becomes "Untitled"
+```
+
+### Optional chaining (`?.`)
+
+```text
+avatar = $user?.profile?.avatar     # undefined if $user or profile is null
+city   = data?.address?.city ?? "—"
+```
+
+`obj?.prop` short-circuits to `undefined` when `obj` is `null` /
+`undefined`, instead of throwing or returning the JS error string. Chain
+freely without verbose ternary guards.
+
+### Spread operator (`...`)
+
+Works in array literals and object literals:
+
+```text
+merged  = [...$pinned, ...$todos, lastItem]
+patched = {...$current, status: "done", updatedAt: @Now()}
+chars   = [..."abc"]    # ["a", "b", "c"] — strings spread into characters
+```
+
+Useful for merging state in mutation args (`Mutation("update", {...$current, status: "done"})`)
+or building derived arrays without dropping reactivity.
 
 ### Member access
 
@@ -989,12 +1082,28 @@ All are `@`-prefixed and may appear anywhere in an expression.
 | `@Abs(n)`                   | Absolute value.                  |
 | `@Floor(n)`, `@Ceil(n)`     | Floor / ceil.                    |
 
-### Filter / sort
+### Numeric (extras)
+
+| Builtin                     | Returns                                                       |
+|-----------------------------|---------------------------------------------------------------|
+| `@Clamp(n, min, max)`       | Clamps `n` into `[min, max]`. Great for progress / sliders.   |
+
+### Array shape
 
 | Builtin                                       | Returns                                                                       |
 |-----------------------------------------------|-------------------------------------------------------------------------------|
 | `@Filter(arr, "field", "op", value)`          | Subset where `item[field] op value` is true.                                  |
 | `@Sort(arr, "field", "asc"\|"desc")`          | Sorted copy. Numbers compared numerically; everything else lexically.         |
+| `@Find(arr, "field", "op", value)`            | First matching item or `null`.                                                |
+| `@Map(arr, "field")`                          | Pluck a field — readable alias for `arr.field`.                               |
+| `@GroupBy(arr, "field")`                      | `{key: [items…]}` grouped by `item[field]`.                                   |
+| `@Slice(arr, start?, end?)`                   | `arr.slice(start, end)`.                                                      |
+| `@Take(arr, n)`                               | First N items — `@Slice(arr, 0, n)`.                                          |
+| `@Reverse(arr)`                               | Reversed copy (non-mutating).                                                 |
+| `@Unique(arr, "field"?)`                      | Dedupe by strict equality or by a field.                                      |
+| `@Range(start, end, step?)`                   | Inclusive integer range (`[0..4]`). Step defaults to ±1.                      |
+| `@Repeat(value, n)`                           | `n` copies of `value` — great for skeleton/placeholder grids.                 |
+| `@Pick(obj, ["a", "b"])`                      | New object with only the listed keys.                                         |
 
 Filter operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`
 (case-insensitive substring on stringified values).
@@ -1013,9 +1122,62 @@ addBtn = Button("Add", Action([@Set($todos, @Push($todos, newTodo))]))
 prependBtn = Button("Pin", Action([@Set($todos, @Concat([$pinned], $todos))]))
 ```
 
+### Formatting
+
+| Builtin                                          | Returns                                                                          |
+|--------------------------------------------------|----------------------------------------------------------------------------------|
+| `@Format(value, "currency"\|"percent"\|"number", currencyOrLocale?, locale?)` | Locale-aware number formatter. |
+| `@FormatCurrency(value, currency?, locale?)`     | Shortcut for currency mode (default `"USD"`).                                    |
+| `@FormatNumber(value, locale?)`                  | Plain locale-aware number formatting.                                            |
+| `@FormatDate(value, format?)`                    | Moment-like tokens (`"MMM D"`, `"YYYY-MM-DD"`) OR named modes: `"relative"` (e.g. "5m ago"), `"date"`, `"time"`, `"datetime"`, `"iso"`. |
+| `@Plural(n, singular, plural?)`                  | `"1 order"` / `"3 orders"`. Plural defaults to `singular + "s"`.                 |
+
+### Date / time
+
+| Builtin                | Returns                                                       |
+|------------------------|---------------------------------------------------------------|
+| `@Now()`               | Current epoch ms — feed into `@FormatDate` for display.       |
+| `@Today()`             | Today at local midnight, as ISO string.                       |
+| `@AddDays(date, n)`    | Shift a date by N days (negative N moves backward). Returns ISO. |
+
+### String helpers
+
+| Builtin                | Returns                                                       |
+|------------------------|---------------------------------------------------------------|
+| `@Capitalize(s)`       | Uppercase first char.                                         |
+| `@Lowercase(s)`        | Lowercase every char.                                         |
+| `@Uppercase(s)`        | Uppercase every char.                                         |
+| `@Titlecase(s)`        | Capitalise the first letter of each word.                     |
+| `@Camelcase(s)`        | `"hello world"` → `"helloWorld"`.                             |
+| `@Snakecase(s)`        | `"helloWorld"` → `"hello_world"`.                             |
+| `@Kebabcase(s)`        | `"hello world"` → `"hello-world"`.                            |
+| `@Pascalcase(s)`       | `"hello world"` → `"HelloWorld"`.                             |
+
 ### Iteration
 
-`@Each(arr, "varName", template)` — see § 6.
+`@Each(arr, "varName", template)` — see § 6. `varName` supports
+destructuring: `"{id, name, role}"` binds those fields directly per row,
+`"row, {id, name}"` binds BOTH the row object and the individual fields.
+
+### Lazy control flow
+
+| Builtin                                       | Returns                                                                       |
+|-----------------------------------------------|-------------------------------------------------------------------------------|
+| `@If(condition, trueBranch, falseBranch?)`    | Only the chosen branch is evaluated.                                          |
+| `@Switch(value, {key: branch, …}, default?)`  | Stringifies `value`; renders the matching property or `default`. Branches are lazy. |
+
+Use these instead of nested ternaries — especially when an unused branch
+would otherwise reference a loop variable that isn't in scope, or call a
+slow builtin you'd rather skip.
+
+```text
+body  = @If($mode == "empty", emptyState, dataView)
+panel = @Switch($tab, {
+  overview: overviewPanel,
+  billing:  billingPanel,
+  security: securityPanel
+}, overviewPanel)
+```
 
 ### Action step builtins
 
@@ -1044,14 +1206,25 @@ the children as a literal `[...]` array.
 ```text
 Stack(children, direction?, gap?, align?, justify?, wrap?)
   direction: "column" (default) | "row"
+              — OR a responsive map like {sm: "column", md: "row"}
   gap: "xs" | "s" | "m" (default) | "l" | "xl"
+              — OR a responsive map like {sm: "s", md: "m"}
   align: "start" | "center" | "end" | "stretch"
   justify: "start" | "center" | "end" | "between" | "around"
   wrap: boolean
 
 Grid(children, columns?, gap?, minItemWidth?)
-  columns: 1..6 (default: auto-fit responsive)
+  columns: 1..12 (default: auto-fit responsive)
+              — OR a responsive map like {sm: 1, md: 2, lg: 4}
+  gap: "xs" | "s" | "m" (default) | "l" | "xl"
+              — OR a responsive map like {sm: "s", md: "l"}
   minItemWidth: CSS width (default 220px) — used when columns is omitted
+
+# Breakpoints used by responsive maps (mobile-first):
+#   base (default)   sm (≥640px)   md (≥768px)   lg (≥1024px)   xl (≥1280px)
+# Bare numbers / strings still work for simple sections — the responsive
+# form is opt-in. Prefer it on full pages that should adapt to phone +
+# tablet + desktop.
 
 Section(children, title?)
 Card(children, variant?)
@@ -3630,6 +3803,19 @@ Walk this list before you send your output:
     of next-step buttons)?
 19. Are all icons valid Font Awesome 6 free names (no emoji, no `fa-`
     prefix)?
+20. **Did I use `$$persistent`** for any value the user expects to find
+    again after a refresh (theme, sidebar state, cart, draft text,
+    "recently viewed")?
+21. **Did I replace nested ternaries with `@If` / `@Switch`?** Especially
+    when the unused branch would otherwise read an out-of-scope loop
+    variable.
+22. **For full pages, did I use responsive prop maps?** `Grid(items, {sm: 1, md: 2, lg: 4})`,
+    `Stack(children, {sm: "column", md: "row"})`. Single-value props are
+    fine for simple sections.
+23. **Did I prefer template literals (`` `…${expr}…` ``) over string
+    concatenation?** They're shorter and easier to read.
+24. **Did I factor repeated component trees into macros**
+    (`MyCard(user) = …`) when the same shape appears more than twice?
 
 If you can answer "yes" to all checks, your response is ready.
 

@@ -8,9 +8,18 @@
 export type TokenType =
   | "Identifier"
   | "StateIdentifier"
+  /** `$$name` — persistent state reference. */
+  | "PersistentStateIdentifier"
   | "BuiltinIdentifier"
   | "Number"
   | "String"
+  /**
+   * Backtick-quoted template literal — carries alternating raw chunks and
+   * embedded expression source strings via `parts`.
+   * `parts[0]` is always a string chunk; positions then alternate between
+   * `{kind:"expr", source}` and `{kind:"str", text}`.
+   */
+  | "TemplateString"
   | "Boolean"
   | "Null"
   | "Punctuation"
@@ -18,11 +27,17 @@ export type TokenType =
   | "Newline"
   | "EOF";
 
+export type TemplatePart =
+  | { kind: "str"; text: string }
+  | { kind: "expr"; source: string; line: number; column: number };
+
 export interface Token {
   type: TokenType;
   value: string;
   line: number;
   column: number;
+  /** Set on `TemplateString` tokens to carry the alternating parts. */
+  parts?: TemplatePart[];
 }
 
 const SINGLE_CHAR_PUNCT = new Set(["(", ")", "[", "]", "{", "}", ",", ":", "?", "."]);
@@ -99,12 +114,11 @@ export function tokenize(source: string): Token[] {
 
     // String literal:
     //   - "..." / '...' — single-line strings with escape support
-    //   - `...`         — multi-line "raw" strings (template-literal style),
-    //                     useful for embedding JavaScript bodies in Script(...)
-    //                     and @Js(...) without escaping every newline.
-    if (ch === '"' || ch === "'" || ch === "`") {
+    //   - `...`         — multi-line template literals: support `${expr}`
+    //                     interpolation, real newlines, and unescaped `"`.
+    //                     Escape `\${` to embed a literal `${` in JS bodies.
+    if (ch === '"' || ch === "'") {
       const quote = ch;
-      const multiline = ch === "`";
       const startLine = line;
       const startCol = column;
       advance();
@@ -125,15 +139,126 @@ export function tokenize(source: string): Token[] {
           }
           continue;
         }
-        if (!multiline && peek() === "\n") {
+        if (peek() === "\n") {
           // Quoted strings stop at newlines so a half-written line never
-          // swallows the rest of the program. Backtick strings keep going.
+          // swallows the rest of the program.
           break;
         }
         value += advance();
       }
       if (peek() === quote) advance();
       push("String", value, startLine, startCol);
+      continue;
+    }
+    if (ch === "`") {
+      const startLine = line;
+      const startCol = column;
+      advance();
+      const parts: TemplatePart[] = [];
+      let chunk = "";
+      let sawExpr = false;
+      while (i < source.length && peek() !== "`") {
+        if (peek() === "\\" && peek(1) !== undefined) {
+          advance();
+          const escaped = advance();
+          switch (escaped) {
+            case "n": chunk += "\n"; break;
+            case "t": chunk += "\t"; break;
+            case "r": chunk += "\r"; break;
+            case "\\": chunk += "\\"; break;
+            case '"': chunk += '"'; break;
+            case "'": chunk += "'"; break;
+            case "`": chunk += "`"; break;
+            case "$": chunk += "$"; break;
+            default: chunk += escaped ?? "";
+          }
+          continue;
+        }
+        // `${expression}` interpolation. Scan the source inside `${...}` —
+        // balanced braces are tracked so JS object literals inside the
+        // expression don't terminate the substitution prematurely.
+        if (peek() === "$" && peek(1) === "{") {
+          parts.push({ kind: "str", text: chunk });
+          chunk = "";
+          const exprLine = line;
+          const exprCol = column;
+          advance();
+          advance();
+          let depth = 1;
+          let source2 = "";
+          while (i < source.length && depth > 0) {
+            const next = peek();
+            if (next === undefined) break;
+            // Mirror JS: a nested template literal inside `${...}` shouldn't
+            // greedily consume `}`s belonging to *its* substitutions, so we
+            // skip over nested template strings as opaque text.
+            if (next === "`") {
+              source2 += advance();
+              while (i < source.length && peek() !== "`") {
+                if (peek() === "\\" && peek(1) !== undefined) {
+                  source2 += advance();
+                  source2 += advance();
+                  continue;
+                }
+                source2 += advance();
+              }
+              if (peek() === "`") source2 += advance();
+              continue;
+            }
+            // Skip past quoted strings without counting their internal braces.
+            if (next === '"' || next === "'") {
+              const q = next;
+              source2 += advance();
+              while (i < source.length && peek() !== q) {
+                if (peek() === "\\" && peek(1) !== undefined) {
+                  source2 += advance();
+                  source2 += advance();
+                  continue;
+                }
+                if (peek() === "\n") break;
+                source2 += advance();
+              }
+              if (peek() === q) source2 += advance();
+              continue;
+            }
+            if (next === "{") {
+              depth += 1;
+              source2 += advance();
+              continue;
+            }
+            if (next === "}") {
+              depth -= 1;
+              if (depth === 0) {
+                advance();
+                break;
+              }
+              source2 += advance();
+              continue;
+            }
+            source2 += advance();
+          }
+          parts.push({ kind: "expr", source: source2, line: exprLine, column: exprCol });
+          sawExpr = true;
+          continue;
+        }
+        chunk += advance();
+      }
+      if (peek() === "`") advance();
+      parts.push({ kind: "str", text: chunk });
+      if (!sawExpr) {
+        // Plain backtick string with no interpolation — emit as a regular
+        // string so downstream consumers see the same shape as before. This
+        // preserves backward compatibility for Script() / @Js() bodies.
+        push("String", chunk, startLine, startCol);
+        continue;
+      }
+      tokens.push({
+        type: "TemplateString",
+        value: "",
+        line: startLine,
+        column: startCol,
+        parts,
+      });
       continue;
     }
 
@@ -192,16 +317,18 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // State identifier: $name
+    // State identifier: $name (one $) or $$name (persistent).
     if (ch === "$") {
       const startLine = line;
       const startCol = column;
       advance();
+      const persistent = peek() === "$";
+      if (persistent) advance();
       let name = "";
       while (i < source.length && isIdentifierChar(peek() ?? "")) {
         name += advance();
       }
-      push("StateIdentifier", name, startLine, startCol);
+      push(persistent ? "PersistentStateIdentifier" : "StateIdentifier", name, startLine, startCol);
       continue;
     }
 
@@ -224,11 +351,22 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Multi-character operators: ==, !=, >=, <=, &&, ||
+    // Spread operator `...` (must come before single-dot punctuation).
+    if (ch === "." && peek(1) === "." && peek(2) === ".") {
+      const startLine = line;
+      const startCol = column;
+      advance();
+      advance();
+      advance();
+      push("Operator", "...", startLine, startCol);
+      continue;
+    }
+
+    // Multi-character operators: ==, !=, >=, <=, &&, ||, ??, ?.
     const two = ch + (peek(1) ?? "");
     if (
       two === "==" || two === "!=" || two === ">=" || two === "<=" ||
-      two === "&&" || two === "||"
+      two === "&&" || two === "||" || two === "??" || two === "?."
     ) {
       const startLine = line;
       const startCol = column;

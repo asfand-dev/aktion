@@ -172,15 +172,16 @@ function chatSyntaxSection(rootComponent: string): string {
 
 1. Each statement is on its own line: \`identifier = Expression\`.
 2. \`root\` is the entry point — every program must define \`root = ${rootComponent}(...)\`.
-3. Expressions are: strings (\`"..."\`), numbers, booleans (\`true\`/\`false\`), \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`.
+3. Expressions are: strings (\`"..."\`), template literals (\`\\\`Hi \${name}\\\`\`), numbers, booleans, \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`.
 4. Prefer references for readability: define \`name = ...\` on one line, then use \`name\` elsewhere.
 5. EVERY variable (except \`root\` and the optional top-level \`theme = Theme({...})\` binding) MUST be referenced somewhere. Unreachable definitions silently render nothing.
 6. Arguments are POSITIONAL (order matters, not names). Write \`Stack([children], "row", "l")\`, NOT \`Stack(children: ..., direction: "row")\`.
 7. Optional arguments can be omitted from the end.
-8. Strings use double quotes with backslash escaping.
-9. Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
-10. Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& ||\`, unary \`! -\`. Ternary: \`cond ? a : b\`.
-11. Forward references are allowed — the parser resolves names after parsing the whole input, which keeps streaming smooth.`;
+8. Strings use double quotes with backslash escaping. Backticks allow \`\${expr}\` interpolation: \`\\\`Found \${$rows.length} results\\\`\`.
+9. Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array. Use \`?.\` (optional chain) to short-circuit on null.
+10. Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || ??\`, unary \`! -\`. Ternary: \`cond ? a : b\`. \`??\` returns left unless null/undefined.
+11. Spread \`...\` works in arrays (\`[...$a, ...$b]\`) and objects (\`{...$cur, status: "done"}\`).
+12. Forward references are allowed — the parser resolves names after parsing the whole input, which keeps streaming smooth.`;
 }
 
 function chatComponentsSection(library: ComponentLibrary): string {
@@ -310,12 +311,17 @@ function syntaxSection(rootComponent: string): string {
 - One statement per line: \`identifier = Expression\`.
 - Identifiers use lower_camel or snake_case (no spaces, no quotes).
 - State variables start with \`$\`: \`$days = "7"\`.
+- **Persistent state** uses \`$$\`: \`$$theme = "dark"\` survives page reloads via the host's storage. Same read/write surface as \`$\`, just durable.
 - Component calls use positional arguments: \`Stack([...children], "row", "m")\`.
 - Strings use double quotes, numbers are bare, booleans are \`true\`/\`false\`, null is \`null\`.
+- **Template literals** use backticks with \`\${expr}\` interpolation: \`\`\`name = \\\`Hello \${$user.name}, you have \${$todos.length} todos\\\`\`\`\` — cleaner than \`"Hello " + $user.name + …\`.
 - Arrays: \`[a, b, c]\`. Objects: \`{key: value, other: 1}\` (object keys are bare identifiers).
+- **Spread** with \`...\` works in arrays and objects: \`[...$pinned, ...$todos]\`, \`{...$current, status: "done"}\`. Strings spread into characters; non-iterables are ignored.
 - Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
-- Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& ||\`, unary \`! -\`.
-- Ternary: \`cond ? a : b\`.
+- **Optional chaining** \`obj?.prop\` short-circuits to \`undefined\` when \`obj\` is null/undefined — no nested \`?\` ternaries needed.
+- Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || ??\`, unary \`! -\`. \`??\` returns the left operand unless it is null/undefined.
+- Ternary: \`cond ? a : b\`. For multi-branch UI prefer \`@If(...)\` / \`@Switch(...)\` (see Built-in functions).
+- **Custom component macros** let you factor repeated component trees into a reusable call: write \`MyUserCard(user) = Card([Avatar(user.name), TextContent(user.role)])\` once, then call \`MyUserCard(u)\` anywhere — even inside \`@Each\`. Parameters are scoped to the macro body, exactly like \`@Each\` loop vars.
 - Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
 - Comments are stripped by the parser (\`// line\`, \`# line\`, \`/* block */\`). Avoid them in responses — they waste tokens.
 - The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.
@@ -909,7 +915,19 @@ function bindingsSection(): string {
 - Pass a \`$variable\` directly as an Input/Select/Checkbox value to enable two-way binding.
 - Use \`@Set($name, value)\` to write a state variable from an action.
 - Use \`@Reset($a, $b)\` to restore variables to their declared defaults.
-- Any expression that reads a \`$variable\` re-evaluates automatically when it changes.`;
+- Any expression that reads a \`$variable\` re-evaluates automatically when it changes.
+
+### Persistent state (\`$$variable\`)
+Declare with the double-dollar sigil to make the value survive page reloads:
+\`\`\`
+$$theme        = "dark"
+$$cart         = []
+$$lastVisited  = "/dashboard"
+\`\`\`
+- Persistent and non-persistent names live in **separate namespaces** — \`$theme\` and \`$$theme\` are unrelated.
+- The runtime stores values via the host's storage adapter (\`localStorage\` by default), keyed by the element's id + variable name so two \`<streaming-ui-script>\` elements on the same page never collide.
+- Read / write / reset surface is identical to \`$\`: \`$$cart\`, \`@Set($$cart, …)\`, \`@Reset($$cart)\`.
+- Use it for any "real app" preference, draft, or selection that the user expects to find again after a refresh (theme, sidebar collapsed state, recently viewed, draft form input, multi-step wizard cursor).`;
 }
 
 function toolingSection(): string {
@@ -930,22 +948,36 @@ function builtinsSection(): string {
   return `## Built-in functions
 All built-ins use the \`@\` prefix and may appear anywhere in an expression.
 - Aggregation: \`@Count(arr)\`, \`@Sum(nums)\`, \`@Avg(nums)\`, \`@Min(nums)\`, \`@Max(nums)\`, \`@First(arr)\`, \`@Last(arr)\`.
-- Numeric: \`@Round(n, decimals?)\`, \`@Abs(n)\`, \`@Floor(n)\`, \`@Ceil(n)\`.
-- Filter & sort: \`@Filter(arr, "field", "op", value)\` (ops: \`==\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`contains\`); \`@Sort(arr, "field", "asc"|"desc")\`.
-- Array growth: \`@Push(arr, value)\` (returns a NEW array with \`value\` appended); \`@Concat(a, b)\` (concatenate two arrays).
-- Iteration: \`@Each(arr, "varName", template)\` — \`varName\` is bound ONLY inside \`template\` (see "Loop scoping" below).
+- Numeric: \`@Round(n, decimals?)\`, \`@Abs(n)\`, \`@Floor(n)\`, \`@Ceil(n)\`, \`@Clamp(n, min, max)\`.
+- Array shape: \`@Filter(arr, "field", "op", value)\` (ops: \`==\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`contains\`); \`@Sort(arr, "field", "asc"|"desc")\`; \`@Slice(arr, start?, end?)\`; \`@Take(arr, n)\`; \`@Reverse(arr)\`; \`@Unique(arr, "field"?)\`.
+- Array growth: \`@Push(arr, value)\` (returns a NEW array with \`value\` appended); \`@Concat(a, b)\`; \`@Range(start, end, step?)\` (inclusive); \`@Repeat(value, n)\` (skeleton grids).
+- Array reshape: \`@Map(arr, "field")\` (readable alias for array pluck); \`@Find(arr, "field", "op", value)\`; \`@GroupBy(arr, "field")\`; \`@Pick(obj, ["a","b"])\`.
+- Formatting: \`@Format(value, "currency"|"percent"|"number", currency?, locale?)\`, \`@FormatCurrency(value, currency?, locale?)\`, \`@FormatNumber(value, locale?)\`, \`@FormatDate(value, format?)\` (\`format\` is a moment-like pattern OR a named mode: \`"relative"\`, \`"date"\`, \`"time"\`, \`"datetime"\`, \`"iso"\`).
+- Date / time: \`@Now()\` (epoch ms), \`@Today()\` (today at midnight, ISO), \`@AddDays(date, n)\`.
+- Strings: \`@Plural(n, "order", "orders")\`, \`@Capitalize\`, \`@Lowercase\`, \`@Uppercase\`, \`@Titlecase\`, \`@Camelcase\`, \`@Snakecase\`, \`@Kebabcase\`, \`@Pascalcase\`.
+- Iteration: \`@Each(arr, "varName", template)\` — \`varName\` is bound ONLY inside \`template\` (see "Loop scoping" below). Supports destructuring: \`"{id, name, role}"\` exposes those fields directly per row; \`"row, {id, name}"\` exposes BOTH the row object AND the fields.
+- Lazy control flow:
+  - \`@If(condition, trueBranch, falseBranch?)\` — only the chosen branch is evaluated. Use this instead of \`cond ? a : b\` when an unused branch would otherwise read loop variables that aren't in scope, or call expensive builtins.
+  - \`@Switch(value, {key1: branch1, key2: branch2}, defaultBranch?)\` — string-keyed match; \`value\` is coerced to a string and the matching property's branch (or \`default\`) is evaluated. Replaces nested ternaries like \`$tab == "billing" ? billing : ($tab == "security" ? security : overview)\`.
 
 ### Loop scoping (CRITICAL — read this before writing @Each)
 \`@Each($items, "x", template)\` is the only way to scope a per-item variable. \`x\` is bound while \`template\` is being evaluated and is invisible everywhere else (top-level statements, \`Script\` bodies, \`@Js\` strings).
 - INSIDE \`template\`: refer to \`x.id\`, \`x.title\`, etc. Even named references work — \`@Each($todos, "t", row)\` where \`row = Card([..., t.title, ...])\` re-evaluates \`row\` per item with \`t\` bound.
 - OUTSIDE \`template\`: \`x\` is undefined. Do NOT write \`ctx.state.get('x')\` to read a loop variable — \`x\` is not state, it is a per-iteration local. To pass per-item data into a \`@Js\` handler, use the second argument of \`@Js\` (see the JS section).
+- **Destructuring**: \`@Each($users, "{id, name, role}", row)\` binds \`id\`, \`name\`, \`role\` directly inside \`row\` (no \`u.\` prefix). For both row + fields: \`@Each($users, "u, {id, name}", row)\`.
 
 ### Array / string member shortcuts
 You may use property access for the most common JS-shaped queries:
 - \`$rows.length\` / \`$todos.length\` / \`$text.length\` — element or character count.
 - \`$rows.first\` / \`$rows.last\` — first or last element (or \`null\` if empty).
 - \`$rows.title\` — "array pluck": map each element to its \`title\` field (idiomatic for charts / columns).
-For anything else, use the \`@\` builtins above. There is no \`.filter()\`, \`.map()\`, \`.find()\`, \`.slice()\`, etc. — they do not exist.`;
+For anything else, use the \`@\` builtins above. There is no \`.filter()\`, \`.map()\`, \`.find()\`, \`.slice()\`, etc. — they do not exist.
+
+### Responsive prop maps
+Layout components accept an object with breakpoint keys for prop values that vary per screen size:
+- \`Grid(items, {sm: 1, md: 2, lg: 4}, "l")\` — 1 column on mobile, 2 on tablet, 4 on desktop.
+- \`Stack(children, {sm: "column", md: "row"}, {sm: "s", md: "m"})\` — direction AND gap can both be responsive.
+Breakpoint keys (mobile-first): \`base\` (<640px), \`sm\` (≥640), \`md\` (≥768), \`lg\` (≥1024), \`xl\` (≥1280). Numbers and bare strings still work — \`Grid(items, 3, "m")\` keeps the old behaviour. Prefer responsive maps for full pages that should look right on phone AND desktop.`;
 }
 
 function javascriptSection(): string {

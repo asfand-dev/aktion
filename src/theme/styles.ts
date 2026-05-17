@@ -896,11 +896,90 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .rui-grid[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .rui-grid[data-columns="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.rui-grid[data-columns="7"] { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rui-grid[data-columns="8"] { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.rui-grid[data-columns="9"] { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.rui-grid[data-columns="10"] { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.rui-grid[data-columns="11"] { grid-template-columns: repeat(11, minmax(0, 1fr)); }
+.rui-grid[data-columns="12"] { grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .rui-grid[data-gap="xs"] { gap: var(--rui-spacing-xs); }
 .rui-grid[data-gap="s"] { gap: var(--rui-spacing-s); }
 .rui-grid[data-gap="m"] { gap: var(--rui-spacing-m); }
 .rui-grid[data-gap="l"] { gap: var(--rui-spacing-l); }
 .rui-grid[data-gap="xl"] { gap: var(--rui-spacing-xl); }
+
+/* Responsive prop maps for Grid columns/gap and Stack direction/gap.
+ * Components set --rui-grid-cols-{bp} / --rui-stack-dir-{bp} CSS vars for
+ * each requested breakpoint; the cascade picks the most specific value
+ * via mobile-first min-width media queries. */
+.rui-grid[data-responsive-cols] {
+  grid-template-columns: repeat(var(--rui-grid-cols-base, 1), minmax(0, 1fr));
+}
+.rui-grid[data-responsive-gap] {
+  gap: var(--rui-grid-gap-base, var(--rui-spacing-m));
+}
+.rui-stack[data-responsive-dir] {
+  flex-direction: var(--rui-stack-dir-base, column);
+}
+.rui-stack[data-responsive-gap] {
+  gap: var(--rui-stack-gap-base, var(--rui-spacing-m));
+}
+@media (min-width: 640px) {
+  .rui-grid[data-responsive-cols] {
+    grid-template-columns: repeat(var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)), minmax(0, 1fr));
+  }
+  .rui-grid[data-responsive-gap] {
+    gap: var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)));
+  }
+  .rui-stack[data-responsive-dir] {
+    flex-direction: var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column));
+  }
+  .rui-stack[data-responsive-gap] {
+    gap: var(--rui-stack-gap-sm, var(--rui-stack-gap-base, var(--rui-spacing-m)));
+  }
+}
+@media (min-width: 768px) {
+  .rui-grid[data-responsive-cols] {
+    grid-template-columns: repeat(var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))), minmax(0, 1fr));
+  }
+  .rui-grid[data-responsive-gap] {
+    gap: var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))));
+  }
+  .rui-stack[data-responsive-dir] {
+    flex-direction: var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)));
+  }
+  .rui-stack[data-responsive-gap] {
+    gap: var(--rui-stack-gap-md, var(--rui-stack-gap-sm, var(--rui-stack-gap-base, var(--rui-spacing-m))));
+  }
+}
+@media (min-width: 1024px) {
+  .rui-grid[data-responsive-cols] {
+    grid-template-columns: repeat(var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)))), minmax(0, 1fr));
+  }
+  .rui-grid[data-responsive-gap] {
+    gap: var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)))));
+  }
+  .rui-stack[data-responsive-dir] {
+    flex-direction: var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column))));
+  }
+  .rui-stack[data-responsive-gap] {
+    gap: var(--rui-stack-gap-lg, var(--rui-stack-gap-md, var(--rui-stack-gap-sm, var(--rui-stack-gap-base, var(--rui-spacing-m)))));
+  }
+}
+@media (min-width: 1280px) {
+  .rui-grid[data-responsive-cols] {
+    grid-template-columns: repeat(var(--rui-grid-cols-xl, var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))))), minmax(0, 1fr));
+  }
+  .rui-grid[data-responsive-gap] {
+    gap: var(--rui-grid-gap-xl, var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))))));
+  }
+  .rui-stack[data-responsive-dir] {
+    flex-direction: var(--rui-stack-dir-xl, var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)))));
+  }
+  .rui-stack[data-responsive-gap] {
+    gap: var(--rui-stack-gap-xl, var(--rui-stack-gap-lg, var(--rui-stack-gap-md, var(--rui-stack-gap-sm, var(--rui-stack-gap-base, var(--rui-spacing-m))))));
+  }
+}
 
 /* AspectRatio */
 .rui-aspect-ratio {

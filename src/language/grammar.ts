@@ -69,7 +69,9 @@ export const grammarSpec: GrammarSpec = {
   name: "streaming-ui-script",
   atoms: ["true", "false", "null"],
   operators: ["+", "-", "*", "/", "%", "!", "=", "<", ">", "?", ":", ".", ","],
-  operatorsLong: ["==", "!=", ">=", "<=", "&&", "||"],
+  // Long operators include `??` and `?.` (nullish coalescing + optional chain)
+  // and `...` (spread). Order matters: longest match wins.
+  operatorsLong: ["...", "==", "!=", ">=", "<=", "&&", "||", "??", "?."],
   brackets: [
     { open: "(", close: ")" },
     { open: "[", close: "]" },
@@ -246,6 +248,9 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
     }
     if (next === spec.sigils.state) {
       stream.next();
+      // `$$name` — persistent state ref. Eat the second `$` before reading
+      // the identifier body so the whole prefix highlights as one token.
+      if (stream.peek() === spec.sigils.state) stream.next();
       stream.eatWhile(spec.identifier.part);
       return "state";
     }

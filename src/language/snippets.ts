@@ -169,6 +169,46 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  buttonFontWeight:   "${9:500}"\n' +
       '})',
   },
+  {
+    name: "Macro",
+    description: "DSL-level component macro — `Name(args) = Expression`.",
+    template:
+      '${1:MyUserCard}(${2:user}) = Card([\n' +
+      '  Avatar(${2:user}.name),\n' +
+      '  TextContent(${2:user}.role)\n' +
+      '])\n' +
+      'list = @Each($users, "u", ${1:MyUserCard}(u))',
+  },
+  {
+    name: "If",
+    description: "Lazy conditional renderer — only the chosen branch evaluates.",
+    template: 'body${1} = @If(${2:condition}, ${3:trueBranch}, ${4:falseBranch})',
+  },
+  {
+    name: "Switch",
+    description: "Key-based branch selector with optional default.",
+    template:
+      'panel${1} = @Switch(${2:$tab}, {\n' +
+      '  overview: overviewPanel,\n' +
+      '  billing:  billingPanel,\n' +
+      '  security: securityPanel\n' +
+      '}, overviewPanel)',
+  },
+  {
+    name: "TemplateLiteral",
+    description: "Template literal with `${}` interpolation.",
+    template: 'greeting${1} = `Hello ${${2:$user.name}}, you have ${${3:$messages.length}} messages`',
+  },
+  {
+    name: "PersistentState",
+    description: "Persistent `$$variable` that survives page reloads via localStorage.",
+    template: '$$${1:theme} = "${2:light}"',
+  },
+  {
+    name: "ResponsiveGrid",
+    description: "Grid with a responsive column map per breakpoint.",
+    template: 'cards${1} = Grid(${2:items}, {sm: 1, md: 2, lg: 4}, "${3:l}")',
+  },
 ];
 
 export function getSnippets(): readonly SnippetEntry[] {

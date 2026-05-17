@@ -20,7 +20,9 @@ export type Expression =
   | BinaryExpr
   | TernaryExpr
   | CallExpr
-  | BuiltinCallExpr;
+  | BuiltinCallExpr
+  | TemplateLiteralExpr
+  | SpreadExpr;
 
 export interface SourceLocation {
   line: number;
@@ -42,6 +44,12 @@ export interface IdentifierExpr {
 export interface StateRefExpr {
   kind: "StateRef";
   name: string;
+  /**
+   * When true, this reference targets a persistent (`$$name`) variable whose
+   * value survives page reloads via the host's storage. Persistent and
+   * non-persistent names live in independent namespaces.
+   */
+  persistent?: boolean;
   loc?: SourceLocation;
 }
 
@@ -54,6 +62,8 @@ export interface ArrayExpr {
 export interface ObjectProperty {
   key: string;
   value: Expression;
+  /** True for `{...source}` shorthand — `key` is ignored when set. */
+  spread?: boolean;
 }
 
 export interface ObjectExpr {
@@ -66,6 +76,35 @@ export interface MemberExpr {
   kind: "Member";
   object: Expression;
   property: string;
+  /** True for `obj?.prop` — short-circuits to undefined if `obj` is null/undefined. */
+  optional?: boolean;
+  loc?: SourceLocation;
+}
+
+/**
+ * Spread element used inside array literals (`[...a, b]`). Object spread is
+ * modelled as an `ObjectProperty` with `spread: true` because the parser
+ * already enumerates props.
+ */
+export interface SpreadExpr {
+  kind: "Spread";
+  argument: Expression;
+  loc?: SourceLocation;
+}
+
+/**
+ * Template literal: `` `Hello ${$user.name}, you have ${$count} messages` ``.
+ *
+ * Encoded as alternating raw string chunks (`quasis`) and embedded
+ * expressions. `quasis.length === expressions.length + 1` — there is always
+ * one more chunk than expression, even when the template starts or ends
+ * with an interpolation (the boundary chunk is empty in that case). This
+ * mirrors how the JavaScript AST represents template literals.
+ */
+export interface TemplateLiteralExpr {
+  kind: "Template";
+  quasis: string[];
+  expressions: Expression[];
   loc?: SourceLocation;
 }
 
@@ -79,7 +118,12 @@ export interface UnaryExpr {
 export type BinaryOperator =
   | "+" | "-" | "*" | "/" | "%"
   | "==" | "!=" | ">" | "<" | ">=" | "<="
-  | "&&" | "||";
+  | "&&" | "||"
+  /**
+   * Nullish coalescing — returns `left` unless it is `null` or `undefined`.
+   * Distinct from `||`, which also short-circuits on `0`, `""`, and `false`.
+   */
+  | "??";
 
 export interface BinaryExpr {
   kind: "Binary";
@@ -115,6 +159,15 @@ export interface AssignmentStatement {
   kind: "Assignment";
   identifier: string;
   isState: boolean;
+  /** True for `$$persistent = …` declarations. Ignored when `isState` is false. */
+  isPersistent?: boolean;
+  /**
+   * When set, the assignment defines a **macro** (`Name(arg1, arg2) = …`).
+   * `params` holds the macro parameter names; the macro body is `expression`.
+   * Macros are *not* state — they can be referenced anywhere a component or
+   * value can appear, and inlining happens at call time.
+   */
+  params?: string[];
   expression: Expression;
   loc?: SourceLocation;
 }

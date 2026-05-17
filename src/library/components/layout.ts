@@ -5,28 +5,58 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength } from "../utils.js";
+import {
+  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength,
+  readResponsiveProp, RESPONSIVE_BREAKPOINTS, type Breakpoint,
+} from "../utils.js";
 
 export const Stack: ComponentSpec = {
   name: "Stack",
-  description: "Flex container that arranges children in a row or column.",
+  description:
+    "Flex container that arranges children in a row or column. " +
+    "`direction` and `gap` accept either a single value OR a responsive " +
+    "map like `{sm: \"column\", md: \"row\"}` to switch layout at common " +
+    "breakpoints (base / sm / md / lg / xl).",
   props: [
     { name: "children", type: "Node[]", description: "Child components to stack" },
-    { name: "direction", type: "string", optional: true, enum: ["column", "row"], description: "Layout direction (default column)" },
-    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between children" },
+    { name: "direction", type: "string | object", optional: true, enum: ["column", "row"], description: "Layout direction (default column). May be a responsive map." },
+    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between children. May be a responsive map." },
     { name: "align", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Cross-axis alignment" },
     { name: "justify", type: "string", optional: true, enum: ["start", "center", "end", "between", "around"], description: "Main-axis alignment" },
     { name: "wrap", type: "boolean", optional: true, description: "Allow wrapping" },
   ],
   render: (_node, props, helpers) => {
-    const root = el("div", {
+    const direction = readResponsiveProp<string>(props.direction);
+    const gap = readResponsiveProp<string>(props.gap);
+    const attrs: Record<string, string | null> = {
       class: "rui-stack",
-      "data-direction": asString(props.direction, "column"),
-      "data-gap": asString(props.gap, "m"),
       "data-align": asString(props.align, "stretch"),
       "data-justify": asString(props.justify, "start"),
       "data-wrap": asBoolean(props.wrap) ? "true" : null,
-    });
+    };
+    const styleParts: string[] = [];
+    if (direction.kind === "single") {
+      attrs["data-direction"] = direction.value ? String(direction.value) : "column";
+    } else {
+      attrs["data-direction"] = "responsive";
+      attrs["data-responsive-dir"] = "true";
+      for (const bp of RESPONSIVE_BREAKPOINTS) {
+        const v = direction.values[bp];
+        if (v) styleParts.push(`--rui-stack-dir-${bp}:${v}`);
+      }
+    }
+    if (gap.kind === "single") {
+      attrs["data-gap"] = gap.value ? String(gap.value) : "m";
+    } else {
+      attrs["data-gap"] = "responsive";
+      attrs["data-responsive-gap"] = "true";
+      for (const bp of RESPONSIVE_BREAKPOINTS) {
+        const v = gap.values[bp];
+        if (v) styleParts.push(`--rui-stack-gap-${bp}:var(--rui-spacing-${v}, ${v})`);
+      }
+    }
+    if (styleParts.length > 0) attrs.style = styleParts.join(";");
+    const root = el("div", attrs);
     for (const child of asArray(props.children)) {
       root.append(helpers.renderNode(child));
     }
@@ -400,28 +430,63 @@ export const Accordion: ComponentSpec = {
   },
 };
 
+const clampGridColumns = (n: number): number => Math.max(1, Math.min(12, Math.round(n)));
+
 export const Grid: ComponentSpec = {
   name: "Grid",
   description:
     "Responsive CSS grid. Use for KPI strips, feature blocks, card grids, " +
     "and any layout where children should stay on the same row but reflow on " +
     "narrow viewports. Prefer `Grid` over `Stack` with `direction=\"row\"` " +
-    "whenever the children should size uniformly.",
+    "whenever the children should size uniformly. " +
+    "`columns` and `gap` accept either a single value OR a responsive map " +
+    "like `{sm: 1, md: 2, lg: 4}` to set per-breakpoint values.",
   props: [
     { name: "children", type: "Node[]" },
-    { name: "columns", type: "number", optional: true, description: "Target column count 1–6 (default auto-fit)" },
-    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"] },
+    { name: "columns", type: "number | object", optional: true, description: "Target column count 1–12 (default auto-fit). May be `{sm:1, md:2, lg:4}` for responsive layouts." },
+    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Gap size. May be a responsive map." },
     { name: "minItemWidth", type: "string", optional: true, description: "CSS width used by the auto-fit fallback (default 220px)" },
   ],
   render: (_node, props, helpers) => {
-    const requested = asNumber(props.columns, 0);
-    const columns = requested > 0 ? Math.max(1, Math.min(6, requested)) : 0;
-    const root = el("div", {
+    const columns = readResponsiveProp<number | string>(props.columns);
+    const gap = readResponsiveProp<string>(props.gap);
+    const attrs: Record<string, string | null> = {
       class: "rui-grid",
-      "data-columns": columns > 0 ? String(columns) : null,
-      "data-gap": asString(props.gap, "m"),
-      style: columns === 0 ? `--rui-grid-min-item:${sanitiseCssLength(props.minItemWidth, "220px")}` : null,
-    });
+    };
+    const styleParts: string[] = [];
+
+    if (columns.kind === "single") {
+      const requested = columns.value === null ? 0 : asNumber(columns.value, 0);
+      const cols = requested > 0 ? clampGridColumns(requested) : 0;
+      if (cols > 0) {
+        attrs["data-columns"] = String(cols);
+      } else {
+        // Auto-fit fallback — CSS variable controls the min item width.
+        styleParts.push(`--rui-grid-min-item:${sanitiseCssLength(props.minItemWidth, "220px")}`);
+      }
+    } else {
+      attrs["data-responsive-cols"] = "true";
+      for (const bp of RESPONSIVE_BREAKPOINTS) {
+        const v = columns.values[bp as Breakpoint];
+        if (v === undefined) continue;
+        const cols = clampGridColumns(asNumber(v, 0));
+        styleParts.push(`--rui-grid-cols-${bp}:${cols}`);
+      }
+    }
+
+    if (gap.kind === "single") {
+      attrs["data-gap"] = gap.value ? String(gap.value) : "m";
+    } else {
+      attrs["data-gap"] = "responsive";
+      attrs["data-responsive-gap"] = "true";
+      for (const bp of RESPONSIVE_BREAKPOINTS) {
+        const v = gap.values[bp];
+        if (v) styleParts.push(`--rui-grid-gap-${bp}:var(--rui-spacing-${v}, ${v})`);
+      }
+    }
+
+    if (styleParts.length > 0) attrs.style = styleParts.join(";");
+    const root = el("div", attrs);
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
   },

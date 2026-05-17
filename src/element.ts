@@ -43,6 +43,7 @@ import {
   ScriptRunner,
   Router,
   createContext,
+  createLocalStorageAdapter,
   planProgram,
   isThemeNode,
   type ToolRegistry,
@@ -225,6 +226,7 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.applyThemeFromAttribute();
     this.syncScriptRunnerStreaming();
     this.startRouter();
+    this.attachPersistenceAdapter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
       this.setResponse(responseAttr);
@@ -420,6 +422,21 @@ export class StreamingUiScriptElement extends HTMLElement {
     // Seed `$route` immediately so the very first render sees the URL
     // hash (instead of the default "/").
     this.state.set(STATE_ROUTE, this.router.getPath());
+  }
+
+  /**
+   * Wire `$$variable` declarations to a `localStorage`-backed adapter.
+   * Persistence is namespaced by the element's `id` (falling back to the
+   * tag name when no id is set) so two `<streaming-ui-script>` elements on
+   * the same page don't collide. SSR / sandboxed contexts without storage
+   * silently degrade to in-memory only — `$$variable` still works, just
+   * without survival across reloads.
+   */
+  private attachPersistenceAdapter(): void {
+    const storage = typeof window !== "undefined" ? window.localStorage : null;
+    const prefix = `rui:${StreamingUiScriptElement.tagName}:${this.id || "default"}`;
+    const adapter = createLocalStorageAdapter(prefix, storage ?? null);
+    this.state.setPersistenceAdapter(adapter);
   }
 
   /**

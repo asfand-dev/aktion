@@ -19,7 +19,7 @@ all — and you have a streaming, interactive renderer for an LLM's response.
 The library bundles everything needed at runtime:
 
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
-- An **evaluator with reactive state**, queries, mutations, actions, and 20+ built-in functions (`@Count`, `@Filter`, `@Sort`, `@Push`, `@Concat`, `@Each`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@Round`, `@Floor`, `@Ceil`, `@Abs`, …) plus array shortcuts (`.length`, `.first`, `.last`, and field pluck like `$rows.title`).
+- An **evaluator with reactive state** (including `$$persistent` variables that survive page reloads via `localStorage`), template literals (`` `Hello ${$user.name}` ``), spread (`[...$pinned, ...$todos]`), optional chaining (`user?.profile?.avatar`), nullish coalescing (`name ?? "Guest"`), `@Each` destructuring (`"{id, name}"`), DSL-level component macros (`MyCard(user) = Card([...])`), lazy `@If` / `@Switch` control flow, queries, mutations, actions, and **40+ built-in functions** (data: `@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@Filter`, `@Sort`, `@Find`, `@Map`, `@GroupBy`, `@Slice`, `@Take`, `@Unique`, `@Reverse`, `@Range`, `@Repeat`, `@Pick`, `@Push`, `@Concat`; formatting: `@Format`, `@FormatCurrency`, `@FormatNumber`, `@FormatDate`, `@Plural`, `@Capitalize`/`@Lowercase`/`@Uppercase`/`@Titlecase`/`@Camelcase`/`@Snakecase`/`@Kebabcase`/`@Pascalcase`; numeric: `@Round`, `@Floor`, `@Ceil`, `@Abs`, `@Clamp`; dates: `@Now`, `@Today`, `@AddDays`) plus array shortcuts (`.length`, `.first`, `.last`, and field pluck like `$rows.title`).
 - A **React-like DOM reconciler** that diffs each re-render against the live DOM — text-input value, selection, IME state, scroll positions, `<details>.open`, and stateful primitives like `Tabs` are all preserved across renders. Components that need to hold UI state get a `helpers.useInstanceState(...)` slot keyed by their position in the tree.
 - A **rich component library** of 130+ components — layout, content (including a Markdown parser with headings/blockquotes/fenced code/numbered lists/images/auto-links and `Spinner`), forms (`Slider`, `NumberInput`, `DatePicker`, `DateRangePicker`, `FileUpload`, `Combobox`, `MultiSelect`, `SegmentedControl`), tables (with `density`, `striped`, `sticky`, per-column `align`), charts (`BarChart`, `LineChart`, `PieChart`) and inline `Sparkline`, feedback & media (`Avatar`, `Progress` with `segments`/`buffered`, `Tooltip`, `HoverCard`, `Popover`, `Toast`/`Toasts`, `Rating` with `halfStep` + custom icons, `ProgressRing`, `ChatBubble`, …), navigation (`Breadcrumb`, `Pagination` with `total`/`perPage`/`compact`, `Navbar`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`), hierarchical data (`Tree`, `TreeNode`), chat composites, **high-level pattern composites** (`Hero`, `Cover`, `PageHeader`, `MetricGrid`, `Toolbar` with `center` slot, `EmptyState` with multi-action + `illustration`, `Timeline`, `KanbanBoard`, `Testimonial`, `PricingTable`, `MediaCard`, …) and **app-shell composites** (`AppShell`, `Sidebar`, `SplitView`) that render a full SaaS layout in one statement.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available.
@@ -335,14 +335,20 @@ root = Stack([CardHeader("Analytics"), filter, kpi, chart])
 Highlights:
 
 - One statement per line: `name = Expression`.
-- `$variables` are reactive — passing one to an Input or Select two-way-binds.
-- Strings come in three flavours: `"double"`, `'single'`, and `` `backtick` `` (multi-line, no escaping required — perfect for JS bodies).
+- `$variables` are reactive — passing one to an Input or Select two-way-binds. `$$variables` persist across reloads (e.g. `$$theme = "dark"`) via `localStorage`, keyed per element id.
+- Strings come in three flavours: `"double"`, `'single'`, and `` `backtick` ``. Backticks support `${expression}` interpolation: `` `Hello ${$user.name}, you have ${$todos.length} todos` ``. Backtick strings without `${...}` are plain — perfect for JS bodies.
+- Optional chaining `obj?.prop` and nullish coalescing `name ?? "Guest"` mirror their JavaScript counterparts.
+- Spread works in arrays (`[...$pinned, ...$todos]`) and objects (`{...$current, status: "done"}`).
+- `@Each` supports destructuring: `@Each($users, "{id, name}", row)` exposes `id` / `name` directly inside `row`.
 - Comments are stripped silently: `// line`, `# line` (shell-style), and `/* block */`.
 - `Query("tool", {args}, {defaults}, refreshSec?)` runs immediately and re-runs when its `$variable` args change.
 - `Mutation("tool", {...})` only runs from `@Run(name)` inside an `Action([...])`.
 - `@Each(arr, "row", template)` iterates inline. The loop variable is scoped strictly to `template`.
-- `@Filter`, `@Sort`, `@Count`, `@Sum`, `@Avg`, `@Round`, `@Push`, `@Concat` and more are available.
+- `@If(cond, trueBranch, falseBranch?)` and `@Switch(value, {key: branch, …}, default?)` are lazy — only the matched branch is evaluated, replacing nested ternaries.
+- Custom component macros let you factor repeated trees: `MyUserCard(user) = Card([Avatar(user.name), TextContent(user.role)])`, then `MyUserCard(u)` anywhere.
+- `@Filter`, `@Sort`, `@Find`, `@Map`, `@GroupBy`, `@Slice`, `@Take`, `@Unique`, `@Reverse`, `@Range`, `@Repeat`, `@Pick`, `@Push`, `@Concat`, `@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@Round`, `@Clamp`, `@Format` / `@FormatCurrency` / `@FormatNumber` / `@FormatDate`, `@Now` / `@Today` / `@AddDays`, `@Plural`, casing helpers (`@Capitalize` / `@Lowercase` / `@Uppercase` / `@Titlecase` / `@Camelcase` / `@Snakecase` / `@Kebabcase` / `@Pascalcase`) and more are available.
 - Array shortcuts: `$rows.length`, `$rows.first`, `$rows.last`, plus pluck (`$rows.title` → `[title1, title2, …]`).
+- **Responsive prop maps** on layout components: `Grid(items, {sm: 1, md: 2, lg: 4}, "l")`, `Stack(children, {sm: "column", md: "row"})`. Bare numbers / strings still work.
 - Forward references are allowed — list `root = Stack([...])` first and let the children stream in beneath it.
 
 ### Build a todo app declaratively (no JS required for add/delete)

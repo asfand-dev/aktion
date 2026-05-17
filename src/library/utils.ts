@@ -69,6 +69,50 @@ export function asNumber(value: unknown, fallback = 0): number {
 }
 
 /**
+ * Breakpoint keys honoured by responsive prop maps (Grid columns, Stack
+ * direction, etc.). Ordered from narrow → wide so CSS only needs to chain
+ * one `min-width` per breakpoint and naturally cascades.
+ */
+export const RESPONSIVE_BREAKPOINTS = ["base", "sm", "md", "lg", "xl"] as const;
+export type Breakpoint = typeof RESPONSIVE_BREAKPOINTS[number];
+
+/**
+ * Normalise a prop value that may be a single value or a responsive map
+ * like `{sm: 1, md: 2, lg: 4}`. Returns either:
+ *   - `{kind: "single", value}` — caller should use the value directly
+ *   - `{kind: "responsive", values}` — caller should emit CSS variables /
+ *     data attributes for each breakpoint
+ *
+ * A bare key without a breakpoint prefix (e.g. `{value: 2}`) collapses to
+ * a single-value result. Unknown breakpoint keys are ignored so typos
+ * don't crash the page.
+ */
+export type ResponsiveProp<T> =
+  | { kind: "single"; value: T | null }
+  | { kind: "responsive"; values: Partial<Record<Breakpoint, T>> };
+
+export function readResponsiveProp<T>(value: unknown): ResponsiveProp<T> {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return { kind: "single", value: (value ?? null) as T | null };
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  const values: Partial<Record<Breakpoint, T>> = {};
+  let matched = false;
+  for (const [key, raw] of entries) {
+    if ((RESPONSIVE_BREAKPOINTS as readonly string[]).includes(key)) {
+      values[key as Breakpoint] = raw as T;
+      matched = true;
+    }
+  }
+  if (!matched) {
+    // Caller passed a non-responsive object — treat as a single value
+    // (probably a component-config object the caller passes through).
+    return { kind: "single", value: value as T };
+  }
+  return { kind: "responsive", values };
+}
+
+/**
  * Strip characters that would let an LLM-supplied string break out of a
  * `url("...")` literal embedded in an inline `style` attribute. We keep the
  * common allowed URL characters and drop anything that could close the

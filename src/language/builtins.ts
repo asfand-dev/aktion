@@ -105,6 +105,171 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
     description: "Round a number up to the nearest integer.",
     params: [{ name: "value", type: "number", required: true }],
   },
+  Map: {
+    description: "Pluck a field from each item — readable alias for `arr.field`.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "field", type: "string", required: true },
+    ],
+  },
+  Find: {
+    description: "Find the first item matching a field/op/value comparator.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "field", type: "string", required: true },
+      { name: "op", type: "'=='|'!='|'>'|'<'|'>='|'<='|'contains'", required: true },
+      { name: "value", type: "any", required: true },
+    ],
+  },
+  GroupBy: {
+    description: "Group items into `{groupKey: [items…]}` by a field value.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "field", type: "string", required: true },
+    ],
+  },
+  Slice: {
+    description: "Slice an array by `[start, end)` — both indices optional.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "start", type: "number", required: false },
+      { name: "end", type: "number", required: false },
+    ],
+  },
+  Take: {
+    description: "Take the first N items — `@Slice(arr, 0, n)` shortcut.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "count", type: "number", required: true },
+    ],
+  },
+  Unique: {
+    description: "Deduplicate. With a `field`, dedupes by that field (first wins).",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "field", type: "string", required: false },
+    ],
+  },
+  Reverse: {
+    description: "Return a reversed copy of the array (non-mutating).",
+    params: [{ name: "array", type: "any[]", required: true }],
+  },
+  Range: {
+    description: "Inclusive integer range. Third arg is the step (default 1 / -1).",
+    params: [
+      { name: "start", type: "number", required: true },
+      { name: "end", type: "number", required: true },
+      { name: "step", type: "number", required: false },
+    ],
+  },
+  Repeat: {
+    description: "Repeat a value N times. Useful for skeleton/placeholder grids.",
+    params: [
+      { name: "value", type: "any", required: true },
+      { name: "count", type: "number", required: true },
+    ],
+  },
+  Pick: {
+    description: "Keep only the listed keys from an object — `@Pick(obj, [\"a\",\"b\"])`.",
+    params: [
+      { name: "object", type: "object", required: true },
+      { name: "keys", type: "string[]", required: true },
+    ],
+  },
+  Format: {
+    description: "Locale-aware number formatter. Modes: 'currency', 'percent', 'number'.",
+    params: [
+      { name: "value", type: "number", required: true },
+      { name: "mode", type: "'currency'|'percent'|'number'", required: false },
+      { name: "currencyOrLocale", type: "string", required: false },
+      { name: "locale", type: "string", required: false },
+    ],
+  },
+  FormatCurrency: {
+    description: "Format a number as currency — default USD, default browser locale.",
+    params: [
+      { name: "value", type: "number", required: true },
+      { name: "currency", type: "string", required: false },
+      { name: "locale", type: "string", required: false },
+    ],
+  },
+  FormatNumber: {
+    description: "Locale-aware plain number formatter.",
+    params: [
+      { name: "value", type: "number", required: true },
+      { name: "locale", type: "string", required: false },
+    ],
+  },
+  FormatDate: {
+    description: "Format a date. Pattern tokens (MMM D, YYYY-MM-DD) or named: 'relative', 'date', 'time', 'datetime', 'iso'.",
+    params: [
+      { name: "value", type: "Date|number|string", required: true },
+      { name: "format", type: "string", required: false },
+    ],
+  },
+  Now: {
+    description: "Current moment as epoch ms — pair with `@FormatDate`.",
+    params: [],
+  },
+  Today: {
+    description: "Today's date at midnight, as an ISO string.",
+    params: [],
+  },
+  AddDays: {
+    description: "Shift a date by N days (negative N moves backward).",
+    params: [
+      { name: "date", type: "Date|number|string", required: true },
+      { name: "days", type: "number", required: true },
+    ],
+  },
+  Plural: {
+    description: "Pluralisation: `@Plural(n, \"order\", \"orders\")` → \"1 order\" / \"2 orders\".",
+    params: [
+      { name: "count", type: "number", required: true },
+      { name: "singular", type: "string", required: true },
+      { name: "plural", type: "string", required: false },
+    ],
+  },
+  Capitalize: {
+    description: "Uppercase the first character.",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Lowercase: {
+    description: "Lowercase every character.",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Uppercase: {
+    description: "Uppercase every character.",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Titlecase: {
+    description: "Capitalise the first letter of each word.",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Camelcase: {
+    description: "Convert to camelCase (`\"hello world\"` → `\"helloWorld\"`).",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Snakecase: {
+    description: "Convert to snake_case (`\"hello world\"` → `\"hello_world\"`).",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Kebabcase: {
+    description: "Convert to kebab-case (`\"hello world\"` → `\"hello-world\"`).",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Pascalcase: {
+    description: "Convert to PascalCase (`\"hello world\"` → `\"HelloWorld\"`).",
+    params: [{ name: "value", type: "string", required: true }],
+  },
+  Clamp: {
+    description: "Clamp a number into `[min, max]`.",
+    params: [
+      { name: "value", type: "number", required: true },
+      { name: "min", type: "number", required: true },
+      { name: "max", type: "number", required: true },
+    ],
+  },
 };
 
 const ACTION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
@@ -153,11 +318,31 @@ const ITERATION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
   {
     name: "Each",
     category: "iteration",
-    description: "Iterate over an array. The loop variable is scoped to the template.",
+    description: "Iterate over an array. The loop variable is scoped to the template. Supports destructuring: \"{id, name}\" binds those fields per row.",
     params: [
       { name: "array", type: "any[]", required: true },
       { name: "varName", type: "string", required: true },
       { name: "template", type: "Node", required: true },
+    ],
+  },
+  {
+    name: "If",
+    category: "iteration",
+    description: "Lazy conditional renderer — only the selected branch is evaluated. Useful when an unused branch would otherwise read missing loop variables.",
+    params: [
+      { name: "condition", type: "any", required: true },
+      { name: "trueBranch", type: "Node", required: true },
+      { name: "falseBranch", type: "Node", required: false },
+    ],
+  },
+  {
+    name: "Switch",
+    category: "iteration",
+    description: "Key-based branch selector. Stringifies `value` and renders the matching property of `cases` (or `default` when no key matches).",
+    params: [
+      { name: "value", type: "any", required: true },
+      { name: "cases", type: "{key: Node | string, ...}, i.e. {overview: Node, billing: 'Invoice', security: Node}", required: true },
+      { name: "default", type: "Node", required: false },
     ],
   },
 ];

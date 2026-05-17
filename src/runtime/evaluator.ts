@@ -48,6 +48,17 @@ export const isComponentNode = (value: unknown): value is ComponentNode => {
   );
 };
 
+/**
+ * Authored macro — `MyUserCard(user) = Card([...])`. Stored on the
+ * evaluation context so callers can find and invoke it with positional args.
+ */
+export interface MacroDefinition {
+  /** Macro parameter names in declaration order. */
+  params: string[];
+  /** Macro body — evaluated with the parameters bound as loop variables. */
+  expression: Expression;
+}
+
 export interface EvaluationContext {
   state: StateStore;
   queries: QueryRegistry;
@@ -59,6 +70,8 @@ export interface EvaluationContext {
    * extracted path params injected as a loop variable.
    */
   expressions: Map<string, Expression>;
+  /** Macro definitions — looked up before component renderers in calls. */
+  macros: Map<string, MacroDefinition>;
   /** Set of $variable names accessed during the current evaluation. */
   trackedState: Set<string>;
   /** Set of query/mutation refs accessed during the current evaluation. */
@@ -80,6 +93,7 @@ export function createContext(
     queries,
     bindings: new Map(),
     expressions: new Map(),
+    macros: new Map(),
     trackedState: new Set(),
     trackedQueries: new Set(),
     loopVars: new Map(),
@@ -101,7 +115,11 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   for (const stmt of program.statements) {
     if (stmt.isState) {
       const initial = evaluateLiteral(stmt.expression);
-      ctx.state.declare(stmt.identifier, initial);
+      if (stmt.isPersistent) {
+        ctx.state.declarePersistent(stmt.identifier, initial);
+      } else {
+        ctx.state.declare(stmt.identifier, initial);
+      }
     }
   }
 
@@ -119,6 +137,16 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   // with path params injected as a loop variable.
   for (const stmt of program.statements) {
     if (stmt.isState) continue;
+    if (stmt.params) {
+      // Macro definition — registered separately and NOT installed as a
+      // binding (calling the bare name would otherwise yield the body
+      // evaluated with the parameters unbound).
+      ctx.macros.set(stmt.identifier, {
+        params: stmt.params,
+        expression: stmt.expression,
+      });
+      continue;
+    }
     ctx.expressions.set(stmt.identifier, stmt.expression);
     if (
       stmt.expression.kind === "Call" &&
@@ -145,11 +173,25 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
 function evaluateLiteral(expr: Expression): unknown {
   switch (expr.kind) {
     case "Literal": return expr.value;
-    case "Array": return expr.elements.map(evaluateLiteral);
+    case "Array": {
+      const out: unknown[] = [];
+      for (const e of expr.elements) {
+        if (e.kind === "Spread") continue;
+        out.push(evaluateLiteral(e));
+      }
+      return out;
+    }
     case "Object": {
       const obj: Record<string, unknown> = {};
-      for (const prop of expr.properties) obj[prop.key] = evaluateLiteral(prop.value);
+      for (const prop of expr.properties) {
+        if (prop.spread) continue;
+        obj[prop.key] = evaluateLiteral(prop.value);
+      }
       return obj;
+    }
+    case "Template": {
+      if (expr.expressions.length === 0) return expr.quasis[0] ?? "";
+      return null;
     }
     default: return null;
   }
@@ -166,17 +208,49 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       return null;
     }
     case "StateRef": {
+      // Track via the same name regardless of persistence — the state store
+      // owns both flavours under a single namespace.
       ctx.trackedState.add(expr.name);
       return ctx.state.get(expr.name);
     }
-    case "Array": return expr.elements.map((e) => evaluate(e, ctx));
+    case "Array": {
+      const out: unknown[] = [];
+      for (const element of expr.elements) {
+        if (element.kind === "Spread") {
+          const value = evaluate(element.argument, ctx);
+          if (Array.isArray(value)) {
+            for (const item of value) out.push(item);
+          } else if (value != null) {
+            // Mirror JS spread on iterables — strings spread into their
+            // characters. Objects without an iterator are ignored to keep
+            // LLM mistakes from blowing up the render.
+            if (typeof value === "string") for (const ch of value) out.push(ch);
+          }
+          continue;
+        }
+        out.push(evaluate(element, ctx));
+      }
+      return out;
+    }
     case "Object": {
       const obj: Record<string, unknown> = {};
-      for (const prop of expr.properties) obj[prop.key] = evaluate(prop.value, ctx);
+      for (const prop of expr.properties) {
+        if (prop.spread) {
+          const value = evaluate(prop.value, ctx);
+          if (value && typeof value === "object" && !Array.isArray(value)) {
+            for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+              obj[k] = v;
+            }
+          }
+          continue;
+        }
+        obj[prop.key] = evaluate(prop.value, ctx);
+      }
       return obj;
     }
     case "Member": {
       const target = evaluate(expr.object, ctx);
+      if (expr.optional && target == null) return undefined;
       return memberAccess(target, expr.property);
     }
     case "Unary": {
@@ -190,8 +264,28 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     }
     case "Call": return evaluateComponentCall(expr.callee, expr.arguments, ctx, expr.loc);
     case "BuiltinCall": return evaluateBuiltinCall(expr.name, expr.arguments, ctx);
+    case "Template": return evaluateTemplate(expr.quasis, expr.expressions, ctx);
+    case "Spread": {
+      // A bare spread outside of an array/object literal collapses to its
+      // argument value. The array/object evaluators handle the spread
+      // semantics, so we only reach here for malformed input.
+      return evaluate(expr.argument, ctx);
+    }
     default: return null;
   }
+}
+
+function evaluateTemplate(
+  quasis: string[],
+  expressions: Expression[],
+  ctx: EvaluationContext,
+): string {
+  let out = quasis[0] ?? "";
+  for (let i = 0; i < expressions.length; i += 1) {
+    out += stringify(evaluate(expressions[i]!, ctx));
+    out += quasis[i + 1] ?? "";
+  }
+  return out;
 }
 
 function evaluateBinary(
@@ -208,6 +302,11 @@ function evaluateBinary(
   if (op === "||") {
     const left = evaluate(leftExpr, ctx);
     if (left) return left;
+    return evaluate(rightExpr, ctx);
+  }
+  if (op === "??") {
+    const left = evaluate(leftExpr, ctx);
+    if (left !== null && left !== undefined) return left;
     return evaluate(rightExpr, ctx);
   }
 
@@ -246,6 +345,14 @@ function evaluateComponentCall(
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
+  // Macro call — `MyUserCard(user)` defined as `MyUserCard(user) = …`.
+  // Resolved before component dispatch so authors can shadow component
+  // names with their own macros if they really want to.
+  const macro = ctx.macros.get(callee);
+  if (macro) {
+    return invokeMacro(macro, args, ctx);
+  }
+
   // Special: Query/Mutation evaluation reads the registered runtime value.
   if (callee === "Query") {
     return null; // handled by registry
@@ -302,6 +409,32 @@ function evaluateComponentCall(
     source: loc,
   };
   return node;
+}
+
+function invokeMacro(
+  macro: MacroDefinition,
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  // Snapshot every existing binding for the macro's parameter names so we
+  // can restore them after evaluation. This mirrors the `@Each` loop-var
+  // scoping rules — the parameters are visible inside the body only.
+  const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
+  for (let i = 0; i < macro.params.length; i += 1) {
+    const name = macro.params[i]!;
+    const argExpr = args[i];
+    const value = argExpr ? evaluate(argExpr, ctx) : undefined;
+    restore.push({ name, had: ctx.loopVars.has(name), prev: ctx.loopVars.get(name) });
+    ctx.loopVars.set(name, value);
+  }
+  try {
+    return evaluate(macro.expression, ctx);
+  } finally {
+    for (const slot of restore) {
+      if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
+      else ctx.loopVars.delete(slot.name);
+    }
+  }
 }
 
 function evaluateBuiltinCall(
@@ -369,29 +502,117 @@ function evaluateBuiltinCall(
     const sourceValue = evaluate(sourceArg, ctx);
     const arr = Array.isArray(sourceValue) ? sourceValue : [];
     const varName = varNameArg.kind === "Literal" ? String(varNameArg.value ?? "") : "";
+    // Destructuring forms: `"{id, name, role}"` binds those fields directly
+    // in addition to the row object (also bound under its single-name
+    // counterpart for backward compatibility — `"{id, name}"` exposes
+    // `id` / `name`; `"row,{id,name}"` would expose `row`, `id`, `name`).
+    const destructuring = parseDestructureNames(varName);
     const out: unknown[] = [];
-    // Snapshot the prior binding *once* before the loop so we can restore the
-    // outer scope exactly — including the legitimate case where the outer
-    // value is `undefined`. Using `has(...)` instead of `prev === undefined`
-    // prevents an inner @Each from accidentally deleting an outer loop var.
-    const hadPrev = ctx.loopVars.has(varName);
-    const prevValue = ctx.loopVars.get(varName);
+    // Snapshot every binding we are about to overwrite so we can restore
+    // the outer scope exactly — including the legitimate case where the
+    // outer value is `undefined`. Using `has(...)` instead of `prev ===
+    // undefined` prevents an inner @Each from accidentally deleting an
+    // outer loop var.
+    const snapshots = destructuring.bindings.map((name) => ({
+      name,
+      had: ctx.loopVars.has(name),
+      prev: ctx.loopVars.get(name),
+    }));
     try {
       for (const item of arr) {
-        ctx.loopVars.set(varName, item);
+        if (destructuring.scalarName) {
+          ctx.loopVars.set(destructuring.scalarName, item);
+        }
+        for (const field of destructuring.fields) {
+          if (item && typeof item === "object") {
+            ctx.loopVars.set(field, (item as Record<string, unknown>)[field]);
+          } else {
+            ctx.loopVars.set(field, undefined);
+          }
+        }
         out.push(evaluate(templateArg, ctx));
       }
     } finally {
-      if (hadPrev) ctx.loopVars.set(varName, prevValue);
-      else ctx.loopVars.delete(varName);
+      for (const slot of snapshots) {
+        if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
+        else ctx.loopVars.delete(slot.name);
+      }
     }
     return out;
+  }
+
+  // Lazy conditional renderer: `@If(cond, trueNode, falseNode?)`. Only the
+  // selected branch is evaluated — useful for forms whose alternate branch
+  // would otherwise consume `params.id` / loop variables in scope.
+  if (name === "If") {
+    const condArg = args[0];
+    const thenArg = args[1];
+    const elseArg = args[2];
+    if (!condArg) return null;
+    const condition = evaluate(condArg, ctx);
+    if (condition) return thenArg ? evaluate(thenArg, ctx) : null;
+    return elseArg ? evaluate(elseArg, ctx) : null;
+  }
+
+  // Lazy switch: `@Switch(value, { key1: branch1, key2: branch2 }, default?)`.
+  // The map's branches are evaluated lazily — only the matching branch
+  // (or the default) is computed.
+  if (name === "Switch") {
+    const valueArg = args[0];
+    const casesArg = args[1];
+    const defaultArg = args[2];
+    if (!valueArg || !casesArg) return null;
+    const value = evaluate(valueArg, ctx);
+    const key = stringify(value);
+    if (casesArg.kind === "Object") {
+      for (const prop of casesArg.properties) {
+        if (prop.spread) continue;
+        if (prop.key === key) return evaluate(prop.value, ctx);
+      }
+    }
+    return defaultArg ? evaluate(defaultArg, ctx) : null;
   }
 
   const fn = dataBuiltins[name];
   if (!fn) return null;
   const evaluated = args.map((a) => evaluate(a, ctx));
   return fn(evaluated);
+}
+
+/**
+ * Parse an `@Each` loop variable specifier into the set of names to bind.
+ * Supports:
+ *   - `"row"`                       — single scalar binding
+ *   - `"{id, name}"`                — destructure the row object's fields
+ *   - `"row, {id, name}"`           — bind the row AND destructured fields
+ * The result lists every name we will write into `ctx.loopVars` so the
+ * caller can snapshot/restore them.
+ */
+function parseDestructureNames(spec: string): {
+  scalarName: string;
+  fields: string[];
+  bindings: string[];
+} {
+  const trimmed = spec.trim();
+  if (!trimmed) return { scalarName: "", fields: [], bindings: [] };
+
+  // `{a, b, c}` — pure destructure.
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const fields = trimmed.slice(1, -1).split(",").map((f) => f.trim()).filter(Boolean);
+    return { scalarName: "", fields, bindings: fields };
+  }
+  // `row, {a, b}` — row binding plus destructured fields.
+  const braceIdx = trimmed.indexOf("{");
+  if (braceIdx > 0) {
+    const head = trimmed.slice(0, braceIdx).trim();
+    const scalar = head.replace(/,\s*$/, "").trim();
+    const closeIdx = trimmed.indexOf("}", braceIdx);
+    const fields = closeIdx > braceIdx
+      ? trimmed.slice(braceIdx + 1, closeIdx).split(",").map((f) => f.trim()).filter(Boolean)
+      : [];
+    return { scalarName: scalar, fields, bindings: scalar ? [scalar, ...fields] : fields };
+  }
+  return { scalarName: trimmed, fields: [], bindings: [trimmed] };
 }
 
 /**

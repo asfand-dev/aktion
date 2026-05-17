@@ -244,11 +244,26 @@ export class QueryRegistry {
 function evaluateStaticDefault(expr: Expression): unknown {
   switch (expr.kind) {
     case "Literal": return expr.value;
-    case "Array": return expr.elements.map(evaluateStaticDefault);
+    case "Array": {
+      const out: unknown[] = [];
+      for (const e of expr.elements) {
+        if (e.kind === "Spread") continue;
+        out.push(evaluateStaticDefault(e));
+      }
+      return out;
+    }
     case "Object": {
       const obj: Record<string, unknown> = {};
-      for (const prop of expr.properties) obj[prop.key] = evaluateStaticDefault(prop.value);
+      for (const prop of expr.properties) {
+        if (prop.spread) continue;
+        obj[prop.key] = evaluateStaticDefault(prop.value);
+      }
       return obj;
+    }
+    case "Template": {
+      // Static templates with zero expressions collapse to the single quasi.
+      if (expr.expressions.length === 0) return expr.quasis[0] ?? "";
+      return null;
     }
     default: return null;
   }
@@ -302,6 +317,12 @@ function visit(node: Expression, fn: (node: Expression) => void): void {
     case "Call":
     case "BuiltinCall":
       node.arguments.forEach((a) => visit(a, fn));
+      break;
+    case "Template":
+      node.expressions.forEach((e) => visit(e, fn));
+      break;
+    case "Spread":
+      visit(node.argument, fn);
       break;
     default: break;
   }

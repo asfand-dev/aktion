@@ -58,6 +58,8 @@
         <tbody>
           <tr><td>Component assignment</td><td><code>name = Component(args...)</code></td><td><code>card = Card([header])</code></td></tr>
           <tr><td>State variable</td><td><code>$name = defaultValue</code></td><td><code>$days = "7"</code></td></tr>
+          <tr><td>Persistent state</td><td><code>$$name = defaultValue</code></td><td><code>$$theme = "dark"</code> — survives page reloads via <code>localStorage</code>.</td></tr>
+          <tr><td>Component macro</td><td><code>Name(params) = Expression</code></td><td><code>MyUserCard(user) = Card([Avatar(user.name), TextContent(user.role)])</code> — call <code>MyUserCard(u)</code> anywhere a component fits.</td></tr>
           <tr><td>Query / Mutation</td><td><code>name = Query(...) | Mutation(...)</code></td><td><code>data = Query("get_users", {}, {rows: []})</code></td></tr>
         </tbody>
       </table>
@@ -68,21 +70,62 @@
         <tbody>
           <tr><td>String (single-line)</td><td><code>"text"</code> or <code>'text'</code></td><td><code>"Hello"</code></td></tr>
           <tr><td>String (multi-line)</td><td><code>`text`</code> (backticks)</td><td><code>`line 1<br>line 2`</code> — great for <code>Script(...)</code> bodies</td></tr>
+          <tr><td>Template literal</td><td><code>`Hello ${expression}`</code></td><td><code>`${$rows.length} rows · ${@FormatCurrency(total)}`</code> — backticks with <code>${…}</code> blocks interpolate any expression.</td></tr>
           <tr><td>Number</td><td><code>123</code>, <code>-5</code>, <code>12.5</code></td><td><code>42</code></td></tr>
           <tr><td>Boolean</td><td><code>true</code> / <code>false</code></td><td><code>true</code></td></tr>
           <tr><td>Null</td><td><code>null</code></td><td></td></tr>
           <tr><td>Array</td><td><code>[a, b, c]</code></td><td><code>["Mon","Tue"]</code></td></tr>
+          <tr><td>Array spread</td><td><code>[...iterable, ...other]</code></td><td><code>[...$pinned, ...$todos, lastItem]</code></td></tr>
           <tr><td>Object</td><td><code>{key: value, ...}</code></td><td><code>{limit: 10}</code></td></tr>
+          <tr><td>Object spread</td><td><code>{...source, key: value}</code></td><td><code>{...$current, status: "done"}</code></td></tr>
           <tr><td>Reference</td><td><code>identifier</code></td><td><code>card</code></td></tr>
-          <tr><td>State reference</td><td><code>$name</code></td><td><code>$days</code></td></tr>
+          <tr><td>State reference</td><td><code>$name</code> or <code>$$name</code></td><td><code>$days</code>, <code>$$theme</code></td></tr>
           <tr><td>Member access</td><td><code>obj.field</code></td><td><code>data.rows.title</code> (array pluck)</td></tr>
+          <tr><td>Optional chain</td><td><code>obj?.field</code></td><td><code>$user?.profile?.avatar</code> — short-circuits to <code>undefined</code> when the target is null.</td></tr>
           <tr><td>Component call</td><td><code>Component(args)</code></td><td><code>PageHeader("Hi")</code></td></tr>
           <tr><td>Builtin call</td><td><code>@Builtin(args)</code></td><td><code>@Filter(rows, "name", "contains", $q)</code></td></tr>
           <tr><td>Ternary</td><td><code>cond ? a : b</code></td><td><code>$open ? form : null</code></td></tr>
           <tr><td>Binary</td><td><code>a + b</code>, <code>a == b</code>, <code>a &amp;&amp; b</code></td><td><code>"" + $days + " days"</code></td></tr>
+          <tr><td>Nullish coalescing</td><td><code>a ?? b</code></td><td><code>$user.name ?? "Guest"</code> — returns <code>a</code> unless it is null/undefined (unlike <code>||</code>, which also discards 0/<code>""</code>/<code>false</code>).</td></tr>
           <tr><td>Unary</td><td><code>!a</code>, <code>-a</code></td><td><code>!$open</code></td></tr>
         </tbody>
       </table>
+
+      <h2>Lazy control flow</h2>
+      <p>
+        <code>@If</code> and <code>@Switch</code> evaluate <strong>only</strong>
+        the matching branch — useful when the unused branch would otherwise
+        read loop variables that aren't in scope, or invoke a slow builtin.
+      </p>
+<pre><code>body = @If($mode == "empty", emptyState, dataView)
+panel = @Switch($tab, {
+  overview: overviewPanel,
+  billing:  billingPanel,
+  security: securityPanel
+}, overviewPanel)</code></pre>
+
+      <h2>Destructuring in <code>@Each</code></h2>
+      <p>
+        The middle argument of <code>@Each</code> can destructure each row's
+        fields directly, so the template body skips the <code>row.</code>
+        prefix:
+      </p>
+<pre><code># Bind id, name, role directly:
+list = @Each($users, "{id, name, role}", Card([TextContent(name), Badge(role)]))
+
+# Bind BOTH the row object AND individual fields:
+list = @Each($users, "u, {id, name}", Card([TextContent(name), TextContent(u.email)]))</code></pre>
+
+      <h2>Responsive prop maps</h2>
+      <p>
+        Layout components accept either a single value or a per-breakpoint
+        map: <code>{base?, sm?, md?, lg?, xl?}</code>. Mobile-first breakpoints
+        are <code>base</code> (less than 640px), <code>sm</code> (≥640), <code>md</code>
+        (greater than or equal to 768px), <code>lg</code> (greater than or equal to 1024px), <code>xl</code> (greater than or equal to 1280px). Numbers /
+        bare strings still work for simple sections.
+      </p>
+<pre><code>cards  = Grid(items, {sm: 1, md: 2, lg: 4}, "l")
+layout = Stack(children, {sm: "column", md: "row"}, "m")</code></pre>
 
       <h2>Comments</h2>
       <p>
@@ -120,15 +163,52 @@ data = Query("usage", {days: $days}, {rows: []})</code></pre>
         which in turn re-runs anything that depends on it.
       </p>
 
+      <h3>Persistent state (<code>$$variable</code>)</h3>
+      <p>
+        Declare with the double-dollar sigil to make a value survive page
+        reloads. The runtime stores updates via the host's storage adapter
+        (defaults to <code>localStorage</code>), keyed by the element's id
+        + the variable name so two <code>&lt;streaming-ui-script&gt;</code>
+        instances on the same page never collide. Read / write / reset
+        surface is identical to <code>$</code> — only the sigil changes.
+      </p>
+<pre><code>$$theme        = "dark"
+$$cart         = []
+$$lastVisited  = "/dashboard"
+
+themeToggle = Switch("theme", "Dark mode", $$theme == "dark")
+addToCart   = Button("Add", Action([@Set($$cart, @Push($$cart, item))]))</code></pre>
+      <p>
+        Use it for anything the user expects to find again after a refresh:
+        theme picks, sidebar collapsed state, draft form input, recently
+        viewed item, multi-step wizard cursor.
+      </p>
+
+      <h3>Custom component macros</h3>
+      <p>
+        Factor repeated component trees into reusable DSL-level components.
+        The macro's parameters are scoped to the body, just like
+        <code>@Each</code> loop variables.
+      </p>
+<pre><code>MyUserCard(user) = Card([
+  Avatar(user.name),
+  TextContent(user.role)
+])
+root = Grid(@Each($users, "u", MyUserCard(u)))</code></pre>
+
       <h2>Built-in functions</h2>
       <table class="signature-table">
         <thead><tr><th>Group</th><th>Functions</th></tr></thead>
         <tbody>
           <tr><td>Aggregation</td><td><code>@Count, @Sum, @Avg, @Min, @Max, @First, @Last</code></td></tr>
-          <tr><td>Numeric</td><td><code>@Round(n, decimals?), @Abs, @Floor, @Ceil</code></td></tr>
-          <tr><td>Filter / sort</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc")</code></td></tr>
+          <tr><td>Numeric</td><td><code>@Round(n, decimals?), @Abs, @Floor, @Ceil, @Clamp(n, min, max)</code></td></tr>
+          <tr><td>Array shape</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc"), @Find(arr, "field", "op", value), @Map(arr, "field"), @GroupBy(arr, "field"), @Slice(arr, start?, end?), @Take(arr, n), @Reverse(arr), @Unique(arr, "field"?), @Range(start, end, step?), @Repeat(value, n), @Pick(obj, ["a","b"])</code></td></tr>
           <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>@Concat(a, b)</code></td></tr>
-          <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> is local to <code>template</code></td></tr>
+          <tr><td>Formatting</td><td><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?), @FormatCurrency(value, currency?, locale?), @FormatNumber(value, locale?), @FormatDate(value, format?), @Plural(n, singular, plural?)</code></td></tr>
+          <tr><td>String casing</td><td><code>@Capitalize, @Lowercase, @Uppercase, @Titlecase, @Camelcase, @Snakecase, @Kebabcase, @Pascalcase</code></td></tr>
+          <tr><td>Date / time</td><td><code>@Now(), @Today(), @AddDays(date, n)</code> — feed values to <code>@FormatDate</code> for display.</td></tr>
+          <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> can destructure (<code>"{id, name}"</code>) and is local to <code>template</code>.</td></tr>
+          <tr><td>Lazy control flow</td><td><code>@If(cond, trueBranch, falseBranch?), @Switch(value, {key: branch, …}, default?)</code> — only the matching branch evaluates.</td></tr>
           <tr><td>Array shortcuts</td><td><code>$rows.length</code>, <code>$rows.first</code>, <code>$rows.last</code>, <code>$rows.field</code> (pluck)</td></tr>
           <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url"), @Navigate("/path"), @Js(body, args?)</code> — see the dedicated <a href="actions.html">Actions guide</a>.</td></tr>
         </tbody>
