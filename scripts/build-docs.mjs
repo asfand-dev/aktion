@@ -30,11 +30,23 @@ const docsDir = resolve(root, "docs");
 const distDir = resolve(root, "dist");
 const outDir = resolve(root, "site");
 
+/**
+ * Directories under `docs/` that are author-facing source material for the
+ * live-example bundle, not files we want shipped to the static site.
+ */
+const NON_DEPLOYABLE_DOCS_DIRS = new Set(["_examples"]);
+
 async function main() {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  await cp(docsDir, outDir, { recursive: true });
+  await cp(docsDir, outDir, {
+    recursive: true,
+    filter: (src) => {
+      const rel = src.slice(docsDir.length + 1).split("/")[0];
+      return !NON_DEPLOYABLE_DOCS_DIRS.has(rel);
+    },
+  });
   await cp(distDir, resolve(outDir, "dist"), { recursive: true });
 
   await rewriteDeployPaths(outDir);

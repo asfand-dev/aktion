@@ -24,7 +24,8 @@
     "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs",
     "build:lib": "vite build",
     "build:prompt": "node scripts/emit-prompt.mjs",
-    "build:docs": "node scripts/build-docs.mjs",
+    "build:examples": "node scripts/build-live-examples.mjs",
+    "build:docs": "node scripts/build-live-examples.mjs && node scripts/build-docs.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

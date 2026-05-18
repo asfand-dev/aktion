@@ -770,7 +770,7 @@ notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + "
 parameters (`/users/:id`) land in `params.id` inside the matched
 `Route`. Deep dive:
 [`coding-gen-skill.md § 10.5`](./coding-gen-skill.md#105-routing-layer-multi-page-uis)
-or the [live demo](https://asfand-dev.github.io/streaming-ui-script/routing-demo.html).
+or the [live demo](https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=routing-demo).
 
 ### Talking to your backend: `Query` and `Mutation`
 

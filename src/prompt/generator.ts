@@ -949,7 +949,7 @@ root = Stack([
 \`\`\`
 
 ### Multi-step wizard / authoring (MultiStepForm + RichTextEditor + advanced inputs)
-Use for sign-up flows, checkout (consider \`checkout-flow.html\` first),
+Use for sign-up flows, checkout (consider the \`checkout-flow\` live example first),
 content authoring, configuration wizards — anywhere a single page would
 overwhelm.
 \`\`\`

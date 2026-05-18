@@ -1,9 +1,9 @@
 /*
- * Shared styling for the standalone example pages
- * (chat-bot.html, tools-example.html, external-data-example.html).
+ * Shared styling for the standalone example pages — used by `live-example.html`
+ * (the bundled-example shell), `brand-themes.html`, and any other focused,
+ * single-purpose demos.
  *
- * These pages do NOT use the docs sidebar/header layout. They render as
- * focused single-purpose demos that are reachable from the docs site.
+ * These pages do NOT use the docs sidebar/header layout.
  */
 
 :root {

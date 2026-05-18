@@ -1,7 +1,9 @@
 /**
- * Smoke tests for the standalone demo pages. We parse and evaluate the actual
- * UI Script source embedded in each <code id="src-..."> block to guarantee
- * the demos stay syntactically valid as the language evolves.
+ * Smoke tests for the bundled live-example demos. The source-of-truth lives
+ * in `docs/_examples/<slug>.html` — each file carries the UI Script source
+ * inside a `<code id="src-..."></code>` block. We parse those directly so the
+ * demos stay syntactically valid as the language evolves, even though only
+ * one shell page (`docs/live-example.html`) ships to the deployed site.
  */
 
 import { describe, expect, it, beforeEach } from "vitest";
@@ -21,7 +23,24 @@ type StreamingEl = HTMLElement & {
 };
 
 function extractSource(file: string, codeId: string): string {
-  const html = readFileSync(resolve(repoRoot, "docs", file), "utf8");
+  // The 29 standard examples live in `docs/_examples/` (bundled into the
+  // `live-example.html` shell). A handful of bespoke pages — `brand-themes`,
+  // `chat-bot`, `chat-bot-advanced` — keep their own HTML at `docs/` because
+  // their UIs are too custom to fit the shared shell.
+  const candidates = [
+    resolve(repoRoot, "docs/_examples", file),
+    resolve(repoRoot, "docs", file),
+  ];
+  let html: string | undefined;
+  for (const candidate of candidates) {
+    try {
+      html = readFileSync(candidate, "utf8");
+      break;
+    } catch {
+      /* try the next location */
+    }
+  }
+  if (!html) throw new Error(`Could not find ${file} under docs/ or docs/_examples/`);
   const re = new RegExp(`<code id="${codeId}">([\\s\\S]*?)</code>`);
   const match = html.match(re);
   if (!match) throw new Error(`Could not find <code id="${codeId}"> in ${file}`);

@@ -4116,44 +4116,49 @@ LLM and tool integrations:
 
 - **Chat bot:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot.html>
 - **Chat bot · advanced pipeline:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot-advanced.html>
-- **Tools integration:** <https://asfand-dev.github.io/streaming-ui-script/tools-example.html>
-- **External data:** <https://asfand-dev.github.io/streaming-ui-script/external-data-example.html>
-- **Support agent:** <https://asfand-dev.github.io/streaming-ui-script/support-agent.html>
-- **Analytics assistant:** <https://asfand-dev.github.io/streaming-ui-script/analytics-assistant.html>
+- **Tools integration:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=tools-example>
+- **External data:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=external-data-example>
+- **Support agent:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=support-agent>
+- **Analytics assistant:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=analytics-assistant>
 
 JavaScript layer demos:
 
-- **Todo app (localStorage):** <https://asfand-dev.github.io/streaming-ui-script/javascript-todo-app.html>
-- **Pomodoro timer:** <https://asfand-dev.github.io/streaming-ui-script/javascript-pomodoro.html>
-- **Stopwatch + laps:** <https://asfand-dev.github.io/streaming-ui-script/javascript-stopwatch.html>
+- **Todo app (localStorage):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-todo-app>
+- **Pomodoro timer:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-pomodoro>
+- **Stopwatch + laps:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-stopwatch>
 
 Routing and multi-page:
 
-- **Multi-page routing demo:** <https://asfand-dev.github.io/streaming-ui-script/routing-demo.html>
-- **App workspace (AppShell):** <https://asfand-dev.github.io/streaming-ui-script/app-workspace.html>
+- **Multi-page routing demo:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=routing-demo>
+- **App workspace (AppShell):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=app-workspace>
 
 Pattern-driven applications:
 
-- **Project dashboard:** <https://asfand-dev.github.io/streaming-ui-script/project-dashboard.html>
-- **Marketing landing:** <https://asfand-dev.github.io/streaming-ui-script/marketing-landing.html>
-- **Team directory:** <https://asfand-dev.github.io/streaming-ui-script/team-directory.html>
-- **Settings app:** <https://asfand-dev.github.io/streaming-ui-script/settings-app.html>
-- **Product detail (e-commerce):** <https://asfand-dev.github.io/streaming-ui-script/ecommerce-product.html>
-- **Inbox app (SplitView):** <https://asfand-dev.github.io/streaming-ui-script/inbox-app.html>
-- **Pricing page:** <https://asfand-dev.github.io/streaming-ui-script/pricing-page.html>
-- **CRM contacts:** <https://asfand-dev.github.io/streaming-ui-script/crm-contacts.html>
-- **Status page (monitoring):** <https://asfand-dev.github.io/streaming-ui-script/status-page.html>
-- **Checkout flow (wizard):** <https://asfand-dev.github.io/streaming-ui-script/checkout-flow.html>
-- **File manager (Tree + preview):** <https://asfand-dev.github.io/streaming-ui-script/file-manager.html>
-- **Calendar & scheduler:** <https://asfand-dev.github.io/streaming-ui-script/calendar-app.html>
-- **Docs portal (help center):** <https://asfand-dev.github.io/streaming-ui-script/docs-portal.html>
-- **Issue tracker (Kanban + filters):** <https://asfand-dev.github.io/streaming-ui-script/issue-tracker.html>
-- **Expense tracker (finance + charts):** <https://asfand-dev.github.io/streaming-ui-script/expense-tracker.html>
-- **Polls & surveys (voting + results):** <https://asfand-dev.github.io/streaming-ui-script/polls-app.html>
-- **Data explorer (DataGrid + advanced charts):** <https://asfand-dev.github.io/streaming-ui-script/data-explorer.html>
-- **Media gallery (Carousel + Gallery + Lightbox + Map):** <https://asfand-dev.github.io/streaming-ui-script/media-gallery.html>
-- **Content studio (RichTextEditor + MultiStepForm + advanced inputs):** <https://asfand-dev.github.io/streaming-ui-script/content-studio.html>
-- **Scheduler (CalendarView + OnboardingChecklist + state cards):** <https://asfand-dev.github.io/streaming-ui-script/scheduler.html>
+- **Project dashboard:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=project-dashboard>
+- **Marketing landing:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=marketing-landing>
+- **Team directory:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=team-directory>
+- **Settings app:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=settings-app>
+- **Product detail (e-commerce):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=ecommerce-product>
+- **Inbox app (SplitView):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=inbox-app>
+- **Pricing page:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=pricing-page>
+- **CRM contacts:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=crm-contacts>
+- **Status page (monitoring):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=status-page>
+- **Checkout flow (wizard):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=checkout-flow>
+- **File manager (Tree + preview):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=file-manager>
+- **Calendar & scheduler:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=calendar-app>
+- **Docs portal (help center):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=docs-portal>
+- **Issue tracker (Kanban + filters):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=issue-tracker>
+- **Expense tracker (finance + charts):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=expense-tracker>
+- **Polls & surveys (voting + results):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=polls-app>
+- **Data explorer (DataGrid + advanced charts):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=data-explorer>
+- **Media gallery (Carousel + Gallery + Lightbox + Map):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=media-gallery>
+- **Content studio (RichTextEditor + MultiStepForm + advanced inputs):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=content-studio>
+- **Scheduler (CalendarView + OnboardingChecklist + state cards):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=scheduler>
+
+> All bundled live examples are served by a single shell page
+> (`live-example.html`) and one JS bundle (`assets/live-example.js`). Source
+> for each demo lives in `docs/_examples/<slug>.html`; run
+> `npm run build:examples` after editing one.
 
 ### Build artefacts
 

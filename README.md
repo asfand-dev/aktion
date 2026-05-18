@@ -470,7 +470,7 @@ routing section (e.g. for chat-style replies where you don't want the model
 inventing URLs), build the prompt via `getSystemPrompt({ mode: "chat" })`.
 
 See the [routing guide](https://asfand-dev.github.io/streaming-ui-script/routing.html)
-and the [live routing demo](https://asfand-dev.github.io/streaming-ui-script/routing-demo.html)
+and the [live routing demo](https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=routing-demo)
 for a full end-to-end walkthrough.
 
 ## Built-in components
@@ -583,51 +583,67 @@ CDN.
 | `playground.html`                   | CodeMirror 6 editor with custom Streaming UI Script highlighting + autocomplete, live preview, share links (`?code=` query param + hash), persistent layout modes (drag the splitter, collapse the docs sidebar), hover-over component info, signature/argument tooltips with allowed enum values, and an inspection mode that maps rendered DOM back to the source. Powered by [`src/language/`](./src/language/README.md). |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes — **Chat Compact** (`system_prompt_chat`), **Chat Full** (`system_prompt`), **Website Builder** (full prompt + landing-page extensions), and **App Builder** (full prompt + routed-app extensions with seeded mock data). Each assistant turn renders both a live preview and a copy-able source view, with one-click *Open in playground* and *Download as standalone HTML*. Picks any built-in theme and any OpenRouter model; obeys the docs light/dark toggle. |
 | `chat-bot-advanced.html`            | Production-grade **LLM pipeline** demo. Every user prompt runs four sequential OpenRouter calls — **(1) Brief** (intent classifier that outputs JSON: intent, industry, audience, brand, app name, tagline, tone, locale, currency, polished prompt), **(2) Blueprint** (information architect that returns JSON pages, navigation, data schemas, 6–15 realistic sample records per schema, KPIs, primary actions, filters, ctaLines, copy), **(3) Brand theme** (returns a tailored `theme = Theme({...})` line keyed to the industry/brand/tone), and **(4) Intent-specific UI generator** — 14+ specialised generators for `dashboard` / `app` / `website` / `landing` / `storefront` / `crm` / `booking` / `directory` / `portfolio` / `docs` / `form` / `data-view` / `profile` / `chat` / `generic` covering essentially every professional/industry use case, each enforcing shared production rules (accessibility, responsive, real copy, working interactions, density, icons, follow-ups). The theme line is prepended to the streaming UI source and rendered live. Per-turn **Refine** flow rewrites the program in place from a change request. Every successful generation auto-saves to a local **Saved-apps gallery** (12 most recent) with quick Playground / HTML download / Rebuild / Remove actions. Settings drawer adds an industry-hint field that biases ambiguous prompts. |
-| `live-examples.html`                | Catalog page linking out to every standalone demo below.                                |
+| `live-examples.html`                | Catalog page that links every demo into the shared `live-example.html?example=<slug>` shell. |
+| `live-example.html`                 | Shared shell for the bundled live examples — picks the demo from the `?example=<slug>` query parameter and renders it from `assets/live-example.js`. |
 
 ---
 
 ## Live examples
 
-Every standalone demo is a single HTML page that you can open directly. They
-double as integration recipes — view source on any of them to see how a real
-host page wires `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
+Every standalone demo is served by a single shell page
+(`docs/live-example.html`) and the single JS bundle
+(`docs/assets/live-example.js`) that ships every demo's UI Script source and
+setup code together. Open any example with `live-example.html?example=<slug>`
+— the shell renders the original hero / source / output layout from the
+bundled data, so each demo doubles as an integration recipe for
+`setResponse`, `appendChunk`, `setTools`, and `setTheme`.
 
-| Demo page                       | Highlights                                                                                                  |
+A few demos (`chat-bot`, `chat-bot-advanced`, `brand-themes`) have bespoke
+UIs and remain on their own HTML pages.
+
+| Demo slug                       | Highlights                                                                                                  |
 |---------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `tools-example.html`            | Read / write / poll patterns wired to in-page `setTools()` handlers.                                        |
-| `external-data-example.html`    | Live GitHub repository explorer powered by a single tool function.                                          |
-| `support-agent.html`            | AI triage workspace: pick a ticket, the agent suggests priority + draft reply.                              |
-| `analytics-assistant.html`      | Natural-language → charts/KPIs/breakdown.                                                                   |
-| `javascript-todo-app.html`      | Reactive todo list with filters + localStorage persistence via one `Script(...)`.                           |
-| `javascript-pomodoro.html`      | Pomodoro timer with phases, audio chime, and notifications.                                                 |
-| `javascript-stopwatch.html`     | Sub-second stopwatch + laps using `requestAnimationFrame` and proper teardown.                              |
-| `routing-demo.html`             | A four-page app driven by `Routes` + `NavLink` + `@Navigate`, deep links, browser back/forward.             |
-| `app-workspace.html`            | Full SaaS workspace: sticky `Sidebar`, topbar, `MetricGrid`, timeline, `DescriptionList`.                   |
-| `project-dashboard.html`        | Engineering program dashboard: banner, `PageHeader`, KPIs, kanban board, activity timeline.                 |
-| `marketing-landing.html`        | Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ.                                         |
-| `team-directory.html`           | Profile cards, avatar groups, search-with-pagination, empty state, slide-in `Sheet`.                        |
-| `settings-app.html`             | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Sheet`.                         |
-| `ecommerce-product.html`        | Product page with `Cover` hero, `MediaCard` related items, `Rating`, `ProgressRing`, `Stats`, reviews.      |
-| `inbox-app.html`                | Focused mail/chat inbox using `SplitView`, `SearchBar`, `PersonChip`, `Notification`, `ChatBubble`.         |
-| `pricing-page.html`             | Pricing surface: `Cover`, `Stats` trust strip, `PricingTable`, `FeatureGrid`, `Quote`, FAQ, CTA.            |
-| `crm-contacts.html`             | Directory: `SearchBar`, segmented filters, `Tile` quick stats, paginated cards, detail `Sheet`.             |
-| `status-page.html`              | Public SRE status: incident `Banner`, latency `LineChart`, services with `StatusDot`, incident `Timeline`.  |
-| `checkout-flow.html`            | Four-step checkout wizard: `Steps`, `SplitView` cart, promo codes, address + payment + review + confirmation. |
-| `file-manager.html`             | Cloud file browser: `Tree` sidebar, `Toolbar`, files `Table`, preview `Sheet`, storage `ProgressRing`.       |
-| `calendar-app.html`             | Calendar & scheduler: `DatePicker`, category chips, busy-hours ring, agenda `Timeline`, event detail `Sheet`. |
-| `docs-portal.html`              | Help center / knowledge base: `SearchBar`, `Tree` categories, `Markdown` article, `Rating`, FAQ `Accordion`. |
-| `issue-tracker.html`            | Linear-style tracker: `KanbanBoard`, priority/assignee filters, activity `Timeline`, squad `AvatarGroup`, detail `Sheet`. |
-| `expense-tracker.html`          | Personal finance: 6-month `LineChart`, category `BarChart`, savings `ProgressRing`, per-budget `Progress` bars, transaction list. |
-| `polls-app.html`                | Multiple-choice polls with live results: per-option `Progress` bars, leader `ProgressRing`, 7-day `LineChart`, comments thread. |
-| `data-explorer.html`            | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `AreaChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `AuditTrail`. |
-| `media-gallery.html`            | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer` trailer, `AudioPlayer` soundtrack, Leaflet-backed `Map` with pinned itinerary. |
-| `content-studio.html`           | CMS-style authoring surface: `RichTextEditor`, `CodeEditor`, `MultiStepForm`, `ColorPicker`, `TagInput`, `MentionInput`, `PinInput`/`OtpInput`, `ValidationSummary`, `TopBar`. |
-| `scheduler.html`                | Full-month `CalendarView`, `OnboardingChecklist`, `InboxPanel`, `ActivityLog`, and `LoadingState`/`ErrorState`/`SuccessState` wired through one `@Switch`. |
-| `brand-themes.html`             | Same UI reskinned with `Theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, and **Vercel** — copy any palette straight into your own response. |
+| `tools-example`                 | Read / write / poll patterns wired to in-page `setTools()` handlers.                                        |
+| `external-data-example`         | Live GitHub repository explorer powered by a single tool function.                                          |
+| `support-agent`                 | AI triage workspace: pick a ticket, the agent suggests priority + draft reply.                              |
+| `analytics-assistant`           | Natural-language → charts/KPIs/breakdown.                                                                   |
+| `javascript-todo-app`           | Reactive todo list with filters + localStorage persistence via one `Script(...)`.                           |
+| `javascript-pomodoro`           | Pomodoro timer with phases, audio chime, and notifications.                                                 |
+| `javascript-stopwatch`          | Sub-second stopwatch + laps using `requestAnimationFrame` and proper teardown.                              |
+| `routing-demo`                  | A four-page app driven by `Routes` + `NavLink` + `@Navigate`, deep links, browser back/forward.             |
+| `app-workspace`                 | Full SaaS workspace: sticky `Sidebar`, topbar, `MetricGrid`, timeline, `DescriptionList`.                   |
+| `project-dashboard`             | Engineering program dashboard: banner, `PageHeader`, KPIs, kanban board, activity timeline.                 |
+| `marketing-landing`             | Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ.                                         |
+| `team-directory`                | Profile cards, avatar groups, search-with-pagination, empty state, slide-in `Sheet`.                        |
+| `settings-app`                  | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Sheet`.                         |
+| `ecommerce-product`             | Product page with `Cover` hero, `MediaCard` related items, `Rating`, `ProgressRing`, `Stats`, reviews.      |
+| `inbox-app`                     | Focused mail/chat inbox using `SplitView`, `SearchBar`, `PersonChip`, `Notification`, `ChatBubble`.         |
+| `pricing-page`                  | Pricing surface: `Cover`, `Stats` trust strip, `PricingTable`, `FeatureGrid`, `Quote`, FAQ, CTA.            |
+| `crm-contacts`                  | Directory: `SearchBar`, segmented filters, `Tile` quick stats, paginated cards, detail `Sheet`.             |
+| `status-page`                   | Public SRE status: incident `Banner`, latency `LineChart`, services with `StatusDot`, incident `Timeline`.  |
+| `checkout-flow`                 | Four-step checkout wizard: `Steps`, `SplitView` cart, promo codes, address + payment + review + confirmation. |
+| `file-manager`                  | Cloud file browser: `Tree` sidebar, `Toolbar`, files `Table`, preview `Sheet`, storage `ProgressRing`.       |
+| `calendar-app`                  | Calendar & scheduler: `DatePicker`, category chips, busy-hours ring, agenda `Timeline`, event detail `Sheet`. |
+| `docs-portal`                   | Help center / knowledge base: `SearchBar`, `Tree` categories, `Markdown` article, `Rating`, FAQ `Accordion`. |
+| `issue-tracker`                 | Linear-style tracker: `KanbanBoard`, priority/assignee filters, activity `Timeline`, squad `AvatarGroup`, detail `Sheet`. |
+| `expense-tracker`               | Personal finance: 6-month `LineChart`, category `BarChart`, savings `ProgressRing`, per-budget `Progress` bars, transaction list. |
+| `polls-app`                     | Multiple-choice polls with live results: per-option `Progress` bars, leader `ProgressRing`, 7-day `LineChart`, comments thread. |
+| `data-explorer`                 | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `AreaChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `AuditTrail`. |
+| `media-gallery`                 | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer` trailer, `AudioPlayer` soundtrack, Leaflet-backed `Map` with pinned itinerary. |
+| `content-studio`                | CMS-style authoring surface: `RichTextEditor`, `CodeEditor`, `MultiStepForm`, `ColorPicker`, `TagInput`, `MentionInput`, `PinInput`/`OtpInput`, `ValidationSummary`, `TopBar`. |
+| `scheduler`                     | Full-month `CalendarView`, `OnboardingChecklist`, `InboxPanel`, `ActivityLog`, and `LoadingState`/`ErrorState`/`SuccessState` wired through one `@Switch`. |
+| `brand-themes.html`             | Same UI reskinned with `Theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, and **Vercel** (own page — bespoke UI). |
 
 The full catalog with tag filters lives at
 [`docs/live-examples.html`](https://asfand-dev.github.io/streaming-ui-script/live-examples.html).
+
+### Editing live examples
+
+Each bundled demo's source-of-truth is a self-contained HTML in
+`docs/_examples/<slug>.html`. Edit one of those files and run
+`npm run build:examples` to regenerate the single `docs/assets/live-example.js`
+bundle (also triggered automatically by `npm run build:docs`). The
+`docs/_examples/` folder is excluded from the deployed `site/` output.
 
 ---
 
@@ -667,9 +683,14 @@ The full catalog with tag filters lives at
 │   ├── element.ts             # The custom element
 │   └── index.ts               # Public entry point
 ├── docs/                      # Static documentation site (HTML + CSS + JS)
+│   ├── _examples/             #   Author-facing source for every bundled live
+│   │                          #   example. Excluded from the deployed site.
+│   │                          #   Regenerate the bundle via `npm run build:examples`.
+│   └── assets/live-example.js #   GENERATED single-bundle for `live-example.html`.
 ├── _docs/                     # Internal design notes and inspirations (not shipped)
 ├── scripts/
 │   ├── emit-prompt.mjs        # Writes dist/system_prompt*.txt from the bundle
+│   ├── build-live-examples.mjs # Assembles docs/assets/live-example.js from docs/_examples/
 │   └── build-docs.mjs         # Assembles ./site/ from docs/ + dist/
 ├── tests/                     # Vitest unit + element regression tests
 ├── dist/                      # Built artifacts (created by `npm run build`)
