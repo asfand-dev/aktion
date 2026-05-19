@@ -4,13 +4,15 @@
  * Slider, NumberInput, DatePicker, FileUpload, Combobox.
  */
 
-import type { ComponentSpec } from "../types.js";
+import type { ComponentSpec, RenderHelpers } from "../types.js";
+import type { ComponentNode } from "../../runtime/evaluator.js";
 import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
+import { extractComboboxItems } from "./forms-shared.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
-const BUTTON_SIZES = ["sm", "md", "lg", "small", "normal", "large"] as const;
+const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl", "small", "normal", "large"] as const;
 const INPUT_TYPES = ["text", "email", "password", "number", "tel", "url", "date"] as const;
 
 /**
@@ -20,9 +22,12 @@ const INPUT_TYPES = ["text", "email", "password", "number", "tel", "url", "date"
  */
 function normaliseButtonSize(value: unknown): string {
   const v = asString(value).trim().toLowerCase();
+  if (v === "xs" || v === "extra-small") return "xs";
   if (v === "small" || v === "sm") return "sm";
   if (v === "large" || v === "lg") return "lg";
+  if (v === "xl" || v === "extra-large") return "xl";
   if (v === "normal" || v === "md" || v === "") return "md";
+  if (v === "xs" || v === "sm" || v === "md" || v === "lg" || v === "xl") return v;
   return "md";
 }
 
@@ -34,22 +39,46 @@ export const Button: ComponentSpec = {
     { name: "action", type: "Action", optional: true, description: "Action() payload to execute" },
     { name: "variant", type: "string", optional: true, enum: BUTTON_VARIANTS },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
-    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Accepts `sm`/`md`/`lg` (and legacy `small`/`normal`/`large`)" },
-    { name: "icon", type: "string", optional: true, description: "Optional leading Font Awesome icon name" },
+    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Canonical `xs|sm|md|lg|xl` (legacy `small|normal|large` still accepted)" },
+    { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
+    { name: "iconPosition", type: "string", optional: true, enum: ["leading", "trailing"], description: "Icon placement (default leading)" },
+    { name: "iconOnly", type: "boolean", optional: true, description: "Hide the label visually (keeps aria-label)" },
+    { name: "loading", type: "boolean", optional: true, description: "Show spinner and disable interaction" },
+    { name: "fullWidth", type: "boolean", optional: true },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
+    const loading = asBoolean(props.loading);
+    const iconOnly = asBoolean(props.iconOnly);
+    const iconPosition = asString(props.iconPosition, "leading");
+    const labelText = asString(props.label);
     const button = el("button", {
       class: "rui-button",
       type: asString(props.type, "button"),
       "data-variant": asString(props.variant, "primary"),
       "data-size": normaliseButtonSize(props.size),
-      disabled: asBoolean(props.disabled) ? "" : null,
+      "data-icon-position": iconPosition,
+      "data-icon-only": iconOnly ? "true" : null,
+      "data-full-width": asBoolean(props.fullWidth) ? "true" : null,
+      "data-loading": loading ? "true" : null,
+      "aria-label": iconOnly ? labelText : null,
+      disabled: asBoolean(props.disabled) || loading ? "" : null,
     });
+    const labelSpan = el("span", { class: "rui-button-label" }, [labelText]);
     const iconNode = renderIcon(props.icon, { className: "rui-button-icon" });
-    if (iconNode) button.append(iconNode);
-    button.append(el("span", { class: "rui-button-label" }, [asString(props.label)]));
+    const spinNode = loading ? renderIcon("spinner", { className: "rui-button-spinner" }) : null;
+    const adornment = spinNode ?? iconNode;
+    if (iconOnly) {
+      if (adornment) button.append(adornment);
+    } else if (iconPosition === "trailing") {
+      button.append(labelSpan);
+      if (adornment) button.append(adornment);
+    } else {
+      if (adornment) button.append(adornment);
+      button.append(labelSpan);
+    }
     button.onclick = () => {
+      if (loading) return;
       if (isActionPayload(props.action)) helpers.runAction(props.action);
     };
     return button;
@@ -135,15 +164,21 @@ export const SelectItem: ComponentSpec = {
 
 export const Select: ComponentSpec = {
   name: "Select",
-  description: "Dropdown select. Pass a $variable as `value` for two-way binding.",
+  description:
+    "Dropdown select. Pass a `$variable` as `value` for two-way binding. " +
+    "Set `searchable=true` for a combobox-style filter UI on long option lists.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "SelectItem[]" },
     { name: "label", type: "string", optional: true },
     { name: "placeholder", type: "string", optional: true },
     { name: "value", type: "any", optional: true },
+    { name: "searchable", type: "boolean", optional: true, description: "Render as a filterable combobox" },
   ],
   render: (node, props, helpers) => {
+    if (asBoolean(props.searchable)) {
+      return renderSearchableSelect(node, props, helpers);
+    }
     const select = el("select", {
       class: "rui-select",
       id: asString(props.id),
@@ -790,27 +825,6 @@ export const Combobox: ComponentSpec = {
   },
 };
 
-function extractComboboxItems(raw: unknown): Array<{ value: string; label: string }> {
-  const items = asArray<unknown>(raw);
-  return items
-    .map((entry) => {
-      if (entry && typeof entry === "object") {
-        const node = entry as { __kind?: string; args?: unknown[]; value?: unknown; label?: unknown };
-        if (node.__kind === "Component" && Array.isArray(node.args)) {
-          const value = asString(node.args[0]);
-          return { value, label: asString(node.args[1], value) };
-        }
-        if (node.value !== undefined || node.label !== undefined) {
-          const value = asString(node.value);
-          return { value, label: asString(node.label, value) };
-        }
-      }
-      const value = asString(entry);
-      return { value, label: value };
-    })
-    .filter((item) => item.value !== "" || item.label !== "");
-}
-
 export const MultiSelect: ComponentSpec = {
   name: "MultiSelect",
   description:
@@ -1043,82 +1057,34 @@ export const DateRangePicker: ComponentSpec = {
   },
 };
 
-const SEGMENTED_SIZES = ["sm", "md", "lg"] as const;
-
-export const SegmentedControl: ComponentSpec = {
-  name: "SegmentedControl",
-  description:
-    "View-mode picker for short, mutually-exclusive choices (grid / list, " +
-    "day / week / month, light / dark). Pass items as " +
-    "`{value, label, icon?}[]`, `[value, label]` tuples, or plain " +
-    "strings; bind a `$variable` to `value` for two-way binding. " +
-    "Visually distinct from `ToggleGroup` — use this when there are at " +
-    "most ~5 options that all act on the same surface.",
-  props: [
-    { name: "id", type: "string" },
-    { name: "items", type: "any[]", description: "Items: {value, label, icon?} objects, [value, label] tuples, or plain strings" },
-    { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
-    { name: "size", type: "string", optional: true, enum: SEGMENTED_SIZES },
-  ],
-  render: (node, props, helpers) => {
-    const id = asString(props.id);
-    const current = asString(props.value);
-    const size = asString(props.size, "md");
-    const stateName = node.argMeta?.[2]?.stateRef;
-    const root = el("div", {
-      class: "rui-segmented-control",
-      role: "tablist",
-      "data-size": size,
-      id,
-    });
-    for (const raw of asArray<unknown>(props.items)) {
-      const { value, label, icon } = extractSegmentedItem(raw);
-      const isActive = value === current;
-      const btn = el("button", {
-        type: "button",
-        class: "rui-segmented-control-option",
-        role: "tab",
-        "aria-selected": isActive ? "true" : "false",
-        "data-active": isActive ? "true" : "false",
-        "data-value": value,
-      });
-      const iconNode = renderIcon(icon, { className: "rui-segmented-control-icon" });
-      if (iconNode) btn.append(iconNode);
-      btn.append(el("span", { class: "rui-segmented-control-label" }, [label]));
-      if (stateName && !isActive) {
-        btn.onclick = () => {
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value }],
-          });
-        };
-      }
-      root.append(btn);
-    }
-    return root;
-  },
-};
-
-function extractSegmentedItem(raw: unknown): { value: string; label: string; icon: string } {
-  if (typeof raw === "string") return { value: raw, label: raw, icon: "" };
-  if (Array.isArray(raw)) {
-    return {
-      value: asString(raw[0]),
-      label: asString(raw[1], asString(raw[0])),
-      icon: asString(raw[2]),
-    };
-  }
-  if (raw && typeof raw === "object") {
-    const r = raw as { value?: unknown; label?: unknown; icon?: unknown };
-    const value = asString(r.value);
-    return { value, label: asString(r.label, value), icon: asString(r.icon) };
-  }
-  return { value: "", label: "", icon: "" };
-}
-
 function clampNumber(value: number, min: number, max: number): number {
   if (Number.isNaN(value)) return min === Number.NEGATIVE_INFINITY ? 0 : min;
   return Math.min(Math.max(value, min), max);
+}
+
+/** Searchable `Select` delegates to the Combobox renderer (value binds at arg index 4). */
+function renderSearchableSelect(
+  node: ComponentNode,
+  props: Record<string, unknown>,
+  helpers: RenderHelpers,
+): Node {
+  const meta = node.argMeta ? [...node.argMeta] : [];
+  while (meta.length < 5) meta.push({});
+  if (meta[4]?.stateRef) meta[2] = meta[4];
+  const root = Combobox.render(
+    { ...node, argMeta: meta } as ComponentNode,
+    {
+      id: props.id,
+      items: props.items,
+      value: props.value,
+      placeholder: props.placeholder,
+      emptyLabel: "No matches",
+      disabled: false,
+    },
+    helpers,
+  ) as HTMLElement;
+  root.classList.add("rui-select-searchable");
+  return root;
 }
 
 function bindToStateAtArg(

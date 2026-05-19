@@ -10,12 +10,13 @@ import {
 import { dataBuiltins } from "../src/runtime/builtins.js";
 import { ActionRunner } from "../src/runtime/actions.js";
 import type { ActionPayload } from "../src/runtime/builtins.js";
+import { defaultLibrary } from "../src/library/index.js";
 
 function buildContext(source: string) {
   const program = parse(source);
   const state = new StateStore();
   const queries = new QueryRegistry();
-  const ctx = createContext(state, queries);
+  const ctx = createContext(state, queries, undefined, defaultLibrary);
   planProgram(program, ctx);
   return { program, ctx, state, queries };
 }
@@ -73,18 +74,9 @@ describe("data builtins", () => {
     expect(dataBuiltins.Sort!([rows, "x", "desc"])).toEqual([{ x: 3 }, { x: 2 }, { x: 1 }]);
   });
 
-  it("@Push returns a new array with the item appended (non-mutating)", () => {
-    const original = [{ id: 1 }, { id: 2 }];
-    const result = dataBuiltins.Push!([original, { id: 3 }]) as Array<{ id: number }>;
-    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    // Originals stay untouched so reactive state sees a fresh reference.
-    expect(original).toEqual([{ id: 1 }, { id: 2 }]);
-    expect(result).not.toBe(original);
-  });
-
-  it("@Concat joins two arrays", () => {
-    expect(dataBuiltins.Concat!([[1, 2], [3, 4]])).toEqual([1, 2, 3, 4]);
-    expect(dataBuiltins.Concat!([null, [1]])).toEqual([1]);
+  it("@Join concatenates array values", () => {
+    expect(dataBuiltins.Join!([[1, 2, 3]])).toBe("1,2,3");
+    expect(dataBuiltins.Join!([["a", "b"], "-"])).toBe("a-b");
   });
 });
 
@@ -134,6 +126,71 @@ describe("expression evaluation", () => {
     const stmt = program.statements[0]!;
     const value = evaluate(stmt.expression, ctx);
     expect(value).toBe("7 days");
+  });
+
+  it("lazy ternary only evaluates the taken branch", () => {
+    const { ctx } = buildContext(
+      'taken = true ? "yes" : undefinedReference\n' +
+      'skipped = false ? undefinedReference : "no"',
+    );
+    expect(ctx.bindings.get("taken")?.()).toBe("yes");
+    expect(ctx.bindings.get("skipped")?.()).toBe("no");
+  });
+});
+
+describe("bracket member access", () => {
+  it("indexes arrays with numeric and negative indices", () => {
+    const { ctx } = buildContext(`$rows = ["a", "b", "c"]\nfirst = $rows[0]\nlast = $rows[-1]`);
+    expect(ctx.bindings.get("first")?.()).toBe("a");
+    expect(ctx.bindings.get("last")?.()).toBe("c");
+  });
+
+  it("reads object keys via bracket notation", () => {
+    const { ctx } = buildContext(`$key = "name"\n$user = {name: "Ada"}\nlabel = $user[$key]`);
+    expect(ctx.bindings.get("label")?.()).toBe("Ada");
+  });
+
+  it("?.[key] optional-chains bracket access", () => {
+    const { ctx } = buildContext(
+      '$user = null\nmissing = $user?.["name"]\n' +
+      '$key = "role"\n$user2 = {role: "Eng"}\nrole = $user2?.[$key]',
+    );
+    expect(ctx.bindings.get("missing")?.()).toBeUndefined();
+    expect(ctx.bindings.get("role")?.()).toBe("Eng");
+  });
+});
+
+describe("named component arguments", () => {
+  it("merges a trailing object literal into positional props", () => {
+    const { ctx } = buildContext(
+      'btn = Button("Hi", {variant: "primary", size: "small"})',
+    );
+    const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
+    expect(node.name).toBe("Button");
+    expect(node.args[0]).toBe("Hi");
+    expect(node.args[2]).toBe("primary");
+    expect(node.args[4]).toBe("small");
+  });
+
+  it("merges inline name=value args with positional props", () => {
+    const { ctx } = buildContext(
+      'cell = GridItem(TextContent("Side"), span="1/4")',
+    );
+    const node = ctx.bindings.get("cell")?.() as { name: string; args: unknown[] };
+    expect(node.name).toBe("GridItem");
+    expect((node.args[0] as { name: string }).name).toBe("TextContent");
+    expect(node.args[1]).toBe("1/4");
+  });
+
+  it("merges named args before a trailing children array", () => {
+    const { ctx } = buildContext(
+      'layout = Grid(columns=12, gap="l", [GridItem(TextContent("A"), span="1/4")])',
+    );
+    const node = ctx.bindings.get("layout")?.() as { name: string; args: unknown[] };
+    expect(node.name).toBe("Grid");
+    expect(node.args[1]).toBe(12);
+    expect(node.args[2]).toBe("l");
+    expect(Array.isArray(node.args[0])).toBe(true);
   });
 });
 

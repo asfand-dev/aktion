@@ -249,45 +249,6 @@ export const Switch: ComponentSpec = {
   },
 };
 
-export const Toggle: ComponentSpec = {
-  name: "Toggle",
-  description:
-    "Single icon/text button with a pressed/unpressed state. When `value` is a " +
-    "`$variable` reference, clicking the toggle flips it without an extra " +
-    "Action — perfect for filter chips and view-mode buttons.",
-  props: [
-    { name: "label", type: "string" },
-    { name: "value", type: "boolean", optional: true, description: "Pressed state (typically $variable)" },
-    { name: "icon", type: "string", optional: true },
-    { name: "variant", type: "string", optional: true, enum: ["default", "outline", "ghost"] },
-    { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
-  ],
-  render: (node, props, helpers) => {
-    const pressed = asBoolean(props.value);
-    const button = el("button", {
-      type: "button",
-      class: "rui-toggle",
-      "aria-pressed": pressed ? "true" : "false",
-      "data-variant": asString(props.variant, "default"),
-      "data-size": asString(props.size, "md"),
-      "data-state": pressed ? "on" : "off",
-    });
-    const iconNode = renderIcon(props.icon, { className: "rui-toggle-icon" });
-    if (iconNode) button.append(iconNode);
-    button.append(el("span", { class: "rui-toggle-label" }, [asString(props.label)]));
-    const stateName = node.argMeta?.[1]?.stateRef;
-    if (stateName) {
-      button.onclick = () => {
-        helpers.runAction({
-          kind: "Action",
-          steps: [{ kind: "Set", name: stateName, value: !pressed }],
-        });
-      };
-    }
-    return button;
-  },
-};
-
 export const ToggleGroup: ComponentSpec = {
   name: "ToggleGroup",
   description:
@@ -820,7 +781,7 @@ export const Toast: ComponentSpec = {
     "that removes the toast from the DOM (and fires `onClose` if set). " +
     "Pass `duration` (ms) to auto-dismiss, or `position` for a standalone " +
     "one-off toast (the renderer will pin it to the viewport corner so " +
-    "you do not have to wrap a single notification in `Toasts(...)`). " +
+    "you do not have to wrap a single notification in `Stack(...)`). " +
     "Use `Toasts` for grouped stacks; prefer `Banner` for top-of-page " +
     "announcements and `Notification` for permanent inbox entries.",
   props: [
@@ -831,7 +792,7 @@ export const Toast: ComponentSpec = {
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: true, description: "Optional inline action Button(...) shown above the message" },
     { name: "onClose", type: "Action", optional: true, description: "Action fired when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
-    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Toasts(...)`" },
+    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)`" },
   ],
   render: (_node, props, helpers) => {
     const tone = asString(props.tone, "default");
@@ -947,27 +908,6 @@ export const Toast: ComponentSpec = {
       const placeholder = el("div", { class: "rui-toast-placeholder", hidden: "" });
       return placeholder;
     }
-    return root;
-  },
-};
-
-export const Toasts: ComponentSpec = {
-  name: "Toasts",
-  description:
-    "Fixed-position container that stacks Toast notifications. Pin to a " +
-    "viewport corner with `position`. Pair with a `$toasts` $variable + " +
-    "`@Push` / `@Filter` to add and remove toasts declaratively.",
-  props: [
-    { name: "items", type: "Toast[]" },
-    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Viewport anchor (default \"top-right\")" },
-  ],
-  render: (_node, props, helpers) => {
-    const root = el("div", {
-      class: "rui-toasts",
-      "data-position": asString(props.position, "top-right"),
-      "aria-live": "polite",
-    });
-    for (const item of asArray(props.items)) root.append(helpers.renderNode(item));
     return root;
   },
 };

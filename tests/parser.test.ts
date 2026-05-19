@@ -34,6 +34,21 @@ describe("parser", () => {
     });
   });
 
+  it("parses bracket member access and optional ?.[key]", () => {
+    const program = parse(`first = $rows[0]\nkey = $user?.[$name]`);
+    expect(program.errors).toEqual([]);
+    expect(program.statements[0]?.expression).toMatchObject({
+      kind: "Member",
+      computed: { kind: "Literal", value: 0 },
+      object: { kind: "StateRef", name: "rows" },
+    });
+    expect(program.statements[1]?.expression).toMatchObject({
+      kind: "Member",
+      optional: true,
+      computed: { kind: "StateRef", name: "name" },
+    });
+  });
+
   it("parses ternary, binary, and string concatenation", () => {
     const program = parse(`label = "" + $days + " days"`);
     const expr = program.statements[0]?.expression;
@@ -45,6 +60,19 @@ describe("parser", () => {
     expect(program.errors).toEqual([]);
     const callExpr = program.statements[0]?.expression;
     expect(callExpr?.kind).toBe("Call");
+  });
+
+  it("parses inline named call arguments", () => {
+    const program = parse(`cell = GridItem(TextContent("Side"), span="1/4")`);
+    expect(program.errors).toEqual([]);
+    const callExpr = program.statements[0]?.expression;
+    expect(callExpr?.kind).toBe("Call");
+    if (callExpr?.kind !== "Call") return;
+    expect(callExpr.arguments[1]).toMatchObject({
+      kind: "NamedArg",
+      name: "span",
+      value: { kind: "Literal", value: "1/4" },
+    });
   });
 
   it("collects errors but keeps parsing", () => {

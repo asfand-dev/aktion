@@ -1,388 +1,499 @@
-# Codebase Optimization Suggestions
+# Streaming UI Script — Language & Component Audit
 
-A review of `src/**` for redundant or replaceable language features and small
-patterns that can be tightened without changing behaviour. Items are grouped
-by impact and each one references the concrete files / lines that motivate
-the suggestion. Nothing here proposes a behavioural change — every item is
-either a deduplication, a stronger type, or a modernization of an idiom that
-the rest of the codebase already uses elsewhere.
+> Generated from a full codebase review (parser, runtime, builtins, component library, themes, routing, prompts).  
+> **Scope:** ~130 registered components, ~45 `@`-builtins + action/iteration steps, seven themes.  
+> **Goal:** Reduce redundancy, close layout gaps (especially `Stack` / `Grid`), and make rich UIs easier for LLMs and developers.
 
----
+## Implementation status (completed)
 
-## 1. High-impact deduplications
+The following items from this audit were **implemented** in the codebase (no deprecation flags — removed or merged directly):
 
-### 1.1 Three near-identical URL/scheme sanitizers
+| Area | Done |
+|------|------|
+| **Language** | Removed `@Push`, `@Concat`, `@Take`, `@Map`, `@FormatCurrency`, `@FormatNumber`, case builtins → `@Case`; added `@Join`, `@Split`, `@Trim`, `@Replace`, `@Substring`, `@StartsWith`, `@EndsWith`, `@Contains`, `@Match`, `@Pow`, `@Sqrt`, `@Random`, `@Log`, `@FilterBy`, `@AddHours`, `@DiffDays`, `@StartOfWeek`, `@EndOfMonth`, `@Const`; bracket access `obj[$key]` / `arr[i]`; lazy ternary; trailing-object named component args |
+| **Layout** | `StackItem`, `GridItem`, `Box`; `Stack` gains `reverse`, `uniform`, `inline`, `padding`, `alignContent`, responsive `align`/`justify`, `justify="evenly"`; `Grid` 12-column mode + fractional spans (`"1/2"`…`"1/12"`) |
+| **Components removed** | `BreadcrumbPageHeader`, `Toasts`, `StepsItem`, `Section`, `CardBody`, `Toggle`, `SegmentedControl`, `OtpInput`, `AreaChart`, `AuditTrail`, `Cover`, `MetricGrid`, `Sheet` (use `Drawer`) |
+| **Components merged** | `Hero(layout="cover")`, `Stats(layout="grid")`, `ActivityLog(variant="audit")`, `LineChart(filled=true)` |
+| **Components added** | `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`, `Truncate`, `InlineEdit`, `NotificationBell` |
+| **Docs** | `README.md`, `coding-gen-skill.md`, `src/prompt/generator.ts`, `docs/assets/live-example.js`, demo tests updated |
 
-Three places implement essentially the same "strip control chars, reject
-`//`, allowlist the scheme" algorithm with the same regex
-`/^([a-zA-Z][a-zA-Z0-9+.\-]*):/`:
-
-- `sanitiseHref(raw, fallback)` — `src/library/utils.ts` (~L125)
-- `sanitiseImageSrc(raw)` — `src/library/utils.ts` (~L172)
-- `sanitizeMarkdownHref(raw)` — `src/library/components/content.ts` (~L454)
-
-Suggestion: collapse them into a single factory in `src/library/utils.ts`,
-e.g.
-
-```ts
-type SanitiseUrlOptions = {
-  schemes: ReadonlySet<string>;
-  fallback: string;
-  allowDataImagesOnly?: boolean;
-};
-
-export function sanitiseUrl(raw: unknown, opts: SanitiseUrlOptions): string {
-  // single implementation
-}
-
-export const sanitiseHref      = (raw: unknown, fallback = "#") =>
-  sanitiseUrl(raw, { schemes: SAFE_HREF_SCHEMES, fallback });
-
-export const sanitiseImageSrc  = (raw: unknown) =>
-  sanitiseUrl(raw, { schemes: SAFE_IMAGE_SCHEMES, fallback: "", allowDataImagesOnly: true });
-```
-
-`sanitizeMarkdownHref` would then become a one-liner that calls
-`sanitiseUrl` with `{ schemes: new Set(["http","https","mailto","tel"]), fallback: "#" }`
-and pipes the result through `escapeAttr`. This removes one regex, two scheme
-allowlists, and ~60 lines of near-identical code.
-
-### 1.2 Two `escapeAttr` implementations
-
-- `escapeAttr` in `src/library/utils.ts` (~L74)
-- `escapeAttr` in `src/library/components/content.ts` (~L472)
-
-The two differ only in whether they replace `<` / `>` (the content.ts version
-does, the utils.ts version does not). Move the stricter one into
-`src/library/utils.ts`, export it, delete the local copy, and switch the
-Markdown renderer to import it.
-
-### 1.3 Two `parseRatio` helpers
-
-- `parseRatio` — `src/library/components/layout.ts` (~L364)
-- `parseMediaRatio` — `src/library/components/patterns.ts` (~L1038)
-
-The bodies differ only in `den !== 0` vs `den > 0`. Promote one of them into
-`src/library/utils.ts` (e.g. `parseAspectRatio`) and have both call sites use
-it. Two functions become one, and the stricter `den > 0` rule applies
-uniformly (it is the safer default).
-
-### 1.4 Three `toNumber`/`asNumber` variants
-
-- `toNumber` — `src/runtime/builtins.ts` (~L11)
-- `toNumber` — `src/runtime/evaluator.ts` (~L553)
-- `asNumber` — `src/library/utils.ts` (~L62)
-
-All three coerce `unknown -> number` with a `0` (or supplied) fallback. The
-`utils.ts` version already takes a `fallback` parameter — adopt it everywhere
-and delete the other two. `runtime/builtins.ts` and `runtime/evaluator.ts`
-can both `import { asNumber as toNumber } from "../library/utils.js"`.
-
-### 1.5 Two `stringify` functions
-
-- `stringify` — `src/runtime/evaluator.ts` (~L564)
-- `stringify` — `src/runtime/scripts.ts` (~L316)
-
-Behaviour differs only in how `null`/`undefined` is rendered (empty string vs
-`"null"`). Replace with a single `stringifyValue(value, { nullAs: "" | "null" })`
-in a shared `runtime/format.ts` (or `library/utils.ts`). The duplicate
-`try { JSON.stringify } catch { String }` block disappears.
-
-### 1.6 Three `default*Icon` switch tables
-
-- `defaultCalloutIcon(variant)` — `src/library/components/content.ts` (~L265)
-- `defaultNoteIcon(tone)` — `src/library/components/content.ts` (~L403)
-- `defaultToastIcon(tone)` — `src/library/components/feedback.ts` (~L883)
-
-All three are short `switch (tone)` ladders that map a small set of tone
-strings to icon names with substantial overlap (`success`, `warning`,
-`info`, `danger`/`error`). Replace with one shared `Record<string, string>`
-plus optional per-component overrides:
-
-```ts
-const TONE_ICON_DEFAULT: Record<string, string> = {
-  success: "circle-check",
-  warning: "triangle-exclamation",
-  danger: "circle-xmark",
-  error: "circle-xmark",
-  info: "circle-info",
-};
-export const defaultToneIcon = (tone: string, overrides: Record<string,string> = {}) =>
-  overrides[tone] ?? TONE_ICON_DEFAULT[tone] ?? "circle-info";
-```
-
-Three switches collapse to one lookup table.
-
-### 1.7 Repeated "is component node" predicate
-
-The exact pattern below appears in **four** files:
-
-```ts
-value !== null && typeof value === "object" &&
-  (value as { __kind?: string }).__kind === "Component"
-```
-
-Locations:
-- `src/library/components/data.ts` (~L59)
-- `src/library/components/feedback.ts` (~L80)
-- `src/library/components/navigation.ts` (~L69)
-- `src/library/components/patterns.ts` (~L774)
-
-Plus a structurally similar check in `src/library/components/chat.ts`
-(`extractFollowUp`) that also pulls `args` out of the same object.
-
-Suggestion: declare a single shared interface and a typed predicate (e.g.
-in `src/runtime/types.ts` or `src/library/types.ts`):
-
-```ts
-export interface ComponentNode {
-  readonly __kind: "Component";
-  readonly name: string;
-  readonly args: ReadonlyArray<unknown>;
-  readonly props?: Record<string, unknown>;
-}
-export const isComponentNode = (v: unknown): v is ComponentNode =>
-  typeof v === "object" && v !== null &&
-  (v as { __kind?: unknown }).__kind === "Component";
-```
-
-Every call site becomes `if (isComponentNode(value)) { … }`, the structural
-cast disappears, and TypeScript narrows `value` to the proper shape.
-
-### 1.8 Repeated "open + outside-click" pattern
-
-The same `useInstanceState<boolean>("open", false)` + `setOpen()` +
-`installDismissListeners(...)` pattern is implemented three times for very
-similar dropdown-style UIs:
-
-- `src/library/components/menu.ts` (`DropdownMenu`, ~L95)
-- `src/library/components/feedback.ts` (`Popover`, ~L605)
-- `src/library/components/forms.ts` (`Combobox`, ~L629)
-
-Suggestion: extract a tiny helper that encapsulates the pattern:
-
-```ts
-function useDismissibleOpen(
-  helpers: RenderHelpers,
-  root: HTMLElement,
-  opts?: { onClose?: () => void },
-): { open: boolean; setOpen: (v: boolean) => void } { … }
-```
-
-This removes ~30 lines of identical wiring per component and centralizes the
-escape-key / outside-click semantics.
-
-### 1.9 Inline `runAction({ kind: "Action", steps: [{ kind: "Set", … }] })`
-
-Repeated 7 times across components (`forms.ts`, `feedback.ts`,
-`navigation.ts`, `chat.ts`, …). Add small builders, e.g. in
-`src/runtime/builtins.ts` next to the action-step types:
-
-```ts
-export const setStateAction = (name: string, value: unknown): ActionPayload =>
-  ({ kind: "Action", steps: [{ kind: "Set", name, value }] });
-
-export const toAssistantAction = (message: string): ActionPayload =>
-  ({ kind: "Action", steps: [{ kind: "ToAssistant", message }] });
-```
-
-Call sites become `helpers.runAction(setStateAction(name, value))`, which
-also makes future changes to the `ActionPayload` envelope a one-line edit.
+**Still open** (not yet implemented): `Effect`/`Watch`, host-registerable builtins, `Query` error surface, virtualization in `DataGrid`, DnD Kanban, full `Notice`/`Header` unification, `ctx.toast()`, anchored `Tour`/`Spotlight`.
 
 ---
 
-## 2. Modernization opportunities
+## Table of contents
 
-### 2.1 `Object.assign({}, x, { … })` → object spread
-
-- `src/prompt/generator.ts` (~L1042)
-- `src/prompt/generator.ts` (~L1130)
-
-```ts
-// before
-todos.map(x => x.id === ctx.args.id ? Object.assign({}, x, { done: !x.done }) : x);
-// after
-todos.map(x => x.id === ctx.args.id ? { ...x, done: !x.done } : x);
-```
-
-These appear inside generated prompt examples (LLM-facing strings) so the
-change also doubles as guidance for what idiom the LLM should emit.
-
-### 2.2 Explicit `any` on the AsyncFunction constructor
-
-- `src/runtime/scripts.ts` (~L283)
-
-```ts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const AsyncFunctionCtor: any = Object.getPrototypeOf(async function () {}).constructor;
-```
-
-Tighten the type and drop the eslint-disable:
-
-```ts
-type AsyncFn = (this: unknown, ...a: unknown[]) => Promise<unknown>;
-type AsyncFnCtor = new (...args: string[]) => AsyncFn;
-const AsyncFunctionCtor =
-  Object.getPrototypeOf(async function () {}).constructor as AsyncFnCtor;
-```
-
-The `tsconfig.json` already sets `"strict": true` and
-`"noUncheckedIndexedAccess": true` — a single typed alias here keeps the
-file consistent with the rest.
-
-### 2.3 One-line wrapper that hides nothing
-
-- `src/runtime/scripts.ts` (~L312):
-
-```ts
-function snapshotState(state: StateStore): Record<string, unknown> {
-  return state.snapshot();
-}
-```
-
-This wrapper has one caller (line 237). Inline it:
-`values: () => opts.state.snapshot()`.
-
-### 2.4 `event.currentTarget ?? event.target` cast
-
-This pattern is repeated 8 times (`forms.ts` ×2, `menu.ts` ×2,
-`feedback.ts` ×2, `layout.ts`, `renderer/renderer.ts`). Centralise:
-
-```ts
-// in src/library/utils.ts
-export const eventTarget = <T extends Element>(event: Event): T | null =>
-  ((event.currentTarget ?? event.target) as T | null);
-```
-
-### 2.5 `Math.max(1, Math.min(N, Math.floor(Number(props.x ?? "auto"))))`
-
-Variants of this appear 4 times in `src/library/components/patterns.ts`
-(L165, L286, L795, L894). Add a typed helper next to `asNumber`:
-
-```ts
-export const clampInt = (value: unknown, min: number, max: number, fallback: number): number => {
-  const n = Math.floor(asNumber(value, fallback));
-  return Math.max(min, Math.min(max, Number.isFinite(n) ? n : fallback));
-};
-```
-
-Removes the `Number(props.x ?? "auto")` idiom (which silently produces `NaN`
-that then has to be clamped) and replaces it with one well-named call.
-
-### 2.6 `Array.isArray(x) ? x : []` inlined despite `asArray` existing
-
-`asArray` (in `src/library/utils.ts`) already does this. There are still
-inlined versions in `src/runtime/builtins.ts` (`toArray`) and
-`src/runtime/evaluator.ts`. Same recommendation as 1.4 — converge on the one
-in `library/utils.ts`.
-
-### 2.7 `switch` ladders that are pure `key -> constant` mappings
-
-The codebase contains several `switch` statements whose only purpose is a
-key-to-constant mapping (no fall-through, no side effects). Beyond the three
-`default*Icon` ones already covered (1.6), candidates worth a second look:
-
-- `compare(op, a, b)` in `src/runtime/builtins.ts` — string switch over 7
-  arms; a `Record<string, (a, b) => boolean>` would let it inline
-  comparisons cleanly and remove the `default: return false` arm.
-- Tone-to-class maps in `feedback.ts` / `patterns.ts`.
-
-Where the body is genuinely a lookup, prefer a `Record<string, T>` with a
-`?? defaultValue` fallback. Where the cases involve real logic (e.g. the
-parser / evaluator dispatch on AST `kind`), keep the `switch` — it gives
-TypeScript exhaustiveness checking that an object lookup cannot.
-
-### 2.8 `import { type X, … }` mixed with `import type { X }`
-
-Most files use `import type` correctly, but a handful (e.g. `runtime/actions.ts`,
-`library/components/router.ts`) mix value and type imports in the same line.
-Splitting them gives slightly cleaner emit and matches the dominant style.
-This is a low-effort lint pass, not a semantic change.
+1. [Executive summary](#executive-summary)
+2. [Language — redundant / optimizable features](#language--redundant--optimizable-features)
+3. [Language — missing features](#language--missing-features)
+4. [Components — redundant / candidates for removal](#components--redundant--candidates-for-removal)
+5. [Components — improvements to existing](#components--improvements-to-existing)
+6. [Components — missing (recommended additions)](#components--missing-recommended-additions)
+7. [Stack & Grid — current limits](#stack--grid--current-limits)
+8. [Stack & Grid — improvement proposals](#stack--grid--improvement-proposals)
+9. [Prioritized roadmap](#prioritized-roadmap)
 
 ---
 
-## 3. Stylistic / consistency cleanups
+## Executive summary
 
-### 3.1 `function` declarations vs arrow `const`
-
-The codebase mixes both:
-
-- `runtime/builtins.ts` defines helpers as `const x = (…) => …`.
-- `runtime/evaluator.ts` and `library/components/content.ts` use
-  `function x(…) { … }` for the same kind of helpers.
-
-Pick one convention per area:
-- **Module-private helpers** → `const x = (…) => …` (matches `builtins.ts`).
-- **Public exports** → `export function x(…)` (better stack traces, hoisting).
-
-This is purely cosmetic but removes a frequent reviewer question.
-
-### 3.2 `interface` vs `type` aliases
-
-The codebase uses both `interface` and `type` for object shapes more or less
-arbitrarily. Recommended convention:
-
-- `interface` for object shapes that may grow (component specs, helpers).
-- `type` for unions, intersections, mapped types, and tuples.
-
-Mostly already followed; a one-pass cleanup in `runtime/builtins.ts`
-(`ActionStep`, `ActionPayload`) would tidy the remaining inconsistencies.
-
-### 3.3 `readonly` on configuration arrays
-
-Several module-level constants are mutable arrays / sets even though they
-are never written to:
-
-- `SAFE_HREF_SCHEMES`, `SAFE_IMAGE_SCHEMES` in `src/library/utils.ts`
-- `componentGroups` in `src/library/index.ts`
-
-Mark them `as const` (for arrays of literals) or `Readonly<…>` so accidental
-mutation surfaces at compile-time.
-
-### 3.4 Empty `catch {}` blocks
-
-There are six `} catch {` swallow-all blocks across `element.ts` (×4),
-`runtime/scripts.ts`, `runtime/evaluator.ts`, `icons/index.ts`,
-`library/components/data.ts`, and `theme/index.ts`. Each one is
-*intentional* (browser-compat fall-throughs, console-only error reporting),
-but they all look identical to a reviewer.
-
-Either:
-- Add a one-line comment on every empty catch explaining *why* it is safe to
-  swallow, or
-- Wrap the pattern in a `safe(fn)` helper that takes a label and a fallback,
-  so intent is encoded in the call site.
-
-### 3.5 Project conventions worth documenting
-
-While reviewing, the following project-wide conventions were already
-followed and are worth capturing in `coding-gen-skill.md` / `README.md` so
-they are preserved:
-
-- No `var` anywhere — `const` / `let` only.
-- No `enum` declarations — preferring `as const` literal unions and
-  `Record<string, …>` lookup tables (this is the right call; `enum` adds
-  runtime weight and is awkward in `"type": "module"` builds).
-- No `namespace` declarations.
-- No `Function` constructor outside the deliberate `AsyncFunctionCtor` in
-  `runtime/scripts.ts`.
-- ESM-only (`"type": "module"`), `target: "ES2022"`, `strict: true`,
-  `noUncheckedIndexedAccess: true`.
-
-Documenting these as explicit project rules makes them easier to enforce in
-review and prevents drift.
+| Area | Finding |
+|------|---------|
+| **Language** | Solid expression grammar and reactive model. Main waste: overlapping builtins (`@Push`/`@Concat` vs spread), eager ternary vs lazy `@If`, and no `obj[key]` / array indexing. |
+| **Components** | ~140 components with many overlapping families (notices, headers, loading, toggles, quotes). Several are pure aliases or one-class wrappers. |
+| **Layout** | `Stack` already has flex-like `align` / `justify` / `wrap`, but lacks `grow`, `basis`, `reverse`, responsive align/justify, and per-child flex. `Grid` is equal-column only — no per-child span or fractional widths (1/2, 1/3, … 1/12). |
+| **DX** | Chat prompt still lists removed components (`Divider`, `Header`, `Tag`, `Alert`, `Note`). Positional-only args are the #1 LLM footgun. |
 
 ---
 
-## 4. Suggested order of execution
+## Language — redundant / optimizable features
 
-If the goal is to land these incrementally without disturbing behaviour:
+### High confidence — safe to deprecate or merge
 
-1. **Pure dedup, no API change** — 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.3.
-2. **New shared helpers, call sites migrate one at a time** — 1.7, 1.9,
-   2.4, 2.5, 2.6.
-3. **Refactors that touch component internals** — 1.8, 2.2.
-4. **Cosmetic / convention** — 2.7, 2.8, 3.1–3.5.
+| Feature | Overlaps with | Recommendation |
+|---------|---------------|----------------|
+| `[...$arr, x]` | `[...$arr, x]` (spread in grammar) | Deprecate; document spread in skill/prompt. |
+| `[...a, ...b]` | `[...a, ...b]` | Deprecate. |
+| `@Slice(arr, 0, n)` | `@Slice(arr, 0, n)` | Remove `@Take`; keep `@Slice` only. |
+| `arr.field` | Array pluck: `$rows.title` (`evaluator.ts`) | Deprecate `@Map`; document pluck as canonical. |
+| `@FormatCurrency` / `@FormatNumber` | `@Format(value, mode, …)` | Merge into `@Format` with clearer param names (avoid overloaded 3rd arg). |
+| `@Camelcase` / `@Snakecase` / `@Kebabcase` / `@Pascalcase` | Same `recase()` helper | Single `@Case(value, "camel"\|"snake"\|…)`. |
+| Eager ternary `a ? b : c` | Lazy `@If(a, b, c)` | Make ternary lazy for UI branches, or restrict ternary to pure values in docs/lint. |
+| `$x` + `$$x` (one namespace) | Could be `$x` + `persistent` flag | Unify sigils long-term; keep `$$` as alias during migration. |
+| `@Each` destructure as string | `"row, {id, name}"` mini-parser | Parse destructuring in main grammar: `@Each($items, {id, name}, row, …)`. |
 
-Each step is independently mergeable and individually testable against the
-existing `vitest` suite — there is no need to bundle them.
+### Medium confidence — simplify authoring surface
+
+| Feature | Issue | Recommendation |
+|---------|-------|----------------|
+| Action step registry duplicated | `builtins.ts` + `evaluator.ts` switch | Single source of truth; generate evaluator dispatch from catalog. |
+| `@Run(name)` bare identifier | Other steps take expressions | Allow `@Run(mutationRef)` or `mutation()`-style for consistency. |
+| `Query` / `Mutation` / `Routes` / `Theme` / `Action` special-cased in evaluator | Parallel to `ComponentNode` union | Model as components or one `MetaNode` type to reduce name-based switches. |
+| `params` for routing | Hard-coded loop-var bind vs `@Each` machinery | Reuse loop-var bind/restore from `@Each`. |
+| Route truth: `Router.currentPath` vs `state.get("route")` | Two sources | Single source: router writes `$route` only. |
+| Chat prompt component list | References `Divider`, `Header`, `Tag`, `TagBlock`, `Alert`, `Note` (removed) | Derive allowlist from library tags or fix list (`Separator`, `TextContent`, `Badge`, `Callout`, …). |
+| Size tokens | `xs/sm/md/lg/xl` vs Button `small/normal/large` vs Skeleton variants | Normalize on `xs–xl`; alias legacy sizes internally. |
+
+### Low priority — document rather than remove
+
+| Feature | Note |
+|---------|------|
+| Macros (single-expression only) | Fine for DSL; document when `@Js` is required. |
+| `null` vs `undefined` | Coerced equally; document for LLMs. |
+| Optional chaining `?.` | Keep; underused in examples. |
+| Template literals | Keep; promote for multi-line `@Js` bodies. |
+
+---
+
+## Language — missing features
+
+### Syntax & expressions (high impact)
+
+| Feature | Why it matters |
+|---------|----------------|
+| **Bracket / computed member access** `obj[$key]`, `arr[$i]` | Dynamic keys today need `@Pick`, `@Switch`, or `@Js`. |
+| **Array index access** `arr[0]`, negative index | Only `.first` / `.last` shortcuts exist. |
+| **Named / keyword arguments** for components | Positional args cause most LLM render bugs; options object as last arg would help. |
+| **Parse-time component name validation** | Typos silently render `null`. |
+| **Lazy ternary** (or lint against eager ternary in UI) | Prevents evaluating branches that reference `@Each` loop vars. |
+
+### String, math, collections (medium impact)
+
+| Feature | Why it matters |
+|---------|----------------|
+| `@Join`, `@Split`, `@Trim`, `@Replace`, `@Substring` | Trivial string ops force `@Js`. |
+| `@Contains`, `@StartsWith`, `@EndsWith` | Filter/search UIs. |
+| `@Match` / regex helper | Validation, parsing. |
+| `@Pow`, `@Sqrt`, `@Random`, `@Log` | Charts and simulations. |
+| `@FilterBy(arr, predicate)` or expression predicates | `(field, op, value)` triple is limiting. |
+| `@DiffDays`, `@AddHours`, `@StartOfWeek`, `@EndOfMonth` | Scheduling beyond `@AddDays`. |
+
+### Runtime & DX (medium impact)
+
+| Feature | Why it matters |
+|---------|----------------|
+| **`Query` error surface** (`$queryError`, `loading`, `empty`) | Failures silently fall back to defaults. |
+| **`@Const` / one-shot bindings** | Recompute everything on every dep change. |
+| **`Effect` / `Watch($x, fn)`** | Lighter than `Script("id", …)` for simple side effects. |
+| **Host-registerable `@` builtins** with dep tracking | Extensibility without `@Js`. |
+| **Scoped namespaces** per response region | Flat namespace collisions in large apps. |
+| **Structured action logging** | Host observability beyond `assistant-message`. |
+| **Source locations in runtime errors** | `ComponentNode.source` exists but underused. |
+
+### Async (lower priority for v1)
+
+| Feature | Why it matters |
+|---------|----------------|
+| Declarative `await` in expressions | Only `@Js` can await today. |
+| `try` / `catch` in actions | Multi-step flows with failure branches. |
+
+---
+
+## Components — redundant / candidates for removal
+
+> **Policy:** Prefer deprecation + aliases over hard breaks. Update `coding-gen-skill.md`, README, and prompts when removing.
+
+### Remove or alias (high confidence)
+
+| Component | Reason | Replacement |
+|-----------|--------|-------------|
+| `Drawer` | Literal alias of `Sheet` (`advanced-patterns.ts`) | Keep `Drawer` as canonical name; make `Sheet` the alias (docs already prefer `Drawer`). |
+| `BreadcrumbPageHeader` | Calls `PageHeader.render` with derived breadcrumbs | `PageHeader(breadcrumbs=path, …)` or snippet only. |
+| `Toasts` | `Toast(position=…)` already pins to viewport | Document `Toast` list pattern; deprecate `Toasts`. |
+| `StepsItem` | Marked back-compat; `Steps` accepts object items | Remove from prompt; keep render compat. |
+| `Section` | Thin `<section>` + optional `<h3>` | `Card` + `SectionHeader` or `Container`. |
+| `CardBody` | One-class wrapper | Children directly in `Card`. |
+| `Toggle` (standalone) | Overlaps `Switch` | `Switch` for booleans; keep `ToggleGroup` only if needed. |
+| `SegmentedControl` **or** `ToggleGroup` | Same “pick one of N” model | Pick one; deprecate the other. |
+| `OtpInput` | Documented as canonical 6-digit `PinInput` | `PinInput(length=6, autocomplete=one-time-code)`. |
+| `LineChart` + `AreaChart` | Same data; `filled` flag differs | `LineChart(…, filled=true)`. |
+| `AuditTrail` | Nearly identical to `ActivityLog` (+ `meta`, monospace CSS) | `ActivityLog(variant="audit", …)`. |
+| `Hero` **or** `Cover` | Same marketing header family | `Hero(media=imageSrc, …)` with optional background. |
+| `MetricGrid` **or** `Stats` | Both render KPI rows | `Stats(items, layout="grid"\|"strip")`. |
+
+### Consolidate families (medium confidence)
+
+| Family | Overlap | Suggestion |
+|--------|---------|------------|
+| **Notices** | `Banner`, `Callout`, `Notification`, `Toast` | One `Notice` with `placement` + `dismissible`; keep thin aliases. |
+| **Quotes** | `Quote`, `Testimonial`, `Comment`, `ChatBubble` | `Quote` + `author` / `role` / `rating` / `from` props. |
+| **Loading** | `Spinner`, `Skeleton`, `Progress(indeterminate)`, `ProgressRing(indeterminate)`, `LoadingState` | Document decision tree; merge tiny inline cases. |
+| **Headers** | `PageHeader`, `SectionHeader`, `TopBar`, `Navbar` | `Header(level="page"\|"section"\|"bar", …)`. |
+| **Feeds** | `Timeline`, `ActivityLog`, `AuditTrail` | `Timeline(entries, variant="activity"\|"audit")`. |
+| **Tables** | `Table`, `DataGrid` | `Table(mode="advanced", sort, filter, …)` or keep both with clearer “when to use”. |
+| **Multi-select** | `MultiSelect`, `CheckBoxGroup` | Same bound array; differ only in UI chrome. |
+| **Combobox** | `Combobox`, `Select` + filter | `Select(searchable=true)`. |
+
+### Thin child components (low priority — expand object shorthand instead)
+
+Consider accepting `{label, …}` objects on parents (like `Steps`, `Breadcrumb`, `Toolbar` already do) and stop prompting for: `SelectItem`, `CheckBoxItem`, `FollowUpItem`, `FeatureItem`, `TimelineItem`, `KanbanCard`, `KanbanColumn`, `PricingCard`, `DescriptionItem`, `MenuItem` (keep for `DropdownMenu` slot typing if needed).
+
+---
+
+## Components — improvements to existing
+
+| Component | Improvement |
+|-----------|-------------|
+| **`Button`** | `loading=true`, `iconOnly=true`, `iconPosition`, `fullWidth`; unify size to `xs–xl`. |
+| **`Form` / `FormControl`** | Per-field `error` prop; bind validation to `$errors` map; async validator hook via `@Js` or builtin. |
+| **`DataGrid`** | Optional inline cell edit; column resize; export CSV action slot. |
+| **`Table` / `Col`** | `Col(width?, minWidth?, sticky?)`; document that sort/filter props apply only in `DataGrid`. |
+| **`KanbanBoard`** | Drag-and-drop reorder (even column-only); `onMove` action. |
+| **`InfiniteList`** | True windowing / virtualization for 1k+ rows. |
+| **`Markdown`** | `copyable` on fenced blocks to reduce `CodeBlock` usage. |
+| **`EmptyState`** | Built-in illustration presets (not just keyword icons). |
+| **`Tour` / `Spotlight`** | Anchor to selector / ref, not only centered overlay. |
+| **`Toast`** | `ctx.toast({ title, tone })` from `Script` / `@Js`. |
+| **`SearchBar`** | Optional `CommandPalette` mode (modal + fuzzy list). |
+| **`Rating`** | Already strong; expose in chat prompt. |
+| **`FileUpload`** | Progress per file; preview thumbnails. |
+| **`CalendarView`** | Drag to create events; week/day density. |
+| **`RichTextEditor`** | Markdown round-trip or `MarkdownEditor` variant. |
+| **All form inputs** | Consistent `disabled`, `readOnly`, `hint`, `error` slots on every control. |
+
+---
+
+## Components — missing (recommended additions)
+
+### Tier 1 — unlock most SaaS layouts
+
+| Component | Purpose |
+|-----------|---------|
+| **`GridItem` / `Col` layout child** | Per-child `span`, `offset`, `width` (see Stack & Grid section). |
+| **`Flex` / enhanced `Stack`** | Full flexbox surface (grow, shrink, basis, order). |
+| **`Box`** | Padding, margin, border, background semantic tokens — layout spacing without raw CSS. |
+| **`IconButton`** | Icon-only `Button` with accessible `label`. |
+| **`CommandPalette`** | Cmd-K searchable actions (complements `SearchBar`). |
+| **`FilterChips`** | Applied filters with remove + clear-all. |
+| **`FieldRepeater`** | Dynamic add/remove rows (line items, contacts). |
+
+### Tier 2 — data-heavy & admin UIs
+
+| Component | Purpose |
+|-----------|---------|
+| **`VirtualList` / `VirtualTable`** | Performance for large datasets. |
+| **`QueryBuilder`** | Visual AND/OR filter builder. |
+| **`DiffViewer`** | Side-by-side or unified diff. |
+| **`JsonTree`** | Collapsible object/array inspector. |
+| **`EditableCell` / `EditableGrid`** | Spreadsheet-style editing. |
+| **`Gantt` / `ScheduleTimeline`** | Horizontal task timeline (beyond `CalendarView`). |
+
+### Tier 3 — polish & niche
+
+| Component | Purpose |
+|-----------|---------|
+| **`Truncate` / `ShowMore`** | Long text collapse. |
+| **`InlineEdit`** | Click-to-edit single line. |
+| **`ImageCropper` / `SignaturePad`** | Capture flows. |
+| **`FlowChart` / `NodeGraph`** | Simple diagrams (nodes + edges). |
+| **`PresenceAvatars`** | Live “viewing” strip. |
+| **`NotificationBell`** | Compact inbox trigger → `InboxPanel`. |
+| **`MarkdownEditor`** | WYSIWYG or split preview. |
+| **`PivotTable`** | Cross-tab summaries. |
+
+---
+
+## Stack & Grid — current limits
+
+### `Stack` today (`layout.ts`, `styles.ts`)
+
+**Props:** `children`, `direction` (`column` \| `row` + responsive map), `gap` (xs–xl + responsive), `align` (`start` \| `center` \| `end` \| `stretch`), `justify` (`start` \| `center` \| `end` \| `between` \| `around`), `wrap` (boolean).
+
+**Already works:** Basic flexbox main/cross alignment, responsive direction/gap via CSS variables, wrap.
+
+**Gaps vs typical flexbox / layout needs:**
+
+| Gap | Impact |
+|-----|--------|
+| No `align` / `justify` responsive maps | Can't center on mobile, space-between on desktop without nested stacks. |
+| No `gap` as raw CSS length in docs (only tokens) | Fine for themes; document raw lengths where supported. |
+| No `reverse` | Common for chat timelines (column-reverse). |
+| No per-child `grow` / `shrink` / `basis` / `alignSelf` | Row stacks force `flex: 1 1 auto` on all children (`styles.ts:155`) — breaks toolbars (partially patched for badges/icons). |
+| No `inline` stack | Inline flex for chip rows next to text. |
+| No `padding` / `maxWidth` on container | Authors nest `Container` + `Stack` manually. |
+| `justify: "around"` only | Missing `evenly` (`space-evenly`). |
+| No `alignContent` for multi-line wrap | Wrapped rows can't align as a group. |
+
+### `Grid` today (`layout.ts`, `styles.ts`)
+
+**Props:** `children`, `columns` (1–12 or responsive map), `gap`, `minItemWidth` (auto-fit fallback).
+
+**Already works:** Equal-width columns, responsive column counts, auto-fit card walls.
+
+**Gaps vs Bootstrap / CSS Grid layouts:**
+
+| Gap | Impact |
+|-----|--------|
+| **Equal columns only** | Cannot do sidebar (1/4) + main (3/4) or asymmetric dashboards. |
+| **No per-child span** | No “this card spans 2 columns”. |
+| **No fractional widths** | No 1/2, 1/3, …, 1/12 per column or per child. |
+| **No row gap / column gap split** | Single `gap` only. |
+| **No `areas` / named template** | App shells need nested grids. |
+| **No `alignItems` / `justifyItems`** | Cell content alignment inside grid cells. |
+| **`minItemWidth` ignored when `columns` set** | Can't combine fixed column count with min child width. |
+| **No `Container` integration** | Page width vs grid width left to author. |
+
+---
+
+## Stack & Grid — improvement proposals
+
+### A. Enhance `Stack` (flexbox-complete for LLM authoring)
+
+#### A.1 New props (container)
+
+| Prop | Values | Maps to |
+|------|--------|---------|
+| `reverse` | `boolean` | `flex-direction: *-reverse` |
+| `justify` | add `evenly` | `space-evenly` |
+| `alignContent` | `start` \| `center` \| `end` \| `between` \| `around` \| `stretch` | Multi-line wrap alignment |
+| `align` / `justify` | responsive maps `{ sm: "center", lg: "between" }` | Same pattern as `direction` |
+| `padding` | `none` \| `xs`–`xl` \| responsive map | Theme spacing on container |
+| `inline` | `boolean` | `display: inline-flex` |
+
+#### A.2 New component: `StackItem` (or `FlexItem`)
+
+Wrap any child to control flex item without `@Js`:
+
+```text
+Stack(direction="row", justify="between", [
+  StackItem(child, grow=0),
+  Logo(),
+  StackItem(child, grow=1),
+  SearchBar(...),
+  StackItem(child, grow=0),
+  Avatar(...)
+])
+```
+
+| `StackItem` prop | Values |
+|----------------|--------|
+| `grow` | `0` \| `1` \| number |
+| `shrink` | `0` \| `1` |
+| `basis` | `auto` \| `0` \| CSS length |
+| `alignSelf` | `start` \| `center` \| `end` \| `stretch` |
+| `order` | number |
+| `minWidth` / `maxWidth` | CSS length |
+
+**Implementation:** Render wrapper `div.rui-stack-item` with `data-grow`, etc.; CSS maps to flex longhands. Default row-stack rule `> * { flex: 1 1 auto }` becomes `> *:not(.rui-stack-item)` or only when `uniform=true` on `Stack`.
+
+#### A.3 `Stack(uniform?)`
+
+- `uniform=true` (default for backward compat on row): children share space equally.
+- `uniform=false`: children size to content unless wrapped in `StackItem`.
+
+---
+
+### B. Enhance `Grid` (12-column + spans)
+
+#### B.1 Twelve-column system (Bootstrap-like)
+
+Introduce constant `GRID_COLUMNS = 12`. Two authoring styles (pick one primary for LLMs):
+
+**Style 1 — `Grid` + `GridItem` (recommended for LLMs)**
+
+```text
+Grid(columns=12, gap="m", [
+  GridItem(child, span=3),   // sidebar 3/12
+  SidebarNav(),
+  GridItem(child, span=9),   // main 9/12
+  MainContent()
+])
+```
+
+**Style 2 — shorthand on `Grid` children via array of specs**
+
+```text
+Grid([
+  { span: 3, content: SidebarNav() },
+  { span: 9, content: MainContent() }
+])
+```
+
+#### B.2 `GridItem` props
+
+| Prop | Description |
+|------|-------------|
+| `span` | Columns occupied at `base` (1–12) |
+| `offset` | Empty columns before item (0–11) |
+| `spanAt` / responsive map | `{ sm: 12, md: 6, lg: 4 }` → CSS vars `--rui-grid-span-sm: 6` |
+| `start` / `end` | Optional line-based placement (advanced) |
+| `align` / `justify` | Item-level cell alignment |
+
+**CSS approach:** Parent `display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));` Children `grid-column: span var(--rui-grid-item-span, 1)`.
+
+#### B.3 Fractional width aliases (authoring sugar)
+
+Accept string fractions on `GridItem` / `span`:
+
+| Author writes | Resolved span (12-col) |
+|---------------|------------------------|
+| `"1/2"` | 6 |
+| `"1/3"` | 4 |
+| `"2/3"` | 8 |
+| `"1/4"` | 3 |
+| `"3/4"` | 9 |
+| `"1/5"` | `round(12/5)` → document as 2 or use subgrid |
+| `"1/6"` | 2 |
+| `"1/12"` … `"11/12"` | 1 … 11 |
+
+Parser: `span="1/3"` → integer 4 at render time. Document table in skill file.
+
+#### B.4 Keep existing `Grid(columns=n)` for equal columns
+
+- `columns=4` → `repeat(4, 1fr)` (unchanged).
+- `columns=12` + `GridItem(span=…)` → explicit 12-col mode (`data-grid-mode="12"`).
+- When any child is `GridItem`, auto-enable 12-col mode if `columns` omitted.
+
+#### B.5 Additional `Grid` container props
+
+| Prop | Purpose |
+|------|---------|
+| `rows` | Fixed row count or `auto` |
+| `rowGap` / `columnGap` | Split gaps (fallback to `gap`) |
+| `alignItems` / `justifyItems` | Cell content alignment |
+| `dense` | `grid-auto-flow: dense` for masonry-like packing |
+| `minChildWidth` + `columns` | `repeat(auto-fill, minmax(min, 1fr))` with max column cap |
+
+---
+
+### C. Unified layout primitives (optional long-term)
+
+| Primitive | Role |
+|-----------|------|
+| `Stack` | 1D flex |
+| `Grid` | 2D equal or 12-col |
+| `Box` | Spacing/surface wrapper |
+| `Container` | Max-width page centering (exists) |
+| `Split` | Alias for `ResizablePanels` or `SplitView` |
+
+Document in skill: **“Pick Grid for 2D; Stack for 1D; never use `Stack(row, wrap=true)` for uniform tiles — use `Grid`.”**
+
+---
+
+### D. Example patterns after improvements
+
+**Dashboard sidebar + main**
+
+```text
+root = Grid(columns=12, gap="l", [
+  GridItem(Sidebar(), span="1/4"),
+  GridItem(Stack([PageHeader(...), content]), span="3/4")
+])
+```
+
+**Responsive marketing features**
+
+```text
+Grid(columns=12, gap="m", [
+  GridItem(FeatureCard(...), spanAt={ base: 12, md: 6, lg: 4 }),
+  GridItem(FeatureCard(...), spanAt={ base: 12, md: 6, lg: 4 }),
+  GridItem(FeatureCard(...), spanAt={ base: 12, md: 6, lg: 4 })
+])
+```
+
+**Toolbar (no unwanted flex grow)**
+
+```text
+Stack(direction="row", justify="between", uniform=false, [
+  StackItem(Stack(direction="row", [filters...]), grow=0),
+  StackItem(SearchBar(...), grow=1),
+  StackItem(Button("Save"), grow=0)
+])
+```
+
+---
+
+## Prioritized roadmap
+
+### Phase 1 — Quick wins (docs + prompt, no breaking changes)
+
+1. Fix chat prompt dead component names (`generator.ts`).
+2. Document Stack/Grid decision tree + existing `align`/`justify`.
+3. Document array pluck vs `@Map`, spread vs `@Push`/`@Concat`.
+4. Add “notice / loading / header” decision trees to `coding-gen-skill.md`.
+
+### Phase 2 — Layout (highest user value)
+
+1. `GridItem` with `span` / `offset` + 12-column mode.
+2. Fractional aliases (`"1/2"`, `"1/3"`, … `"1/12"`).
+3. `StackItem` with `grow` / `shrink` / `alignSelf`.
+4. `Stack(uniform=false)` + fix row flex defaults.
+5. Responsive `align` / `justify` on `Stack`.
+
+### Phase 3 — Language ergonomics
+
+1. Bracket access `obj[key]`, `arr[i]`.
+2. Named args or trailing options object for components.
+3. Lazy ternary or lint rule.
+4. Deprecate redundant builtins (`@Push`, `@Take`, …).
+
+### Phase 4 — Component consolidation
+
+1. Merge notice/quote/loading families behind aliases.
+2. Remove `Drawer`/`Sheet` duplication (one canonical).
+3. Add Tier 1 missing components (`IconButton`, `CommandPalette`, `FieldRepeater`, …).
+
+### Phase 5 — Advanced
+
+1. Virtualized lists/tables.
+2. DnD Kanban.
+3. Host-registerable builtins.
+4. Form validation model.
+
+---
+
+## Appendix — inventory snapshot
+
+| Category | Count (approx.) |
+|----------|-----------------|
+| Registered components | ~140 |
+| Data `@` builtins | ~45 |
+| Action / iteration builtins | `@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`, `@Each`, `@If`, `@Switch` |
+| Built-in themes | 7 |
+| Responsive breakpoints | `base`, `sm`, `md`, `lg`, `xl` |
+
+**Files reviewed:** `src/parser/*`, `src/runtime/*`, `src/library/**`, `src/theme/*`, `src/prompt/generator.ts`, `coding-gen-skill.md`, `src/theme/styles.ts` (Stack/Grid CSS).
+
+---
+
+*This document is advisory. Implementation should pair each change with tests (`tests/library.test.ts`, `tests/new-language-features.test.ts`, `tests/demos.test.ts`) and sync `coding-gen-skill.md` + `README.md` per workspace rules.*

@@ -125,32 +125,6 @@ export const PinInput: ComponentSpec = {
   },
 };
 
-export const OtpInput: ComponentSpec = {
-  name: "OtpInput",
-  description:
-    "One-time-password input — the canonical 6-digit `PinInput` with " +
-    "`autocomplete=\"one-time-code\"` set so iOS/Android offer to fill " +
-    "in SMS codes. Pass a `$variable` as `value` for two-way binding.",
-  props: [
-    { name: "id", type: "string" },
-    { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
-    { name: "length", type: "number", optional: true, description: "Number of digits (default 6)" },
-    { name: "disabled", type: "boolean", optional: true },
-  ],
-  render: (node, props, helpers) => {
-    const id = asString(props.id);
-    const length = Math.max(4, Math.min(12, Math.floor(asNumber(props.length, 6))));
-    const value = asString(props.value);
-    const disabled = asBoolean(props.disabled);
-    const stateName = node.argMeta?.[1]?.stateRef;
-    return renderPin(id, length, "numeric", value, disabled, false, (next) => {
-      if (stateName) {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: next }] });
-      }
-    });
-  },
-};
-
 /* ----------------------------------------------------------------------- *
  * PasswordInput
  * ----------------------------------------------------------------------- */

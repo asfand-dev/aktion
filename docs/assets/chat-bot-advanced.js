@@ -1,17 +1,17 @@
 /**
  * Advanced chat bot — production-grade multi-stage LLM pipeline.
  *
- * Per user prompt the pipeline runs FOUR sequential LLM calls:
+ * Per user prompt the pipeline runs THREE sequential LLM calls:
  *
- *   1. Intent + persona brief        →  small JSON brief
- *   2. Information architecture      →  JSON blueprint (pages, sections,
- *                                       data schemas, sample records,
- *                                       navigation, KPIs, actions)
- *   3. Brand theme                   →  single `theme = Theme({...})` line
- *   4. Intent-specific UI generator  →  streaming Streaming UI Script
+ *   1. Intent + persona + brand theme  →  JSON brief (includes Theme tokens)
+ *   2. Information architecture        →  JSON blueprint (pages, sections,
+ *                                         data schemas, sample records,
+ *                                         navigation, KPIs, actions)
+ *   3. Intent-specific UI generator    →  streaming Streaming UI Script
  *
- * After a turn the user can refine it in place — a fifth-style edit call
- * that rewrites the program using the previous code as a starting point.
+ * The user's original prompt is passed verbatim to blueprint and UI stages
+ * (no intermediate prompt rewriting). After a turn the user can refine in
+ * place — an edit call that rewrites the program from the previous source.
  *
  * The pipeline covers 14+ intents (dashboard, app, website, landing,
  * storefront, crm, booking, directory, portfolio, docs, form, data-view,
@@ -53,9 +53,9 @@ const INTENT_KEYS = [
   "form", "data-view", "profile", "chat", "generic",
 ];
 
-const INTENT_SYSTEM_PROMPT = `You are a senior product manager classifying a user's "build me X" request for a generative UI system. Your job is to produce a tight JSON brief that downstream stages will use to plan the information architecture, design the brand, and generate the UI.
+const INTENT_SYSTEM_PROMPT = `You are a senior product manager and brand designer classifying a user's "build me X" request for a generative UI system. Your job is to produce a tight JSON brief — including a complete brand theme — that downstream stages will use to plan the information architecture and generate the UI.
 
-Return ONLY one JSON object. No markdown, no commentary, no code fences.
+Return ONLY one JSON object. No markdown, no commentary, no code fences. Do NOT rewrite or polish the user's prompt; downstream stages receive their exact words.
 
 Schema:
 {
@@ -71,8 +71,23 @@ Schema:
   "locale": string,             // BCP-47 like "en-US", "en-GB", "de-DE", "fr-FR" — defaults to "en-US"
   "currency": string,           // ISO 4217 like "USD", "EUR", "GBP" — defaults to "USD"
   "needsMockData": boolean,     // true unless the user already provided data
-  "refinedPrompt": string       // a polished 3–7 sentence rewrite of the request that an LLM can implement directly. Mention pages, sections, sample fields, layout cues, and tone.
+  "theme": {                    // brand tokens for Theme({...}) — ALL required keys below
+    "colorPrimary": string, "colorPrimaryHover": string, "colorAccent": string,
+    "colorBg": string, "colorBgSubtle": string, "colorSurface": string,
+    "colorText": string, "colorTextMuted": string, "colorBorder": string,
+    "colorSuccess": string, "colorWarning": string, "colorDanger": string,
+    "fontFamily": string, "fontFamilyHeading": string, "fontSizeBase": string,
+    "radiusButton": string, "radiusMd": string, "shadowMd": string,
+    "buttonFontWeight": string,
+    "chart1": string, "chart2": string, "chart3": string, "chart4": string
+  }
 }
+
+Theme token rules (every value is a CSS string — hex colors in quotes like "#0969da", radii like "8px", font stacks as full quoted CSS stacks):
+- Match palette to industry, brand, and tone (fintech ≠ kids ≠ luxury ≠ developer tools).
+- Primary color must have WCAG-acceptable contrast against colorBg.
+- Font stack must fit the brand: Inter/system for tech, Georgia/serif for editorial/luxury, rounded sans for friendly products, mono accents for developer tools.
+- Keep radii consistent. Chart palette is 4 coherent hues.
 
 Intent rubric (pick the MOST specific that fits):
 - "dashboard"  — analytics/admin/reports surface with KPIs, charts, tables, filters
@@ -92,6 +107,17 @@ Intent rubric (pick the MOST specific that fits):
 - "generic"    — only when nothing else clearly fits
 
 Industry tips: pick the closest vertical so the downstream stages can seed realistic data. Match locale + currency to the user's market if mentioned (default en-US/USD).`;
+
+/* Theme token keys the brief must populate (used when building theme = Theme({...})). */
+const REQUIRED_THEME_KEYS = [
+  "colorPrimary", "colorPrimaryHover", "colorAccent",
+  "colorBg", "colorBgSubtle", "colorSurface",
+  "colorText", "colorTextMuted", "colorBorder",
+  "colorSuccess", "colorWarning", "colorDanger",
+  "fontFamily", "fontFamilyHeading", "fontSizeBase",
+  "radiusButton", "radiusMd", "shadowMd", "buttonFontWeight",
+  "chart1", "chart2", "chart3", "chart4",
+];
 
 /* ---------------------------------------------------------------------------
    Stage 2 — Information architecture blueprint
@@ -152,6 +178,8 @@ Schema:
 
 Rules:
 - Tailor every field to the brief's industry, locale, currency, audience, tone.
+- COMPLETENESS — navigation must include every page path exactly once (label + path + icon). Every page in \`pages\` must appear in \`navigation\`. No orphan routes and no nav links without a matching page.
+- primaryActions must list every top-level CTA the UI needs (Create, Export, Book, Checkout, …) so the generator can wire them all.
 - Sample data is REALISTIC: real-looking names, dates within the last 12 months, plausible statuses, locale-appropriate addresses and currency formatting.
 - Page count by intent:
     landing / data-view / form / profile / chat                   → 1
@@ -168,53 +196,7 @@ Rules:
 - Output JSON ONLY.`;
 
 /* ---------------------------------------------------------------------------
-   Stage 3 — Theme generator
-   --------------------------------------------------------------------------- */
-
-const THEME_SYSTEM_PROMPT = `You are a senior brand designer producing a single Theme({...}) call for Streaming UI Script. Output ONLY ONE LINE of code, starting with \`theme = Theme({\` and ending with \`})\`. No commentary, no markdown, no fences.
-
-Available tokens (use the ones that match the brand; omit the rest):
-
-Surface:
-  colorBg, colorBgSubtle, colorSurface, colorSurfaceMuted,
-  colorBorder, colorBorderSubtle, colorText, colorTextMuted
-
-Brand & semantic:
-  colorPrimary, colorPrimaryHover, colorPrimaryText,
-  colorAccent, colorAccentHover, colorAccentText, colorFocusRing,
-  colorSuccess, colorWarning, colorDanger, colorInfo
-
-Typography:
-  fontFamily, fontFamilyHeading, fontFamilyMono,
-  fontSizeBase, fontSizeHeading, fontSizeTitle,
-  fontWeightBody, fontWeightHeading,
-  lineHeightBody, lineHeightHeading,
-  letterSpacingHeading, headingTextTransform
-
-Shape:
-  radiusXs, radiusSm, radiusMd, radiusLg, radiusPill,
-  radiusButton, radiusInput, borderWidth,
-  shadowSm, shadowMd, shadowLg
-
-Spacing:  spacingXs, spacingS, spacingM, spacingL, spacingXl
-Buttons:  buttonFontWeight, buttonTextTransform, buttonLetterSpacing, buttonPaddingY, buttonPaddingX
-Motion:   transitionDuration
-Charts:   chart1, chart2, chart3, chart4, chart5, chart6
-
-Value format: every value is a CSS string. Colors are hex (\`"#0969da"\`) or rgba. Radii are pixel/string values (\`"6px"\`, \`"980px"\`). Weights are quoted numerics (\`"500"\`). Fonts are full quoted CSS font stacks. Use SINGLE quotes inside font strings when you need to nest quotes.
-
-Required tokens (always include at least these): colorPrimary, colorPrimaryHover, colorAccent, colorBg, colorBgSubtle, colorSurface, colorText, colorTextMuted, colorBorder, colorSuccess, colorWarning, colorDanger, fontFamily, fontFamilyHeading, fontSizeBase, radiusButton, radiusMd, shadowMd, buttonFontWeight, chart1, chart2, chart3, chart4.
-
-Rules:
-1. Match the palette to the brief's industry, brand, tone (fintech ≠ kids ≠ luxury ≠ developer tools).
-2. Primary color must have WCAG-acceptable contrast against colorBg.
-3. Font stack must fit the brand: Inter/Sohne/system for tech, Georgia/serif for editorial/luxury, rounded sans for friendly/family products, mono accents for developer tools.
-4. Keep radii consistent across the design (do not mix 4px and 24px without intent).
-5. Chart palette is 4–6 coherent hues that read well next to each other.
-6. Output ONE physical line. No newlines inside the object literal.`;
-
-/* ---------------------------------------------------------------------------
-   Stage 5 — Refine (edit existing program)
+   Refine (edit existing program)
    --------------------------------------------------------------------------- */
 
 const REFINE_SYSTEM_PROMPT = `You are an expert Streaming UI Script editor. Given the current program and a change request from the user, output the COMPLETE updated program with the change applied.
@@ -227,6 +209,7 @@ Hard rules:
 - Preserve sample data unless the user asks to change it. Mock data realism matters — keep it consistent.
 - Carry routing/state ($state variables) through unchanged unless the user asks to change them.
 - Every statement on its own line. Order: \`theme = ...\` (if present), \`root = ...\`, then named definitions, then leaf data values last.
+- Never use \`@ToAssistant(...)\` or \`FollowUpBlock\`. Every control must perform a real in-app action.
 - If the user asks for a completely different page, you may rewrite the program — but keep the same theme line and the same brand identity unless told otherwise.`;
 
 /* ---------------------------------------------------------------------------
@@ -239,20 +222,22 @@ Hard rules:
  */
 const SHARED_PRODUCTION_RULES = [
   "PRODUCTION QUALITY — the generated UI must be ready to host as a real product, not a demo. Real microcopy, plausible mock data, working interactions, polished typography and spacing.",
+  "STANDALONE PRODUCT — this ships as a hostable website or application, not a chat-embedded snippet. Never use `@ToAssistant(...)` or `FollowUpBlock`. Do not delegate actions back to an LLM.",
   "ACCESSIBILITY — every Input/Select/TextArea has a label via `FormControl(...)`. Every Image carries an alt sentence. Icon-only buttons get an aria-label-style `tooltip` prop where the component supports one. Never use color alone to convey state — pair with text/icon.",
   "RESPONSIVE BY DEFAULT — prefer **responsive prop maps** on layout components: `Grid(items, {sm: 1, md: 2, lg: 4}, \"l\")` and `Stack(children, {sm: \"column\", md: \"row\"}, \"m\")`. Wrap reading surfaces in `Container(content, 'lg'|'md')`. Tables are horizontally scrollable.",
-  "WORKING INTERACTIONS — every visible button has an `Action([...])` (or routes via `@Navigate`). Forms submit into `$state`. No dead buttons. Use `Script(\"id\", body)` for derived/computed values.",
+  "WORKING INTERACTIONS — every visible button, link, menu item, and row action has a real `Action([...])` chain: `@Navigate`, `@Set`, `@Run`, `@OpenUrl`, `@Js`, or UI state that visibly updates (Sheet/Dialog/Alert). Forms submit into `$state` and show success feedback. No dead or placeholder controls.",
+  "NAVIGATION COMPLETENESS — every `NavLink`, `SidebarItem`, footer link, and menu entry must go somewhere real: a `Route`, an in-page anchor, a `Sheet`, or a `Dialog`. Multi-page apps use `Routes([...])` covering every nav item plus `Route(\"*\", notFoundPage)`. Never show a link that does nothing.",
   "REAL COPY — never write Lorem Ipsum. Hero headlines, feature descriptions, testimonials, sample table rows are believable and on-brand for the industry.",
   "ICONS — every `StatCard`/`FeatureItem`/`Banner`/`Tile`/`SidebarItem` carries a Font Awesome icon name (no `fa-` prefix). Status conveyed via `Badge`/`Tag`/`StatusDot`.",
   "DENSITY — match the page-type minimum: dashboards 6+ sections, app pages 5+, marketing pages 5+. A single Card is never enough for a page-shaped request.",
-  "FOLLOW-UPS — end the response with a `FollowUpBlock` of 3–4 short prompts the user can click to iterate (e.g. \"Add a pricing page\", \"Switch to dark mode\", \"Translate to Spanish\").",
+  "FEATURE COMPLETENESS — implement the full surface from the blueprint: every page, nav item, primary action, filter, KPI, and schema the plan lists. Omitting a planned page or leaving a CTA unwired is a failure.",
   // Modern-language nudges (these prevent the LLM from emitting verbose, hard-to-stream patterns).
   "PERSIST USER PREFERENCES — anything the user expects to find again after a reload (`$$theme`, `$$sidebarCollapsed`, `$$lastRoute`, `$$selectedId`, `$$cart`, `$$sort`, draft form values) uses the `$$variable` sigil so it survives via `localStorage`. Same read/write surface as `$`.",
   "LAZY CONTROL FLOW — replace nested ternaries with `@Switch(value, {key1: branch1, key2: branch2}, default)` for tabs/views, and `@If(cond, then, else?)` for empty states. Branches are evaluated lazily so loop variables stay safe.",
-  "TEMPLATE LITERALS — any string that mixes copy with values uses backtick interpolation: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@FormatCurrency(@Sum(rows.total), \"USD\")}` ``. Never write `\"…\" + … + \"…\"` concatenation.",
+  "TEMPLATE LITERALS — any string that mixes copy with values uses backtick interpolation: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@Format(@Sum(rows.total, \"currency\", \"USD\"), \"USD\")}` ``. Never write `\"…\" + … + \"…\"` concatenation.",
   "MACROS FOR REPEATED CARDS/ROWS — define once, call many times. Example: `RowCard(p) = Card([Avatar(p.name), TextContent(p.role)])` then `@Each($people, \"p\", RowCard(p))`. Macros are the cleanest way to keep a list of cards visually consistent.",
   "DESTRUCTURE LOOP VARS — `@Each($users, \"{id, name, role}\", row)` exposes fields directly inside `row`, no `u.` prefix. Use it whenever a row template touches 2+ fields.",
-  "FORMATTING BUILTINS — use `@FormatCurrency(n, code)`, `@FormatNumber(n)`, `@FormatDate(d, mode)`, `@Plural(n, sing, pl)`, `@Titlecase(s)`/`@Uppercase(s)` to keep numbers/dates/text locale-friendly and consistent.",
+  "FORMATTING BUILTINS — use `@Format(n, code, \"currency\", \"USD\")`, `@Format(n, \"number\")`, `@FormatDate(d, mode)`, `@Plural(n, sing, pl)`, `@Titlecase(s)`/`@Uppercase(s)` to keep numbers/dates/text locale-friendly and consistent.",
 ];
 
 const INTENT_GENERATORS = {
@@ -271,7 +256,8 @@ const INTENT_GENERATORS = {
       "You are a generative UI designer producing a single rich, production-grade analytics dashboard in Streaming UI Script. The reply MUST be a complete dashboard surface — not a single Card and not a chat bubble.",
     rules: [
       "DASHBOARD MODE — open with a `PageHeader` (title + subtitle + 1–2 status `Badge`/`Tag` + 1–3 action `Button`s).",
-      "Compose 6+ named sections: `PageHeader`, `Toolbar` (with `SearchBar` + filter chips + date range), `MetricGrid` of 4–6 `StatCard`s with trend deltas and icons, a primary chart (`LineChart`/`BarChart`), a secondary chart or `KanbanBoard`, a `Table` of recent records, a side `List`/`Timeline` of activity, and a final `FollowUpBlock`.",
+      "Compose 6+ named sections: `PageHeader`, `Toolbar` (with `SearchBar` + filter chips + date range), `MetricGrid` of 4–6 `StatCard`s with trend deltas and icons, a primary chart (`LineChart`/`BarChart`), a secondary chart or `KanbanBoard`, a `Table` of recent records, and a side `List`/`Timeline` of activity.",
+      "Wire every toolbar filter chip and every primary action button from the blueprint with real `Action([@Set(...)])` or `@Navigate` behavior.",
       "Wire toolbar filters: each filter chip uses `Action([@Set(\"$filter\", \"value\")])`. Use `Script(\"id\", body, deps)` for derived totals/filtered lists where useful.",
       "Use the blueprint's KPI values verbatim. Use the blueprint's primary chart series names. Pull table rows from the blueprint's sample data.",
       "Currency, dates, and units follow the brief's locale/currency.",
@@ -294,7 +280,7 @@ const INTENT_GENERATORS = {
     rules: [
       "APP MODE — assign `root` to an `AppShell(sidebar, mainOutlet)`. Never reply with a single Card.",
       "Sidebar has logical `SidebarSection`s, 4–8 `SidebarItem`s with icons + paths, and a `PersonChip` user widget at the bottom.",
-      "`mainOutlet = Routes([Route(...), ...], firstPath)`. Every navigation item MUST resolve to a real, substantive page (PageHeader + 4+ sections).",
+      "`mainOutlet = Routes([Route(...), ...], firstPath)`. Every `SidebarItem` and nav entry from the blueprint MUST have a matching `Route` with substantive content (PageHeader + 4+ sections). Include `Route(\"*\", notFoundPage)`.",
       "Every page: `PageHeader`, KPIs (`MetricGrid`), data view (`Table`/`KanbanBoard`/`Timeline`/`List`/`Tree`), toolbar (`Toolbar`/`SearchBar`/filter chips), at least one working action button (Create / Edit / Delete / Status change), and an `EmptyState` for empty lists.",
       "MOCK DATA from the blueprint goes into top-level `$state` variables. Pages read from `$state.<schema>` so changes propagate live. Wire CRUD with `@Set` / `@Push` / `@Pop` / `@Reset` / `@Js`.",
       "Include a working settings page with a Form. Include a 404 fallback `Route(\"*\", notFoundPage)`.",
@@ -317,7 +303,7 @@ const INTENT_GENERATORS = {
       "You are a generative web designer producing a complete, modern, production-quality website in Streaming UI Script. The response must look and feel like a real, polished marketing or content site — not a single card.",
     rules: [
       "WEBSITE MODE — lead with `Navbar` (logo + 3–6 `NavLink`s + a CTA `Button`) and end with a footer `Stack` (brand line, 2–3 link columns, copyright + social).",
-      "If the blueprint declares more than one page, wire them with `Routes([Route(...), ...], \"/\")` and matching `NavLink` items. Each page is 3+ sections drawn from: `Hero`, `Cover`, `FeatureGrid`, `MediaCard`, `PricingTable`, `Testimonial`, `Stats`, `Timeline`, `Banner`, `EmptyState`, custom `Section`/`Card`.",
+      "If the blueprint declares more than one page, wire them with `Routes([Route(...), ...], \"/\")` and matching `NavLink` items — every navbar and footer link must `@Navigate` to a real route or section. Each page is 3+ sections drawn from: `Hero`, `Cover`, `FeatureGrid`, `MediaCard`, `PricingTable`, `Testimonial`, `Stats`, `Timeline`, `Banner`, `EmptyState`, custom `Section`/`Card`.",
       "Wrap each section's content in `Container(content, 'lg'|'md')` so wide screens do not stretch reading content edge-to-edge.",
       "Use real, on-brand microcopy from the blueprint's `copy`/`ctaLines`. Never write Lorem Ipsum.",
       "Pair text-heavy sections with plausible `Image` URLs (https://images.unsplash.com/photo-... or https://picsum.photos/seed/<slug>/1200/800) and alt text.",
@@ -343,7 +329,7 @@ const INTENT_GENERATORS = {
       "Required section order: `Navbar`, `Hero` (with the blueprint's hero headline + subhero + primaryCta + image), trust strip (`Stats` or logo row), `FeatureGrid` (3–6 items with icons), one `MediaCard` or `Cover` deep-dive, `PricingTable` (2–3 plans from the blueprint), `Testimonial` row, FAQ via `Accordion`, final `Banner` CTA, footer.",
       "Wrap every section in `Container(content, 'lg')`. Real microcopy only. Icons on every FeatureItem and StatCard.",
       "Pair the Hero with a plausible product image URL. Pair testimonials with a name + role + avatar.",
-      "End with a `FollowUpBlock` outside the footer (\"Add a video section\", \"Translate to Spanish\", \"Show the dark version\").",
+      "Footer links (Pricing, About, Contact, Privacy) must each `@Navigate` to a real section or route — never leave footer items inert.",
     ],
     examples: [],
   },
@@ -493,10 +479,10 @@ const INTENT_GENERATORS = {
       "You are a generative UI designer producing a polished form/wizard surface in Streaming UI Script. The screen must feel like a real settings/onboarding flow.",
     rules: [
       "FORM MODE — open with a `PageHeader` (title + subtitle). Place the form inside a `Card`.",
-      "Multi-step forms use `Steps([StepsItem(...)])` bound to `$step` with prev/next buttons that `@Set(\"$step\", n)`.",
+      "Multi-step forms use `Steps([{title, details?, active?}])` bound to `$step` with prev/next buttons that `@Set(\"$step\", n)`.",
       "Define ONE `FormControl` reference per field so each control streams in progressively. Use the right input type per field (Input email/password/number, Select, TextArea, Checkbox, Switch, RadioGroup).",
       "Sections use `SectionHeader` or separate `Card`s with clear titles. Group related toggles with `Tabs` if the form covers different concerns.",
-      "Submit button wires `Action([@Set(...), @ToAssistant(\"Submitted: ...\")])`. Show a success `Note` or `Alert` after submit.",
+      "Submit button wires `Action([@Set(...), @Set(\"$submitted\", true)])` and conditionally shows a success `Note` or `Alert` when `$submitted` is true.",
       "Pull placeholder text and sample defaults from the blueprint.",
     ],
     examples: [],
@@ -558,7 +544,7 @@ const INTENT_GENERATORS = {
     preamble:
       "You are an AI chat assistant. Respond using Streaming UI Script — a small, focused reply that fits inside a single chat bubble. No app shells, no routes, no sidebars.",
     rules: [
-      "CHAT MODE — keep the reply to ONE `Stack` with at most 3–4 visible children: a heading, the main artefact (table/chart/list/form), and a `FollowUpBlock` of 2–4 short prompts.",
+      "CHAT MODE — keep the reply to ONE `Stack` with at most 3–4 visible children: a heading, the main artefact (table/chart/list/form), and optional action `Button`s that update in-place state (not chat follow-ups).",
       "No `AppShell`, `Sidebar`, `Routes`, `Navbar`, or `PageHeader`. No `Hero`. No multi-section dashboards.",
       "Pick the component that best fits the content: `Table` for comparisons, `LineChart`/`BarChart`/`PieChart` for trends, `List` for tips, `Form` for input, `Card` for explanations.",
     ],
@@ -579,7 +565,7 @@ const INTENT_GENERATORS = {
       "You are a generative UI designer producing a polished UI surface in Streaming UI Script. Match the design quality of shadcn/Tailwind apps.",
     rules: [
       "GENERIC MODE — compose a tight, focused surface. Use `PageHeader` only if the request implies a full page; otherwise lead with a `Card` or `SectionHeader`.",
-      "Include at least one icon, one piece of structure (Table/List/Stack), and a `FollowUpBlock` of 2–4 short prompts.",
+      "Include at least one icon, one piece of structure (Table/List/Stack), and at least one working action that updates visible UI state.",
       "Real, plausible mock data only — never placeholder text.",
     ],
     examples: [],
@@ -1003,7 +989,7 @@ function resizeInput() {
 }
 
 /**
- * Run the full 4-stage pipeline for a new top-level prompt.
+ * Run the full 3-stage pipeline for a new top-level prompt.
  */
 async function runPipeline(rawText) {
   const text = (rawText || "").trim();
@@ -1036,6 +1022,7 @@ async function runPipeline(rawText) {
       industryHint: settings.industryHint,
       signal: controller.signal,
     });
+    const themeSource = brief.themeLine || "";
     turn.stages.brief.complete(brief);
 
     const generator = INTENT_GENERATORS[brief.intent] || INTENT_GENERATORS.generic;
@@ -1049,6 +1036,7 @@ async function runPipeline(rawText) {
         apiKey: settings.apiKey,
         model: settings.model,
         brief,
+        userPrompt: text,
         signal: controller.signal,
       });
       turn.stages.blueprint.complete(blueprint);
@@ -1058,28 +1046,10 @@ async function runPipeline(rawText) {
       blueprint = null;
     }
 
-    // ----- Stage 3: theme -----
-    turn.stages.theme.start();
-    let themeSource = "";
-    try {
-      themeSource = await generateTheme({
-        apiKey: settings.apiKey,
-        model: settings.model,
-        brief,
-        blueprint,
-        signal: controller.signal,
-      });
-      turn.stages.theme.complete(themeSource);
-    } catch (themeErr) {
-      if (controller.signal.aborted) throw themeErr;
-      turn.stages.theme.fail("Theme generation failed — using default theme");
-      themeSource = "";
-    }
-
-    // ----- Stage 4: UI generation (streaming) -----
+    // ----- Stage 3: UI generation (streaming) -----
     turn.stages.ui.start();
     const uiSystemPrompt = buildUiSystemPrompt(generator);
-    const userTurn = buildUserTurn(brief, blueprint, generator, themeSource);
+    const userTurn = buildUserTurn(text, brief, blueprint, themeSource);
 
     let uiSource = "";
     for await (const delta of streamCompletion({
@@ -1221,8 +1191,11 @@ function buildUiSystemPrompt(generator) {
   });
 }
 
-function buildUserTurn(brief, blueprint, generator, themeSource) {
+function buildUserTurn(userPrompt, brief, blueprint, themeSource) {
   const lines = [];
+  lines.push(`User request (implement exactly — do not drop features they asked for):`);
+  lines.push(userPrompt);
+  lines.push("");
   lines.push(`Brief:`);
   lines.push(`- App name: ${brief.appName || "(unnamed)"}`);
   lines.push(`- Tagline: ${brief.tagline || ""}`);
@@ -1231,13 +1204,11 @@ function buildUserTurn(brief, blueprint, generator, themeSource) {
   lines.push(`- Audience: ${brief.audience || "general users"}`);
   lines.push(`- Brand: ${brief.brand || "modern"}`);
   lines.push(`- Tone: ${brief.tone || "professional"}`);
+  lines.push(`- Purpose: ${brief.purpose || ""}`);
   lines.push(`- Locale: ${brief.locale || "en-US"}, Currency: ${brief.currency || "USD"}`);
   if (settings.useMockData && brief.needsMockData !== false) {
     lines.push(`- Mock data: REQUIRED — seed realistic data inline.`);
   }
-  lines.push("");
-  lines.push(`Polished request:`);
-  lines.push(brief.refinedPrompt || brief.purpose || "");
   lines.push("");
 
   if (blueprint) {
@@ -1247,6 +1218,7 @@ function buildUserTurn(brief, blueprint, generator, themeSource) {
     lines.push("```");
     lines.push("");
     lines.push("Wire the sample data into top-level $state bindings (one $state per schema). Pages must read from $state so user actions propagate live.");
+    lines.push("Implement EVERY page, nav item, primary action, filter, and KPI from the blueprint — no stubs or missing routes.");
     lines.push("");
   }
 
@@ -1257,7 +1229,7 @@ function buildUserTurn(brief, blueprint, generator, themeSource) {
     lines.push("");
   }
 
-  lines.push("Generate the complete Streaming UI Script program now. Start with `root = ...` on the very first line. No markdown, no code fences, no commentary.");
+  lines.push("Generate the complete Streaming UI Script program now. Start with `root = ...` on the very first line. No markdown, no code fences, no commentary. No `@ToAssistant` or `FollowUpBlock`.");
   return lines.join("\n");
 }
 
@@ -1344,7 +1316,7 @@ function parseIntentJson(raw, fallbackPrompt) {
     locale: stringField(parsed.locale, "en-US"),
     currency: stringField(parsed.currency, "USD"),
     needsMockData: parsed.needsMockData !== false,
-    refinedPrompt: stringField(parsed.refinedPrompt, fallbackPrompt),
+    themeLine: buildThemeLineFromTokens(parsed.theme) || extractThemeLine(stringField(parsed.themeLine, "")),
   };
 }
 
@@ -1366,16 +1338,38 @@ function defaultIntent(userPrompt) {
     locale: "en-US",
     currency: "USD",
     needsMockData: true,
-    refinedPrompt: userPrompt,
+    themeLine: "",
   };
+}
+
+function buildThemeLineFromTokens(theme) {
+  if (!theme || typeof theme !== "object") return "";
+  const parts = [];
+  for (const key of REQUIRED_THEME_KEYS) {
+    const value = theme[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    parts.push(`${key}: ${formatThemeTokenValue(value.trim())}`);
+  }
+  if (parts.length === 0) return "";
+  return `theme = Theme({ ${parts.join(", ")} })`;
+}
+
+function formatThemeTokenValue(value) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value;
+  }
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 /* ===========================================================================
    11. Stage 2 — blueprint generation call
    =========================================================================== */
 
-async function generateBlueprint({ apiKey, model, brief, signal }) {
+async function generateBlueprint({ apiKey, model, brief, userPrompt, signal }) {
   const userMsg = [
+    `User request:`,
+    userPrompt,
+    ``,
     `Brief:`,
     `- Intent: ${brief.intent}`,
     `- Industry: ${brief.industry}`,
@@ -1386,7 +1380,6 @@ async function generateBlueprint({ apiKey, model, brief, signal }) {
     `- Tone: ${brief.tone}`,
     `- Locale: ${brief.locale}, Currency: ${brief.currency}`,
     `- Purpose: ${brief.purpose}`,
-    `- Refined request: ${brief.refinedPrompt}`,
     `- Mock data required: ${brief.needsMockData !== false}`,
     ``,
     `Output the JSON blueprint now.`,
@@ -1426,46 +1419,6 @@ function parseBlueprintJson(raw) {
   return parsed;
 }
 
-/* ===========================================================================
-   12. Stage 3 — theme generation call
-   =========================================================================== */
-
-async function generateTheme({ apiKey, model, brief, blueprint, signal }) {
-  const userMsg = [
-    `Generate a Theme({...}) call that brands the following UI:`,
-    `- App name: ${brief.appName || "(unnamed)"}`,
-    `- Intent: ${brief.intent}`,
-    `- Industry: ${brief.industry}`,
-    `- Brand: ${brief.brand}`,
-    `- Audience: ${brief.audience}`,
-    `- Tone: ${brief.tone}`,
-    `- Primary color hint: ${brief.primaryColorHint}`,
-    `- Purpose: ${brief.purpose}`,
-    blueprint?.tagline ? `- Tagline: ${blueprint.tagline}` : "",
-    `- Refined request: ${brief.refinedPrompt}`,
-    ``,
-    `Output ONLY one line that starts with \`theme = Theme({\` and ends with \`})\`. No commentary.`,
-  ].filter(Boolean).join("\n");
-
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: defaultHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: THEME_SYSTEM_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      temperature: 0.5,
-    }),
-    signal,
-  });
-  if (!res.ok) throw new Error(await openRouterError(res, "Theme generation failed"));
-  const data = await res.json();
-  const raw = data?.choices?.[0]?.message?.content || "";
-  return extractThemeLine(raw);
-}
-
 function extractThemeLine(raw) {
   const cleaned = stripFences(raw).trim();
   if (!cleaned) return "";
@@ -1494,7 +1447,7 @@ function extractThemeLine(raw) {
 }
 
 /* ===========================================================================
-   13. OpenRouter streaming (used by stage 4 + refine)
+   12. OpenRouter streaming (used by UI stage + refine)
    =========================================================================== */
 
 async function* streamCompletion({ apiKey, model, messages, signal }) {
@@ -1579,15 +1532,14 @@ function appendUserMessage(text, icon = "user") {
 }
 
 /**
- * Append a full 4-stage assistant turn for a new top-level prompt.
+ * Append a full 3-stage assistant turn for a new top-level prompt.
  */
 function appendAssistantTurn() {
   const ctx = appendTurnSkeleton({
     stagesConfig: [
-      { id: "brief",     step: 1, title: "Brief — intent, persona, industry", icon: "compass" },
-      { id: "blueprint", step: 2, title: "Blueprint — pages, schemas, data",   icon: "diagram-project" },
-      { id: "theme",     step: 3, title: "Brand theme",                        icon: "palette" },
-      { id: "ui",        step: 4, title: "Composing the UI",                   icon: "shapes" },
+      { id: "brief",     step: 1, title: "Brief — intent, persona, brand theme", icon: "compass" },
+      { id: "blueprint", step: 2, title: "Blueprint — pages, schemas, data",     icon: "diagram-project" },
+      { id: "ui",        step: 3, title: "Composing the UI",                     icon: "shapes" },
     ],
   });
   return ctx;
@@ -1945,10 +1897,9 @@ function buildStage(stepNum, title, icon, parent) {
 /**
  * Render the stage's artifact in its body.
  *
- *   step 1 (brief)      → key/value summary + refined prompt + raw JSON
+ *   step 1 (brief)      → key/value summary + brand theme swatches + raw JSON
  *   step 2 (blueprint)  → pages + nav + schemas + sample-data preview
- *   step 3 (theme)      → swatch grid + raw theme source
- *   step 4+ (UI/refine) → pointer to the source/preview tabs
+ *   step 3+ (UI/refine) → pointer to the source/preview tabs
  */
 function renderArtifact(bodyEl, stepNum, artifact) {
   bodyEl.replaceChildren();
@@ -1975,12 +1926,11 @@ function renderArtifact(bodyEl, stepNum, artifact) {
     }
     bodyEl.append(summary);
 
-    if (brief.refinedPrompt) {
-      bodyEl.append(
-        el("h4", { class: "cba-stage-subhead" }, "Refined prompt"),
-        el("p", { class: "cba-stage-quote" }, brief.refinedPrompt),
-      );
+    const themeLine = typeof brief.themeLine === "string" ? brief.themeLine.trim() : "";
+    if (themeLine) {
+      renderThemeArtifact(bodyEl, themeLine);
     }
+
     bodyEl.append(
       el("details", { class: "cba-stage-raw" },
         el("summary", {}, "Raw JSON"),
@@ -2063,44 +2013,6 @@ function renderArtifact(bodyEl, stepNum, artifact) {
     return;
   }
 
-  if (stepNum === 3) {
-    const themeLine = typeof artifact === "string" ? artifact.trim() : "";
-    if (!themeLine) {
-      bodyEl.append(el("p", { class: "cba-stage-empty" }, "No theme produced — using the default theme."));
-      return;
-    }
-    const tokens = extractThemeTokens(themeLine);
-    if (tokens.length > 0) {
-      const swatchGrid = el("div", { class: "cba-swatch-grid" });
-      for (const [key, value] of tokens) {
-        const chip = el("div", { class: "cba-swatch" });
-        const swatch = el("span", { class: "cba-swatch-color" });
-        if (looksLikeColor(value)) {
-          swatch.style.background = value;
-        } else {
-          swatch.classList.add("cba-swatch-color--text");
-          swatch.textContent = "Aa";
-          swatch.style.font = `600 11px/1 ${value.replace(/^['"]|['"]$/g, "")}`;
-        }
-        chip.append(
-          swatch,
-          el("span", { class: "cba-swatch-meta" },
-            el("b", {}, key),
-            el("code", {}, value),
-          ),
-        );
-        swatchGrid.append(chip);
-      }
-      bodyEl.append(swatchGrid);
-    }
-    bodyEl.append(
-      el("details", { class: "cba-stage-raw", open: tokens.length === 0 },
-        el("summary", {}, "Theme source"),
-        el("pre", {}, el("code", {}, themeLine)),
-      ),
-    );
-    return;
-  }
 
   // Default (UI / refine stage):
   bodyEl.append(
@@ -2117,6 +2029,42 @@ function renderArtifact(bodyEl, stepNum, artifact) {
 /* ===========================================================================
    15. Theme token parsing for swatch rendering
    =========================================================================== */
+
+function renderThemeArtifact(bodyEl, themeLine) {
+  const tokens = extractThemeTokens(themeLine);
+  if (tokens.length > 0) {
+    const swatchGrid = el("div", { class: "cba-swatch-grid" });
+    for (const [key, value] of tokens) {
+      const chip = el("div", { class: "cba-swatch" });
+      const swatch = el("span", { class: "cba-swatch-color" });
+      if (looksLikeColor(value)) {
+        swatch.style.background = value;
+      } else {
+        swatch.classList.add("cba-swatch-color--text");
+        swatch.textContent = "Aa";
+        swatch.style.font = `600 11px/1 ${value.replace(/^['"]|['"]$/g, "")}`;
+      }
+      chip.append(
+        swatch,
+        el("span", { class: "cba-swatch-meta" },
+          el("b", {}, key),
+          el("code", {}, value),
+        ),
+      );
+      swatchGrid.append(chip);
+    }
+    bodyEl.append(
+      el("h4", { class: "cba-stage-subhead" }, "Brand theme"),
+      swatchGrid,
+    );
+  }
+  bodyEl.append(
+    el("details", { class: "cba-stage-raw", open: tokens.length === 0 },
+      el("summary", {}, "Theme source"),
+      el("pre", {}, el("code", {}, themeLine)),
+    ),
+  );
+}
 
 function extractThemeTokens(themeLine) {
   const m = themeLine.match(/Theme\s*\(\s*\{([\s\S]*)\}\s*\)/);

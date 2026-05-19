@@ -17,7 +17,7 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="assets/chat-bot.css?v=2026.05.16a" />
-  <link rel="stylesheet" href="assets/chat-bot-advanced.css?v=2026.05.16a" />
+  <link rel="stylesheet" href="assets/chat-bot-advanced.css?v=2026.05.19" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body data-page="chat-bot" data-variant="advanced">
@@ -33,13 +33,13 @@
             <h1>Connect to OpenRouter</h1>
             <p class="cb-lede">
               A production-grade pipeline that turns one prompt into a
-              hostable product. Four LLM calls: <strong>brief</strong> →
+              hostable product. Three LLM calls: <strong>brief</strong> (intent,
+              persona, and branded <code>Theme({...})</code>) →
               <strong>blueprint</strong> (pages + schemas + sample records) →
-              <strong>brand theme</strong> → <strong>specialised
-              generator</strong> for 14+ intents (dashboard, app, website,
-              storefront, CRM, booking, directory, portfolio, docs, …). Your
-              key stays in <code>localStorage</code> — it is sent only to
-              OpenRouter.
+              <strong>specialised generator</strong> for 14+ intents (dashboard,
+              app, website, storefront, CRM, booking, directory, portfolio,
+              docs, …). Your key stays in <code>localStorage</code> — it is sent
+              only to OpenRouter.
             </p>
 
             <form id="cba-setup-form" class="cb-form">
@@ -88,8 +88,9 @@
 
             <ul class="cb-perks" aria-label="What you get">
               <li><i class="fa-solid fa-circle-check"></i> 14+ specialised generators</li>
+              <li><i class="fa-solid fa-circle-check"></i> Full nav, routes, and working actions</li>
               <li><i class="fa-solid fa-circle-check"></i> Pages, schemas + realistic mock data</li>
-              <li><i class="fa-solid fa-circle-check"></i> Auto-branded <code>Theme({...})</code></li>
+              <li><i class="fa-solid fa-circle-check"></i> Auto-branded <code>Theme({...})</code> in the brief</li>
               <li><i class="fa-solid fa-circle-check"></i> Refine in place &amp; auto-save gallery</li>
               <li><i class="fa-solid fa-circle-check"></i> One-click hostable HTML download</li>
               <li><i class="fa-solid fa-circle-check"></i> Open in playground &amp; share links</li>
@@ -110,7 +111,7 @@
                 </span>
                 <span class="cba-toolbar-text">
                   <strong>Advanced pipeline</strong>
-                  <span>Brief · Blueprint · Theme · Generator</span>
+                  <span>Brief · Blueprint · Generator</span>
                 </span>
               </div>
 
@@ -147,21 +148,21 @@
                 <span class="cb-aurora-blob cb-aurora-blob--b"></span>
                 <span class="cb-aurora-blob cb-aurora-blob--c"></span>
               </div>
-              <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Brief · Blueprint · Theme · UI · live pipeline</span>
+              <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Brief · Blueprint · UI · production pipeline</span>
               <h2>Ship a <span class="cb-grad-text">real product</span> from a single prompt.</h2>
               <p>
                 Tell us what you want to build — a SaaS dashboard, a marketing
                 site, a CRM, a booking app, a storefront, a portfolio. The
-                pipeline drafts a polished brief, plans the pages and data
-                schemas, picks a brand theme, then runs a specialised
-                generator that emits a fully-working, hostable program.
+                pipeline classifies intent and designs your brand theme, plans
+                every page and data schema, then runs a specialised generator
+                that emits a fully-working, hostable program with complete
+                navigation and real in-app actions.
               </p>
 
               <ol class="cba-pipeline-hint" aria-hidden="true">
-                <li><span>1</span> <b>Brief</b> · intent, industry, persona</li>
+                <li><span>1</span> <b>Brief</b> · intent, persona, brand theme</li>
                 <li><span>2</span> <b>Blueprint</b> · pages, schemas, sample data</li>
-                <li><span>3</span> <b>Theme</b> · branded <code>Theme({...})</code></li>
-                <li><span>4</span> <b>UI</b> · intent-specific Streaming UI Script</li>
+                <li><span>3</span> <b>UI</b> · intent-specific Streaming UI Script</li>
               </ol>
 
               <div class="cb-suggestions" id="cba-suggestions"></div>
@@ -274,6 +275,6 @@
   </div>
 
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
-  <script type="module" src="assets/chat-bot-advanced.js?v=2026.05.16a"></script>
+  <script type="module" src="assets/chat-bot-advanced.js?v=2026.05.19"></script>
 </body>
 </html>

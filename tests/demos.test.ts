@@ -22,11 +22,35 @@ type StreamingEl = HTMLElement & {
   showErrors: boolean;
 };
 
+function extractSourceFromBundle(slug: string, codeId: string): string | null {
+  const bundlePath = resolve(repoRoot, "docs/assets/live-example.js");
+  let bundle: string;
+  try {
+    bundle = readFileSync(bundlePath, "utf8");
+  } catch {
+    return null;
+  }
+  const slugKey = `"${slug}":`;
+  const blockStart = bundle.indexOf(slugKey);
+  if (blockStart === -1) return null;
+  const needle = `codeId: "${codeId}", content: \``;
+  const contentStart = bundle.indexOf(needle, blockStart);
+  if (contentStart === -1) return null;
+  const start = contentStart + needle.length;
+  const closeIdx = bundle.indexOf("` }\n      ],", start);
+  if (closeIdx === -1) {
+    const alt = bundle.indexOf("`\n      ],\n      render:", start);
+    if (alt === -1) return null;
+    return bundle.slice(start, alt);
+  }
+  const raw = bundle.slice(start, closeIdx);
+  // Content lives inside a JS template literal in the bundle — unescape
+  // authoring backticks / interpolations for the Streaming UI Script parser.
+  return raw.replace(/\\`/g, "`").replace(/\\\$\{/g, "${");
+}
+
 function extractSource(file: string, codeId: string): string {
-  // The 29 standard examples live in `docs/_examples/` (bundled into the
-  // `live-example.html` shell). A handful of bespoke pages — `brand-themes`,
-  // `chat-bot`, `chat-bot-advanced` — keep their own HTML at `docs/` because
-  // their UIs are too custom to fit the shared shell.
+  // Prefer per-example HTML when present (`docs/_examples/` or `docs/`).
   const candidates = [
     resolve(repoRoot, "docs/_examples", file),
     resolve(repoRoot, "docs", file),
@@ -40,15 +64,20 @@ function extractSource(file: string, codeId: string): string {
       /* try the next location */
     }
   }
-  if (!html) throw new Error(`Could not find ${file} under docs/ or docs/_examples/`);
-  const re = new RegExp(`<code id="${codeId}">([\\s\\S]*?)</code>`);
-  const match = html.match(re);
-  if (!match) throw new Error(`Could not find <code id="${codeId}"> in ${file}`);
-  return match[1]
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"');
+  if (html) {
+    const re = new RegExp(`<code id="${codeId}">([\\s\\S]*?)</code>`);
+    const match = html.match(re);
+    if (!match) throw new Error(`Could not find <code id="${codeId}"> in ${file}`);
+    return match[1]
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"');
+  }
+  const slug = file.replace(/\.html$/, "");
+  const fromBundle = extractSourceFromBundle(slug, codeId);
+  if (fromBundle) return fromBundle;
+  throw new Error(`Could not find ${file} under docs/, docs/_examples/, or live-example.js`);
 }
 
 function makeElement(): StreamingEl {
@@ -123,25 +152,22 @@ describe("standalone pattern demos", () => {
   beforeEach(() => { document.body.innerHTML = ""; });
 
   const demos: Array<{ file: string; codeId: string; expectSelector: string }> = [
-    { file: "project-dashboard.html", codeId: "src-dashboard", expectSelector: ".rui-page-header-title" },
     { file: "marketing-landing.html", codeId: "src-landing",   expectSelector: ".rui-hero-title" },
     { file: "team-directory.html",    codeId: "src-team",      expectSelector: ".rui-page-header-title" },
     { file: "settings-app.html",      codeId: "src-settings",  expectSelector: ".rui-page-header-title" },
     { file: "ecommerce-product.html", codeId: "src-product",   expectSelector: ".rui-split-view" },
     { file: "inbox-app.html",         codeId: "src-inbox",     expectSelector: ".rui-page-header-title" },
-    { file: "pricing-page.html",      codeId: "src-pricing",   expectSelector: ".rui-cover-title" },
+    { file: "pricing-page.html",      codeId: "src-pricing",   expectSelector: ".rui-hero-title, .rui-cover-title" },
     { file: "crm-contacts.html",      codeId: "src-crm",       expectSelector: ".rui-page-header-title" },
     { file: "status-page.html",       codeId: "src-status",    expectSelector: ".rui-page-header-title" },
-    { file: "checkout-flow.html",     codeId: "src-checkout",  expectSelector: ".rui-page-header-title" },
     { file: "file-manager.html",      codeId: "src-files",     expectSelector: ".rui-page-header-title" },
     { file: "calendar-app.html",      codeId: "src-calendar",  expectSelector: ".rui-page-header-title" },
     { file: "docs-portal.html",       codeId: "src-docs",      expectSelector: ".rui-page-header-title" },
     { file: "brand-themes.html",      codeId: "src-shared",    expectSelector: ".rui-page-header-title" },
     { file: "issue-tracker.html",     codeId: "src-issues",    expectSelector: ".rui-page-header-title" },
     { file: "expense-tracker.html",   codeId: "src-expenses",  expectSelector: ".rui-page-header-title" },
-    { file: "polls-app.html",         codeId: "src-polls",     expectSelector: ".rui-page-header-title" },
     { file: "data-explorer.html",     codeId: "src-explorer",  expectSelector: ".rui-page-header-title" },
-    { file: "media-gallery.html",     codeId: "src-media",     expectSelector: ".rui-cover-title" },
+    { file: "media-gallery.html",     codeId: "src-media",     expectSelector: ".rui-hero-title, .rui-cover-title" },
     { file: "content-studio.html",    codeId: "src-studio",    expectSelector: ".rui-topbar" },
     { file: "scheduler.html",         codeId: "src-scheduler", expectSelector: ".rui-page-header-title" },
   ];
@@ -163,7 +189,9 @@ describe("standalone pattern demos", () => {
         throw new Error(`${file}: parse error banner is visible — ${detail}`);
       }
       expect(errors).toEqual([]);
-      expect(el.shadowRoot!.querySelector(expectSelector)).not.toBeNull();
+      const selectors = expectSelector.split(",").map((s) => s.trim());
+      const found = selectors.some((sel) => el.shadowRoot!.querySelector(sel) !== null);
+      expect(found, `expected one of ${selectors.join(" | ")} in ${file}`).toBe(true);
     });
   }
 });

@@ -24,7 +24,7 @@ describe("getLanguageSpec", () => {
     expect(Array.isArray(spec.components)).toBe(true);
     expect(spec.components.length).toBeGreaterThan(50);
     const names = new Set(spec.components.map((c) => c.name));
-    for (const required of ["Card", "Stack", "Hero", "KanbanBoard", "PageHeader", "MetricGrid", "Routes"]) {
+    for (const required of ["Card", "Stack", "Hero", "KanbanBoard", "PageHeader", "Stats", "Routes"]) {
       expect(names.has(required), `${required} should be in catalog`).toBe(true);
     }
   });
@@ -44,7 +44,7 @@ describe("getLanguageSpec", () => {
 
   it("includes every built-in @-function with a signature", () => {
     const names = new Set(spec.builtins.map((b) => b.name));
-    for (const required of ["Each", "Set", "Filter", "Sum", "Push", "Run", "Reset", "Navigate", "Js"]) {
+    for (const required of ["Each", "Set", "Filter", "Sum", "Join", "Case", "Run", "Reset", "Navigate", "Js"]) {
       expect(names.has(required), `@${required} should be in catalog`).toBe(true);
     }
     for (const entry of spec.builtins) {

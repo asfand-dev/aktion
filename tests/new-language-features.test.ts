@@ -31,7 +31,7 @@ function buildContext(source: string) {
   const program = parse(source);
   const state = new StateStore();
   const queries = new QueryRegistry();
-  const ctx = createContext(state, queries);
+  const ctx = createContext(state, queries, undefined, defaultLibrary);
   planProgram(program, ctx);
   return { program, ctx, state, queries };
 }
@@ -161,6 +161,16 @@ describe("@If / @Switch lazy control flow", () => {
     expect(ctx.bindings.get("panel")?.()).toBe("DEFAULT");
   });
 
+  it("@Const memoizes repeated evaluation", () => {
+    const { ctx } = buildContext("$n = 0\na = @Const($n + 1)\nb = @Const($n + 1)");
+    expect(ctx.bindings.get("a")?.()).toBe(1);
+    expect(ctx.bindings.get("b")?.()).toBe(1);
+    // Bump state after the memo is populated — Const should still return 1.
+    ctx.state.set("n", 5);
+    expect(ctx.bindings.get("a")?.()).toBe(1);
+    expect(ctx.bindings.get("b")?.()).toBe(1);
+  });
+
   it("@Switch does not evaluate unmatched branches", () => {
     // The unmatched branch references an undefined identifier — if it were
     // eagerly evaluated, we'd get `null` from the lookup. Lazy evaluation
@@ -219,7 +229,7 @@ describe("persistent state ($$variable)", () => {
     const state = new StateStore();
     state.setPersistenceAdapter(adapter);
     const queries = new QueryRegistry();
-    const ctx = createContext(state, queries);
+    const ctx = createContext(state, queries, undefined, defaultLibrary);
     planProgram(parse('$$theme = "light"\n$$cart = []'), ctx);
     expect(state.isPersistent("theme")).toBe(true);
     expect(state.get("theme")).toBe("light");
@@ -305,12 +315,6 @@ describe("responsive prop maps", () => {
 });
 
 describe("new data builtins", () => {
-  it("@Map plucks a field from each item", () => {
-    expect(
-      dataBuiltins.Map!([[{ name: "a" }, { name: "b" }], "name"]),
-    ).toEqual(["a", "b"]);
-  });
-
   it("@Find returns the first match or null", () => {
     const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
     expect(dataBuiltins.Find!([rows, "id", "==", 2])).toEqual({ id: 2 });
@@ -329,12 +333,10 @@ describe("new data builtins", () => {
     });
   });
 
-  it("@Slice / @Take work as expected", () => {
+  it("@Slice works as expected", () => {
     expect(dataBuiltins.Slice!([[1, 2, 3, 4, 5], 1, 4])).toEqual([2, 3, 4]);
     expect(dataBuiltins.Slice!([[1, 2, 3], 1])).toEqual([2, 3]);
-    expect(dataBuiltins.Take!([[1, 2, 3, 4], 2])).toEqual([1, 2]);
-    // Negative or zero take yields an empty array — guards against NaN / -1.
-    expect(dataBuiltins.Take!([[1, 2], 0])).toEqual([]);
+    expect(dataBuiltins.Slice!([[1, 2, 3, 4], 0, 2])).toEqual([1, 2]);
   });
 
   it("@Unique without a field dedupes by strict equality; with a field dedupes by it", () => {
@@ -368,14 +370,11 @@ describe("new data builtins", () => {
     });
   });
 
-  it("@FormatCurrency / @FormatNumber use the Intl APIs", () => {
-    const usd = dataBuiltins.FormatCurrency!([1234.5, "USD", "en-US"]) as string;
-    expect(usd).toMatch(/\$1,234\.5/);
-    const num = dataBuiltins.FormatNumber!([1234567, "en-US"]) as string;
-    expect(num).toBe("1,234,567");
-  });
-
   it("@Format dispatches to currency / percent / number modes", () => {
+    const usd = dataBuiltins.Format!([1234.5, "currency", "USD", "en-US"]) as string;
+    expect(usd).toMatch(/\$1,234\.5/);
+    const num = dataBuiltins.Format!([1234567, "number", "en-US"]) as string;
+    expect(num).toBe("1,234,567");
     const currency = dataBuiltins.Format!([10, "currency", "EUR", "de-DE"]) as string;
     expect(currency).toMatch(/10/);
     const percent = dataBuiltins.Format!([0.5, "percent", "en-US"]) as string;
@@ -422,13 +421,47 @@ describe("new data builtins", () => {
     expect(dataBuiltins.Titlecase!(["hello world"])).toBe("Hello World");
   });
 
-  it("case-conversion helpers (Camel / Snake / Kebab / Pascal)", () => {
-    expect(dataBuiltins.Camelcase!(["hello world"])).toBe("helloWorld");
-    expect(dataBuiltins.Snakecase!(["Hello World"])).toBe("hello_world");
-    expect(dataBuiltins.Kebabcase!(["Hello World"])).toBe("hello-world");
-    expect(dataBuiltins.Pascalcase!(["hello world"])).toBe("HelloWorld");
-    // Already-camelCase input is split correctly via the lower→Upper boundary.
-    expect(dataBuiltins.Snakecase!(["helloWorld"])).toBe("hello_world");
+  it("@Case converts casing by mode", () => {
+    expect(dataBuiltins.Case!(["hello world", "camel"])).toBe("helloWorld");
+    expect(dataBuiltins.Case!(["Hello World", "snake"])).toBe("hello_world");
+    expect(dataBuiltins.Case!(["Hello World", "kebab"])).toBe("hello-world");
+    expect(dataBuiltins.Case!(["hello world", "pascal"])).toBe("HelloWorld");
+    expect(dataBuiltins.Case!(["helloWorld", "snake"])).toBe("hello_world");
+  });
+
+  it("string helpers (Join / Split / Trim / Replace / Substring / prefix tests)", () => {
+    expect(dataBuiltins.Join!([["a", "b"], "-"])).toBe("a-b");
+    expect(dataBuiltins.Split!(["a,b,c"])).toEqual(["a", "b", "c"]);
+    expect(dataBuiltins.Trim!(["  hi  "])).toBe("hi");
+    expect(dataBuiltins.Replace!(["foo bar", "bar", "baz"])).toBe("foo baz");
+    expect(dataBuiltins.Substring!(["hello", 1, 4])).toBe("ell");
+    expect(dataBuiltins.StartsWith!(["hello", "he"])).toBe(true);
+    expect(dataBuiltins.EndsWith!(["hello", "lo"])).toBe(true);
+    expect(dataBuiltins.Contains!(["hello", "ell"])).toBe(true);
+    expect(dataBuiltins.Match!(["abc123", "\\d+"])).toBe(true);
+  });
+
+  it("numeric helpers (Pow / Sqrt / Log / Random)", () => {
+    expect(dataBuiltins.Pow!([2, 3])).toBe(8);
+    expect(dataBuiltins.Sqrt!([9])).toBe(3);
+    expect(dataBuiltins.Log!([Math.E])).toBeCloseTo(1);
+    const r = dataBuiltins.Random!([]) as number;
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThan(1);
+  });
+
+  it("@FilterBy mirrors @Filter", () => {
+    const rows = [{ name: "alpha" }, { name: "beta" }];
+    expect(dataBuiltins.FilterBy!([rows, "name", "==", "alpha"])).toEqual([{ name: "alpha" }]);
+  });
+
+  it("date helpers (AddHours / DiffDays / StartOfWeek / EndOfMonth)", () => {
+    const base = "2024-01-01T12:00:00.000Z";
+    expect(dataBuiltins.AddHours!([base, 2])).toBe("2024-01-01T14:00:00.000Z");
+    expect(dataBuiltins.DiffDays!(["2024-01-01", "2024-01-04"])).toBe(3);
+    const weekStart = new Date(dataBuiltins.StartOfWeek!(["2024-01-04T12:00:00.000Z"]) as string);
+    expect(weekStart.getUTCDay()).toBe(0);
+    expect(dataBuiltins.EndOfMonth!(["2024-02-10"])).toMatch(/2024-02-29/);
   });
 
   it("@Clamp constrains a number into [min, max]", () => {

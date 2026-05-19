@@ -207,7 +207,7 @@ export class StreamingUiScriptElement extends HTMLElement {
       router: this.router,
     });
 
-    this.context = createContext(this.state, this.queries, this.router);
+    this.context = createContext(this.state, this.queries, this.router, this.library);
     this.renderer = new Renderer({
       library: this.library,
       state: this.state,
@@ -583,7 +583,7 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   private replan(): void {
     this.queries.reset();
-    this.context = createContext(this.state, this.queries, this.router);
+    this.context = createContext(this.state, this.queries, this.router, this.library);
     this.queries.setNotify(() => this.scheduleRender());
 
     const program = parse(this.currentResponse);

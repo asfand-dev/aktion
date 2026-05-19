@@ -296,8 +296,22 @@ function parsePostfix(ctx: ParserContext): Expression {
     }
     if (tok.type === "Operator" && tok.value === "?.") {
       ctx.consume();
-      const prop = ctx.expect("Identifier").value;
-      expr = { kind: "Member", object: expr, property: prop, optional: true };
+      if (ctx.peek().type === "Punctuation" && ctx.peek().value === "[") {
+        ctx.consume();
+        const computed = parseExpression(ctx);
+        ctx.expect("Punctuation", "]");
+        expr = { kind: "Member", object: expr, computed, optional: true };
+      } else {
+        const prop = ctx.expect("Identifier").value;
+        expr = { kind: "Member", object: expr, property: prop, optional: true };
+      }
+      continue;
+    }
+    if (tok.type === "Punctuation" && tok.value === "[") {
+      ctx.consume();
+      const computed = parseExpression(ctx);
+      ctx.expect("Punctuation", "]");
+      expr = { kind: "Member", object: expr, computed };
       continue;
     }
     break;
@@ -385,7 +399,7 @@ function parsePrimary(ctx: ParserContext): Expression {
   if (tok.type === "BuiltinIdentifier") {
     ctx.consume();
     ctx.expect("Punctuation", "(");
-    const args = parseCallArgs(ctx);
+    const args = parseCallArgs(ctx, { named: true });
     ctx.expect("Punctuation", ")");
     return {
       kind: "BuiltinCall",
@@ -398,7 +412,7 @@ function parsePrimary(ctx: ParserContext): Expression {
     ctx.consume();
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
       ctx.consume();
-      const args = parseCallArgs(ctx);
+      const args = parseCallArgs(ctx, { named: true });
       ctx.expect("Punctuation", ")");
       return {
         kind: "Call",
@@ -439,14 +453,15 @@ function parsePrimary(ctx: ParserContext): Expression {
   } satisfies ParseError;
 }
 
-function parseCallArgs(ctx: ParserContext): Expression[] {
+function parseCallArgs(ctx: ParserContext, opts?: { named?: boolean }): Expression[] {
   const args: Expression[] = [];
+  const allowNamed = opts?.named === true;
   // Allow newlines/whitespace inside argument lists for multi-line forms.
   while (ctx.match("Newline")) {/* skip */}
   if (ctx.peek().type === "Punctuation" && (ctx.peek().value === ")" || ctx.peek().value === "]")) {
     return args;
   }
-  args.push(parseArgItem(ctx));
+  args.push(allowNamed ? parseCallArgItem(ctx) : parseArgItem(ctx));
   while (ctx.match("Newline")) {/* skip */}
   while (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
     ctx.consume();
@@ -454,7 +469,7 @@ function parseCallArgs(ctx: ParserContext): Expression[] {
     if (ctx.peek().type === "Punctuation" && (ctx.peek().value === ")" || ctx.peek().value === "]")) {
       break;
     }
-    args.push(parseArgItem(ctx));
+    args.push(allowNamed ? parseCallArgItem(ctx) : parseArgItem(ctx));
     while (ctx.match("Newline")) {/* skip */}
   }
   while (ctx.match("Newline")) {/* skip */}
@@ -472,6 +487,34 @@ function parseArgItem(ctx: ParserContext): Expression {
     const tok = ctx.consume();
     const argument = parseExpression(ctx);
     return { kind: "Spread", argument, loc: { line: tok.line, column: tok.column } };
+  }
+  return parseExpression(ctx);
+}
+
+/**
+ * Call-list argument: optional `name = expr` before falling back to a full
+ * expression. Named args are only allowed in `(...)` lists, not `[...]`.
+ */
+function parseCallArgItem(ctx: ParserContext): Expression {
+  if (ctx.peek().type === "Operator" && ctx.peek().value === "...") {
+    const tok = ctx.consume();
+    const argument = parseExpression(ctx);
+    return { kind: "Spread", argument, loc: { line: tok.line, column: tok.column } };
+  }
+  if (
+    ctx.peek().type === "Identifier" &&
+    ctx.peek(1).type === "Operator" &&
+    ctx.peek(1).value === "="
+  ) {
+    const nameTok = ctx.consume();
+    ctx.consume(); // =
+    const value = parseExpression(ctx);
+    return {
+      kind: "NamedArg",
+      name: nameTok.value,
+      value,
+      loc: { line: nameTok.line, column: nameTok.column },
+    };
   }
   return parseExpression(ctx);
 }

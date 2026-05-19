@@ -67,9 +67,9 @@ const EXAMPLES = {
 greeting = Card([CardHeader("Hello, world", "Edit this text and watch it update")])
 sample = Card([
   CardHeader("Sample stats"),
-  MetricGrid([
-    StatCard("Active users", \`\${@FormatNumber(12540)}\`, "up", "+12% vs last week", "users"),
-    StatCard("Revenue",      \`\${@FormatCurrency(48230, "USD")}\`, "flat", "stable", "sack-dollar"),
+  Stats([
+    StatCard("Active users", \`\${@Format(12540, "number")}\`, "up", "+12% vs last week", "users"),
+    StatCard("Revenue",      \`\${@Format(48230, "currency", "USD")}\`, "flat", "stable", "sack-dollar"),
     StatCard("Errors",       "12", "down", "-32%", "triangle-exclamation")
   ])
 ])
@@ -85,7 +85,7 @@ follow = FollowUpBlock([
 root = Stack([header, kpis, board, follow])
 header = PageHeader("Engineering Q3", \`\${@Count(projects)} active · \${@Count(atRisk)} at risk\`, ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
 headerActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
-kpis = MetricGrid([
+kpis = Stats([
   StatCard(\`Active\`,  \`\${@Count(projects)}\`, "flat", "0 vs last week",                          "folder"),
   StatCard(\`At risk\`, \`\${@Count(atRisk)}\`,   "up",   \`+\${@Count(atRisk) - 2} vs last week\`,    "triangle-exclamation"),
   StatCard("Shipped", "8",                     "up",   "+3 vs last week",                          "rocket"),
@@ -117,7 +117,7 @@ $$todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done
 $draft  = ""
 
 addBtn = Button("Add", Action([
-  @Set($$todos, @Push($$todos, {id: $$todos.length + 1, text: $draft, done: false})),
+  @Set($$todos, [...$$todos, {id: $$todos.length + 1, text: $draft, done: false}]),
   @Reset($draft)
 ]), "primary")
 
@@ -182,19 +182,19 @@ root = Card([
 $range = "7"
 root   = Stack([header, kpis, trendRow])
 header = PageHeader("Analytics", \`Daily traffic last \${$range} days\`)
-kpis   = MetricGrid([
-  StatCard("Sessions",     \`\${@FormatNumber(@Sum(thisWk))}\`, "up",   \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, "chart-line"),
+kpis   = Stats([
+  StatCard("Sessions",     \`\${@Format(@Sum(thisWk, "number"))}\`, "up",   \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, "chart-line"),
   StatCard("Avg. duration","3m 12s",                          "flat", "stable", "clock"),
   StatCard("Bounce rate",  "32%",                             "down", "-2%",    "arrow-trend-down")
 ])
 trendRow = Grid([trend, breakdown], {sm: 1, md: 2}, "l")
 trend = Card([
   CardHeader("Sessions"),
-  CardBody([LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"], [Series("This week", thisWk), Series("Last week", lastWk)])])
+  Stack([LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"], [Series("This week", thisWk), Series("Last week", lastWk)])])
 ])
 breakdown = Card([
   CardHeader("By channel"),
-  CardBody([PieChart(["Organic","Direct","Referral"], [60, 25, 15])])
+  Stack([PieChart(["Organic","Direct","Referral"], [60, 25, 15])])
 ])
 thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
 lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]`,
@@ -354,7 +354,7 @@ publishGate = @If(@Count(errors) > 0,
   Card([Callout("success", "Ready to publish", "All gates passed.", "circle-check", true)]))
 
 root = Stack([
-  BreadcrumbPageHeader(["Content", "Drafts", $title], "Compose, brand, gate, publish."),
+  PageHeader(["Content", "Drafts", $title], "Compose, brand, gate, publish."),
   MultiStepForm([
     {title: "Compose", details: "Title, body, tags", content: [
       Card([SectionHeader("Body", null, "EDITOR"), FormSection("Post",
@@ -380,7 +380,7 @@ root = Stack([
     code: `# Highlights: every new chart primitive in one dashboard.
 root = Stack([
   PageHeader("Engineering analytics", "Quarterly view"),
-  MetricGrid([
+  Stats([
     StatCard("SLA",    "99.3%", "up",   "+0.2 pp", "shield-halved"),
     StatCard("P95",    "112ms", "down", "-12 ms",  "gauge-high"),
     StatCard("Errors", "0.42%", "flat", "stable",  "circle-exclamation"),
@@ -393,7 +393,7 @@ root = Stack([
   ], {sm: 1, md: 3}, "l"),
   Card([
     SectionHeader("Signups · last 7 days", "Stacked by source"),
-    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+    LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
       [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
        Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
        Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])
@@ -420,6 +420,28 @@ root = Stack([
       Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], null, 6)
     ])
   ], {sm: 1, md: 2}, "l")
+])`,
+  },
+  gridLayout: {
+    label: "12-col grid + named args",
+    code: `# Highlights: Grid(columns=12), GridItem(span="1/4"), inline name=value props.
+sidebar = Card([
+  CardHeader("Sidebar", "Named args: span='1/4'"),
+  Stack([
+    NavLink("Overview", "/", "ghost", true),
+    NavLink("Reports", "/reports",   "ghost"),
+    NavLink("Settings", "/settings", "ghost")
+  ], "column", "s")
+])
+
+content = Card([
+  CardHeader("Main workspace", "GridItem span='3/4' fills the rest"),
+  TextContent("Use Grid(columns=12, gap='l', [...]) with GridItem(child, span='1/4') for sidebar layouts.")
+])
+
+root = Grid(columns=12, gap="l", [
+  GridItem(sidebar, span="1/4"),
+  GridItem(content, span="3/4")
 ])`,
   },
 };

@@ -114,6 +114,8 @@ export const LineChart: ComponentSpec = {
     { name: "series", type: "Series[]", optional: true },
     { name: "data", type: "{x: string, [key: string]: number}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived" },
     { name: "title", type: "string", optional: true },
+    { name: "filled", type: "boolean", optional: true, description: "Fill the area beneath each line (area-chart style)" },
+    { name: "stacked", type: "boolean", optional: true, description: "Stack series when filled=true" },
   ],
   render: (_node, props) => {
     let labels = asArray<unknown>(props.labels).map((l) => asString(l));
@@ -140,12 +142,30 @@ export const LineChart: ComponentSpec = {
         series = [...seriesByKey.entries()].map(([name, values]) => ({ name, values }));
       }
     }
-    const root = el("div", { class: "rui-chart rui-line-chart" });
+    const filled = props.filled === true;
+    const stacked = props.stacked === true;
+    const pointCount = Math.max(labels.length, ...series.map((s) => s.values.length), 1);
+    const stackedValues: number[][] = series.map(() => Array(pointCount).fill(0));
+    if (filled && stacked) {
+      for (let i = 0; i < pointCount; i += 1) {
+        let acc = 0;
+        series.forEach((s, sIdx) => {
+          acc += s.values[i] ?? 0;
+          stackedValues[sIdx]![i] = acc;
+        });
+      }
+    }
+    const root = el("div", {
+      class: "rui-chart rui-line-chart",
+      "data-filled": filled ? "true" : "false",
+    });
     if (asString(props.title)) root.append(el("div", { class: "rui-chart-title" }, [asString(props.title)]));
 
-    const all = series.flatMap((s) => s.values);
+    const all = filled && stacked
+      ? stackedValues.flat()
+      : series.flatMap((s) => s.values);
     const max = Math.max(1, ...all);
-    const min = Math.min(0, ...all);
+    const min = filled && stacked ? 0 : Math.min(0, ...all);
     const width = 640;
     const height = 240;
     const labelPlan = planLabels(labels, width - 40 - 12);
@@ -158,17 +178,38 @@ export const LineChart: ComponentSpec = {
 
     const denominator = Math.max(labels.length - 1, 1);
     const stepX = innerWidth / denominator;
-    // Line charts can render data even when there are no labels (or fewer
-    // labels than data points) — derive an x-position per data point.
-    const pointCount = Math.max(...series.map((s) => s.values.length), labels.length);
-    const xForPoint = (i: number): number => padding.left + i * (innerWidth / Math.max(pointCount - 1, 1));
+    const xForPoint = (i: number): number =>
+      padding.left + i * (innerWidth / Math.max(pointCount - 1, 1));
 
     series.forEach((s, sIdx) => {
-      const points = s.values.map((value, i) => {
+      const values = filled && stacked ? stackedValues[sIdx]! : s.values;
+      const baseline = filled && stacked && sIdx > 0 ? stackedValues[sIdx - 1]! : null;
+      const points = values.map((value, i) => {
         const x = xForPoint(i);
         const y = padding.top + innerHeight - ((value - min) / (max - min || 1)) * innerHeight;
         return [x, y] as const;
       });
+      if (filled && points.length > 0) {
+        let areaPath = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+        if (baseline) {
+          const baselinePoints = baseline.map((value, i) => {
+            const x = xForPoint(i);
+            const y = padding.top + innerHeight - ((value - min) / (max - min || 1)) * innerHeight;
+            return [x, y] as const;
+          });
+          areaPath += " " + baselinePoints.slice().reverse().map(([x, y]) => `L${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z";
+        } else {
+          const first = points[0]!;
+          const last = points[points.length - 1]!;
+          areaPath += ` L${last[0].toFixed(1)},${(padding.top + innerHeight).toFixed(1)} L${first[0].toFixed(1)},${(padding.top + innerHeight).toFixed(1)} Z`;
+        }
+        svg.append(svgEl("path", {
+          d: areaPath,
+          fill: colorAt(sIdx),
+          "fill-opacity": "0.2",
+          stroke: "none",
+        }));
+      }
       const d = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
       svg.append(svgEl("path", {
         d,

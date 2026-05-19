@@ -22,7 +22,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'card${1} = Card([\n' +
       '  CardHeader("${2:Title}", "${3:Subtitle}"),\n' +
-      '  CardBody([\n' +
+      '  Stack([\n' +
       '    TextContent("${4:Body copy goes here.}")\n' +
       '  ])\n' +
       '])',
@@ -52,14 +52,25 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       ')',
   },
   {
-    name: "MetricGrid",
+    name: "Stats",
     description: "Responsive KPI strip with four StatCards.",
     template:
-      'metrics${1} = MetricGrid([\n' +
+      'metrics${1} = Stats([\n' +
       '  StatCard("${2:Active}", "${3:12}", "flat"),\n' +
       '  StatCard("${4:At risk}", "${5:4}", "up", "+2"),\n' +
       '  StatCard("${6:Shipped}", "${7:8}", "up", "+3"),\n' +
       '  StatCard("${8:On-time}", "${9:87%}", "down", "-3%")\n' +
+      '])',
+  },
+  {
+    name: "GridLayout",
+    description: "12-column sidebar layout with named GridItem spans.",
+    template:
+      'sidebar${1} = Card([CardHeader("${2:Sidebar}")])\n' +
+      'main${1}    = Card([CardHeader("${3:Main}")])\n' +
+      'root${1} = Grid(columns=12, gap="l", [\n' +
+      '  GridItem(sidebar${1}, span="1/4"),\n' +
+      '  GridItem(main${1}, span="3/4")\n' +
       '])',
   },
   {
@@ -148,7 +159,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       'form${1} = Stack([\n' +
       '  Input("${2:draft}", "What needs doing?", "text", null, $draft),\n' +
       '  Button("Add", Action([\n' +
-      '    @Set($items, @Push($items, {id: $items.length + 1, text: $draft})),\n' +
+      '    @Set($items, [...$items, {id: $items.length + 1, text: $draft}]),\n' +
       '    @Reset($draft)\n' +
       '  ]), "primary")\n' +
       '])',

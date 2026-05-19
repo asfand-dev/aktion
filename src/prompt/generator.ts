@@ -123,22 +123,22 @@ function generateFullPrompt(library: ComponentLibrary, options: PromptOptions): 
  */
 const CHAT_PROMPT_COMPONENTS: ReadonlyArray<string> = [
   // Layout
-  "Stack", "Grid", "Card", "CardHeader", "CardBody", "CardFooter", "Divider", "Separator",
-  "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps", "StepsItem",
+  "Stack", "StackItem", "Grid", "GridItem", "Box", "Card", "CardHeader", "CardFooter",
+  "Separator", "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
   // Content
-  "TextContent", "Header", "Image", "Link", "Badge", "Tag", "TagBlock",
-  "Alert", "Callout", "Note", "Quote", "CodeBlock", "Markdown",
+  "TextContent", "Image", "Link", "Badge", "BadgeList", "Callout", "Quote",
+  "CodeBlock", "Markdown", "Icon",
   // Forms
   "Form", "FormControl", "Input", "TextArea", "Select", "SelectItem",
-  "Checkbox", "Switch", "Button", "Buttons",
+  "Checkbox", "Switch", "Button", "Buttons", "SearchBar",
   // Data
-  "Table", "Col", "List", "ListItem", "StatCard", "Progress",
+  "Table", "Col", "List", "ListItem", "StatCard", "Stats", "Progress",
   // Charts
   "BarChart", "LineChart", "PieChart", "Series",
   // Chat
   "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem", "ActionLink", "ChatBubble",
   // Lightweight feedback
-  "Avatar", "Rating",
+  "Avatar", "Rating", "Toast",
 ];
 
 function generateChatPrompt(library: ComponentLibrary, options: PromptOptions): string {
@@ -172,12 +172,12 @@ function chatSyntaxSection(rootComponent: string): string {
 
 1. Each statement is on its own line: \`identifier = Expression\`.
 2. \`root\` is the entry point — every program must define \`root = ${rootComponent}(...)\`.
-3. Expressions are: strings (\`"..."\`), template literals (\`\\\`Hi \${name}\\\`\`), numbers, booleans, \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`.
+3. Expressions are: strings (\`"..."\`), template literals (\`\` \`Hi \${name}\` \`\`), numbers, booleans, \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`. Write backticks literally (\`\` \` \`\`) — never as a backslash + backtick.
 4. Prefer references for readability: define \`name = ...\` on one line, then use \`name\` elsewhere.
 5. EVERY variable (except \`root\` and the optional top-level \`theme = Theme({...})\` binding) MUST be referenced somewhere. Unreachable definitions silently render nothing.
 6. Arguments are POSITIONAL (order matters, not names). Write \`Stack([children], "row", "l")\`, NOT \`Stack(children: ..., direction: "row")\`.
 7. Optional arguments can be omitted from the end.
-8. Strings use double quotes with backslash escaping. Backticks allow \`\${expr}\` interpolation: \`\\\`Found \${$rows.length} results\\\`\`.
+8. Strings use double quotes with backslash escaping. Backticks allow \`\${expr}\` interpolation: \`\` \`Found \${$rows.length} results\` \`\`.
 9. Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array. Use \`?.\` (optional chain) to short-circuit on null.
 10. Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || ??\`, unary \`! -\`. Ternary: \`cond ? a : b\`. \`??\` returns left unless null/undefined.
 11. Spread \`...\` works in arrays (\`[...$a, ...$b]\`) and objects (\`{...$cur, status: "done"}\`).
@@ -337,7 +337,7 @@ function syntaxSection(rootComponent: string): string {
 - **Persistent state** uses \`$$\`: \`$$theme = "dark"\` survives page reloads via the host's storage. Same read/write surface as \`$\`, just durable.
 - Component calls use positional arguments: \`Stack([...children], "row", "m")\`.
 - Strings use double quotes, numbers are bare, booleans are \`true\`/\`false\`, null is \`null\`.
-- **Template literals** use backticks with \`\${expr}\` interpolation: \`\`\`name = \\\`Hello \${$user.name}, you have \${$todos.length} todos\\\`\`\`\` — cleaner than \`"Hello " + $user.name + …\`.
+- **Template literals** use backticks with \`\${expr}\` interpolation: \`\` \`Hello \${$user.name}, you have \${$todos.length} todos\` \`\` — cleaner than \`"Hello " + $user.name + …\`. Write backticks literally — never escape them as a backslash + backtick.
 - Arrays: \`[a, b, c]\`. Objects: \`{key: value, other: 1}\` (object keys are bare identifiers).
 - **Spread** with \`...\` works in arrays and objects: \`[...$pinned, ...$todos]\`, \`{...$current, status: "done"}\`. Strings spread into characters; non-iterables are ignored.
 - Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
@@ -364,7 +364,7 @@ quality from a hand-crafted shadcn/ui layout.
   distinct visual sections (banner, header, KPIs, primary content area,
   secondary panel, follow-ups).
 - **Clear visual hierarchy** through spacing, typography, and grouping.
-- **Composed patterns** (\`PageHeader\`, \`MetricGrid\`, \`KanbanBoard\`, etc.)
+- **Composed patterns** (\`PageHeader\`, \`Stats\`, \`KanbanBoard\`, etc.)
   instead of hand-rolled Cards.
 - **Status and meaning conveyed via colour** (Badge, Tag, StatusDot, Banner
   tones, StatCard trend deltas).
@@ -378,11 +378,11 @@ quality from a hand-crafted shadcn/ui layout.
 1. **Reach for high-level patterns first.** Before composing Card+Stack by hand,
    check whether one of these single-line composites already does the job:
    - \`Hero(...)\` for text-first landing/intro headers
-   - \`Cover(title, imageSrc, ...)\` for image-backed hero bands (products, articles, campaign tops)
+   - \`Hero(title, imageSrc, ...)\` for image-backed hero bands (products, articles, campaign tops)
    - \`PageHeader(...)\` for dashboard / detail page headers (with breadcrumbs + actions)
    - \`SectionHeader(...)\` for sub-section titles inside a Card (eyebrow + title + actions)
-   - \`MetricGrid([...])\` for KPI strips (NOT \`Stack(direction="row")\`)
-   - \`Stats([{label, value, hint?, tone?}, …])\` for compact inline stat rows inside a Card (lighter than \`MetricGrid\`)
+   - \`Stats([...])\` for KPI strips (NOT \`Stack(direction="row")\`)
+   - \`Stats([{label, value, hint?, tone?}, …])\` for compact inline stat rows inside a Card (lighter than \`Stats\`)
    - \`Toolbar(left, right)\` for filter/search/action rows above a list, table, or board
    - \`FeatureGrid([FeatureItem(...)])\` for product highlights
    - \`MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?)\` for article/product/preview cards (in a \`Grid\`)
@@ -457,11 +457,11 @@ The single most common failure is producing a UI that's too sparse. Use these
 
 | Request type            | Minimum named sections | Required patterns                                                              |
 |-------------------------|------------------------|---------------------------------------------------------------------------------|
-| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`MetricGrid\` + chart Card + table/list + secondary Card |
+| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`Stats\` + chart Card + table/list + secondary Card |
 | Landing / marketing     | **5**                  | \`Hero\` + \`FeatureGrid\` + (Testimonial \\| PricingTable) + \`Banner\` CTA |
 | Detail / profile        | **5**                  | \`PageHeader\` + \`DescriptionList\` Card + secondary content Card + \`Timeline\`/\`Comment\` Card |
 | Settings                | **5**                  | \`PageHeader\` + 3+ Section Cards (with \`SectionHeader\`) + danger-zone Card |
-| List / browse           | **5**                  | \`PageHeader\` + \`Toolbar\` + \`MetricGrid\` (optional) + \`Table\`/\`Grid\` + \`Pagination\` |
+| List / browse           | **5**                  | \`PageHeader\` + \`Toolbar\` + \`Stats\` (optional) + \`Table\`/\`Grid\` + \`Pagination\` |
 | Full app surface        | **4** (inside shell)   | \`AppShell\` wrapping \`Sidebar\` + (PageHeader + sections) |
 | Empty / zero state      | **3**                  | \`PageHeader\` + \`EmptyState\` (with CTA) |
 | Form (compose / submit) | **4**                  | \`PageHeader\` (or \`CardHeader\`) + grouped Card sections + buttons row + status \`Callout\` |
@@ -473,7 +473,7 @@ is always available.
 ### Anti-patterns to avoid
 
 - A single \`Card([CardHeader(...), TextContent(...)])\` for a dashboard request.
-- A vertical \`Stack\` of bare \`StatCard\`s instead of \`MetricGrid([...])\`
+- A vertical \`Stack\` of bare \`StatCard\`s instead of \`Stats([...])\`
   (or \`Stats([...])\` for an inline strip beside a chart).
 - A vertical \`Stack\` of \`TextContent\` lines for a key/value summary —
   use \`DescriptionList\` instead.
@@ -528,7 +528,7 @@ dashStatus    = Badge("Live", "success")
 dashToolbar   = Toolbar([rangeFilter, segmentFilter], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
 rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","Last 7 days"),SelectItem("30d","Last 30 days"),SelectItem("90d","Last quarter")], null, null, $range))
 segmentFilter = FormControl("Segment", Select("segment", [SelectItem("all","All"),SelectItem("paid","Paid"),SelectItem("organic","Organic")], null, null, $segment))
-dashKpis      = MetricGrid([kpiRevenue, kpiOrders, kpiAov, kpiConvRate])
+dashKpis      = Stats([kpiRevenue, kpiOrders, kpiAov, kpiConvRate])
 kpiRevenue    = StatCard("Revenue", "$248,312", "up", "+12.4%", "sack-dollar")
 kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%", "cart-shopping")
 kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%", "ticket")
@@ -575,7 +575,7 @@ topbar = [
 
 pageHeader = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
 
-kpiStrip = MetricGrid([
+kpiStrip = Stats([
   StatCard("MRR",          "$48.2k",  "up",   "+12% vs last month", "sack-dollar"),
   StatCard("Active users", "2,184",   "up",   "+184",               "users"),
   StatCard("Open tickets", "23",      "down", "-9",                 "ticket"),
@@ -714,7 +714,7 @@ listToolbar = Toolbar([
   FormControl("Status", Select("status", [SelectItem("all","All"),SelectItem("active","Active"),SelectItem("paused","Paused"),SelectItem("churned","Churned")], null, null, $status))
 ], [Button("Export", Action([@Run(export)]), "secondary"), Button("Saved views", Action([@Run(views)]), "ghost")])
 
-listStats = MetricGrid([
+listStats = Stats([
   StatCard("Active",   "" + data.active,   "up",   "+4 this week",   "circle-check"),
   StatCard("Paused",   "" + data.paused,   "flat", "no change",      "circle-pause"),
   StatCard("Churned",  "" + data.churned,  "down", "-2 this month",  "circle-xmark"),
@@ -774,7 +774,7 @@ product detail page, blog post, marketing campaign, release announcement.
 \`\`\`
 root = Stack([productCover, productSummary, productStats, relatedHeader, related, reviewsHeader, reviews], "column", "l")
 
-productCover = Cover(
+productCover = Hero(
   "Aurora Headphones",
   "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1400",
   "Studio sound in a 240g shell.",
@@ -797,7 +797,7 @@ summaryRating  = Card([SectionHeader("Reviews", null, null, Badge("In stock", "s
   ProgressRing(86, 100, "86%", "Would buy again", "success", "md")
 ])])
 
-productStats = MetricGrid([
+productStats = Stats([
   StatCard("Sold this month", "12,481", "up",  "+18% vs prev", "cart-shopping"),
   StatCard("Avg. rating",     "4.6",    "flat","stable",        "star"),
   StatCard("In stock",        "1,204",  "down","-220",          "box"),
@@ -849,7 +849,7 @@ gaugeRow = Grid([
 
 chartRow = Grid([
   Card([SectionHeader("Signups"),
-    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+    LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
       [Series("Organic",  [40, 52, 65, 78, 92, 105, 124]),
        Series("Referral", [20, 28, 35, 42, 50, 60,  72])])]),
   Card([SectionHeader("Capacity"),
@@ -858,7 +858,7 @@ chartRow = Grid([
 ], {sm: 1, md: 2}, "l")
 
 auditCard = Card([SectionHeader("Audit trail", "Last 7 days", "AUDIT"),
-  AuditTrail([
+  ActivityLog([
     {actor:"system", title:"Rotated signing key",   time:"08:14",     icon:"key",           tone:"primary"},
     {actor:"admin",  title:"Granted Owner role",    time:"yesterday", icon:"user-shield",   tone:"success"},
     {actor:"scanner",title:"Blocked sign-in",       time:"2d ago",    icon:"shield-halved", tone:"danger"}
@@ -909,7 +909,7 @@ statePane = @Switch($view, {
 }, SuccessState("Ready", "All set."))
 
 root = Stack([
-  BreadcrumbPageHeader(["Workspace","Calendar","May"], "Plan the week."),
+  PageHeader(["Workspace","Calendar","May"], "Plan the week."),
   Grid([calendarCard, Stack([onboardingCard, Card([statePane])], "column","l")], {sm:1, lg:2}, "l")
 ], "column","l")
 \`\`\`
@@ -949,8 +949,7 @@ root = Stack([
 \`\`\`
 
 ### Multi-step wizard / authoring (MultiStepForm + RichTextEditor + advanced inputs)
-Use for sign-up flows, checkout (consider the \`checkout-flow\` live example first),
-content authoring, configuration wizards — anywhere a single page would
+Use for sign-up flows, checkout, content authoring, configuration wizards — anywhere a single page would
 overwhelm.
 \`\`\`
 $step  = 0
@@ -970,7 +969,7 @@ publishGate = @If(@Count(errors) > 0,
   Card([Callout("success","Ready","All gates passed.","circle-check", true)]))
 
 root = Stack([
-  BreadcrumbPageHeader(["Content","Drafts"], "Compose, brand, gate, publish."),
+  PageHeader(["Content","Drafts"], "Compose, brand, gate, publish."),
   MultiStepForm([
     {title:"Compose", details:"Title + body", content:[
       Card([SectionHeader("Body",null,"EDITOR"),
@@ -997,7 +996,7 @@ function defaultRichExamples(): string[] {
     // they showcase the modern language features (template literals,
     // responsive prop maps, $$persistent state, @Switch, @Each with
     // destructuring, custom component macros, @If for lazy branches).
-    `# Project status dashboard (dashboard request → 6+ sections, MetricGrid, Toolbar, Kanban, Timeline)
+    `# Project status dashboard (dashboard request → 6+ sections, Stats, Toolbar, Kanban, Timeline)
 root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardArea], "column", "l")
 statusBanner  = Banner("Quarterly review is open", \`Submit by Friday — \${@Count(atRiskCards)} projects need attention.\`, bannerCta, "bullseye", "primary")
 bannerCta     = Button("Submit update", Action([@Run(open_submit)]), "primary", "button", "small")
@@ -1008,7 +1007,7 @@ dashToolbar   = Toolbar([rangeFilter, ownerFilter, viewToggle], [Button("Share",
 rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","7d"), SelectItem("30d","30d"), SelectItem("90d","90d")], null, null, $$range))
 ownerFilter   = FormControl("Owner", Select("owner", [SelectItem("all","Everyone"), SelectItem("ada","Ada"), SelectItem("linus","Linus")], null, null, $owner))
 viewToggle    = ToggleGroup("view", [{value:"board",label:"Board",icon:"table-columns"},{value:"timeline",label:"Activity",icon:"clock-rotate-left"}], $$view)
-kpis          = MetricGrid([
+kpis          = Stats([
   StatCard("Active",  \`\${@Count(allCards)}\`,    "flat", "0 vs last week",                                "folder"),
   StatCard("At risk", \`\${@Count(atRiskCards)}\`, "up",   \`+\${@Count(atRiskCards) - 2} vs last week\`,    "triangle-exclamation"),
   StatCard("Shipped", "8",                          "up",   "+3 vs last week",                               "rocket"),
@@ -1065,7 +1064,7 @@ sidebarFooter = [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@T
 
 topbar = [StatusDot("Realtime", "success", true), Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])]
 headerCard = PageHeader(\`\${$$lastNav ?? "Overview"}\`, "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
-kpiStrip = MetricGrid([
+kpiStrip = Stats([
   StatCard("MRR",          "$48.2k", "up",   "+12% vs last month", "sack-dollar"),
   StatCard("Active users", "2,184",  "up",   "+184",               "users"),
   StatCard("Open tickets", "23",     "down", "-9",                 "ticket"),
@@ -1113,14 +1112,14 @@ sorted      = @Switch($$sort, {
 
 summary     = Stats([
   {label:"Showing", value: \`\${@Count(sorted)} of \${@Count(products)}\`, hint: \`@\${@Count(@Filter(sorted, "badge", "==", "Sale"))} on sale\`, tone:"primary"},
-  {label:"Avg price",  value: @FormatCurrency(@Avg(sorted.price), "USD"), tone:"info"},
+  {label:"Avg price",  value: @Format(@Avg(sorted.price, "currency", "USD"), "USD"), tone:"info"},
   {label:"Avg rating", value: \`\${@Round(@Avg(sorted.rating), 1)} ★\`,        tone:"success"}
 ], "start")
 
 body        = @If(@Count(sorted) > 0, productGrid, emptyState)
 emptyState  = EmptyState("No results", \`Nothing matches "\${$query}" in \${$category}.\`, "magnifying-glass", Button("Reset filters", Action([@Reset($query, $category)]), "primary"))
 
-ProductCard(p) = MediaCard(p.name, p.image, p.summary, p.tags, \`\${@FormatCurrency(p.price, "USD")} · \${p.rating} ★\`, [Button("Add to cart", Action([@Push($$cart, p.id), @ToAssistant(\`Added \${p.name} to cart\`)]), "primary", "button", "small")], @If(p.badge == "Sale", Badge("Sale","danger","tag","sm"), null))
+ProductCard(p) = MediaCard(p.name, p.image, p.summary, p.tags, \`\${@Format(p.price, "currency", "USD")} · \${p.rating} ★\`, [Button("Add to cart", Action([[...$$cart, p.id], @ToAssistant(\`Added \${p.name} to cart\`)]), "primary", "button", "small")], @If(p.badge == "Sale", Badge("Sale","danger","tag","sm"), null))
 
 productGrid = Grid(@Each(sorted, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "l")
 
@@ -1144,9 +1143,9 @@ root = Stack([explorerHeader, kpiStrip, gaugeRow, gridCard, chartRow, chartRow2,
 explorerHeader = PageHeader("Engineering analytics", \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`, ["Workspace","Engineering","Analytics"], explorerActions, Badge("Realtime", "success", "circle", "sm"))
 explorerActions = [Button("Export PDF", Action([@Run(export_pdf)]), "secondary"), Button("Share view", Action([@Run(share)]), "primary")]
 
-kpiStrip = MetricGrid([
+kpiStrip = Stats([
   StatCard("Contributors", \`\${@Count(contributors)}\`,                       "up",   "+2 this week", "users"),
-  StatCard("Commits",      \`\${@FormatNumber(@Sum(contributors.commits))}\`,  "up",   "+184 today",   "code-commit"),
+  StatCard("Commits",      \`\${@Format(@Sum(contributors.commits, "number"))}\`,  "up",   "+184 today",   "code-commit"),
   StatCard("Avg latency",  \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`,  "down", "-12 ms",       "gauge-high"),
   StatCard("Top score",    \`\${@Max(contributors.score)}\`,                   "flat", "Ada Lovelace", "trophy")
 ])
@@ -1180,7 +1179,7 @@ gridCard = Card([
 # Six chart primitives share Series(...) shape — swap in Query() results to make them live.
 chartRow = Grid([
   Card([SectionHeader("Signups · last 7 days", "Stacked by source"),
-    AreaChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+    LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
       [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
        Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
        Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])]),
@@ -1210,7 +1209,7 @@ bottomRow = Grid([
     ListItem("Grace deployed compiler 4.2", "Latency improved 8%.",        "rocket")
   ], Action([@Run(load_more_activity)]), false, true)]),
   Card([SectionHeader("Audit trail", "Privileged actions, last 7d", "AUDIT", Badge("Compliance","primary","shield-halved","sm")),
-    AuditTrail([
+    ActivityLog([
       {actor: "system",  title: "Rotated signing key",       time: "08:14",      icon: "key",           tone: "primary", meta: "kid=abc123"},
       {actor: "admin",   title: "Granted Owner role to Ada", time: "yesterday",  icon: "user-shield",   tone: "success", meta: "actor=u_8132"},
       {actor: "scanner", title: "Blocked suspicious sign-in",time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless"}
@@ -1312,10 +1311,10 @@ function builtinsSection(): string {
 All built-ins use the \`@\` prefix and may appear anywhere in an expression.
 - Aggregation: \`@Count(arr)\`, \`@Sum(nums)\`, \`@Avg(nums)\`, \`@Min(nums)\`, \`@Max(nums)\`, \`@First(arr)\`, \`@Last(arr)\`.
 - Numeric: \`@Round(n, decimals?)\`, \`@Abs(n)\`, \`@Floor(n)\`, \`@Ceil(n)\`, \`@Clamp(n, min, max)\`.
-- Array shape: \`@Filter(arr, "field", "op", value)\` (ops: \`==\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`contains\`); \`@Sort(arr, "field", "asc"|"desc")\`; \`@Slice(arr, start?, end?)\`; \`@Take(arr, n)\`; \`@Reverse(arr)\`; \`@Unique(arr, "field"?)\`.
-- Array growth: \`@Push(arr, value)\` (returns a NEW array with \`value\` appended); \`@Concat(a, b)\`; \`@Range(start, end, step?)\` (inclusive); \`@Repeat(value, n)\` (skeleton grids).
-- Array reshape: \`@Map(arr, "field")\` (readable alias for array pluck); \`@Find(arr, "field", "op", value)\`; \`@GroupBy(arr, "field")\`; \`@Pick(obj, ["a","b"])\`.
-- Formatting: \`@Format(value, "currency"|"percent"|"number", currency?, locale?)\`, \`@FormatCurrency(value, currency?, locale?)\`, \`@FormatNumber(value, locale?)\`, \`@FormatDate(value, format?)\` (\`format\` is a moment-like pattern OR a named mode: \`"relative"\`, \`"date"\`, \`"time"\`, \`"datetime"\`, \`"iso"\`).
+- Array shape: \`@Filter(arr, "field", "op", value)\` (ops: \`==\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`contains\`); \`@Sort(arr, "field", "asc"|"desc")\`; \`@Slice(arr, start?, end?)\`; \`@Slice(arr, 0, n)\`; \`@Reverse(arr)\`; \`@Unique(arr, "field"?)\`.
+- Array growth: \`@Push(arr, value)\` (returns a NEW array with \`value\` appended); \`[...a, ...b]\`; \`@Range(start, end, step?)\` (inclusive); \`@Repeat(value, n)\` (skeleton grids).
+- Array reshape: \`arr.field\` (readable alias for array pluck); \`@Find(arr, "field", "op", value)\`; \`@GroupBy(arr, "field")\`; \`@Pick(obj, ["a","b"])\`.
+- Formatting: \`@Format(value, "currency"|"percent"|"number", currency?, locale?)\`, \`@Format(value, currency?, locale?, "currency", "USD")\`, \`@Format(value, locale?, "number")\`, \`@FormatDate(value, format?)\` (\`format\` is a moment-like pattern OR a named mode: \`"relative"\`, \`"date"\`, \`"time"\`, \`"datetime"\`, \`"iso"\`).
 - Date / time: \`@Now()\` (epoch ms), \`@Today()\` (today at midnight, ISO), \`@AddDays(date, n)\`.
 - Strings: \`@Plural(n, "order", "orders")\`, \`@Capitalize\`, \`@Lowercase\`, \`@Uppercase\`, \`@Titlecase\`, \`@Camelcase\`, \`@Snakecase\`, \`@Kebabcase\`, \`@Pascalcase\`.
 - Iteration: \`@Each(arr, "varName", template)\` — \`varName\` is bound ONLY inside \`template\` (see "Loop scoping" below). Supports destructuring: \`"{id, name, role}"\` exposes those fields directly per row; \`"row, {id, name}"\` exposes BOTH the row object AND the fields.
@@ -1384,7 +1383,7 @@ Most "imperative-looking" UI logic is already expressible without JS. Check this
 | You're tempted to write…              | Idiomatic Streaming UI Script                                                |
 |---------------------------------------|-------------------------------------------------------------------------------|
 | \`Script("init", "ctx.state.set('todos', [...])")\` to seed data | \`$todos = [...]\` — state declarations seed themselves |
-| \`@Js("ctx.state.set('todos', ctx.state.get('todos').concat(newItem))")\` | \`@Set($todos, @Push($todos, newItem))\` |
+| \`@Js("ctx.state.set('todos', ctx.state.get('todos').concat(newItem))")\` | \`@Set($todos, [...$todos, newItem])\` |
 | \`@Js("...filter(t => t.id !== id)")\` to delete | \`@Set($todos, @Filter($todos, "id", "!=", x.id))\` (inside \`@Each\` where \`x\` is the row) |
 | \`$todos.filter(...)\` for display                          | \`@Filter($todos, "done", "==", false)\` |
 | \`$todos.length\`, \`$todos.first\`, \`$todos.last\`           | Same — these member shortcuts work directly. |
@@ -1414,7 +1413,7 @@ header = PageHeader("Todos", "Add tasks below")
 composer = Stack([
   Input("draft-input", "What needs doing?", "text", null, $draft),
   Button("Add", Action([
-    @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+    @Set($todos, [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
     @Reset($draft)
   ]), "primary")
 ])
@@ -1557,7 +1556,7 @@ shortcut = Script("shortcut", \`
 - WRONG: \`"" + ($todos.length || 0)\`, \`filter($todos, "done")\`, \`$todos.find(...)\`, \`$todos.map(t => t.title)\`.
   RIGHT: \`"" + $todos.length\` (length is already a number). Use builtins: \`@Filter($todos, "done", "==", true)\`. Array pluck via member access: \`$todos.title\`.
 - WRONG: \`@Js("...todos.concat([newItem])...")\` to append.
-  RIGHT: \`@Set($todos, @Push($todos, newItem))\` — no JS required.
+  RIGHT: \`@Set($todos, [...$todos, newItem])\` — no JS required.
 - WRONG: a stray word or descriptor inside an Action array, e.g. \`Action([@Js(\`...\`) Enthusiastic])\`. Action arrays contain ONLY action steps separated by commas — no prose, no adverbs, no labels.
   RIGHT: \`Action([@Js(\`...\`), @ToAssistant("Saved!")])\`.
 - WRONG: \`state.set('x', 1)\` — \`state\` is not global. Always go through \`ctx.state\`.
@@ -1758,7 +1757,7 @@ Streaming UI Script supports hoisting: a reference can be used BEFORE it is defi
 
 **Streaming rules — follow strictly:**
 - Always reference children by name from the root (\`root = Stack([hero, body, footer])\`) instead of inlining everything in one giant expression. Inline trees only stabilise after the closing bracket streams in, but named references render the parent shell immediately and let each child appear as its line completes.
-- Define one reference per FormControl, TabItem, AccordionItem, StepsItem, Series, and Col. Bundling many fields inside a single literal array delays rendering until the entire array has streamed.
+- Define one reference per FormControl, TabItem, AccordionItem, Series, and Col. Bundling many fields inside a single literal array delays rendering until the entire array has streamed.
 - Place large data values (long arrays, big strings, base64, generated tables) on their own trailing lines so they appear last and never block the visible structure.
 - Never split a single statement across multiple lines unless it sits inside an unmatched bracket — the parser only commits on a complete line, so half-finished lines stay invisible until they finish.
 - Do not introduce trailing commas, dangling operators, or open brackets you don't close on the same line — these will keep the chunk un-parseable until the next chunk arrives.
@@ -1773,7 +1772,7 @@ function closingSection(): string {
 - Always start with \`root = ...\` on the very first line.
 - Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
 - Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
-- **Reach for pattern composites** (\`Hero\`, \`Cover\`, \`PageHeader\`, \`SectionHeader\`, \`MetricGrid\`, \`Stats\`, \`Toolbar\`, \`FeatureGrid\`, \`MediaCard\`, \`Tile\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`PersonChip\`, \`Testimonial\`, \`Quote\`, \`Banner\`, \`Notification\`, \`Comment\`, \`ChatBubble\`, \`DescriptionList\`, \`StatusDot\`, \`Rating\`, \`ProgressRing\`, \`PricingTable\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
+- **Reach for pattern composites** (\`Hero\`, \`Cover\`, \`PageHeader\`, \`SectionHeader\`, \`Stats\`, \`Stats\`, \`Toolbar\`, \`FeatureGrid\`, \`MediaCard\`, \`Tile\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`PersonChip\`, \`Testimonial\`, \`Quote\`, \`Banner\`, \`Notification\`, \`Comment\`, \`ChatBubble\`, \`DescriptionList\`, \`StatusDot\`, \`Rating\`, \`ProgressRing\`, \`PricingTable\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
 - **Reach for app-shell composites** (\`AppShell\`, \`Sidebar\`, \`SplitView\`) whenever the response represents a complete product surface — never replicate them with bare \`Stack(row, wrap=true)\`.
 - **Use \`Container\` for marketing/article surfaces.** Wrap the top of \`root\` in \`Container(children, size?)\` (sm/md/lg/xl) so wide screens don't stretch reading content edge-to-edge. \`AppShell\` already takes care of width on dashboards.
 - **Use \`Grid\` for uniform card rows** (KPIs, tiles, features, MediaCards). Reserve \`Stack(direction="row")\` for asymmetric side-by-side content; use \`Spacer\` inside a row Stack to push the next item to the far edge.
@@ -1807,7 +1806,7 @@ Before finishing, walk your output and verify:
    5). If you are short, add a complementary section (related links, recent
    activity, status, next steps) — never ship a sparse layout.
 7. **Pattern check.** Did you use \`PageHeader\` / \`SectionHeader\` /
-   \`MetricGrid\` / \`Stats\` / \`Toolbar\` / \`SearchBar\` / \`MediaCard\` /
+   \`Stats\` / \`Stats\` / \`Toolbar\` / \`SearchBar\` / \`MediaCard\` /
    \`DescriptionList\` / \`AppShell\` / \`Container\` where they apply, or did
    you reinvent them with raw \`Stack\` + \`Card\` + \`Input\` + \`Image\`?
    Prefer the patterns.

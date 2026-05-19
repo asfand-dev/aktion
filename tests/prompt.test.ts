@@ -46,11 +46,11 @@ describe("generatePrompt", () => {
   it("documents the new shadcn-parity primitives and pattern composites", () => {
     const text = generatePrompt(defaultLibrary);
     // Primitives we added (shadcn parity)
-    for (const name of ["Avatar", "Progress", "Switch", "Toggle", "Tooltip", "Breadcrumb", "Pagination", "Sheet", "Grid"]) {
+    for (const name of ["Avatar", "Progress", "Switch", "ToggleGroup", "Tooltip", "Breadcrumb", "Pagination", "Drawer", "Grid"]) {
       expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
     }
     // Pattern composites
-    for (const name of ["Hero", "PageHeader", "MetricGrid", "EmptyState", "Timeline", "FeatureGrid", "KanbanBoard"]) {
+    for (const name of ["Hero", "PageHeader", "Stats", "EmptyState", "Timeline", "FeatureGrid", "KanbanBoard"]) {
       expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
     }
     // The Patterns group is announced in components section
@@ -78,14 +78,14 @@ describe("generatePrompt", () => {
   it("documents the richer composition primitives", () => {
     const text = generatePrompt(defaultLibrary);
     for (const name of [
-      "Container", "Spacer", "Cover", "MediaCard", "Stats", "Tile",
+      "Container", "Spacer", "Hero", "MediaCard", "Stats", "Tile",
       "Notification", "PersonChip", "Quote", "Rating",
       "ProgressRing", "ChatBubble", "SearchBar",
     ]) {
       expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
     }
     // Product detail recipe references the new components
-    expect(text).toContain("Cover(");
+    expect(text).toContain("Hero(");
     expect(text).toContain("MediaCard(");
     expect(text).toContain("Rating(");
   });
@@ -93,7 +93,7 @@ describe("generatePrompt", () => {
   it("falls back to a built-in rich example when none is provided", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("## Examples");
-    expect(text).toContain("MetricGrid");
+    expect(text).toContain("Stats");
     expect(text).toContain("KanbanBoard");
   });
 
@@ -126,6 +126,21 @@ describe("generatePrompt", () => {
     expect(text).toContain("NavLink(");
     expect(text).toContain("@Navigate(");
     expect(text).toContain("### Routing");
+  });
+
+  it("never teaches the LLM to escape backticks (regression: \\` in template-literal examples)", () => {
+    // Earlier versions accidentally rendered `\`Hi ${name}\`` (backslash + backtick)
+    // into the prompt because the TS template literal used \\\\` instead of \\`.
+    // The LLM faithfully copied the backslashes into its output, breaking parsing.
+    // Both the full and chat prompts must show backticks literally.
+    const fullPrompt = generatePrompt(defaultLibrary);
+    const chatPrompt = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(fullPrompt).not.toMatch(/\\`/);
+    expect(chatPrompt).not.toMatch(/\\`/);
+    // And the correct backtick examples must be present.
+    expect(fullPrompt).toContain("`Hello ${$user.name}");
+    expect(chatPrompt).toContain("`Hi ${name}`");
+    expect(chatPrompt).toContain("`Found ${$rows.length} results`");
   });
 
   describe("chat mode", () => {

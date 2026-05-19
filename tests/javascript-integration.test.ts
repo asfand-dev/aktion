@@ -145,15 +145,15 @@ root = Stack([label, btn])`;
     expect(el.shadowRoot!.querySelector(".rui-text")?.textContent).toBe("1");
   });
 
-  it("supports the canonical 'add via @Push' pattern without any JS", async () => {
+  it("supports the canonical 'add via spread' pattern without any JS", async () => {
     // The todo-app teaching pattern: adding an item is fully declarative.
-    // No Script/@Js needed. This regression-tests the new @Push builtin and
+    // No Script/@Js needed. This regression-tests array spread in @Set and
     // the .length shortcut working together.
     const el = mount();
     el.setResponse(
       "$todos = []\n" +
       "$draft = \"\"\n" +
-      "addBtn = Button(\"Add\", Action([@Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft})), @Reset($draft)]))\n" +
+      "addBtn = Button(\"Add\", Action([@Set($todos, [...$todos, {id: $todos.length + 1, text: $draft}]), @Reset($draft)]))\n" +
       "root = Stack([addBtn])",
     );
     await waitForRenders();

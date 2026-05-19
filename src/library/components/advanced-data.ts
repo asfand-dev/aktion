@@ -3,7 +3,7 @@
  *
  *   - DataGrid — Table with built-in sort, filter, row selection, pagination.
  *   - CalendarView — Month/week calendar grid distinct from DatePicker.
- *   - ActivityLog / AuditTrail — Timeline-like specialised feeds.
+ *   - ActivityLog — Timeline-like specialised feeds.
  *   - ComparisonTable — Generic feature/spec comparison table.
  *   - InfiniteList — Scroll-to-load list container.
  *
@@ -646,7 +646,7 @@ export const CalendarView: ComponentSpec = {
 };
 
 /* ----------------------------------------------------------------------- *
- * ActivityLog / AuditTrail — Timeline siblings
+ * ActivityLog — activity / audit feeds
  * ----------------------------------------------------------------------- */
 
 interface FeedEntry {
@@ -679,8 +679,8 @@ function readFeedEntries(raw: unknown): FeedEntry[] {
   return out;
 }
 
-function renderFeed(klass: string, items: FeedEntry[]): HTMLElement {
-  const root = el("ol", { class: klass });
+function renderFeed(klass: string, items: FeedEntry[], variant: string): HTMLElement {
+  const root = el("ol", { class: klass, "data-variant": variant });
   for (const entry of items) {
     const li = el("li", { class: `${klass}-item`, "data-tone": entry.tone });
     const marker = el("span", { class: `${klass}-marker` });
@@ -709,26 +709,19 @@ export const ActivityLog: ComponentSpec = {
   name: "ActivityLog",
   description:
     "Purpose-built feed of user/system activity. Each entry has `actor`, " +
-    "`title`, `description?`, `time?`, `icon?`, `tone?`. Use INSTEAD of " +
-    "Timeline when the feed represents who did what, when (audit logs, " +
-    "comments, change history). Pass items as `{actor, title, description, " +
-    "time, icon, tone, avatarSrc}` objects.",
+    "`title`, `description?`, `time?`, `icon?`, `tone?`, and optional `meta` " +
+    "(IP, browser, request id). Use `variant=\"audit\"` for monospace " +
+    "security/admin trails. Pass items as `{actor, title, description, time, " +
+    "icon, tone, avatarSrc, meta}` objects.",
   props: [
     { name: "items", type: "object[]" },
+    { name: "variant", type: "string", optional: true, enum: ["default", "audit"], description: "audit = monospace voice with meta column" },
   ],
-  render: (_node, props) => renderFeed("rui-activity-log", readFeedEntries(props.items)),
-};
-
-export const AuditTrail: ComponentSpec = {
-  name: "AuditTrail",
-  description:
-    "Dense audit trail of system events. Same shape as `ActivityLog` but " +
-    "rendered with a monospace voice and metadata column (`meta`) — use " +
-    "for security logs, admin actions, and compliance dashboards.",
-  props: [
-    { name: "items", type: "object[]" },
-  ],
-  render: (_node, props) => renderFeed("rui-audit-trail", readFeedEntries(props.items)),
+  render: (_node, props) => {
+    const variant = asString(props.variant, "default");
+    const klass = variant === "audit" ? "rui-audit-trail" : "rui-activity-log";
+    return renderFeed(klass, readFeedEntries(props.items), variant);
+  },
 };
 
 /* ----------------------------------------------------------------------- *

@@ -40,6 +40,14 @@ const getField = (item: unknown, field: string): unknown => {
   return undefined;
 };
 
+const filterByField = (args: unknown[]): unknown[] => {
+  const arr = toArray(args[0]);
+  const field = String(args[1] ?? "");
+  const op = String(args[2] ?? "==");
+  const value = args[3];
+  return arr.filter((item) => compare(op, getField(item, field), value));
+};
+
 const isObject = (v: unknown): v is Record<string, unknown> =>
   Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -167,13 +175,9 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     const arr = toArray(args[0]);
     return arr.length === 0 ? null : arr[arr.length - 1];
   },
-  Filter: (args) => {
-    const arr = toArray(args[0]);
-    const field = String(args[1] ?? "");
-    const op = String(args[2] ?? "==");
-    const value = args[3];
-    return arr.filter((item) => compare(op, getField(item, field), value));
-  },
+  Filter: filterByField,
+  /** Alias for `@Filter` — identical semantics. */
+  FilterBy: filterByField,
   Sort: (args) => {
     const arr = [...toArray(args[0])];
     const field = String(args[1] ?? "");
@@ -186,17 +190,6 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     });
     return arr;
   },
-  /**
-   * Append a value to an array, returning a new array. Designed to be paired
-   * with `@Set` so the LLM can grow a list declaratively, no JS required:
-   *   addBtn = Button("Add", Action([@Set($todos, @Push($todos, newTodo))]))
-   */
-  Push: (args) => [...toArray(args[0]), args[1]],
-  /**
-   * Concatenate two arrays. Useful for prepending items as well:
-   *   @Set($todos, @Concat([newTodo], $todos))
-   */
-  Concat: (args) => [...toArray(args[0]), ...toArray(args[1])],
   Round: (args) => {
     const n = toNumber(args[0]);
     const decimals = args[1] === undefined ? 0 : toNumber(args[1]);
@@ -208,13 +201,6 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
   Ceil: (args) => Math.ceil(toNumber(args[0])),
 
   // ───────── Array helpers ─────────
-  /** Pluck a field from each item — readable alias for `arr.title`. */
-  Map: (args) => {
-    const arr = toArray(args[0]);
-    const field = String(args[1] ?? "");
-    if (!field) return arr;
-    return arr.map((item) => getField(item, field));
-  },
   /** Find the first item matching a comparator (mirrors `@Filter`). */
   Find: (args) => {
     const arr = toArray(args[0]);
@@ -241,8 +227,6 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     const end = args[2] === undefined ? arr.length : toNumber(args[2]);
     return arr.slice(start, end);
   },
-  /** Take the first N items. Equivalent to `@Slice(arr, 0, n)`. */
-  Take: (args) => toArray(args[0]).slice(0, Math.max(0, toNumber(args[1]))),
   /**
    * Deduplicate. Without a field, compares values with strict equality;
    * with a field, dedupes by that field's value (first seen wins).
@@ -324,21 +308,6 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     const locale = args[2] === undefined ? undefined : String(args[2] ?? "");
     return new Intl.NumberFormat(locale || undefined).format(value);
   },
-  FormatCurrency: (args) => {
-    const value = toNumber(args[0]);
-    const currency = String(args[1] ?? "USD") || "USD";
-    const locale = args[2] === undefined ? undefined : String(args[2] ?? "");
-    try {
-      return new Intl.NumberFormat(locale || undefined, { style: "currency", currency }).format(value);
-    } catch {
-      return value.toFixed(2);
-    }
-  },
-  FormatNumber: (args) => {
-    const value = toNumber(args[0]);
-    const locale = args[1] === undefined ? undefined : String(args[1] ?? "");
-    return new Intl.NumberFormat(locale || undefined).format(value);
-  },
   /**
    * Format a date. The second argument is either a moment-like pattern
    * (e.g. `"MMM D"`, `"YYYY-MM-DD"`) or one of these named modes:
@@ -378,6 +347,34 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     next.setDate(next.getDate() + days);
     return next.toISOString();
   },
+  /** Shift a date by N hours (negative N moves backward). */
+  AddHours: (args) => {
+    const date = toDate(args[0]);
+    const hours = toNumber(args[1]);
+    const next = new Date(date.getTime());
+    next.setTime(next.getTime() + hours * 3_600_000);
+    return next.toISOString();
+  },
+  /** Whole-day difference from `start` to `end` (end − start). */
+  DiffDays: (args) => {
+    const start = toDate(args[0]);
+    const end = toDate(args[1]);
+    const msPerDay = 86_400_000;
+    return Math.round((end.getTime() - start.getTime()) / msPerDay);
+  },
+  /** UTC Sunday 00:00:00 for the week containing `date`. */
+  StartOfWeek: (args) => {
+    const date = toDate(args[0]);
+    const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    next.setUTCDate(next.getUTCDate() - next.getUTCDay());
+    return next.toISOString();
+  },
+  /** Last moment of the calendar month containing `date`. */
+  EndOfMonth: (args) => {
+    const date = toDate(args[0]);
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+    return next.toISOString();
+  },
 
   // ───────── String helpers ─────────
   /** Pluralisation: `@Plural(n, "order", "orders")` → "1 order"/"2 orders". */
@@ -399,10 +396,48 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" "),
-  Camelcase: (args) => recase(args[0], "camel"),
-  Snakecase: (args) => recase(args[0], "snake"),
-  Kebabcase: (args) => recase(args[0], "kebab"),
-  Pascalcase: (args) => recase(args[0], "pascal"),
+  Case: (args) => {
+    const kind = String(args[1] ?? "camel").toLowerCase();
+    if (kind === "snake" || kind === "kebab" || kind === "pascal" || kind === "camel") {
+      return recase(args[0], kind);
+    }
+    return recase(args[0], "camel");
+  },
+  Join: (args) => {
+    const arr = toArray(args[0]);
+    const sep = args[1] === undefined ? "," : String(args[1] ?? "");
+    return arr.map((v) => (v == null ? "" : String(v))).join(sep);
+  },
+  Split: (args) => {
+    const text = String(args[0] ?? "");
+    const sep = args[1] === undefined ? "," : String(args[1] ?? "");
+    return text.split(sep);
+  },
+  Trim: (args) => String(args[0] ?? "").trim(),
+  Replace: (args) => {
+    const text = String(args[0] ?? "");
+    const search = String(args[1] ?? "");
+    const replacement = args[2] === undefined ? "" : String(args[2] ?? "");
+    return text.split(search).join(replacement);
+  },
+  Substring: (args) => {
+    const text = String(args[0] ?? "");
+    const start = toNumber(args[1]);
+    const end = args[2] === undefined ? text.length : toNumber(args[2]);
+    return text.substring(start, end);
+  },
+  StartsWith: (args) => String(args[0] ?? "").startsWith(String(args[1] ?? "")),
+  EndsWith: (args) => String(args[0] ?? "").endsWith(String(args[1] ?? "")),
+  Contains: (args) => String(args[0] ?? "").includes(String(args[1] ?? "")),
+  Match: (args) => {
+    const text = String(args[0] ?? "");
+    const pattern = String(args[1] ?? "");
+    try {
+      return new RegExp(pattern).test(text);
+    } catch {
+      return false;
+    }
+  },
 
   // ───────── Numeric utility ─────────
   /** Clamp a number into `[min, max]`. */
@@ -412,6 +447,10 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
     const max = toNumber(args[2]);
     return Math.min(Math.max(v, min), max);
   },
+  Pow: (args) => Math.pow(toNumber(args[0]), toNumber(args[1])),
+  Sqrt: (args) => Math.sqrt(toNumber(args[0])),
+  Random: () => Math.random(),
+  Log: (args) => Math.log(toNumber(args[0])),
 };
 
 /**

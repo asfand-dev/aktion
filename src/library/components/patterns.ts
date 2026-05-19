@@ -14,11 +14,12 @@
 import type { ComponentSpec } from "../types.js";
 import { isActionPayload } from "../../runtime/builtins.js";
 import {
-  el, asArray, asString, asBoolean, renderIcon,
+  el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength, sanitiseCssUrl, sanitiseImageSrc,
 } from "../utils.js";
 import { renderAvatar, pickIconForLabel, pickIconForTone } from "./_internal.js";
 import { SearchBar } from "./forms.js";
+import { Grid } from "./layout.js";
 
 const SURFACE_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
 
@@ -62,8 +63,10 @@ export const Hero: ComponentSpec = {
   name: "Hero",
   description:
     "Eye-catching landing/marketing header with eyebrow tag, title, subtitle, " +
-    "optional bullet highlights, and primary/secondary CTA buttons. Use as the " +
-    "first child of `root` when introducing a product, feature, or new section.",
+    "optional bullet highlights, and primary/secondary CTA buttons. Use " +
+    "`layout=\"cover\"` with `imageSrc` for an image-backed hero band " +
+    "(pass `height` and optional `caption`). Default layout shows an " +
+    "optional side illustration.",
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true },
@@ -71,32 +74,61 @@ export const Hero: ComponentSpec = {
     { name: "secondary", type: "Button", optional: true, description: "Secondary CTA — pass a Button(...)" },
     { name: "eyebrow", type: "string", optional: true, description: "Short uppercase tag above the title" },
     { name: "highlights", type: "string[]", optional: true, description: "Bullet items rendered as tag pills" },
-    { name: "imageSrc", type: "string", optional: true, description: "Optional illustration src" },
+    { name: "imageSrc", type: "string", optional: true, description: "Illustration or cover background when layout=cover" },
+    { name: "caption", type: "string", optional: true, description: "Small caption above CTAs (cover layout)" },
+    { name: "height", type: "string", optional: true, description: "Min-height for cover layout (default 280px)" },
+    { name: "actions", type: "Node[]", optional: true, description: "CTA row (cover layout; alternative to primary/secondary)" },
+    { name: "layout", type: "string", optional: true, enum: ["default", "cover"], description: "default = text-first; cover = image-backed band" },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES, description: "Accent tone" },
   ],
   render: (_node, props, helpers) => {
-    // Resolve the safe image URL up front so the `data-has-image` flag stays
-    // in sync with whether we actually render the `<img>` element — a hostile
-    // `javascript:` src would otherwise leave the layout reserving space for
-    // an image that never appears.
-    const heroImageSrc = sanitiseImageSrc(props.imageSrc);
-    const root = el("section", {
-      class: "rui-hero",
-      "data-tone": asString(props.tone, "primary"),
-      "data-has-image": heroImageSrc ? "true" : "false",
-    });
-    const body = el("div", { class: "rui-hero-body" });
-
+    const layout = asString(props.layout, "default");
     const heroTitle = asString(props.title);
     const heroSubtitle = asString(props.subtitle);
     const explicitEyebrow = asString(props.eyebrow);
     const eyebrow = explicitEyebrow || deriveHeroEyebrow(heroTitle, heroSubtitle);
+    const tone = asString(props.tone, "primary");
+
+    if (layout === "cover") {
+      const safeImageSrc = sanitiseCssUrl(asString(props.imageSrc));
+      const safeHeight = sanitiseCssLength(asString(props.height), "280px");
+      const root = el("section", {
+        class: "rui-cover",
+        "data-tone": tone,
+        style: `background-image:linear-gradient(180deg, rgba(15, 23, 42, 0.05) 0%, rgba(15, 23, 42, 0.62) 100%), url("${safeImageSrc}");min-height:${safeHeight};`,
+      });
+      const body = el("div", { class: "rui-cover-body" });
+      if (eyebrow) body.append(el("span", { class: "rui-cover-eyebrow" }, [eyebrow]));
+      body.append(el("h1", { class: "rui-cover-title" }, [heroTitle]));
+      if (heroSubtitle) body.append(el("p", { class: "rui-cover-subtitle" }, [heroSubtitle]));
+      const caption = asString(props.caption);
+      if (caption) body.append(el("p", { class: "rui-cover-caption" }, [caption]));
+      const actions = renderActionsRow(props.actions, helpers);
+      if (actions) {
+        actions.classList.add("rui-cover-actions");
+        body.append(actions);
+      } else {
+        const ctaItems = [props.primary, props.secondary].filter(Boolean);
+        if (ctaItems.length > 0) {
+          const ctas = el("div", { class: "rui-cover-actions rui-pattern-actions" });
+          for (const cta of ctaItems) ctas.append(helpers.renderNode(cta));
+          body.append(ctas);
+        }
+      }
+      root.append(body);
+      return root;
+    }
+
+    const heroImageSrc = sanitiseImageSrc(props.imageSrc);
+    const root = el("section", {
+      class: "rui-hero",
+      "data-tone": tone,
+      "data-has-image": heroImageSrc ? "true" : "false",
+    });
+    const body = el("div", { class: "rui-hero-body" });
     if (eyebrow) body.append(el("span", { class: "rui-hero-eyebrow" }, [eyebrow]));
-
     body.append(el("h1", { class: "rui-hero-title" }, [heroTitle]));
-
     if (heroSubtitle) body.append(el("p", { class: "rui-hero-subtitle" }, [heroSubtitle]));
-
     const highlights = asArray<unknown>(props.highlights);
     if (highlights.length > 0) {
       const tags = el("div", { class: "rui-hero-highlights" });
@@ -106,22 +138,18 @@ export const Hero: ComponentSpec = {
       }
       body.append(tags);
     }
-
     const ctaItems = [props.primary, props.secondary].filter(Boolean);
     if (ctaItems.length > 0) {
       const ctas = el("div", { class: "rui-hero-ctas" });
       for (const cta of ctaItems) ctas.append(helpers.renderNode(cta));
       body.append(ctas);
     }
-
     root.append(body);
-
     if (heroImageSrc) {
       const media = el("div", { class: "rui-hero-media" });
       media.append(el("img", { src: heroImageSrc, alt: "", loading: "lazy" }));
       root.append(media);
     }
-
     return root;
   },
 };
@@ -185,28 +213,6 @@ export const PageHeader: ComponentSpec = {
     }
 
     root.append(titleRow);
-    return root;
-  },
-};
-
-export const MetricGrid: ComponentSpec = {
-  name: "MetricGrid",
-  description:
-    "Responsive grid of StatCard tiles (auto 2/3/4 columns based on viewport). " +
-    "Use as the KPI strip at the top of any dashboard. Pass an array of " +
-    "StatCard(...) values as items.",
-  props: [
-    { name: "items", type: "StatCard[]" },
-    { name: "columns", type: "number", optional: true, description: "Preferred column count (1–6, default auto)" },
-  ],
-  render: (_node, props, helpers) => {
-    const items = asArray<unknown>(props.items);
-    const columns = Math.max(1, Math.min(6, Number(props.columns ?? "auto")));
-    const root = el("div", {
-      class: "rui-metric-grid",
-      "data-columns": columns > 0 ? String(columns) : null,
-    });
-    for (const item of items) root.append(helpers.renderNode(item));
     return root;
   },
 };
@@ -1034,53 +1040,6 @@ export const PricingTable: ComponentSpec = {
  * chip, inline notification) so the LLM can reach for a single line.
  * ----------------------------------------------------------------------- */
 
-export const Cover: ComponentSpec = {
-  name: "Cover",
-  description:
-    "Image-backed hero band with a gradient overlay, eyebrow tag, title, " +
-    "subtitle, optional caption row, and CTA buttons. Use as the top " +
-    "section of product, article, or campaign pages — distinct from " +
-    "`Hero`, which is text-first with an optional side image.",
-  props: [
-    { name: "title", type: "string" },
-    { name: "imageSrc", type: "string", description: "Background image URL" },
-    { name: "subtitle", type: "string", optional: true },
-    { name: "eyebrow", type: "string", optional: true, description: "Short uppercase label above the title" },
-    { name: "caption", type: "string", optional: true, description: "Small caption rendered above the actions" },
-    { name: "actions", type: "Node[]", optional: true, description: "Buttons (typically Button(...) nodes)" },
-    { name: "tone", type: "string", optional: true, enum: SURFACE_TONES, description: "Overlay accent tone" },
-    { name: "height", type: "string", optional: true, description: "Min-height CSS value (default 280px)" },
-  ],
-  render: (_node, props, helpers) => {
-    // Sanitise both interpolated values to prevent style-injection: a hostile
-    // `imageSrc` containing `');…` could break out of the `url()` literal and
-    // inject arbitrary CSS declarations, and `height` is interpolated directly
-    // into the rule.
-    const safeImageSrc = sanitiseCssUrl(asString(props.imageSrc));
-    const safeHeight = sanitiseCssLength(asString(props.height), "280px");
-    const root = el("section", {
-      class: "rui-cover",
-      "data-tone": asString(props.tone, "primary"),
-      style: `background-image:linear-gradient(180deg, rgba(15, 23, 42, 0.05) 0%, rgba(15, 23, 42, 0.62) 100%), url("${safeImageSrc}");min-height:${safeHeight};`,
-    });
-    const body = el("div", { class: "rui-cover-body" });
-    const eyebrow = asString(props.eyebrow);
-    if (eyebrow) body.append(el("span", { class: "rui-cover-eyebrow" }, [eyebrow]));
-    body.append(el("h1", { class: "rui-cover-title" }, [asString(props.title)]));
-    const subtitle = asString(props.subtitle);
-    if (subtitle) body.append(el("p", { class: "rui-cover-subtitle" }, [subtitle]));
-    const caption = asString(props.caption);
-    if (caption) body.append(el("p", { class: "rui-cover-caption" }, [caption]));
-    const actions = renderActionsRow(props.actions, helpers);
-    if (actions) {
-      actions.classList.add("rui-cover-actions");
-      body.append(actions);
-    }
-    root.append(body);
-    return root;
-  },
-};
-
 export const MediaCard: ComponentSpec = {
   name: "MediaCard",
   description:
@@ -1214,19 +1173,40 @@ export function renderInlineSparkline(values: number[], tone = "primary"): SVGSV
 export const Stats: ComponentSpec = {
   name: "Stats",
   description:
-    "Compact horizontal stat strip of `{label, value, hint?, tone?, spark?}` " +
-    "entries. Lighter than `MetricGrid` — use inside a Card alongside a " +
-    "chart, in a Toolbar, or beneath a PageHeader when you need a few " +
-    "inline KPIs without taking over the layout. Provide `spark` as a " +
-    "number array to render an inline Sparkline beside each value.",
+    "KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` " +
+    "objects for strip layout, or as `StatCard(...)` nodes when `layout=\"grid\"`.",
   props: [
-    { name: "items", type: "object[]", description: "Array of {label, value, hint?, tone?, spark?} objects" },
-    { name: "align", type: "string", optional: true, enum: ["start", "center", "end"] },
+    { name: "items", type: "object[] | StatCard[]", description: "Stat objects or StatCard nodes when layout=grid" },
+    { name: "layout", type: "string", optional: true, enum: ["strip", "grid"], description: "strip = horizontal row; grid = responsive Grid" },
+    { name: "columns", type: "number", optional: true, description: "Preferred column count for grid layout (1–6)" },
+    { name: "align", type: "string", optional: true, enum: ["start", "center", "end"], description: "Strip alignment (layout=strip only)" },
   ],
-  render: (_node, props) => {
+  render: (_node, props, helpers) => {
+    const items = asArray<unknown>(props.items);
+    const hasComponentItems = items.some(
+      (item) => item && typeof item === "object" && (item as { __kind?: string }).__kind === "Component",
+    );
+    const layout = asString(
+      props.layout,
+      hasComponentItems ? "grid" : "strip",
+    );
+    if (layout === "grid") {
+      const columns = props.columns ? Math.max(1, Math.min(6, Math.floor(asNumber(props.columns)))) : 0;
+      const gridNode = Grid.render(
+        { __kind: "Component", name: "Grid", args: [], argMeta: [] },
+        {
+          children: items,
+          columns: columns > 0 ? columns : "auto",
+          gap: "m",
+        },
+        helpers,
+      ) as HTMLElement;
+      gridNode.classList.add("rui-metric-grid");
+      return gridNode;
+    }
     const align = asString(props.align, "start");
     const root = el("div", { class: "rui-stats", "data-align": align });
-    for (const raw of asArray<unknown>(props.items)) {
+    for (const raw of items) {
       const item = (raw ?? {}) as {
         label?: unknown; value?: unknown; hint?: unknown; tone?: unknown; spark?: unknown;
       };

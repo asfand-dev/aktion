@@ -1,6 +1,6 @@
 /**
  * Navigation primitives modeled after shadcn/ui:
- * Breadcrumb, BreadcrumbItem, Pagination, Sheet, Navbar, NavbarItem.
+ * Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem.
  *
  * These are intentionally light — they wrap the existing Link/NavLink
  * components when an `href`/`to` is provided so routing stays consistent
@@ -334,71 +334,5 @@ export const Navbar: ComponentSpec = {
       root.append(right);
     }
     return root;
-  },
-};
-
-export const Sheet: ComponentSpec = {
-  name: "Sheet",
-  description:
-    "Side drawer overlay shown when `open` is true. Pass a `$variable` as " +
-    "`open` to control it. Choose `side` for slide direction (default right).",
-  props: [
-    { name: "title", type: "string" },
-    { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
-    { name: "children", type: "Node[]" },
-    { name: "side", type: "string", optional: true, enum: ["right", "left", "top", "bottom"] },
-    { name: "footer", type: "Node[]", optional: true, description: "Optional footer actions row" },
-  ],
-  render: (node, props, helpers) => {
-    const isOpen = asBoolean(props.open);
-    const side = asString(props.side, "right");
-    const overlay = el("div", {
-      class: "rui-sheet-overlay",
-      "data-open": isOpen ? "true" : "false",
-      "data-side": side,
-    });
-    const panel = el("aside", {
-      class: "rui-sheet",
-      role: "dialog",
-      "aria-modal": "true",
-      "data-side": side,
-    });
-    const header = el("header", { class: "rui-sheet-header" });
-    header.append(el("h3", { class: "rui-sheet-title" }, [asString(props.title)]));
-    const closeBtn = el("button", {
-      type: "button",
-      class: "rui-sheet-close",
-      "aria-label": "Close",
-    }, ["×"]);
-    const stateName = node.argMeta?.[1]?.stateRef;
-    if (stateName) {
-      closeBtn.onclick = () => {
-        helpers.runAction({
-          kind: "Action",
-          steps: [{ kind: "Set", name: stateName, value: false }],
-        });
-      };
-      overlay.onclick = (event) => {
-        if (event.target === overlay) {
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value: false }],
-          });
-        }
-      };
-    }
-    header.append(closeBtn);
-    panel.append(header);
-    const body = el("div", { class: "rui-sheet-body" });
-    for (const child of asArray(props.children)) body.append(helpers.renderNode(child));
-    panel.append(body);
-    const footer = asArray<unknown>(props.footer);
-    if (footer.length > 0) {
-      const footerRow = el("footer", { class: "rui-sheet-footer" });
-      for (const child of footer) footerRow.append(helpers.renderNode(child));
-      panel.append(footerRow);
-    }
-    overlay.append(panel);
-    return overlay;
   },
 };

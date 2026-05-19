@@ -64,26 +64,21 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
       { name: "value", type: "any", required: true },
     ],
   },
+  FilterBy: {
+    description: "Alias for `@Filter` — filter an array by a field/operator/value comparison.",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "field", type: "string", required: true },
+      { name: "op", type: "'=='|'!='|'>'|'<'|'>='|'<='|'contains'", required: true },
+      { name: "value", type: "any", required: true },
+    ],
+  },
   Sort: {
     description: "Sort an array by a field, ascending or descending.",
     params: [
       { name: "array", type: "any[]", required: true },
       { name: "field", type: "string", required: true },
       { name: "direction", type: "'asc'|'desc'", required: false },
-    ],
-  },
-  Push: {
-    description: "Append a value to an array; returns a new array.",
-    params: [
-      { name: "array", type: "any[]", required: true },
-      { name: "value", type: "any", required: true },
-    ],
-  },
-  Concat: {
-    description: "Concatenate two arrays into a new array.",
-    params: [
-      { name: "a", type: "any[]", required: true },
-      { name: "b", type: "any[]", required: true },
     ],
   },
   Round: {
@@ -104,13 +99,6 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
   Ceil: {
     description: "Round a number up to the nearest integer.",
     params: [{ name: "value", type: "number", required: true }],
-  },
-  Map: {
-    description: "Pluck a field from each item — readable alias for `arr.field`.",
-    params: [
-      { name: "array", type: "any[]", required: true },
-      { name: "field", type: "string", required: true },
-    ],
   },
   Find: {
     description: "Find the first item matching a field/op/value comparator.",
@@ -134,13 +122,6 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
       { name: "array", type: "any[]", required: true },
       { name: "start", type: "number", required: false },
       { name: "end", type: "number", required: false },
-    ],
-  },
-  Take: {
-    description: "Take the first N items — `@Slice(arr, 0, n)` shortcut.",
-    params: [
-      { name: "array", type: "any[]", required: true },
-      { name: "count", type: "number", required: true },
     ],
   },
   Unique: {
@@ -185,21 +166,6 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
       { name: "locale", type: "string", required: false },
     ],
   },
-  FormatCurrency: {
-    description: "Format a number as currency — default USD, default browser locale.",
-    params: [
-      { name: "value", type: "number", required: true },
-      { name: "currency", type: "string", required: false },
-      { name: "locale", type: "string", required: false },
-    ],
-  },
-  FormatNumber: {
-    description: "Locale-aware plain number formatter.",
-    params: [
-      { name: "value", type: "number", required: true },
-      { name: "locale", type: "string", required: false },
-    ],
-  },
   FormatDate: {
     description: "Format a date. Pattern tokens (MMM D, YYYY-MM-DD) or named: 'relative', 'date', 'time', 'datetime', 'iso'.",
     params: [
@@ -221,6 +187,28 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
       { name: "date", type: "Date|number|string", required: true },
       { name: "days", type: "number", required: true },
     ],
+  },
+  AddHours: {
+    description: "Shift a date by N hours (negative N moves backward).",
+    params: [
+      { name: "date", type: "Date|number|string", required: true },
+      { name: "hours", type: "number", required: true },
+    ],
+  },
+  DiffDays: {
+    description: "Whole-day difference from start to end (end − start).",
+    params: [
+      { name: "start", type: "Date|number|string", required: true },
+      { name: "end", type: "Date|number|string", required: true },
+    ],
+  },
+  StartOfWeek: {
+    description: "Local Sunday 00:00:00 for the week containing the date.",
+    params: [{ name: "date", type: "Date|number|string", required: true }],
+  },
+  EndOfMonth: {
+    description: "Last moment of the calendar month containing the date.",
+    params: [{ name: "date", type: "Date|number|string", required: true }],
   },
   Plural: {
     description: "Pluralisation: `@Plural(n, \"order\", \"orders\")` → \"1 order\" / \"2 orders\".",
@@ -246,21 +234,74 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
     description: "Capitalise the first letter of each word.",
     params: [{ name: "value", type: "string", required: true }],
   },
-  Camelcase: {
-    description: "Convert to camelCase (`\"hello world\"` → `\"helloWorld\"`).",
+  Case: {
+    description: "Convert casing — mode: \"camel\", \"snake\", \"kebab\", or \"pascal\".",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "mode", type: "'camel'|'snake'|'kebab'|'pascal'", required: true },
+    ],
+  },
+  Join: {
+    description: "Join array values into a string (default separator \",\").",
+    params: [
+      { name: "array", type: "any[]", required: true },
+      { name: "separator", type: "string", required: false },
+    ],
+  },
+  Split: {
+    description: "Split a string by a separator (default \",\").",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "separator", type: "string", required: false },
+    ],
+  },
+  Trim: {
+    description: "Trim leading and trailing whitespace.",
     params: [{ name: "value", type: "string", required: true }],
   },
-  Snakecase: {
-    description: "Convert to snake_case (`\"hello world\"` → `\"hello_world\"`).",
-    params: [{ name: "value", type: "string", required: true }],
+  Replace: {
+    description: "Replace all occurrences of search with replacement.",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "search", type: "string", required: true },
+      { name: "replacement", type: "string", required: false },
+    ],
   },
-  Kebabcase: {
-    description: "Convert to kebab-case (`\"hello world\"` → `\"hello-world\"`).",
-    params: [{ name: "value", type: "string", required: true }],
+  Substring: {
+    description: "Extract a substring — `start`, optional `end`.",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "start", type: "number", required: true },
+      { name: "end", type: "number", required: false },
+    ],
   },
-  Pascalcase: {
-    description: "Convert to PascalCase (`\"hello world\"` → `\"HelloWorld\"`).",
-    params: [{ name: "value", type: "string", required: true }],
+  StartsWith: {
+    description: "True when the string starts with the given prefix.",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "prefix", type: "string", required: true },
+    ],
+  },
+  EndsWith: {
+    description: "True when the string ends with the given suffix.",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "suffix", type: "string", required: true },
+    ],
+  },
+  Contains: {
+    description: "True when the string contains the given substring.",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "needle", type: "string", required: true },
+    ],
+  },
+  Match: {
+    description: "Test a string against a RegExp pattern (invalid patterns return false).",
+    params: [
+      { name: "value", type: "string", required: true },
+      { name: "pattern", type: "string", required: true },
+    ],
   },
   Clamp: {
     description: "Clamp a number into `[min, max]`.",
@@ -269,6 +310,25 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
       { name: "min", type: "number", required: true },
       { name: "max", type: "number", required: true },
     ],
+  },
+  Pow: {
+    description: "Raise a number to a power — `Math.pow(base, exp)`.",
+    params: [
+      { name: "base", type: "number", required: true },
+      { name: "exp", type: "number", required: true },
+    ],
+  },
+  Sqrt: {
+    description: "Square root of a number.",
+    params: [{ name: "value", type: "number", required: true }],
+  },
+  Random: {
+    description: "Pseudo-random number in [0, 1) — `Math.random()`.",
+    params: [],
+  },
+  Log: {
+    description: "Natural logarithm — `Math.log(value)`.",
+    params: [{ name: "value", type: "number", required: true }],
   },
 };
 
@@ -344,6 +404,12 @@ const ITERATION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
       { name: "cases", type: "{key: Node | string, ...}, i.e. {overview: Node, billing: 'Invoice', security: Node}", required: true },
       { name: "default", type: "Node", required: false },
     ],
+  },
+  {
+    name: "Const",
+    category: "iteration",
+    description: "Evaluate an expression once per program evaluation and cache the result (memoized by expression shape).",
+    params: [{ name: "expression", type: "any", required: true }],
   },
 ];
 

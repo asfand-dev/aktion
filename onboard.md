@@ -167,7 +167,7 @@ into a handful of families:
 - **Forms** — `Input`, `TextArea`, `Select`, `Checkbox`, `Switch`, `Button`, …
 - **Data** — `Table`, `List`, `StatCard`, `Progress`, …
 - **Charts** — `BarChart`, `LineChart`, `PieChart`, `Gauge`, …
-- **Patterns** (the secret sauce) — `PageHeader`, `MetricGrid`, `Hero`,
+- **Patterns** (the secret sauce) — `PageHeader`, `Stats`, `Hero`,
   `EmptyState`, `KanbanBoard`, `Timeline`, …
 
 You don't have to remember the full list. The browseable catalog with live
@@ -388,7 +388,7 @@ $todos = [{title: "Buy milk", done: true}, {title: "Call mum", done: false}]
 open    = @Filter($todos, "done", "==", false)        # subset where done is false
 done    = @Filter($todos, "done", "==", true)
 sorted  = @Sort($todos, "title", "asc")               # sort by field
-titles  = $todos.title                                # pluck — same as @Map($todos, "title")
+titles  = $todos.title                                # pluck — same as $todos.title
 total   = $todos.length
 ```
 
@@ -399,7 +399,7 @@ Supported filter operators: `==`, `!=`, `>`, `>=`, `<`, `<=`, and
 
 ```text
 addBtn = Button("Add", Action([
-  @Set($todos, @Push($todos, {id: $todos.length + 1, title: "New", done: false}))
+  @Set($todos, [...$todos, {id: $todos.length + 1, title: "New", done: false}])
 ]))
 
 clearDoneBtn = Button("Clear done", Action([
@@ -407,21 +407,21 @@ clearDoneBtn = Button("Clear done", Action([
 ]))
 ```
 
-`@Push(arr, value)` returns a new array with `value` appended (it never
+`[...spread](arr, value)` returns a new array with `value` appended (it never
 mutates), and pairs perfectly with `@Set`. `@Filter(arr, field, op, value)`
 returns a new array — drop it into `@Set` to "remove" items declaratively.
 
 ### Format numbers, dates, and counts
 
 ```text
-price   = @FormatCurrency(48.2, "USD")        # "$48.20"
+price   = @Format(48.2, "currency", "USD")        # "$48.20"
 percent = @Format(0.873, "percent")           # "87%"
 ago     = @FormatDate(@Now(), "relative")     # "just now" / "5m ago" / …
 label   = @Plural($todos.length, "task")      # "1 task" / "3 tasks"
 ```
 
 You can mix and match freely — every builtin is a pure function of its
-arguments, so you can chain them: `@FormatCurrency(@Sum($invoices.amount))`.
+arguments, so you can chain them: `@Format(@Sum($invoices.amount, "currency", "USD"))`.
 
 **Try this.** Combine what you've learned: render only the *open* todos
 from chapter 6, sorted by title.
@@ -477,7 +477,7 @@ in one line and look polished out of the box.
 | You want…                                | Use this one-liner                                                |
 |-----------------------------------------|--------------------------------------------------------------------|
 | Page title + breadcrumbs + actions      | `PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)`   |
-| KPI strip                               | `MetricGrid([StatCard(...), ...])`                                |
+| KPI strip                               | `Stats([StatCard(...), ...])`                                |
 | Empty list                              | `EmptyState(title, description?, icon?, action?)`                 |
 | Activity feed                           | `Timeline([TimelineItem(title, time?, description?, icon?, tone?)])` |
 | Kanban board                            | `KanbanBoard([KanbanColumn(title, [KanbanCard(...)])])`           |
@@ -508,10 +508,10 @@ root = EmptyState("No items", "Add your first one below.", "inbox",
 everything, applies muted typography for the description, and pairs the
 CTA with the right spacing — all for free.
 
-**Try this.** Replace the counter from chapter 4 with a `MetricGrid`:
+**Try this.** Replace the counter from chapter 4 with a `Stats`:
 
 ```text
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("Tasks",     "" + $count,      "up"),
   StatCard("Streak",    "5 days",         "up", "+1"),
   StatCard("Focus",     "2h 18m",         "flat")
@@ -598,7 +598,7 @@ banner = @If(allDone,
   null
 )
 
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("Total",     "" + $$tasks.length, "flat",  null, "list-check"),
   StatCard("Completed", "" + done.length,    "up",    null, "circle-check"),
   StatCard("Progress",  percent + "%",       allDone ? "up" : "flat", null, "gauge-high")
@@ -616,12 +616,12 @@ composer = Card([
     ], $priority),
     Buttons([
       Button("Add task", Action([
-        @Set($$tasks, @Push($$tasks, {
+        @Set($$tasks, [...$$tasks, {
           id:       $$tasks.length + 1,
           text:     $draft,
           priority: $priority,
           done:     false
-        })),
+        }]),
         @Reset($draft)
       ]), "primary"),
       Button("Clear", Action([@Reset($draft)]), "ghost")
@@ -680,11 +680,11 @@ Let's tour the program with the chapters in mind.
 | `done`, `open`, `visible`    | Chapter 7 — `@Filter` as derived values                                  |
 | `allDone`, `percent`         | Plain expressions on state — no helpers needed                           |
 | `root = Stack([...])`        | Chapter 2 — composition; chapter 9 — high-level layout                   |
-| `PageHeader`, `MetricGrid`, `Banner`, `EmptyState` | Chapter 9 — patterns: one line per section            |
+| `PageHeader`, `Stats`, `Banner`, `EmptyState` | Chapter 9 — patterns: one line per section            |
 | `@If(allDone, ..., null)`    | Chapter 8 — lazy conditional branches                                    |
 | `Input`, `ToggleGroup`       | Chapter 5 — two-way binding via the trailing value prop                  |
 | `Action([@Set, @Reset])`     | Chapter 4 — chained action steps                                         |
-| `@Push`, `@Filter`           | Chapter 7 — declarative add/remove                                       |
+| `[...spread]`, `@Filter`           | Chapter 7 — declarative add/remove                                       |
 | `@Each(visible, "t", row)`   | Chapter 6 — loops with template references                               |
 
 > **About the `@Js` block in the toggle button.** "Flipping one field on
@@ -849,9 +849,9 @@ Print this on a sticky note. It covers ~80% of the programs you'll write.
 | Reset back to declared default          | `@Reset($a, $b)`                                                               |
 | Loop a list                             | `@Each($items, "x", template)`                                                 |
 | Filter / sort                           | `@Filter($rows, "field", "op", value)` · `@Sort($rows, "field", "asc")`        |
-| Add / remove without JS                 | `@Set($rows, @Push($rows, item))` · `@Set($rows, @Filter($rows, "id", "!=", id))` |
+| Add / remove without JS                 | `@Set($rows, [...$rows, item])` · `@Set($rows, @Filter($rows, "id", "!=", id))` |
 | Conditional branch                      | `@If(cond, yes, no?)` · `@Switch(value, {key: branch, ...}, default?)`         |
-| Polished section in one line            | `PageHeader(...)` · `MetricGrid([...])` · `EmptyState(...)` · `Banner(...)`    |
+| Polished section in one line            | `PageHeader(...)` · `Stats([...])` · `EmptyState(...)` · `Banner(...)`    |
 
 ---
 

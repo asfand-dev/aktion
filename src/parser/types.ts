@@ -22,7 +22,19 @@ export type Expression =
   | CallExpr
   | BuiltinCallExpr
   | TemplateLiteralExpr
-  | SpreadExpr;
+  | SpreadExpr
+  | NamedArgExpr;
+
+/**
+ * Named component argument inside a call list: `GridItem(child, span="1/4")`.
+ * Only valid in `(...)` argument lists, not inside `[...]` arrays.
+ */
+export interface NamedArgExpr {
+  kind: "NamedArg";
+  name: string;
+  value: Expression;
+  loc?: SourceLocation;
+}
 
 export interface SourceLocation {
   line: number;
@@ -75,8 +87,11 @@ export interface ObjectExpr {
 export interface MemberExpr {
   kind: "Member";
   object: Expression;
-  property: string;
-  /** True for `obj?.prop` — short-circuits to undefined if `obj` is null/undefined. */
+  /** Dot-access property name (`obj.field`). */
+  property?: string;
+  /** Bracket-access key (`arr[i]`, `obj[$key]`). */
+  computed?: Expression;
+  /** True for `obj?.prop` / `obj?.[key]` — short-circuits when `obj` is null/undefined. */
   optional?: boolean;
   loc?: SourceLocation;
 }

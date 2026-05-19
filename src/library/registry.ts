@@ -12,7 +12,9 @@ function getIndex(library: ComponentLibrary): Map<string, ComponentSpec> {
   let index = indexCache.get(library.components);
   if (!index) {
     index = new Map();
-    for (const spec of library.components) index.set(spec.name, spec);
+    for (const spec of library.components) {
+      if (spec?.name) index.set(spec.name, spec);
+    }
     indexCache.set(library.components, index);
   }
   return index;

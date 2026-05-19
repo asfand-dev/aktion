@@ -27,8 +27,8 @@ all — and you have a streaming, interactive renderer for an LLM's response.
 The library bundles everything needed at runtime:
 
 - A **Streaming UI Script parser** (line-oriented, streaming-first, error-tolerant) with single-, double-, and backtick-quoted strings.
-- An **evaluator with reactive state** (including `$$persistent` variables that survive page reloads via `localStorage`), template literals (`` `Hi ${$user.name}` ``), spread (`[...$a, ...$b]`, `{...$cur, key: v}`), optional chaining (`obj?.prop`), nullish coalescing (`name ?? "Guest"`), `@Each` destructuring (`"{id, name}"`), DSL-level component macros (`MyCard(user) = Card([…])`), lazy `@If` / `@Switch`, queries, mutations, actions, and **40+ built-in `@`-functions** — data ops (`@Count`, `@Sum`, `@Avg`, `@Min`, `@Max`, `@First`, `@Last`, `@Filter`, `@Sort`, `@Find`, `@Map`, `@GroupBy`, `@Slice`, `@Take`, `@Unique`, `@Reverse`, `@Range`, `@Repeat`, `@Pick`, `@Push`, `@Concat`), numeric (`@Round`, `@Abs`, `@Floor`, `@Ceil`, `@Clamp`), formatting (`@Format`, `@FormatCurrency`, `@FormatNumber`, `@FormatDate`, `@Plural`, casing helpers `@Capitalize`/`@Lowercase`/`@Uppercase`/`@Titlecase`/`@Camelcase`/`@Snakecase`/`@Kebabcase`/`@Pascalcase`), dates (`@Now`, `@Today`, `@AddDays`), iteration (`@Each`, `@If`, `@Switch`), and action steps (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`) — plus array shortcuts (`.length`, `.first`, `.last`, array pluck `$rows.title`).
-- A **rich component library** of 180+ components — layout (`Stack`, `Grid`, `Drawer`/`Sheet`, `Container`, `Spacer`, `AspectRatio`, `ScrollArea`, `Separator` with `label?`, `Sticky`, `ResizablePanels`, `MasonryGrid`), content (`TextContent`, `Markdown`, `Icon`, `Quote`, `Callout`, `Spinner`, `Badge`, `BadgeList`), forms (`Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `Radio`, `Checkbox`, `Switch`, `Toggle`, `ToggleGroup`, `SegmentedControl`, `SearchBar`, `Button`, `Buttons`, `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `Combobox`, `MultiSelect`, `PinInput`, `OtpInput`, `MultiStepForm`), tables and lists (`Table` with `density`/`striped`/`sticky`/`emptyLabel`, `Col` with `align`, the advanced `DataGrid` for sort + filter + selection + pagination + sticky first column, `List`, `ListItem`, `Pagination` with `total`/`perPage`/`compact`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList`), charts (`BarChart`, `LineChart` with `data=` row-shaped shorthand, `AreaChart`, `PieChart`, `RadarChart`, `ScatterChart`, `Histogram`, `Heatmap`, `Gauge`, `Series`, `Sparkline`), chat composites (`SectionBlock`, `FollowUpBlock`, `ChatBubble`), feedback & media (`Avatar` with DiceBear fallback, `AvatarGroup`, `Progress` with `segments`/`buffered`, `ProgressRing`, `Rating` with `halfStep` + custom icons, `Tooltip`, `HoverCard`, `Popover`, `Toast` (standalone via `position`), `Toasts`, `Kbd`, `Skeleton` (`paragraph`/`card`/`table-row`/`avatar`/`image` variants), `VideoPlayer`, `AudioPlayer`, `Carousel`, `Gallery`, `Lightbox`, `Map`), navigation (`Breadcrumb`, `Pagination`, `Navbar`, `NavbarItem`, `TopBar`), menus (`DropdownMenu`, `MenuItem`, `MenuSeparator`, `MenuLabel`, `ContextMenu`), editors (`RichTextEditor`, `CodeEditor`), **high-level pattern composites** (`Hero` with auto-eyebrow, `Cover`, `PageHeader` with auto-breadcrumbs, `BreadcrumbPageHeader`, `SectionHeader`, `MetricGrid`, `Stats`, `Tile`, `Toolbar` with `searchable=true`, `EmptyState` with auto-icon, `Timeline`, `ActivityLog`, `AuditTrail`, `FeatureGrid`, `Testimonial`, `ProfileCard`, `PersonChip`, `Comment`, `MediaCard`, `Banner` with auto-icon-from-tone, `Notification`, `InboxPanel`, `OnboardingChecklist`, `KanbanBoard`, `DescriptionList`, `StatusDot`, `PricingTable`, `LoadingState`, `ErrorState`, `SuccessState`, `Tour`, `Spotlight`), and **app-shell composites** (`AppShell` with optional mobile drawer, `Sidebar` with `collapsed` rail, `SidebarSection`, `SidebarItem`, `SplitView`) that render full SaaS-style layouts in a single statement.
+- An **evaluator with reactive state** (including `$$persistent` variables that survive page reloads via `localStorage`), template literals, spread (`[...$a, ...$b]`), bracket access (`obj[$key]`, `arr[i]`), optional chaining, nullish coalescing, `@Each` destructuring, macros, lazy `@If` / `@Switch` and lazy ternary, queries, mutations, actions, and **45+ built-in `@`-functions** — see section 8. Prefer spread and array pluck over removed `@Push`, `@Concat`, `@Map`, `@Take`, `@FormatCurrency`, `@FormatNumber`, and the old case builtins (use `@Case(value, "camel")`).
+- A **rich component library** of 130+ components — layout (`Stack`, `StackItem`, `Grid`, `GridItem`, `Box`, `Drawer`, …), patterns (`Hero` with `layout="cover"`, `Stats` with `layout="grid"`, `ActivityLog` with `variant="audit"`), charts (`LineChart` with `filled=true`), advanced UI (`CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `JsonTree`, `Gantt`, …). Removed: `Cover`, `MetricGrid`, `AreaChart`, `AuditTrail`, `Sheet`, `Toasts`, `CardBody`, `Toggle`, `SegmentedControl`, `OtpInput`, `BreadcrumbPageHeader`, `Section`. See section 9 and component groups in the runtime prompt.
 - A **built-in JavaScript layer** — `Script(...)` (lifecycle-managed, `useEffect`-style) and `@Js(body, args?)` (one-shot click handlers with per-item arg capture). Always available; the chat-mode prompt simply hides it from the LLM.
 - A **built-in routing layer** — `Routes(...)`, `Route(path, content)`, `NavLink(...)`, `@Navigate(...)`, and reactive `$route` + `params`. Hash-based, framework-agnostic, always wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`, `brutalist`, `skyline`) plus full custom-token support via CSS custom properties.
@@ -144,7 +144,7 @@ If you internalise these rules, you will write correct, polished programs:
    before children arrive. Use forward references (`root = Stack([header, list])`)
    and define `header`, `list` below it.
 3. **Reach for high-level patterns first.** Start with `Hero`, `PageHeader`,
-   `SectionHeader`, `MetricGrid`, `Toolbar`, `EmptyState`, `Timeline`,
+   `SectionHeader`, `Stats`, `Toolbar`, `EmptyState`, `Timeline`,
    `FeatureGrid`, `Testimonial`, `ProfileCard`, `Banner`, `KanbanBoard`,
    `DescriptionList`, `PricingTable`, `StatusDot`, and the **app-shell**
    composites (`AppShell`, `Sidebar`, `SplitView`). They commit a full visual
@@ -161,7 +161,7 @@ If you internalise these rules, you will write correct, polished programs:
    is **not** state and **cannot** be read via `ctx.state` from JS.
 8. **Pass per-item data to JS via `@Js(body, {id: x.id})`.** Read it inside
    the body as `ctx.args.id`.
-9. **Prefer declarative builtins (`@Push`, `@Filter`, `@Sort`, `@Set`) over
+9. **Prefer declarative builtins (`[...spread]`, `@Filter`, `@Sort`, `@Set`) over
    `@Js`.** Only fall back to JS when no builtin captures the change (e.g.
    toggling one field on one item).
 10. **Strings come in three flavours.** `"double"`, `'single'`, and
@@ -261,7 +261,7 @@ Before opening a `Stack`/`Card`, scan this checklist:
 |-------------------------------------------|--------------------------------------------------------------------------------------------------------|
 | A page title + breadcrumbs + actions     | `PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)`                                       |
 | A sub-section title inside a Card         | `SectionHeader(title, subtitle?, eyebrow?, status?, actions?)`                                        |
-| A row of KPIs                             | `MetricGrid([StatCard(...), ...])`                                                                    |
+| A row of KPIs                             | `Stats([StatCard(...), ...])`                                                                    |
 | A compact inline stat strip (3–6 items)   | `Stats([{label, value, hint?, tone?}, ...], align?)`                                                  |
 | Quick-action / category tiles             | `Grid([Tile(label, icon?, value?, description?, tone?, action?), ...], columns?)`                     |
 | A filter + actions bar above a list/table | `Toolbar([searchControls...], [actions...])`                                                          |
@@ -275,7 +275,7 @@ Before opening a `Stack`/`Card`, scan this checklist:
 | Activity feed                             | `Timeline([TimelineItem(title, time?, description?, icon?, tone?)])`                                  |
 | Kanban / task board                       | `KanbanBoard([KanbanColumn(title, [KanbanCard(...)], tone?)])`                                        |
 | Hero / marketing intro                    | `Hero(title, subtitle?, primary?, secondary?, eyebrow?, highlights?, imageSrc?, tone?)`               |
-| Image-led hero (product, article)         | `Cover(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)`                     |
+| Image-led hero (product, article)         | `Hero(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)`                     |
 | Feature highlights                        | `FeatureGrid([FeatureItem(title, description?, icon?, tone?)])`                                       |
 | Product / article preview card            | `MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?)`             |
 | Star rating + review count                | `Rating(value, max?, label?, count?, size?, interactive?)`                                            |
@@ -306,8 +306,8 @@ Before opening a `Stack`/`Card`, scan this checklist:
 4. **Group fields inside Cards.** Settings pages are a stack of Cards. Each
    Card opens with a `SectionHeader` (or `CardHeader`) and contains a few
    related `FormControl`s — never a flat list of fields on the page.
-5. **Tabs/Sheets for secondary content.** Hide low-priority sections behind
-   `Tabs` or a side `Sheet` rather than scrolling forever.
+5. **Tabs/Drawers for secondary content.** Hide low-priority sections behind
+   `Tabs` or a side `Drawer` rather than scrolling forever.
 6. **Padding, gap, and rhythm.** Use `gap="l"` for top-level section
    spacing, `gap="m"` inside Cards, `gap="s"` between tightly related
    controls. Wrap each major chunk in a `Card` for visual grouping.
@@ -316,15 +316,15 @@ Before opening a `Stack`/`Card`, scan this checklist:
 
 | Page type             | Minimum sections | What sections to include                                                                              |
 |-----------------------|------------------|-------------------------------------------------------------------------------------------------------|
-| Dashboard             | **6**            | `PageHeader` + `Toolbar`/filters + `MetricGrid` + chart Card + table/list Card      |
+| Dashboard             | **6**            | `PageHeader` + `Toolbar`/filters + `Stats` + chart Card + table/list Card      |
 | Detail / profile      | **5**            | `PageHeader` + `DescriptionList` Card + content Card + activity/timeline Card       |
 | Settings              | **5**            | `PageHeader` + 3+ Section Cards (each with `SectionHeader`) + danger-zone Card                        |
-| Landing / marketing   | **5**            | `Hero` (or `Cover`) + `FeatureGrid` + (`Testimonial` &#124; `Quote` &#124; `PricingTable`) + closing `Banner` |
-| Product / article     | **6**            | `Cover` + `Stats` trust strip + spec Card / `DescriptionList` + related `MediaCard` grid + reviews (`ChatBubble`/`Testimonial`) + closing `Banner`/`Notification` |
-| Pricing               | **5**            | `Cover` (or `Hero`) + cycle `ToggleGroup` + `PricingTable` + `FeatureGrid` + FAQ `Accordion` + closing `Banner` |
+| Landing / marketing   | **5**            | `Hero` (or `Hero`) + `FeatureGrid` + (`Testimonial` &#124; `Quote` &#124; `PricingTable`) + closing `Banner` |
+| Product / article     | **6**            | `Hero` + `Stats` trust strip + spec Card / `DescriptionList` + related `MediaCard` grid + reviews (`ChatBubble`/`Testimonial`) + closing `Banner`/`Notification` |
+| Pricing               | **5**            | `Hero` (or `Hero`) + cycle `ToggleGroup` + `PricingTable` + `FeatureGrid` + FAQ `Accordion` + closing `Banner` |
 | Inbox / messaging     | **4**            | `PageHeader` + `SplitView` (list of `Notification` + thread of `ChatBubble`) + composer (`TextArea` + `Buttons`) |
 | Directory / CRM       | **5**            | `PageHeader` + `Tile` quick-stats + `SearchBar` + filter `ToggleGroup` + `ProfileCard` grid + `Pagination` |
-| List / browse         | **5**            | `PageHeader` + `Toolbar` + (optional `MetricGrid`) + `Table`/`Grid` Card + `Pagination`               |
+| List / browse         | **5**            | `PageHeader` + `Toolbar` + (optional `Stats`) + `Table`/`Grid` Card + `Pagination`               |
 | Full app surface      | **4 (in shell)** | `AppShell` wrapping a `Sidebar` + (PageHeader + sections)                                              |
 | Empty / zero state    | **3**            | `PageHeader` + `EmptyState` (with CTA)                                              |
 
@@ -451,7 +451,7 @@ auto-stringified.
 | Wrong                                                                       | Right                                                                                       |
 |----------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | Single `Card([CardHeader, TextContent])` for a dashboard request           | Use the **Dashboard recipe** in § 11 Pattern I or the dashboard recipe in the system prompt |
-| Vertical `Stack` of `StatCard`s                                            | `MetricGrid([StatCard(...), ...])`                                                          |
+| Vertical `Stack` of `StatCard`s                                            | `Stats([StatCard(...), ...])`                                                          |
 | `Stack(direction="row", wrap=true)` for uniform tiles                     | `Grid(items, columns?, gap?)`                                                                |
 | Vertical `Stack` of `TextContent("Label: " + value)` lines on a detail page| `DescriptionList([DescriptionItem(label, value, icon?)])`                                   |
 | Table with no `Toolbar` above it                                           | Wrap in `Card([SectionHeader(...), Toolbar([...], [...]), Table(...)])`                     |
@@ -1118,10 +1118,10 @@ All are `@`-prefixed and may appear anywhere in an expression.
 | `@Filter(arr, "field", "op", value)`          | Subset where `item[field] op value` is true.                                  |
 | `@Sort(arr, "field", "asc"\|"desc")`          | Sorted copy. Numbers compared numerically; everything else lexically.         |
 | `@Find(arr, "field", "op", value)`            | First matching item or `null`.                                                |
-| `@Map(arr, "field")`                          | Pluck a field — readable alias for `arr.field`.                               |
+| `arr.field`                          | Pluck a field — readable alias for `arr.field`.                               |
 | `@GroupBy(arr, "field")`                      | `{key: [items…]}` grouped by `item[field]`.                                   |
 | `@Slice(arr, start?, end?)`                   | `arr.slice(start, end)`.                                                      |
-| `@Take(arr, n)`                               | First N items — `@Slice(arr, 0, n)`.                                          |
+| `@Slice(arr, 0, n)`                               | First N items — `@Slice(arr, 0, n)`.                                          |
 | `@Reverse(arr)`                               | Reversed copy (non-mutating).                                                 |
 | `@Unique(arr, "field"?)`                      | Dedupe by strict equality or by a field.                                      |
 | `@Range(start, end, step?)`                   | Inclusive integer range (`[0..4]`). Step defaults to ±1.                      |
@@ -1135,14 +1135,14 @@ Filter operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`
 
 | Builtin                      | Returns                                            |
 |------------------------------|----------------------------------------------------|
-| `@Push(arr, value)`          | New array with `value` appended. Non-mutating.     |
-| `@Concat(a, b)`              | Concatenated array. Either side may be `null`.     |
+| `[...spread](arr, value)`          | New array with `value` appended. Non-mutating.     |
+| `[...a, ...b]`              | Concatenated array. Either side may be `null`.     |
 
 These pair perfectly with `@Set`:
 
 ```text
-addBtn = Button("Add", Action([@Set($todos, @Push($todos, newTodo))]))
-prependBtn = Button("Pin", Action([@Set($todos, @Concat([$pinned], $todos))]))
+addBtn = Button("Add", Action([@Set($todos, [...$todos, newTodo])]))
+prependBtn = Button("Pin", Action([@Set($todos, [...[$pinned], ...$todos])]))
 ```
 
 ### Formatting
@@ -1150,8 +1150,8 @@ prependBtn = Button("Pin", Action([@Set($todos, @Concat([$pinned], $todos))]))
 | Builtin                                          | Returns                                                                          |
 |--------------------------------------------------|----------------------------------------------------------------------------------|
 | `@Format(value, "currency"\|"percent"\|"number", currencyOrLocale?, locale?)` | Locale-aware number formatter. |
-| `@FormatCurrency(value, currency?, locale?)`     | Shortcut for currency mode (default `"USD"`).                                    |
-| `@FormatNumber(value, locale?)`                  | Plain locale-aware number formatting.                                            |
+| `@Format(value, currency?, locale?, "currency", "USD")`     | Shortcut for currency mode (default `"USD"`).                                    |
+| `@Format(value, locale?, "number")`                  | Plain locale-aware number formatting.                                            |
 | `@FormatDate(value, format?)`                    | Moment-like tokens (`"MMM D"`, `"YYYY-MM-DD"`) OR named modes: `"relative"` (e.g. "5m ago"), `"date"`, `"time"`, `"datetime"`, `"iso"`. |
 | `@Plural(n, singular, plural?)`                  | `"1 order"` / `"3 orders"`. Plural defaults to `singular + "s"`.                 |
 
@@ -1171,10 +1171,10 @@ prependBtn = Button("Pin", Action([@Set($todos, @Concat([$pinned], $todos))]))
 | `@Lowercase(s)`        | Lowercase every char.                                         |
 | `@Uppercase(s)`        | Uppercase every char.                                         |
 | `@Titlecase(s)`        | Capitalise the first letter of each word.                     |
-| `@Camelcase(s)`        | `"hello world"` → `"helloWorld"`.                             |
-| `@Snakecase(s)`        | `"helloWorld"` → `"hello_world"`.                             |
-| `@Kebabcase(s)`        | `"hello world"` → `"hello-world"`.                            |
-| `@Pascalcase(s)`       | `"hello world"` → `"HelloWorld"`.                             |
+| `@Case(s, "camel")`        | `"hello world"` → `"helloWorld"`.                             |
+| `@Case(s, "snake")`        | `"helloWorld"` → `"hello_world"`.                             |
+| `@Case(s, "kebab")`        | `"hello world"` → `"hello-world"`.                            |
+| `@Case(s, "pascal")`       | `"hello world"` → `"HelloWorld"`.                             |
 
 ### Iteration
 
@@ -1220,9 +1220,20 @@ Use these only inside `Action([...])`:
 
 ## 9. Component reference (by category)
 
-Signatures below are positional. Optional arguments come last. When a prop
-expects an array of a named subcomponent (e.g. `Table` takes `Col[]`), pass
-the children as a literal `[...]` array.
+Signatures below are positional. Optional arguments come last. You may also
+pass props by name with `prop=value` inside any component call, or bundle
+several in a trailing object `{prop: value}` — both merge into the
+positional slot order from the signature below.
+
+```text
+Grid(columns=12, gap="l", [
+  GridItem(sidebar, span="1/4"),
+  GridItem(main, span="3/4")
+])
+```
+
+When a prop expects an array of a named subcomponent (e.g. `Table` takes
+`Col[]`), pass the children as a literal `[...]` array.
 
 ### Layout
 
@@ -1236,12 +1247,20 @@ Stack(children, direction?, gap?, align?, justify?, wrap?)
   justify: "start" | "center" | "end" | "between" | "around"
   wrap: boolean
 
-Grid(children, columns?, gap?, minItemWidth?)
-  columns: 1..12 (default: auto-fit responsive)
+Grid(children, columns?, gap?, minItemWidth?, …)
+  columns: 1..12 (default: auto-fit responsive). `12` enables 12-column mode.
               — OR a responsive map like {sm: 1, md: 2, lg: 4}
   gap: "xs" | "s" | "m" (default) | "l" | "xl"
               — OR a responsive map like {sm: "s", md: "l"}
   minItemWidth: CSS width (default 220px) — used when columns is omitted
+
+GridItem(child, span?, offset?, spanAt?)
+  span: column count 1–12 OR fraction strings "1/2", "1/3", "1/4", … (12-col track)
+  offset: empty columns before this cell (0–11)
+  spanAt: responsive span map `{sm: 12, md: 6, lg: 4}`
+
+StackItem(child, grow?, shrink?, basis?, order?, alignSelf?)
+Box(children, padding?, margin?, border?, background?, maxWidth?)
 
 # Breakpoints used by responsive maps (mobile-first):
 #   base (default)   sm (≥640px)   md (≥768px)   lg (≥1024px)   xl (≥1280px)
@@ -1253,7 +1272,7 @@ Section(children, title?)
 Card(children, variant?)
   variant: "default" | "outlined" | "elevated"
 CardHeader(title, subtitle?)
-CardBody(children)
+(children)
 CardFooter(children)
 Separator(orientation?, label?, decorative?)
   orientation: "horizontal" | "vertical"
@@ -1275,13 +1294,11 @@ Modal(title, open, children, size?, footer?, closable?, closeOnBackdrop?)
   footer: Node[] — typically a row of action Buttons.
   closable: true by default (renders the × button).
   closeOnBackdrop: false by default; opt in to backdrop-click dismissal.
-Sheet(title, open, children, side?, footer?)
+Drawer(title, open, children, side?, footer?)
   side: "right" (default) | "left" | "top" | "bottom"
 
 Steps(items)
   items can be {title, details?, active?} objects (preferred) or
-  StepsItem(...) nodes. Plain strings render as a title-only step.
-StepsItem(title, details?, active?)
   active=true highlights the current step in a multi-step flow.
 
 AspectRatio(ratio, children)              # ratio: "16:9", "1:1", "4:3", or decimal
@@ -1310,7 +1327,7 @@ Spacer(size?, flex?)
 | Uniform-sized cards / tiles / KPIs in a row         | `Grid` — auto-fits responsively, children stay equal width         |
 | Asymmetric row (sidebar + main)                     | `Stack(direction="row")`                                           |
 | Centered confirmation dialog                        | `Modal(title, open, [body])`                                       |
-| Detail panel that slides in from the side           | `Sheet(title, open, [body], side)`                                 |
+| Detail panel that slides in from the side           | `Drawer(title, open, [body], side)`                                 |
 | Long log / chat / list with capped height           | `ScrollArea([items], maxHeight)`                                   |
 | Fixed-ratio embed (video, thumbnail)                | `AspectRatio("16:9", [Image(...)])`                                |
 
@@ -1435,7 +1452,7 @@ DateRangePicker(id, from?, to?, label?, min?, max?, disabled?)
   Paired ISO date inputs that share the same min/max. Bind `from` and
   `to` to separate $variables for a two-way-bound range.
 
-SegmentedControl(id, items, value?, size?)
+ToggleGroup(id, items, value?, size?)
   View-mode picker for 2–5 mutually-exclusive options (grid/list,
   day/week/month, light/dark). items can be {value, label, icon?}
   objects, [value, label] tuples, or plain strings. Visually distinct
@@ -1453,7 +1470,7 @@ PinInput(id, length?, value?, type?, autoFocus?)
   Renders N per-digit fields with auto-advance, paste support, and masking.
   Default length is 4. Bind `value` to a $variable holding a string.
 
-OtpInput(id, value?, length?)
+PinInput(id, value?, length?)
   Specialised 6-digit PinInput pre-tuned for SMS / 2FA codes.
 
 TagInput(id, value?, placeholder?, label?, max?, disabled?)
@@ -1582,7 +1599,7 @@ LineChart(labels, series, title?, data?)
         explicit Series objects.
 PieChart(labels, values, title?)        # parallel arrays
 
-AreaChart(labels, series, title?, stacked?)
+LineChart(labels, series, title?, stacked?)
   Like LineChart but with filled areas. Pass `stacked=true` to stack series.
 
 RadarChart(axes, series, title?)
@@ -1687,10 +1704,10 @@ Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)
   onClose:  Action fired when the toast is dismissed (× button OR auto-dismiss).
             Use it to remove the toast from your reactive list, log analytics, etc.
   position: pin a STANDALONE Toast to a viewport corner without wrapping it in
-            Toasts(...). Accepts the same values as Toasts.position. Use this
-            for one-off notifications; for grouped/queued toasts use Toasts.
-Toasts(items, position?)
-  Fixed-position stack of Toasts.
+            Stack(...). Accepts the same values as Toast.position. Use this
+            for one-off notifications; for grouped/queued toasts use Toast.
+Stack(items, position?)
+  Fixed-position stack of Toast.
   items:    Toast[]
   position: "top-right" | "top-left" | "top-center" |
             "bottom-right" (default) | "bottom-left" | "bottom-center"
@@ -1737,7 +1754,7 @@ Pagination(page, totalPages, siblings?, total?, perPage?, perPageOptions?, compa
 Navbar(brand?, items?, actions?, sticky?, variant?)
   Horizontal top bar with three slots: brand (left), items (centre), actions
   (right). sticky=true pins it to the top of the scroll container.
-  variant: "default" | "transparent" (sits on top of a Hero/Cover) |
+  variant: "default" | "transparent" (sits on top of a Hero/Hero) |
            "elevated" (subtle shadow for floating navs)
   items / actions: Node[] — typically NavbarItem(...) entries on the left
                    and Button(...) entries on the right.
@@ -1753,11 +1770,11 @@ NavbarItem(label, to?, icon?, active?, action?, href?)
 Hero(title, subtitle?, primary?, secondary?, eyebrow?, highlights?, imageSrc?, tone?)
   primary / secondary: pass Button(...) nodes for the CTAs
   highlights: string[] — small pill chips below subtitle
-Cover(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)
+Hero(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)
   Image-backed hero band with gradient overlay, eyebrow tag, subtitle,
   optional caption row, and CTA buttons. Use as the top section of
   product, article, or campaign pages — Hero is text-first with optional
-  side image; Cover is image-first.
+  side image; Hero is image-first.
 PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)
   breadcrumbs: Breadcrumb OR string[]
   actions: Node[] — Buttons shown on the right
@@ -1766,12 +1783,12 @@ SectionHeader(title, subtitle?, eyebrow?, status?, actions?)
   Use inside a Card to introduce a section with eyebrow + status + right-aligned actions.
 Toolbar(left?, right?, center?)
   Left slot: search / filter FormControls. Right slot: primary action Buttons.
-  Center slot (optional): centered controls — typically SegmentedControl,
+  Center slot (optional): centered controls — typically ToggleGroup,
   a centered search bar, or a date-range pill.
 
-MetricGrid(items, columns?)            # items: StatCard[]
+Stats(items, columns?)            # items: StatCard[]
 Stats(items, align?)                    # items: {label, value, hint?, tone?, spark?}[]
-  Compact inline stat strip — lighter than MetricGrid. Use beside a chart,
+  Compact inline stat strip — lighter than Stats. Use beside a chart,
   in a Toolbar, or beneath a PageHeader for a trust-strip / quick KPIs row.
   Each item may include `spark: number[]` for an inline Sparkline beside
   the value.
@@ -1839,7 +1856,7 @@ ActivityLog(entries, title?, dense?)
   Purpose-built feed of user actions. Prefer over hand-rolled `Timeline`
   for product activity streams.
 
-AuditTrail(entries, title?)
+ActivityLog(entries, title?)
   entries: {actor, title, time?, meta?, icon?, tone?}[]
   Sibling of `ActivityLog` rendered in a monospace voice for security /
   admin trails. Adds an optional `meta` field per entry for IPs, IDs,
@@ -1876,7 +1893,7 @@ Spotlight(title?, description?, action?, icon?)
   feature or surface.
 
 # ----- Convenience composites --------------------------------------------
-BreadcrumbPageHeader(path, subtitle?, actions?, status?)
+PageHeader(path, subtitle?, actions?, status?)
   path: string[] — the last segment becomes the title, the rest become
         the breadcrumb trail.
   Convenience wrapper around `PageHeader` that lets you skip the
@@ -1906,7 +1923,7 @@ MasonryGrid(items, columns?, gap?)
   viewport changes. Prefer `Grid` when rows should share a height.
 
 Drawer(title, open, children, side?, footer?)
-  Industry-standard alias for `Sheet` — same props. Prefer this name in
+  Industry-standard alias for `Drawer` — same props. Prefer this name in
   new responses.
 ```
 
@@ -1985,7 +2002,7 @@ SplitView(primary, detail, primaryWidth?)
 ```
 
 **Why patterns matter for streaming.** Patterns commit a full visual section
-in one statement. `MetricGrid([StatCard("MRR","$48k","up","+12%","sack-dollar"), …])`
+in one statement. `Stats([StatCard("MRR","$48k","up","+12%","sack-dollar"), …])`
 streams a dashboard row as a single line instead of a half-screen `Stack` of
 ad-hoc primitives. **Reach for a pattern before composing from scratch.**
 
@@ -2200,7 +2217,7 @@ copyBtn = Button("Copy", Action([
 | Tempting JS                                                       | Use this instead                                                     |
 |-------------------------------------------------------------------|----------------------------------------------------------------------|
 | `Script("init", "ctx.state.set('todos', [...])")` to seed         | `$todos = [...]`                                                     |
-| `@Js("ctx.state.set('todos', todos.concat(newItem))")`             | `@Set($todos, @Push($todos, newItem))`                               |
+| `@Js("ctx.state.set('todos', todos.concat(newItem))")`             | `@Set($todos, [...$todos, newItem])`                               |
 | `@Js("...filter(t => t.id !== id)...")`                            | `@Set($todos, @Filter($todos, "id", "!=", t.id))`                    |
 | `$todos.filter(...)` for display                                  | `@Filter($todos, "done", "==", false)`                               |
 | `$todos.length`, `$todos.first`, `$todos.last`                    | They already work as member shortcuts.                               |
@@ -2435,7 +2452,7 @@ $todos = []
 $draft = ""
 
 add = Action([
-  @Set("todos", @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Set("todos", [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
   @Set("draft", "")
 ])
 
@@ -2451,7 +2468,7 @@ list = @Each($todos, "t", Stack([
 ], "row", "s"))
 ```
 
-`@Push` and `@Filter` are the declarative way to mutate arrays in `@Set`
+`[...spread]` and `@Filter` are the declarative way to mutate arrays in `@Set`
 without writing JS. For per-item delete you still need `@Js(body, {id: t.id})`
 so the row id is captured at render time.
 
@@ -2471,15 +2488,15 @@ root = Card([CodeBlock("npm install streaming-ui-script", "bash"), copyBtn])
 
 ### Recipe 8 — Toast / transient notification
 
-Use the built-in `Toast` + `Toasts` components: each `Toast` carries its own
+Use the built-in `Toast` + `Toast` components: each `Toast` carries its own
 × close button and an optional `duration` (ms) for auto-dismiss. Pair with
-a `$variable` of toasts plus `@Push` / `@Filter` to append/remove
+a `$variable` of toasts plus `[...spread]` / `@Filter` to append/remove
 notifications declaratively.
 
 ```text
 $toasts = []
 
-addToast = (msg, tone) => @Push($toasts, {id: @Now(), msg: msg, tone: tone})
+addToast = (msg, tone) => [...$toasts, {id: @Now(], msg: msg, tone: tone})
 dropToast = (id)       => @Filter($toasts, "id", "!=", id)
 
 cards = $toasts.map((t) =>
@@ -2492,7 +2509,7 @@ root = Stack([
     Button("Notify", addToast("Heads up.",     "info"),    "secondary"),
     Button("Fail",   addToast("Sync failed.",  "danger"),  "ghost")
   ]),
-  Toasts(cards, "bottom-right")
+  Stack(cards, "bottom-right")
 ])
 ```
 
@@ -2569,7 +2586,7 @@ updates the variable and the derived `visible` re-evaluates.
 ### Recipe 12 — Stat row with trends and tones
 
 ```text
-metrics = MetricGrid([
+metrics = Stats([
   StatCard("MRR",        "$48.2k", "up",   "+12.4%", "sack-dollar"),
   StatCard("Active",     "1,284",  "up",   "+8%",    "users"),
   StatCard("Churn",      "2.1%",   "down", "-0.3%",  "user-minus"),
@@ -2651,7 +2668,7 @@ header = PageHeader("Todos", "Add tasks below")
 composer = Stack([
   Input("draft-input", "What needs doing?", "text", null, $draft),
   Button("Add", Action([
-    @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+    @Set($todos, [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
     @Reset($draft)
   ]), "primary")
 ])
@@ -2687,7 +2704,7 @@ footer = Stack([
 
 **Lessons baked into this pattern**
 
-- Add: declarative via `@Push` + `@Set`.
+- Add: declarative via `[...spread]` + `@Set`.
 - Delete: declarative via `@Filter` + `@Set` (no JS).
 - Toggle: `@Js(body, {id: t.id})` because no builtin flips one field of one item.
 - Filter UI: ternary + `@Filter`.
@@ -2744,9 +2761,9 @@ $email = ""
 $plan = "starter"
 
 progress = Steps([
-  StepsItem("Account", $step >= 1 ? "circle-check" : null),
-  StepsItem("Profile", $step >= 2 ? "circle-check" : null),
-  StepsItem("Plan",    $step >= 3 ? "circle-check" : null)
+  { title: "Account", details: $step >= 1 ? "Done" : null },
+  { title: "Profile", details: $step >= 2 ? "Done" : null },
+  { title: "Plan", details: $step >= 3 ? "Done" : null}
 ])
 
 stepView = $step == 1 ? accountStep : ($step == 2 ? profileStep : planStep)
@@ -2973,7 +2990,7 @@ Highlights:
 - The fallback `Route("*", notFoundPage)` makes sure unknown URLs render
   something meaningful instead of an empty outlet.
 
-### Pattern I — Rich project dashboard (PageHeader + MetricGrid + Kanban + Timeline)
+### Pattern I — Rich project dashboard (PageHeader + Stats + Kanban + Timeline)
 
 When the prompt is "show me a dashboard", reach for high-level patterns first.
 The dashboard below uses **one statement per visual section** and never
@@ -3005,7 +3022,7 @@ header = PageHeader(
 data = Query("program_summary", {range: $range, assignee: $assignee},
   {shipped: 0, inReview: 0, blocked: 0, velocity: 0, deltas: {}, columns: [], events: []})
 
-metrics = MetricGrid([
+metrics = Stats([
   StatCard("Shipped this week", "" + data.shipped,           "up",   data.deltas.shipped,  "rocket"),
   StatCard("In review",         "" + data.inReview,          "flat", data.deltas.review,   "eye"),
   StatCard("Blocked",           "" + data.blocked,           "down", data.deltas.blocked,  "circle-stop"),
@@ -3040,7 +3057,7 @@ follow = FollowUpBlock([
 **Why this works.**
 
 - `PageHeader` ships breadcrumbs + actions + status in one statement.
-- `MetricGrid` is a `Grid` of `StatCard`s with sensible defaults — replaces
+- `Stats` is a `Grid` of `StatCard`s with sensible defaults — replaces
   a wide row of hand-rolled cards.
 - `KanbanBoard` + `KanbanColumn` + `KanbanCard` encode the entire "trello-like
   board" shape; `@Each` over `data.columns` lets the LLM stay agnostic about
@@ -3124,10 +3141,10 @@ body = @Count(data.rows) > 0 ? cards : empty
 pager = Pagination($page, data.pages, 1)
 ```
 
-### Pattern L — Settings panel (Tabs + Switch + ToggleGroup + Sheet)
+### Pattern L — Settings panel (Tabs + Switch + ToggleGroup + Drawer)
 
 ```text
-root = Stack([header, tabsBlock, dangerZone, confirmSheet], "column", "l")
+root = Stack([header, tabsBlock, dangerZone, confirmDrawer], "column", "l")
 
 $notifications = true
 $theme = "light"
@@ -3174,7 +3191,7 @@ dangerZone = Card([
   Buttons([Button("Delete workspace", Action([@Set($deleting, true)]), "danger")])
 ], "outlined")
 
-confirmSheet = Sheet("Delete workspace?", $deleting, [
+confirmDrawer = Drawer("Delete workspace?", $deleting, [
   TextContent("This permanently deletes every project, file, and member."),
   Buttons([
     Button("Cancel",  Action([@Set($deleting, false)]), "ghost"),
@@ -3187,7 +3204,7 @@ confirmSheet = Sheet("Delete workspace?", $deleting, [
 
 - `Switch`, `ToggleGroup`, and `Pagination` are all **two-way bound** to a
   `$variable` — just pass the bare `$name` as the value/page arg.
-- `Sheet` is the right pattern for a "confirm" affordance that should feel
+- `Drawer` is the right pattern for a "confirm" affordance that should feel
   heavier than a `Modal` but lighter than a full page.
 
 ### Pattern M — Full app surface (AppShell + Sidebar + multi-section content)
@@ -3222,7 +3239,7 @@ content = [pageHeader, kpiStrip, contentGrid, activityCard, followUps]
 
 pageHeader = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
 
-kpiStrip = MetricGrid([
+kpiStrip = Stats([
   StatCard("MRR",          "$48.2k",  "up",   "+12% vs last month", "sack-dollar"),
   StatCard("Active users", "2,184",   "up",   "+184",               "users"),
   StatCard("Open tickets", "23",      "down", "-9",                 "ticket"),
@@ -3389,7 +3406,7 @@ data = Query("inbox", {filter: $filter, id: $selectedId}, {rows: [], selected: {
 `SplitView` collapses to a single column on narrow viewports, so the same
 program works on phones without a redesign.
 
-### Pattern Q — Product detail page (Cover + Stats + MediaCard + ChatBubble)
+### Pattern Q — Product detail page (Hero + Stats + MediaCard + ChatBubble)
 
 ```text
 $variant = "midnight"
@@ -3399,7 +3416,7 @@ variants = ToggleGroup("variant", [
   {value: "sunset",   label: "Sunset",   icon: "sun"}
 ], $variant)
 
-cover = Cover(
+cover = Hero(
   "Aurora Wireless Headphones",
   "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=1600",
   "Studio-grade sound, 40-hour battery.",
@@ -3479,12 +3496,12 @@ root = Stack([
 ], "column", "xl")
 ```
 
-This is the canonical commerce / article layout: image-led `Cover`, trust
+This is the canonical commerce / article layout: image-led `Hero`, trust
 `Stats`, a stock `ProgressRing`, a `Rating`, review `ChatBubble`s, related
 `MediaCard`s, and a closing `Notification`. **No `Stack` of raw primitives —
 every visual section is one named pattern.**
 
-### Pattern R — Directory / CRM (Tile stats + SearchBar + ProfileCard grid + Sheet)
+### Pattern R — Directory / CRM (Tile stats + SearchBar + ProfileCard grid + Drawer)
 
 ```text
 $segment = "all"
@@ -3516,7 +3533,7 @@ cards = data.rows.length == 0
                   Action([@Set($selected, c.id)]))
     ), 4, "m")
 
-detail = $selected == "" ? null : Sheet(
+detail = $selected == "" ? null : Drawer(
   "Contact detail",
   true,
   [Stack([
@@ -3551,7 +3568,7 @@ root = Stack([
 
 The `Tile` row gives the page a dense quick-stats strip; clicking a tile
 filters the directory. `SearchBar` provides a polished search input without
-manual styling. The slide-in `Sheet` reuses `PersonChip`, `Callout`, and
+manual styling. The slide-in `Drawer` reuses `PersonChip`, `Callout`, and
 `Quote` for a richer detail view than a plain `Card`.
 
 ### Pattern S — E-commerce checkout (multi-step + Stripe-style summary)
@@ -3872,7 +3889,7 @@ Highlights:
 | Mutating `$todos` inside `@Js` via `.push()` (mutates state in place; no re-render). | Always assign a fresh array: `ctx.state.set('todos', [...todos, newItem])`.                                                       |
 | Touching `localStorage`, `document.cookie`, custom `fetch(...)` directly.            | Go through tools: `await ctx.tools.save_pref({key, value})`.                                                                      |
 | Defining everything inline in `root = Stack([...])` (no streaming).                  | Break into named statements: `root = Stack([header, body, footer])` so each section renders independently as it arrives.          |
-| Hand-rolling a dashboard row from raw `Card`s + `Stack` + `TextContent`.             | Use `MetricGrid([StatCard(...), ...])` — one statement, polished defaults, responsive grid.                                       |
+| Hand-rolling a dashboard row from raw `Card`s + `Stack` + `TextContent`.             | Use `Stats([StatCard(...), ...])` — one statement, polished defaults, responsive grid.                                       |
 | Building a multi-column "trello-like" board out of nested `Stack`s.                  | Use `KanbanBoard([KanbanColumn(title, [KanbanCard(...)])])` — encodes the entire shape.                                            |
 | Putting page title + breadcrumbs + actions in 4 separate statements.                 | Use `PageHeader(title, subtitle, breadcrumbs, actions, status)` — one statement.                                                  |
 | Using `Stack(direction="row", wrap=true)` for tiles that should all be the same size.| Use `Grid(items, columns?)` — auto-fits with uniform sizing.                                                                       |
@@ -4020,8 +4037,8 @@ const prompt = el.getSystemPrompt({
 | Build a detail / profile page                         | § 11 Pattern N (PageHeader + DescriptionList)         |
 | Build a pricing page                                  | § 11 Pattern O (PricingTable)                         |
 | Build a master/detail (inbox, files)                  | § 11 Pattern P (SplitView)                            |
-| Build a product detail / store page                   | § 11 Pattern Q (Cover + MediaCard)                    |
-| Build a CRM / contacts directory                      | § 11 Pattern R (Tile stats + Sheet)                   |
+| Build a product detail / store page                   | § 11 Pattern Q (Hero + MediaCard)                    |
+| Build a CRM / contacts directory                      | § 11 Pattern R (Tile stats + Drawer)                   |
 | Build an e-commerce checkout                          | § 11 Pattern S                                        |
 | Build docs / knowledge-base reader                    | § 11 Pattern T                                        |
 | Build a file manager                                  | § 11 Pattern U                                        |
@@ -4039,7 +4056,7 @@ Walk this list before you send your output:
 1. Is `root = …` the FIRST line?
 2. Is every name referenced from `root` defined somewhere below?
 3. **Did I reach for high-level patterns first?** Could a `PageHeader`
-   replace a hand-rolled title row? A `MetricGrid` replace a row of
+   replace a hand-rolled title row? A `Stats` replace a row of
    `StatCard`s? A `KanbanBoard` replace nested `Stack`s? An `EmptyState`
    replace a bare "no results" text? A `SplitView` instead of a hand-rolled
    2-column grid?
@@ -4064,8 +4081,8 @@ Walk this list before you send your output:
 14. Did I register `ctx.cleanup(...)` for every interval / listener /
     subscription / observer?
 15. Are all `Script` ids unique within this response?
-16. Could any `@Js` be replaced by `@Set` + a builtin (`@Push`, `@Filter`,
-    `@Sort`, `@Concat`)?
+16. Could any `@Js` be replaced by `@Set` + a builtin (`[...spread]`, `@Filter`,
+    `@Sort`, `[...spread]`)?
 17. If the response uses routing, does it include a wildcard or `default`
     fallback, never assign `$route` itself, and read `params.*` only inside
     a matched `Route`'s content?
@@ -4117,14 +4134,12 @@ LLM and tool integrations:
 - **Chat bot:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot.html>
 - **Chat bot · advanced pipeline:** <https://asfand-dev.github.io/streaming-ui-script/chat-bot-advanced.html>
 - **Tools integration:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=tools-example>
-- **External data:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=external-data-example>
 - **Support agent:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=support-agent>
 - **Analytics assistant:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=analytics-assistant>
 
 JavaScript layer demos:
 
 - **Todo app (localStorage):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-todo-app>
-- **Pomodoro timer:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-pomodoro>
 - **Stopwatch + laps:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=javascript-stopwatch>
 
 Routing and multi-page:
@@ -4134,7 +4149,6 @@ Routing and multi-page:
 
 Pattern-driven applications:
 
-- **Project dashboard:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=project-dashboard>
 - **Marketing landing:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=marketing-landing>
 - **Team directory:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=team-directory>
 - **Settings app:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=settings-app>
@@ -4143,13 +4157,11 @@ Pattern-driven applications:
 - **Pricing page:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=pricing-page>
 - **CRM contacts:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=crm-contacts>
 - **Status page (monitoring):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=status-page>
-- **Checkout flow (wizard):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=checkout-flow>
 - **File manager (Tree + preview):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=file-manager>
 - **Calendar & scheduler:** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=calendar-app>
 - **Docs portal (help center):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=docs-portal>
 - **Issue tracker (Kanban + filters):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=issue-tracker>
 - **Expense tracker (finance + charts):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=expense-tracker>
-- **Polls & surveys (voting + results):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=polls-app>
 - **Data explorer (DataGrid + advanced charts):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=data-explorer>
 - **Media gallery (Carousel + Gallery + Lightbox + Map):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=media-gallery>
 - **Content studio (RichTextEditor + MultiStepForm + advanced inputs):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=content-studio>

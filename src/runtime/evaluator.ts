@@ -23,6 +23,8 @@ import {
   type ThemeNode,
 } from "./builtins.js";
 import { matchRoute, type Router, type RouteParams } from "./router.js";
+import { findComponent } from "../library/registry.js";
+import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
 
 export interface ArgMeta {
   /** Name of the `$variable` if this argument is a direct state reference. */
@@ -80,6 +82,10 @@ export interface EvaluationContext {
   loopVars: Map<string, unknown>;
   /** Optional router — used to special-case `Routes(...)` and `@Navigate(...)`. */
   router?: Router;
+  /** Memo table for `@Const(expr)` — keyed by a stable expression fingerprint. */
+  constCache?: Map<string, unknown>;
+  /** Component library used to resolve trailing named-arg object literals. */
+  library?: ComponentLibrary;
 }
 
 /** Build a top-level evaluation context for a freshly parsed program. */
@@ -87,6 +93,7 @@ export function createContext(
   state: StateStore,
   queries: QueryRegistry,
   router?: Router,
+  library?: ComponentLibrary,
 ): EvaluationContext {
   return {
     state,
@@ -98,6 +105,7 @@ export function createContext(
     trackedQueries: new Set(),
     loopVars: new Map(),
     router,
+    library,
   };
 }
 
@@ -251,7 +259,11 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     case "Member": {
       const target = evaluate(expr.object, ctx);
       if (expr.optional && target == null) return undefined;
-      return memberAccess(target, expr.property);
+      if (expr.computed) {
+        const key = evaluate(expr.computed, ctx);
+        return computedMemberAccess(target, key);
+      }
+      return memberAccess(target, expr.property ?? "");
     }
     case "Unary": {
       const value = evaluate(expr.argument, ctx);
@@ -399,7 +411,10 @@ function evaluateComponentCall(
     return payload;
   }
 
-  const evaluated: unknown[] = args.map((arg) => evaluate(arg, ctx));
+  let evaluated: unknown[] = args.map((arg) =>
+    arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
+  );
+  evaluated = applyNamedComponentArgs(ctx, callee, args, evaluated);
   const argMeta: ArgMeta[] = args.map((arg) => (arg.kind === "StateRef" ? { stateRef: arg.name } : {}));
   const node: ComponentNode = {
     __kind: "Component",
@@ -557,6 +572,17 @@ function evaluateBuiltinCall(
   // Lazy switch: `@Switch(value, { key1: branch1, key2: branch2 }, default?)`.
   // The map's branches are evaluated lazily — only the matching branch
   // (or the default) is computed.
+  if (name === "Const") {
+    const exprArg = args[0];
+    if (!exprArg) return null;
+    const key = expressionKey(exprArg);
+    if (!ctx.constCache) ctx.constCache = new Map();
+    if (ctx.constCache.has(key)) return ctx.constCache.get(key);
+    const value = evaluate(exprArg, ctx);
+    ctx.constCache.set(key, value);
+    return value;
+  }
+
   if (name === "Switch") {
     const valueArg = args[0];
     const casesArg = args[1];
@@ -758,6 +784,143 @@ function readRoutePath(ctx: EvaluationContext): string {
     if (typeof value === "string" && value) return value;
   }
   return "/";
+}
+
+/**
+ * Merge inline `name=value` args and/or a trailing object literal into the
+ * positional arg list using the component's prop order.
+ */
+function applyNamedComponentArgs(
+  ctx: EvaluationContext,
+  callee: string,
+  argExprs: Expression[],
+  evaluated: unknown[],
+): unknown[] {
+  if (argExprs.length === 0 || !ctx.library) return evaluated;
+
+  const spec = findComponent(ctx.library, callee);
+  if (!spec) return evaluated;
+
+  const named: Record<string, unknown> = {};
+  const positional: unknown[] = [];
+  let hasNamed = false;
+
+  for (let i = 0; i < argExprs.length; i += 1) {
+    const expr = argExprs[i]!;
+    const value = evaluated[i];
+    if (expr.kind === "NamedArg") {
+      named[expr.name] = value;
+      hasNamed = true;
+      continue;
+    }
+    const isTrailingObject =
+      i === argExprs.length - 1 &&
+      expr.kind === "Object" &&
+      expr.properties.length > 0 &&
+      !expr.properties.every((p) => p.spread);
+    if (isTrailingObject) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        Object.assign(named, value as Record<string, unknown>);
+        hasNamed = true;
+      }
+      continue;
+    }
+    positional.push(value);
+  }
+
+  if (!hasNamed) return evaluated;
+  return mergePositionalAndNamed(spec, positional, named);
+}
+
+function mergePositionalAndNamed(
+  spec: ComponentSpec,
+  positional: unknown[],
+  named: Record<string, unknown>,
+): unknown[] {
+  const merged: unknown[] = [];
+  for (let i = 0; i < spec.props.length; i += 1) {
+    const prop = spec.props[i]!;
+    if (prop.name in named) {
+      merged[i] = named[prop.name];
+    } else if (i < positional.length) {
+      merged[i] = positional[i];
+    }
+  }
+  // Trim trailing undefined slots so optional tail props stay omitted.
+  while (merged.length > 0 && merged[merged.length - 1] === undefined) {
+    merged.pop();
+  }
+  return merged;
+}
+
+function expressionKey(expr: Expression): string {
+  switch (expr.kind) {
+    case "Literal": return `lit:${JSON.stringify(expr.value)}`;
+    case "Identifier": return `id:${expr.name}`;
+    case "StateRef": return `st:${expr.persistent ? "$$" : "$"}${expr.name}`;
+    case "Unary": return `un:${expr.operator}:${expressionKey(expr.argument)}`;
+    case "Binary": return `bin:${expr.operator}:${expressionKey(expr.left)}:${expressionKey(expr.right)}`;
+    case "Ternary":
+      return `ter:${expressionKey(expr.test)}:${expressionKey(expr.consequent)}:${expressionKey(expr.alternate)}`;
+    case "Member": {
+      const obj = expressionKey(expr.object);
+      if (expr.computed) return `mem:${expr.optional ? "?" : ""}${obj}[${expressionKey(expr.computed)}]`;
+      return `mem:${expr.optional ? "?" : ""}${obj}.${expr.property ?? ""}`;
+    }
+    case "Call": return `call:${expr.callee}(${expr.arguments.map(expressionKey).join(",")})`;
+    case "BuiltinCall": return `builtin:${expr.name}(${expr.arguments.map(expressionKey).join(",")})`;
+    case "Array": return `arr:[${expr.elements.map(expressionKey).join(",")}]`;
+    case "Object": {
+      const parts = expr.properties.map((p) =>
+        p.spread ? `...${expressionKey(p.value)}` : `${p.key}=${expressionKey(p.value)}`,
+      );
+      return `obj:{${parts.join(",")}}`;
+    }
+    case "Template": {
+      const parts = expr.expressions.map(expressionKey);
+      return `tpl:${expr.quasis.join("\0")}|${parts.join(",")}`;
+    }
+    case "Spread": return `spread:${expressionKey(expr.argument)}`;
+    case "NamedArg": return `named:${expr.name}=${expressionKey(expr.value)}`;
+    default: return "unknown";
+  }
+}
+
+function computedMemberAccess(target: unknown, key: unknown): unknown {
+  if (target == null) return undefined;
+
+  if (Array.isArray(target)) {
+    const index = toArrayIndex(key, target.length);
+    if (index === null) return undefined;
+    return target[index];
+  }
+
+  if (typeof target === "string") {
+    const index = toArrayIndex(key, target.length);
+    if (index === null) return undefined;
+    return target[index];
+  }
+
+  if (typeof target === "object") {
+    return (target as Record<string, unknown>)[String(key ?? "")];
+  }
+
+  return undefined;
+}
+
+/** Resolve numeric/string keys to a bounded array index (supports negatives). */
+function toArrayIndex(key: unknown, length: number): number | null {
+  let index: number;
+  if (typeof key === "number") {
+    index = key;
+  } else if (typeof key === "string" && key.trim() !== "" && !Number.isNaN(Number(key))) {
+    index = Number(key);
+  } else {
+    return null;
+  }
+  if (index < 0) index = length + index;
+  if (index < 0 || index >= length) return null;
+  return index;
 }
 
 function memberAccess(target: unknown, property: string): unknown {

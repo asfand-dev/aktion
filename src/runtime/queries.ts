@@ -301,6 +301,7 @@ function visit(node: Expression, fn: (node: Expression) => void): void {
       break;
     case "Member":
       visit(node.object, fn);
+      if (node.computed) visit(node.computed, fn);
       break;
     case "Unary":
       visit(node.argument, fn);

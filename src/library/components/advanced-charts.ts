@@ -1,7 +1,6 @@
 /**
  * Advanced chart components built on the same SVG primitives as `charts.ts`:
  *
- *   - AreaChart   — line chart with a filled area beneath each series.
  *   - Gauge       — half-doughnut indicator for KPIs and thresholds.
  *   - Heatmap     — color-intensity grid (calendar / matrix style).
  *   - RadarChart  — multi-axis polygon for skills, comparisons, scorecards.
@@ -70,101 +69,6 @@ function legend(series: SeriesData[]): HTMLElement {
   });
   return root;
 }
-
-/* ----------------------------------------------------------------------- *
- * AreaChart
- * ----------------------------------------------------------------------- */
-
-export const AreaChart: ComponentSpec = {
-  name: "AreaChart",
-  description:
-    "Filled line chart — same shape as `LineChart` but each series renders " +
-    "with a soft area beneath it. Use for trends with cumulative emphasis " +
-    "(traffic, revenue, signups), stacked metrics, and time-series KPIs.",
-  props: [
-    { name: "labels", type: "string[]" },
-    { name: "series", type: "Series[]" },
-    { name: "title", type: "string", optional: true },
-    { name: "stacked", type: "boolean", optional: true },
-  ],
-  render: (_node, props) => {
-    const labels = asArray<unknown>(props.labels).map((l) => asString(l));
-    const series = readSeries(asArray<unknown>(props.series));
-    const stacked = props.stacked === true;
-    const root = el("div", { class: "rui-chart rui-area-chart" });
-    if (asString(props.title)) root.append(el("div", { class: "rui-chart-title" }, [asString(props.title)]));
-
-    const width = 640;
-    const height = 240;
-    const padding = { left: 40, right: 12, top: 12, bottom: 40 };
-    const innerWidth = width - padding.left - padding.right;
-    const innerHeight = height - padding.top - padding.bottom;
-
-    // For stacked mode, accumulate values per x-position.
-    const pointCount = Math.max(labels.length, ...series.map((s) => s.values.length), 1);
-    const stackedValues: number[][] = series.map(() => Array(pointCount).fill(0));
-    if (stacked) {
-      for (let i = 0; i < pointCount; i += 1) {
-        let acc = 0;
-        series.forEach((s, sIdx) => {
-          acc += s.values[i] ?? 0;
-          stackedValues[sIdx]![i] = acc;
-        });
-      }
-    }
-    const peak = stacked
-      ? stackedValues.reduce((m, arr) => Math.max(m, ...arr), 0)
-      : series.reduce((m, s) => Math.max(m, ...s.values), 0);
-    const max = Math.max(1, peak);
-    const svg = createSvg(width, height);
-    drawHorizontalGrid(svg, padding, innerWidth, innerHeight, max);
-
-    const xFor = (i: number): number => padding.left + i * (innerWidth / Math.max(pointCount - 1, 1));
-    series.forEach((s, sIdx) => {
-      const values = stacked ? stackedValues[sIdx]! : s.values;
-      const baseline = stacked && sIdx > 0 ? stackedValues[sIdx - 1]! : null;
-      const points = values.map((value, i) => {
-        const x = xFor(i);
-        const y = padding.top + innerHeight - (value / max) * innerHeight;
-        return [x, y] as const;
-      });
-      if (points.length === 0) return;
-      let areaPath = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-      if (baseline) {
-        const baselinePoints = baseline.map((value, i) => {
-          const x = xFor(i);
-          const y = padding.top + innerHeight - (value / max) * innerHeight;
-          return [x, y] as const;
-        });
-        areaPath += " " + baselinePoints.slice().reverse().map(([x, y]) => `L${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z";
-      } else {
-        const first = points[0]!;
-        const last = points[points.length - 1]!;
-        areaPath += ` L${last[0].toFixed(1)},${(padding.top + innerHeight).toFixed(1)} L${first[0].toFixed(1)},${(padding.top + innerHeight).toFixed(1)} Z`;
-      }
-      svg.append(svgEl("path", {
-        d: areaPath,
-        fill: colorAt(sIdx),
-        "fill-opacity": "0.2",
-        stroke: "none",
-      }));
-      const linePath = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-      svg.append(svgEl("path", {
-        d: linePath,
-        fill: "none",
-        stroke: colorAt(sIdx),
-        "stroke-width": "2",
-        "stroke-linejoin": "round",
-        "stroke-linecap": "round",
-      }));
-    });
-
-    drawXLabels(svg, labels, padding, innerWidth, innerHeight);
-    root.append(svg);
-    if (series.length > 0) root.append(legend(series));
-    return root;
-  },
-};
 
 /* ----------------------------------------------------------------------- *
  * Gauge
@@ -647,25 +551,4 @@ function drawHorizontalGrid(
       "font-size": "14",
     }, [String(Math.round((min + (max - min) * ratio) * 10) / 10)]));
   }
-}
-
-function drawXLabels(
-  svg: SVGSVGElement,
-  labels: ReadonlyArray<string>,
-  padding: { left: number; right: number; top: number; bottom: number },
-  innerWidth: number,
-  innerHeight: number,
-): void {
-  if (labels.length === 0) return;
-  const slot = innerWidth / Math.max(labels.length - 1, 1);
-  labels.forEach((label, i) => {
-    const x = padding.left + i * slot;
-    svg.append(svgEl("text", {
-      x: String(x),
-      y: String(padding.top + innerHeight + 20),
-      "text-anchor": "middle",
-      class: "rui-chart-label",
-      "font-size": "14",
-    }, [label]));
-  });
 }

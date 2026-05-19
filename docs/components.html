@@ -403,7 +403,7 @@ el.registerComponents([ProductCard]);</code></pre>
     Button("Confirm", null, "primary", "button", "small")
   ])
 ])`,
-      Sheet: `root = Sheet("Sheet title", true, [
+      Sheet: `root = Drawer("Sheet title", true, [
   TextContent("Sheet body slides in from the side when open=true."),
   Buttons([
     Button("Cancel", null, "ghost",   "button", "small"),
@@ -411,14 +411,9 @@ el.registerComponents([ProductCard]);</code></pre>
   ])
 ], "right")`,
       Steps: `root = Steps([
-  StepsItem("Create account",   "Sign up with your email."),
-  StepsItem("Invite teammates", "Share an invite link."),
-  StepsItem("Connect data",     "Hook up your first source.")
-])`,
-      StepsItem: `root = Steps([
-  StepsItem("Step one",   "Detail copy."),
-  StepsItem("Step two",   "Another detail."),
-  StepsItem("Step three", "Wrap it up.")
+  { title: "Create account",   details: "Sign up with your email." },
+  { title: "Invite teammates", details: "Share an invite link." },
+  { title: "Connect data",     details: "Hook up your first source." }
 ])`,
       AspectRatio: `root = AspectRatio("16:9", [
   Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", "Demo image")
@@ -723,7 +718,7 @@ root = Pagination($page, 10, 1)`,
   "success",
   "circle-check"
 )`,
-      Toasts: `root = Toasts([
+      Toasts: `root = Stack([
   Toast("Changes saved", "Your draft was synced.",            "success", "circle-check"),
   Toast("Heads up",      "Two reviewers were notified.",      "info",    "circle-info"),
   Toast("Couldn't save", "Edits queued — retrying.",          "warning", "triangle-exclamation")
@@ -851,7 +846,7 @@ root = Pagination($page, 10, 1)`,
   "v2 launch",
   ["No credit card", "Cancel anytime", "Free for 14 days"]
 )`,
-      Cover: `root = Cover(
+      Cover: `root = Hero(
   "Build the future of generative UI",
   "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
   "From a single LLM prompt to a streaming UI in 90 seconds.",
@@ -878,7 +873,7 @@ root = Pagination($page, 10, 1)`,
   ),
   TextContent("Section body content lives below the header.")
 ])`,
-      MetricGrid: `root = MetricGrid([
+      MetricGrid: `root = Stats([
   StatCard("Active",  "12",   "flat"),
   StatCard("At risk", "4",    "up",   "+2"),
   StatCard("Shipped", "8",    "up",   "+3"),
@@ -1046,7 +1041,7 @@ content = [
   PageHeader("Overview", "Everything happening across your workspace",
     null,
     [Button("New project", null, "primary")]),
-  MetricGrid([
+  Stats([
     StatCard("MRR",      "$48.2k", "up", "+12%"),
     StatCard("Users",    "2,184",  "up", "+184"),
     StatCard("Tickets",  "23",     "down","-9")
@@ -1152,7 +1147,7 @@ root = Stack([
 $to   = "2026-05-15"
 root = DateRangePicker("range", $from, $to, "Reporting window")`,
       SegmentedControl: `$view = "grid"
-root = SegmentedControl("view",
+root = ToggleGroup("view",
   [{value: "grid", label: "Grid", icon: "grip"},
    {value: "list", label: "List", icon: "list"},
    {value: "kanban", label: "Board", icon: "table-columns"}],
@@ -1180,7 +1175,7 @@ true, "1-2")`,
       Toolbar: `root = Toolbar(
   [SearchBar("q", "Search…")],
   [Button("New", null, "primary", "button", "sm", "plus")],
-  [SegmentedControl("v", [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], "grid")])`,
+  [ToggleGroup("v", [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], "grid")])`,
       Pagination: `$page = 3
 root = Pagination($page, 10, 1, 240, 25)`,
       Table: `root = Table([
@@ -1247,7 +1242,7 @@ root = CalendarView(
   {actor: "Linus", title: "opened ticket #2049",   description: "Kernel scheduler regression.", time: "1h",  icon: "circle-exclamation", tone: "warning"},
   {actor: "Grace", title: "deployed compiler 4.2", time: "yesterday", icon: "rocket",          tone: "primary"}
 ], "Recent activity")`,
-      AuditTrail: `root = AuditTrail([
+      AuditTrail: `root = ActivityLog([
   {actor: "system",  title: "Rotated signing key",          time: "08:14",      icon: "key",     tone: "primary", meta: "kid=abc123 ip=10.0.0.4"},
   {actor: "admin",   title: "Granted Owner role to Ada",    time: "yesterday", icon: "user-shield", tone: "success", meta: "actor=u_8132 ip=82.32.1.7"},
   {actor: "scanner", title: "Blocked suspicious sign-in",    time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless ip=tor"}
@@ -1352,7 +1347,7 @@ root = ColorPicker("brand", $brand, "Brand colour",
       // -------------------------------------------------------------------
       // Advanced charts
       // -------------------------------------------------------------------
-      AreaChart: `root = AreaChart(
+      AreaChart: `root = LineChart(
   ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
   [Series("Revenue", [12, 18, 22, 28, 32, 41]),
    Series("Expenses", [8, 12, 14, 18, 20, 24])],
@@ -1396,7 +1391,7 @@ root = ColorPicker("brand", $brand, "Brand colour",
       PinInput: `$pin = ""
 root = PinInput("pin", 4, $pin, "numeric")`,
       OtpInput: `$otp = ""
-root = OtpInput("otp", $otp)`,
+root = PinInput("otp", $otp)`,
       PasswordInput: `$pw = "Hunter2!"
 root = PasswordInput("pw", $pw, "Choose a strong password", "Password", true)`,
       TagInput: `$tags = ["streaming", "ui", "library"]
@@ -1531,7 +1526,7 @@ root = Tour([
   [SearchBar("q", "Search Atlas…")],
   [Button("New issue", null, "primary", "button", "sm", "plus")]
 )`,
-      BreadcrumbPageHeader: `root = BreadcrumbPageHeader(
+      BreadcrumbPageHeader: `root = PageHeader(
   ["Workspace", "Engineering", "Q3 plan"],
   "Roadmap, OKRs, and budget for Q3",
   [Button("Share", null, "ghost", "button", "sm", "share"),

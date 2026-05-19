@@ -106,7 +106,7 @@ const WEBSITE_RULES = [
   "Use `Icon`/`Badge` liberally for visual polish, and `Quote` for testimonials. Pair text-heavy sections with `Image` URLs that look plausible (https://images.unsplash.com/... or https://picsum.photos/).",
   // Modern-language nudges
   "Prefer **responsive prop maps** for layout: write `Grid(items, {sm: 1, md: 2, lg: 3}, \"l\")` (NOT `Grid(items, 3, \"l\")`) so the site looks right on phone AND desktop. The same goes for `Stack(direction)` (e.g. `{sm:\"column\",md:\"row\"}`).",
-  "Use **template literals** for any string that mixes copy with values: `` `${@Count(plans)} plans starting from ${@FormatCurrency(min, \"USD\")}` `` instead of `\"…\" + … + \"…\"` concatenation.",
+  "Use **template literals** for any string that mixes copy with values: `${@Count(plans)} plans starting from today's date` instead of `\"…\" + … + \"…\"` concatenation.",
   "Use **component macros** to factor out repeated sections — e.g. `FeatureRow(f) = FeatureItem(f.title, f.desc, f.icon)` then `FeatureGrid(@Each(features, \"f\", FeatureRow(f)))`. Keeps the page short and consistent.",
   "Keep the response in pure Streaming UI Script — no HTML, no markdown wrappers, no commentary.",
 ];
@@ -125,7 +125,7 @@ const APP_RULES = [
   // Modern-language nudges
   "Use **`$$persistent` state** for anything the user expects to find again on reload — `$$theme`, `$$sidebarCollapsed`, `$$lastRoute`, `$$selectedId`, `$$cart`. Same read/write surface as `$`, just durable.",
   "Use **`@Switch(value, {…}, default)` and `@If(cond, then, else?)`** instead of nested ternaries when routing tabs/views — branches are evaluated lazily so loop variables stay safe.",
-  "Use **template literals** for any computed copy: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@FormatCurrency(@Sum(rows.total), \"USD\")}` `` reads much better than `+` concatenation.",
+  "Use **template literals** for any computed copy: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@Format(@Sum(rows.total, \"currency\", \"USD\"), \"USD\")}` `` reads much better than `+` concatenation.",
   "Use **`@Each` with destructuring**: `@Each($users, \"{id, name, role}\", row)` exposes the fields directly inside `row` instead of repeating `u.name`, `u.role`.",
   "Use **component macros** for repeated rows/cards: `RowCard(p) = Card([Avatar(p.name), TextContent(p.role)])` then `@Each($people, \"p\", RowCard(p))`. One source of truth for visual style.",
   "Use **responsive prop maps** for `Grid`/`Stack` (`{sm:1, md:2, lg:4}`) so the app works on mobile AND desktop.",

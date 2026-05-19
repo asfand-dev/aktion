@@ -397,7 +397,7 @@ header = PageHeader(data.title, data.subtitle, null,
   [Button("New", Action([@ToAssistant(\`Open the new-item flow on \${$$active}\`)]), "primary")],
   Badge(data.status, "success", null, "sm"))
 
-kpis = MetricGrid(@Each(data.kpis, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon)))
+kpis = Stats(@Each(data.kpis, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon)))
 
 projectsCard = Card([
   SectionHeader("Active projects", null, "WORK", null,
@@ -836,7 +836,7 @@ freeBlocks = Stack(@Each(events.freeBlocks, "{label, duration}",
 
 weekCard = Card([
   SectionHeader("Week at a glance", "Mon–Fri overview", null, Badge("Week 20", "info", null, "sm")),
-  MetricGrid([
+  Stats([
     StatCard("Meetings",        \`\${events.weekStats.meetings}\`,  "down", "-3 vs last week",  "users"),
     StatCard("Focus blocks",    \`\${events.weekStats.focus}\`,     "up",   "+2",                "headphones"),
     StatCard("Deep work",       events.weekStats.deepWork,        "up",   "longest in 3 wks",  "clock"),
@@ -937,7 +937,7 @@ detailLoaded = Stack([
   ], "row", "m", "center")
 ], "column", "m")
 
-eventSheet = Sheet(
+eventSheet = Drawer(
   "Event detail",
   $$selected != "",
   [@If(selectedExists == 0, detailEmpty, detailLoaded)],
@@ -957,7 +957,7 @@ dayStats = Stats([
 
 followUps = FollowUpBlock([
   FollowUpItem("Find 2h of focus on Thursday"),
-  FollowUpItem("Reschedule \\"Roadmap review\\""),
+  FollowUpItem('Reschedule "Roadmap review"'),
   FollowUpItem("Send agenda to next standup")
 ], "Quick actions")
 
@@ -1155,356 +1155,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     el.setResponse(document.getElementById("src-calendar").textContent);
     }
   },
-  "checkout-flow": {
-    slug: "checkout-flow",
-    docTitle: `Checkout flow · streaming-ui-script`,
-    eyebrow: `Live demo · multi-step wizard`,
-    heroTitleHtml: `A working e-commerce checkout, generated from one program`,
-    heroDescriptionHtml: `Four-step wizard (info → shipping → payment → review) driven by a
-        single <code>$step</code> variable. <code>Steps</code> across the top
-        shows progress; the main pane swaps between forms; an always-visible
-        <code>SplitView</code> order summary on the right recomputes the
-        total as shipping method and promo codes change. All declarative —
-        no JavaScript handlers in the program.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · checkout flow`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Walk through the steps. Try the promo code <code>WELCOME10</code>
-        for 10% off, or <code>SHIPFREE</code> for free shipping; switch
-        shipping methods to watch totals recompute; then place the order to
-        see the confirmation screen.`,
-      codeBlocks: [
-      { codeId: "src-checkout", content: `$$step          = "info"
-$$shipMethod    = "standard"
-$$payMethod     = "card"
-$$promoApplied  = ""
-$email          = "ada@compute.lab"
-$firstName      = "Ada"
-$lastName       = "Lovelace"
-$phone          = ""
-$address1       = ""
-$address2       = ""
-$city           = ""
-$region         = ""
-$zip            = ""
-$country        = "us"
-$cardName       = ""
-$cardNumber     = ""
-$cardExp        = ""
-$cardCvc        = ""
-$promo          = ""
-$saveAddress    = true
-$marketing      = false
-
-$cart = [
-  {id: "tee",     title: "Streaming UI tee",        variant: "Heather grey · M",   qty: 2, price: 32.00},
-  {id: "mug",     title: "Generative UI mug",       variant: "12oz · Indigo",       qty: 1, price: 18.00},
-  {id: "sticker", title: "Pattern composites pack", variant: "20 stickers · Vinyl", qty: 3, price: 6.00}
-]
-
-ship = Query("ship_quote", {country: $country, method: $$shipMethod}, {price: 0, eta: ""})
-
-lineTotals    = @Each($cart, "{price, qty}", price * qty)
-quantities    = @Each($cart, "{qty}",        qty)
-subtotal      = @Sum(lineTotals)
-itemCount     = @Sum(quantities)
-discount      = @If($$promoApplied == "WELCOME10", @Round(subtotal * 0.1, 2), 0)
-shippingPrice = @If($$promoApplied == "SHIPFREE",  0,                          ship.price)
-total         = @Round(subtotal - discount + shippingPrice, 2)
-
-stepIndex = @Switch($$step, {info: 0, shipping: 1, payment: 2, review: 3}, 4)
-
-methodLabel(m) = @Switch(m, {card: "Card on file", paypal: "PayPal"}, "Apple Pay")
-shipLabel(m)   = @Switch(m, {standard: "Standard · 5-7 days", express: "Express · 2-3 days"}, "Next-day · order before 2pm")
-
-progress = Steps([
-  StepsItem("Your info", \`\${$firstName} \${$lastName} · \${$email}\`),
-  StepsItem("Shipping",  @If($address1 == "", "Add address", \`\${$city}, \${$region} · \${ship.eta}\`)),
-  StepsItem("Payment",   methodLabel($$payMethod)),
-  StepsItem("Review",    @If($$step == "done", "Order placed", \`Total \${@FormatCurrency(total, "USD")}\`))
-])
-
-infoCard = Card([
-  SectionHeader("Your info", "We'll send your receipt and shipping updates here.", "Step 1 of 4"),
-  Stack([
-    FormControl("Email", Input("email", "you@company.com", "email", null, $email)),
-    Grid([
-      FormControl("First name", Input("firstName", "Ada",      "text", null, $firstName)),
-      FormControl("Last name",  Input("lastName",  "Lovelace", "text", null, $lastName))
-    ], 2, "m"),
-    FormControl("Phone (optional)", Input("phone", "+1 555 123 4567", "tel", null, $phone)),
-    Switch("marketing", "Email me product updates and offers", $marketing, "Unsubscribe anytime, one click.")
-  ], "column", "m"),
-  Separator("horizontal", true),
-  Stack([
-    Button("Back to cart", Action([@ToAssistant("Back to cart")]),  "ghost"),
-    Spacer(),
-    Button("Continue to shipping", Action([@Set($$step, "shipping")]), "primary")
-  ], "row", "m", "center")
-])
-
-shippingCard = Card([
-  SectionHeader("Shipping address", "Where should we send the order?", "Step 2 of 4"),
-  Stack([
-    FormControl("Country", Combobox("country", [
-      SelectItem("us", "United States"),
-      SelectItem("ca", "Canada"),
-      SelectItem("uk", "United Kingdom"),
-      SelectItem("de", "Germany"),
-      SelectItem("fr", "France"),
-      SelectItem("jp", "Japan"),
-      SelectItem("au", "Australia")
-    ], $country, "Search country…")),
-    FormControl("Address line 1", Input("addr1", "1 Market St", "text", null, $address1)),
-    FormControl("Address line 2 (optional)", Input("addr2", "Apt 4B", "text", null, $address2)),
-    Grid([
-      FormControl("City",         Input("city",   "San Francisco", "text", null, $city)),
-      FormControl("State/region", Input("region", "CA",            "text", null, $region)),
-      FormControl("Postal code",  Input("zip",    "94105",         "text", null, $zip))
-    ], 3, "m"),
-    Switch("saveAddress", "Save this address to my account", $saveAddress)
-  ], "column", "m"),
-  Separator("horizontal", true),
-  SectionHeader("Shipping method", "Pick a delivery speed.", null, Badge(ship.eta, "info", "truck", "sm")),
-  Radio("shipMethod", [
-    SelectItem("standard", "Standard · 5-7 business days"),
-    SelectItem("express",  "Express · 2-3 business days"),
-    SelectItem("next-day", "Next-day · order before 2pm")
-  ], $$shipMethod),
-  Separator("horizontal", true),
-  Stack([
-    Button("Back",                  Action([@Set($$step, "info")]),    "ghost"),
-    Spacer(),
-    Button("Continue to payment",   Action([@Set($$step, "payment")]), "primary")
-  ], "row", "m", "center")
-])
-
-cardFields = Stack([
-  FormControl("Name on card", Input("cardName",   "Ada Lovelace",        "text", null, $cardName)),
-  FormControl("Card number",  Input("cardNumber", "4242 4242 4242 4242", "text", null, $cardNumber)),
-  Grid([
-    FormControl("Expiry", Input("cardExp", "MM / YY", "text", null, $cardExp)),
-    FormControl("CVC",    Input("cardCvc", "123",     "text", null, $cardCvc))
-  ], 2, "m"),
-  Callout("info", "Test cards only. We never store card details — payment is tokenised before it leaves the browser.", null, "lock", true)
-], "column", "m")
-
-paypalPanel = Stack([
-  Callout("info", "You'll be redirected to PayPal to confirm your payment after placing the order.", null, "paypal", true),
-  Buttons([Button("Continue with PayPal",
-                   Action([@OpenUrl("https://www.paypal.com")]),
-                   "primary")])
-], "column", "m")
-
-applePayPanel = Stack([
-  Callout("info", "Apple Pay works on Safari with Touch ID or Face ID. We don't see your card details.", null, "apple", true),
-  Buttons([Button("Pay with Apple Pay",
-                   Action([@ToAssistant("Trigger Apple Pay")]),
-                   "primary")])
-], "column", "m")
-
-paymentBody = @Switch($$payMethod, {card: cardFields, paypal: paypalPanel}, applePayPanel)
-
-paymentCard = Card([
-  SectionHeader("Payment method", "Pick how you'd like to pay.", "Step 3 of 4"),
-  Radio("payMethod", [
-    SelectItem("card",     "Credit or debit card"),
-    SelectItem("paypal",   "PayPal"),
-    SelectItem("applepay", "Apple Pay")
-  ], $$payMethod),
-  Separator("horizontal", true),
-  paymentBody,
-  Separator("horizontal", true),
-  Stack([
-    Button("Back",         Action([@Set($$step, "shipping")]), "ghost"),
-    Spacer(),
-    Button("Review order", Action([@Set($$step, "review")]),    "primary")
-  ], "row", "m", "center")
-])
-
-reviewLines = DescriptionList([
-  DescriptionItem("Contact", $email,                                                                  "envelope"),
-  DescriptionItem("Ship to", \`\${$firstName} \${$lastName} · \${$address1} · \${$city}, \${$region} \${$zip}\`, "location-dot"),
-  DescriptionItem("Method",  shipLabel($$shipMethod),                                                   "truck"),
-  DescriptionItem("Payment", methodLabel($$payMethod),                                                  "credit-card")
-])
-
-reviewItems = Table([
-  Col("Item",     @Each($cart, "{title, variant}", \`\${title} · \${variant}\`)),
-  Col("Qty",      @Each($cart, "{qty}",            \`\${qty}\`)),
-  Col("Price",    @Each($cart, "{price}",          @FormatCurrency(price, "USD"))),
-  Col("Subtotal", @Each($cart, "{price, qty}",     @FormatCurrency(price * qty, "USD")))
-])
-
-reviewCard = Card([
-  SectionHeader("Review order", "Take one last look — you can still edit any section.", "Step 4 of 4"),
-  reviewLines,
-  Separator("horizontal", true),
-  reviewItems,
-  Separator("horizontal", true),
-  Stack([
-    Button("Back",          Action([@Set($$step, "payment")]),                                                "ghost"),
-    Spacer(),
-    Button("Edit shipping", Action([@Set($$step, "shipping")]),                                               "ghost"),
-    Button(\`Place order · \${@FormatCurrency(total, "USD")}\`,
-           Action([@Set($$step, "done"), @ToAssistant(\`Place the order for \${$email}\`)]),
-           "primary")
-  ], "row", "m", "center")
-])
-
-arrivalCopy = @Switch($$shipMethod, {"next-day": "Tomorrow", express: "Tue-Wed"}, "Mon-Fri next week")
-
-doneCard = Card([
-  Hero(
-    "Order placed!",
-    \`Order #ACME-2491 — receipt sent to \${$email}\`,
-    Button("Track shipment", Action([@ToAssistant("Track ACME-2491")]),    "primary"),
-    Button("Back to shop",   Action([@ToAssistant("Continue shopping")]),  "secondary"),
-    "Thanks for your order",
-    null,
-    null,
-    "success"
-  ),
-  Stack([
-    StatusDot("Authorising payment",   "success"),
-    StatusDot("Reserving inventory",   "success"),
-    StatusDot("Printing label",        "warning", true),
-    StatusDot("Handing off to carrier","default")
-  ], "column", "s"),
-  DescriptionList([
-    DescriptionItem("Order ID",          "ACME-2491",                                       "hashtag"),
-    DescriptionItem("Total",             @FormatCurrency(total, "USD"),                     "sack-dollar"),
-    DescriptionItem("Estimated arrival", \`\${ship.eta} · \${arrivalCopy}\`,                    "calendar"),
-    DescriptionItem("Confirmation sent", $email,                                            "envelope")
-  ])
-])
-
-mainPane = @Switch($$step, {
-  info:     infoCard,
-  shipping: shippingCard,
-  payment:  paymentCard,
-  review:   reviewCard
-}, doneCard)
-
-cartRows = @Each($cart, "{title, variant, qty, price}",
-  Stack([
-    Stack([
-      TextContent(title,                                            "small-heavy"),
-      TextContent(variant,                                          "small", "muted"),
-      TextContent(\`Qty \${qty} · \${@FormatCurrency(price, "USD")} each\`, "small", "muted")
-    ], "column", "xs"),
-    Spacer(),
-    TextContent(@FormatCurrency(price * qty, "USD"), "body-heavy")
-  ], "row", "s", "center")
-)
-
-promoNote = @If($$promoApplied != "",
-  @Switch($$promoApplied, {
-    WELCOME10: Callout("success", "WELCOME10 applied — 10% off your order.", null, "tags", true),
-    SHIPFREE:  Callout("success", "SHIPFREE applied — free shipping.",       null, "truck", true)
-  }, Callout("warning", \`Code "\${$$promoApplied}" isn't valid.\`, null, "circle-info", true))
-)
-
-orderSummary = Card([
-  SectionHeader("Order summary", \`\${itemCount} \${@Plural(itemCount, "item", "items")} in cart\`),
-  Stack(cartRows, "column", "m"),
-  Separator("horizontal", true),
-  Stack([
-    FormControl("Promo code", Input("promo", "WELCOME10 or SHIPFREE", "text", null, $promo)),
-    Button("Apply", Action([@Set($$promoApplied, $promo)]), "secondary", "button", "small")
-  ], "row", "s", "end"),
-  promoNote,
-  Separator("horizontal", true),
-  DescriptionList([
-    DescriptionItem("Subtotal", @FormatCurrency(subtotal, "USD"),                                "tag"),
-    DescriptionItem("Shipping", \`\${@FormatCurrency(shippingPrice, "USD")} · \${ship.eta}\`,        "truck"),
-    DescriptionItem("Discount", \`-\${@FormatCurrency(discount, "USD")}\`,                          "percent"),
-    DescriptionItem("Total",    @FormatCurrency(total, "USD"),                                    "sack-dollar")
-  ]),
-  Callout("info", "All prices in USD. Taxes calculated at next step where applicable.", null, "circle-info", true)
-])
-
-split = @If($$step == "done", mainPane, SplitView([mainPane], [orderSummary], "1.5fr"))
-
-header = PageHeader(
-  "Checkout",
-  \`Step \${stepIndex + 1} of 4\`,
-  Breadcrumb([BreadcrumbItem("Shop", "#"), BreadcrumbItem("Cart", "#"), BreadcrumbItem("Checkout")]),
-  [Button("Save & continue later", Action([@ToAssistant("Save my cart and email me a checkout link")]), "ghost")],
-  Badge(@If($$step == "done", "Complete", "In progress"), @If($$step == "done", "success", "info"))
-)
-
-trust = Stats([
-  {label: "Free returns",  value: "30 days",  hint: "no questions asked", tone: "success"},
-  {label: "Carbon offset", value: "100%",     hint: "every shipment",     tone: "info"},
-  {label: "Support",       value: "24 / 7",   hint: "live chat",          tone: "primary"},
-  {label: "Secure",        value: "TLS 1.3",  hint: "PCI-DSS 4.0",        tone: "default"}
-])
-
-followUps = FollowUpBlock([
-  FollowUpItem("Apply a promo code"),
-  FollowUpItem("Change shipping address"),
-  FollowUpItem("Use a different card")
-], "Need help?")
-
-root = Stack([header, progress, trust, split, @If($$step != "done", followUps)], "column", "l")` }
-      ],
-      render: { elId: "rui-checkout", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The host wires a single shipping-quote tool`,
-      lede: `Everything else is declarative. The host only has to return a price
-        and ETA for the chosen country + method — the renderer recalculates
-        the live total whenever <code>$shipMethod</code> or
-        <code>$country</code> changes.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  ship_quote: ({ country, method }) =&gt; {
-    const base = country === "us" ? 1 : country === "ca" ? 1.2 : 1.6;
-    const price = method === "standard" ? 4.99 * base
-                : method === "express"  ? 9.99 * base
-                : 19.99 * base;
-    const eta = method === "standard" ? "5-7 business days"
-              : method === "express"  ? "2-3 business days"
-              : "Next business day";
-    return { price: Number(price.toFixed(2)), eta };
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-checkout");
-
-    el.setTools({
-      ship_quote: ({ country, method }) => {
-        const base = country === "us" ? 1 : country === "ca" ? 1.2 : 1.6;
-        const price = method === "standard"
-          ? 4.99 * base
-          : method === "express"
-            ? 9.99 * base
-            : 19.99 * base;
-        const eta = method === "standard"
-          ? "5-7 business days"
-          : method === "express"
-            ? "2-3 business days"
-            : "Next business day";
-        return { price: Number(price.toFixed(2)), eta };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-checkout").textContent);
-    }
-  },
   "content-studio": {
     slug: "content-studio",
     docTitle: `Content studio · streaming-ui-script`,
@@ -1557,7 +1207,7 @@ topbar = TopBar(
    Button("Publish", Action([@Set($published, true), @ToAssistant("Publish the post")]), "primary", "button", "small", "rocket")]
 )
 
-header = BreadcrumbPageHeader(
+header = PageHeader(
   ["Workspace", "Content", "Drafts", $title],
   "Compose, brand, schedule, and gate the release in one place.",
   [Button("Save draft", Action([@ToAssistant("Save draft")]), "ghost",   "button", "small", "floppy-disk"),
@@ -1610,7 +1260,7 @@ gateSection = Card([
     Badge("Required", "warning", "shield-halved", "sm")),
   Stack([
     FormControl("4-digit PIN", PinInput("pin", 4, $pin, "numeric")),
-    FormControl("OTP from authenticator", OtpInput("otp", $otp, 6))
+    FormControl("OTP from authenticator", PinInput("otp", $otp, 6))
   ], "column", "m")
 ])
 
@@ -1883,7 +1533,7 @@ detailLoaded = Stack([
 
 detailBody = @If(selectedExists == 0, detailGeneric, detailLoaded)
 
-detailSheet = Sheet(
+detailSheet = Drawer(
   "Contact detail",
   $$selected != "",
   [detailBody],
@@ -2032,7 +1682,7 @@ errorGauge = Card([
 areaCard = Card([
   SectionHeader("Signups · last 7 days", "Stacked by source", "GROWTH",
     Badge("+18% WoW", "success", "arrow-trend-up", "sm")),
-  AreaChart(
+  LineChart(
     ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
      Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
@@ -2099,7 +1749,7 @@ activityCard = Card([
 auditCard = Card([
   SectionHeader("Audit trail", "Privileged actions, last 7 days", "AUDIT",
     Badge("Compliance", "primary", "shield-halved", "sm")),
-  AuditTrail([
+  ActivityLog([
     {actor: "system",  title: "Rotated signing key",          time: "08:14",      icon: "key",          tone: "primary", meta: "kid=abc123 ip=10.0.0.4"},
     {actor: "admin",   title: "Granted Owner role to Ada",    time: "yesterday",  icon: "user-shield",  tone: "success", meta: "actor=u_8132 ip=82.32.1.7"},
     {actor: "scanner", title: "Blocked suspicious sign-in",   time: "2 days ago", icon: "shield-halved",tone: "danger",  meta: "ua=ChromeHeadless ip=tor"},
@@ -2109,9 +1759,9 @@ auditCard = Card([
 
 bottomGrid = Grid([activityCard, auditCard], {sm: 1, md: 2}, "l")
 
-kpiStrip = MetricGrid([
+kpiStrip = Stats([
   StatCard("Contributors", \`\${@Count(contributors)}\`,                      "up",   "+2 this week", "users"),
-  StatCard("Commits",      \`\${@FormatNumber(@Sum(contributors.commits))}\`, "up",   "+184 today",   "code-commit"),
+  StatCard("Commits",      \`\${@Format(@Sum(contributors.commits, "number"))}\`, "up",   "+184 today",   "code-commit"),
   StatCard("Avg latency",  \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`, "down", "-12 ms",       "gauge-high"),
   StatCard("Top score",    \`\${@Max(contributors.score)}\`,                  "flat", "Ada Lovelace", "trophy")
 ])
@@ -2211,7 +1861,7 @@ $articles = [
    updated: "Updated May 11 · v2.3",
    image: "https://images.unsplash.com/photo-1517511620798-cec17d428bc0?w=480&h=240&fit=crop",
    excerpt: "Set streaming = true, pipe tokens into appendChunk(), set streaming = false. The renderer handles partial parses.",
-   body: "**Streaming-first design.** The parser commits every fully-streamed line, so users see the page shell before the body has finished rendering. Set the \`streaming\` attribute on the element so banners and parse errors are suppressed mid-stream:\\n\\n1. \`el.streaming = true\` before the first chunk.\\n2. Call \`el.appendChunk(chunk)\` for each incoming token.\\n3. \`el.streaming = false\` when the stream finishes.\\n\\nIf you need progressive results without a real LLM, set \`el.setResponse(...)\` with a full program — every statement is committed in order."},
+   body: "Streaming-first design. The parser commits every fully-streamed line so users see the page shell before the body finishes."},
 
   {id: "themes",
    title: "Themes, tokens, and runtime customisation",
@@ -2221,7 +1871,7 @@ $articles = [
    updated: "Updated May 09 · v2.3",
    image: "https://images.unsplash.com/photo-1503424886307-b090341d25d1?w=480&h=240&fit=crop",
    excerpt: "Seven built-in themes plus full token overrides. Authored programs never hard-code colours.",
-   body: "**Pick a theme** via the \`theme\` attribute or pass a partial token map. Authored Streaming UI Script must work across every theme — use semantic \`tone\` props (\\"primary\\", \\"success\\", \\"warning\\", \\"danger\\") and let the runtime resolve the colour.\\n\\nThemes are CSS custom properties under the hood, so you can also style the host element from the outside:\\n\\n\`\`\`css\\nstreaming-ui-script {\\n  --rui-color-primary: #16a34a;\\n  --rui-radius-md: 14px;\\n}\\n\`\`\`"},
+   body: '**Pick a theme** via the theme attribute or pass a partial token map. Authored Streaming UI Script must work across every theme — use semantic tone props (primary, success, warning, danger) and let the runtime resolve the colour.'},
 
   {id: "rate-limits",
    title: "Rate limits, batching, and retries",
@@ -2261,7 +1911,7 @@ $articles = [
    updated: "Updated May 12 · v2.3",
    image: "https://images.unsplash.com/photo-1505816014357-96b5ff457e9a?w=480&h=240&fit=crop",
    excerpt: "Walks through the four most common reasons the element appears blank.",
-   body: "When nothing renders, check in this order:\\n\\n1. The \`script\` tag is \`type=\\"module\\"\` and the URL points to a valid bundle.\\n2. The first non-blank line of the program is \`root = Stack(...)\`.\\n3. \`el.streaming\` is \`false\` after the last chunk (otherwise the banner is suppressed).\\n4. Open the host page's console — every parse error is also emitted as a custom \`error\` event you can log."},
+   body: "When nothing renders, verify the module script URL, ensure root = Stack(...) is first, set streaming false after the last chunk, and check the console for parse errors."},
 
   {id: "errors-tools",
    title: "Why is my tool called with undefined args?",
@@ -2271,7 +1921,7 @@ $articles = [
    updated: "Updated May 11 · v2.3",
    image: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=480&h=240&fit=crop",
    excerpt: "Args reflect the call site verbatim — interpolate to empty strings, never to undefined.",
-   body: "Tools receive whatever object the call site emits. If the LLM emits \`{q: \\"\\" + $search}\` and \`$search\` is empty, the tool sees \`{ q: \\"\\" }\`. Always default inside the tool with \`?? \\"\\"\` rather than relying on absence."}
+   body: "Tools receive whatever object the call site emits. Default missing fields inside the tool with nullish coalescing rather than relying on absence."}
 ]
 
 categoryRows = @If($$category == "all", $articles, @Filter($articles, "category", "==", $$category))
@@ -2379,7 +2029,7 @@ articleHeader = @If(currentExists == 0,
   EmptyState("Pick an article", "Choose a tile on the left to read.", "book", null),
   Stack([
     Breadcrumb([BreadcrumbItem("Help center", "#"), BreadcrumbItem(categoryLabel, "#"), BreadcrumbItem(current.title)]),
-    Cover(
+    Hero(
       current.title,
       current.image,
       current.excerpt,
@@ -2440,14 +2090,14 @@ popularFaqs = Card([
   SectionHeader("Popular FAQs", "Quick answers without leaving the page"),
   Accordion([
     AccordionItem("How do I switch themes at runtime?",
-                  [Markdown("Pass a theme name to \`el.setTheme(\\"dark\\")\` or a partial token map. Themes are CSS custom properties under the hood — values propagate immediately without re-rendering.")],
+                  [TextContent("Pass a theme name to setTheme on the element, or pass a partial token map. Themes are CSS custom properties under the hood.")],
                   true),
     AccordionItem("Where does the system prompt live?",
                   [Markdown("Two flavours ship in \`dist/\`: \`system_prompt.txt\` (full) and \`system_prompt_chat.txt\` (chat). Fetch one and prepend it to every model call. Programmatic prompts: \`el.getSystemPrompt({ tools: [...] })\`.")]),
     AccordionItem("Can I add my own components?",
                   [Markdown("Yes — call \`el.registerComponents([...])\`. Each spec contributes a name, description, props, and a \`render(node, props, helpers)\` function. The next \`getSystemPrompt()\` call automatically advertises the new component.")]),
     AccordionItem("How do I keep Tabs state across re-renders?",
-                  [Markdown("Use a stable \`defaultValue\` derived from a \`$variable\`. Internal renderer state is keyed by tree path, so the active tab persists as long as the surrounding shape doesn't change.")])
+                  [TextContent("Bind the active tab to a $variable. Internal renderer state is keyed by tree path, so the active tab persists as long as the surrounding shape does not change.")])
   ])
 ])
 
@@ -2856,17 +2506,17 @@ categoryLabel = @Switch($$category, {
 
 header = PageHeader(
   "Personal finance",
-  \`May 2026 · \${@FormatCurrency(income, "USD")} in · \${@FormatCurrency(@Sum(transactions.amount), "USD")} out\`,
+  \`May 2026 · \${@Format(income, "currency", "USD")} in · \${@Format(@Sum(transactions.amount, "currency", "USD"), "USD")} out\`,
   ["Money", categoryLabel],
   [Button("Add transaction", Action([@ToAssistant("Add a new transaction")]),     "primary"),
    Button("Export CSV",      Action([@ToAssistant("Export this month as CSV")]),  "secondary")],
   Badge(\`\${savingsRate}% saved\`, @If(savingsRate >= 25, "success", @If(savingsRate >= 10, "warning", "danger")), null, "sm")
 )
 
-kpis = MetricGrid([
-  StatCard("Income",     @FormatCurrency(income, "USD"),                    "flat", "Monthly net",                            "sack-dollar"),
-  StatCard("Spent",      @FormatCurrency(@Sum(transactions.amount), "USD"), "up",   \`\${totalCount} \${@Plural(totalCount, "txn", "txns")}\`, "receipt"),
-  StatCard("Remaining",  @FormatCurrency(remaining, "USD"),                  "down", \`\${savingsRate}% savings rate\`,           "piggy-bank"),
+kpis = Stats([
+  StatCard("Income",     @Format(income, "currency", "USD"),                    "flat", "Monthly net",                            "sack-dollar"),
+  StatCard("Spent",      @Format(@Sum(transactions.amount, "currency", "USD"), "USD"), "up",   \`\${totalCount} \${@Plural(totalCount, "txn", "txns")}\`, "receipt"),
+  StatCard("Remaining",  @Format(remaining, "currency", "USD"),                  "down", \`\${savingsRate}% savings rate\`,           "piggy-bank"),
   StatCard("Top cat.",   "Groceries",                                        "up",   "$180 spent · 22% of budget",             "basket-shopping")
 ])
 
@@ -2897,7 +2547,7 @@ BudgetBar(category, label, budget, icon) = Stack([
     Icon(icon, "solid", "md"),
     TextContent(label, "small-heavy"),
     Spacer(),
-    TextContent(\`\${@FormatCurrency(@Sum(@Filter(transactions, "category", "==", category).amount), "USD")} / \${@FormatCurrency(budget, "USD")}\`, "small", "muted")
+    TextContent(\`\${@Format(@Sum(@Filter(transactions, "category", "==", category, "currency", "USD").amount), "USD")} / \${@Format(budget, "currency", "USD")}\`, "small", "muted")
   ], "row", "s", "center"),
   Progress(@Round(@Sum(@Filter(transactions, "category", "==", category).amount) / budget * 100, 0), 100, @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget, "danger", @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget * 0.8, "warning", "success")), "sm")
 ], "column", "xs")
@@ -2909,11 +2559,11 @@ budgetCard = Card([
 
 savingsCard = Card([
   SectionHeader("Savings goal", "Vacation fund · July"),
-  ProgressRing(remaining, 1500, @FormatCurrency(remaining, "USD"), \`of \${@FormatCurrency(1500, "USD")}\`, @If(remaining > 750, "success", "warning"), "lg"),
+  ProgressRing(remaining, 1500, @Format(remaining, "currency", "USD"), \`of \${@Format(1500, "currency", "USD")}\`, @If(remaining > 750, "success", "warning"), "lg"),
   Stats([
-    {label: "This month", value: @FormatCurrency(remaining, "USD"), tone: "success"},
-    {label: "Last month", value: @FormatCurrency(870, "USD"),       tone: "info"},
-    {label: "Target",     value: @FormatCurrency(1500, "USD"),       tone: "primary"}
+    {label: "This month", value: @Format(remaining, "currency", "USD"), tone: "success"},
+    {label: "Last month", value: @Format(870, "currency", "USD"),       tone: "info"},
+    {label: "Target",     value: @Format(1500, "currency", "USD"),       tone: "primary"}
   ])
 ])
 
@@ -2946,7 +2596,7 @@ TxnRow(id, date, merchant, category, amount, icon, note) = Card([
     ], "column", "xs"),
     Spacer(),
     CategoryBadge(category),
-    TextContent(\`-\${@FormatCurrency(amount, "USD")}\`, "body-heavy", "danger"),
+    TextContent(\`-\${@Format(amount, "currency", "USD")}\`, "body-heavy", "danger"),
     Button(@If(id == $$selected, "Selected", "Detail"),
            Action([@Set($$selected, id)]),
            @If(id == $$selected, "primary", "ghost"),
@@ -2965,7 +2615,7 @@ emptyTxns = EmptyState(
 )
 
 txnList = Card([
-  SectionHeader(\`\${categoryLabel}\`, \`\${@Count(categoryRows)} \${@Plural(@Count(categoryRows), "transaction", "transactions")} · \${@FormatCurrency(totalSpent, "USD")}\`, null, null,
+  SectionHeader(\`\${categoryLabel}\`, \`\${@Count(categoryRows)} \${@Plural(@Count(categoryRows), "transaction", "transactions")} · \${@Format(totalSpent, "currency", "USD")}\`, null, null,
     [Button("Sort by date",   Action([@ToAssistant("Sort by date")]),   "ghost", "button", "small"),
      Button("Sort by amount", Action([@ToAssistant("Sort by amount")]), "ghost", "button", "small")]),
   categoryToggle,
@@ -2983,13 +2633,13 @@ detailLoaded = Stack([
       TextContent(\`\${selectedTxn.date} · \${selectedTxn.note}\`, "small", "muted")
     ], "column", "xs"),
     Spacer(),
-    TextContent(\`-\${@FormatCurrency(selectedTxn.amount, "USD")}\`, "large-heavy", "danger")
+    TextContent(\`-\${@Format(selectedTxn.amount, "currency", "USD")}\`, "large-heavy", "danger")
   ], "row", "m", "center"),
   CategoryBadge(selectedTxn.category),
   DescriptionList([
     DescriptionItem("Category", categoryLabel,                   "tag"),
     DescriptionItem("Date",     selectedTxn.date,                "calendar"),
-    DescriptionItem("Amount",   @FormatCurrency(selectedTxn.amount, "USD"), "dollar-sign"),
+    DescriptionItem("Amount",   @Format(selectedTxn.amount, "currency", "USD"), "dollar-sign"),
     DescriptionItem("Note",     selectedTxn.note,                "comment")
   ]),
   Buttons([
@@ -3006,7 +2656,7 @@ detailEmpty = EmptyState(
   null
 )
 
-detailSheet = Sheet(
+detailSheet = Drawer(
   "Transaction detail",
   $$selected != "",
   [@If(selectedTxnExists == 0, detailEmpty, detailLoaded)],
@@ -3057,145 +2707,6 @@ root = Stack([
     setup(){
 const el = document.getElementById("rui-expenses");
     el.setResponse(document.getElementById("src-expenses").textContent);
-    }
-  },
-  "external-data-example": {
-    slug: "external-data-example",
-    docTitle: `External data example · streaming-ui-script`,
-    eyebrow: `Live demo · public API`,
-    heroTitleHtml: `Bring a real API into the UI`,
-    heroDescriptionHtml: `Tools aren't limited to local data. This demo registers a single
-        <code>github_repos</code> tool that hits GitHub's public REST API. Whenever
-        the user types a different handle, the <code>$user</code> binding changes,
-        the Query re-fires, and the table + chart redraw automatically. No extra
-        plumbing — same flow you'd use to wire up a real backend.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · external data`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `GitHub repository explorer`,
-      lede: `Type any GitHub username or organisation. We fetch the top-starred public
-        repos via the <code>search/repositories</code> endpoint, then render them as
-        a table, a stars-by-repo chart, and a quick KPI summary.`,
-      codeBlocks: [
-      { codeId: "src-github", content: `$user = "thesysdev"
-data  = Query("github_repos", {user: $user}, {rows: [], total: 0, status: "idle"})
-
-userField = FormControl("GitHub user", Input("user", "vercel, anthropic, thesysdev…", "text", null, $user))
-
-errBanner = Callout("error", "Couldn't load repos", "Check the username and try again. The GitHub API may also be rate-limiting unauthenticated requests.")
-loading   = TextContent("Loading repositories…",   "small", "muted")
-emptyMsg  = TextContent("No public repositories found.", "small", "muted")
-
-starsChart = BarChart(data.rows.name, [Series("Stars", data.rows.stars)])
-forksChart = BarChart(data.rows.name, [Series("Forks", data.rows.forks)])
-
-chartTabs = Tabs([
-  TabItem("stars", "Stars", [starsChart]),
-  TabItem("forks", "Forks", [forksChart])
-])
-
-repoTable = Table([
-  Col("Repository",  data.rows.name),
-  Col("Description", data.rows.description),
-  Col("Language",    @Each(data.rows, "{language}", Badge(language, "info", null, "sm"))),
-  Col("Stars",       data.rows.stars, "number"),
-  Col("Forks",       data.rows.forks, "number"),
-  Col("Open",        @Each(data.rows, "{url}",       Button("View", Action([@OpenUrl(url)]), "secondary", "normal", "small")))
-])
-
-stats = Stack([
-  StatCard("Repos shown", \`\${@Count(data.rows)}\`),
-  StatCard("Total stars", \`\${@FormatNumber(@Sum(data.rows.stars))}\`, "up"),
-  StatCard("Total forks", \`\${@FormatNumber(@Sum(data.rows.forks))}\`, "up")
-], "row", "m", "stretch", "start", true)
-
-# Default branch handles "ok" with actual data (or the empty message).
-view = @Switch(data.status, {
-  error:   errBanner,
-  loading: loading
-}, @If(@Count(data.rows) > 0,
-       Stack([stats, Card([CardHeader("Top repositories"), repoTable]), Card([CardHeader("Comparison chart"), chartTabs])]),
-       emptyMsg))
-
-root = Stack([Card([CardHeader("GitHub explorer", "Live data via api.github.com"), userField]), view])` }
-      ],
-      render: { elId: "rui-github", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How it's wired`,
-      lede: `A single tool function fetches the API, normalises the response, and hands
-        it back as the <code>data</code> Query result. The library handles caching,
-        re-runs on state change, and the optimistic <code>defaults</code> while the
-        request is in flight.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  github_repos: async ({ user }) =&gt; {
-    if (!user) return { rows: [], total: 0, status: "idle" };
-    try {
-      const url = \`https://api.github.com/search/repositories?q=user:\${encodeURIComponent(user)}&amp;sort=stars&amp;order=desc&amp;per_page=8\`;
-      const res = await fetch(url);
-      if (!res.ok) return { rows: [], total: 0, status: "error" };
-      const data = await res.json();
-      const rows = (data.items ?? []).map((r) =&gt; ({
-        name:        r.name,
-        description: r.description ?? "—",
-        language:    r.language ?? "Other",
-        stars:       r.stargazers_count,
-        forks:       r.forks_count,
-        url:         r.html_url,
-      }));
-      return { rows, total: data.total_count ?? rows.length, status: "ok" };
-    } catch {
-      return { rows: [], total: 0, status: "error" };
-    }
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-github");
-
-    /* Track loading state so the UI can show a spinner / error banner */
-    function withLoading(promise) {
-      let resolved = false;
-      promise.finally(() => { resolved = true; });
-      return promise;
-    }
-
-    el.setTools({
-      github_repos: async ({ user }) => {
-        const handle = (user ?? "").trim();
-        if (!handle) return { rows: [], total: 0, status: "idle" };
-        try {
-          const url = `https://api.github.com/search/repositories?q=user:${encodeURIComponent(handle)}&sort=stars&order=desc&per_page=8`;
-          const res = await fetch(url);
-          if (!res.ok) return { rows: [], total: 0, status: "error" };
-          const data = await res.json();
-          const rows = (data.items ?? []).map((r) => ({
-            name:        r.name,
-            description: r.description ?? "—",
-            language:    r.language ?? "Other",
-            stars:       r.stargazers_count ?? 0,
-            forks:       r.forks_count ?? 0,
-            url:         r.html_url,
-          }));
-          return { rows, total: data.total_count ?? rows.length, status: "ok" };
-        } catch {
-          return { rows: [], total: 0, status: "error" };
-        }
-      },
-    });
-
-    el.setResponse(document.getElementById("src-github").textContent);
     }
   },
   "file-manager": {
@@ -3448,13 +2959,13 @@ detailLoaded = Stack([
   Timeline([
     TimelineItem("File previewed",       "Just now",          "Opened in the file detail sheet.",         "eye",            "info"),
     TimelineItem("Re-shared with team",  "Yesterday · 16:42", "Naomi added Mei to the share list.",       "share-nodes",    "primary"),
-    TimelineItem("Comment added",        "Yesterday · 09:10", "Ada: \\"Let's lock the gradient by Fri.\\"",  "comment",        "default"),
+    TimelineItem("Comment added",        "Yesterday · 09:10", "Ada: Let's lock the gradient by Fri.",  "comment",        "default"),
     TimelineItem("New version uploaded", "2 days ago",        "v3 replaced v2. Auto-versioned.",          "cloud-arrow-up", "success"),
     TimelineItem("File created",         "Last week",         "Imported from local Drive.",               "circle-plus",    "default")
   ])
 ], "column", "m")
 
-detailSheet = Sheet(
+detailSheet = Drawer(
   "File detail",
   $$selected != "",
   [@If(selectedExists == 0, detailEmpty, detailLoaded)],
@@ -3484,7 +2995,7 @@ storageBanner = @If(storage.percent > 80,
          Button("Upgrade", Action([@ToAssistant("Open upgrade")]), "primary", "button", "small"),
          "triangle-exclamation", "warning"))
 
-quickStats = MetricGrid([
+quickStats = Stats([
   StatCard("Total files",     \`\${totalCount}\`,                                                "up",   "+12 this week",   "file"),
   StatCard("Folders",          "5",                                                            "flat", "across drive",    "folder"),
   StatCard("Starred",         \`\${@Count(@Filter($files, "starred", "==", true))}\`,            "up",   "your top picks",  "star"),
@@ -4081,7 +3592,7 @@ detailEmpty = EmptyState(
   null
 )
 
-detailSheet = Sheet(
+detailSheet = Drawer(
   "Issue detail",
   $$selected != "",
   [@If(selectedIssueExists == 0, detailEmpty, detailLoaded)],
@@ -4134,194 +3645,6 @@ root = Stack([
     setup(){
 const el = document.getElementById("rui-issues");
     el.setResponse(document.getElementById("src-issues").textContent);
-    }
-  },
-  "javascript-pomodoro": {
-    slug: "javascript-pomodoro",
-    docTitle: `JS demo · Pomodoro · streaming-ui-script`,
-    eyebrow: `JS demo · phases, intervals, audio`,
-    heroTitleHtml: `A focused pomodoro app, written declaratively`,
-    heroDescriptionHtml: `Three phases — focus, short break, long break — automatically cycle
-        and a single <code>Script</code> drives the countdown. Phase changes
-        trigger a small audio beep and a notification if the user grants
-        permission. The entire UI (rings, controls, history) is plain
-        components.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · pomodoro timer`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Try starting a session, then pausing or skipping the phase. When a
-        phase ends the script flips to the next one automatically and the
-        completed sessions counter increments.`,
-      codeBlocks: [
-      ],
-      render: { elId: "rui-pomodoro", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `UI Script source`,
-      lede: `Note how every state transition is expressed as
-        <code>Action([@Set(...)])</code> — the script doesn't decide policy,
-        it just runs the clock and signals when a phase ends by mutating
-        state.`,
-      codeBlocks: [
-      { codeId: "src-pomodoro", content: `$phase = "focus"
-$remaining = 1500
-$running = false
-$completed = 0
-$totalSeconds = 1500
-
-ticker = Script("ticker", "if (!ctx.state.get('running')) return; const tick = async () => { if (ctx.signal.aborted) return; const r = (ctx.state.get('remaining') ?? 0) - 1; if (r &lt;= 0) { ctx.state.set('remaining', 0); ctx.state.set('running', false); const next = await ctx.tools.advance_phase({ phase: ctx.state.get('phase'), completed: ctx.state.get('completed') ?? 0 }); if (ctx.signal.aborted) return; ctx.state.set('phase', next.phase); ctx.state.set('remaining', next.seconds); ctx.state.set('totalSeconds', next.seconds); ctx.state.set('completed', next.completed); } else { ctx.state.set('remaining', r); } }; const id = setInterval(tick, 1000); ctx.cleanup(() => clearInterval(id));", ["running", "phase"])
-
-formatter = Script("formatter", "const r = ctx.state.get('remaining') ?? 0; const m = Math.floor(r / 60); const s = r % 60; const pad = (n) => String(n).padStart(2, '0'); ctx.state.set('clock', pad(m) + ':' + pad(s));", ["remaining"])
-
-$clock = "25:00"
-
-phaseLabel = $phase == "focus" ? "Focus" : ($phase == "short" ? "Short break" : "Long break")
-phaseHint = $phase == "focus" ? "Deep work, no distractions." : ($phase == "short" ? "Stand up, look out the window." : "Step away. Stretch. Hydrate.")
-phaseColor = $phase == "focus" ? "primary" : ($phase == "short" ? "success" : "info")
-
-header = Card([
-  CardHeader(phaseLabel, phaseHint),
-  Stack([
-    Badge(phaseLabel, phaseColor, null, "sm"),
-    Badge(@Count($completed) + " sessions today", "neutral", null, "sm")
-  ], "row", "s", "center", "start", true)
-], "elevated")
-
-display = Card([TextContent($clock, "large-heavy")], "outlined")
-
-primary = $running ? "Pause" : "Start"
-primaryVariant = $running ? "secondary" : "primary"
-
-controls = Buttons([
-  Button(primary, Action([@Set($running, !$running)]), primaryVariant),
-  Button("Skip phase", Action([
-    @Set($running, false),
-    @Js("const next = await ctx.tools.advance_phase({ phase: ctx.state.get('phase'), completed: ctx.state.get('completed') ?? 0 }); ctx.state.set('phase', next.phase); ctx.state.set('remaining', next.seconds); ctx.state.set('totalSeconds', next.seconds); ctx.state.set('completed', next.completed);")
-  ]), "ghost"),
-  Button("Reset", Action([
-    @Set($running, false),
-    @Set($phase, "focus"),
-    @Set($remaining, 1500),
-    @Set($totalSeconds, 1500),
-    @Reset($completed)
-  ]), "ghost")
-])
-
-progressPct = ($totalSeconds - $remaining) * 100 / $totalSeconds
-progressLabel = "" + @Round(progressPct) + "% of " + phaseLabel + " complete"
-progressTag = Badge(progressLabel, phaseColor, null, "sm")
-
-settingsHint = TextContent("Tip: skipping advances to the next phase in the focus / short / focus / short / focus / long cycle.", "small", "muted")
-
-root = Stack([header, display, progressTag, controls, settingsHint, ticker, formatter])` }
-      ],
-      render: null,
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How <code>advance_phase</code> works`,
-      lede: `Phase rotation belongs to the host page (so it can persist progress,
-        ring a bell, push a notification, etc.), so the script just calls
-        <code>ctx.tools.advance_phase({})</code>. The host implements the
-        policy:`,
-      codeBlocks: [
-      { codeId: null, content: `// Pure host code: derive the next phase from the current one, fire a beep,
-// return the new values. The script writes them back into \`ctx.state\`, which
-// keeps the reactive UI in sync without exposing any private renderer
-// internals. Reset becomes trivial because there's no host-side mutable state
-// to clear.
-el.setTools({
-  advance_phase: ({ phase, completed }) =&gt; {
-    const nextCompleted = phase === "focus" ? (completed ?? 0) + 1 : (completed ?? 0);
-    const isLong = phase === "focus" &amp;&amp; nextCompleted % 4 === 0;
-    const next = phase === "focus" ? (isLong ? "long" : "short") : "focus";
-    const seconds = ({ focus: 25 * 60, short: 5 * 60, long: 15 * 60 })[next];
-    playChime();
-    return { phase: next, seconds, completed: nextCompleted };
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const PHASE_SECONDS = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 };
-
-    const el = document.getElementById("rui-pomodoro");
-
-    // Lightweight WebAudio chime so we don't ship a binary asset.
-    function chime() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.value = 880;
-        osc.type = "triangle";
-        gain.gain.setValueAtTime(0.0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
-        setTimeout(() => ctx.close(), 600);
-      } catch {
-        /* audio blocked — ignore */
-      }
-    }
-
-    function maybeNotify(title, body) {
-      if (typeof Notification === "undefined") return;
-      if (Notification.permission === "granted") {
-        try { new Notification(title, { body }); } catch { /* ignore */ }
-      }
-    }
-
-    el.setTools({
-      // Pure: derive the next phase from current state. The script awaits this
-      // and writes the returned values back into the reactive store via
-      // `ctx.state`. Keeping the tool stateless means Reset just rewinds the
-      // reactive state and we're back to a clean slate.
-      advance_phase: ({ phase, completed }) => {
-        let next;
-        let completedNext = completed ?? 0;
-        if (phase === "focus") {
-          completedNext = completedNext + 1;
-          const long = completedNext % 4 === 0;
-          next = long ? "long" : "short";
-        } else {
-          next = "focus";
-        }
-        const seconds = PHASE_SECONDS[next];
-
-        chime();
-        maybeNotify(
-          next === "focus" ? "Back to focus" : "Time for a break",
-          next === "focus" ? "Let's get into deep work." : "Step away from the screen."
-        );
-
-        return { phase: next, seconds, completed: completedNext };
-      },
-    });
-
-    // Ask for notification permission once on first user gesture.
-    el.addEventListener("click", () => {
-      if (typeof Notification !== "undefined" && Notification.permission === "default") {
-        Notification.requestPermission().catch(() => {});
-      }
-    }, { once: true });
-
-    customElements.whenDefined("streaming-ui-script").then(() => {
-      el.setResponse(document.getElementById("src-pomodoro").textContent);
-    });
     }
   },
   "javascript-stopwatch": {
@@ -4872,23 +4195,27 @@ mapCard = Card([
   )
 ])
 
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("Photos",   \`\${@Count(photos)}\`, "flat", "Curated", "image"),
   StatCard("Duration",  "8 days",            "flat", "Round-trip", "calendar-days"),
   StatCard("Locations", "6 stops",           "up",   "+2 vs last tour", "location-dot"),
   StatCard("Group size", "12 max",           "flat", "Small-group format", "people-group")
 ])
 
-hero = Cover(
+hero = Hero(
   "Aurora Expedition",
-  "https://picsum.photos/seed/aurora-cover/1600/600",
   "Eight days chasing the northern lights across Iceland's most photogenic ridgelines, fjords, and ice caves.",
+  null,
+  null,
   "FIELD GUIDE · v3",
+  null,
+  "https://picsum.photos/seed/aurora-cover/1600/600",
   "Aug — Sept 2026 · from $4,890",
+  "360px",
   [Button("Reserve a spot",   Action([@ToAssistant("Reserve a spot")]), "primary"),
    Button("Download brief",   Action([@OpenUrl("/aurora-brief.pdf")]), "ghost")],
-  "primary",
-  "360px"
+  "cover",
+  "primary"
 )
 
 galleryBlock = Card([
@@ -4945,241 +4272,6 @@ const el = document.getElementById("rui-media");
     el.setResponse(document.getElementById("src-media").textContent);
     }
   },
-  "polls-app": {
-    slug: "polls-app",
-    docTitle: `Polls &amp; surveys · streaming-ui-script`,
-    eyebrow: `Live demo · polls`,
-    heroTitleHtml: `Cast a vote, watch the results redraw live`,
-    heroDescriptionHtml: `Three polls in one program — pick an option, the per-option
-        <code>Progress</code> bars, leader badge, and KPI strip all
-        update because the vote tally is a single
-        <code>@Sum</code> recomputed on every read.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · polls &amp; surveys`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Your selections persist across reloads via <code>$$</code>
-        state. Switch the active poll from the toggle — the
-        leaderboard, comments, and follow-ups all stay in sync.`,
-      codeBlocks: [
-      { codeId: "src-polls", content: `$$poll        = "framework"
-$$voteFw      = ""
-$$voteEditor  = ""
-$$voteDeploy  = ""
-$comment      = ""
-
-polls = [
-  {id: "framework", title: "Which frontend framework do you reach for in 2026?",
-   subtitle: "1,284 votes · closes Friday", icon: "code", tone: "primary",
-   options: [
-     {id: "react",   label: "React",   votes: 612, color: "primary"},
-     {id: "vue",     label: "Vue",     votes: 215, color: "success"},
-     {id: "svelte",  label: "Svelte",  votes: 188, color: "warning"},
-     {id: "solid",   label: "Solid",   votes: 124, color: "info"},
-     {id: "angular", label: "Angular", votes:  87, color: "danger"},
-     {id: "qwik",    label: "Qwik",    votes:  58, color: "neutral"}
-   ]},
-  {id: "editor", title: "What's your daily editor?",
-   subtitle: "962 votes · closes Sunday", icon: "pen-to-square", tone: "info",
-   options: [
-     {id: "vscode",   label: "VS Code",    votes: 481, color: "primary"},
-     {id: "cursor",   label: "Cursor",     votes: 209, color: "info"},
-     {id: "neovim",   label: "Neovim",     votes: 137, color: "success"},
-     {id: "zed",      label: "Zed",        votes:  76, color: "warning"},
-     {id: "jetbrains",label: "JetBrains",  votes:  59, color: "neutral"}
-   ]},
-  {id: "deploy", title: "Where do you host your apps?",
-   subtitle: "1,041 votes · closes next Tuesday", icon: "cloud", tone: "warning",
-   options: [
-     {id: "vercel",  label: "Vercel",        votes: 384, color: "primary"},
-     {id: "fly",     label: "Fly.io",        votes: 211, color: "success"},
-     {id: "render",  label: "Render",        votes: 178, color: "warning"},
-     {id: "aws",     label: "AWS direct",    votes: 152, color: "danger"},
-     {id: "cf",      label: "Cloudflare",    votes: 116, color: "info"}
-   ]}
-]
-
-activePoll = @First(@Filter(polls, "id", "==", $$poll))
-totalVotes = @Sum(activePoll.options.votes)
-leader     = @First(@Sort(activePoll.options, "votes", "desc"))
-
-activeVote = @Switch($$poll, {
-  framework: $$voteFw,
-  editor:    $$voteEditor,
-  deploy:    $$voteDeploy
-}, "")
-
-pollToggle = ToggleGroup("poll", [
-  {value: "framework", label: "Framework", icon: "code"},
-  {value: "editor",    label: "Editor",    icon: "pen-to-square"},
-  {value: "deploy",    label: "Hosting",   icon: "cloud"}
-], $$poll)
-
-VoteRow(id, label, votes, color, voteAction) = Card([
-  Stack([
-    Stack([
-      Stack([
-        TextContent(label, "body-heavy"),
-        @If(id == leader.id, Badge("Leading", "success", "trophy", "sm"))
-      ], "row", "s", "center"),
-      TextContent(\`\${votes} \${@Plural(votes, "vote", "votes")} · \${@Round(votes / totalVotes * 100, 1)}%\`, "small", "muted")
-    ], "column", "xs"),
-    Spacer(),
-    Button(@If(id == activeVote, "Your vote", "Vote"),
-           voteAction,
-           @If(id == activeVote, "primary", "secondary"),
-           "button", "small")
-  ], "row", "m", "center"),
-  Progress(@Round(votes / totalVotes * 100, 0), 100, color, "md")
-], "outlined")
-
-voteAction(optionId) = @Switch($$poll, {
-  framework: Action([@Set($$voteFw,     optionId), @ToAssistant(\`Recorded vote for \${optionId} in the framework poll\`)]),
-  editor:    Action([@Set($$voteEditor, optionId), @ToAssistant(\`Recorded vote for \${optionId} in the editor poll\`)])
-}, Action([@Set($$voteDeploy, optionId), @ToAssistant(\`Recorded vote for \${optionId} in the hosting poll\`)]))
-
-pollOptions = @Each(activePoll.options, "{id, label, votes, color}",
-  VoteRow(id, label, votes, color, voteAction(id)))
-
-leaderboard = Card([
-  SectionHeader(activePoll.title, activePoll.subtitle, null, Badge(\`\${totalVotes} votes\`, "info", null, "sm"),
-    [Button("Share poll",  Action([@ToAssistant("Share this poll")]),  "ghost", "button", "small"),
-     Button("Export CSV",  Action([@ToAssistant("Export poll as CSV")]),"ghost", "button", "small")]),
-  Stack(pollOptions, "column", "m"),
-  @If(activeVote == "",
-      Callout("info",    "You haven't voted yet.", "Tap an option above to cast your vote.",                "circle-info",   true),
-      Callout("success", "Vote recorded.",         \`Thanks — your choice is "\${activeVote}". You can change it any time.\`, "circle-check", true))
-])
-
-leaderTrend = LineChart(
-  ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-  @Switch($$poll, {
-    framework: [Series("React", [410, 460, 495, 530, 568, 590, 612]),
-                Series("Vue",   [120, 138, 152, 170, 188, 204, 215]),
-                Series("Svelte",[ 95, 112, 130, 148, 164, 178, 188])],
-    editor:    [Series("VS Code",[300, 340, 375, 405, 432, 460, 481]),
-                Series("Cursor", [120, 140, 156, 174, 190, 200, 209]),
-                Series("Neovim", [ 70,  85,  95, 108, 118, 128, 137])]
-  }, [Series("Vercel", [240, 270, 290, 315, 340, 365, 384]),
-      Series("Fly.io", [130, 150, 165, 178, 190, 202, 211]),
-      Series("Render", [115, 130, 142, 155, 165, 172, 178])])
-)
-
-trendCard = Card([
-  SectionHeader("7-day momentum", "Top 3 options"),
-  leaderTrend
-])
-
-byOptionBars = BarChart(
-  @Each(activePoll.options, "{label}", label),
-  [Series("Votes", @Each(activePoll.options, "{votes}", votes))]
-)
-
-barsCard = Card([
-  SectionHeader("Total votes", "All options")
-  , byOptionBars
-])
-
-kpis = MetricGrid([
-  StatCard("Votes",     \`\${totalVotes}\`,                                                  "up",   "+47 today",                                                          "users"),
-  StatCard("Leader",    leader.label,                                                      "up",   \`\${@Round(leader.votes / totalVotes * 100, 1)}% share\`,               "trophy"),
-  StatCard("Options",   \`\${@Count(activePoll.options)}\`,                                  "flat", "Multiple choice",                                                    "list-check"),
-  StatCard("Your vote", @If(activeVote == "", "—", activeVote),                            "flat", @If(activeVote == "", "Not yet recorded", "Click an option to change"),"check-double")
-])
-
-comments = [
-  {author: "Naomi", body: "Honestly torn between Svelte and Solid these days.", time: "12m ago", avatar: "https://i.pravatar.cc/64?img=47"},
-  {author: "Marc",  body: "Still love Vue 3 — composition API is excellent.",    time: "1h ago",  avatar: "https://i.pravatar.cc/64?img=11"},
-  {author: "Ada",   body: "React's ecosystem is impossible to beat at scale.",   time: "3h ago",  avatar: "https://i.pravatar.cc/64?img=20"},
-  {author: "Linus", body: "Qwik on the comeback trail — resumability ftw.",      time: "Yest.",   avatar: "https://i.pravatar.cc/64?img=12"}
-]
-
-commentBubbles = @Each(comments, "{author, body, time}",
-  ChatBubble(author, body, time, null, "agent", "delivered"))
-
-commentsCard = Card([
-  SectionHeader("Discussion", \`\${@Count(comments)} \${@Plural(@Count(comments), "comment", "comments")}\`),
-  Stack(commentBubbles, "column", "m"),
-  Stack([
-    FormControl("Add a comment", Input("c", "Share your reasoning…", "text", null, $comment)),
-    Button("Post", Action([@ToAssistant(\`Add comment: \${$comment}\`), @Reset($comment)]), "primary", "button", "small")
-  ], "row", "s", "end")
-])
-
-shareCard = Card([
-  SectionHeader("Share", "Send this poll to your team"),
-  Stack([
-    Buttons([
-      Button("Copy link",  Action([@ToAssistant("Copy poll link to clipboard")]),                       "primary"),
-      Button("Slack",      Action([@OpenUrl("https://slack.com")]),                                     "secondary"),
-      Button("Email",      Action([@OpenUrl("mailto:?subject=Vote%20in%20the%20poll")]),                "secondary")
-    ]),
-    Kbd("⌘ + K", "lg")
-  ], "column", "m")
-])
-
-leaderRing = Card([
-  SectionHeader("Leader share", \`\${leader.label} leads with \${@Round(leader.votes / totalVotes * 100, 1)}%\`),
-  ProgressRing(leader.votes, totalVotes, \`\${@Round(leader.votes / totalVotes * 100, 0)}%\`, leader.label, "primary", "lg")
-])
-
-pollHeader = PageHeader(
-  "Community polls",
-  \`\${@Count(polls)} active polls · \${@Sum(@Each(polls, "{options}", @Sum(options.votes)))} total votes\`,
-  ["Community", activePoll.title],
-  [Button("Create poll",  Action([@ToAssistant("Create a new poll")]),       "primary"),
-   Button("Past results", Action([@ToAssistant("Show past poll results")]),  "secondary")],
-  Badge(activePoll.subtitle, "info", null, "sm")
-)
-
-followUps = FollowUpBlock([
-  FollowUpItem("Break this down by region"),
-  FollowUpItem("Show me last quarter's results"),
-  FollowUpItem("Notify me when this poll closes")
-], "Try next")
-
-chartsGrid = Grid([trendCard, barsCard], {sm: 1, md: 2}, "l")
-sideGrid   = Grid([leaderRing, shareCard], {sm: 1, md: 2}, "l")
-
-root = Stack([
-  pollHeader,
-  pollToggle,
-  kpis,
-  leaderboard,
-  chartsGrid,
-  sideGrid,
-  commentsCard,
-  followUps
-], "column", "l")` }
-      ],
-      render: { elId: "rui-polls", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `The leader, percentages, leader badge, and ring chart are all
-        derived from one <code>@Sum(activePoll.options.votes)</code> and
-        one <code>@Sort(...)</code> — no manual book-keeping. Switching
-        between three polls keeps the <em>same</em> layout, just by
-        re-binding <code>activePoll</code>. The user's vote per poll is
-        stored in three independent <code>$$</code> variables so the
-        choices persist across reloads.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-polls");
-    el.setResponse(document.getElementById("src-polls").textContent);
-    }
-  },
   "pricing-page": {
     slug: "pricing-page",
     docTitle: `Pricing page · streaming-ui-script`,
@@ -5209,18 +4301,22 @@ cycleToggle = ToggleGroup("cycle", [
   {value: "annual",  label: "Annual · 20% off", icon: "party-horn"}
 ], $$cycle)
 
-cover = Cover(
+cover = Hero(
   "Pricing built for shipping teams",
-  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
   "Start free, scale when you're ready. Every plan includes streaming, theming, and JavaScript interactions.",
+  null,
+  null,
   "Pricing · v2.3",
+  null,
+  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
   "Cancel anytime · no credit card to start",
+  "320px",
   [
     Button("Start free", Action([@ToAssistant("Start the free plan")]), "primary"),
     Button("Compare plans", Action([@ToAssistant("Show me a full feature comparison")]), "ghost")
   ],
-  "primary",
-  "320px"
+  "cover",
+  "primary"
 )
 
 trustStrip = Stats([
@@ -5356,246 +4452,6 @@ root = Stack([
     setup(){
 const el = document.getElementById("rui-pricing");
     el.setResponse(document.getElementById("src-pricing").textContent);
-    }
-  },
-  "project-dashboard": {
-    slug: "project-dashboard",
-    docTitle: `Project dashboard · streaming-ui-script`,
-    eyebrow: `Live demo · rich patterns`,
-    heroTitleHtml: `A full engineering program dashboard, one statement per section`,
-    heroDescriptionHtml: `This single Streaming UI Script program drives an entire dashboard:
-        announcement banner, page header with breadcrumbs and actions, KPI
-        strip, kanban board, activity timeline, and follow-up chips. Every
-        section reaches for a high-level pattern (<code>PageHeader</code>,
-        <code>MetricGrid</code>, <code>KanbanBoard</code>,
-        <code>Timeline</code>, <code>Banner</code>) instead of stitching
-        primitives together by hand.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · project dashboard`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live dashboard`,
-      lede: `Change the range or owner and the whole dashboard re-renders.
-        Click a kanban card to mark it as the active item.`,
-      codeBlocks: [
-      { codeId: "src-dashboard", content: `$$range    = "30d"
-$$assignee = "everyone"
-$focusedCard = ""
-
-data = Query("program_summary", {range: $$range, assignee: $$assignee}, {
-  shipped: 0, inReview: 0, blocked: 0, velocity: 0,
-  deltas: {shipped: "", review: "", blocked: "", velocity: ""},
-  columns: [], events: [], blockers: []
-})
-
-banner = Banner(
-  "v2.3 ships Friday",
-  "Two hot bugs left in QA — see the board below.",
-  Button("Open release", Action([@ToAssistant("Open the v2.3 release notes")]), "secondary", "button", "small"),
-  "rocket",
-  "info"
-)
-
-rangeField = FormControl("Range", Select("range", [
-  SelectItem("7d",  "Last 7 days"),
-  SelectItem("30d", "Last 30 days"),
-  SelectItem("90d", "Last quarter")
-], null, null, $$range))
-
-assigneeField = FormControl("Assignee", Select("assignee", [
-  SelectItem("everyone", "Everyone"),
-  SelectItem("ada",      "Ada Lovelace"),
-  SelectItem("grace",    "Grace Hopper"),
-  SelectItem("linus",    "Linus Torvalds")
-], null, null, $$assignee))
-
-controlsRow = Toolbar([rangeField, assigneeField])
-
-header = PageHeader(
-  "Engineering · Q3 program",
-  \`Track deliverables across squads · filter: \${@Titlecase($$assignee)} · \${@Uppercase($$range)}\`,
-  Breadcrumb([BreadcrumbItem("Programs", "#"), BreadcrumbItem("Q3", "#"), BreadcrumbItem("Engineering")]),
-  [Button("Export", Action([@ToAssistant("Export the dashboard as PDF")]), "ghost"), Button("New milestone", Action([@ToAssistant("Open the new milestone form")]), "primary")],
-  Badge("On track", "success", null, "sm")
-)
-
-metrics = MetricGrid([
-  StatCard("Shipped this week", \`\${data.shipped}\`,        "up",   data.deltas.shipped,  "rocket"),
-  StatCard("In review",         \`\${data.inReview}\`,       "flat", data.deltas.review,   "eye"),
-  StatCard("Blocked",           \`\${data.blocked}\`,        "down", data.deltas.blocked,  "circle-stop"),
-  StatCard("Velocity",          \`\${data.velocity} pts\`,   "up",   data.deltas.velocity, "bolt")
-])
-
-BoardCard(c) = KanbanCard(c.title, c.description, c.tags, c.assignee, c.tone, c.icon, Action([@Set($focusedCard, c.title), @ToAssistant(\`Open card: \${c.title}\`)]))
-
-board = KanbanBoard(@Each(data.columns, "{title, cards, tone}",
-  KanbanColumn(title, @Each(cards, "c", BoardCard(c)), tone)
-))
-
-ActivityRow(e) = TimelineItem(e.title, e.time, e.description, e.icon, e.tone)
-BlockerRow(b)  = ListItem(b.title, b.owner, b.icon)
-
-timelineCard = Card([
-  CardHeader("Recent activity", "Latest events across all squads"),
-  Timeline(@Each(data.events, "e", ActivityRow(e)))
-])
-
-blockersList = Card([
-  CardHeader("Top blockers", \`\${@Count(data.blockers)} need a decision this week\`),
-  List(@Each(data.blockers, "b", BlockerRow(b)))
-])
-
-bottomGrid = Grid([timelineCard, blockersList], {sm: 1, md: 2}, "l")
-
-focusedNote = @If($focusedCard != "", Callout("info", "Focused card", $focusedCard, "thumbtack"))
-
-followUps = FollowUpBlock([
-  FollowUpItem("Drill into blocked items"),
-  FollowUpItem("Send a weekly digest"),
-  FollowUpItem("Compare to last quarter")
-], "Try next")
-
-root = Stack([banner, header, controlsRow, metrics, board, bottomGrid, focusedNote, followUps], "column", "l")` }
-      ],
-      render: { elId: "rui-dashboard", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The single tool that drives everything`,
-      lede: `One <code>Query("program_summary", …)</code> call returns every shape
-        the dashboard needs: KPI deltas, kanban columns, timeline events,
-        blockers. The UI Script program is agnostic about how many columns
-        or events come back — <code>@Each</code> over the arrays does the
-        right thing.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  program_summary: async ({ range, assignee }) =&gt; {
-    await sleep(280);
-    const totals = totalsFor(range, assignee);
-    return {
-      ...totals,
-      columns: kanbanFor(assignee),
-      events:  activityFor(range),
-      blockers: blockersFor(assignee),
-    };
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const ASSIGNEES = {
-      ada:   "Ada Lovelace",
-      grace: "Grace Hopper",
-      linus: "Linus Torvalds",
-    };
-
-    function totalsFor(range, assignee) {
-      const base = { "7d": 1, "30d": 1, "90d": 3 }[range] ?? 1;
-      const teamMultiplier = assignee === "everyone" ? 1 : 0.4;
-      const shipped = Math.round(12 * base * teamMultiplier);
-      const inReview = Math.round(8 * base * teamMultiplier);
-      const blocked = Math.max(1, Math.round(3 * teamMultiplier));
-      const velocity = Math.round(42 * base * teamMultiplier);
-      const deltas = {
-        shipped:  `+${Math.round(shipped * 0.18)} vs prev`,
-        review:   `${Math.round(inReview * 0.04)} flat`,
-        blocked:  `-${Math.max(1, Math.round(blocked * 0.5))} vs prev`,
-        velocity: `+${Math.round(velocity * 0.07)} vs prev`,
-      };
-      return { shipped, inReview, blocked, velocity, deltas };
-    }
-
-    function kanbanFor(assignee) {
-      const all = [
-        {
-          title: "Backlog",
-          tone: "default",
-          cards: [
-            { title: "Spec onboarding revamp", description: "Discovery + 3 prototype variants", tags: ["product", "ux"], assignee: "Grace Hopper", tone: "default", icon: "pen-to-square", owner: "grace" },
-            { title: "Investigate flaky CI runs",       description: "Top of the operational backlog", tags: ["infra"], assignee: "Linus Torvalds", tone: "default", icon: "screwdriver-wrench", owner: "linus" },
-            { title: "Token usage telemetry",      description: "Foundation for billing v2",         tags: ["data", "billing"], assignee: "Ada Lovelace", tone: "default", icon: "chart-pie", owner: "ada" },
-          ],
-        },
-        {
-          title: "In progress",
-          tone: "primary",
-          cards: [
-            { title: "Rich-UI patterns release", description: "Patterns + 4 demos", tags: ["product"], assignee: "Ada Lovelace", tone: "primary", icon: "wand-magic-sparkles", owner: "ada" },
-            { title: "SSO upgrade", description: "Okta + Workspaces", tags: ["security"], assignee: "Linus Torvalds", tone: "primary", icon: "shield-halved", owner: "linus" },
-          ],
-        },
-        {
-          title: "Review",
-          tone: "warning",
-          cards: [
-            { title: "Quota dashboard QA", description: "Last-mile UX tweaks", tags: ["qa"], assignee: "Grace Hopper", tone: "warning", icon: "magnifying-glass", owner: "grace" },
-            { title: "Migration docs",      description: "Needs SRE sign-off",  tags: ["docs"], assignee: "Ada Lovelace", tone: "warning", icon: "book", owner: "ada" },
-          ],
-        },
-        {
-          title: "Shipped",
-          tone: "success",
-          cards: [
-            { title: "Tokenizer 2.1",             description: "Released Monday — perf +14%", tags: ["perf"],   assignee: "Linus Torvalds", tone: "success", icon: "ship", owner: "linus" },
-            { title: "Mobile push notifications", description: "iOS + Android beta",          tags: ["mobile"], assignee: "Grace Hopper", tone: "success", icon: "mobile-screen", owner: "grace" },
-            { title: "Audit log export",          description: "CSV + Parquet",               tags: ["data"],   assignee: "Ada Lovelace", tone: "success", icon: "inbox", owner: "ada" },
-          ],
-        },
-      ];
-      if (assignee === "everyone") return all;
-      return all.map((col) => ({
-        ...col,
-        cards: col.cards.filter((c) => c.owner === assignee),
-      }));
-    }
-
-    function activityFor(range) {
-      const base = [
-        { title: "Ada merged #2491",                  time: "5 min ago",  description: "Rich-UI patterns ready for review",    icon: "code-pull-request", tone: "primary" },
-        { title: "QA caught a regression",            time: "1h ago",     description: "Quota dashboard double-counts",         icon: "triangle-exclamation", tone: "warning" },
-        { title: "Tokenizer 2.1 deployed to prod",    time: "Yesterday",  description: "Latency improved 14%",                  icon: "circle-check", tone: "success" },
-        { title: "Security review opened",            time: "2 days ago", description: "Awaiting threat model from infosec",   icon: "circle-info", tone: "info" },
-        { title: "Linus closed flaky-tests sprint",   time: "3 days ago", description: "0 flakes in last 200 builds",           icon: "circle-check", tone: "success" },
-      ];
-      const limit = range === "7d" ? 3 : range === "30d" ? 4 : 5;
-      return base.slice(0, limit);
-    }
-
-    function blockersFor(assignee) {
-      const all = [
-        { title: "Need SOC2 sign-off on audit log export", owner: "Linus Torvalds",  icon: "circle-stop" },
-        { title: "Pricing review for token telemetry",     owner: "Ada Lovelace",   icon: "money-bill-trend-up" },
-        { title: "Design review for onboarding revamp",    owner: "Grace Hopper",   icon: "palette" },
-      ];
-      if (assignee === "everyone") return all;
-      const filter = ASSIGNEES[assignee];
-      return all.filter((b) => b.owner === filter);
-    }
-
-    const el = document.getElementById("rui-dashboard");
-
-    el.setTools({
-      program_summary: async ({ range, assignee }) => {
-        await sleep(280);
-        return {
-          ...totalsFor(range, assignee),
-          columns: kanbanFor(assignee),
-          events:  activityFor(range),
-          blockers: blockersFor(assignee),
-        };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-dashboard").textContent);
     }
   },
   "routing-demo": {
@@ -5921,14 +4777,14 @@ stateCard = Card([
   statePane
 ])
 
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("Events this month", \`\${@Count(events)}\`,                                            "up",   "+2 vs April",    "calendar-days"),
   StatCard("Releases",          \`\${@Count(@Filter(events, "tone", "==", "success"))}\`,           "flat", "1 customer",     "rocket"),
   StatCard("Onboarding",        \`\${onboardingDoneCount}/4\`,                                     "up",   "Save & continue", "circle-check"),
   StatCard("Unread",             "3",                                                            "down", "-2 today",        "bell")
 ])
 
-pageHeader = BreadcrumbPageHeader(
+pageHeader = PageHeader(
   ["Workspace", "Calendar", "May"],
   "Plan the week, finish onboarding, and watch the inbox fill.",
   [Button("Help",  Action([@ToAssistant("Show me how the scheduler works")]), "ghost",   "button", "small", "circle-question"),
@@ -6037,7 +4893,7 @@ header = PageHeader(
 
 usageCard = Card([
   CardHeader("Workspace usage", \`Renews \${usage.renews}\`),
-  MetricGrid([
+  Stats([
     StatCard("Storage", \`\${usage.storageUsed} / \${usage.storageMax} GB\`, "flat", null,             "database"),
     StatCard("Seats",   \`\${usage.seatsUsed} / \${usage.seatsMax}\`,         "up",   "+2 this month", "users"),
     StatCard("Plan",    usage.planLabel,                                   "flat", null,             "id-card")
@@ -6114,7 +4970,7 @@ tabs = Tabs([
   TabItem("danger",        "Danger zone",   [dangerCard])
 ], $$tab)
 
-confirmSheet = Sheet(
+confirmSheet = Drawer(
   "Delete workspace?",
   $deleting,
   [
@@ -6275,7 +5131,7 @@ regionToggle = ToggleGroup("region", [
 
 filters = Toolbar([rangeToggle], [regionToggle])
 
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("Uptime",       data.uptime,                                        "up",                                            "vs prev period",  "gauge-high"),
   StatCard("Incidents",    \`\${data.incidentCount}\`,                            "flat",                                          "in window",       "siren-on"),
   StatCard("Avg response", data.avgLatency,                                    "down",                                          "lower is better", "bolt"),
@@ -7001,7 +5857,7 @@ pager = Pagination($page, data.pages, 1)
 
 statTiles = @Each(detail.stats, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon))
 
-detailSheet = Sheet(
+detailSheet = Drawer(
   @If(detail.name == "", "Loading…", detail.name),
   $$selectedId != "",
   [
@@ -7015,7 +5871,7 @@ detailSheet = Sheet(
     Separator("horizontal", true),
     BadgeList(detail.tags, "primary", "sm"),
     Separator("horizontal", true),
-    MetricGrid(statTiles, {sm: 1, md: 3})
+    Stats(statTiles, "grid", 3)
   ],
   "right",
   [

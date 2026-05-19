@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { FollowUpBlock, FollowUpItem } from "../src/library/components/chat.js";
 import {
-  Avatar, AvatarGroup, Progress, ProgressRing, Switch, Toggle, ToggleGroup,
-  Tooltip, Kbd, Rating, ChatBubble, Popover, Toast, Toasts,
+  Avatar, AvatarGroup, Progress, ProgressRing, Switch, ToggleGroup,
+  Tooltip, Kbd, Rating, ChatBubble, Popover, Toast,
 } from "../src/library/components/feedback.js";
 import {
-  Breadcrumb, BreadcrumbItem, Pagination, Sheet, Navbar, NavbarItem,
+  Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem,
 } from "../src/library/components/navigation.js";
 import {
   DropdownMenu, MenuItem, MenuSeparator, MenuLabel,
@@ -15,25 +15,29 @@ import {
 } from "../src/library/components/forms.js";
 import { Tree, TreeNode } from "../src/library/components/data.js";
 import {
-  Hero, PageHeader, MetricGrid, EmptyState, Timeline, TimelineItem,
+  Hero, PageHeader, EmptyState, Timeline, TimelineItem,
   FeatureGrid, FeatureItem, KanbanBoard, KanbanColumn, KanbanCard,
   ProfileCard, Banner,
   SectionHeader, Toolbar, Sidebar, SidebarItem, SidebarSection,
   AppShell, SplitView, DescriptionList, DescriptionItem,
   StatusDot, PricingTable, PricingCard,
-  Cover, MediaCard, Stats, Tile, Notification, PersonChip,
+  MediaCard, Stats, Tile, Notification, PersonChip,
 } from "../src/library/components/patterns.js";
 import {
   Container, Spacer, Quote, Markdown, Image, Link, Skeleton,
   Spinner, Badge, BadgeList, Callout, CodeBlock,
 } from "../src/library/components/content.js";
-import { SearchBar, MultiSelect, DateRangePicker, SegmentedControl, Button } from "../src/library/components/forms.js";
-import { Grid, AspectRatio, Modal, Tabs, TabItem, Separator } from "../src/library/components/layout.js";
+import { SearchBar, MultiSelect, DateRangePicker, Button } from "../src/library/components/forms.js";
+import {
+  Stack, StackItem, Grid, GridItem, Box, resolveSpan,
+  AspectRatio, Modal, Tabs, TabItem, Separator,
+} from "../src/library/components/layout.js";
 import { Sparkline, StatCard, Table, Col } from "../src/library/components/data.js";
 import type { RenderHelpers } from "../src/library/types.js";
 import { defaultLibrary } from "../src/library/index.js";
 import { findComponent } from "../src/library/registry.js";
 import { Router } from "../src/runtime/router.js";
+import { Drawer } from "../src/library/components/advanced-patterns.js";
 
 const noop = () => {/* no-op */};
 const helpers: RenderHelpers = {
@@ -85,11 +89,11 @@ describe("registry lookup", () => {
 describe("default library", () => {
   it("registers every documented component group", () => {
     const expected = [
-      "Stack", "Grid", "Card", "CardHeader", "Button", "Input", "Select", "Table", "BarChart",
-      "FollowUpBlock", "Avatar", "AvatarGroup", "Progress", "Switch", "Toggle",
+      "Stack", "StackItem", "Grid", "GridItem", "Box", "Card", "CardHeader", "Button", "Input", "Select", "Table", "BarChart",
+      "FollowUpBlock", "Avatar", "AvatarGroup", "Progress", "Switch",
       "ToggleGroup", "Tooltip", "HoverCard", "Kbd", "Breadcrumb", "BreadcrumbItem",
-      "Pagination", "Sheet", "AspectRatio", "ScrollArea",
-      "Hero", "PageHeader", "MetricGrid", "EmptyState", "Timeline", "TimelineItem",
+      "Pagination", "Drawer", "AspectRatio", "ScrollArea",
+      "Hero", "PageHeader", "Stats", "EmptyState", "Timeline", "TimelineItem",
       "FeatureGrid", "FeatureItem", "Testimonial", "ProfileCard", "Comment", "Banner",
       "KanbanBoard", "KanbanColumn", "KanbanCard",
       // Rich-layout / app-shell patterns
@@ -97,16 +101,20 @@ describe("default library", () => {
       "StatusDot", "PricingTable", "PricingCard",
       "AppShell", "Sidebar", "SidebarSection", "SidebarItem", "SplitView",
       // Richer composition primitives
-      "Container", "Spacer", "Cover", "MediaCard", "Stats", "Tile",
+      "Container", "Spacer", "Hero", "MediaCard", "Stats", "Tile",
       "Notification", "PersonChip", "Quote", "Rating",
       "ProgressRing", "ChatBubble", "SearchBar",
       // Menu & overlay primitives
       "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel",
-      "Popover", "Toast", "Toasts",
+      "Popover", "Toast",
       // Extended form inputs
       "Slider", "NumberInput", "DatePicker", "FileUpload", "Combobox",
       // Hierarchical data + top navigation
       "Tree", "TreeNode", "Navbar", "NavbarItem",
+      "StackItem", "GridItem", "Box",
+      "IconButton", "CommandPalette", "FilterChips", "FieldRepeater",
+      "VirtualList", "QueryBuilder", "DiffViewer", "JsonTree", "Gantt",
+      "Truncate", "InlineEdit", "NotificationBell",
     ];
     for (const name of expected) {
       expect(findComponent(defaultLibrary, name), `${name} should be registered`).toBeDefined();
@@ -220,24 +228,6 @@ describe("Switch", () => {
   });
 });
 
-describe("Toggle", () => {
-  it("flips a bound $variable on click via an Action payload", () => {
-    let payload: unknown = null;
-    const localHelpers = {
-      ...helpers,
-      runAction: (p: unknown) => { payload = p; },
-    };
-    const node = makeNode("Toggle", ["Bold", true], [{}, { stateRef: "bold_on" }]);
-    const button = Toggle.render(node, { label: "Bold", value: true }, localHelpers) as HTMLButtonElement;
-    expect(button.getAttribute("aria-pressed")).toBe("true");
-    button.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "bold_on", value: false }],
-    });
-  });
-});
-
 describe("ToggleGroup", () => {
   it("sets the bound state to the clicked value", () => {
     let payload: unknown = null;
@@ -326,21 +316,82 @@ describe("Pagination", () => {
   });
 });
 
-describe("Sheet", () => {
+describe("Drawer", () => {
   it("closes by dispatching a Set false action when the close button is clicked", () => {
     let payload: unknown = null;
     const localHelpers = {
       ...helpers,
       runAction: (p: unknown) => { payload = p; },
     };
-    const node = makeNode("Sheet", ["Details", true, []], [{}, { stateRef: "panelOpen" }, {}]);
-    const overlay = Sheet.render(node, { title: "Details", open: true, children: [] }, localHelpers) as HTMLElement;
+    const node = makeNode("Drawer", ["Details", true, []], [{}, { stateRef: "panelOpen" }, {}]);
+    const overlay = Drawer.render(node, { title: "Details", open: true, children: [] }, localHelpers) as HTMLElement;
     expect(overlay.getAttribute("data-open")).toBe("true");
     overlay.querySelector<HTMLButtonElement>(".rui-sheet-close")?.click();
     expect(payload).toMatchObject({
       kind: "Action",
       steps: [{ kind: "Set", name: "panelOpen", value: false }],
     });
+  });
+});
+
+describe("Stack", () => {
+  it("defaults row stacks to uniform flex growth", () => {
+    const node = Stack.render(
+      makeNode("Stack", [[], "row"]),
+      { children: [], direction: "row" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-uniform")).toBe("true");
+    expect(node.getAttribute("data-direction")).toBe("row");
+  });
+
+  it("supports reverse and justify evenly", () => {
+    const node = Stack.render(
+      makeNode("Stack", [[]]),
+      { children: [], direction: "column", reverse: true, justify: "evenly" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-direction")).toBe("column-reverse");
+    expect(node.getAttribute("data-justify")).toBe("evenly");
+  });
+
+  it("emits responsive align CSS variables", () => {
+    const node = Stack.render(
+      makeNode("Stack", [[]]),
+      { children: [], align: { base: "start", md: "center" } },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-align")).toBe("responsive");
+    expect(node.getAttribute("data-responsive-align")).toBe("true");
+    expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-base:flex-start");
+    expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-md:center");
+  });
+});
+
+describe("StackItem", () => {
+  it("renders flex item data attributes and child", () => {
+    const child = makeNode("TextContent", ["Hello"]);
+    const node = StackItem.render(
+      makeNode("StackItem", [child, 0, 1]),
+      { child, grow: 0, shrink: 0, alignSelf: "center", order: 2 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-stack-item");
+    expect(node.getAttribute("data-grow")).toBe("0");
+    expect(node.getAttribute("data-shrink")).toBe("0");
+    expect(node.getAttribute("data-align-self")).toBe("center");
+    expect(node.getAttribute("style") ?? "").toContain("order:2");
+    expect(node.querySelector(".rui-stub")).toBeTruthy();
+  });
+});
+
+describe("resolveSpan", () => {
+  it("resolves fraction strings on a 12-column grid", () => {
+    expect(resolveSpan("1/2")).toBe(6);
+    expect(resolveSpan("1/3")).toBe(4);
+    expect(resolveSpan("2/3")).toBe(8);
+    expect(resolveSpan("1/4")).toBe(3);
+    expect(resolveSpan(6)).toBe(6);
   });
 });
 
@@ -354,6 +405,26 @@ describe("Grid", () => {
     expect(node.getAttribute("data-columns")).toBe("3");
   });
 
+  it("enables 12-column mode for columns=12", () => {
+    const node = Grid.render(
+      makeNode("Grid", [[], 12]),
+      { children: [], columns: 12 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-columns")).toBe("12");
+    expect(node.getAttribute("data-grid-mode")).toBe("12");
+  });
+
+  it("auto-enables 12-column mode when children include GridItem", () => {
+    const item = makeNode("GridItem", [makeNode("TextContent", ["x"]), 6]);
+    const node = Grid.render(
+      makeNode("Grid", [[item]]),
+      { children: [item] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-grid-mode")).toBe("12");
+  });
+
   it("falls back to auto-fit when no columns provided", () => {
     const node = Grid.render(
       makeNode("Grid", [[]]),
@@ -362,6 +433,40 @@ describe("Grid", () => {
     ) as HTMLElement;
     expect(node.getAttribute("data-columns")).toBeNull();
     expect(node.getAttribute("style") ?? "").toContain("--rui-grid-min-item");
+  });
+});
+
+describe("GridItem", () => {
+  it("renders span, offset, and responsive span CSS vars", () => {
+    const child = makeNode("TextContent", ["Cell"]);
+    const node = GridItem.render(
+      makeNode("GridItem", [child, "1/3", 2]),
+      { child, span: "1/3", offset: 2, spanAt: { base: 12, md: 4 } },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-grid-item");
+    expect(node.getAttribute("data-span")).toBe("4");
+    expect(node.getAttribute("data-offset")).toBe("2");
+    expect(node.getAttribute("data-responsive-span")).toBe("true");
+    expect(node.getAttribute("style") ?? "").toContain("--rui-grid-item-span:4");
+    expect(node.getAttribute("style") ?? "").toContain("--rui-grid-item-span-md:4");
+    expect(node.getAttribute("style") ?? "").toContain("--rui-grid-item-span-base:12");
+  });
+});
+
+describe("Box", () => {
+  it("renders semantic surface and spacing attrs", () => {
+    const node = Box.render(
+      makeNode("Box", [[]]),
+      { children: [], padding: "l", margin: "s", border: "subtle", background: "muted", maxWidth: "480px" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-box");
+    expect(node.getAttribute("data-padding")).toBe("l");
+    expect(node.getAttribute("data-margin")).toBe("s");
+    expect(node.getAttribute("data-border")).toBe("subtle");
+    expect(node.getAttribute("data-background")).toBe("muted");
+    expect(node.getAttribute("style") ?? "").toContain("max-width:480px");
   });
 });
 
@@ -405,15 +510,15 @@ describe("Pattern composites", () => {
     expect(node.querySelector(".rui-page-header-title")?.textContent).toBe("Reports");
   });
 
-  it("MetricGrid renders each item", () => {
+  it("Stats renders each item", () => {
     const items = [
       makeNode("StatCard", ["A", "1"]),
       makeNode("StatCard", ["B", "2"]),
       makeNode("StatCard", ["C", "3"]),
     ];
-    const node = MetricGrid.render(
-      makeNode("MetricGrid", [items]),
-      { items },
+    const node = Stats.render(
+      makeNode("Stats", [items]),
+      { items, layout: "grid" },
       helpers,
     ) as HTMLElement;
     expect(node.classList.contains("rui-metric-grid")).toBe(true);
@@ -811,18 +916,18 @@ describe("CSS-length sanitisation in style props", () => {
     expect(root.getAttribute("style") ?? "").not.toContain("background:");
   });
 
-  it("Cover strips characters that would break out of url(...)", () => {
+  it("Hero strips characters that would break out of url(...)", () => {
     // Regression: `imageSrc` containing `");` could close the url() literal
     // and inject arbitrary CSS rules. The sanitiser drops those characters
     // so anything the attacker supplied stays trapped *inside* the url()
     // literal (where the browser treats it as a malformed URL, never CSS).
-    const benign = Cover.render(
-      makeNode("Cover", []),
+    const benign = Hero.render(
+      makeNode("Hero", []),
       { title: "x", imageSrc: "https://example.com/cover.jpg" },
       helpers,
     ) as HTMLElement;
-    const hostile = Cover.render(
-      makeNode("Cover", []),
+    const hostile = Hero.render(
+      makeNode("Hero", []),
       { title: "x", imageSrc: 'foo");background:red;//' },
       helpers,
     ) as HTMLElement;
@@ -1011,12 +1116,13 @@ describe("URL sanitisation in component props", () => {
   });
 });
 
-describe("Cover", () => {
+describe("Hero", () => {
   it("renders title, eyebrow, subtitle, and actions", () => {
-    const node = Cover.render(
-      makeNode("Cover", []),
+    const node = Hero.render(
+      makeNode("Hero", []),
       {
         title: "Aurora",
+        layout: "cover",
         imageSrc: "https://example.com/cover.jpg",
         subtitle: "Studio sound",
         eyebrow: "NEW",
@@ -1511,7 +1617,7 @@ describe("Popover", () => {
   });
 });
 
-describe("Toast & Toasts", () => {
+describe("Toast & Toast", () => {
   it("Toast renders title, message, and tone-based icon", () => {
     const node = Toast.render(
       makeNode("Toast", []),
@@ -1583,16 +1689,14 @@ describe("Toast & Toasts", () => {
     node.remove();
   });
 
-  it("Toasts positions the stack and renders children", () => {
-    const items = [makeNode("Toast", ["A"]), makeNode("Toast", ["B"])];
-    const node = Toasts.render(
-      makeNode("Toasts", []),
-      { items, position: "bottom-right" },
+  it("Toast pins itself to a viewport corner when position is set", () => {
+    const node = Toast.render(
+      makeNode("Toast", []),
+      { title: "Saved", position: "bottom-right" },
       helpers,
     ) as HTMLElement;
-    expect(node.classList.contains("rui-toasts")).toBe(true);
+    expect(node.classList.contains("rui-toast")).toBe(true);
     expect(node.getAttribute("data-position")).toBe("bottom-right");
-    expect(node.children.length).toBe(2);
   });
 });
 
@@ -2063,21 +2167,21 @@ describe("new components — phase 1-4 rollout", () => {
     expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toEqual([]);
   });
 
-  it("SegmentedControl marks the active option + sets the bound state on click", () => {
+  it("ToggleGroup marks the active option + sets the bound state on click", () => {
     let captured: unknown = null;
     const localHelpers = { ...helpers, runAction: (p: unknown) => { captured = p; } };
     const items = [
       { value: "grid", label: "Grid", icon: "grip" },
       { value: "list", label: "List" },
     ];
-    const node = SegmentedControl.render(
-      makeNode("SegmentedControl", ["view", items, "grid"], [{}, {}, { stateRef: "view" }]),
+    const node = ToggleGroup.render(
+      makeNode("ToggleGroup", ["view", items, "grid"], [{}, {}, { stateRef: "view" }]),
       { id: "view", items, value: "grid" },
       localHelpers,
     ) as HTMLElement;
-    const buttons = node.querySelectorAll<HTMLButtonElement>(".rui-segmented-control-option");
+    const buttons = node.querySelectorAll<HTMLButtonElement>(".rui-toggle");
     expect(buttons.length).toBe(2);
-    expect(buttons[0]?.getAttribute("data-active")).toBe("true");
+    expect(buttons[0]?.getAttribute("aria-checked")).toBe("true");
     buttons[1]?.click();
     expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toBe("list");
   });
@@ -2249,7 +2353,7 @@ describe("new components — phase 1-4 rollout", () => {
     expect(html).toContain('href="#"');
   });
 
-  it("Steps accepts {title, details, active} objects in addition to StepsItem nodes", async () => {
+  it("Steps accepts {title, details, active} objects", async () => {
     const { Steps } = await import("../src/library/components/layout.js");
     const node = Steps.render(
       makeNode("Steps", [[{ title: "Sign up", details: "Free", active: true }, { title: "Verify" }]]),
@@ -2296,24 +2400,25 @@ describe("new components — phase 1-4 rollout", () => {
  * ----------------------------------------------------------------------- */
 
 import {
-  DataGrid, CalendarView, ComparisonTable, ActivityLog, AuditTrail, InfiniteList,
+  DataGrid, CalendarView, ComparisonTable, ActivityLog, InfiniteList,
 } from "../src/library/components/advanced-data.js";
 import {
   Carousel, Gallery, Lightbox, VideoPlayer, AudioPlayer, Map as MapComponent,
 } from "../src/library/components/media.js";
 import { RichTextEditor, CodeEditor, ContextMenu, ColorPicker } from "../src/library/components/editors.js";
+import { LineChart } from "../src/library/components/charts.js";
 import {
-  AreaChart, Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
+  Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
 } from "../src/library/components/advanced-charts.js";
 import {
-  PinInput, OtpInput, PasswordInput, TagInput, MentionInput,
+  PinInput, PasswordInput, TagInput, MentionInput,
   TimePicker, DateTimePicker, MaskedInput, FormSection, FieldSet,
   ValidationSummary, MultiStepForm,
 } from "../src/library/components/advanced-forms.js";
 import {
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
-  Tour, Spotlight, ResizablePanels, MasonryGrid, Drawer, TopBar,
-  BreadcrumbPageHeader, Sticky,
+  Tour, Spotlight, ResizablePanels, MasonryGrid, TopBar,
+  Sticky,
 } from "../src/library/components/advanced-patterns.js";
 
 /** Smoke-test every newly-added component renders without crashing. */
@@ -2416,8 +2521,8 @@ const ADVANCED_SMOKE_TESTS: Array<{
     rootClass: "rui-color-picker",
   },
   {
-    name: "AreaChart",
-    spec: AreaChart,
+    name: "LineChart",
+    spec: LineChart,
     props: {
       labels: ["Jan", "Feb", "Mar"],
       series: [makeNode("Series", ["Revenue", [10, 20, 30]])],
@@ -2461,8 +2566,8 @@ const ADVANCED_SMOKE_TESTS: Array<{
     rootClass: "rui-pin-input",
   },
   {
-    name: "OtpInput",
-    spec: OtpInput,
+    name: "PinInput",
+    spec: PinInput,
     props: { id: "otp" },
     rootClass: "rui-pin-input",
   },
@@ -2536,15 +2641,16 @@ const ADVANCED_SMOKE_TESTS: Array<{
     name: "ActivityLog",
     spec: ActivityLog,
     props: {
-      entries: [{ actor: "Alice", title: "merged PR #42", time: "2m" }],
+      items: [{ actor: "Alice", title: "merged PR #42", time: "2m" }],
     },
     rootClass: "rui-activity-log",
   },
   {
-    name: "AuditTrail",
-    spec: AuditTrail,
+    name: "ActivityLog audit variant",
+    spec: ActivityLog,
     props: {
-      entries: [{ actor: "system", title: "rotated key", meta: "kid=abc123" }],
+      items: [{ actor: "system", title: "rotated key", meta: "kid=abc123" }],
+      variant: "audit",
     },
     rootClass: "rui-audit-trail",
   },
@@ -2632,12 +2738,6 @@ const ADVANCED_SMOKE_TESTS: Array<{
     spec: TopBar,
     props: { title: "Dashboard", right: [makeNode("Button", ["Save"])] },
     rootClass: "rui-topbar",
-  },
-  {
-    name: "BreadcrumbPageHeader",
-    spec: BreadcrumbPageHeader,
-    props: { path: ["Workspace", "Reports", "Q3"], subtitle: "Quarterly revenue" },
-    rootClass: "rui-page-header",
   },
 ];
 

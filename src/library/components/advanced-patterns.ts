@@ -8,8 +8,8 @@
  *   - Sticky / Affix — Pin a child to the top while scrolling.
  *   - ResizablePanels — Two-pane drag-to-resize split.
  *   - MasonryGrid — Pinterest-style column grid.
- *   - TopBar / BreadcrumbPageHeader — Convenience composites.
- *   - Drawer — Sheet alias (industry-standard naming).
+ *   - TopBar — Convenience composite.
+ *   - Drawer — Side-panel overlay (detail views, filters, previews).
  */
 
 import type { ComponentSpec } from "../types.js";
@@ -18,8 +18,7 @@ import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength,
 } from "../utils.js";
-import { Sheet } from "./navigation.js";
-import { Notification, PageHeader } from "./patterns.js";
+import { Notification } from "./patterns.js";
 
 /* ----------------------------------------------------------------------- *
  * InboxPanel
@@ -539,11 +538,67 @@ export const MasonryGrid: ComponentSpec = {
 export const Drawer: ComponentSpec = {
   name: "Drawer",
   description:
-    "Industry-standard alias for `Sheet`. Side-overlay panel — same " +
-    "props (title, open, children, side, footer). Prefer this name in " +
-    "new responses; `Sheet` is kept for backwards compatibility.",
-  props: Sheet.props,
-  render: (node, props, helpers) => Sheet.render(node, props, helpers),
+    "Side drawer overlay shown when `open` is true. Pass a `$variable` as " +
+    "`open` to control it. Choose `side` for slide direction (default right).",
+  props: [
+    { name: "title", type: "string" },
+    { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
+    { name: "children", type: "Node[]" },
+    { name: "side", type: "string", optional: true, enum: ["right", "left", "top", "bottom"] },
+    { name: "footer", type: "Node[]", optional: true, description: "Optional footer actions row" },
+  ],
+  render: (node, props, helpers) => {
+    const isOpen = asBoolean(props.open);
+    const side = asString(props.side, "right");
+    const overlay = el("div", {
+      class: "rui-sheet-overlay",
+      "data-open": isOpen ? "true" : "false",
+      "data-side": side,
+    });
+    const panel = el("aside", {
+      class: "rui-sheet",
+      role: "dialog",
+      "aria-modal": "true",
+      "data-side": side,
+    });
+    const header = el("header", { class: "rui-sheet-header" });
+    header.append(el("h3", { class: "rui-sheet-title" }, [asString(props.title)]));
+    const closeBtn = el("button", {
+      type: "button",
+      class: "rui-sheet-close",
+      "aria-label": "Close",
+    }, ["×"]);
+    const stateName = node.argMeta?.[1]?.stateRef;
+    if (stateName) {
+      closeBtn.onclick = () => {
+        helpers.runAction({
+          kind: "Action",
+          steps: [{ kind: "Set", name: stateName, value: false }],
+        });
+      };
+      overlay.onclick = (event) => {
+        if (event.target === overlay) {
+          helpers.runAction({
+            kind: "Action",
+            steps: [{ kind: "Set", name: stateName, value: false }],
+          });
+        }
+      };
+    }
+    header.append(closeBtn);
+    panel.append(header);
+    const body = el("div", { class: "rui-sheet-body" });
+    for (const child of asArray(props.children)) body.append(helpers.renderNode(child));
+    panel.append(body);
+    const footer = asArray<unknown>(props.footer);
+    if (footer.length > 0) {
+      const footerRow = el("footer", { class: "rui-sheet-footer" });
+      for (const child of footer) footerRow.append(helpers.renderNode(child));
+      panel.append(footerRow);
+    }
+    overlay.append(panel);
+    return overlay;
+  },
 };
 
 export const TopBar: ComponentSpec = {
@@ -587,38 +642,6 @@ export const TopBar: ComponentSpec = {
     for (const child of asArray(props.right)) right.append(helpers.renderNode(child));
     root.append(right);
     return root;
-  },
-};
-
-export const BreadcrumbPageHeader: ComponentSpec = {
-  name: "BreadcrumbPageHeader",
-  description:
-    "Convenience composite — renders a `PageHeader` with the breadcrumbs " +
-    "slot auto-derived from the `path` array. The last segment of the " +
-    "path becomes the title; everything before it is the breadcrumb " +
-    "trail. Equivalent to `PageHeader(lastSegment, subtitle, path, " +
-    "actions, status)` but reads naturally when you already have a " +
-    "breadcrumb array on hand.",
-  props: [
-    { name: "path", type: "string[]", description: "Breadcrumb labels, e.g. `[\"Workspace\", \"Reports\", \"Q3\"]`. Last segment is used as the title." },
-    { name: "subtitle", type: "string", optional: true },
-    { name: "actions", type: "Node[]", optional: true },
-    { name: "status", type: "Badge", optional: true },
-  ],
-  render: (_node, props, helpers) => {
-    const path = Array.isArray(props.path) ? (props.path as unknown[]).map(String) : [];
-    const title = path.length > 0 ? path[path.length - 1] : "";
-    return PageHeader.render(
-      { __kind: "Component", name: "PageHeader", args: [], argMeta: [] },
-      {
-        title,
-        subtitle: props.subtitle,
-        breadcrumbs: path,
-        actions: props.actions,
-        status: props.status,
-      },
-      helpers,
-    );
   },
 };
 

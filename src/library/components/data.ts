@@ -159,7 +159,7 @@ export const StatCard: ComponentSpec = {
   description:
     "Single KPI card with label, value, optional delta, optional icon, " +
     "and optional inline sparkline (`spark=[…numbers]`). Use inside " +
-    "`MetricGrid` for a uniform KPI strip.",
+    "`Stats` for a uniform KPI strip.",
   props: [
     { name: "label", type: "string" },
     { name: "value", type: "string" },

@@ -70,7 +70,7 @@
         <tbody>
           <tr><td>String (single-line)</td><td><code>"text"</code> or <code>'text'</code></td><td><code>"Hello"</code></td></tr>
           <tr><td>String (multi-line)</td><td><code>`text`</code> (backticks)</td><td><code>`line 1<br>line 2`</code> — great for <code>Script(...)</code> bodies</td></tr>
-          <tr><td>Template literal</td><td><code>`Hello ${expression}`</code></td><td><code>`${$rows.length} rows · ${@FormatCurrency(total)}`</code> — backticks with <code>${…}</code> blocks interpolate any expression.</td></tr>
+          <tr><td>Template literal</td><td><code>`Hello ${expression}`</code></td><td><code>`${$rows.length} rows · ${@Format(total, "currency", "USD")}`</code> — backticks with <code>${…}</code> blocks interpolate any expression.</td></tr>
           <tr><td>Number</td><td><code>123</code>, <code>-5</code>, <code>12.5</code></td><td><code>42</code></td></tr>
           <tr><td>Boolean</td><td><code>true</code> / <code>false</code></td><td><code>true</code></td></tr>
           <tr><td>Null</td><td><code>null</code></td><td></td></tr>
@@ -177,7 +177,7 @@ $$cart         = []
 $$lastVisited  = "/dashboard"
 
 themeToggle = Switch("theme", "Dark mode", $$theme == "dark")
-addToCart   = Button("Add", Action([@Set($$cart, @Push($$cart, item))]))</code></pre>
+addToCart   = Button("Add", Action([@Set($$cart, [...$$cart, item])]))</code></pre>
       <p>
         Use it for anything the user expects to find again after a refresh:
         theme picks, sidebar collapsed state, draft form input, recently
@@ -202,9 +202,9 @@ root = Grid(@Each($users, "u", MyUserCard(u)))</code></pre>
         <tbody>
           <tr><td>Aggregation</td><td><code>@Count, @Sum, @Avg, @Min, @Max, @First, @Last</code></td></tr>
           <tr><td>Numeric</td><td><code>@Round(n, decimals?), @Abs, @Floor, @Ceil, @Clamp(n, min, max)</code></td></tr>
-          <tr><td>Array shape</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc"), @Find(arr, "field", "op", value), @Map(arr, "field"), @GroupBy(arr, "field"), @Slice(arr, start?, end?), @Take(arr, n), @Reverse(arr), @Unique(arr, "field"?), @Range(start, end, step?), @Repeat(value, n), @Pick(obj, ["a","b"])</code></td></tr>
-          <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>@Concat(a, b)</code></td></tr>
-          <tr><td>Formatting</td><td><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?), @FormatCurrency(value, currency?, locale?), @FormatNumber(value, locale?), @FormatDate(value, format?), @Plural(n, singular, plural?)</code></td></tr>
+          <tr><td>Array shape</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc"), @Find(arr, "field", "op", value), arr.field, @GroupBy(arr, "field"), @Slice(arr, start?, end?), @Slice(arr, 0, n), @Reverse(arr), @Unique(arr, "field"?), @Range(start, end, step?), @Repeat(value, n), @Pick(obj, ["a","b"])</code></td></tr>
+          <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>[...a, ...b]</code></td></tr>
+          <tr><td>Formatting</td><td><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?), @Format(value, currency?, locale?, "currency", "USD"), @Format(value, locale?, "number"), @FormatDate(value, format?), @Plural(n, singular, plural?)</code></td></tr>
           <tr><td>String casing</td><td><code>@Capitalize, @Lowercase, @Uppercase, @Titlecase, @Camelcase, @Snakecase, @Kebabcase, @Pascalcase</code></td></tr>
           <tr><td>Date / time</td><td><code>@Now(), @Today(), @AddDays(date, n)</code> — feed values to <code>@FormatDate</code> for display.</td></tr>
           <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> can destructure (<code>"{id, name}"</code>) and is local to <code>template</code>.</td></tr>

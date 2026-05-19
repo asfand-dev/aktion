@@ -110,9 +110,9 @@
 <pre><code class="example-source">root = Stack([intro, steps, follow])
 intro = Card([CardHeader("Onboarding plan", "3 steps to set up your workspace")])
 steps = Steps([
-  StepsItem("Invite teammates", "Open the Members tab and send invites."),
-  StepsItem("Connect a data source", "Settings → Integrations → choose a provider."),
-  StepsItem("Pick a starter template", "Seed the workspace with sample content.")
+  { title: "Invite teammates", details: "Open the Members tab and send invites." },
+  { title: "Connect a data source", details: "Settings → Integrations → choose a provider." },
+  { title: "Pick a starter template", details: "Seed the workspace with sample content." }
 ])
 follow = FollowUpBlock([
   FollowUpItem("Show invite link"),
@@ -256,9 +256,9 @@ header = PageHeader("Q3 performance", `Updated nightly · all amounts in USD · 
 toolbar = Toolbar([
   FormControl("Range", Select("range", [SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")], null, null, $$range))
 ], [StatusDot("Streaming", "success", true)])
-kpis = MetricGrid([
-  StatCard("Revenue",      @FormatCurrency(48230, "USD"), "up",   "+12% vs Q2", "sack-dollar"),
-  StatCard("Active users", @FormatNumber(12540),          "up",   "+8% vs Q2",  "users"),
+kpis = Stats([
+  StatCard("Revenue",      @Format(48230, "currency", "USD"), "up",   "+12% vs Q2", "sack-dollar"),
+  StatCard("Active users", @Format(12540, "number"),          "up",   "+8% vs Q2",  "users"),
   StatCard("Churn",        "2.1%",                         "down", "-0.4 pp",    "arrow-trend-down"),
   StatCard("NPS",          "62",                           "flat", "+1",         "star")
 ])
@@ -274,7 +274,7 @@ accounts = [
   {name:"Globex",  mrr:2400, plan:"Pro"},
   {name:"Initech", mrr:1850, plan:"Free"}
 ]
-topAccounts = Card([SectionHeader("Top accounts", `Largest MRR contributors · ${@FormatCurrency(@Sum(accounts.mrr), "USD")} combined`, null, null,
+topAccounts = Card([SectionHeader("Top accounts", `Largest MRR contributors · ${@Format(@Sum(accounts.mrr, "currency", "USD"), "USD")} combined`, null, null,
   [Button("View all", Action([@ToAssistant("Open the accounts list")]), "ghost", "button", "small")]), Table([
   Col("Account", accounts.name),
   Col("MRR",     accounts.mrr, "currency"),
@@ -383,7 +383,7 @@ header = PageHeader("Overview", "Everything happening across your workspace",
   [Button("New project", Action([@ToAssistant("Start a new project")]), "primary")],
   Badge("Live", "success"))
 
-kpis = MetricGrid([
+kpis = Stats([
   StatCard("MRR",          "$48.2k", "up",   "+12%", "sack-dollar"),
   StatCard("Active users", "2,184",  "up",   "+184", "users"),
   StatCard("Open tickets", "23",     "down", "-9",   "ticket"),
@@ -537,7 +537,7 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Cover(
+<pre><code class="example-source">root = Hero(
   "Build the future of generative UI",
   "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&amp;q=80",
   "From a single LLM prompt to a streaming, themeable, interactive UI — in 90 seconds.",
@@ -815,7 +815,7 @@ root = Stack([
 <pre><code class="example-source">// Every toast shows a × close button. Pass `duration` (ms) to auto-dismiss;
 // omit it for a persistent toast the user must close manually.
 
-root = Toasts([
+root = Stack([
   Toast("Changes saved",
         "Your draft was synced across all devices.",
         "success", "circle-check",
@@ -1139,13 +1139,13 @@ ProductCard(p) = Card([
     TextContent(p.name, "large-heavy"),
     @If(p.badge != "", Badge(p.badge, "primary", null, "sm"))
   ], "row", "s", "center", "between"),
-  TextContent(@FormatCurrency(p.price, "USD"), "body-heavy", "primary"),
+  TextContent(@Format(p.price, "currency", "USD"), "body-heavy", "primary"),
   Stack([
     Badge(@Titlecase(p.category), "neutral", null, "sm"),
     Rating(p.rating, 5, `${p.rating}`, null, "sm")
   ], "row", "s", "center", "start"),
   Buttons([
-    Button("Add to cart", Action([@Push($$cart, p.name), @ToAssistant(`Add ${p.name} to my cart`)]), "primary", "normal", "small"),
+    Button("Add to cart", Action([[...$$cart, p.name], @ToAssistant(`Add ${p.name} to my cart`)]), "primary", "normal", "small"),
     Button("Details", null, "secondary", "normal", "small")
   ])
 ])
@@ -1164,7 +1164,7 @@ filters = Toolbar([
 stats = Stats([
   {label:"Showing",    value: `${@Count(hits)} of ${@Count(products.rows)}`, hint: `${@Count($$cart)} in cart`, tone:"primary"},
   {label:"Avg rating", value: `${@Round(@Avg(hits.rating), 1)} ★`,            tone:"success"},
-  {label:"Avg price",  value: @FormatCurrency(@Avg(hits.price), "USD"),        tone:"info"}
+  {label:"Avg price",  value: @Format(@Avg(hits.price, "currency", "USD"), "USD"),        tone:"info"}
 ], "start")
 
 grid  = Grid(@Each(hits, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "m")
@@ -1311,10 +1311,10 @@ statusFilter = FormControl("Filter", Select("status", [
   SelectItem("cancelled","Cancelled")
 ], null, null, $$status))
 
-stats = MetricGrid([
+stats = Stats([
   StatCard("Orders",     `${@Count(filtered)}`,                                  "flat", `${@Plural(@Count(filtered), "match", "matches")}`, "list-check"),
-  StatCard("Revenue",    @FormatCurrency(@Sum(filtered.total), "USD"),            "up",   "this filter",                                     "sack-dollar"),
-  StatCard("Avg ticket", @FormatCurrency(@Round(@Avg(filtered.total), 2), "USD"), "flat", "per order",                                       "receipt")
+  StatCard("Revenue",    @Format(@Sum(filtered.total, "currency", "USD"), "USD"),            "up",   "this filter",                                     "sack-dollar"),
+  StatCard("Avg ticket", @Format(@Round(@Avg(filtered.total, "currency", "USD"), 2), "USD"), "flat", "per order",                                       "receipt")
 ])
 
 StatusBadge(s) = @Switch(s, {
@@ -1376,7 +1376,7 @@ total    = subtotal + shipping + tax - discount
 
 qtyTags = @Each(cart.items, "{qty}",            Badge(`× ${qty}`,           "neutral", null, "sm"))
 remove  = @Each(cart.items, "{sku}",            Button("Remove", Action([@ToAssistant(`Remove ${sku} from cart`)]), "ghost", "normal", "small"))
-lineCol = @Each(cart.items, "{qty, price}",     @FormatCurrency(qty * price, "USD"))
+lineCol = @Each(cart.items, "{qty, price}",     @Format(qty * price, "currency", "USD"))
 
 table = Table([
   Col("Item",       cart.items.name),
@@ -1390,12 +1390,12 @@ Row(label, value, tone) = Stack([TextContent(label, "small", tone), TextContent(
 
 summary = Card([
   CardHeader("Order summary"),
-  Row("Subtotal",   @FormatCurrency(subtotal, "USD"), "muted"),
-  Row("Shipping",   @If(shipping == 0, "Free", @FormatCurrency(shipping, "USD")), "muted"),
-  Row("Tax (8.5%)", @FormatCurrency(tax, "USD"), "muted"),
-  @If(discount &gt; 0, Row("Discount", `- ${@FormatCurrency(discount, "USD")}`, "success")),
+  Row("Subtotal",   @Format(subtotal, "currency", "USD"), "muted"),
+  Row("Shipping",   @If(shipping == 0, "Free", @Format(shipping, "currency", "USD")), "muted"),
+  Row("Tax (8.5%)", @Format(tax, "currency", "USD"), "muted"),
+  @If(discount &gt; 0, Row("Discount", `- ${@Format(discount, "currency", "USD")}`, "success")),
   Separator("horizontal", true),
-  Stack([TextContent("Total", "large-heavy"), TextContent(@FormatCurrency(total, "USD"), "large-heavy", "primary")], "row", "s", "center", "between"),
+  Stack([TextContent("Total", "large-heavy"), TextContent(@Format(total, "currency", "USD"), "large-heavy", "primary")], "row", "s", "center", "between"),
   Buttons([
     Button("Checkout",    Action([@ToAssistant("Proceed to checkout")]), "primary"),
     Button("Apply coupon", null, "secondary")
@@ -1618,7 +1618,7 @@ board = Card([
   CheckBoxGroup("todos", selectableItems, $$selected)
 ])
 
-stats = MetricGrid([
+stats = Stats([
   StatCard("Open",          `${@Count(active)}`,                                    "flat", "to do",    "list-check"),
   StatCard("Done",          `${@Count(done)}`,                                      "up",   "complete", "circle-check"),
   StatCard("High priority", `${@Count(@Filter(active, "priority", "==", "high"))}`, "flat", "urgent",   "fire")

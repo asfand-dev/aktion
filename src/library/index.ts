@@ -7,8 +7,8 @@
 
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
 import {
-  Stack, Grid, Section, Card, CardHeader, CardBody, CardFooter, Separator,
-  Tabs, TabItem, Accordion, AccordionItem, Modal, Steps, StepsItem,
+  Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
 import {
@@ -20,7 +20,7 @@ import {
   Form, FormControl, Input, TextArea, Select, SelectItem, Checkbox,
   CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, SearchBar,
   Slider, NumberInput, DatePicker, FileUpload, Combobox,
-  MultiSelect, DateRangePicker, SegmentedControl,
+  MultiSelect, DateRangePicker,
 } from "./components/forms.js";
 import {
   Table, Col, List, ListItem, StatCard, Tree, TreeNode, Sparkline,
@@ -30,27 +30,27 @@ import {
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink,
 } from "./components/chat.js";
 import {
-  Avatar, AvatarGroup, Progress, Switch, Toggle, ToggleGroup,
-  Tooltip, HoverCard, Popover, Toast, Toasts, Kbd, Rating, ProgressRing, ChatBubble,
+  Avatar, AvatarGroup, Progress, Switch, ToggleGroup,
+  Tooltip, HoverCard, Popover, Toast, Kbd, Rating, ProgressRing, ChatBubble,
 } from "./components/feedback.js";
 import {
-  Breadcrumb, BreadcrumbItem, Pagination, Sheet, Navbar, NavbarItem,
+  Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem,
 } from "./components/navigation.js";
 import {
   DropdownMenu, MenuItem, MenuSeparator, MenuLabel,
 } from "./components/menu.js";
 import {
-  Hero, PageHeader, MetricGrid, EmptyState,
+  Hero, PageHeader, EmptyState,
   Timeline, TimelineItem, FeatureGrid, FeatureItem,
   Testimonial, ProfileCard, Comment, Banner,
   KanbanBoard, KanbanColumn, KanbanCard,
   SectionHeader, Toolbar, Sidebar, SidebarSection, SidebarItem,
   AppShell, SplitView, DescriptionList, DescriptionItem,
   StatusDot, PricingTable, PricingCard,
-  Cover, MediaCard, Stats, Tile, Notification, PersonChip,
+  MediaCard, Stats, Tile, Notification, PersonChip,
 } from "./components/patterns.js";
 import {
-  DataGrid, CalendarView, ActivityLog, AuditTrail, ComparisonTable, InfiniteList,
+  DataGrid, CalendarView, ActivityLog, ComparisonTable, InfiniteList,
 } from "./components/advanced-data.js";
 import {
   VideoPlayer, AudioPlayer, Carousel, Gallery, Lightbox, Map,
@@ -59,43 +59,47 @@ import {
   RichTextEditor, CodeEditor, ContextMenu, ColorPicker,
 } from "./components/editors.js";
 import {
-  AreaChart, Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
+  Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
 } from "./components/advanced-charts.js";
 import {
-  PinInput, OtpInput, PasswordInput, TagInput, MentionInput,
+  PinInput, PasswordInput, TagInput, MentionInput,
   TimePicker, DateTimePicker, MaskedInput,
   FormSection, FieldSet, ValidationSummary, MultiStepForm,
 } from "./components/advanced-forms.js";
 import {
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
-  BreadcrumbPageHeader,
 } from "./components/advanced-patterns.js";
 import { Script } from "./components/scripts.js";
 import { Theme } from "./components/theme.js";
 import { Routes, Route, NavLink } from "./components/router.js";
+import {
+  IconButton, CommandPalette, FilterChips, FieldRepeater,
+  VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
+  Truncate, InlineEdit, NotificationBell,
+} from "./components/new-components.js";
 
 export * from "./types.js";
 export * from "./registry.js";
 
 const components: ComponentSpec[] = [
-  Stack, Grid, Section, Card, CardHeader, CardBody, CardFooter, Separator,
-  Tabs, TabItem, Accordion, AccordionItem, Modal, Steps, StepsItem,
+  Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea, Container, Spacer,
   TextContent, Image, Link, Badge, BadgeList,
   Callout, CodeBlock, Skeleton, Markdown, Quote, Icon, Spinner,
   Form, FormControl, Input, TextArea, Select, SelectItem, Checkbox,
   CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, SearchBar,
   Slider, NumberInput, DatePicker, FileUpload, Combobox,
-  MultiSelect, DateRangePicker, SegmentedControl,
+  MultiSelect, DateRangePicker,
   Table, Col, List, ListItem, StatCard, Sparkline, Tree, TreeNode,
   BarChart, LineChart, PieChart, Series,
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink, ChatBubble,
-  Avatar, AvatarGroup, Progress, ProgressRing, Switch, Toggle, ToggleGroup,
-  Tooltip, HoverCard, Popover, Toast, Toasts, Kbd, Rating,
-  Breadcrumb, BreadcrumbItem, Pagination, Sheet, Navbar, NavbarItem,
+  Avatar, AvatarGroup, Progress, ProgressRing, Switch, ToggleGroup,
+  Tooltip, HoverCard, Popover, Toast, Kbd, Rating,
+  Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem,
   DropdownMenu, MenuItem, MenuSeparator, MenuLabel,
-  Hero, Cover, PageHeader, MetricGrid, Stats, Tile, EmptyState,
+  Hero, PageHeader, Stats, Tile, EmptyState,
   Timeline, TimelineItem, FeatureGrid, FeatureItem,
   Testimonial, ProfileCard, PersonChip, Comment, Banner, Notification,
   MediaCard, KanbanBoard, KanbanColumn, KanbanCard,
@@ -103,34 +107,36 @@ const components: ComponentSpec[] = [
   AppShell, SplitView, DescriptionList, DescriptionItem,
   StatusDot, PricingTable, PricingCard,
   // Advanced data
-  DataGrid, CalendarView, ActivityLog, AuditTrail, ComparisonTable, InfiniteList,
+  DataGrid, CalendarView, ActivityLog, ComparisonTable, InfiniteList,
   // Media
   VideoPlayer, AudioPlayer, Carousel, Gallery, Lightbox, Map,
   // Editors
   RichTextEditor, CodeEditor, ContextMenu, ColorPicker,
   // More charts
-  AreaChart, Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
+  Gauge, Heatmap, RadarChart, ScatterChart, Histogram,
   // Advanced forms
-  PinInput, OtpInput, PasswordInput, TagInput, MentionInput,
+  PinInput, PasswordInput, TagInput, MentionInput,
   TimePicker, DateTimePicker, MaskedInput,
   FormSection, FieldSet, ValidationSummary, MultiStepForm,
   // Advanced patterns + state cards
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
-  BreadcrumbPageHeader,
   Script,
   Theme,
   Routes, Route, NavLink,
+  IconButton, CommandPalette, FilterChips, FieldRepeater,
+  VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
+  Truncate, InlineEdit, NotificationBell,
 ];
 
 const componentGroups: ComponentGroup[] = [
   {
     name: "Layout",
     components: [
-      "Stack", "Grid", "Section", "Container", "Spacer", "Card", "CardHeader", "CardBody", "CardFooter",
-      "Separator", "Tabs", "TabItem", "Accordion", "AccordionItem",
-      "Modal", "Drawer", "Sheet", "Steps", "StepsItem", "AspectRatio", "ScrollArea",
-      "Sticky", "ResizablePanels", "MasonryGrid",
+      "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
+      "Card", "CardHeader", "CardFooter", "Separator", "Tabs", "TabItem",
+      "Accordion", "AccordionItem", "Modal", "Drawer", "Steps",
+      "AspectRatio", "ScrollArea", "Sticky", "ResizablePanels", "MasonryGrid",
     ],
     notes: [
       "- `root` MUST be `Stack(...)` and contain at least one child.",
@@ -139,10 +145,13 @@ const componentGroups: ComponentGroup[] = [
       "- Use `Container(children, size?)` to centre a wide page within a comfortable max-width (landing pages, articles, marketing sections).",
       "- Use `Spacer()` inside `Stack(direction=\"row\")` to push the next item to the far edge; pass a `size` for an explicit fixed gap.",
       "- Use `Separator(orientation?, label?)` between sections to add visual breaks. Pass a `label` for a centered \"OR\"-style separator.",
-      "- Use `Drawer` (new canonical name) or `Sheet` (alias) for side-panel detail views, `Modal` for centered dialogs.",
+      "- Use `Drawer` for side-panel detail views, `Modal` for centered dialogs.",
       "- Use `Sticky(children, side?, offset?)` to pin a toolbar/banner while the surrounding content scrolls.",
       "- Use `ResizablePanels(primary, secondary, initialPrimaryWidth?)` for user-resizable two-pane layouts (code editors, file browsers).",
       "- Use `MasonryGrid([...])` for Pinterest-style mixed-height card walls — prefer `Grid` when rows should share a height.",
+      "- Use `StackItem(child, grow?, shrink?, basis?, alignSelf?)` inside `Stack(direction=\"row\", uniform=false)` for toolbars.",
+      "- Use `Grid(columns=12, [GridItem(child, span=\"1/4\"), GridItem(main, span=\"3/4\")])` for sidebar layouts; fractional spans `\"1/2\"`…`\"1/12\"` resolve on a 12-column track.",
+      "- Use `Box(children, padding?, margin?, border?, background?)` for spacing and surfaces without raw CSS.",
     ],
   },
   {
@@ -172,17 +181,17 @@ const componentGroups: ComponentGroup[] = [
       "Form", "FormControl", "FormSection", "FieldSet", "ValidationSummary",
       "Input", "TextArea", "PasswordInput", "MaskedInput", "MentionInput", "TagInput",
       "Select", "SelectItem", "Combobox", "MultiSelect",
-      "Checkbox", "CheckBoxGroup", "CheckBoxItem", "Radio", "Switch", "Toggle",
-      "ToggleGroup", "SegmentedControl", "Button", "Buttons", "SearchBar",
+      "Checkbox", "CheckBoxGroup", "CheckBoxItem", "Radio", "Switch",
+      "ToggleGroup", "Button", "Buttons", "SearchBar",
       "Slider", "NumberInput", "ColorPicker",
       "DatePicker", "DateRangePicker", "TimePicker", "DateTimePicker",
-      "FileUpload", "PinInput", "OtpInput",
+      "FileUpload", "PinInput",
       "MultiStepForm",
     ],
     notes: [
       "- Each FormControl should be a separate reference for progressive streaming.",
       "- Pass a `$variable` as the last argument to `Input`, `Select`, `Checkbox`, `Switch`, `MultiSelect`, or `CheckBoxGroup` for two-way binding.",
-      "- Prefer `Switch` over `Checkbox` for settings, `ToggleGroup` for view-mode pickers, `SegmentedControl(items, value?, size?)` for 2–5 mutually-exclusive view modes (grid/list, day/week/month, light/dark).",
+      "- Prefer `Switch` over `Checkbox` for settings; use `ToggleGroup` for view-mode pickers and mutually-exclusive filters.",
       "- Reach for `SearchBar(id, placeholder?, value?, shortcut?)` instead of a raw `Input` whenever the field's purpose is to filter content. It ships with the magnifier icon and keyboard hint baked in.",
       "- `Slider(id, min?, max?, step?, value?, label?, showValue?)` is the canonical control for numeric ranges (volume, brightness, filters); pass a `$variable` as `value` for two-way binding.",
       "- `NumberInput(id, value?, min?, max?, step?, placeholder?)` is friendlier than `Input(type=\"number\")` for quantity steppers and integer settings — it ships with +/- buttons that respect `min`/`max`.",
@@ -197,7 +206,7 @@ const componentGroups: ComponentGroup[] = [
       "- `FieldSet(legend, children, helper?)` is the accessible `<fieldset>` for radio/checkbox groups; prefer `FormSection` for purely visual grouping.",
       "- `ValidationSummary(errors, title?)` renders an aggregate error panel at the top of the form. Pass `errors` as `{label, message}` objects.",
       "- `PasswordInput(id, value?, placeholder?, strengthMeter?)` adds a show/hide toggle and an optional 4-step strength meter — prefer over `Input(type=\"password\")` for sign-up flows.",
-      "- `PinInput(id, length?, value?, type?)` and `OtpInput(id, value?, length?)` render per-digit code entry for 2FA / SMS verification.",
+      "- `PinInput(id, length?, value?, type?)` renders per-digit code entry for 2FA / SMS verification (use `length=6` for OTP codes).",
       "- `TagInput(id, value?, placeholder?)` lets the user add comma- or Enter-separated chips bound to a `$variable` array.",
       "- `MentionInput(id, people, value?)` is a textarea with inline @-mention suggestions — use for comments, task notes, chat composers.",
       "- `MaskedInput(id, mask, value?)` formats input against a mask string (`9` digit, `A` letter, `*` any). Use for phone numbers, postal codes.",
@@ -219,7 +228,7 @@ const componentGroups: ComponentGroup[] = [
       "- `InfiniteList(items, onLoadMore?, loading?, hasMore?)` is a scroll-to-load list; the action fires when the sentinel scrolls into view.",
       "- Use `Progress(value, max?, label?, tone?, indeterminate?, segments?, buffered?)` for linear bars — `segments` renders an N-step strip (onboarding flows), `buffered` adds a secondary buffer indicator.",
       "- `ProgressRing(value, max?, label?, tone?, size?)` is the circular variant for quotas/completion.",
-      "- `Stats([{label, value, hint?, tone?, spark?}, …])` is the compact inline stat strip — pass `spark` (number array) for an inline trend line beside each value. Lighter than `MetricGrid`, perfect inside a chart Card or beneath a header.",
+      "- `Stats([{label, value, hint?, tone?, spark?}, …], layout?)` — `layout=\"strip\"` (default) for inline KPIs; `layout=\"grid\"` for a responsive StatCard grid (replaces the old MetricGrid). Pass `spark` for an inline trend line.",
       "- `StatCard(label, value, trend?, delta?, icon?, spark?, tone?)` gains an optional inline `Sparkline` via the `spark` prop. Use `Sparkline(values, tone?)` standalone for tiny trend chips in table cells.",
       "- `Tile(label, icon?, value?, description?, tone?, action?)` is the dense icon tile for quick-action menus and category grids; pair with `Grid` for uniform rows.",
       "- `Tree([TreeNode(label, children?, icon?, expanded?, active?, badge?, action?)])` renders a hierarchical tree (file browsers, nested navigation, category pickers); use `expanded=true` to open a branch by default.",
@@ -229,11 +238,11 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Charts",
     components: [
-      "BarChart", "LineChart", "AreaChart", "PieChart", "RadarChart",
+      "BarChart", "LineChart", "PieChart", "RadarChart",
       "ScatterChart", "Histogram", "Heatmap", "Gauge", "Series",
     ],
     notes: [
-      "- Use `LineChart` for trends, `BarChart` for comparisons, `PieChart` for proportions, `AreaChart` for cumulative trends, `RadarChart` for multi-axis scorecards.",
+      "- Use `LineChart` for trends (pass `filled=true` for area-style charts), `BarChart` for comparisons, `PieChart` for proportions, `RadarChart` for multi-axis scorecards.",
       "- `Heatmap(xLabels, yLabels, values)` renders a color-intensity matrix — perfect for calendar heatmaps, correlation grids, schedule density.",
       "- `ScatterChart(series, xLabel?, yLabel?)` plots XY points; pass each Series as `Series(name, points)` where points are `{x, y, label?}`.",
       "- `Histogram(values, binCount?)` bins raw numbers; pass pre-computed `bins=[{label, count}]` instead when you control the bucketing.",
@@ -245,7 +254,7 @@ const componentGroups: ComponentGroup[] = [
     name: "Feedback & Media",
     components: [
       "Avatar", "AvatarGroup", "PersonChip", "Tooltip", "HoverCard", "Popover",
-      "Rating", "Toast", "Toasts",
+      "Rating", "Toast",
       "VideoPlayer", "AudioPlayer", "Carousel", "Gallery", "Lightbox", "Map",
     ],
     notes: [
@@ -256,7 +265,8 @@ const componentGroups: ComponentGroup[] = [
       "- Use `HoverCard(trigger, content)` when the popover needs rich content (profile preview, link target) and the trigger should open on hover.",
       "- `Popover(trigger, content, title?, side?, align?, width?)` is the click-triggered counterpart of `HoverCard` — use for filter panels, color pickers, share menus, and small settings flyouts. Always renders an × close button in the header; clicking the trigger again, clicking outside, or pressing Escape also closes it.",
       "- `Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)` renders stars for product reviews, testimonials, and ranked lists. Pass a `$variable` as `value` with `interactive=true` to let users rate; add `halfStep=true` so clicking the left half of a star sets a half-value. Set `icon=\"heart\"|\"thumb\"|\"fire\"|\"bolt\"` (or any FA name) to swap glyphs.",
-      "- `Toasts([Toast(...)], position?)` pins a fixed corner stack of transient `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` cards. Every Toast always shows a × close button; pass `duration` (ms) for auto-dismiss, omit it for a persistent toast. A standalone `Toast(...)` with a `position` prop pins itself to a viewport corner without needing `Toasts(...)`. Drive lists via a `$toasts` $variable plus `@Push`/`@Filter`. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists via `@Set($toasts, [...$toasts, item])` and `@Filter`. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `NotificationBell(count?, items?, onOpen?)` — compact inbox trigger; `CommandPalette` for Cmd-K action search.",
     ],
   },
   {
@@ -281,8 +291,8 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Patterns",
     components: [
-      "Hero", "Cover", "PageHeader", "BreadcrumbPageHeader", "MetricGrid", "EmptyState",
-      "Timeline", "TimelineItem", "ActivityLog", "AuditTrail",
+      "Hero", "PageHeader", "EmptyState",
+      "Timeline", "TimelineItem", "ActivityLog",
       "FeatureGrid", "FeatureItem",
       "Testimonial", "ProfileCard", "Comment", "Banner", "Notification",
       "InboxPanel", "OnboardingChecklist",
@@ -295,18 +305,15 @@ const componentGroups: ComponentGroup[] = [
     ],
     notes: [
       "- Patterns are **opinionated composites** that pack an entire UI idiom into one component. Reach for them BEFORE composing equivalent layouts by hand with Card+Stack — the result will look more polished and require fewer tokens.",
-      "- `Hero(title, subtitle, primary, secondary, eyebrow?, highlights?, tone?)` — landing-style text-first header. Pair with a FeatureGrid below.",
-      "- `Cover(title, imageSrc, subtitle?, eyebrow?, caption?, actions?, tone?, height?)` — image-backed hero band. Use for product, article, or campaign top sections.",
+      "- `Hero(title, subtitle, primary, secondary, eyebrow?, highlights?, tone?)` — landing-style text-first header. Use `layout=\"cover\"` with `imageSrc`, `height`, and optional `caption` for image-backed hero bands.",
       "- `PageHeader(title, subtitle?, breadcrumbs?, actions?, status?)` — the canonical first child for any dashboard or detail page. If you omit `breadcrumbs`, the component auto-derives `[\"Home\", title]`.",
-      "- `BreadcrumbPageHeader(path, subtitle?, actions?, status?)` — convenience composite that builds a `PageHeader` from a raw breadcrumb array (the last segment becomes the title).",
       "- `TopBar(title?, search?, actions?, sticky?)` — compact top strip for a content surface (panels, dialogs, embedded views). Use `AppShell` when you need a full sidebar; use `TopBar` for narrower headers above scrolling content.",
       "- `SectionHeader(title, subtitle?, eyebrow?, status?, actions?)` — sub-header inside a Card or panel. Use instead of bare `CardHeader` when the section also needs eyebrow / actions / status.",
-      "- `MetricGrid([statCard1, statCard2, …])` — responsive KPI strip. Always prefer this over a `Stack(direction=\"row\")` of StatCards.",
-      "- `Toolbar(left?, right?, center?, searchable?, searchPlaceholder?, searchValue?)` — filter/search/actions row above a list, table, or board. Pass `searchable=true` to auto-mount a `SearchBar` (use `searchValue` to bind it to a `$variable`). The optional `center` slot pins controls (e.g. `SegmentedControl`) between the left filters and right actions.",
+      "- `Stats(items, layout?)` — KPI strip (`layout=\"strip\"`, default) or responsive grid (`layout=\"grid\"` with StatCard children). Prefer over hand-rolled StatCard rows.",
+      "- `Toolbar(left?, right?, center?, searchable?, searchPlaceholder?, searchValue?)` — filter/search/actions row above a list, table, or board. Pass `searchable=true` to auto-mount a `SearchBar` (use `searchValue` to bind it to a `$variable`).",
       "- `EmptyState(title, description?, icon?, illustration?, actions?, action?)` — render this when a list is empty rather than an empty Card. The icon is auto-picked from the title keywords if you omit it (inbox/messages → `inbox`, charts/analytics → `chart-pie`, files/folders → `folder-open`, etc.).",
       "- `Timeline([TimelineItem(...)])` — vertical event feed (audit log, changelog, activity).",
-      "- `ActivityLog(entries, title?)` — purpose-built feed of user actions. Pass `entries` of `{actor, title, description?, time?, icon?, tone?, avatarSrc?}`. Prefer over a hand-rolled `Timeline` for product activity streams.",
-      "- `AuditTrail(entries, title?)` — sibling of `ActivityLog` rendered in a monospace voice for security/admin trails. Adds an optional `meta` field per entry for IPs, IDs, browsers.",
+      "- `ActivityLog(entries, variant?)` — purpose-built feed of user actions. Pass `entries` of `{actor, title, description?, time?, icon?, tone?, meta?}`; use `variant=\"audit\"` for security/admin trails with monospace meta.",
       "- `FeatureGrid([FeatureItem(...)])` — feature highlights with iconography.",
       "- `MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?, ratio?)` — image + content card. Use for article previews, product cards, project highlights. Pair with `Grid` for uniform card rows.",
       "- `KanbanBoard([KanbanColumn(\"To do\", [KanbanCard(...), ...])])` — task boards.",
@@ -359,6 +366,26 @@ const componentGroups: ComponentGroup[] = [
       "- Common branding tokens: `colorPrimary`, `colorPrimaryHover`, `colorPrimaryText`, `colorAccent`, `colorBg`, `colorSurface`, `colorText`, `colorTextMuted`, `colorBorder`, `colorFocusRing`, `fontFamily`, `fontFamilyHeading`, `fontSizeBase`, `fontWeightHeading`, `letterSpacingHeading`, `headingTextTransform`, `radiusMd`, `radiusButton`, `radiusInput`, `borderWidth`, `shadowMd`, `buttonFontWeight`, `buttonTextTransform`, `buttonPaddingY`, `buttonPaddingX`, `transitionDuration`, `chart1`–`chart6`.",
       "- Tokens are CSS values (`\"#0969da\"`, `\"'Inter', sans-serif\"`, `\"6px\"`, `\"600\"`). The runtime ignores unknown keys, so typos fail silent.",
       "- Removing the `Theme(...)` line snaps the UI back to the base theme without a reload.",
+    ],
+  },
+  {
+    name: "Advanced UI",
+    components: [
+      "IconButton", "CommandPalette", "FilterChips", "FieldRepeater",
+      "VirtualList", "QueryBuilder", "DiffViewer", "JsonTree", "Gantt",
+      "Truncate", "InlineEdit", "NotificationBell",
+    ],
+    notes: [
+      "- `IconButton(icon, label, action?, variant?, size?, disabled?)` — accessible icon-only control.",
+      "- `CommandPalette(items, open?, placeholder?, shortcut?)` — Cmd-K searchable actions.",
+      "- `FilterChips(chips, onRemove?, onClear?)` — applied filter pills with remove.",
+      "- `FieldRepeater(items, fields, onAdd?, onRemove?)` — dynamic form rows.",
+      "- `VirtualList(items, itemHeight?, renderItem)` — windowed long lists.",
+      "- `QueryBuilder(fields, value?)` — visual AND/OR filter builder.",
+      "- `DiffViewer(left, right, mode?)` — side-by-side or unified diff.",
+      "- `JsonTree(data)` — collapsible JSON inspector.",
+      "- `Gantt(tasks, startDate?, endDate?)` — horizontal schedule timeline.",
+      "- `Truncate(text, maxLines?)` / `InlineEdit(value, onSave?)` / `NotificationBell(count?, items?)`.",
     ],
   },
   {

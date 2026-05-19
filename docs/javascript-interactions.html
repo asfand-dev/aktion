@@ -443,7 +443,7 @@ root = Stack([list])</code></pre>
         Delete becomes a one-liner with <code>@Filter</code> + <code>@Set</code>:
 <pre><code>Button("Delete", Action([@Set($todos, @Filter($todos, "id", "!=", t.id))]))</code></pre>
         Add becomes <code>@Push</code> + <code>@Set</code>:
-<pre><code>Button("Add", Action([@Set($todos, @Push($todos, newTodo))]))</code></pre>
+<pre><code>Button("Add", Action([@Set($todos, [...$todos, newTodo])]))</code></pre>
         Reach for <code>@Js</code> only when no builtin can express the change
         (e.g. toggling one field on one item).
       </div>

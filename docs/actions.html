@@ -325,7 +325,7 @@ Button("Learn more about caching", Action([@ToAssistant("Learn more about cachin
 $draft = ""
 
 addBtn = Button("Add", Action([
-  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Set($todos, [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
   @Reset($draft)
 ]), "primary")
 
@@ -676,7 +676,7 @@ root = Stack([CardHeader("Tasks"), rows, editor])</code></pre>
           </tr>
           <tr>
             <td><code>Action([@Js(`ctx.state.set('todos', ctx.state.get('todos').concat(item))`)])</code></td>
-            <td><code>Action([@Set($todos, @Push($todos, item))])</code> &mdash; no JS needed.</td>
+            <td><code>Action([@Set($todos, [...$todos, item])])</code> &mdash; no JS needed.</td>
           </tr>
           <tr>
             <td><code>Button("Go", "@Run(save)")</code> &mdash; passing the step as a string.</td>
@@ -786,7 +786,7 @@ root = Stack([openBtn, dialog])`);
     form.setResponse(`$todos = [{id: 1, text: "Welcome", done: false}]
 $draft = ""
 addBtn = Button("Add", Action([
-  @Set($todos, @Push($todos, {id: $todos.length + 1, text: $draft, done: false})),
+  @Set($todos, [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
   @Reset($draft)
 ]), "primary")
 clearBtn = Button("Clear", Action([@Reset($todos, $draft)]), "ghost")
