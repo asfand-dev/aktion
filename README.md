@@ -632,14 +632,6 @@ UIs and remain on their own HTML pages.
 The full catalog with tag filters lives at
 [`docs/live-examples.html`](https://asfand-dev.github.io/streaming-ui-script/live-examples.html).
 
-### Editing live examples
-
-Each bundled demo's source-of-truth is a self-contained HTML in
-`docs/_examples/<slug>.html`. Edit one of those files and run
-`npm run build:examples` to regenerate the single `docs/assets/live-example.js`
-bundle (also triggered automatically by `npm run build:docs`). The
-`docs/_examples/` folder is excluded from the deployed `site/` output.
-
 ---
 
 ## Project layout
@@ -685,7 +677,6 @@ bundle (also triggered automatically by `npm run build:docs`). The
 ├── _docs/                     # Internal design notes and inspirations (not shipped)
 ├── scripts/
 │   ├── emit-prompt.mjs        # Writes dist/system_prompt*.txt from the bundle
-│   ├── build-live-examples.mjs # Assembles docs/assets/live-example.js from docs/_examples/
 │   └── build-docs.mjs         # Assembles ./site/ from docs/ + dist/
 ├── tests/                     # Vitest unit + element regression tests
 ├── dist/                      # Built artifacts (created by `npm run build`)

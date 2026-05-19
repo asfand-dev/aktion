@@ -4168,9 +4168,7 @@ Pattern-driven applications:
 - **Scheduler (CalendarView + OnboardingChecklist + state cards):** <https://asfand-dev.github.io/streaming-ui-script/live-example.html?example=scheduler>
 
 > All bundled live examples are served by a single shell page
-> (`live-example.html`) and one JS bundle (`assets/live-example.js`). Source
-> for each demo lives in `docs/_examples/<slug>.html`; run
-> `npm run build:examples` after editing one.
+> (`live-example.html`) and one JS bundle (`assets/live-example.js`).
 
 ### Build artefacts
 
