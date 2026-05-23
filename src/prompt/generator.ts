@@ -622,6 +622,9 @@ panel = match $stage {
   not valid).
 - \`default:\` is the wildcard.
 - Arms can return arbitrary expressions, not just strings.
+- Wrap an arm body in \`{ … }\` to run a **statement block** (multiple
+  state writes, then an optional last-expression result). To return an
+  object literal from an arm, parenthesise it: \`"a": ({ y: 1 })\`.
 
 ### \`for\`
 \`\`\`
@@ -751,6 +754,36 @@ action copyShareLink() {
   js{ navigator.clipboard.writeText(window.location.href) }
   emit "assistant-message" { message: "Link copied" }
 }
+\`\`\`
+
+### Markup escape hatches — \`HTMLTag\` & \`Styles\`
+
+When the standard catalogue cannot express the markup or visual treatment
+you need, reach for two last-resort components:
+
+- \`HTMLTag(tag, attributes?, children?)\` renders an allow-listed HTML tag
+  with an attribute object and child nodes. \`on*\` attributes,
+  \`javascript:\` URLs in \`href\`/\`src\`, and unsafe \`style\` patterns are
+  stripped; tag names outside the allow-list collapse to \`div\`.
+- \`Styles(css)\` injects a \`<style>\` block whose CSS targets your own
+  selectors. Payloads containing \`</style>\`, \`<script>\`,
+  \`expression(\`, \`javascript:\`, \`behavior:\`, or \`@import\` are dropped.
+
+Prefer the standard library for everything they can express
+(typography, layout, surfaces, controls). Use these only as a documented
+last resort.
+
+\`\`\`
+_app_ = Stack([
+  Styles(\`
+    .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
+    .hero-callout h2 { margin: 0 0 8px; }
+  \`),
+  HTMLTag("div", attributes: { class: "hero-callout" }, children: [
+    HTMLTag("h2", children: [Text("Custom block")]),
+    Text("Use HTMLTag + Styles only when the standard components cannot capture the design.")
+  ])
+])
 \`\`\``;
 }
 

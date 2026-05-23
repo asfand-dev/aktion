@@ -81,6 +81,7 @@ import {
 import {
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
 } from "./components/helpers.js";
+import { HTMLTag, Styles } from "./components/escape-hatch.js";
 
 export * from "./types.js";
 export * from "./registry.js";
@@ -132,6 +133,8 @@ const components: ComponentSpec[] = [
   Truncate, InlineEdit, NotificationBell,
   // Aktion 0.5 standard helpers
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
+  // Escape hatches for raw HTML / CSS — last-resort primitives
+  HTMLTag, Styles,
 ];
 
 const componentGroups: ComponentGroup[] = [
@@ -407,6 +410,15 @@ const componentGroups: ComponentGroup[] = [
       "- `Redirect(path)` is a router-aware component — see Routing.",
       "- `Lazy(loader, fallback?)` defers children until `loader` resolves.",
       "- `ErrorBoundary(fallback?, onError?, children)` catches rendering errors thrown by descendants.",
+    ],
+  },
+  {
+    name: "Escape hatches",
+    components: ["HTMLTag", "Styles"],
+    notes: [
+      "- **Use only as a last resort.** Reach for these primitives when the standard catalogue cannot express the markup or styling you need; for everything else (typography, layout, surfaces, controls) the dedicated components produce a more consistent UI for fewer tokens.",
+      "- `HTMLTag(tag, attributes?, children?)` renders an allow-listed HTML tag with the given attribute object and child nodes (e.g. `HTMLTag(\"section\", attributes: {class: \"hero\", \"data-id\": 1}, children: [Text(\"Hello\")])`). Tag names outside the allow-list collapse to `div`; `on*` attributes, `javascript:` URLs in `href`/`src`, and `expression()` / `@import` in inline `style` are stripped.",
+      "- `Styles(css)` injects a `<style>` block containing the given CSS rules (e.g. `` Styles(`.hero { background: linear-gradient(...); }`) ``). Pair it with `HTMLTag` (or any built-in component's `class`-bearing wrapper) when scoping to a custom selector. Payloads containing `</style>`, `<script>`, `expression(`, `javascript:`, `behavior:`, or `@import` are dropped.",
     ],
   },
 ];

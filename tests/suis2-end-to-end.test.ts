@@ -278,6 +278,38 @@ describe("Expression control flow", () => {
     expect(render().textContent).toBe("Warn");
   });
 
+  it("`match` arm bodies accept block syntax and run side-effecting statements", () => {
+    const { state, ctx } = harness(`
+      $drafts  = []
+      $records = []
+      action submit(payload) {
+        match payload.kind {
+          "draft": { $drafts = [...$drafts, payload] }
+          default: { $records = [...$records, payload] }
+        }
+      }
+      run1 = submit({kind: "draft", title: "first"})
+      run2 = submit({kind: "final", title: "second"})
+      _app_ = Text("ok")
+    `);
+    expect(ctx.actionDecls.has("submit")).toBe(true);
+    ctx.bindings.get("run1")?.();
+    ctx.bindings.get("run2")?.();
+    expect(state.get("drafts")).toEqual([{ kind: "draft", title: "first" }]);
+    expect(state.get("records")).toEqual([{ kind: "final", title: "second" }]);
+  });
+
+  it("`match` arm bodies accept block syntax that returns the last expression", () => {
+    const { render } = harness(`
+      $stage = "draft"
+      _app_ = match $stage {
+        "draft": { Text("Draft view") }
+        default: { Text("Other") }
+      }
+    `);
+    expect(render().textContent).toBe("Draft view");
+  });
+
   it("`for x in xs { … }` produces a renderable array", () => {
     const { render } = harness(`
       $items = ["a", "b", "c"]

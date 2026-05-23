@@ -328,6 +328,7 @@ active = if $tab == "billing" { billingPanel } else { overviewPanel }</code></pr
         <li>Arms use <code>: value</code> like object properties &mdash; <strong>not</strong> <code>-&gt;</code>.</li>
         <li><code>default:</code> is the wildcard.</li>
         <li>Arms can return arbitrary expressions, not just strings.</li>
+        <li>Wrap an arm body in <code>{ &hellip; }</code> to run a <strong>statement block</strong> (multiple state writes, ending in an optional last-expression result). To return a literal object from an arm, parenthesise it: <code>"a": ({ y: 1 })</code>.</li>
       </ul>
 
       <h3><code>for</code></h3>
@@ -507,6 +508,44 @@ Text(t("orders.greeting", { name: $userName }))  # "Welcome back, Alex"</code></
         keyboard listeners, IntersectionObserver, audio, custom DOM work).
         See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.
       </p>
+
+      <h2 id="escape-hatches">Markup escape hatches &mdash; <code>HTMLTag</code> &amp; <code>Styles</code></h2>
+      <p>
+        When the standard component catalogue cannot express the markup or
+        styling you need, two last-resort components are available. Reach
+        for them only after confirming nothing in the standard library
+        captures the design &mdash; the dedicated components produce a
+        more consistent UI for fewer tokens.
+      </p>
+      <ul>
+        <li>
+          <code>HTMLTag(tag, attributes?, children?)</code> renders an
+          allow-listed HTML tag with the supplied attribute object and
+          child nodes. Tag names outside the allow-list collapse to
+          <code>div</code>; <code>on*</code> attributes,
+          <code>javascript:</code> URLs in <code>href</code>/<code>src</code>,
+          and unsafe <code>style</code> patterns
+          (<code>expression()</code>, <code>@import</code>, &hellip;) are
+          stripped.
+        </li>
+        <li>
+          <code>Styles(css)</code> injects a <code>&lt;style&gt;</code>
+          block whose CSS targets your own selectors. Payloads containing
+          <code>&lt;/style&gt;</code>, <code>&lt;script&gt;</code>,
+          <code>expression(</code>, <code>javascript:</code>,
+          <code>behavior:</code>, or <code>@import</code> are dropped.
+        </li>
+      </ul>
+<pre><code>_app_ = Stack([
+  Styles(`
+    .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
+    .hero-callout h2 { margin: 0 0 8px; }
+  `),
+  HTMLTag("div", attributes: { class: "hero-callout" }, children: [
+    HTMLTag("h2", children: [Text("Custom block")]),
+    Text("Use HTMLTag + Styles only when the standard components cannot capture the design.")
+  ])
+])</code></pre>
 
       <h2 id="theming">In-script theming</h2>
       <p>

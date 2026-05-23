@@ -577,6 +577,7 @@ production-quality SaaS UI in a single line.
 | **App shell**      | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView` |
 | **Advanced UI**    | `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`, `Truncate`, `InlineEdit`, `NotificationBell` |
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
+| **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
 | **Theming**        | `Theme` |
 | **Routing**        | `_router_({ … })`, `NavLink` |
 

@@ -338,7 +338,7 @@ el.registerComponents([ProductCard]);</code></pre>
   StackItem(Badge("Fixed", tone: "info"), grow: 0, shrink: 0, alignSelf: "center"),
   StackItem(Text("This section grows to fill remaining space."), grow: 1),
   StackItem(Button("Action", variant: "primary"), grow: 0, shrink: 0, alignSelf: "center")
-], direction: "row", gap: "m", align: "stretch")`,
+], direction: "row", gap: "m", align: "center")`,
       GridItem: `_app_ = Grid([
   GridItem(Card([CardHeader("Sidebar"), Text("1/4 width.")]), span: "1/4"),
   GridItem(Card([CardHeader("Main content"), Text("3/4 width.")]), span: "3/4")
@@ -1601,6 +1601,31 @@ _app_ = pages`,
   ],
   open: true
 )`,
+
+      // -------------------------------------------------------------------
+      // Escape hatches — last-resort raw HTML / CSS primitives
+      // -------------------------------------------------------------------
+      HTMLTag: `_app_ = HTMLTag("section",
+  attributes: { class: "rui-html-demo", "data-role": "spotlight" },
+  children: [
+    HTMLTag("h2", attributes: { class: "rui-html-demo-title" }, children: [Text("Custom markup")]),
+    HTMLTag("p",  attributes: { class: "rui-html-demo-body" },  children: [Text("Reach for HTMLTag only when no built-in component captures the shape you need.")])
+  ]
+)`,
+      Styles: `_app_ = Stack([
+  Styles(\`
+    .escape-hatch-card {
+      border: 1px dashed var(--rui-color-border);
+      border-radius: 12px;
+      padding: 16px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(16,185,129,0.08));
+    }
+    .escape-hatch-card strong { color: var(--rui-color-primary); }
+  \`),
+  HTMLTag("div", attributes: { class: "escape-hatch-card" }, children: [
+    Markdown("Use **Styles** + **HTMLTag** together to scope custom CSS to your own selectors.")
+  ])
+])`,
     };
 
     /**

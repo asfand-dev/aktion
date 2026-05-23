@@ -265,6 +265,19 @@ language keywords, to keep the core small:
 - `ErrorBoundary(children, fallback?, onError?)` — catches descendant
   rendering errors.
 
+**Escape hatches (last resort).** When the standard catalogue cannot
+express the markup or styling you need, two primitives are available:
+
+- `HTMLTag(tag, attributes?, children?)` — render an allow-listed HTML
+  tag with sanitised attributes (`on*` handlers and unsafe URLs are
+  dropped).
+- `Styles(css)` — inject a `<style>` block scoped to your own
+  selectors (payloads with `</style>`, `<script>`, `expression(`,
+  `javascript:`, or `@import` are dropped).
+
+Reach for them only after confirming nothing in the standard library
+captures the design.
+
 ---
 
 ## 0.5. Rich-layout principles
@@ -1378,6 +1391,13 @@ list   = for item in $todos { TaskRow(item) }
 panel  = match $stage { "done": Done() "ready": Ready() default: Pending() }
 ```
 
+`match` arms accept either a bare expression (`"draft": DraftView()`)
+or a **statement block** (`"draft": { $drafts = [...$drafts, payload] }`).
+Use the block form inside `action` / `effect` bodies when an arm needs
+to write state or run multiple statements before yielding a value. To
+return a literal object from an arm, parenthesise it
+(`"a": ({ y: 1 })`) so the brace is parsed as an expression, not a block.
+
 ### Responsive prop maps
 
 `Grid(items, columns: {sm: 1, md: 2, lg: 4}, gap: "l")` — 1 column on
@@ -1777,6 +1797,42 @@ Notes:
 - `Lazy(loader, fallback?)` defers children until `loader` resolves.
 - `ErrorBoundary(children, fallback?, onError?)` catches rendering
   errors thrown by descendants.
+
+### Escape hatches — last-resort raw HTML / CSS
+
+`HTMLTag`, `Styles`.
+
+> ⚠️ **Use these only when no standard component captures the design.**
+> The dedicated catalogue produces a more consistent, on-theme UI for
+> fewer tokens. Reach for these primitives only after confirming
+> nothing in §9 (or a composite from §11) covers the case.
+
+- `HTMLTag(tag, attributes?, children?)` renders an allow-listed HTML
+  tag (`div`, `section`, `article`, `header`, `footer`, `main`, `nav`,
+  `aside`, headings, lists, table tags, `a`, `img`, `figure`,
+  `details`/`summary`, inline text tags, …) with the supplied attribute
+  object and child nodes. Tag names outside the allow-list collapse to
+  `div`. Attribute sanitisation drops `on*` event handlers,
+  `javascript:` URLs in `href`/`src`, and unsafe `style` patterns
+  (`expression()`, `@import`, `behavior:`).
+- `Styles(css)` injects a `<style>` block whose CSS targets your own
+  selectors. Pair it with `HTMLTag` (or any component that exposes a
+  `class` attribute) to scope custom rules. Payloads containing
+  `</style>`, `<script>`, `expression(`, `javascript:`, `behavior:`, or
+  `@import` are dropped silently.
+
+```text
+_app_ = Stack([
+  Styles(`
+    .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
+    .hero-callout h2 { margin: 0 0 8px; font-size: 22px; }
+  `),
+  HTMLTag("div", attributes: { class: "hero-callout" }, children: [
+    HTMLTag("h2", children: [Text("Custom block")]),
+    Text("Use HTMLTag + Styles only when the standard catalogue cannot capture the design.")
+  ])
+])
+```
 
 ---
 

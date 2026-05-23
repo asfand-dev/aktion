@@ -1132,7 +1132,7 @@ function parseMatchExpression(ctx: ParserContext): Expression {
       pattern = parseExpression(ctx);
     }
     ctx.expect("Punctuation", ":");
-    const body = parseExpression(ctx);
+    const body = parseMatchArmBody(ctx);
     arms.push({ pattern, body });
     while (ctx.match("Newline")) {/* skip */}
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
@@ -1147,6 +1147,30 @@ function parseMatchExpression(ctx: ParserContext): Expression {
     arms,
     loc: { line: start.line, column: start.column },
   };
+}
+
+/**
+ * Parse the right-hand side of a `match` arm.
+ *
+ * When the body opens with `{`, treat it as a **statement block** — the
+ * same shape `if` / `for` accept — so callers can run side effects
+ * (`{ $drafts = [...$drafts, payload] }`) and return the last expression.
+ *
+ * Without this carve-out, `parseExpression` would route the brace to the
+ * object-literal branch in `parsePrimary`, which only accepts
+ * `key: value` pairs and rejects state writes / control statements with
+ * a confusing "Expected object key" error.
+ *
+ * Authors who need to return an object literal from a match arm can wrap
+ * it in parentheses (`"a": ({ y: 1 })`) — the grouping form keeps the
+ * primary expression path active.
+ */
+function parseMatchArmBody(ctx: ParserContext): Expression {
+  const head = ctx.peek();
+  if (head.type === "Punctuation" && head.value === "{") {
+    return parseBlock(ctx);
+  }
+  return parseExpression(ctx);
 }
 
 function parseForExpression(ctx: ParserContext): Expression {

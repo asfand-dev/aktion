@@ -118,6 +118,7 @@ describe("default library", () => {
       "IconButton", "CommandPalette", "FilterChips", "FieldRepeater",
       "VirtualList", "QueryBuilder", "DiffViewer", "JsonTree", "Gantt",
       "Truncate", "InlineEdit", "NotificationBell",
+      "HTMLTag", "Styles",
     ];
     for (const name of expected) {
       expect(findComponent(defaultLibrary, name), `${name} should be registered`).toBeDefined();
@@ -3001,6 +3002,132 @@ describe("LineChart row-shaped shorthand", () => {
     expect(node.querySelector("svg")).not.toBeNull();
     // 2 series -> 2 polyline paths drawn inside the SVG.
     expect(node.querySelectorAll("svg path").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("HTMLTag", () => {
+  it("renders the requested tag with allow-listed attributes and child nodes", async () => {
+    const { HTMLTag } = await import("../src/library/components/escape-hatch.js");
+    const node = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      {
+        tag: "section",
+        attributes: { class: "hero", "data-id": "42" },
+        children: ["Hello", " world"],
+      },
+      helpers,
+    ) as HTMLElement;
+    expect(node.tagName.toLowerCase()).toBe("section");
+    expect(node.getAttribute("class")).toBe("hero");
+    expect(node.getAttribute("data-id")).toBe("42");
+    expect(node.textContent).toBe("Hello world");
+  });
+
+  it("falls back to <div> for tag names outside the allow-list", async () => {
+    const { HTMLTag } = await import("../src/library/components/escape-hatch.js");
+    const node = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      { tag: "script", attributes: {}, children: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.tagName.toLowerCase()).toBe("div");
+  });
+
+  it("strips on* event-handler attributes and `javascript:` URLs", async () => {
+    const { HTMLTag } = await import("../src/library/components/escape-hatch.js");
+    const node = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      {
+        tag: "a",
+        attributes: {
+          href: "javascript:alert(1)",
+          onclick: "alert(1)",
+          onerror: "alert(2)",
+          class: "link",
+        },
+        children: ["click"],
+      },
+      helpers,
+    ) as HTMLElement;
+    expect(node.tagName.toLowerCase()).toBe("a");
+    expect(node.hasAttribute("onclick")).toBe(false);
+    expect(node.hasAttribute("onerror")).toBe(false);
+    expect(node.getAttribute("href")).not.toBe("javascript:alert(1)");
+    expect(node.getAttribute("class")).toBe("link");
+  });
+
+  it("filters dangerous patterns in inline `style` declarations", async () => {
+    const { HTMLTag } = await import("../src/library/components/escape-hatch.js");
+    const safe = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      {
+        tag: "div",
+        attributes: { style: "background: red; color: white;" },
+        children: [],
+      },
+      helpers,
+    ) as HTMLElement;
+    expect(safe.getAttribute("style")).toBe("background: red; color: white;");
+
+    const hostile = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      {
+        tag: "div",
+        attributes: { style: "background: expression(alert(1));" },
+        children: [],
+      },
+      helpers,
+    ) as HTMLElement;
+    expect(hostile.hasAttribute("style")).toBe(false);
+  });
+
+  it("renders component-shaped children via the renderNode helper", async () => {
+    const { HTMLTag } = await import("../src/library/components/escape-hatch.js");
+    const node = HTMLTag.render(
+      makeNode("HTMLTag", []),
+      {
+        tag: "div",
+        attributes: { class: "wrapper" },
+        children: [makeNode("Text", ["Hi"])],
+      },
+      helpers,
+    ) as HTMLElement;
+    const stub = node.querySelector(".rui-stub");
+    expect(stub).not.toBeNull();
+    expect(stub?.getAttribute("data-component-name")).toBe("Text");
+  });
+});
+
+describe("Styles", () => {
+  it("renders a <style> element containing the supplied CSS", async () => {
+    const { Styles } = await import("../src/library/components/escape-hatch.js");
+    const node = Styles.render(
+      makeNode("Styles", []),
+      { css: ".hero { color: red; } .accent { color: blue; }" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.tagName.toLowerCase()).toBe("style");
+    expect(node.textContent).toContain(".hero { color: red; }");
+    expect(node.textContent).toContain(".accent { color: blue; }");
+  });
+
+  it("drops payloads that try to break out of the <style> tag or smuggle script", async () => {
+    const { Styles } = await import("../src/library/components/escape-hatch.js");
+    const cases = [
+      "</style><script>alert(1)</script>",
+      ".x { background: url(javascript:alert(1)); }",
+      "@import 'evil.css';",
+      ".x { width: expression(alert(1)); }",
+    ];
+    for (const css of cases) {
+      const node = Styles.render(
+        makeNode("Styles", []),
+        { css },
+        helpers,
+      ) as HTMLElement;
+      expect(node.tagName.toLowerCase()).toBe("style");
+      expect(node.textContent).toBe("");
+    }
   });
 });
 

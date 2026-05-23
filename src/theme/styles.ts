@@ -762,10 +762,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-button[data-size="xl"] { padding: calc(var(--rui-button-padding-y) * 1.6) calc(var(--rui-button-padding-x) * 1.5); font-size: var(--rui-font-size-lg); }
 .rui-button[data-full-width="true"] { width: 100%; }
 .rui-button[data-icon-only="true"] .rui-button-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
-.rui-button[data-icon-position="trailing"] .rui-button-icon { margin-right: 0; margin-left: 4px; order: 2; }
+.rui-button[data-icon-position="trailing"] .rui-button-icon { margin-right: 0; margin-left: 10px; order: 2; }
 .rui-button[data-loading="true"] { pointer-events: none; }
 .rui-button-spinner { margin-right: 4px; }
-.rui-button[data-icon-position="trailing"] .rui-button-spinner { margin-right: 0; margin-left: 4px; }
+.rui-button[data-icon-position="trailing"] .rui-button-spinner { margin-right: 0; margin-left: 10px; }
 
 .rui-buttons {
   display: flex;
