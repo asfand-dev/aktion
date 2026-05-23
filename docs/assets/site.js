@@ -61,6 +61,7 @@ const NAV_GROUPS = [
       { href: "examples.html", label: "Examples" },
       { href: "live-examples.html", label: "Live demos" },
       { href: "playground.html", label: "Playground" },
+      { href: "visual-editor.html", label: "Visual editor", badge: "New" },
       { href: "chat-bot.html", label: "Chat bot", badge: "AI" },
     ],
   },
@@ -95,6 +96,7 @@ const PAGE_KEYWORDS = {
   "examples.html": "recipes copy paste snippets",
   "live-examples.html": "demos catalog showcase",
   "playground.html": "editor preview live",
+  "visual-editor.html": "drag drop visual editor canvas inspector palette no-code wysiwyg",
   "chat-bot.html": "chat bot llm openrouter generate website builder app builder files images upload",
 };
 

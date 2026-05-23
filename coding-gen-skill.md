@@ -3280,6 +3280,7 @@ Before finishing, walk your output and verify:
 - **`docs/playground.html`** — CodeMirror 6 editor with syntax
   highlighting, autocomplete, share links, and an inspector that maps
   rendered DOM back to source.
+- **`docs/visual-editor.html`** — previous drag-and-drop visual editor.
 - **`docs/live-examples.html`** — catalog of bundled live demos
   (routing, settings, data explorer, media gallery, content studio,
   brand themes).

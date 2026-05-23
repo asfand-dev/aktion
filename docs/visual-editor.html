@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visual editor · Aktion</title>
+  <meta name="description" content="A drag-and-drop visual editor for Aktion. Compose, edit and reorder components on a live canvas. Import .aktion files or paste source. Export .aktion or a self-contained HTML." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* =========================================================================
+       Visual editor — page-scoped styles.
+
+       The editor takes over the docs main column with a four-region layout:
+         ┌──────────────────────────────────────────────────────────────────┐
+         │ Toolbar                                                          │
+         ├─────────┬───────────────────────────────────────────┬────────────┤
+         │ Palette │ Canvas (visual node tree + drop zones)    │ Inspector  │
+         │         │                                           │            │
+         ├─────────┴───────────────────────────────────────────┴────────────┤
+         │ Bottom panel — preview / code / standalone HTML tabs             │
+         └──────────────────────────────────────────────────────────────────┘
+       ========================================================================= */
+
+    body[data-page="visual-editor"] .layout > main {
+      padding: 0;
+      max-width: none;
+    }
+    body[data-page="visual-editor"] .layout {
+      max-width: none;
+    }
+
+    .ve-app {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      height: calc(100vh - 0px);
+      min-height: 600px;
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      font-family: var(--doc-font);
+      isolation: isolate;
+    }
+
+    /* ----- Toolbar ----- */
+    .ve-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      flex-wrap: wrap;
+    }
+    .ve-bar-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-right: 6px;
+    }
+    .ve-bar-title i { color: var(--doc-primary); }
+    .ve-spacer { flex: 1; }
+
+    .ve-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-bg-soft);
+    }
+    .ve-group select, .ve-group input {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 6px 10px;
+      border-radius: calc(var(--doc-radius-md) - 2px);
+    }
+    .ve-group select { cursor: pointer; padding-right: 22px; }
+
+    .ve-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      transition: background var(--doc-transition), border-color var(--doc-transition), color var(--doc-transition);
+    }
+    .ve-btn:hover { background: var(--doc-bg-soft); border-color: var(--doc-border-strong); }
+    .ve-btn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+    .ve-btn[aria-pressed="true"], .ve-btn.is-active {
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
+      border-color: transparent;
+    }
+    .ve-btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .ve-btn--primary {
+      background: var(--doc-primary);
+      color: var(--doc-text-inverse);
+      border-color: transparent;
+    }
+    .ve-btn--primary:hover {
+      background: var(--doc-primary-hover);
+      color: var(--doc-text-inverse);
+    }
+    @media (max-width: 900px) {
+      .ve-btn .ve-btn-text { display: none; }
+    }
+
+    .ve-iconbtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--doc-text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+    }
+    .ve-iconbtn:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .ve-iconbtn[aria-pressed="true"] { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .ve-iconbtn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+
+    /* ----- Workspace ----- */
+    .ve-workspace {
+      display: grid;
+      grid-template-columns: var(--ve-pal-w, 256px) minmax(0, 1fr) var(--ve-ins-w, 320px);
+      min-height: 0;
+      background: var(--doc-bg);
+    }
+    @media (max-width: 1280px) {
+      .ve-workspace { --ve-pal-w: 224px; --ve-ins-w: 280px; }
+    }
+    .ve-app[data-palette="false"] .ve-workspace { grid-template-columns: 0 minmax(0, 1fr) var(--ve-ins-w, 320px); }
+    .ve-app[data-inspector="false"] .ve-workspace { grid-template-columns: var(--ve-pal-w, 256px) minmax(0, 1fr) 0; }
+    .ve-app[data-palette="false"][data-inspector="false"] .ve-workspace { grid-template-columns: 0 minmax(0, 1fr) 0; }
+
+    .ve-pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .ve-pane--palette { border-right: 1px solid var(--doc-border); }
+    .ve-pane--inspector { border-left: 1px solid var(--doc-border); }
+
+    .ve-pane-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .ve-pane-header h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 0;
+      color: var(--doc-text-muted);
+    }
+
+    /* ----- Palette ----- */
+    .ve-palette-search {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+    }
+    .ve-palette-search input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      border: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-sm);
+      font: inherit;
+      font-size: 13px;
+      color: inherit;
+    }
+    .ve-palette-search input:focus { outline: 0; border-color: var(--doc-primary); box-shadow: var(--doc-focus-ring); }
+
+    .ve-palette-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 6px 0 12px;
+    }
+    .ve-palette-group { margin: 6px 0; }
+    .ve-palette-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      cursor: pointer;
+      user-select: none;
+      border: 0;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+    .ve-palette-group-header:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
+    .ve-palette-group-header i.fa-chevron-right {
+      transition: transform var(--doc-transition);
+      font-size: 10px;
+    }
+    .ve-palette-group[data-open="true"] .ve-palette-group-header i.fa-chevron-right {
+      transform: rotate(90deg);
+    }
+    .ve-palette-items {
+      display: none;
+      padding: 0 6px 6px;
+    }
+    .ve-palette-group[data-open="true"] .ve-palette-items { display: block; }
+
+    .ve-palette-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      margin: 2px 0;
+      border-radius: var(--doc-radius-sm);
+      cursor: grab;
+      font-size: 13px;
+      color: var(--doc-text);
+      border: 1px solid transparent;
+      transition: background var(--doc-transition), border-color var(--doc-transition);
+    }
+    .ve-palette-item:hover {
+      background: var(--doc-primary-softer);
+      border-color: var(--doc-primary-soft);
+    }
+    .ve-palette-item:active { cursor: grabbing; }
+    .ve-palette-item .ve-pal-icon {
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .ve-palette-item .ve-pal-meta { display: flex; flex-direction: column; min-width: 0; }
+    .ve-palette-item .ve-pal-name { font-weight: 500; line-height: 1.3; }
+    .ve-palette-item .ve-pal-sig {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      color: var(--doc-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ----- Canvas ----- */
+    .ve-canvas-pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .ve-canvas-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .ve-breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .ve-breadcrumbs button {
+      background: transparent;
+      border: 0;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--doc-text-muted);
+      cursor: pointer;
+      font: inherit;
+    }
+    .ve-breadcrumbs button:hover { background: var(--doc-surface); color: var(--doc-primary); }
+    .ve-breadcrumbs button.is-current { color: var(--doc-text); font-weight: 600; }
+    .ve-breadcrumbs i { color: var(--doc-text-subtle); font-size: 9px; }
+
+    .ve-canvas {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 1px 1px, var(--doc-border-subtle) 1px, transparent 0) 0 0 / 16px 16px,
+        var(--doc-bg-soft);
+    }
+
+    /* ----- Tree node card ----- */
+    .ve-node {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-sm);
+      margin: 6px 0;
+      transition: box-shadow var(--doc-transition), border-color var(--doc-transition);
+    }
+    .ve-node:hover { border-color: var(--doc-border-strong); }
+    .ve-node[data-selected="true"] {
+      border-color: var(--doc-primary);
+      box-shadow: 0 0 0 2px var(--doc-primary-soft);
+    }
+    .ve-node[data-dragging="true"] { opacity: .45; }
+    .ve-node[data-kind="expr"] {
+      background: var(--doc-bg-soft);
+      border-style: dashed;
+    }
+
+    .ve-node-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ve-node-head .ve-drag {
+      cursor: grab;
+      color: var(--doc-text-subtle);
+      width: 16px;
+      text-align: center;
+    }
+    .ve-node-head .ve-drag:active { cursor: grabbing; }
+    .ve-node-head .ve-name {
+      font-family: var(--doc-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-primary);
+    }
+    .ve-node[data-kind="expr"] .ve-name { color: var(--doc-text-muted); }
+    .ve-node-head .ve-summary {
+      font-family: var(--doc-mono);
+      font-size: 11.5px;
+      color: var(--doc-text-muted);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ve-node-head .ve-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      opacity: 0;
+      transition: opacity var(--doc-transition);
+    }
+    .ve-node:hover .ve-node-head .ve-actions,
+    .ve-node[data-selected="true"] .ve-node-head .ve-actions {
+      opacity: 1;
+    }
+    .ve-node-head .ve-actions button {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: transparent;
+      color: var(--doc-text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .ve-node-head .ve-actions button:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .ve-node-head .ve-actions button.is-danger:hover { color: var(--doc-danger); }
+
+    .ve-node-body {
+      padding: 0 10px 8px;
+      display: none;
+    }
+    .ve-node[data-expanded="true"] .ve-node-body { display: block; }
+
+    /* Slot — child container */
+    .ve-slot {
+      margin: 6px 0;
+      padding: 4px 0 4px 10px;
+      border-left: 2px dashed var(--doc-border);
+    }
+    .ve-slot-label {
+      font-size: 11px;
+      color: var(--doc-text-subtle);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-family: var(--doc-mono);
+      margin-bottom: 2px;
+    }
+    .ve-slot-children { display: flex; flex-direction: column; gap: 2px; }
+    .ve-slot-empty {
+      padding: 14px;
+      text-align: center;
+      border: 2px dashed var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      color: var(--doc-text-subtle);
+      font-size: 12px;
+      background: var(--doc-bg);
+    }
+    .ve-slot-empty.is-drag-over { border-color: var(--doc-primary); background: var(--doc-primary-softer); color: var(--doc-primary); }
+    .ve-slot.is-drag-over { background: var(--doc-primary-softer); border-left-color: var(--doc-primary); }
+
+    .ve-drop-gap {
+      height: 6px;
+      transition: height 120ms ease;
+    }
+    .ve-drop-gap.is-drag-over {
+      height: 30px;
+      border-radius: 4px;
+      background: var(--doc-primary-soft);
+      border: 2px dashed var(--doc-primary);
+    }
+
+    /* Inline summary value chips inside the canvas heading */
+    .ve-summary-chip {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-muted);
+      margin-right: 4px;
+    }
+
+    /* ----- Inspector ----- */
+    .ve-inspector-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px 14px 80px;
+    }
+    .ve-inspector-empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+    }
+    .ve-inspector-empty i { font-size: 28px; color: var(--doc-text-subtle); margin-bottom: 12px; display: block; }
+    .ve-insp-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--doc-mono);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--doc-primary);
+      margin-bottom: 6px;
+    }
+    .ve-insp-group-tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-family: var(--doc-font);
+    }
+    .ve-insp-desc {
+      color: var(--doc-text-muted);
+      font-size: 12.5px;
+      margin: 0 0 14px;
+      line-height: 1.5;
+    }
+    .ve-insp-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--doc-border-subtle);
+      margin-bottom: 14px;
+    }
+    .ve-insp-actions .ve-btn { padding: 4px 8px; font-size: 12px; }
+
+    .ve-prop {
+      margin-bottom: 14px;
+    }
+    .ve-prop-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .ve-prop-name {
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .ve-prop-required {
+      color: var(--doc-danger);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .ve-prop-type {
+      font-family: var(--doc-mono);
+      font-size: 10.5px;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg-soft);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .ve-prop-spacer { flex: 1; }
+    .ve-prop-toggle {
+      font-size: 10.5px;
+      color: var(--doc-text-subtle);
+      background: transparent;
+      border: 1px solid var(--doc-border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .ve-prop-toggle:hover { color: var(--doc-primary); border-color: var(--doc-primary-soft); }
+    .ve-prop-toggle.is-active { background: var(--doc-primary-soft); color: var(--doc-primary); border-color: transparent; }
+    .ve-prop-clear {
+      background: transparent;
+      border: 0;
+      color: var(--doc-text-subtle);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 4px;
+    }
+    .ve-prop-clear:hover { color: var(--doc-danger); }
+    .ve-prop-desc {
+      font-size: 11.5px;
+      color: var(--doc-text-subtle);
+      line-height: 1.5;
+      margin: 4px 0 0;
+    }
+
+    .ve-prop-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 7px 10px;
+      border: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-sm);
+      font: inherit;
+      font-size: 13px;
+      color: inherit;
+    }
+    .ve-prop-input:focus { outline: 0; border-color: var(--doc-primary); box-shadow: var(--doc-focus-ring); background: var(--doc-surface); }
+    textarea.ve-prop-input {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 38px;
+    }
+    select.ve-prop-input { cursor: pointer; }
+
+    .ve-prop-bool {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .ve-prop-bool input { accent-color: var(--doc-primary); }
+
+    .ve-prop-add {
+      background: transparent;
+      border: 1px dashed var(--doc-border);
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+      width: 100%;
+      text-align: left;
+    }
+    .ve-prop-add:hover { border-color: var(--doc-primary); color: var(--doc-primary); }
+
+    .ve-prop-add-list {
+      margin-top: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      background: var(--doc-surface);
+    }
+    .ve-prop-add-list button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 6px 10px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--doc-border-subtle);
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      color: var(--doc-text);
+    }
+    .ve-prop-add-list button:last-child { border-bottom: 0; }
+    .ve-prop-add-list button:hover { background: var(--doc-primary-softer); color: var(--doc-primary); }
+    .ve-prop-add-list button code {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      color: var(--doc-text-muted);
+      margin-left: 8px;
+    }
+
+    .ve-prelude {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--doc-border-subtle);
+    }
+    .ve-prelude h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--doc-text-muted);
+    }
+    .ve-prelude p {
+      margin: 0 0 6px;
+      font-size: 11.5px;
+      color: var(--doc-text-subtle);
+      line-height: 1.5;
+    }
+
+    /* ----- Bottom panel ----- */
+    .ve-bottom {
+      display: flex;
+      flex-direction: column;
+      border-top: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      min-height: 0;
+      max-height: 50vh;
+    }
+    .ve-app[data-bottom="false"] .ve-bottom { max-height: 36px; }
+    .ve-bottom-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 10px;
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+      font-size: 12px;
+    }
+    .ve-bottom-tab {
+      background: transparent;
+      border: 0;
+      padding: 8px 12px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+      border-bottom: 2px solid transparent;
+      transition: color var(--doc-transition), border-color var(--doc-transition);
+    }
+    .ve-bottom-tab:hover { color: var(--doc-text); }
+    .ve-bottom-tab[aria-pressed="true"] {
+      color: var(--doc-primary);
+      border-bottom-color: var(--doc-primary);
+    }
+    .ve-bottom-spacer { flex: 1; }
+    .ve-bottom-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      position: relative;
+    }
+    .ve-bottom-tab-panel {
+      display: none;
+      height: 100%;
+      min-height: 240px;
+    }
+    .ve-bottom-tab-panel[data-active="true"] { display: block; }
+
+    .ve-preview-frame {
+      padding: 16px;
+      background: var(--doc-bg);
+      min-height: 240px;
+    }
+    .ve-preview-frame aktion-app {
+      display: block;
+      width: 100%;
+      min-height: 240px;
+      border-radius: var(--doc-radius-md);
+      overflow: hidden;
+      box-shadow: var(--doc-shadow-sm);
+    }
+    .ve-code-pane {
+      position: relative;
+      height: 100%;
+      min-height: 240px;
+    }
+    .ve-code-pane pre {
+      margin: 0;
+      padding: 14px;
+      background: var(--doc-code-bg);
+      color: var(--doc-code-fg);
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      overflow: auto;
+      height: 100%;
+      box-sizing: border-box;
+      white-space: pre;
+    }
+    .ve-code-pane .ve-code-actions {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+    }
+    .ve-code-pane .ve-code-actions .ve-iconbtn {
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(226, 232, 240, 0.8);
+    }
+    .ve-code-pane .ve-code-actions .ve-iconbtn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    /* Tiny syntax highlight for the read-only code pane */
+    .ve-code-pane .tk-comp { color: #93c5fd; }
+    .ve-code-pane .tk-string { color: #86efac; }
+    .ve-code-pane .tk-number { color: #fca5a5; }
+    .ve-code-pane .tk-state { color: #fdba74; }
+    .ve-code-pane .tk-builtin { color: #c4b5fd; }
+    .ve-code-pane .tk-comment { color: #94a3b8; font-style: italic; }
+    .ve-code-pane .tk-key { color: #5eead4; }
+
+    /* ----- Modals ----- */
+    .ve-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .55);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .ve-modal-backdrop[hidden] { display: none; }
+    .ve-modal {
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      box-shadow: var(--doc-shadow-lg);
+      width: min(640px, 100%);
+      max-height: 80vh;
+      overflow: auto;
+      padding: 22px 24px;
+      color: var(--doc-text);
+    }
+    .ve-modal h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ve-modal h2 i { color: var(--doc-primary); }
+    .ve-modal p { margin: 0 0 14px; color: var(--doc-text-muted); font-size: 13px; }
+    .ve-modal textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 220px;
+      padding: 12px;
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      background: var(--doc-bg-soft);
+      color: var(--doc-text);
+      resize: vertical;
+    }
+    .ve-modal textarea:focus {
+      outline: 0;
+      border-color: var(--doc-primary);
+      box-shadow: var(--doc-focus-ring);
+      background: var(--doc-surface);
+    }
+    .ve-modal-foot {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+    .ve-modal label.ve-file-input {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border: 1px dashed var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--doc-text-muted);
+      margin-bottom: 12px;
+    }
+    .ve-modal label.ve-file-input:hover { border-color: var(--doc-primary); color: var(--doc-primary); }
+    .ve-modal label.ve-file-input input { display: none; }
+
+    /* ----- Toast ----- */
+    .ve-toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 250;
+      background: var(--doc-text);
+      color: var(--doc-text-inverse);
+      padding: 10px 14px;
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-lg);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transform: translateY(8px);
+      opacity: 0;
+      transition: opacity 200ms ease, transform 200ms ease;
+      pointer-events: none;
+    }
+    .ve-toast[data-tone="danger"] { background: var(--doc-danger); }
+    .ve-toast[data-tone="success"] { background: var(--doc-success); }
+    .ve-toast[data-visible="true"] {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ----- Loading ----- */
+    .ve-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--doc-text-muted);
+      font-size: 14px;
+      background: var(--doc-bg);
+      z-index: 50;
+    }
+    .ve-loading[hidden] { display: none; }
+    .ve-loading i { animation: ve-spin 1s linear infinite; }
+    @keyframes ve-spin { to { transform: rotate(360deg); } }
+
+    /* Hide the docs sidebar past the threshold so the editor reclaims
+       horizontal space — the visual editor's own palette / inspector
+       already shadow the docs nav for navigation between pages. */
+    @media (max-width: 1100px) {
+      body[data-page="visual-editor"] .sidebar { display: none; }
+      body[data-page="visual-editor"] .layout { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* Mobile collapse — fold the three workspace columns into a single
+       column once the viewport gets too narrow for a usable side-by-side
+       layout. The bottom panel always stays full-width. */
+    @media (max-width: 720px) {
+      .ve-app { height: 100vh; }
+      .ve-workspace {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto auto auto;
+      }
+      .ve-pane--palette, .ve-pane--inspector { max-height: 220px; }
+      .ve-pane--palette { border-right: 0; border-bottom: 1px solid var(--doc-border); }
+      .ve-pane--inspector { border-left: 0; border-top: 1px solid var(--doc-border); }
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body data-page="visual-editor">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar">
+      <h1>Aktion</h1>
+      <p>Web component runtime for Aktion</p>
+      <nav>
+        <a href="index.html">Overview</a>
+        <a href="get-started.html">Get started</a>
+        <a href="frameworks.html">Framework integration</a>
+        <a href="language.html">Language reference</a>
+        <a href="components.html">Component reference</a>
+        <a href="actions.html">Actions</a>
+        <a href="side-effects.html">Side effects</a>
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        <a href="routing.html">Routing</a>
+        <a href="themes.html">Theming</a>
+        <a href="examples.html">Examples</a>
+        <a href="playground.html">Playground</a>
+        <a href="visual-editor.html" aria-current="page">Visual editor</a>
+        <a href="live-examples.html">Live examples</a>
+      </nav>
+    </aside>
+
+    <main>
+      <div class="ve-app" id="ve-app" data-palette="true" data-inspector="true" data-bottom="true">
+
+        <!-- Toolbar -->
+        <header class="ve-bar" role="banner">
+          <div class="ve-bar-title">
+            <i class="fa-solid fa-cubes" aria-hidden="true"></i>
+            <span>Visual editor</span>
+          </div>
+
+          <button class="ve-btn" id="ve-new" title="Reset to a blank Stack">
+            <i class="fa-solid fa-file" aria-hidden="true"></i>
+            <span class="ve-btn-text">New</span>
+          </button>
+          <button class="ve-btn" id="ve-import" title="Import .aktion source (paste or upload)">
+            <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+            <span class="ve-btn-text">Import</span>
+          </button>
+          <button class="ve-btn" id="ve-load-example" title="Load a worked example into the canvas">
+            <i class="fa-solid fa-flask" aria-hidden="true"></i>
+            <span class="ve-btn-text">Example</span>
+          </button>
+
+          <div class="ve-spacer"></div>
+
+          <div class="ve-group" role="group" aria-label="Theme">
+            <label class="sr-only" for="ve-theme">Theme</label>
+            <select id="ve-theme" aria-label="Renderer theme">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="neon">Neon</option>
+              <option value="pastel">Pastel</option>
+              <option value="glass">Glass</option>
+              <option value="brutalist">Brutalist</option>
+              <option value="skyline">Skyline</option>
+            </select>
+          </div>
+
+          <button class="ve-iconbtn" id="ve-toggle-palette" title="Toggle palette" aria-pressed="true">
+            <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+          </button>
+          <button class="ve-iconbtn" id="ve-toggle-inspector" title="Toggle inspector" aria-pressed="true">
+            <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          </button>
+
+          <button class="ve-btn" id="ve-export-aktion" title="Download the program as .aktion">
+            <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i>
+            <span class="ve-btn-text">.aktion</span>
+          </button>
+          <button class="ve-btn ve-btn--primary" id="ve-export-html" title="Download a self-contained HTML">
+            <i class="fa-solid fa-download" aria-hidden="true"></i>
+            <span class="ve-btn-text">HTML</span>
+          </button>
+        </header>
+
+        <!-- Workspace: palette / canvas / inspector -->
+        <div class="ve-workspace">
+          <aside class="ve-pane ve-pane--palette" aria-label="Component palette">
+            <header class="ve-pane-header">
+              <h3>Components</h3>
+              <span class="ve-spacer"></span>
+              <span id="ve-palette-count" style="font-family: var(--doc-mono); font-size: 11px;"></span>
+            </header>
+            <div class="ve-palette-search">
+              <input type="search" id="ve-palette-input" placeholder="Search 130+ components…" autocomplete="off" />
+            </div>
+            <div class="ve-palette-body" id="ve-palette"></div>
+          </aside>
+
+          <section class="ve-pane ve-canvas-pane" aria-label="Visual canvas">
+            <div class="ve-canvas-toolbar">
+              <span style="text-transform: uppercase; letter-spacing: .05em; font-size: 11px; font-weight: 600; color: var(--doc-text-muted);">Canvas</span>
+              <span style="font-family: var(--doc-mono); color: var(--doc-text-subtle); font-size: 11.5px;">
+                <span id="ve-root-id-display">_app_</span> =
+              </span>
+              <div class="ve-spacer"></div>
+              <span class="ve-breadcrumbs" id="ve-breadcrumbs"></span>
+            </div>
+            <div class="ve-canvas" id="ve-canvas">
+              <div class="ve-loading" id="ve-loading">
+                <i class="fa-solid fa-circle-notch" aria-hidden="true"></i>
+                <span>Loading editor…</span>
+              </div>
+            </div>
+          </section>
+
+          <aside class="ve-pane ve-pane--inspector" aria-label="Inspector">
+            <header class="ve-pane-header">
+              <h3>Properties</h3>
+            </header>
+            <div class="ve-inspector-body" id="ve-inspector"></div>
+          </aside>
+        </div>
+
+        <!-- Bottom panel: preview / code / html -->
+        <div class="ve-bottom">
+          <header class="ve-bottom-tabs">
+            <button class="ve-bottom-tab" data-tab="preview" aria-pressed="true">
+              <i class="fa-solid fa-display" aria-hidden="true"></i>
+              Preview
+            </button>
+            <button class="ve-bottom-tab" data-tab="code" aria-pressed="false">
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+              .aktion
+            </button>
+            <button class="ve-bottom-tab" data-tab="html" aria-pressed="false">
+              <i class="fa-solid fa-file-code" aria-hidden="true"></i>
+              Standalone HTML
+            </button>
+            <span class="ve-bottom-spacer"></span>
+            <button class="ve-iconbtn" id="ve-bottom-toggle" title="Collapse bottom panel" aria-pressed="false">
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
+          </header>
+          <div class="ve-bottom-body">
+            <div class="ve-bottom-tab-panel" data-tab="preview" data-active="true">
+              <div class="ve-preview-frame">
+                <aktion-app id="ve-preview" theme="light" data-theme-managed="true"></aktion-app>
+              </div>
+            </div>
+            <div class="ve-bottom-tab-panel" data-tab="code">
+              <div class="ve-code-pane">
+                <pre><code id="ve-code"></code></pre>
+                <div class="ve-code-actions">
+                  <button class="ve-iconbtn" id="ve-code-copy" title="Copy .aktion source"><i class="fa-solid fa-copy" aria-hidden="true"></i></button>
+                  <button class="ve-iconbtn" id="ve-code-download" title="Download .aktion"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="ve-bottom-tab-panel" data-tab="html">
+              <div class="ve-code-pane">
+                <pre><code id="ve-html"></code></pre>
+                <div class="ve-code-actions">
+                  <button class="ve-iconbtn" id="ve-html-copy" title="Copy HTML"><i class="fa-solid fa-copy" aria-hidden="true"></i></button>
+                  <button class="ve-iconbtn" id="ve-html-download" title="Download HTML"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Import modal -->
+      <div class="ve-modal-backdrop" id="ve-import-backdrop" hidden>
+        <div class="ve-modal" role="dialog" aria-labelledby="ve-import-title" aria-modal="true">
+          <h2 id="ve-import-title">
+            <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+            Import Aktion source
+          </h2>
+          <p>
+            Paste a complete Aktion program below, or upload a <code>.aktion</code>
+            file. The editor extracts the <code>_app_</code> assignment for visual
+            editing and keeps everything else (state, components, actions, effects)
+            as a prelude block.
+          </p>
+          <label class="ve-file-input">
+            <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+            <span>Choose a .aktion file…</span>
+            <input type="file" id="ve-import-file" accept=".aktion,.txt,text/plain" />
+          </label>
+          <textarea id="ve-import-text" placeholder="_app_ = Stack([&#10;  Card([CardHeader(&quot;Hello&quot;)])&#10;])"></textarea>
+          <div class="ve-modal-foot">
+            <button class="ve-btn" id="ve-import-cancel">Cancel</button>
+            <button class="ve-btn ve-btn--primary" id="ve-import-confirm">Import</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Examples modal -->
+      <div class="ve-modal-backdrop" id="ve-example-backdrop" hidden>
+        <div class="ve-modal" role="dialog" aria-labelledby="ve-example-title" aria-modal="true">
+          <h2 id="ve-example-title">
+            <i class="fa-solid fa-flask" aria-hidden="true"></i>
+            Load an example
+          </h2>
+          <p>Pick a starter to see the editor in action. Loading replaces the current canvas — your work is auto-saved to local storage and can be brought back via the browser undo if needed.</p>
+          <div id="ve-example-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"></div>
+          <div class="ve-modal-foot">
+            <button class="ve-btn" id="ve-example-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ve-toast" id="ve-toast" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/visual-editor.js?v=2026.05.23-2"></script>
+</body>
+</html>
