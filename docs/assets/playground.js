@@ -17,6 +17,11 @@ import {
   getLanguageSpec,
 } from "../../dist/aktion.js";
 
+// Public CDN URL embedded in standalone HTML exports so the downloaded file
+// runs anywhere without a local build step. Mirrors the constant used by
+// `chat-bot.js`.
+const CDN_BUNDLE = "https://asfand-dev.github.io/aktion/dist/aktion.js";
+
 // ---------------------------------------------------------------------------
 // CodeMirror 6 — dynamic import from esm.sh
 
@@ -707,6 +712,69 @@ const debounce = (fn, ms) => {
     timer = setTimeout(() => fn(...args), ms);
   };
 };
+
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(text) {
+  return String(text ?? "").replace(/[<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+/**
+ * Build a self-contained HTML document that boots `<aktion-app>` from the
+ * public CDN bundle and renders the given Aktion source. Mirrors the
+ * approach in `chat-bot.js` so links shared with non-developers Just Work.
+ */
+function buildStandaloneHtml(source, theme, title) {
+  const safeSource = JSON.stringify(source).replace(/<\/(script)/gi, "<\\/$1");
+  return [
+    "<!DOCTYPE html>",
+    '<html lang="en">',
+    "<head>",
+    '  <meta charset="utf-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `  <title>${escapeHtml(title)}</title>`,
+    '  <meta name="generator" content="Aktion playground" />',
+    `  <script type="module" src="${CDN_BUNDLE}"></script>`,
+    "  <style>",
+    "    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }",
+    "    aktion-app { display: block; min-height: 100vh; }",
+    "  </style>",
+    "</head>",
+    "<body>",
+    `  <aktion-app theme="${escapeAttr(theme)}"></aktion-app>`,
+    '  <script type="module">',
+    '    const el = document.querySelector("aktion-app");',
+    `    const SOURCE = ${safeSource};`,
+    '    customElements.whenDefined("aktion-app").then(() => {',
+    "      if (typeof el.setResponse === \"function\") el.setResponse(SOURCE);",
+    '      else el.setAttribute("response", SOURCE);',
+    "    });",
+    "  </script>",
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+function downloadStandaloneHtml(source, theme, title) {
+  const html = buildStandaloneHtml(source, theme, title);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `aktion-${Date.now()}.html`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -1556,7 +1624,7 @@ function initPlayground(cm) {
     return null;
   }
 
-  function buildSpecTooltipDom(spec, kind, activeIndex) {
+  function buildSpecTooltipDom(spec, kind, activeIndex, namedArgName) {
     const wrap = document.createElement("div");
 
     const header = document.createElement("h4");
@@ -1572,14 +1640,30 @@ function initPlayground(cm) {
     }
     wrap.append(header);
 
+    // Resolve which parameter to highlight: name-based match wins when
+    // the cursor sits in a `name:` slot, otherwise fall back to the
+    // positional `argIndex`.
+    let activeIdx = null;
+    if (namedArgName && spec.params.length > 0) {
+      const found = spec.params.findIndex((p) => p.name === namedArgName);
+      if (found !== -1) activeIdx = found;
+    }
+    if (
+      activeIdx === null &&
+      typeof activeIndex === "number" &&
+      spec.params.length > 0
+    ) {
+      activeIdx = Math.min(activeIndex, spec.params.length - 1);
+    }
+
     const sig = document.createElement("code");
     sig.className = "pg-cm-sig";
-    if (typeof activeIndex === "number" && spec.params.length > 0) {
+    if (activeIdx !== null) {
       sig.append(document.createTextNode(`${kind === "builtin" ? "@" : ""}${spec.name}(`));
       spec.params.forEach((p, idx) => {
         if (idx > 0) sig.append(document.createTextNode(", "));
         const text = p.required ? p.name : `${p.name}?`;
-        if (idx === Math.min(activeIndex, spec.params.length - 1)) {
+        if (idx === activeIdx) {
           const active = document.createElement("span");
           active.className = "pg-cm-active";
           active.textContent = text;
@@ -1601,8 +1685,8 @@ function initPlayground(cm) {
       wrap.append(desc);
     }
 
-    if (typeof activeIndex === "number" && spec.params.length > 0) {
-      const param = spec.params[Math.min(activeIndex, spec.params.length - 1)];
+    if (activeIdx !== null) {
+      const param = spec.params[activeIdx];
       wrap.append(buildParamCard(param));
     } else if (spec.params.length > 0) {
       const ul = document.createElement("ul");
@@ -1690,15 +1774,46 @@ function initPlayground(cm) {
     const fromIdx = prev === "@" ? word.from - 1 : word.from;
     const rawName = text.slice(fromIdx, word.to);
     const resolved = resolveSpec(rawName);
-    if (!resolved) return null;
+    if (resolved) {
+      return {
+        pos: fromIdx,
+        end: word.to,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "pg-cm-tooltip";
+          dom.append(buildSpecTooltipDom(resolved.spec, resolved.kind));
+          return { dom };
+        },
+      };
+    }
+
+    // Not a component/builtin — fall back to "is this a named-arg key of
+    // the enclosing call?". Lets users hover over `variant`, `tone`,
+    // `icon`, etc. in `Button("Save", variant: "primary")` and see the
+    // exact parameter spec (type, description, allowed values).
+    let after = word.to;
+    while (after < text.length && /\s/.test(text[after])) after += 1;
+    if (text[after] !== ":") return null;
+    const enclosing = findEnclosingCall(text, pos);
+    if (!enclosing) return null;
+    const enclosingResolved = resolveSpec(enclosing.name);
+    if (!enclosingResolved) return null;
+    const param = enclosingResolved.spec.params.find((p) => p.name === rawName);
+    if (!param) return null;
     return {
-      pos: fromIdx,
+      pos: word.from,
       end: word.to,
       above: true,
       create() {
         const dom = document.createElement("div");
         dom.className = "pg-cm-tooltip";
-        dom.append(buildSpecTooltipDom(resolved.spec, resolved.kind));
+        dom.append(buildSpecTooltipDom(
+          enclosingResolved.spec,
+          enclosingResolved.kind,
+          undefined,
+          rawName,
+        ));
         return { dom };
       },
     };
@@ -1723,6 +1838,11 @@ function initPlayground(cm) {
     if (!call) return null;
     const resolved = resolveSpec(call.name);
     if (!resolved) return null;
+    // Prefer name-based resolution: when the user has typed `variant: …`,
+    // pin the active param to `variant` (not whatever positional index
+    // happens to fall there). Falls back to `argIndex` for purely
+    // positional args.
+    const namedArgName = detectActiveNamedArg(text, call, sel.head);
     return {
       pos: sel.head,
       above: true,
@@ -1731,10 +1851,27 @@ function initPlayground(cm) {
       create() {
         const dom = document.createElement("div");
         dom.className = "pg-cm-tooltip";
-        dom.append(buildSpecTooltipDom(resolved.spec, resolved.kind, call.argIndex));
+        dom.append(buildSpecTooltipDom(
+          resolved.spec,
+          resolved.kind,
+          call.argIndex,
+          namedArgName,
+        ));
         return { dom };
       },
     };
+  }
+
+  /**
+   * Return the name of the named-arg slot the cursor currently sits in
+   * (e.g. `"variant"` for `Button("Save", variant: "p|rimary")`) or null
+   * for positional args. Walks from the call's open-paren to `pos` using
+   * the same comma-depth tracking as `readCurrentArg`.
+   */
+  function detectActiveNamedArg(text, call, pos) {
+    const { argText } = readCurrentArg(text, call, pos);
+    const match = argText.match(/^\s*([A-Za-z_]\w*)\s*:/);
+    return match ? match[1] : null;
   }
 
   // ---- Compartments for live updates ----
@@ -1755,6 +1892,7 @@ function initPlayground(cm) {
   let refreshStatusCursor = () => {};
   let refreshStatusChars = () => {};
   let refreshStatusErrors = () => {};
+  let refreshStatusArg = () => {};
 
   const persistCode = () => { if (editorView) lsWrite(LS.code, editorView.state.doc.toString()); };
 
@@ -1836,6 +1974,7 @@ function initPlayground(cm) {
         }
         if (u.selectionSet || u.docChanged) {
           refreshStatusCursor();
+          refreshStatusArg();
         }
       }),
       view.EditorView.theme({
@@ -1883,6 +2022,7 @@ function initPlayground(cm) {
   setRendererTheme(lsRead(LS.theme, "light"));
   refreshStatusCursor();
   refreshStatusChars();
+  refreshStatusArg();
 
   // ---- Event wiring: top app bar ----
   $("pg-example").addEventListener("change", (e) => {
@@ -1906,13 +2046,18 @@ function initPlayground(cm) {
   $("pg-inspect").addEventListener("click", toggleInspect);
   $("pg-share").addEventListener("click", doShare);
   $("pg-copy").addEventListener("click", doCopy);
+  $("pg-download").addEventListener("click", doDownload);
   $("pg-reset").addEventListener("click", () => loadExample(currentExample, true));
   $("pg-help").addEventListener("click", openHelp);
   $("pg-modal-backdrop").addEventListener("click", (e) => {
     if (e.target === $("pg-modal-backdrop")) closeHelp();
   });
+  $("pg-errors-backdrop").addEventListener("click", (e) => {
+    if (e.target === $("pg-errors-backdrop")) closeErrorModal();
+  });
+  $("pg-errors-close").addEventListener("click", closeErrorModal);
   $("pg-fullscreen").addEventListener("click", toggleFullscreen);
-  $("pg-status-errors").addEventListener("click", jumpToFirstError);
+  $("pg-status-errors").addEventListener("click", openErrorModal);
   $("pg-sidebar-toggle").addEventListener("click", toggleSidebarCollapsed);
 
   // Global hotkeys
@@ -1924,6 +2069,7 @@ function initPlayground(cm) {
     }
     if (e.key === "Escape") {
       closeHelp();
+      closeErrorModal();
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }
   });
@@ -2097,6 +2243,20 @@ function initPlayground(cm) {
     }
   }
 
+  function doDownload() {
+    try {
+      const code = editorView.state.doc.toString();
+      const theme = $("pg-target").getAttribute("theme") || "light";
+      const exampleLabel = EXAMPLES[currentExample]?.label ?? "Aktion app";
+      const title = `${exampleLabel} · Aktion`;
+      downloadStandaloneHtml(code, theme, title);
+      showToast("HTML downloaded", { icon: "download" });
+    } catch (err) {
+      console.error(err);
+      showToast("Couldn't download file", { icon: "triangle-exclamation" });
+    }
+  }
+
   function loadExample(key, force) {
     const ex = EXAMPLES[key];
     if (!ex) return;
@@ -2150,6 +2310,9 @@ function initPlayground(cm) {
       btn.querySelector("i").className = "fa-solid fa-triangle-exclamation";
       text.textContent = `${parseErrors.length} error${parseErrors.length === 1 ? "" : "s"}`;
     }
+    if ($("pg-errors-backdrop") && !$("pg-errors-backdrop").hidden) {
+      renderErrorList();
+    }
   };
 
   refreshStatusCursor = () => {
@@ -2167,17 +2330,149 @@ function initPlayground(cm) {
       `<i class="fa-solid fa-text-width" aria-hidden="true"></i> ${n} char${n === 1 ? "" : "s"}`;
   };
 
-  function jumpToFirstError() {
-    if (parseErrors.length === 0) return;
-    const err = parseErrors[0];
-    const lineNum = Math.min(Math.max(1, err.line || 1), editorView.state.doc.lines);
-    const line = editorView.state.doc.line(lineNum);
-    const col = Math.min(Math.max(0, (err.column || 1) - 1), line.length);
+  refreshStatusArg = () => {
+    const pill = $("pg-status-arg");
+    if (!editorView || !pill) return;
+    const sel = editorView.state.selection.main;
+    if (sel.from !== sel.to) {
+      pill.hidden = true;
+      return;
+    }
+    const text = editorView.state.doc.toString();
+    const call = findEnclosingCall(text, sel.head);
+    if (!call || !call.name) {
+      pill.hidden = true;
+      return;
+    }
+    const resolved = resolveSpec(call.name);
+    if (!resolved) {
+      pill.hidden = true;
+      return;
+    }
+    const namedArgName = detectActiveNamedArg(text, call, sel.head);
+    let param = null;
+    if (namedArgName) {
+      param = resolved.spec.params.find((p) => p.name === namedArgName) ?? null;
+    }
+    if (!param && resolved.spec.params.length > 0) {
+      param = resolved.spec.params[
+        Math.min(call.argIndex, resolved.spec.params.length - 1)
+      ];
+    }
+    if (!param) {
+      pill.hidden = true;
+      return;
+    }
+    const optional = param.required ? "" : "?";
+    pill.innerHTML = "";
+    const icon = document.createElement("i");
+    icon.className = "fa-solid fa-bullseye";
+    icon.style.fontSize = "10px";
+    icon.setAttribute("aria-hidden", "true");
+    const label = document.createTextNode(
+      ` ${call.name}(${param.name}${optional}: ${param.type})`,
+    );
+    pill.append(icon, label);
+    pill.title = param.description
+      ? `${param.name}: ${param.type} — ${param.description}`
+      : `${param.name}: ${param.type}`;
+    pill.hidden = false;
+  };
+
+  function jumpToError(err) {
+    if (!err || !editorView) return;
+    const line = err.line;
+    const isGlobal = !Number.isFinite(line) || line < 1;
+    if (isGlobal) return;
+    const lineNum = Math.min(Math.max(1, line), editorView.state.doc.lines);
+    const lineInfo = editorView.state.doc.line(lineNum);
+    const col = Math.min(Math.max(0, (err.column || 1) - 1), lineInfo.length);
     editorView.dispatch({
-      selection: { anchor: line.from + col },
+      selection: { anchor: lineInfo.from + col },
       scrollIntoView: true,
     });
     editorView.focus();
+    flashLine(lineInfo);
+  }
+
+  function openErrorModal() {
+    renderErrorList();
+    $("pg-errors-backdrop").hidden = false;
+  }
+
+  function closeErrorModal() {
+    $("pg-errors-backdrop").hidden = true;
+  }
+
+  function renderErrorList() {
+    const list = $("pg-errors-list");
+    const title = $("pg-errors-title-text");
+    const lede = $("pg-errors-lede");
+    list.replaceChildren();
+
+    const total = parseErrors.length;
+    title.textContent = total === 0
+      ? "No errors"
+      : `${total} error${total === 1 ? "" : "s"}`;
+
+    if (total === 0) {
+      lede.hidden = true;
+      const empty = document.createElement("div");
+      empty.className = "pg-errors-empty";
+      empty.innerHTML = '<i class="fa-solid fa-check"></i> Your program parses cleanly.';
+      list.append(empty);
+      return;
+    }
+    lede.hidden = false;
+
+    // Errors at line 0/undefined are surfaced as "Global" — they happen
+    // when the parser couldn't anchor the diagnostic to a position (for
+    // example: missing `_app_` binding, structural failures, theme-level
+    // diagnostics). Showing them up front prevents the "errors with no
+    // editor markers" confusion.
+    const sorted = parseErrors
+      .map((err, idx) => ({ ...err, _index: idx }))
+      .sort((a, b) => {
+        const aGlobal = !Number.isFinite(a.line) || a.line < 1;
+        const bGlobal = !Number.isFinite(b.line) || b.line < 1;
+        if (aGlobal !== bGlobal) return aGlobal ? -1 : 1;
+        return (a.line || 0) - (b.line || 0) || (a.column || 0) - (b.column || 0);
+      });
+
+    for (const err of sorted) {
+      const isGlobal = !Number.isFinite(err.line) || err.line < 1;
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "pg-error-item";
+      item.dataset.severity = err.severity || "error";
+      item.dataset.global = isGlobal ? "true" : "false";
+
+      const loc = document.createElement("span");
+      loc.className = "pg-error-loc";
+      loc.dataset.global = isGlobal ? "true" : "false";
+      loc.textContent = isGlobal
+        ? "Global"
+        : `Ln ${err.line}, Col ${err.column || 1}`;
+
+      const msg = document.createElement("span");
+      msg.className = "pg-error-message";
+      msg.textContent = err.message || "Unknown error";
+
+      const jump = document.createElement("span");
+      jump.className = "pg-error-jump";
+      jump.textContent = "Jump →";
+
+      item.append(loc, msg, jump);
+      if (!isGlobal) {
+        item.addEventListener("click", () => {
+          jumpToError(err);
+          closeErrorModal();
+        });
+      } else {
+        item.style.cursor = "default";
+      }
+      list.append(item);
+    }
   }
 
   function openHelp() {

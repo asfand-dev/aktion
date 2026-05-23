@@ -387,6 +387,126 @@
       border-radius: 4px;
     }
 
+    /* Modal header with close-button */
+    .pg-modal-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pg-modal-head h2 {
+      margin: 0;
+      font-size: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pg-modal-head h2 i { color: var(--doc-danger); }
+    .pg-modal-head .pg-spacer,
+    .pg-modal-head .pg-iconbtn { margin-left: auto; }
+    .pg-modal-lede {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+
+    /* Errors modal list */
+    .pg-modal--errors { width: min(640px, 100%); }
+    .pg-errors-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pg-error-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      border-left: 3px solid var(--doc-danger);
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      transition: background var(--doc-transition), border-color var(--doc-transition);
+    }
+    .pg-error-item[data-severity="warning"] {
+      border-left-color: #d97706;
+    }
+    .pg-error-item[data-severity="info"] {
+      border-left-color: var(--doc-primary);
+    }
+    .pg-error-item:hover,
+    .pg-error-item:focus-visible {
+      background: var(--doc-surface);
+      border-color: var(--doc-primary);
+      outline: 0;
+    }
+    .pg-error-loc {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-xs);
+      color: var(--doc-text-muted);
+      white-space: nowrap;
+    }
+    .pg-error-loc[data-global="true"] {
+      color: var(--doc-text-subtle);
+      font-style: italic;
+    }
+    .pg-error-message {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--doc-text);
+      word-break: break-word;
+    }
+    .pg-error-jump {
+      font-size: 11px;
+      color: var(--doc-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+      align-self: center;
+    }
+    .pg-error-item[data-global="true"] .pg-error-jump {
+      visibility: hidden;
+    }
+    .pg-errors-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-sm);
+    }
+
+    /* Status-bar named-arg indicator */
+    #pg-status-arg {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--doc-primary-softer);
+      color: var(--doc-primary);
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #pg-status-arg[hidden] { display: none; }
+
     /* ------- Toast ------- */
     .pg-toast {
       position: fixed;
@@ -650,6 +770,9 @@
           <button class="pg-iconbtn" id="pg-copy" title="Copy code" aria-label="Copy code">
             <i class="fa-solid fa-copy" aria-hidden="true"></i>
           </button>
+          <button class="pg-iconbtn" id="pg-download" title="Download as standalone HTML" aria-label="Download as standalone HTML">
+            <i class="fa-solid fa-download" aria-hidden="true"></i>
+          </button>
           <button class="pg-iconbtn" id="pg-reset" title="Reset to example" aria-label="Reset to current example">
             <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
           </button>
@@ -674,11 +797,12 @@
             </div>
             <div class="pg-status" id="pg-status">
               <span id="pg-status-cursor"><i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i> Ln 1, Col 1</span>
-              <button id="pg-status-errors" type="button" data-tone="success" title="Jump to first error">
+              <button id="pg-status-errors" type="button" data-tone="success" title="Show all errors">
                 <i class="fa-solid fa-check" aria-hidden="true"></i>
                 <span id="pg-status-errors-text">No errors</span>
               </button>
               <span id="pg-status-chars"><i class="fa-solid fa-text-width" aria-hidden="true"></i> 0 chars</span>
+              <span id="pg-status-arg" hidden title="Current named argument under cursor"></span>
               <span class="pg-spacer"></span>
               <span id="pg-status-keys" title="Cmd/Ctrl + Enter to run when not in live mode">
                 <kbd>⌘</kbd>+<kbd>↵</kbd>
@@ -708,6 +832,27 @@
       <div class="pg-inspect-overlay" id="pg-inspect-overlay" hidden></div>
       <div class="pg-inspect-tooltip" id="pg-inspect-tooltip" hidden role="tooltip"></div>
 
+      <!-- Errors modal -->
+      <div class="pg-modal-backdrop" id="pg-errors-backdrop" hidden>
+        <div class="pg-modal pg-modal--errors" role="dialog" aria-labelledby="pg-errors-title" aria-modal="true">
+          <header class="pg-modal-head">
+            <h2 id="pg-errors-title">
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+              <span id="pg-errors-title-text">Errors</span>
+            </h2>
+            <button class="pg-iconbtn" id="pg-errors-close" type="button" title="Close" aria-label="Close errors">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </header>
+          <p class="pg-modal-lede" id="pg-errors-lede">
+            Click any entry to jump to it. Entries without a line number are
+            global parse errors and aren't pinned to a specific spot in the
+            editor.
+          </p>
+          <ul class="pg-errors-list" id="pg-errors-list" role="list"></ul>
+        </div>
+      </div>
+
       <!-- Help modal -->
       <div class="pg-modal-backdrop" id="pg-modal-backdrop" hidden>
         <div class="pg-modal" role="dialog" aria-labelledby="pg-modal-title" aria-modal="true">
@@ -725,9 +870,9 @@
             </tbody>
           </table>
           <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
-            <strong>Autocomplete is context-aware.</strong> At the top level,
-            tab through components, <code>@</code>-builtins, language
-            keywords (<code>if</code>, <code>match</code>, <code>for</code>,
+            <strong>Smart autocomplete.</strong> At the top level, tab through
+            components, <code>@</code>-builtins, language keywords
+            (<code>if</code>, <code>match</code>, <code>for</code>,
             <code>component</code>, <code>action</code>, <code>effect</code>),
             and snippets (<code>router…</code>, <code>component…</code>,
             <code>http…</code>). Inside a call like
@@ -735,9 +880,26 @@
             <strong>named-arg names</strong> with their types
             (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>…);
             after the colon, enum-typed args (e.g.
-            <code>variant: "primary"|"secondary"|…</code>) show their
-            allowed values inline so you can pick one with a single tab.
-            Hover any identifier for the full signature + per-arg docs.
+            <code>variant: "primary"|"secondary"|…</code>) show their allowed
+            values inline so you can pick one with a single tab.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Cursor-aware param docs.</strong> Hover any identifier,
+            <em>or just place your cursor</em> inside a
+            <code>name: value</code> slot, to see the matching parameter's
+            type, description, and allowed values. The status bar also pins
+            the active named arg so you always know what you're editing.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Sharing.</strong> Use <i class="fa-solid fa-share-nodes"
+            aria-hidden="true"></i> to copy a share link, or
+            <i class="fa-solid fa-download" aria-hidden="true"></i> to
+            download a standalone HTML file you can host or open offline.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Errors.</strong> Click the error pill in the editor's
+            status bar to open the error inspector — every diagnostic, with
+            line numbers and click-to-jump.
           </p>
         </div>
       </div>
@@ -746,6 +908,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.05.22-router"></script>
+  <script type="module" src="assets/playground.js?v=2026.05.23-modal"></script>
 </body>
 </html>
