@@ -710,9 +710,17 @@ $theme = "dark"
 
 ### Component-scoped state
 
-A `$name = value` declared **inside** a `component` body is per-instance.
-Two `Counter()` siblings each have their own `$count`. Top-level
-`$name` declarations live for the lifetime of the response.
+A `$name = value` declared **inside** a `component` body is per-instance
+**and the right-hand side is an initializer, not a write**: it runs
+exactly once when the instance first mounts. Every subsequent render
+sees whatever value the user (or an action / effect) has written —
+re-rendering never snaps the value back to the initializer. Two
+`Counter()` siblings each hold their own `$count`. Top-level `$name`
+declarations live for the lifetime of the response.
+
+Non-literal initializers also work (the expression is fully evaluated
+on first mount): `$now = @Now()`, `$n = initial` (referencing a
+parameter), `$id = @Uuid()` — all run once per instance.
 
 ```text
 component Counter(label) {
@@ -725,6 +733,11 @@ component Counter(label) {
 
 _app_ = Stack([Counter("A"), Counter("B")])  # independent counters
 ```
+
+`$x = newValue` outside the top of a component body — inside a lambda,
+action, effect, `if` arm, `for` body — is a regular write (not a
+re-declaration). The `onClick: () => $n = $n + 1` handler above is a
+write against the same per-instance slot the body initialised.
 
 ### Computed values
 
@@ -2252,7 +2265,7 @@ _app_ = Stack([
 ### Pattern B — Counter with per-instance state
 
 ```text
-component Counter(label = "Count", initial = 0) {
+component Counter(label: "Count", initial: 0) {
   $n = initial
   return Card([Stack([
     SectionHeader(label),

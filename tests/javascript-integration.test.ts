@@ -163,6 +163,43 @@ component App() {
     expect(el.state.get("ticks")).toBe(ticksAtTeardown);
   });
 
+  it("an effect inside a component body writes to the per-instance state slot, not the top-level one", async () => {
+    // Regression: pre-fix the effect body's `$count = 5` resolved
+    // `count` against an empty alias stack (the component body had
+    // already returned and popped its frame), so the write landed on a
+    // brand-new top-level `count` atom while the per-instance slot
+    // `<path>:count` stayed stuck at 0. The renderer kept showing "0"
+    // because that's what `$count` resolved to inside the component
+    // body. The fix snapshots the alias frame when the declaration is
+    // collected and restores it before running the body.
+    const el = mount();
+    el.setResponse(`_app_ = Stack([Counter(), Counter()])
+component Counter() {
+  $count = 0
+  effect [on:mount] {
+    $count = $count + 5
+  }
+  return Text(\`\${$count}\`)
+}`);
+    await waitForRenders();
+    const state = (el as unknown as { state: { entries: () => Iterable<[string, unknown]> } }).state;
+    const perInstanceSlots = [...state.entries()]
+      .map(([k, v]) => [k, v] as const)
+      .filter(([k]) => k.endsWith(":count"));
+    // Both Counter instances must have created their own slot…
+    expect(perInstanceSlots).toHaveLength(2);
+    // …and each instance's effect must have run, writing into its OWN slot.
+    for (const [, value] of perInstanceSlots) {
+      expect(value).toBe(5);
+    }
+    // The bare top-level `count` slot must NOT exist — proves the
+    // effect body's write went through the alias.
+    expect((el.state as { get: (k: string) => unknown }).get("count")).toBeUndefined();
+    // The rendered shadow DOM should reflect the per-instance value
+    // rather than the initializer's 0.
+    expect(el.shadowRoot?.textContent ?? "").toContain("5");
+  });
+
   it("does not register a component-local effect on the global runner", async () => {
     // Regression: effects nested inside a component body must NOT leak into
     // `ctx.effectDecls`, otherwise `syncEffects` would mount them once

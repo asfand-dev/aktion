@@ -340,7 +340,7 @@ shell before the leaves arrive.
 $count = 0
 $theme = "dark"
 
-component Counter(label = "Count") {
+component Counter(label: "Count") {
   return Stack([
     SectionHeader(label),
     Button("Inc", onClick: () => $count = $count + 1),
@@ -377,9 +377,12 @@ _app_ = pages
 - `$name = value` — reactive state. One kind. Read or write with the
   same sigil. Inside `action` / `effect` / lambda bodies, assignment
   operators (`= += -= *= /= ??= ++ --`) are all allowed.
-- `component Name(p = default) { return Expression }` — first-class
+- `component Name(p: default) { return Expression }` — first-class
   declarations with default expressions, lexical scope, and per-instance
-  state. **Always** end with an explicit `return`.
+  state. Inside the body, `$x = expr` is a **declaration**: the
+  initializer runs once when the instance first mounts, and re-renders
+  preserve whatever value the user (or an action / effect) has written.
+  **Always** end with an explicit `return`.
 - `action Name(args) { body }` — callable effects with optional
   `return`. Used as event handlers (`onClick: save`) or as expressions
   (`$result = greet("Ada")`).

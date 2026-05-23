@@ -22,7 +22,7 @@ import type {
   EffectDeclaration,
   Statement,
 } from "../parser/types.js";
-import type { EvaluationContext } from "./evaluator.js";
+import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
 import { evaluate, resolveStateAlias } from "./evaluator.js";
 import type { StateStore, StateValue } from "./state.js";
 
@@ -50,6 +50,15 @@ interface MountedEffect {
   unsubscribers: Array<() => void>;
   /** Snapshot of `ctx` at mount-time so re-runs reuse the same scope. */
   ctxRef: () => EvaluationContext;
+  /**
+   * Per-instance state-alias frames captured at the moment the
+   * declaration was discovered inside a `component { … }` body. Empty
+   * for program-level effects, where no alias frame applies. The runner
+   * restores these onto `ctx.stateAliases` before evaluating the body
+   * so `$x = …` writes resolve to the per-instance slot the surrounding
+   * component owns.
+   */
+  capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>;
 }
 
 /**
@@ -96,7 +105,7 @@ export class EffectRunner {
     }
     for (const decl of decls) {
       if (!this.mounted.has(decl.name)) {
-        this.mount(decl.name, decl, getCtx);
+        this.mount(decl.name, decl, getCtx, []);
       }
     }
   }
@@ -109,18 +118,20 @@ export class EffectRunner {
    */
   syncInstanceEffects(
     instanceKey: string,
-    decls: ReadonlyArray<EffectDeclaration>,
+    decls: ReadonlyArray<ScopedEffectDecl>,
     getCtx: () => EvaluationContext,
   ): void {
     const prefix = `${instanceKey}${INSTANCE_KEY_SEPARATOR}`;
-    const incoming = new Set(decls.map((d) => `${prefix}${d.name}`));
+    const incoming = new Set(decls.map((d) => `${prefix}${d.decl.name}`));
     for (const name of [...this.mounted.keys()]) {
       if (!name.startsWith(prefix)) continue;
       if (!incoming.has(name)) this.unmount(name);
     }
-    for (const decl of decls) {
-      const key = `${prefix}${decl.name}`;
-      if (!this.mounted.has(key)) this.mount(key, decl, getCtx);
+    for (const scoped of decls) {
+      const key = `${prefix}${scoped.decl.name}`;
+      if (!this.mounted.has(key)) {
+        this.mount(key, scoped.decl, getCtx, scoped.capturedAliases);
+      }
     }
   }
 
@@ -149,6 +160,7 @@ export class EffectRunner {
     mountKey: string,
     decl: EffectDeclaration,
     getCtx: () => EvaluationContext,
+    capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>,
   ): void {
     const mounted: MountedEffect = {
       decl,
@@ -156,6 +168,7 @@ export class EffectRunner {
       intervals: [],
       unsubscribers: [],
       ctxRef: getCtx,
+      capturedAliases,
     };
     this.mounted.set(mountKey, mounted);
 
@@ -305,8 +318,31 @@ function runEffectBody(
   //   - expression statements — evaluated for side effects.
   //   - `cleanup(fn)` calls — register a teardown handler.
   //   - `emit "name" { detail }` — dispatch an outbound event.
-  for (const stmt of decl.body.body) {
-    runStatement(stmt, ctx, mounted, options);
+  //
+  // For per-instance effects (declared inside a `component { … }` body)
+  // the captured alias stack is restored around the run so `$x = …`
+  // writes resolve to the per-instance slot the surrounding component
+  // owns — without this the assignment would silently write the
+  // top-level `x` instead. Top-level effects pass an empty array which
+  // makes the push/pop a no-op.
+  const restoreAliases = mounted.capturedAliases.length > 0
+    ? ctx.stateAliases.slice()
+    : null;
+  if (restoreAliases) {
+    ctx.stateAliases.length = 0;
+    for (const frame of mounted.capturedAliases) {
+      ctx.stateAliases.push(new Map(frame));
+    }
+  }
+  try {
+    for (const stmt of decl.body.body) {
+      runStatement(stmt, ctx, mounted, options);
+    }
+  } finally {
+    if (restoreAliases) {
+      ctx.stateAliases.length = 0;
+      for (const frame of restoreAliases) ctx.stateAliases.push(frame);
+    }
   }
 }
 

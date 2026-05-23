@@ -21,9 +21,9 @@ import {
   evaluateUserComponent,
   type ComponentNode,
   type EvaluationContext,
+  type ScopedEffectDecl,
   type UserComponentNode,
 } from "../runtime/evaluator.js";
-import type { EffectDeclaration } from "../parser/types.js";
 import type { StateStore } from "../runtime/state.js";
 import type { Router } from "../runtime/router.js";
 import { sanitiseHref } from "../library/utils.js";
@@ -57,10 +57,15 @@ export interface RenderOptions {
    * the instance; the implementation is expected to be idempotent so
    * re-renders are no-ops once the effects are mounted. The host wires
    * this to the same `EffectRunner` that handles top-level effects.
+   *
+   * Each entry pairs the declaration with the per-instance alias frames
+   * captured when the body was walked, so writes inside the effect body
+   * resolve to the same per-instance state slots the component itself
+   * uses.
    */
   mountInstanceEffects?: (
     instanceKey: string,
-    decls: ReadonlyArray<EffectDeclaration>,
+    decls: ReadonlyArray<ScopedEffectDecl>,
     getCtx: () => EvaluationContext,
   ) => void;
   /**

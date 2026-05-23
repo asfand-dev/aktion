@@ -101,6 +101,23 @@ export const isUserComponentNode = (value: unknown): value is UserComponentNode 
   );
 };
 
+/**
+ * An `effect [ … ] { … }` declaration discovered inside a `component { … }`
+ * body, paired with the per-instance state-alias stack captured at the
+ * moment the body was walked. The runner restores those aliases before
+ * running the body so `$count = …` lands on the same instance slot the
+ * component itself uses, even though the alias frame is no longer on
+ * `ctx.stateAliases` by the time the effect fires.
+ */
+export interface ScopedEffectDecl {
+  decl: EffectDeclaration;
+  /**
+   * Cloned alias frames in stack order (bottom → top). `[]` for effects
+   * declared at the program top level, where no per-instance frame applies.
+   */
+  capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>;
+}
+
 export interface EvaluationContext {
   state: StateStore;
   /** Per-program scope for non-state assignments (refs to other lines). */
@@ -140,8 +157,13 @@ export interface EvaluationContext {
    * immediately after `evaluateUserComponent` returns so it can mount the
    * declarations on a per-instance scope (instead of globally, once per
    * program).
+   *
+   * Each entry pairs the declaration with a snapshot of `stateAliases` at
+   * the moment the body was walked, so `$x = …` writes inside the effect
+   * body resolve through the per-instance alias frame even after the
+   * component body has returned and the alias frame has been popped.
    */
-  componentEffectStack: EffectDeclaration[][];
+  componentEffectStack: ScopedEffectDecl[][];
   /** Action declarations (`action Foo() { ... }`). */
   actionDecls: Map<string, ActionDeclaration>;
   /** HTTP runtime (`http({...})` calls + interceptor configuration). */
@@ -518,7 +540,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     case "If": return evaluateIf(expr, ctx);
     case "Match": return evaluateMatch(expr, ctx);
     case "For": return evaluateFor(expr, ctx);
-    case "Block": return evaluateBlock(expr, ctx);
+    case "Block": return evaluateBlock(expr, ctx, {});
     case "Lambda": {
       // Lambdas evaluate to a callable JS function. We capture the current
       // context AND a snapshot of the active per-instance state-alias
@@ -619,11 +641,11 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
 
 function evaluateIf(expr: { test: Expression; consequent: BlockExpr; alternate?: Expression | BlockExpr }, ctx: EvaluationContext): unknown {
   if (evaluate(expr.test, ctx)) {
-    return evaluateBlock(expr.consequent, ctx);
+    return evaluateBlock(expr.consequent, ctx, {});
   }
   if (expr.alternate) {
     if ((expr.alternate as { kind?: string }).kind === "Block") {
-      return evaluateBlock(expr.alternate as BlockExpr, ctx);
+      return evaluateBlock(expr.alternate as BlockExpr, ctx, {});
     }
     return evaluate(expr.alternate as Expression, ctx);
   }
@@ -683,7 +705,7 @@ function evaluateFor(
           : undefined;
         ctx.loopVars.set(field, value);
       }
-      out.push(evaluateBlock(expr.body, ctx));
+      out.push(evaluateBlock(expr.body, ctx, {}));
     }
   } finally {
     if (itemHad) ctx.loopVars.set(expr.item, itemPrev);
@@ -701,13 +723,38 @@ function evaluateFor(
 }
 
 /**
+ * Options that change how `evaluateBlock` interprets specific statement
+ * kinds inside the body. The defaults match the legacy "generic block"
+ * semantics — `$x = expr` writes to state, etc. — and only the direct
+ * call site from `evaluateUserComponent` opts into the per-instance
+ * declaration semantics.
+ */
+interface BlockEvalOptions {
+  /**
+   * When `true`, `$x = expr` at the top level of this block is treated
+   * as a **per-instance state declaration**: the initializer runs once
+   * (on first invocation, when the alias slot is still empty) and is
+   * skipped on every subsequent re-render so user mutations persist.
+   *
+   * Nested blocks (lambda bodies, `if` arms, `for` bodies, …) are
+   * unaffected — they evaluate without this flag so `$x = newValue`
+   * keeps working as a regular state write.
+   */
+  stateAsDeclaration?: boolean;
+}
+
+/**
  * Evaluate a block: run every declaration / statement sequentially and
  * return the value of the last expression statement (last-expression-wins
  * per §3.5 of the spec). Statements that don't produce a value (state
  * declarations, effect declarations, helper bindings, …) are still
  * executed for their side-effects on `ctx`.
  */
-function evaluateBlock(block: BlockExpr, ctx: EvaluationContext): unknown {
+function evaluateBlock(
+  block: BlockExpr,
+  ctx: EvaluationContext,
+  options: BlockEvalOptions,
+): unknown {
   let result: unknown = null;
   // Clone-restore tracking for any block-local bindings that shadow outer
   // names (component params, $state declarations, etc.). We only restore
@@ -719,19 +766,37 @@ function evaluateBlock(block: BlockExpr, ctx: EvaluationContext): unknown {
         result = evaluate(stmt.expression, ctx);
         continue;
       case "Assignment": {
-        const value = evaluate(stmt.expression, ctx);
         if (stmt.isState && stmt.identifier) {
-          // `$x = expr` inside a block (lambda body, if/match arm, for body)
-          // writes to the reactive state store, resolving through the
-          // per-instance alias stack so user-component scopes hit the
-          // right slot (§7). Without this branch the assignment would
-          // silently fall into `loopVars` and never trigger a re-render.
           const target = resolveStateAlias(ctx, stmt.identifier);
+          if (options.stateAsDeclaration) {
+            // Per-instance state declaration — semantically equivalent
+            // to `useState` in React: the initializer runs once when the
+            // instance first mounts, and every later render preserves
+            // whatever value the user (or an action / effect) has
+            // written. Without this branch, every re-render would clobber
+            // the user's mutation and the component would appear "stuck"
+            // on its initial value (the bug this option exists to fix).
+            if (ctx.state.has(target)) {
+              result = ctx.state.get(target);
+              continue;
+            }
+            const value = evaluate(stmt.expression, ctx);
+            ctx.state.declare(target, value);
+            result = value;
+            continue;
+          }
+          // Generic block (lambda body, if/match arm, for body, …):
+          // `$x = expr` writes to the reactive state store, resolving
+          // through the per-instance alias stack so user-component
+          // scopes hit the right slot (§7).
+          const value = evaluate(stmt.expression, ctx);
           ctx.state.set(target, value);
-        } else {
-          if (!ctx.loopVars.has(stmt.identifier)) introduced.push(stmt.identifier);
-          ctx.loopVars.set(stmt.identifier, value);
+          result = value;
+          continue;
         }
+        const value = evaluate(stmt.expression, ctx);
+        if (!ctx.loopVars.has(stmt.identifier)) introduced.push(stmt.identifier);
+        ctx.loopVars.set(stmt.identifier, value);
         result = value;
         continue;
       }
@@ -742,12 +807,22 @@ function evaluateBlock(block: BlockExpr, ctx: EvaluationContext): unknown {
         // Effects declared inside a `component { … }` body are scoped to
         // the surrounding component instance — defer them to the top
         // frame of `componentEffectStack` so the renderer can mount them
-        // against the per-instance key. At the program top level (no
-        // active frame) we still register them on `effectDecls` so the
-        // host's `syncEffects(...)` pass picks them up.
+        // against the per-instance key. Capture the active alias stack
+        // *now* so `$x = …` writes inside the body still resolve to the
+        // right per-instance slot when the effect fires after the
+        // component body has already returned (and popped its frame).
+        // At the program top level (no active frame) the declaration is
+        // registered globally — the host's `syncEffects(...)` pass picks
+        // it up.
         const frame = ctx.componentEffectStack[ctx.componentEffectStack.length - 1];
-        if (frame) frame.push(stmt);
-        else installStatementBinding(stmt, ctx);
+        if (frame) {
+          frame.push({
+            decl: stmt,
+            capturedAliases: ctx.stateAliases.map((f) => new Map(f)),
+          });
+        } else {
+          installStatementBinding(stmt, ctx);
+        }
         continue;
       }
       case "ComponentDeclaration":
@@ -1271,13 +1346,14 @@ function invokeComponentDecl(
  * Result of `evaluateUserComponent`. `value` is the body's last
  * expression value (a `ComponentNode`, another `UserComponentNode`, or a
  * primitive) that the renderer will materialise. `effects` is the list of
- * `effect [ ...deps ] { … }` declarations discovered inside the body —
+ * `effect [ ...deps ] { … }` declarations discovered inside the body
+ * (paired with the per-instance alias stack captured at walk time) —
  * the renderer hands them to the host's `EffectRunner` so they mount on
  * a per-instance scope and tear down when the instance unmounts.
  */
 export interface EvaluatedUserComponent {
   value: unknown;
-  effects: ReadonlyArray<EffectDeclaration>;
+  effects: ReadonlyArray<ScopedEffectDecl>;
 }
 
 /**
@@ -1351,26 +1427,30 @@ export function evaluateUserComponent(
     ctx.loopVars.set("slots", slotsValue);
   }
 
-  // Walk the body once to discover `$x = expr` state assignments and
-  // pre-allocate per-instance aliases for them. We do this *before*
-  // evaluating the body so that forward references inside the body
-  // resolve to the aliased name.
+  // Walk the body once to discover `$x = expr` state declarations and
+  // register per-instance aliases for each. The initial value is NOT
+  // computed here — `evaluateBlock` lazily evaluates the initializer
+  // expression the first time it sees the statement (when the slot has
+  // not yet been declared) so non-literal initializers like
+  // `$now = @Now()` or `$n = initial` work the same way literals do.
+  // On every subsequent render the alias frame is rebuilt with the same
+  // mappings and the block walk skips the initializer because the slot
+  // already exists in the state store — preserving the user's mutations.
   const aliasFrame = new Map<string, string>();
   for (const stmt of decl.body.body) {
     if (stmt.kind === "Assignment" && stmt.isState) {
       const instanceName = `${instanceKey}:${stmt.identifier}`;
       aliasFrame.set(stmt.identifier, instanceName);
-      ctx.state.declare(instanceName, evaluateLiteral(stmt.expression));
     }
   }
   ctx.stateAliases.push(aliasFrame);
   // Push a frame so `effect [ ...deps ] { … }` declarations encountered
   // inside this body collect into a per-instance bucket instead of
   // mutating the global `effectDecls` map.
-  const effectsFrame: EffectDeclaration[] = [];
+  const effectsFrame: ScopedEffectDecl[] = [];
   ctx.componentEffectStack.push(effectsFrame);
   try {
-    const value = evaluateBlock(decl.body, ctx);
+    const value = evaluateBlock(decl.body, ctx, { stateAsDeclaration: true });
     return { value, effects: effectsFrame };
   } finally {
     ctx.componentEffectStack.pop();
@@ -1436,7 +1516,7 @@ function invokeActionDecl(
       ctx.loopVars.set(param.name, args[i]);
     }
     try {
-      return evaluateBlock(decl.body, ctx);
+      return evaluateBlock(decl.body, ctx, {});
     } finally {
       for (const slot of restore) {
         if (slot.had) ctx.loopVars.set(slot.name, slot.prev);

@@ -143,6 +143,78 @@ describe("Components and per-instance state", () => {
     expect(state.get(counterKeys[0]!)).toBe(42);
     expect(state.get(counterKeys[1]!)).toBe(0);
   });
+
+  it("`$x = init` inside a component body initialises once and persists user mutations across re-renders", () => {
+    // Regression: a re-render of `App()` used to re-run `$isHide = true`
+    // as a state write, snapping the toggle back to its initial value
+    // and breaking any `() => $isHide = !$isHide` handler the body had
+    // declared. The fix treats `$x = expr` at the top of a component
+    // body as a per-instance declaration (init once, preserve later).
+    const { state, render } = harness(`
+      _app_ = App()
+      component App() {
+        $isHide = true
+        return Text(if $isHide { "hidden" } else { "shown" })
+      }
+    `);
+    expect(render().textContent).toBe("hidden");
+
+    // Find the per-instance alias slot the renderer materialised and
+    // flip it as though the user clicked the toggle button.
+    const aliasKey = [...state.entries()]
+      .map(([k]) => k)
+      .find((k) => k.endsWith(":isHide"));
+    expect(aliasKey).toBeDefined();
+    state.set(aliasKey!, false);
+
+    // A re-render must NOT clobber the user's mutation back to the
+    // initializer's value.
+    expect(render().textContent).toBe("shown");
+    expect(state.get(aliasKey!)).toBe(false);
+  });
+
+  it("evaluates non-literal initializers (`$now = @Now()`) on the first render of a component instance", () => {
+    // Pre-fix the pre-pass used `evaluateLiteral` for every initializer,
+    // so non-literal expressions silently defaulted to `null`. The fix
+    // defers initial evaluation to the first block walk where the full
+    // evaluator is available.
+    const { state, render } = harness(`
+      _app_ = Clock()
+      component Clock() {
+        $tick = @Now()
+        return Text(\`\${$tick}\`)
+      }
+    `);
+    render();
+    const aliasKey = [...state.entries()]
+      .map(([k]) => k)
+      .find((k) => k.endsWith(":tick"));
+    expect(aliasKey).toBeDefined();
+    expect(typeof state.get(aliasKey!)).toBe("number");
+    expect(state.get(aliasKey!)).toBeGreaterThan(0);
+  });
+
+  it("uses a parameter-derived initializer (`$n = initial`) for the per-instance slot", () => {
+    // Documented in coding-gen-skill.md (§ Counter pattern):
+    // `component Counter(initial: 0) { $n = initial … }` — the
+    // initializer references the param so each instance starts at the
+    // caller-supplied value rather than the literal 0.
+    const { state, render } = harness(`
+      _app_ = Stack([Counter(initial: 7), Counter(initial: 12)])
+      component Counter(initial: 0) {
+        $n = initial
+        return Text(\`\${$n}\`)
+      }
+    `);
+    render();
+    const counterKeys = [...state.entries()]
+      .map(([k]) => k)
+      .filter((k) => k.endsWith(":n"));
+    expect(counterKeys).toHaveLength(2);
+    const values = counterKeys.map((k) => state.get(k));
+    expect(values).toContain(7);
+    expect(values).toContain(12);
+  });
 });
 
 describe("Slots", () => {
