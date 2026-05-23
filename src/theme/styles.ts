@@ -2294,7 +2294,6 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   gap: var(--rui-spacing-l);
 }
 .rui-app-shell-topbar {
-  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--rui-spacing-m);
