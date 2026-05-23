@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Brand themes · streaming-ui-script</title>
-  <meta name="description" content="Same Streaming UI Script program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style Theme() declarations. Copy any brand into your own response." />
+  <title>Brand themes · Aktion</title>
+  <meta name="description" content="Same Aktion program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style Theme() declarations. Copy any brand into your own response." />
   <link rel="stylesheet" href="assets/example-page.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
@@ -66,7 +66,7 @@
       background: #ffffff;
       transition: background 220ms ease;
     }
-    .brand-preview-shell streaming-ui-script {
+    .brand-preview-shell aktion-app {
       display: block;
       padding: 22px;
       min-height: 540px;
@@ -173,7 +173,7 @@
 
     /* Per-brand wrapper backdrops so the demo card "feels" like the brand
        even outside the rendered component. The body of the preview is the
-       streaming-ui-script element itself which carries the real theme. */
+       <aktion-app> element itself which carries the real theme. */
     .brand-preview-shell[data-brand="github"]  { background: #f6f8fa; }
     .brand-preview-shell[data-brand="apple"]   { background: #fbfbfd; }
     .brand-preview-shell[data-brand="stripe"]  { background: linear-gradient(135deg, #f6f9fc 0%, #ffffff 60%, #efe9ff 100%); }
@@ -187,7 +187,7 @@
     <header class="example-topbar">
       <a class="example-brand" href="live-examples.html">
         <span class="dot"></span>
-        streaming-ui-script · brand themes
+        Aktion · brand themes
       </a>
       <a class="example-back" href="live-examples.html">← Back to demos</a>
     </header>
@@ -236,7 +236,7 @@
 
       <div class="brand-grid">
         <div id="brand-preview-shell" class="brand-preview-shell" data-brand="github">
-          <streaming-ui-script id="brand-preview" theme="light"></streaming-ui-script>
+          <aktion-app id="brand-preview" theme="light"></aktion-app>
         </div>
 
         <aside class="brand-side">
@@ -265,7 +265,7 @@
     <article class="example-card">
       <h2>The shared UI program</h2>
       <p class="lede">
-        Every brand renders the same Streaming UI Script source. Only the
+        Every brand renders the same Aktion source. Only the
         <code>theme = Theme({...})</code> line at the top changes — the
         runtime applies the new tokens to the host as CSS custom properties,
         so the existing components instantly pick up the new palette,
@@ -273,81 +273,81 @@
       </p>
       <pre class="example-source"><code id="src-shared">head = PageHeader(
   "Acme Platform",
-  "All your operations, one workspace.",
-  ["Workspace", "Dashboard"],
-  [
-    Button("Settings", Action([@ToAssistant("Open settings")]), "secondary", "sm", null, "gear"),
-    Button("New project", Action([@ToAssistant("Start a new project")]), "primary", "sm", null, "plus")
+  subtitle: "All your operations, one workspace.",
+  breadcrumbs: ["Workspace", "Dashboard"],
+  actions: [
+    Button("Settings",    variant: "secondary", size: "sm", icon: "gear"),
+    Button("New project", variant: "primary",   size: "sm", icon: "plus")
   ],
-  Badge("On track", "success")
+  badge: Badge("On track", tone: "success")
 )
 
 kpis = Stats([
-  StatCard("Active deals",     "1,284",  "up",   "+12%", "briefcase"),
-  StatCard("Monthly revenue",  "$48.2k", "up",   "+8%",  "sack-dollar"),
-  StatCard("Open tickets",     "42",     "down", "-15%", "ticket"),
-  StatCard("Churn",            "1.4%",   "flat", "0",    "user-minus")
+  StatCard("Active deals",    value: "1,284",  trend: "up",   delta: "+12%", icon: "briefcase"),
+  StatCard("Monthly revenue", value: "$48.2k", trend: "up",   delta: "+8%",  icon: "sack-dollar"),
+  StatCard("Open tickets",    value: "42",     trend: "down", delta: "-15%", icon: "ticket"),
+  StatCard("Churn",           value: "1.4%",   trend: "flat", delta: "0",    icon: "user-minus")
 ])
 
 trendChart = Card([
-  SectionHeader("Revenue trend", "Last 12 weeks", null, null,
-    [Button("Export", Action([@ToAssistant("Export the trend")]), "ghost", "sm", null, "arrow-up-from-bracket")]
+  SectionHeader("Revenue trend", subtitle: "Last 12 weeks",
+    actions: [Button("Export", variant: "ghost", size: "sm", icon: "arrow-up-from-bracket")]
   ),
   LineChart(
-    ["W1","W2","W3","W4","W5","W6","W7","W8","W9","W10","W11","W12"],
-    [
-      Series("This quarter", [22, 28, 26, 32, 34, 31, 38, 42, 44, 41, 46, 48]),
-      Series("Last quarter", [18, 21, 20, 24, 27, 25, 28, 31, 33, 30, 34, 36])
+    labels: ["W1","W2","W3","W4","W5","W6","W7","W8","W9","W10","W11","W12"],
+    series: [
+      Series("This quarter", values: [22, 28, 26, 32, 34, 31, 38, 42, 44, 41, 46, 48]),
+      Series("Last quarter", values: [18, 21, 20, 24, 27, 25, 28, 31, 33, 30, 34, 36])
     ]
   )
 ])
 
 teamCard = Card([
-  SectionHeader("Team", "6 members", "Engineering"),
+  SectionHeader("Team", subtitle: "6 members", eyebrow: "Engineering"),
   Stack([
-    PersonChip("Asha Patel",    "Engineering lead",   null, "md", "online"),
-    PersonChip("Linus Wong",    "Senior developer",   null, "md", "online"),
-    PersonChip("Mira Sanchez",  "Product designer",   null, "md", "away"),
-    PersonChip("Sam Reyes",     "QA engineer",        null, "md", "offline")
-  ], "column", "s")
+    PersonChip("Asha Patel",   role: "Engineering lead", size: "md", status: "online"),
+    PersonChip("Linus Wong",   role: "Senior developer", size: "md", status: "online"),
+    PersonChip("Mira Sanchez", role: "Product designer", size: "md", status: "away"),
+    PersonChip("Sam Reyes",    role: "QA engineer",      size: "md", status: "offline")
+  ], direction: "column", gap: "s")
 ])
 
 activityCard = Card([
-  SectionHeader("Recent activity", "Last 24h"),
+  SectionHeader("Recent activity", subtitle: "Last 24h"),
   Timeline([
-    TimelineItem("Deployed v2.4.1", "12:04", null, "rocket", "primary"),
-    TimelineItem("Closed 4 support tickets", "11:18", null, "circle-check", "success"),
-    TimelineItem("Updated billing API", "10:02", null, "credit-card", "info"),
-    TimelineItem("Investigating latency", "08:47", null, "triangle-exclamation", "warning")
+    TimelineItem("Deployed v2.4.1",          time: "12:04", icon: "rocket",               tone: "primary"),
+    TimelineItem("Closed 4 support tickets", time: "11:18", icon: "circle-check",         tone: "success"),
+    TimelineItem("Updated billing API",      time: "10:02", icon: "credit-card",          tone: "info"),
+    TimelineItem("Investigating latency",    time: "08:47", icon: "triangle-exclamation", tone: "warning")
   ])
 ])
 
 planCard = Card([
-  SectionHeader("Workspace plan", "Renews in 12 days"),
-  ProgressRing(72, 100, "12 / 17", "Seats used", "primary"),
+  SectionHeader("Workspace plan", subtitle: "Renews in 12 days"),
+  ProgressRing(72, max: 100, label: "12 / 17", description: "Seats used", tone: "primary"),
   Buttons([
-    Button("Manage seats", Action([@ToAssistant("Manage seats")]), "secondary", "sm"),
-    Button("Upgrade",      Action([@ToAssistant("Upgrade plan")]),  "primary",   "sm")
+    Button("Manage seats", variant: "secondary", size: "sm"),
+    Button("Upgrade",      variant: "primary",   size: "sm")
   ])
 ])
 
 quickForm = Card([
-  SectionHeader("Quick capture", "Add a new task"),
-  FormControl("Title", Input("title", "Ship the analytics tab", "text")),
-  FormControl("Owner", Select("owner", [
-    SelectItem("asha", "Asha Patel"),
-    SelectItem("linus","Linus Wong"),
-    SelectItem("mira", "Mira Sanchez")
-  ], null, null, "asha")),
+  SectionHeader("Quick capture", subtitle: "Add a new task"),
+  FormControl("Title", control: Input("title", placeholder: "Ship the analytics tab")),
+  FormControl("Owner", control: Select("owner", items: [
+    SelectItem("asha",  "Asha Patel"),
+    SelectItem("linus", "Linus Wong"),
+    SelectItem("mira",  "Mira Sanchez")
+  ], value: "asha")),
   Buttons([
-    Button("Add task", Action([@ToAssistant("Add the task")]),  "primary"),
-    Button("Cancel",   Action([@ToAssistant("Cancel capture")]), "ghost")
+    Button("Add task", variant: "primary"),
+    Button("Cancel",   variant: "ghost")
   ])
 ])
 
-bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], 2, "l")
+bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], columns: 2, gap: "l")
 
-root = Stack([head, kpis, trendChart, bottomGrid], "column", "l")</code></pre>
+_app_ = Stack([head, kpis, trendChart, bottomGrid], direction: "column", gap: "l")</code></pre>
     </article>
 
     <article class="example-card">
@@ -357,21 +357,21 @@ root = Stack([head, kpis, trendChart, bottomGrid], "column", "l")</code></pre>
         line from the LLM, call <code>setTheme()</code> from the host page,
         or set CSS variables on the host element.
       </p>
-      <pre class="example-source"><code>// 1. Brand a single response from inside the script
+      <pre class="example-source"><code>// 1. Brand a single response from inside the script (structured form).
 el.setResponse(`theme = Theme({
-  colorPrimary:      "#0969da",
-  fontFamily:        "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  radiusButton:      "6px",
-  buttonFontWeight:  "500"
+  colors: { primary: "#0969da" },
+  font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightButton: "500" },
+  radius: { button: "6px" }
 })
-root = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
+_app_ = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
 
-// 2. Or apply the same token map programmatically (host-wide)
+// 2. Or apply a flat token map programmatically (host-wide).
+//    The host-side setTheme() still accepts the flat token names.
 import { brandThemes } from "./brand-themes.js";
 el.setTheme(brandThemes.github);
 
-// 3. Or set CSS variables on the host element
-streaming-ui-script {
+// 3. Or set CSS variables on the host element.
+aktion-app {
   --rui-color-primary:     #0969da;
   --rui-radius-button:     6px;
   --rui-font-family:       -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -380,7 +380,7 @@ streaming-ui-script {
   </div>
 
   <script type="module">
-    import "../dist/streaming-ui-script.js";
+    import "../dist/aktion.js";
 
     /* ------------------------------------------------------------------
        Brand token maps.
@@ -737,15 +737,72 @@ streaming-ui-script {
     const copyThemeBtn = document.getElementById("copy-theme");
     const copyProgBtn  = document.getElementById("copy-program");
 
+    // Map a flat-shape token key (e.g. "colorPrimaryHover", "radiusButton",
+    // "fontFamilyHeading", "buttonFontWeight", "shadowMd") to a structured
+    // group/inner-key pair (e.g. { group: "colors", inner: "primaryHover" }).
+    //
+    // The in-script `Theme({...})` binding only accepts the structured
+    // groups (`colors`, `radius`, `font`, `motion`, `elevation`) per
+    // §16 — flat keys raise a schema-validator error.
+    function flatToStructured(key) {
+      // Chart palette tokens (chart1…chart6) live under colors.chart1 etc.
+      if (/^chart[1-6]$/.test(key)) {
+        return { group: "colors", inner: key };
+      }
+      // Buttons: buttonFontWeight, buttonPaddingY, etc. live under font/motion/elevation
+      // depending on the suffix. The simplest, prompt-accurate mapping is to
+      // route them into the `font` group as `weightButton` / `paddingButtonY`.
+      const buttonPrefixes = [
+        ["buttonFontWeight",    { group: "font",      inner: "weightButton" }],
+        ["buttonTextTransform", { group: "font",      inner: "textTransformButton" }],
+        ["buttonLetterSpacing", { group: "font",      inner: "letterSpacingButton" }],
+        ["buttonPaddingY",      { group: "elevation", inner: "paddingButtonY" }],
+        ["buttonPaddingX",      { group: "elevation", inner: "paddingButtonX" }],
+      ];
+      for (const [name, target] of buttonPrefixes) {
+        if (key === name) return target;
+      }
+      const shadowAliases = ["shadowSm", "shadowMd", "shadowLg", "borderWidth"];
+      if (shadowAliases.includes(key)) {
+        return { group: "elevation", inner: key };
+      }
+      const groups = [
+        { prefix: "color",  group: "colors" },
+        { prefix: "radius", group: "radius" },
+        { prefix: "font",   group: "font" },
+        { prefix: "motion", group: "motion" },
+      ];
+      for (const { prefix, group } of groups) {
+        if (key.startsWith(prefix) && key.length > prefix.length) {
+          const tail = key.slice(prefix.length);
+          const inner = tail.charAt(0).toLowerCase() + tail.slice(1);
+          return { group, inner };
+        }
+      }
+      // Unknown — surface in the `elevation` bucket so the schema validator
+      // can flag it rather than silently dropping the value.
+      return { group: "elevation", inner: key };
+    }
+
     function formatThemeBlock(tokens) {
-      const longest = Math.max(...Object.keys(tokens).map((k) => k.length));
+      const buckets = { colors: [], radius: [], font: [], motion: [], elevation: [] };
+      for (const [key, value] of Object.entries(tokens)) {
+        const { group, inner } = flatToStructured(key);
+        buckets[group].push({ inner, value });
+      }
       const lines = ["theme = Theme({"];
-      const entries = Object.entries(tokens);
-      entries.forEach(([key, value], idx) => {
-        const padded = key.padEnd(longest, " ");
-        const comma = idx < entries.length - 1 ? "," : "";
-        const stringValue = String(value).replace(/"/g, '\\"');
-        lines.push(`  ${padded}: "${stringValue}"${comma}`);
+      const groupKeys = Object.keys(buckets).filter((g) => buckets[g].length > 0);
+      groupKeys.forEach((group, gi) => {
+        const longest = Math.max(...buckets[group].map((e) => e.inner.length));
+        const groupComma = gi < groupKeys.length - 1 ? "," : "";
+        lines.push(`  ${group}: {`);
+        buckets[group].forEach(({ inner, value }, ei) => {
+          const padded = inner.padEnd(longest, " ");
+          const comma = ei < buckets[group].length - 1 ? "," : "";
+          const stringValue = String(value).replace(/"/g, '\\"');
+          lines.push(`    ${padded}: "${stringValue}"${comma}`);
+        });
+        lines.push(`  }${groupComma}`);
       });
       lines.push("})");
       return lines.join("\n");
@@ -807,7 +864,7 @@ streaming-ui-script {
       themeSrcEl.textContent = themeBlock;
 
       // Apply by re-running the program with the Theme(...) prefix. Reusing
-      // setResponse keeps streaming-ui-script as the single source of truth
+      // setResponse keeps aktion as the single source of truth
       // — every brand exercises the same code path an LLM would hit.
       previewEl.setResponse(buildFullProgram(key));
     }

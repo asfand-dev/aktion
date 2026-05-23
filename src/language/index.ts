@@ -1,5 +1,5 @@
 /**
- * Reusable language-support module for Streaming UI Script.
+ * Reusable language-support module for Aktion.
  *
  * Framework-agnostic: this module ships pure data (grammar tokens, the
  * component catalog, builtins, snippets, theme names, severity tokens) plus
@@ -92,7 +92,7 @@ export interface LanguageSpec {
 /**
  * Build a complete language spec ready for editor consumption. Pass a custom
  * `ComponentLibrary` if your host has registered extra components via
- * `<streaming-ui-script>.registerComponents([...])` — the returned spec will
+ * `<aktion-app>.registerComponents([...])` — the returned spec will
  * include them in autocomplete and inspection tooltips.
  */
 export function getLanguageSpec(library: ComponentLibrary = defaultLibrary): LanguageSpec {

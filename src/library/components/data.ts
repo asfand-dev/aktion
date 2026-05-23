@@ -4,7 +4,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { renderInlineSparkline } from "./patterns.js";
 import { pickIconForLabel } from "./_internal.js";
@@ -14,13 +13,17 @@ const COL_ALIGN = ["left", "center", "right"] as const;
 export const Col: ComponentSpec = {
   name: "Col",
   description:
-    "Single column inside a Table. Use `align` for per-column text " +
-    "alignment, `format` for cell rendering (`text|number|currency|date`).",
+    "Single column inside a Table or DataGrid. Use `align` for per-column " +
+    "text alignment, `format` for cell rendering " +
+    "(`text|number|currency|date`). `sortable` and `filterable` only " +
+    "take effect inside `DataGrid` (Table ignores them).",
   props: [
     { name: "header", type: "string" },
     { name: "values", type: "any[]", description: "Column values (use array pluck like data.rows.title)" },
     { name: "format", type: "string", optional: true, enum: ["text", "number", "currency", "date"] },
     { name: "align", type: "string", optional: true, enum: COL_ALIGN, description: "Per-column horizontal alignment" },
+    { name: "sortable", type: "boolean", optional: true, description: "DataGrid: enable click-to-sort on this column" },
+    { name: "filterable", type: "boolean", optional: true, description: "DataGrid: enable a per-column filter chip" },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -41,7 +44,7 @@ export const Table: ComponentSpec = {
     "The empty-state row uses `emptyLabel` when set.",
   props: [
     { name: "columns", type: "Col[]" },
-    { name: "caption", type: "string", optional: true },
+    { name: "caption", type: "string", optional: true, aliases: ["title"] },
     { name: "density", type: "string", optional: true, enum: TABLE_DENSITY, description: "Row padding (default `comfortable`)" },
     { name: "striped", type: "boolean", optional: true, description: "Zebra-stripe alternating rows" },
     { name: "sticky", type: "boolean", optional: true, description: "Pin the header row when the table scrolls" },
@@ -123,7 +126,7 @@ export const ListItem: ComponentSpec = {
   description: "Single list item with optional title and description.",
   props: [
     { name: "title", type: "string" },
-    { name: "description", type: "string", optional: true },
+    { name: "description", type: "string", optional: true, aliases: ["meta"] },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name" },
   ],
   render: (_node, props) => {
@@ -227,16 +230,16 @@ export const TreeNode: ComponentSpec = {
     { name: "children", type: "TreeNode[]", optional: true },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown before the label" },
     { name: "expanded", type: "boolean", optional: true, description: "Whether the branch is open by default" },
-    { name: "active", type: "boolean", optional: true, description: "Highlights the row as the current selection" },
+    { name: "active", type: "boolean", optional: true, aliases: ["selected"], description: "Highlights the row as the current selection" },
     { name: "badge", type: "string", optional: true, description: "Trailing chip (count or status)" },
-    { name: "action", type: "Action", optional: true, description: "Action fired when the row is clicked" },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable fired when the row is clicked" },
   ],
   render: (_node, props, helpers) => {
     const children = asArray<unknown>(props.children);
     const hasChildren = children.length > 0;
     const expanded = asBoolean(props.expanded);
     const active = asBoolean(props.active);
-    const isClickable = isActionPayload(props.action);
+    const isClickable = typeof props.action === "function";
 
     const row = el(isClickable ? "button" : "div" as "div", {
       type: isClickable ? "button" : null,
@@ -259,7 +262,7 @@ export const TreeNode: ComponentSpec = {
     if (badge) row.append(el("span", { class: "rui-tree-node-badge" }, [badge]));
 
     if (isClickable) {
-      row.onclick = () => helpers.runAction(props.action);
+      row.onclick = () => helpers.invoke(props.action);
     }
 
     if (!hasChildren) return row;

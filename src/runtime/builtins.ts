@@ -1,9 +1,11 @@
 /**
- * Built-in `@Name(...)` functions for Streaming UI Script.
+ * Built-in `@Name(...)` functions for Aktion.
  *
- * These are pure data transformations. Action builtins (@Run, @Set, @Reset,
- * @ToAssistant, @OpenUrl) are handled separately because they are emitted as
- * marker objects that the action runner interprets at click-time.
+ * These are pure data transformations. The legacy action-step builtins
+ * (`@Run`, `@Set`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`,
+ * `@Js`) and the `@Const` memo helper were removed. Use `action <Name>() {
+ * … }` declarations + lambda handlers (`onClick: save`) instead, and just
+ * `$name = expression` for plain reactive bindings.
  */
 
 export type BuiltinFn = (args: unknown[]) => unknown;
@@ -34,7 +36,25 @@ const compare = (op: string, a: unknown, b: unknown): boolean => {
 };
 
 const getField = (item: unknown, field: string): unknown => {
+  // Empty/missing field name → compare the item itself. This makes
+  // primitive arrays like `@Filter(["a","b"], "", "!=", "a")` behave
+  // intuitively. For objects, look up the named key (supporting dotted
+  // paths so `@Filter(rows, "user.name", "==", "Asfand")` works without
+  // pre-flattening the rows).
+  if (field === "") return item;
   if (item && typeof item === "object") {
+    if (field.includes(".")) {
+      const parts = field.split(".");
+      let cursor: unknown = item;
+      for (const part of parts) {
+        if (cursor && typeof cursor === "object") {
+          cursor = (cursor as Record<string, unknown>)[part];
+        } else {
+          return undefined;
+        }
+      }
+      return cursor;
+    }
     return (item as Record<string, unknown>)[field];
   }
   return undefined;
@@ -454,50 +474,6 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
 };
 
 /**
- * Action step builtins return marker objects so that buttons can run them
- * later inside an `Action([...])`. They are *not* executed at evaluation time.
- */
-export type ActionStep =
-  | { kind: "Run"; ref: string }
-  | { kind: "Set"; name: string; value: unknown }
-  | { kind: "Reset"; names: string[] }
-  | { kind: "ToAssistant"; message: string }
-  | { kind: "OpenUrl"; url: string }
-  /**
-   * Internal hash-based navigation. Updates `window.location.hash` so the
-   * browser back/forward buttons keep working.
-   */
-  | { kind: "Navigate"; path: string }
-  /**
-   * `args` carries values captured at render time — used to pass per-item data
-   * (loop variables, computed values) into the JS body. Accessible inside the
-   * body as `ctx.args.<key>`. Always an object, never null.
-   */
-  | { kind: "Js"; code: string; args: Record<string, unknown> };
-
-export const isActionStep = (value: unknown): value is ActionStep => {
-  if (!value || typeof value !== "object") return false;
-  const kind = (value as { kind?: unknown }).kind;
-  return (
-    kind === "Run" || kind === "Set" || kind === "Reset" ||
-    kind === "ToAssistant" || kind === "OpenUrl" ||
-    kind === "Navigate" || kind === "Js"
-  );
-};
-
-export interface ActionPayload {
-  kind: "Action";
-  steps: ActionStep[];
-}
-
-export const isActionPayload = (value: unknown): value is ActionPayload => {
-  return Boolean(
-    value && typeof value === "object" &&
-    (value as { kind?: unknown }).kind === "Action",
-  );
-};
-
-/**
  * Marker emitted by the `Theme({...})` construct. Carries an arbitrary token
  * map that the element applies on top of the base theme between render
  * cycles. Distinct from `ComponentNode` so the renderer can ignore it (it is
@@ -505,7 +481,7 @@ export const isActionPayload = (value: unknown): value is ActionPayload => {
  *
  * Authors declare a theme like any other top-level binding:
  *
- *   theme = Theme({colorPrimary: "#0969da", radiusButton: "6px"})
+ *   theme = Theme({ colors: { primary: "#0969da" }, radius: { button: "6px" } })
  *   root  = Stack([...])
  */
 export interface ThemeNode {

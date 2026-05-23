@@ -1,90 +1,17 @@
 /**
- * Hash-based routing components.
+ * Routing-related library components.
  *
- * - `Routes(items, default?)` — outlet that renders the matching `Route`.
- *   The match itself is computed inside the evaluator (so path parameters
- *   are scoped correctly to the matched page's content); by the time this
- *   component's `render` is reached, `node.args[0]` is the already-evaluated
- *   content of the matched page (or `null` if nothing matched).
- *
- * - `Route(path, content)` — declares a single page. When used standalone
- *   (no `Routes` parent) it simply renders its content, so the LLM-emitted
- *   page is still usable as a single-page layout.
- *
- * - `NavLink(label, to, variant?, exact?)` — anchor that triggers a hash
- *   navigation on click. Reflects `data-active="true"` when the current
- *   route matches `to` so the prompt can drive an active styling state
- *   without an extra `$variable`.
+ * In Aktion 0.5 routing is expressed with the
+ * `_router_({...})` call (see `src/runtime/router.ts` and the
+ * `evaluateRouterCall` intercept in `runtime/evaluator.ts`). The legacy
+ * `Routes(...)` outlet and `Route(...)` row components, and the
+ * `$router = router { … }` block syntax, were removed in the 0.5
+ * cleanup pass. The only routing-related component that still ships is
+ * `NavLink`, which navigates via `helpers.router.navigate(to)`.
  */
 
 import type { ComponentSpec } from "../types.js";
-import type { ActionPayload } from "../../runtime/builtins.js";
 import { asBoolean, asString, el, renderIcon } from "../utils.js";
-
-export const Routes: ComponentSpec = {
-  name: "Routes",
-  description:
-    "Router outlet: renders the matching Route based on the current hash path (`#/page`). " +
-    "Children must be Route(path, content) entries. The optional `default` argument is the " +
-    "path of the Route to render when no other path matches (useful for a 404/home fallback).",
-  props: [
-    {
-      name: "items",
-      type: "Route[]",
-      description: "Array of Route(path, content) entries. The first match wins.",
-    },
-    {
-      name: "default",
-      type: "string",
-      optional: true,
-      description: "Path of the Route to fall back to when no entry matches (e.g. \"/\").",
-    },
-  ],
-  render: (node, _props, helpers) => {
-    // The evaluator has already resolved the match — `node.args[0]` is the
-    // matched content (or `null`) and `node.args[1]` is the matched pattern.
-    const content = node.args[0];
-    const matchedPath = asString(node.args[1]);
-    const outlet = el("div", {
-      class: "rui-routes",
-      "data-active-route": matchedPath || null,
-    });
-    if (content !== null && content !== undefined) {
-      outlet.append(helpers.renderNode(content));
-    }
-    return outlet;
-  },
-};
-
-export const Route: ComponentSpec = {
-  name: "Route",
-  description:
-    "Declares a single page inside a Routes container. `path` supports literal segments " +
-    "(\"/about\"), parameter segments (\"/users/:id\"), and a trailing wildcard (\"/docs/*\"). " +
-    "Inside `content`, read path parameters via the `params` loop variable, e.g. `params.id`.",
-  props: [
-    {
-      name: "path",
-      type: "string",
-      description: "Route pattern, e.g. \"/\", \"/about\", or \"/users/:id\".",
-    },
-    {
-      name: "content",
-      type: "Node",
-      description: "Page UI rendered when this route is active.",
-    },
-  ],
-  render: (_node, props, helpers) => {
-    // When Route is used standalone (no Routes parent), just render its
-    // content so the LLM-emitted page still works as a single-page layout.
-    const content = props.content;
-    const wrapper = el("div", { class: "rui-route" });
-    if (content !== null && content !== undefined) {
-      wrapper.append(helpers.renderNode(content));
-    }
-    return wrapper;
-  },
-};
 
 export const NavLink: ComponentSpec = {
   name: "NavLink",
@@ -142,20 +69,12 @@ export const NavLink: ComponentSpec = {
     if (iconNode) anchor.append(iconNode);
     anchor.append(el("span", { class: "rui-nav-link-label" }, [label]));
 
-    // Intercept the click so we can keep state changes synchronous instead of
-    // waiting for the browser's hashchange event.
     anchor.onclick = (event) => {
       if (event.defaultPrevented) return;
       if (event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      // Build the action payload manually so we go through the same action
-      // pipeline as `@Navigate(...)` — keeps the runtime in one place.
-      const payload: ActionPayload = {
-        kind: "Action",
-        steps: [{ kind: "Navigate", path: to }],
-      };
-      helpers.runAction(payload);
+      router.navigate(to);
     };
 
     return anchor;

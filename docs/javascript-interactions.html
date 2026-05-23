@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JavaScript interactions · streaming-ui-script</title>
-  <meta name="description" content="Built-in Script() and @Js() — React-style hooks for generative UI." />
+  <title>JavaScript interactions · Aktion</title>
+  <meta name="description" content="The js{} escape hatch — embed JavaScript in action and effect bodies for browser APIs the declarative surface doesn't cover." />
   <script>
     (function () {
       try {
@@ -16,666 +16,244 @@
     })();
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
-  <style>
-    .js-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin: 18px 0 28px;
-    }
-    .js-card {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding: 14px 16px;
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius);
-      background: var(--doc-surface);
-      box-shadow: var(--doc-shadow);
-    }
-    .js-card-title {
-      font-weight: 700;
-      font-size: 14px;
-      color: var(--doc-text);
-    }
-    .js-card-desc {
-      font-size: 12.5px;
-      color: var(--doc-text-muted);
-      line-height: 1.45;
-    }
-    .api-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 12px 0 24px;
-      font-size: 13.5px;
-    }
-    .api-table th,
-    .api-table td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--doc-border);
-      vertical-align: top;
-    }
-    .api-table th {
-      background: rgba(99, 102, 241, 0.06);
-      font-weight: 700;
-      color: var(--doc-text);
-    }
-    .api-table code {
-      font-size: 12.5px;
-    }
-    .badge-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-    .badge-row span {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--doc-primary-hover);
-      background: rgba(99, 102, 241, 0.10);
-      padding: 3px 10px;
-      border-radius: 999px;
-    }
-    .demo-row {
-      display: grid;
-      grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
-      gap: 22px;
-      align-items: start;
-    }
-    @media (max-width: 880px) {
-      .demo-row { grid-template-columns: 1fr; }
-    }
-    .demo-source {
-      margin: 0;
-      max-height: 360px;
-      overflow: auto;
-    }
-    .demo-preview {
-      background: var(--doc-bg);
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius);
-      padding: 16px;
-      min-height: 160px;
-    }
-    .callout--warn {
-      border: 1px solid rgba(234, 179, 8, 0.45);
-      background: rgba(234, 179, 8, 0.10);
-    }
-  </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
-<body data-page="javascript">
+<body data-page="javascript-interactions">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
-        <span class="hero-eyebrow">Built-in</span>
-        <h1>JavaScript interactions.</h1>
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>The js&#123;&#125; escape hatch.</h1>
         <p class="lead">
-          Most assistant UIs only need declarative components plus reactive
-          <code>$variables</code>. But sometimes you want React-style effects,
-          Vue-style watchers, or a Svelte-style action — timers, animations,
-          clipboard, focus management, conditional fetch. That's what
-          JavaScript interactions are for.
+          When the declarative surface doesn&rsquo;t cover what you need
+          &mdash; clipboard writes, IntersectionObserver, third-party SDKs
+          &mdash; drop into a <code>js&#123; &hellip; &#125;</code> block.
+          You get an async sandbox with access to state, host tools, and the
+          host element.
         </p>
       </header>
 
-      <p>
-        The element ships with two built-in surfaces that turn Streaming UI Script into a full-fledged frontend framework:
-      </p>
+      <h2 id="where">Where you can use it</h2>
+      <p><code>js{ &hellip; }</code> blocks are valid anywhere an imperative statement is valid:</p>
+      <ul>
+        <li>Inside an <code>action</code> body.</li>
+        <li>Inside an <code>effect</code> body.</li>
+        <li>Inside a multi-statement lambda body (rare; prefer named actions).</li>
+      </ul>
 
-      <div class="js-grid">
-        <div class="js-card">
-          <div class="js-card-title"><code>Script("id", "body", deps?)</code></div>
-          <p class="js-card-desc">
-            A behaviour-only node that runs the body when it mounts and again
-            whenever a listed <code>$variable</code> changes. Think
-            <code>useEffect</code> + <code>watch</code> in one statement.
-          </p>
-        </div>
-        <div class="js-card">
-          <div class="js-card-title"><code>@Js("code")</code></div>
-          <p class="js-card-desc">
-            An action step you drop inside <code>Action([...])</code> to run
-            JavaScript on click, submit, or any other user event.
-          </p>
-        </div>
-        <div class="js-card">
-          <div class="js-card-title"><code>ctx</code> bridge</div>
-          <p class="js-card-desc">
-            Both surfaces share a single <code>ctx</code> object exposing
-            reactive state, registered tools, DOM refs, lifecycle hooks, and
-            an AbortSignal for cancellable work.
-          </p>
-        </div>
-      </div>
-
-      <div class="callout">
-        <h4>JavaScript is part of the runtime</h4>
-        <p>
-          <code>Script(...)</code> and <code>@Js(...)</code> are wired up
-          automatically — no attribute to flip. The default ("full")
-          system prompt includes the JavaScript section so the LLM knows
-          when to use them. Use the chat-flavoured prompt
-          (<code>getSystemPrompt({ mode: "chat" })</code>) when you want the
-          model to stick to declarative components for short replies.
-        </p>
-      </div>
-
-      <h2>1. Drop in the renderer</h2>
-      <p>
-        No attribute needed — <code>Script()</code> and <code>@Js()</code>
-        always work. Calling <code>getSystemPrompt()</code> produces a prompt
-        that already teaches the model how to write scripts.
-      </p>
-<pre><code>&lt;streaming-ui-script
-  id="renderer"
-  theme="light"
-&gt;&lt;/streaming-ui-script&gt;
-
-&lt;script type="module"&gt;
-  import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
-  const el = document.getElementById("renderer");
-
-  // The default ("full") prompt includes the JavaScript interactions section.
-  const systemPrompt = el.getSystemPrompt({
-    preamble: "You are a UI assistant who can wire up small JS effects.",
-  });
-&lt;/script&gt;</code></pre>
-
-      <div class="callout">
-        <h4>Heads up: proxy elements</h4>
-        If you build the system prompt from a <em>temporary</em>
-        <code>&lt;streaming-ui-script&gt;</code> element (a common pattern when
-        each turn renders into its own instance), just call
-        <code>getSystemPrompt()</code> — the JavaScript section is part of the
-        default ("full") prompt:
-<pre><code>function buildPrompt() {
-  const proxy = document.createElement("streaming-ui-script");
-  return proxy.getSystemPrompt(); // includes JS interactions by default
+<pre><code>action copyShareLink() {
+  js {
+    await navigator.clipboard.writeText(window.location.href)
+    ctx.state.set("copied", true)
+  }
 }
 
-const renderer = document.createElement("streaming-ui-script");</code></pre>
-      </div>
+effect [on:mount] {
+  js {
+    const onScroll = () =&gt; ctx.state.set("scrollY", window.scrollY)
+    window.addEventListener("scroll", onScroll, { passive: true })
+    ctx.cleanup(() =&gt; window.removeEventListener("scroll", onScroll))
+  }
+}</code></pre>
 
-      <h2>2. Writing the body string</h2>
+      <h2 id="ctx">The <code>ctx</code> bridge</h2>
       <p>
-        The <code>body</code> argument of <code>Script(...)</code> and
-        <code>@Js(...)</code> is a string in Streaming UI Script. You can
-        write it two ways:
+        Every <code>js{}</code> block runs as an <code>async</code> function
+        with one argument: <code>ctx</code>. The block can <code>await</code>
+        anywhere. The surface is intentionally narrow &mdash; just enough to
+        bridge the script and the host without leaking the entire runtime.
       </p>
-      <ul>
-        <li>
-          <strong>Backtick-quoted</strong> (<code>`...`</code>) — multi-line
-          strings with real newlines. Inner <code>"</code> and <code>'</code>
-          are unescaped. Best for any non-trivial body.
-        </li>
-        <li>
-          <strong>Double-quoted</strong> (<code>"..."</code>) — single-line
-          strings. Escape inner <code>"</code> as <code>\"</code> and newlines
-          as <code>\n</code>.
-        </li>
-      </ul>
-      <p>
-        Inside the body, prefer single quotes for JavaScript string literals
-        (<code>'hello'</code>) so you never need to escape:
-      </p>
-<pre><code>// Multi-line: backticks
-oneOff = Script("oneOff", `
-  const value = ctx.state.get('count') ?? 0;
-  console.log("count is", value);
-  ctx.state.set('count', value + 1);
-`)
 
-// Single-line: double quotes
-quick = Script("quick", "ctx.state.set('ready', true);")</code></pre>
-
-      <h2>3. The <code>ctx</code> bridge</h2>
-      <p>
-        Both <code>Script</code> bodies and <code>@Js</code> action steps
-        receive a single <code>ctx</code> argument. The surface is small and
-        framework-agnostic — there are no proxies or compile steps, just plain
-        JavaScript objects backed by the runtime.
-      </p>
-      <table class="api-table">
-        <thead>
-          <tr><th>API</th><th>Purpose</th></tr>
-        </thead>
+      <table class="signature-table">
+        <thead><tr><th>Property</th><th>Type</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr>
-            <td><code>ctx.state.get(name)</code></td>
-            <td>Read a reactive <code>$variable</code>. Use the bare name (no <code>$</code>).</td>
-          </tr>
-          <tr>
-            <td><code>ctx.state.set(name, value)</code></td>
-            <td>Write a reactive <code>$variable</code>. Triggers re-render and re-runs scripts depending on it.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.state.reset(...names)</code></td>
-            <td>Restore variables to their declared defaults.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.state.values()</code></td>
-            <td>Snapshot of every declared <code>$variable</code> at call time.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.tools.<em>name</em>(args)</code></td>
-            <td>Invoke a tool registered via <code>setTools()</code>. Returns a Promise.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.dispatch(message)</code></td>
-            <td>Fire an <code>assistant-message</code> event (same as <code>@ToAssistant</code>).</td>
-          </tr>
-          <tr>
-            <td><code>ctx.open(url)</code></td>
-            <td>Open a URL via the configured opener (defaults to <code>window.open</code>).</td>
-          </tr>
-          <tr>
-            <td><code>ctx.query(id)</code></td>
-            <td>Look up a rendered element inside the shadow root by its DOM id.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.queryAll(selector)</code></td>
-            <td>CSS selector lookup, returning an array of matching elements.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.host</code></td>
-            <td>The <code>&lt;streaming-ui-script&gt;</code> element itself.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.cleanup(fn)</code></td>
-            <td>Register a cleanup callback. Runs before the next re-run and when the script unmounts.</td>
-          </tr>
-          <tr>
-            <td><code>ctx.signal</code></td>
-            <td>AbortSignal that aborts on re-run or unmount. Pass to <code>fetch</code> and other cancellable APIs.</td>
-          </tr>
+          <tr><td><code>ctx.state.get(name)</code></td><td><code>(name: string) =&gt; unknown</code></td><td>Read a reactive atom. Pass the bare name without <code>$</code> &mdash; e.g. <code>ctx.state.get("count")</code> reads <code>$count</code>.</td></tr>
+          <tr><td><code>ctx.state.set(name, value)</code></td><td><code>(name: string, value: unknown) =&gt; void</code></td><td>Write to a reactive atom. Triggers a re-render.</td></tr>
+          <tr><td><code>ctx.cleanup(fn)</code></td><td><code>(fn: () =&gt; void) =&gt; void</code></td><td>Register a cleanup callback (effect bodies only). Runs when the effect re-fires or unmounts.</td></tr>
+          <tr><td><code>ctx.host</code></td><td><code>HTMLElement</code></td><td>The host <code>&lt;aktion-app&gt;</code> element &mdash; useful for <code>dispatchEvent</code>, attribute reads, or accessing the shadow root.</td></tr>
+          <tr><td><code>ctx.tools</code></td><td><code>Record&lt;string, fn&gt;</code></td><td>Host-registered async tools (set via <code>el.setTools(...)</code>).</td></tr>
+          <tr><td><code>ctx.args</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td>Action/lambda parameters by name &mdash; e.g. <code>ctx.args.taskId</code>.</td></tr>
         </tbody>
       </table>
 
-      <p>
-        Script bodies are compiled with <code>AsyncFunction</code>, so
-        <code>await</code> works at the top level. Errors are caught and logged
-        — a broken script never crashes the host page.
-      </p>
-
-      <h2>4. Script lifecycle (the React mental model)</h2>
-      <p>
-        The renderer reconciles scripts after each render pass. The behaviour
-        mirrors React's <code>useEffect</code>:
-      </p>
-      <ul>
-        <li>New <code>id</code> → run once.</li>
-        <li>Same <code>id</code> + same <code>body</code> + same <code>deps</code> values → leave alone.</li>
-        <li>Different <code>body</code> or any dep changed → cleanup, then re-run.</li>
-        <li>Script no longer present in the tree → cleanup, dispose AbortController.</li>
-      </ul>
-      <p>
-        The <code>deps</code> argument is an array of state variable names
-        (no <code>$</code> prefix). Common shapes:
-      </p>
-      <table class="api-table">
-        <thead>
-          <tr><th>Form</th><th>When the body runs</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>Script("id", body)</code></td><td>Once on mount.</td></tr>
-          <tr><td><code>Script("id", body, [])</code></td><td>Once on mount (explicit).</td></tr>
-          <tr><td><code>Script("id", body, ["count"])</code></td><td>On mount + whenever <code>$count</code> changes.</td></tr>
-          <tr><td><code>Script("id", body, ["count", "title"])</code></td><td>On mount + whenever either changes.</td></tr>
-        </tbody>
-      </table>
-
-      <h2>5. Worked example: a live counter</h2>
-      <p>
-        A reactive counter that ticks every second when running, with
-        cleanup that clears the interval on pause and on unmount.
-      </p>
-      <div class="demo-row">
-<pre class="demo-source"><code>$count = 0
-$running = false
-counter = Card([
-  CardHeader("Live counter", "Driven by Script()"),
-  TextContent("" + $count, "large-heavy")
-])
-controls = Buttons([
-  Button($running ? "Pause" : "Start", Action([@Set($running, !$running)]), "primary"),
-  Button("Reset", Action([@Reset($count)]), "secondary")
-])
-ticker = Script("ticker", `
-  if (!ctx.state.get('running')) return;
-  const id = setInterval(() =&gt; ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1), 1000);
-  ctx.cleanup(() =&gt; clearInterval(id));
-`, ["running"])
-root = Stack([counter, controls, ticker])</code></pre>
-        <div class="demo-preview">
-          <streaming-ui-script
-            id="demo-counter"
-            theme="light"
-            transparent
-          ></streaming-ui-script>
-        </div>
-      </div>
-
-      <h2>6. Worked example: calling a tool from a script</h2>
-      <p>
-        Bypass <code>Query</code>/<code>Mutation</code> for one-off calls.
-        The script awaits the tool and writes the result back into state, so
-        the rest of the UI reacts as if it had come from a regular query.
-      </p>
-      <div class="demo-row">
-<pre class="demo-source"><code>$loaded = false
-$repos = []
-$error = ""
-header = Card([CardHeader("Top GitHub repos", "Loaded via ctx.tools")])
-status = $error == "" ? null : Callout("danger", "Couldn't load", $error)
-list = $loaded ? Table([
-  Col("Repo", $repos.name),
-  Col("Stars", $repos.stars, "number"),
-  Col("Forks", $repos.forks, "number")
-]) : Skeleton("table")
-loader = Script("loader", `
-  try {
-    const data = await ctx.tools.list_repos({ limit: 5 });
-    ctx.state.set('repos', data.rows ?? []);
-    ctx.state.set('loaded', true);
-  } catch (err) {
-    ctx.state.set('error', String(err.message ?? err));
-  }
-`, [])
-root = Stack([header, status, list, loader])</code></pre>
-        <div class="demo-preview">
-          <streaming-ui-script
-            id="demo-tools"
-            theme="light"
-            transparent
-          ></streaming-ui-script>
-        </div>
-      </div>
-
-      <h2>7. Worked example: per-item click handlers (<code>@Js(body, args)</code>)</h2>
-      <p>
-        When a button lives inside <code>@Each(...)</code>, the loop variable
-        is a <em>render-time</em> local — it does not exist when the click
-        handler eventually fires. Use the optional second argument of
-        <code>@Js</code> to capture per-item data at render time:
-      </p>
-<pre><code>$todos = [{id: 1, text: "Buy milk"}, {id: 2, text: "Walk dog"}]
-list = @Each($todos, "t", row)
-row = Card([Stack([
-  TextContent(t.text),
-  Button("Delete", Action([
-    @Js("ctx.state.set('todos', (ctx.state.get('todos') || []).filter(x =&gt; x.id !== ctx.args.id))", {id: t.id})
-  ]))
-])])
-root = Stack([list])</code></pre>
-      <p>
-        The <code>{id: t.id}</code> object is evaluated <strong>per
-        iteration</strong> — every rendered button captures its own row's id.
-        Inside the body, read it as <code>ctx.args.id</code>.
-      </p>
       <div class="callout">
-        <h4>Even better: skip JS entirely when you can</h4>
-        Many list mutations are pure data transforms and don't need JS at all.
-        Delete becomes a one-liner with <code>@Filter</code> + <code>@Set</code>:
-<pre><code>Button("Delete", Action([@Set($todos, @Filter($todos, "id", "!=", t.id))]))</code></pre>
-        Add becomes <code>@Push</code> + <code>@Set</code>:
-<pre><code>Button("Add", Action([@Set($todos, [...$todos, newTodo])]))</code></pre>
-        Reach for <code>@Js</code> only when no builtin can express the change
-        (e.g. toggling one field on one item).
-      </div>
-
-      <h2>8. Worked example: <code>@Js</code> for one-off side effects</h2>
-      <p>
-        Drop a single line of JavaScript into any action chain. Combine with
-        <code>@Set</code>, <code>@Run</code>, and <code>@ToAssistant</code>
-        for hybrid effects (e.g. write to the clipboard <em>and</em> tell the
-        assistant to acknowledge it).
-      </p>
-      <div class="demo-row">
-<pre class="demo-source"><code>$snippet = "npm install streaming-ui-script"
-$msg = "Press Copy to test."
-snippet = Card([
-  CardHeader("Copy to clipboard"),
-  CodeBlock("bash", $snippet),
-  Buttons([
-    Button("Copy", Action([
-      @Js("await navigator.clipboard?.writeText(ctx.state.get('snippet') ?? '');"),
-      @Set($msg, "Copied to clipboard.")
-    ]), "primary"),
-    Button("Reset", Action([@Set($msg, "Press Copy to test.")]), "secondary")
-  ]),
-  Callout("info", "Status", $msg)
-])
-root = Stack([snippet])</code></pre>
-        <div class="demo-preview">
-          <streaming-ui-script
-            id="demo-clipboard"
-            theme="light"
-            transparent
-          ></streaming-ui-script>
-        </div>
-      </div>
-
-      <h2>9. Worked example: cancellable fetch with <code>ctx.signal</code></h2>
-      <p>
-        Pass <code>ctx.signal</code> into <code>fetch</code> (or any
-        AbortController-aware API). When the script unmounts or its deps
-        change, in-flight work cancels automatically — no stale state writes,
-        no leaked listeners.
-      </p>
-<pre><code>$query = ""
-$results = []
-search = Script("search", `
-  const q = (ctx.state.get('query') ?? '').trim();
-  if (!q) { ctx.state.set('results', []); return; }
-  try {
-    const url = '/api/search?q=' + encodeURIComponent(q);
-    const res = await fetch(url, { signal: ctx.signal });
-    if (!res.ok) throw new Error(res.statusText);
-    ctx.state.set('results', await res.json());
-  } catch (err) {
-    if (err.name !== 'AbortError') console.error(err);
-  }
-`, ["query"])
-field = FormControl("Search", Input("q", "Type a query…", "text", null, $query))
-list = List([@Each($results, "r", ListItem(r.title, r.summary))])
-root = Stack([field, list, search])</code></pre>
-
-      <h2>10. Best practices</h2>
-      <ul>
-        <li>
-          <strong>Prefer the declarative path.</strong> If <code>Action([@Set(...), @Run(...)])</code>
-          can express the behaviour, use it. Reach for JS only when there is
-          no declarative equivalent (timers, focus, animations, custom DOM
-          work, third-party APIs).
-        </li>
-        <li>
-          <strong>Always cleanup.</strong> Register an <code>ctx.cleanup(...)</code>
-          for every <code>setInterval</code>, <code>setTimeout</code>,
-          <code>addEventListener</code>, subscription, or AbortController you
-          create. Otherwise dependencies leak across renders.
-        </li>
-        <li>
-          <strong>Treat scripts as effects.</strong> Don't throw, don't block.
-          For long work, wrap in <code>async</code> and check
-          <code>ctx.signal.aborted</code> before mutating state.
-        </li>
-        <li>
-          <strong>Pass tools, not raw fetches.</strong> Register tools on the
-          host with <code>setTools({...})</code> and call them via
-          <code>ctx.tools.<em>name</em>(args)</code>. Keeping side effects
-          declared on the host makes them observable from outside the
-          element.
-        </li>
-        <li>
-          <strong>Use stable ids.</strong> The reconciler keys on
-          <code>Script("id", ...)</code>. If the LLM re-emits the same script
-          with a different id, the runtime will dispose the old one and
-          re-run from scratch, losing in-memory state.
-        </li>
-        <li>
-          <strong>Mind the streaming window.</strong> Scripts never run while
-          <code>streaming="true"</code>. Wait for the stream to finish before
-          observing side effects.
-        </li>
-      </ul>
-
-      <h2>11. Security model</h2>
-      <p>
-        The runtime uses <code>new AsyncFunction(body)</code> — the script
-        body runs in the same global scope as the host page. There is no
-        sandbox. That means:
-      </p>
-      <ul>
-        <li>The script can access browser globals (<code>document</code>, <code>fetch</code>, <code>localStorage</code>, …).</li>
-        <li>It cannot bypass the same-origin policy.</li>
-        <li>It can only mutate the shadow DOM via <code>ctx.query</code>; it does not get a reference to the parent document by default.</li>
-      </ul>
-      <p>
-        Treat <code>Script(...)</code> and <code>@Js(...)</code> like
-        <code>dangerouslySetInnerHTML</code>: only run them with model output
-        that you trust, and consider validating untrusted output server-side
-        (or rendering it inside an iframe sandbox) first.
-      </p>
-
-      <div class="callout">
-        <h4>Want even tighter control?</h4>
+        <h4>State naming</h4>
         <p>
-          You can intercept scripts by wrapping <code>setResponse</code> /
-          <code>appendChunk</code> on the element and stripping any
-          <code>Script(...)</code> or <code>@Js(...)</code> lines before
-          they reach the runtime. Alternatively, switch to the
-          <code>chat</code> prompt flavour
-          (<code>getSystemPrompt({ mode: "chat" })</code>) so the LLM never
-          emits scripts for chat-style replies in the first place.
+          When reading and writing through <code>ctx.state</code>, drop the
+          sigil: use <code>ctx.state.get("count")</code> to read the
+          <code>$count</code> atom and <code>ctx.state.set("count", 1)</code>
+          to write it.
         </p>
       </div>
 
-      <h2>Comparison to other frameworks</h2>
-      <p>
-        The Script/<code>@Js</code> pair maps cleanly onto the patterns you
-        already know from popular frameworks:
-      </p>
-      <table class="api-table">
-        <thead>
-          <tr><th>Framework</th><th>Closest equivalent</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>React</td>
-            <td><code>useEffect(fn, deps)</code> — same dep array semantics, same cleanup model.</td>
-          </tr>
-          <tr>
-            <td>Vue 3</td>
-            <td><code>watchEffect</code> / <code>watch(refs, fn)</code> — Script() is the declarative equivalent.</td>
-          </tr>
-          <tr>
-            <td>Svelte</td>
-            <td>Reactive statements (<code>$:</code>) plus <code>onMount</code>/<code>onDestroy</code>.</td>
-          </tr>
-          <tr>
-            <td>Angular</td>
-            <td><code>effect()</code> from Angular signals — Script() reads/writes the same store.</td>
-          </tr>
-          <tr>
-            <td>SolidJS</td>
-            <td><code>createEffect</code> — automatic re-runs and disposal mirror SolidJS' fine-grained reactivity.</td>
-          </tr>
-        </tbody>
-      </table>
+      <h2 id="recipes">Common recipes</h2>
 
+      <h3>Clipboard</h3>
+<pre><code>action copyToClipboard(text) {
+  js {
+    try {
+      await navigator.clipboard.writeText(ctx.args.text)
+      ctx.state.set("toast", { kind: "success", message: "Copied" })
+    } catch (err) {
+      ctx.state.set("toast", { kind: "error", message: err.message })
+    }
+  }
+}</code></pre>
+
+      <h3>File input &mdash; read as data URL</h3>
+<pre><code>action pickAvatar(file) {
+  js {
+    const reader = new FileReader()
+    reader.onload = () =&gt; ctx.state.set("avatarPreview", reader.result)
+    reader.readAsDataURL(ctx.args.file)
+  }
+}</code></pre>
+
+      <h3>IntersectionObserver for infinite scroll</h3>
+<pre><code>effect [on:mount] {
+  js {
+    const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
+    if (!sentinel) return
+    const observer = new IntersectionObserver((entries) =&gt; {
+      if (entries.some((e) =&gt; e.isIntersecting)) {
+        const page = ctx.state.get("page") || 1
+        ctx.state.set("page", page + 1)
+      }
+    })
+    observer.observe(sentinel)
+    ctx.cleanup(() =&gt; observer.disconnect())
+  }
+}</code></pre>
+
+      <h3>WebSocket subscription</h3>
+<pre><code>effect [on:mount] {
+  js {
+    const socket = new WebSocket("wss://example.com/stocks")
+    socket.addEventListener("message", (event) =&gt; {
+      ctx.state.set("ticker", JSON.parse(event.data))
+    })
+    ctx.cleanup(() =&gt; socket.close())
+  }
+}</code></pre>
+
+      <h3>Keyboard shortcut listener</h3>
+<pre><code>effect [on:mount] {
+  js {
+    const onKey = (e) =&gt; {
+      if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true, composed: true }))
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+  }
+}</code></pre>
+
+      <h3>Browser navigation guard</h3>
+<pre><code>effect [on:mount] {
+  js {
+    const onBeforeUnload = (event) =&gt; {
+      if (ctx.state.get("isDirty")) {
+        event.preventDefault()
+        event.returnValue = ""
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    ctx.cleanup(() =&gt; window.removeEventListener("beforeunload", onBeforeUnload))
+  }
+}</code></pre>
+
+      <h3>Reading lambda arguments</h3>
       <p>
-        Together with <code>$variables</code>, queries, mutations, and
-        actions, JavaScript interactions close the loop: anything you would
-        build in React, Vue, Angular, Svelte, or Solid can now be expressed
-        by an LLM in Streaming UI Script and rendered inside the shadow DOM.
+        When an action receives arguments, they land in <code>ctx.args</code>
+        by name. This is handy for per-row action handlers.
       </p>
+<pre><code>action deleteTask(taskId) {
+  js {
+    const id = ctx.args.taskId
+    const remaining = (ctx.state.get("tasks") || []).filter(t =&gt; t.id !== id)
+    ctx.state.set("tasks", remaining)
+  }
+}
+
+# In the script:
+Button("Delete", action: () =&gt; deleteTask(task.id))</code></pre>
+
+      <h3>Talking to a host-registered tool</h3>
+      <p>
+        Tools are the right primitive when the host has secrets, signed
+        URLs, or framework-specific APIs the script shouldn&rsquo;t touch
+        directly. Register them once on the host:
+      </p>
+<pre><code>// Host
+el.setTools({
+  uploadFile: async ({ file }) =&gt; {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body });
+    return res.json();
+  },
+  fetchOrder: async ({ id }) =&gt; (await fetch(`/api/orders/${id}`)).json(),
+});</code></pre>
+
+      <p>Then call them from the script via <code>ctx.tools</code>:</p>
+<pre><code>action uploadAvatar(file) {
+  js {
+    const result = await ctx.tools.uploadFile({ file: ctx.args.file })
+    ctx.state.set("avatarUrl", result.url)
+  }
+}</code></pre>
+
+      <h2 id="when-not">When NOT to use js&#123;&#125;</h2>
+      <p>The declarative surface already covers most needs &mdash; prefer it whenever possible:</p>
+      <ul>
+        <li><strong>Fetching data</strong> &mdash; use <code>http({...})</code>, never <code>fetch()</code>.</li>
+        <li><strong>Navigation</strong> &mdash; use <code>_route_.navigate(path)</code>, never <code>window.location</code>.</li>
+        <li><strong>Persistence</strong> &mdash; use the <code>storage</code> global directly (<code>storage.set</code>, <code>storage.cookies.set</code>, &hellip;).</li>
+        <li><strong>Logging</strong> &mdash; use <code>console.log(...)</code> directly &mdash; it&rsquo;s an Aktion global.</li>
+        <li><strong>Dispatching events</strong> &mdash; use <code>emit "name" { detail }</code> from an action/effect body.</li>
+        <li><strong>Side-effect chaining</strong> &mdash; use multiple <code>action</code> calls or an <code>effect</code> with a state trigger.</li>
+      </ul>
+      <p>
+        Reach for <code>js{}</code> only when you need a browser API, a
+        third-party SDK, or a host integration that has no declarative
+        equivalent.
+      </p>
+
+      <h2 id="security">Security notes</h2>
+      <ul>
+        <li>The body of <code>js{}</code> is executed with <code>new Function(...)</code>. It runs in the host page&rsquo;s realm, with full access to the page&rsquo;s globals and DOM.</li>
+        <li><strong>Only feed scripts from trusted sources.</strong> If you accept Aktion from arbitrary users, strip or refuse <code>js{}</code> blocks before passing the text to the element.</li>
+        <li>Strict CSP environments may need <code>'unsafe-eval'</code> for <code>js{}</code> blocks to execute. The rest of the runtime works without it.</li>
+        <li>Errors thrown inside <code>js{}</code> are caught and logged; they never crash the surrounding action or effect.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>The full body grammar &mdash; state, HTTP, navigate, emit, return values.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language reference</h3>
+          <p>Reactive state, effects, control flow, built-in <code>@</code>-functions.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Integration</span>
+          <h3>Framework integration</h3>
+          <p>Register tools and wire events from React, Vue, Angular, Svelte, and plain HTML.</p>
+          <span class="demo-arrow">See recipes &rarr;</span>
+        </a>
+      </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
-  <script type="module">
-    import "../dist/streaming-ui-script.js";
-
-    // Wire the three demos. They share their state with each other only by
-    // accident — every element has its own state store inside the shadow DOM.
-    const counter = document.getElementById("demo-counter");
-    counter.setResponse(`$count = 0
-$running = false
-counter = Card([
-  CardHeader("Live counter", "Driven by Script()"),
-  TextContent("" + $count, "large-heavy")
-])
-controls = Buttons([
-  Button($running ? "Pause" : "Start", Action([@Set($running, !$running)]), "primary"),
-  Button("Reset", Action([@Reset($count)]), "secondary")
-])
-ticker = Script("ticker", "if (!ctx.state.get('running')) return; const id = setInterval(() => ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1), 1000); ctx.cleanup(() => clearInterval(id));", ["running"])
-root = Stack([counter, controls, ticker])`);
-
-    const tools = document.getElementById("demo-tools");
-    tools.setTools({
-      list_repos: async ({ limit = 5 } = {}) => {
-        await new Promise((r) => setTimeout(r, 600));
-        const repos = [
-          { name: "ui-lang", stars: 1820, forks: 220 },
-          { name: "rich-ui", stars: 940, forks: 80 },
-          { name: "ai-toolkit", stars: 2300, forks: 412 },
-          { name: "stream-render", stars: 612, forks: 47 },
-          { name: "prompt-kit", stars: 488, forks: 31 },
-        ];
-        return { rows: repos.slice(0, limit) };
-      },
-    });
-    tools.setResponse(`$loaded = false
-$repos = []
-$error = ""
-header = Card([CardHeader("Top GitHub repos", "Loaded via ctx.tools")])
-status = $error == "" ? null : Callout("danger", "Couldn't load", $error)
-list = $loaded ? Table([
-  Col("Repo", $repos.name),
-  Col("Stars", $repos.stars, "number"),
-  Col("Forks", $repos.forks, "number")
-]) : Skeleton("table")
-loader = Script("loader", "try { const data = await ctx.tools.list_repos({ limit: 5 }); ctx.state.set('repos', data.rows ?? []); ctx.state.set('loaded', true); } catch (err) { ctx.state.set('error', String(err.message ?? err)); }", [])
-root = Stack([header, status, list, loader])`);
-
-    const clipboard = document.getElementById("demo-clipboard");
-    clipboard.setResponse(`$snippet = "npm install streaming-ui-script"
-$msg = "Press Copy to test."
-snippet = Card([
-  CardHeader("Copy to clipboard"),
-  CodeBlock("bash", $snippet),
-  Buttons([
-    Button("Copy", Action([@Js("await navigator.clipboard?.writeText(ctx.state.get('snippet') ?? '');"), @Set($msg, "Copied to clipboard.")]), "primary"),
-    Button("Reset", Action([@Set($msg, "Press Copy to test.")]), "secondary")
-  ]),
-  Callout("info", "Status", $msg)
-])
-root = Stack([snippet])`);
-  </script>
 </body>
 </html>

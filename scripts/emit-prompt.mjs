@@ -14,7 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(here, "../dist");
-const bundlePath = resolve(distDir, "streaming-ui-script.js");
+const bundlePath = resolve(distDir, "aktion.js");
 
 async function main() {
   // Ensure DOM globals exist for the bundle's customElements/HTMLElement refs.

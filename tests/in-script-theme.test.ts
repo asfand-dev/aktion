@@ -32,7 +32,7 @@ describe("Theme({...}) language construct", () => {
   });
 
   const create = (): ScriptedEl => {
-    const el = document.createElement("streaming-ui-script");
+    const el = document.createElement("aktion-app");
     document.body.appendChild(el);
     return el as ScriptedEl;
   };
@@ -40,9 +40,9 @@ describe("Theme({...}) language construct", () => {
   it("writes token overrides as CSS custom properties on the host", async () => {
     const el = create();
     el.setResponse(`theme = Theme({
-  colorPrimary: "#0969da",
-  radiusButton: "6px",
-  fontFamily:   "-apple-system, sans-serif"
+  colors: { primary: "#0969da" },
+  radius: { button: "6px" },
+  font:   { family: "-apple-system, sans-serif" }
 })
 root = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
@@ -57,7 +57,7 @@ root = Card([CardHeader("Hello")])`);
   it("layers on top of the base theme; untouched tokens keep base values", async () => {
     const el = create();
     el.setAttribute("theme", "dark");
-    el.setResponse(`theme = Theme({colorPrimary: "#ff5722"})
+    el.setResponse(`theme = Theme({colors: { primary: "#ff5722" }})
 root = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
@@ -68,7 +68,7 @@ root = Card([CardHeader("Hello")])`);
 
   it("clears stale script tokens when Theme({...}) is removed from the program", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colorPrimary: "#16a34a"})
+    el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }})
 root = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
@@ -84,13 +84,13 @@ root = Card([CardHeader("v1")])`);
 
   it("replaces previous script tokens when Theme({...}) changes between renders", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colorPrimary: "#16a34a", radiusButton: "12px"})
+    el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }, radius: { button: "12px" }})
 root = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
     expect(el.style.getPropertyValue("--rui-radius-button")).toBe("12px");
 
-    el.setResponse(`theme = Theme({colorPrimary: "#0070f3"})
+    el.setResponse(`theme = Theme({colors: { primary: "#0070f3" }})
 root = Card([CardHeader("v2")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
@@ -102,15 +102,14 @@ root = Card([CardHeader("v2")])`);
   it("ignores unknown token keys silently", async () => {
     const el = create();
     el.setResponse(`theme = Theme({
-  notARealToken: "should be ignored",
-  colorPrimary:  "#7928ca"
+  colors: { primary: "#7928ca", notARealToken: "should be ignored" }
 })
 root = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#7928ca");
     // No CSS variable created for unknown tokens.
-    expect(el.style.getPropertyValue("--rui-not-a-real-token")).toBe("");
+    expect(el.style.getPropertyValue("--rui-color-not-a-real-token")).toBe("");
   });
 
   it("does not require the theme binding — root alone still renders", async () => {
@@ -125,7 +124,7 @@ root = Card([CardHeader("Hello")])`);
 
   it("Theme({...}) overrides survive host-level setTheme() updates", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colorPrimary: "#0969da"})
+    el.setResponse(`theme = Theme({colors: { primary: "#0969da" }})
 root = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0969da");
@@ -137,6 +136,35 @@ root = Card([CardHeader("Hello")])`);
     // overrides are written on top during the next render.
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0969da");
     expect(el.style.getPropertyValue("--rui-color-bg")).toBe("#0b1220");
+  });
+
+  it("surfaces a warning for the legacy flat-shape Theme form", async () => {
+    const el = create();
+    // Use the schema-validator directly via parse() to capture warnings.
+    const { parse, validateProgramSchema, defaultLibrary } = await import(
+      "../src/index.js"
+    );
+    const program = parse(
+      `theme = Theme({colorPrimary: "#0969da", radiusMd: "8px"})`,
+    );
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    expect(warnings.length).toBeGreaterThanOrEqual(2);
+    expect(warnings.find((w) => w.message.includes("colorPrimary"))?.message)
+      .toMatch(/legacy flat-shape/i);
+    expect(warnings.find((w) => w.message.includes("colorPrimary"))?.message)
+      .toMatch(/colors: \{ primary/);
+    expect(warnings.find((w) => w.message.includes("radiusMd"))?.message)
+      .toMatch(/radius: \{ md/);
+  });
+
+  it("rejects free-form `--css-variable` keys with a migration warning", async () => {
+    const { parse, validateProgramSchema, defaultLibrary } = await import(
+      "../src/index.js"
+    );
+    const program = parse(`theme = Theme({"--rui-color-x": "#abc"})`);
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    expect(warnings[0]?.message).toMatch(/free-form CSS variable keys/i);
   });
 });
 

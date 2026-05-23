@@ -5,7 +5,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
 } from "../utils.js";
@@ -118,6 +117,24 @@ function jsonPreview(value: unknown): string {
   }
 }
 
+function appendJsonChildren(
+  container: HTMLElement,
+  entries: ReadonlyArray<readonly [string, unknown]>,
+  expanded: boolean,
+  depth: number,
+): void {
+  for (const [key, val] of entries) {
+    const row = el("div", { class: "rui-json-tree-row" });
+    row.append(el("span", { class: "rui-json-tree-key" }, [`${key}: `]));
+    if (val !== null && typeof val === "object") {
+      row.append(buildJsonTree(val, expanded, depth + 1));
+    } else {
+      row.append(el("span", { class: "rui-json-tree-leaf" }, [jsonPreview(val)]));
+    }
+    container.append(row);
+  }
+}
+
 function buildJsonTree(data: unknown, expanded: boolean, depth = 0): HTMLElement {
   const root = el("div", { class: "rui-json-tree-node", "data-depth": String(depth) });
   if (data === null || typeof data !== "object") {
@@ -127,7 +144,7 @@ function buildJsonTree(data: unknown, expanded: boolean, depth = 0): HTMLElement
   const isArray = Array.isArray(data);
   const entries = isArray
     ? (data as unknown[]).map((v, i) => [String(i), v] as const)
-    : Object.entries(data as Record<string, unknown>);
+    : (Object.entries(data as Record<string, unknown>) as ReadonlyArray<readonly [string, unknown]>);
   const open = expanded || depth < 1;
   const toggle = el("button", {
     type: "button",
@@ -135,34 +152,23 @@ function buildJsonTree(data: unknown, expanded: boolean, depth = 0): HTMLElement
     "aria-expanded": open ? "true" : "false",
   }, [open ? "▼" : "▶", isArray ? ` Array(${entries.length})` : ` Object`]);
   const children = el("div", { class: "rui-json-tree-children", "data-open": open ? "true" : "false" });
-  if (open) {
-    for (const [key, val] of entries) {
-      const row = el("div", { class: "rui-json-tree-row" });
-      row.append(el("span", { class: "rui-json-tree-key" }, [`${key}: `]));
-      if (val !== null && typeof val === "object") {
-        row.append(buildJsonTree(val, expanded, depth + 1));
-      } else {
-        row.append(el("span", { class: "rui-json-tree-leaf" }, [jsonPreview(val)]));
-      }
-      children.append(row);
-    }
-  }
-  toggle.onclick = () => {
-    const next = children.getAttribute("data-open") !== "true";
-    children.setAttribute("data-open", next ? "true" : "false");
-    toggle.setAttribute("aria-expanded", next ? "true" : "false");
-    toggle.firstChild!.textContent = next ? "▼" : "▶";
-    if (next && children.childElementCount === 0) {
-      for (const [key, val] of entries) {
-        const row = el("div", { class: "rui-json-tree-row" });
-        row.append(el("span", { class: "rui-json-tree-key" }, [`${key}: `]));
-        if (val !== null && typeof val === "object") {
-          row.append(buildJsonTree(val, expanded, depth + 1));
-        } else {
-          row.append(el("span", { class: "rui-json-tree-leaf" }, [jsonPreview(val)]));
-        }
-        children.append(row);
-      }
+  if (open) appendJsonChildren(children, entries, expanded, depth);
+  toggle.onclick = (event) => {
+    // Walk to the live siblings — morph copies this handler onto the kept
+    // toggle but the closure's `toggle`/`children` are detached.
+    const liveToggle = event.currentTarget as HTMLElement;
+    const liveChildren = liveToggle.nextElementSibling as HTMLElement | null;
+    if (!liveChildren) return;
+    const next = liveChildren.getAttribute("data-open") !== "true";
+    liveChildren.setAttribute("data-open", next ? "true" : "false");
+    liveToggle.setAttribute("aria-expanded", next ? "true" : "false");
+    if (liveToggle.firstChild) liveToggle.firstChild.textContent = next ? "▼" : "▶";
+    if (next && liveChildren.childElementCount === 0) {
+      appendJsonChildren(liveChildren, entries, expanded, depth);
+    } else if (!next) {
+      // Collapse: drop the rendered rows so re-opening rebuilds them
+      // against the latest data (and keeps the DOM small for big trees).
+      liveChildren.replaceChildren();
     }
   };
   root.append(toggle, children);
@@ -180,8 +186,8 @@ export const IconButton: ComponentSpec = {
   props: [
     { name: "icon", type: "string", description: "Font Awesome icon name" },
     { name: "label", type: "string", description: "Accessible label (visually hidden)" },
-    { name: "action", type: "Action", optional: true },
-    { name: "variant", type: "string", optional: true, enum: BUTTON_VARIANTS },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
+    { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
     { name: "size", type: "string", optional: true, enum: BUTTON_SIZES },
     { name: "disabled", type: "boolean", optional: true },
   ],
@@ -197,9 +203,7 @@ export const IconButton: ComponentSpec = {
     });
     const iconNode = renderIcon(props.icon, { className: "rui-icon-button-icon" });
     if (iconNode) btn.append(iconNode);
-    btn.onclick = () => {
-      if (isActionPayload(props.action)) helpers.runAction(props.action);
-    };
+    btn.onclick = () => helpers.invoke(props.action);
     return btn;
   },
 };
@@ -216,9 +220,20 @@ export const CommandPalette: ComponentSpec = {
   ],
   render: (_node, props, helpers) => {
     const items = readCommandItems(props.items);
-    const openSlot = helpers.useInstanceState<boolean>("open", props.open === undefined ? true : asBoolean(props.open));
+    // The palette is "controlled" whenever the script supplies an `open`
+    // prop (so `open: $atom` updates the visibility on every change), and
+    // "uncontrolled" otherwise (the internal slot tracks open/closed for
+    // demo programs). When controlled, dismiss handlers still write to
+    // the slot so the next host re-render keeps the visual state in sync
+    // if the script also clears the bound atom.
+    const propProvided = props.open !== undefined;
+    const propOpen = propProvided ? asBoolean(props.open) : true;
+    const openSlot = helpers.useInstanceState<boolean>("open", propOpen);
+    // Sync the slot to the latest prop value on every render so internal
+    // dismiss handlers operate against the current "open" state.
+    if (propProvided && openSlot.get() !== propOpen) openSlot.set(propOpen);
     const filterSlot = helpers.useInstanceState<string>("filter", "");
-    const isOpen = openSlot.get();
+    const isOpen = propProvided ? propOpen : openSlot.get();
 
     const host = el("div", { class: "rui-command-palette", "data-open": isOpen ? "true" : "false" });
     if (!isOpen) return host;
@@ -239,8 +254,8 @@ export const CommandPalette: ComponentSpec = {
     shell.append(header);
 
     const list = el("div", { class: "rui-command-palette-list", role: "listbox" });
-    const paintList = (filter: string): void => {
-      list.replaceChildren();
+    const paintList = (target: HTMLElement, filter: string): void => {
+      target.replaceChildren();
       const lower = filter.trim().toLowerCase();
       const matches = lower === ""
         ? items
@@ -253,7 +268,7 @@ export const CommandPalette: ComponentSpec = {
       for (const item of matches.slice(0, 50)) {
         if (item.group && item.group !== lastGroup) {
           lastGroup = item.group;
-          list.append(el("div", { class: "rui-command-palette-group" }, [lastGroup]));
+          target.append(el("div", { class: "rui-command-palette-group" }, [lastGroup]));
         }
         const row = el("button", {
           type: "button",
@@ -264,38 +279,46 @@ export const CommandPalette: ComponentSpec = {
         if (item.shortcut) row.append(el("span", { class: "rui-command-palette-item-kbd" }, [item.shortcut]));
         row.onclick = (event) => {
           event.stopPropagation();
-          if (isActionPayload(item.action)) helpers.runAction(item.action);
+          helpers.invoke(item.action);
           openSlot.set(false);
           filterSlot.set("");
-          host.setAttribute("data-open", "false");
-          disposeDismissListeners(shell);
+          const liveHost = (event.currentTarget as Element).closest(".rui-command-palette") as HTMLElement | null;
+          const liveShell = liveHost?.querySelector(".rui-command-palette-panel") as HTMLElement | null;
+          liveHost?.setAttribute("data-open", "false");
+          disposeDismissListeners(liveShell ?? null);
         };
-        list.append(row);
+        target.append(row);
       }
       if (matches.length === 0) {
-        list.append(el("div", { class: "rui-command-palette-empty" }, ["No commands found"]));
+        target.append(el("div", { class: "rui-command-palette-empty" }, ["No commands found"]));
       }
     };
-    paintList(filterSlot.get());
+    paintList(list, filterSlot.get());
     shell.append(list);
 
-    backdrop.onclick = () => {
+    backdrop.onclick = (event) => {
+      const liveHost = (event.currentTarget as Element).closest(".rui-command-palette") as HTMLElement | null;
+      const liveShell = liveHost?.querySelector(".rui-command-palette-panel") as HTMLElement | null;
       openSlot.set(false);
-      host.setAttribute("data-open", "false");
-      disposeDismissListeners(shell);
+      liveHost?.setAttribute("data-open", "false");
+      disposeDismissListeners(liveShell ?? null);
     };
     host.append(backdrop, shell);
 
     search.oninput = (event) => {
-      const value = (event.currentTarget as HTMLInputElement).value;
-      filterSlot.set(value);
-      paintList(value);
+      const target = event.currentTarget as HTMLInputElement;
+      const liveList = target.closest(".rui-command-palette-panel")
+        ?.querySelector(".rui-command-palette-list") as HTMLElement | null;
+      filterSlot.set(target.value);
+      if (liveList) paintList(liveList, target.value);
     };
     search.onkeydown = (event) => {
       if ((event as KeyboardEvent).key === "Escape") {
+        const liveHost = (event.currentTarget as Element).closest(".rui-command-palette") as HTMLElement | null;
+        const liveShell = liveHost?.querySelector(".rui-command-palette-panel") as HTMLElement | null;
         openSlot.set(false);
-        host.setAttribute("data-open", "false");
-        disposeDismissListeners(shell);
+        liveHost?.setAttribute("data-open", "false");
+        disposeDismissListeners(liveShell ?? null);
       }
     };
     setTimeout(() => search.focus(), 0);
@@ -316,8 +339,8 @@ export const FilterChips: ComponentSpec = {
   description: "Removable filter chips with an optional clear-all control.",
   props: [
     { name: "chips", type: "any[]", description: "Array of strings or {label, value} objects" },
-    { name: "onRemove", type: "Action", optional: true, description: "Receives the removed chip value via @Js" },
-    { name: "onClear", type: "Action", optional: true },
+    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed chip value as an argument" },
+    { name: "onClear", type: "callable", optional: true },
   ],
   render: (_node, props, helpers) => {
     const chips = readChipList(props.chips);
@@ -333,16 +356,14 @@ export const FilterChips: ComponentSpec = {
       });
       const xIcon = renderIcon("xmark", { className: "rui-filter-chip-remove-icon" });
       if (xIcon) remove.append(xIcon);
-      remove.onclick = () => {
-        if (isActionPayload(props.onRemove)) helpers.runAction(props.onRemove);
-      };
+      remove.onclick = () => helpers.invoke(props.onRemove, chip.value);
       pill.append(remove);
       row.append(pill);
     }
     root.append(row);
-    if (chips.length > 0 && isActionPayload(props.onClear)) {
+    if (chips.length > 0 && typeof props.onClear === "function") {
       const clear = el("button", { type: "button", class: "rui-filter-chips-clear" }, ["Clear all"]);
-      clear.onclick = () => helpers.runAction(props.onClear);
+      clear.onclick = () => helpers.invoke(props.onClear);
       root.append(clear);
     }
     return root;
@@ -356,8 +377,8 @@ export const FieldRepeater: ComponentSpec = {
   props: [
     { name: "items", type: "any[]" },
     { name: "fields", type: "any[]" },
-    { name: "onAdd", type: "Action", optional: true },
-    { name: "onRemove", type: "Action", optional: true },
+    { name: "onAdd", type: "callable", optional: true },
+    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed row's 0-indexed position" },
     { name: "addLabel", type: "string", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -381,24 +402,24 @@ export const FieldRepeater: ComponentSpec = {
         grid.append(wrap);
       }
       card.append(grid);
-      if (isActionPayload(props.onRemove)) {
+      if (typeof props.onRemove === "function") {
         const remove = el("button", {
           type: "button",
           class: "rui-field-repeater-remove",
           "aria-label": "Remove row",
         }, ["Remove"]);
-        remove.onclick = () => helpers.runAction(props.onRemove);
+        remove.onclick = () => helpers.invoke(props.onRemove, index);
         card.append(remove);
       }
       root.append(card);
     });
-    if (isActionPayload(props.onAdd)) {
+    if (typeof props.onAdd === "function") {
       const add = el("button", {
         type: "button",
         class: "rui-field-repeater-add rui-button",
         "data-variant": "secondary",
       }, [asString(props.addLabel, "Add row")]);
-      add.onclick = () => helpers.runAction(props.onAdd);
+      add.onclick = () => helpers.invoke(props.onAdd);
       root.append(add);
     }
     return root;
@@ -476,7 +497,7 @@ export const QueryBuilder: ComponentSpec = {
   props: [
     { name: "fields", type: "any[]" },
     { name: "value", type: "any[]", optional: true },
-    { name: "onChange", type: "Action", optional: true },
+    { name: "onChange", type: "callable", optional: true, description: "Receives the next rule array" },
   ],
   render: (node, props, helpers) => {
     const fields = readFields(props.fields);
@@ -506,8 +527,8 @@ export const QueryBuilder: ComponentSpec = {
         const remove = el("button", { type: "button", class: "rui-query-builder-remove" }, ["×"]);
         remove.onclick = () => {
           const next = current.filter((_, i) => i !== index);
-          if (stateRef) helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateRef, value: next }] });
-          else if (isActionPayload(props.onChange)) helpers.runAction(props.onChange);
+          if (stateRef) helpers.setState(stateRef, next);
+          else helpers.invoke(props.onChange, next);
           paint(next);
         };
         row.append(remove);
@@ -516,8 +537,8 @@ export const QueryBuilder: ComponentSpec = {
       const add = el("button", { type: "button", class: "rui-query-builder-add" }, ["Add rule"]);
       add.onclick = () => {
         const next = [...current, { field: fields[0]?.name ?? "", op: "equals", value: "" }];
-        if (stateRef) helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateRef, value: next }] });
-        else if (isActionPayload(props.onChange)) helpers.runAction(props.onChange);
+        if (stateRef) helpers.setState(stateRef, next);
+        else helpers.invoke(props.onChange, next);
         paint(next);
       };
       root.append(add);
@@ -643,23 +664,28 @@ export const Truncate: ComponentSpec = {
   render: (_node, props, helpers) => {
     const maxLines = Math.max(1, Math.floor(asNumber(props.maxLines, 3)));
     const expandedSlot = helpers.useInstanceState<boolean>("expanded", false);
+    const clampStyle = `display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden`;
     const root = el("div", { class: "rui-truncate", "data-expanded": expandedSlot.get() ? "true" : "false" });
     const body = el("p", {
       class: "rui-truncate-text",
-      style: expandedSlot.get() ? "" : `display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden`,
+      style: expandedSlot.get() ? "" : clampStyle,
     }, [asString(props.text)]);
     const toggle = el("button", {
       type: "button",
       class: "rui-truncate-toggle",
     }, [expandedSlot.get() ? "Show less" : asString(props.expandLabel, "Show more")]);
-    toggle.onclick = () => {
+    toggle.onclick = (event) => {
+      // Walk to the live `.rui-truncate` root and find the live <p>; the
+      // closure-captured nodes are detached once morph reuses the kept DOM.
+      const liveToggle = event.currentTarget as HTMLElement;
+      const liveRoot = liveToggle.closest(".rui-truncate") as HTMLElement | null;
+      const liveBody = liveRoot?.querySelector(".rui-truncate-text") as HTMLElement | null;
+      if (!liveRoot || !liveBody) return;
       const next = !expandedSlot.get();
       expandedSlot.set(next);
-      body.style.cssText = next
-        ? ""
-        : `display:-webkit-box;-webkit-line-clamp:${maxLines};-webkit-box-orient:vertical;overflow:hidden`;
-      toggle.textContent = next ? "Show less" : asString(props.expandLabel, "Show more");
-      root.setAttribute("data-expanded", next ? "true" : "false");
+      liveBody.style.cssText = next ? "" : clampStyle;
+      liveToggle.textContent = next ? "Show less" : asString(props.expandLabel, "Show more");
+      liveRoot.setAttribute("data-expanded", next ? "true" : "false");
     };
     root.append(body, toggle);
     return root;
@@ -672,7 +698,7 @@ export const InlineEdit: ComponentSpec = {
   props: [
     { name: "value", type: "string" },
     { name: "label", type: "string", optional: true },
-    { name: "onSave", type: "Action", optional: true },
+    { name: "onSave", type: "callable", optional: true, description: "Receives the committed draft string" },
   ],
   render: (node, props, helpers) => {
     const editingSlot = helpers.useInstanceState<boolean>("editing", false);
@@ -691,33 +717,45 @@ export const InlineEdit: ComponentSpec = {
       value: draftSlot.get(),
     }) as HTMLInputElement;
 
-    const commit = (): void => {
-      editingSlot.set(false);
-      root.setAttribute("data-editing", "false");
-      if (stateRef) {
-        helpers.runAction({
-          kind: "Action",
-          steps: [{ kind: "Set", name: stateRef, value: draftSlot.get() }],
-        });
-      }
-      if (isActionPayload(props.onSave)) helpers.runAction(props.onSave);
+    const resolveLive = (origin: Element): {
+      root: HTMLElement; input: HTMLInputElement;
+    } | null => {
+      const liveRoot = origin.closest(".rui-inline-edit") as HTMLElement | null;
+      const liveInput = liveRoot?.querySelector(".rui-inline-edit-input") as HTMLInputElement | null;
+      if (!liveRoot || !liveInput) return null;
+      return { root: liveRoot, input: liveInput };
     };
 
-    display.onclick = () => {
+    const commit = (origin: Element): void => {
+      const live = resolveLive(origin);
+      editingSlot.set(false);
+      live?.root.setAttribute("data-editing", "false");
+      const draft = draftSlot.get();
+      if (stateRef) helpers.setState(stateRef, draft);
+      helpers.invoke(props.onSave, draft);
+    };
+
+    display.onclick = (event) => {
+      const live = resolveLive(event.currentTarget as Element);
       draftSlot.set(asString(props.value));
       editingSlot.set(true);
-      root.setAttribute("data-editing", "true");
-      setTimeout(() => input.focus(), 0);
+      if (live) {
+        live.root.setAttribute("data-editing", "true");
+        live.input.value = draftSlot.get();
+        setTimeout(() => live.input.focus(), 0);
+      }
     };
     input.oninput = (event) => draftSlot.set((event.currentTarget as HTMLInputElement).value);
     input.onkeydown = (event) => {
-      if ((event as KeyboardEvent).key === "Enter") commit();
-      if ((event as KeyboardEvent).key === "Escape") {
+      const kev = event as KeyboardEvent;
+      if (kev.key === "Enter") commit(event.currentTarget as Element);
+      if (kev.key === "Escape") {
+        const live = resolveLive(event.currentTarget as Element);
         editingSlot.set(false);
-        root.setAttribute("data-editing", "false");
+        live?.root.setAttribute("data-editing", "false");
       }
     };
-    input.onblur = () => commit();
+    input.onblur = (event) => commit(event.currentTarget as Element);
 
     root.append(display, input);
     return root;
@@ -730,7 +768,7 @@ export const NotificationBell: ComponentSpec = {
   props: [
     { name: "count", type: "number", optional: true },
     { name: "items", type: "any[]", optional: true, description: "{title, message?, time?} objects" },
-    { name: "onOpen", type: "Action", optional: true },
+    { name: "onOpen", type: "callable", optional: true },
   ],
   render: (_node, props, helpers) => {
     const count = Math.max(0, Math.floor(asNumber(props.count, 0)));
@@ -772,23 +810,30 @@ export const NotificationBell: ComponentSpec = {
 
     trigger.onclick = (event) => {
       event.stopPropagation();
+      // Resolve the *live* DOM nodes from the event target so this
+      // handler keeps working after the morph reconciler copies it onto
+      // the kept DOM (the closure-captured `root`/`trigger` reference
+      // the freshly-built fragment, which is detached after morph).
+      const liveTrigger = event.currentTarget as HTMLElement;
+      const liveRoot = liveTrigger.closest(".rui-notification-bell") as HTMLElement | null;
+      if (!liveRoot) return;
       const next = !openSlot.get();
       openSlot.set(next);
-      root.setAttribute("data-open", next ? "true" : "false");
-      trigger.setAttribute("aria-expanded", next ? "true" : "false");
+      liveRoot.setAttribute("data-open", next ? "true" : "false");
+      liveTrigger.setAttribute("aria-expanded", next ? "true" : "false");
       if (next) {
-        if (isActionPayload(props.onOpen)) helpers.runAction(props.onOpen);
+        helpers.invoke(props.onOpen);
         installDismissListeners({
-          liveRoot: root,
+          liveRoot,
           key: "notification-bell",
           onDismiss: () => {
             openSlot.set(false);
-            root.setAttribute("data-open", "false");
-            trigger.setAttribute("aria-expanded", "false");
+            liveRoot.setAttribute("data-open", "false");
+            liveTrigger.setAttribute("aria-expanded", "false");
           },
         });
       } else {
-        disposeDismissListeners(root);
+        disposeDismissListeners(liveRoot);
       }
     };
     return root;

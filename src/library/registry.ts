@@ -23,7 +23,7 @@ function getIndex(library: ComponentLibrary): Map<string, ComponentSpec> {
 /**
  * Combines two libraries by name. Components from `extra` win on collision.
  * Useful when a consumer registers their own components alongside the
- * built-ins via `<streaming-ui-script>.registerComponents([...])`.
+ * built-ins via `<aktion-app>.registerComponents([...])`.
  */
 export function mergeLibraries(
   base: ComponentLibrary,

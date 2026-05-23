@@ -8,7 +8,7 @@
  *   - app          : `getSystemPrompt({ mode: "full", preamble, rules })`
  *
  * Per assistant turn:
- *   - Live streaming preview rendered by <streaming-ui-script>.
+ *   - Live streaming preview rendered by <aktion-app>.
  *   - Preview / Source tabs with copy + open-in-playground + download HTML.
  *   - Regenerate uses the last user prompt.
  *
@@ -18,22 +18,22 @@
  * No bundler: ships as plain ESM to GitHub Pages.
  */
 
-import "../../dist/streaming-ui-script.js";
+import "../../dist/aktion.js";
 
 /* ===========================================================================
    1. Constants
    =========================================================================== */
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const CDN_BUNDLE = "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
+const CDN_BUNDLE = "https://asfand-dev.github.io/aktion/dist/aktion.js";
 const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 
 const STORAGE = {
-  apiKey: "streaming-ui-script.chat.openrouter-key",
-  model: "streaming-ui-script.chat.openrouter-model",
-  theme: "streaming-ui-script.chat.theme",
-  mode: "streaming-ui-script.chat.mode",
-  history: "streaming-ui-script.chat.history-size",
+  apiKey: "aktion.chat.openrouter-key",
+  model: "aktion.chat.openrouter-model",
+  theme: "aktion.chat.theme",
+  mode: "aktion.chat.mode",
+  history: "aktion.chat.history-size",
 };
 
 const MODES = {
@@ -95,41 +95,41 @@ const SUGGESTIONS = {
 };
 
 const WEBSITE_PREAMBLE =
-  "You are a generative web designer. Your job is to produce complete, modern, production-quality websites in Streaming UI Script. The reply must look and feel like a real, polished marketing or content site — not a single card.";
+  "You are a generative web designer. Your job is to produce complete, modern, production-quality websites in Aktion. The reply must look and feel like a real, polished marketing or content site — not a single card.";
 
 const WEBSITE_RULES = [
   "WEBSITE MODE — always return a full, multi-section website assigned to `root`. Never reply with a single Card or a chat-style bubble in this mode.",
   "Lead with a `Navbar` (logo + 3–6 links + CTA) and end with a footer section (Stack with brand line, link columns, and a small copyright note).",
   "Between the navbar and footer compose 5+ sections drawn from: `Hero`, `Cover`, `FeatureGrid`, `MediaCard`, `PricingTable`, `Testimonial`, `Stats`, `Timeline`, `Banner`, `EmptyState` (for CTA blocks), and `Section`/`Card` for custom blocks. Use `Container(maxWidth, content)` to constrain each section.",
-  "Use multiple routes when the user implies more than one page (Home, Pricing, About, Contact, etc.) — wire them up with `Routes([Route(...), ...], \"/\")` and `NavLink` items in the navbar. Each page must be substantive (3+ sections).",
+  "Use multiple routes when the user implies more than one page (Home, Pricing, About, Contact, etc.) — declare them once with `pages = _router_({ \"/\": Home(), \"/pricing\": Pricing(), … })` and link them from the navbar with `NavLink(\"Pricing\", to: \"/pricing\")`. Each page must be substantive (3+ sections).",
   "Use real-looking copy. Never write Lorem Ipsum or placeholder text — write actual marketing-ready microcopy that fits the product/brand the user asked for.",
   "Use `Icon`/`Badge` liberally for visual polish, and `Quote` for testimonials. Pair text-heavy sections with `Image` URLs that look plausible (https://images.unsplash.com/... or https://picsum.photos/).",
   // Modern-language nudges
   "Prefer **responsive prop maps** for layout: write `Grid(items, {sm: 1, md: 2, lg: 3}, \"l\")` (NOT `Grid(items, 3, \"l\")`) so the site looks right on phone AND desktop. The same goes for `Stack(direction)` (e.g. `{sm:\"column\",md:\"row\"}`).",
   "Use **template literals** for any string that mixes copy with values: `${@Count(plans)} plans starting from today's date` instead of `\"…\" + … + \"…\"` concatenation.",
-  "Use **component macros** to factor out repeated sections — e.g. `FeatureRow(f) = FeatureItem(f.title, f.desc, f.icon)` then `FeatureGrid(@Each(features, \"f\", FeatureRow(f)))`. Keeps the page short and consistent.",
-  "Keep the response in pure Streaming UI Script — no HTML, no markdown wrappers, no commentary.",
+  "Use **`component` declarations** to factor out repeated sections — e.g. `component FeatureRow(f) { FeatureItem(f.title, f.desc, f.icon) }` then `FeatureGrid(for f in features { FeatureRow(f) })`. Keeps the page short and consistent.",
+  "Keep the response in pure Aktion — no HTML, no markdown wrappers, no commentary.",
 ];
 
 const APP_PREAMBLE =
-  "You are a generative full-stack app builder. Your job is to produce complete, working applications in Streaming UI Script with multiple routes, reactive state, working CRUD interactions, and rich SaaS-quality UI.";
+  "You are a generative full-stack app builder. Your job is to produce complete, working applications in Aktion with multiple routes, reactive state, working CRUD interactions, and rich SaaS-quality UI.";
 
 const APP_RULES = [
   "APP MODE — always reply with a complete application assigned to `root` using `AppShell` (or `Sidebar`+`SplitView`) for the layout. Never reply with a single Card.",
-  "The application MUST have a left `Sidebar` with logical sections (`SidebarSection`) and 4–8 `SidebarItem`s pointing to routes. Every nav item must lead to a real, working page rendered via `Routes([Route(...), ...], \"/dashboard\")`.",
-  "Every page must be substantive: KPIs (`MetricGrid`), at least one data view (`Table`, `KanbanBoard`, `Timeline`, `List`, or `Tree`), filters/toolbar (`Toolbar`, `SearchBar`), and at least one working action button (Create / Edit / Delete / Status change).",
-  "MOCK DATA — if the user did not provide a data source, seed realistic mock data inline via `$state` variables at the top of the program. Aim for 5–20 sample rows per dataset, with believable names, dates, numbers, and statuses. Pages must read from these `$state` variables so changes propagate live.",
-  "Every visible button must be wired. Use `Action([@Set(...), @Push(...), @Reset(...), @Js(...), @Navigate(...)])` for behaviour. No dead buttons. Forms must submit into `$state` and update the visible UI.",
-  "Use `Script(\"id\", body, deps?)` for derived/computed state (e.g. totals, filtered lists) and lifecycle effects (interval refreshes, keyboard shortcuts). Use `@Js(body, args?)` for one-shot click handlers that need per-row data.",
+  "The application MUST have a left `Sidebar` with logical sections (`SidebarSection`) and 4–8 `SidebarItem`s pointing to routes. Every nav item must lead to a real, working page rendered via a `pages = _router_({ … })` call.",
+  "Every page must be substantive: KPIs (`Stats(layout: \"grid\", …)`), at least one data view (`Table`, `KanbanBoard`, `Timeline`, `List`, or `Tree`), filters/toolbar (`Toolbar`, `SearchBar`), and at least one working action button (Create / Edit / Delete / Status change).",
+  "MOCK DATA — if the user did not provide a data source, seed realistic mock data inline via `$state` declarations at the top of the program. Aim for 5–20 sample rows per dataset, with believable names, dates, numbers, and statuses. Pages must read from these `$state` variables so changes propagate live.",
+  "Every visible button must be wired. Declare `action name() { … }` blocks (mark them `optimistic` when they mutate state before an async hop) and reference them via `Button(\"Label\", action: name)`. No dead buttons. Forms submit by dispatching an action that writes to `$state`.",
+  "Use `$name = expr` for derived values (totals, filtered lists) and `effect [ ...deps ] { … }` (deps mix `$atom`, `on:mount`, `on:unmount`, `on:every(N)`, `debounce(N)`, `throttle(N)`) for lifecycle work (interval refreshes, keyboard shortcuts). Avoid raw `js{ … }` inside views — keep it inside `action` / `effect` bodies.",
   "Match the design quality of shadcn/Tailwind apps: rich layouts, `PageHeader` on each page, `Toolbar` strips, `StatCard` density, `Badge`/`StatusDot` for state, `Avatar`/`PersonChip` where people appear, `EmptyState` for empty lists.",
   // Modern-language nudges
-  "Use **`$$persistent` state** for anything the user expects to find again on reload — `$$theme`, `$$sidebarCollapsed`, `$$lastRoute`, `$$selectedId`, `$$cart`. Same read/write surface as `$`, just durable.",
-  "Use **`@Switch(value, {…}, default)` and `@If(cond, then, else?)`** instead of nested ternaries when routing tabs/views — branches are evaluated lazily so loop variables stay safe.",
-  "Use **template literals** for any computed copy: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@Format(@Sum(rows.total, \"currency\", \"USD\"), \"USD\")}` `` reads much better than `+` concatenation.",
-  "Use **`@Each` with destructuring**: `@Each($users, \"{id, name, role}\", row)` exposes the fields directly inside `row` instead of repeating `u.name`, `u.role`.",
-  "Use **component macros** for repeated rows/cards: `RowCard(p) = Card([Avatar(p.name), TextContent(p.role)])` then `@Each($people, \"p\", RowCard(p))`. One source of truth for visual style.",
+  "Reactive state is `$name = value` — there is one atom kind; the host handles persistence via `serializeState()` / `hydrateState()`.",
+  "Use **`if cond { … } else { … }` and `match value { \"key\": branch  default: fallback }`** as first-class expressions instead of nested ternaries when routing tabs/views — branches are evaluated lazily so loop variables stay safe.",
+  "Use **template literals** for any computed copy: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@Format(@Sum(rows, \"total\"), \"currency\", \"USD\")}` `` reads much better than `+` concatenation.",
+  "Use **`for x in xs { … }`** as an expression to iterate lists (with optional `key:` for stable identity), e.g. `for u in $users { UserRow(u) }`.",
+  "Use **`component Name(args) { … }` declarations** for repeated rows/cards: `component RowCard(p) { Card([Avatar(p.name), Text(p.role)]) }`, then `for p in $people { RowCard(p) }`. One source of truth for visual style.",
   "Use **responsive prop maps** for `Grid`/`Stack` (`{sm:1, md:2, lg:4}`) so the app works on mobile AND desktop.",
-  "Keep the response in pure Streaming UI Script — no HTML, no markdown wrappers, no commentary.",
+  "Keep the response in pure Aktion — no HTML, no markdown wrappers, no commentary.",
 ];
 
 /* ===========================================================================
@@ -209,6 +209,9 @@ const els = {
   input: $("cb-input"),
   send: $("cb-send"),
   stop: $("cb-stop"),
+  attachBtn: $("cb-attach"),
+  fileInput: $("cb-file-input"),
+  attachRow: $("cb-attach-row"),
   drawer: $("cb-drawer"),
   drawerBackdrop: $("cb-drawer-backdrop"),
   drawerClose: $("cb-drawer-close"),
@@ -222,6 +225,11 @@ const els = {
   toast: $("cb-toast"),
 };
 
+/* Composer attachment cap — keeps payloads sensible on free OpenRouter keys. */
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024; // 8 MB per file
+const MAX_ATTACHMENTS_PER_MESSAGE = 6;
+const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
 /* ===========================================================================
    5. App state
    =========================================================================== */
@@ -231,6 +239,13 @@ const turns = [];        // DOM refs per assistant turn
 let inFlight = null;     // AbortController
 let currentMode = settings.mode;
 let cachedPrompt = "";   // current built system prompt
+
+/**
+ * Pending attachments staged in the composer (cleared after the next send).
+ * Each entry is { id, name, sizeBytes, mime, kind: "image" | "file", dataUrl }.
+ * `dataUrl` is a base64 data: URL ready to embed in the OpenRouter payload.
+ */
+const pendingAttachments = [];
 
 /* ===========================================================================
    6. Boot
@@ -361,7 +376,7 @@ function wireEvents() {
   // -- Theme picker (affects all renderers) --
   els.theme.addEventListener("change", (e) => {
     settings.theme = e.target.value;
-    document.querySelectorAll(".cb-msg-preview streaming-ui-script").forEach((node) => {
+    document.querySelectorAll(".cb-msg-preview aktion-app").forEach((node) => {
       node.setAttribute("theme", e.target.value);
     });
   });
@@ -411,7 +426,8 @@ function wireEvents() {
   els.composer.addEventListener("submit", (event) => {
     event.preventDefault();
     const text = els.input.value;
-    if (!text.trim() || els.send.disabled) return;
+    const hasContent = text.trim() || pendingAttachments.length > 0;
+    if (!hasContent || els.send.disabled) return;
     els.input.value = "";
     resizeInput();
     sendMessage(text);
@@ -436,6 +452,50 @@ function wireEvents() {
     if (inFlight) inFlight.abort();
   });
 
+  // -- Attachments (paperclip → file input → staged chips) --
+  els.attachBtn.addEventListener("click", () => {
+    if (pendingAttachments.length >= MAX_ATTACHMENTS_PER_MESSAGE) {
+      showToast(`Up to ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message`, "triangle-exclamation");
+      return;
+    }
+    els.fileInput.click();
+  });
+  els.fileInput.addEventListener("change", async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = ""; // reset so the same file can be picked again
+    await addAttachments(files);
+  });
+
+  // -- Drag & drop onto the composer --
+  const dropZone = els.composer.querySelector(".cb-composer-inner");
+  ["dragenter", "dragover"].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      if (!e.dataTransfer?.types?.includes("Files")) return;
+      e.preventDefault();
+      dropZone.classList.add("cb-drop-target");
+    });
+  });
+  ["dragleave", "dragend", "drop"].forEach((name) => {
+    dropZone.addEventListener(name, () => dropZone.classList.remove("cb-drop-target"));
+  });
+  dropZone.addEventListener("drop", async (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    await addAttachments(Array.from(e.dataTransfer.files));
+  });
+
+  // -- Paste images directly from the clipboard --
+  els.input.addEventListener("paste", async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const files = items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (files.length === 0) return;
+    e.preventDefault();
+    await addAttachments(files);
+  });
+
   // -- Suggestions (event-delegated; rendered dynamically) --
   els.suggestions.addEventListener("click", (e) => {
     const btn = e.target.closest(".cb-suggestion");
@@ -449,6 +509,138 @@ function wireEvents() {
       closeDrawer();
     }
   });
+}
+
+/* ===========================================================================
+   7b. Attachments (images + PDFs piped through OpenRouter multimodal API)
+   =========================================================================== */
+
+/**
+ * Stage one or more files in the composer. Files are size-checked, classified
+ * as image vs file (PDF / other), and converted to base64 data URLs ready to
+ * embed in the OpenRouter content array.
+ */
+async function addAttachments(files) {
+  for (const file of files) {
+    if (pendingAttachments.length >= MAX_ATTACHMENTS_PER_MESSAGE) {
+      showToast(`Up to ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message`, "triangle-exclamation");
+      break;
+    }
+    if (!file || file.size === 0) continue;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showToast(`"${file.name}" is too large (max ${formatBytes(MAX_ATTACHMENT_BYTES)})`, "triangle-exclamation");
+      continue;
+    }
+    try {
+      const dataUrl = await readAsDataUrl(file);
+      const isImage = SUPPORTED_IMAGE_TYPES.includes(file.type);
+      pendingAttachments.push({
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name || (isImage ? "image" : "file"),
+        sizeBytes: file.size,
+        mime: file.type || (isImage ? "image/png" : "application/octet-stream"),
+        kind: isImage ? "image" : "file",
+        dataUrl,
+      });
+    } catch (err) {
+      showToast(`Couldn't read "${file.name}": ${err?.message || "unknown error"}`, "triangle-exclamation");
+    }
+  }
+  renderAttachmentChips();
+}
+
+function removeAttachment(id) {
+  const idx = pendingAttachments.findIndex((a) => a.id === id);
+  if (idx === -1) return;
+  pendingAttachments.splice(idx, 1);
+  renderAttachmentChips();
+}
+
+function clearAttachments() {
+  pendingAttachments.length = 0;
+  renderAttachmentChips();
+}
+
+function renderAttachmentChips() {
+  els.attachRow.replaceChildren();
+  if (pendingAttachments.length === 0) {
+    els.attachRow.hidden = true;
+    els.attachBtn.dataset.active = "false";
+    return;
+  }
+  els.attachRow.hidden = false;
+  els.attachBtn.dataset.active = "true";
+  for (const att of pendingAttachments) {
+    const chip = el("span", { class: "cb-chip", "data-id": att.id });
+
+    if (att.kind === "image") {
+      const img = el("img", {
+        class: "cb-chip-thumb",
+        src: att.dataUrl,
+        alt: att.name,
+      });
+      chip.append(img);
+    } else {
+      const icon = el(
+        "span",
+        { class: "cb-chip-icon" },
+        el("i", { class: "fa-solid fa-file-pdf", "aria-hidden": "true" }),
+      );
+      chip.append(icon);
+    }
+
+    chip.append(el("span", { class: "cb-chip-meta" },
+      el("span", { class: "cb-chip-name", title: att.name }, att.name),
+      el("span", { class: "cb-chip-size" }, formatBytes(att.sizeBytes)),
+    ));
+
+    const removeBtn = el("button", {
+      type: "button",
+      class: "cb-chip-remove",
+      "aria-label": `Remove ${att.name}`,
+      title: "Remove attachment",
+    }, el("i", { class: "fa-solid fa-xmark", "aria-hidden": "true" }));
+    removeBtn.addEventListener("click", () => removeAttachment(att.id));
+    chip.append(removeBtn);
+
+    els.attachRow.append(chip);
+  }
+}
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Build the `content` array OpenRouter expects for a multimodal user message.
+ * Per OpenRouter docs: text first, then image_url / file parts.
+ *   - images → { type: "image_url", image_url: { url: dataUrl } }
+ *   - PDFs / other files → { type: "file", file: { filename, file_data: dataUrl } }
+ * Returns a plain string when no attachments are present (cheaper, single-modal).
+ */
+function buildUserContent(text, attachments) {
+  if (!attachments || attachments.length === 0) return text;
+  const parts = [{ type: "text", text }];
+  for (const att of attachments) {
+    if (att.kind === "image") {
+      parts.push({ type: "image_url", image_url: { url: att.dataUrl } });
+    } else {
+      parts.push({ type: "file", file: { filename: att.name, file_data: att.dataUrl } });
+    }
+  }
+  return parts;
 }
 
 /* ===========================================================================
@@ -486,7 +678,7 @@ function renderSuggestions(mode) {
 
 function buildSystemPrompt(mode) {
   const def = MODES[mode] || MODES["chat-compact"];
-  const proxy = document.createElement("streaming-ui-script");
+  const proxy = document.createElement("aktion-app");
   return proxy.getSystemPrompt(def.options());
 }
 
@@ -502,6 +694,7 @@ function resetConversation() {
   conversation.length = 0;
   turns.length = 0;
   els.history.replaceChildren();
+  clearAttachments();
   toggleWelcome(true);
   setBusy(false);
   els.input.focus();
@@ -523,9 +716,13 @@ function resizeInput() {
   els.input.style.height = `${Math.min(200, els.input.scrollHeight)}px`;
 }
 
-async function sendMessage(rawText) {
+async function sendMessage(rawText, options = {}) {
   const text = (rawText || "").trim();
-  if (!text) return;
+  // Snapshot + clear pending attachments BEFORE any await so a slow user
+  // adding files while the request is in-flight can't double-attach.
+  const attachments = options.attachments ?? pendingAttachments.slice();
+  const hasAttachments = attachments.length > 0;
+  if (!text && !hasAttachments) return;
   if (!settings.apiKey) {
     showSetup();
     return;
@@ -538,8 +735,14 @@ async function sendMessage(rawText) {
 
   toggleWelcome(false);
 
-  conversation.push({ role: "user", content: text });
-  appendUserMessage(text);
+  // Conversation history keeps the multimodal `content` array verbatim so the
+  // LLM keeps the attachments in context across turns.
+  const userContent = buildUserContent(text, attachments);
+  conversation.push({ role: "user", content: userContent });
+  appendUserMessage(text, attachments);
+
+  // Clear the composer's staged attachments once we've consumed them.
+  if (options.attachments == null) clearAttachments();
 
   const turn = appendAssistantTurn(currentMode);
   turns.push(turn);
@@ -587,7 +790,7 @@ async function sendMessage(rawText) {
    10. Message rendering
    =========================================================================== */
 
-function appendUserMessage(text) {
+function appendUserMessage(text, attachments) {
   const wrap = el("article", { class: "cb-msg cb-msg--user" });
   const meta = el("div", { class: "cb-msg-meta" },
     el("span", { class: "cb-role" },
@@ -596,7 +799,21 @@ function appendUserMessage(text) {
     ),
     el("span", { class: "cb-msg-time" }, formatTime(new Date())),
   );
-  const bubble = el("div", { class: "cb-bubble" }, text);
+  const bubble = el("div", { class: "cb-bubble" }, text || "");
+  if (attachments && attachments.length > 0) {
+    const row = el("div", { class: "cb-user-attachments" });
+    for (const att of attachments) {
+      const chip = el("span", { class: "cb-user-attachment", title: att.name });
+      if (att.kind === "image") {
+        chip.append(el("img", { src: att.dataUrl, alt: att.name }));
+      } else {
+        chip.append(el("i", { class: "fa-solid fa-file-pdf", "aria-hidden": "true" }));
+      }
+      chip.append(el("span", {}, att.name));
+      row.append(chip);
+    }
+    bubble.append(row);
+  }
   wrap.append(meta, bubble);
   els.history.append(wrap);
   scrollToEnd();
@@ -677,7 +894,7 @@ function appendAssistantTurn(mode) {
   const skeleton = el("div", { class: "cb-msg-skeleton" },
     el("span"), el("span"), el("span"), el("span"), el("span"),
   );
-  const renderer = document.createElement("streaming-ui-script");
+  const renderer = document.createElement("aktion-app");
   renderer.setAttribute("transparent", "true");
   renderer.setAttribute("theme", settings.theme);
   renderer.setAttribute("data-theme-managed", "true");
@@ -885,21 +1102,58 @@ function regenerateFrom(wrap) {
     showToast("Nothing to regenerate", "circle-info");
     return;
   }
-  const text = previous.querySelector(".cb-bubble")?.textContent || "";
-  if (!text.trim()) return;
+
+  // The conversation log keeps the exact multimodal `content` (text +
+  // attachments) of the prior turn. Re-use it so regen replays attachments.
+  const lastAssistantIdx = conversation.length - 1;
+  const lastUserIdx = lastAssistantIdx - 1;
+  const userEntry = conversation[lastUserIdx];
+  if (!userEntry || userEntry.role !== "user") {
+    showToast("Nothing to regenerate", "circle-info");
+    return;
+  }
+
+  const { text, attachments } = splitUserContent(userEntry.content);
+  if (!text.trim() && attachments.length === 0) return;
 
   // Remove the assistant turn (and any cancelled / error tail) so we replace it.
   wrap.remove();
-  // Pop the last assistant entry from the conversation (if any).
-  if (conversation.length && conversation[conversation.length - 1].role === "assistant") {
-    conversation.pop();
-  }
-  // Pop the user message too — sendMessage will re-add it.
-  if (conversation.length && conversation[conversation.length - 1].role === "user") {
-    conversation.pop();
-  }
+  if (conversation[lastAssistantIdx]?.role === "assistant") conversation.pop();
+  conversation.pop(); // user
   previous.remove();
-  sendMessage(text);
+  sendMessage(text, { attachments });
+}
+
+/** Inverse of `buildUserContent` — split a multimodal entry back into pieces. */
+function splitUserContent(content) {
+  if (typeof content === "string") return { text: content, attachments: [] };
+  if (!Array.isArray(content)) return { text: "", attachments: [] };
+  let text = "";
+  const attachments = [];
+  for (const part of content) {
+    if (part?.type === "text" && typeof part.text === "string") {
+      text = part.text;
+    } else if (part?.type === "image_url" && part.image_url?.url) {
+      attachments.push({
+        id: `att-replay-${attachments.length}`,
+        name: "image",
+        sizeBytes: 0,
+        mime: "image/*",
+        kind: "image",
+        dataUrl: part.image_url.url,
+      });
+    } else if (part?.type === "file" && part.file?.file_data) {
+      attachments.push({
+        id: `att-replay-${attachments.length}`,
+        name: part.file.filename || "file",
+        sizeBytes: 0,
+        mime: "application/pdf",
+        kind: "file",
+        dataUrl: part.file.file_data,
+      });
+    }
+  }
+  return { text, attachments };
 }
 
 /* ===========================================================================
@@ -913,7 +1167,7 @@ async function* streamCompletion({ apiKey, model, messages, signal }) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       "HTTP-Referer": window.location.href,
-      "X-Title": "streaming-ui-script chat bot",
+      "X-Title": "Aktion chat bot",
     },
     body: JSON.stringify({ model, messages, stream: true, temperature: 0.5 }),
     signal,
@@ -994,11 +1248,11 @@ function openFullscreen(source, theme, modeLabel) {
   }
   const body = fsOverlay.querySelector(".cb-fullscreen-body");
   body.replaceChildren();
-  const r = document.createElement("streaming-ui-script");
+  const r = document.createElement("aktion-app");
   r.setAttribute("transparent", "true");
   r.setAttribute("theme", theme || settings.theme);
   body.append(r);
-  customElements.whenDefined("streaming-ui-script").then(() => {
+  customElements.whenDefined("aktion-app").then(() => {
     if (typeof r.setResponse === "function") r.setResponse(text);
   });
   fsOverlay.querySelector(".cb-fs-title").textContent = `Fullscreen preview · ${modeLabel}`;
@@ -1016,7 +1270,7 @@ function downloadHtml(source, theme, modeLabel) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `streaming-ui-${Date.now()}.html`;
+  a.download = `aktion-${Date.now()}.html`;
   document.body.append(a);
   a.click();
   a.remove();
@@ -1035,19 +1289,19 @@ function buildStandaloneHtml(source, theme, modeLabel) {
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>Generated UI · ${escapeHtml(modeLabel)}</title>`,
-    '  <meta name="generator" content="streaming-ui-script chat bot" />',
+    '  <meta name="generator" content="Aktion chat bot" />',
     `  <script type="module" src="${CDN_BUNDLE}"></script>`,
     "  <style>",
     "    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }",
-    "    streaming-ui-script { display: block; min-height: 100vh; }",
+    "    aktion-app { display: block; min-height: 100vh; }",
     "  </style>",
     "</head>",
     "<body>",
-    `  <streaming-ui-script theme="${escapeAttr(theme)}"></streaming-ui-script>`,
+    `  <aktion-app theme="${escapeAttr(theme)}"></aktion-app>`,
     '  <script type="module">',
-    '    const el = document.querySelector("streaming-ui-script");',
+    '    const el = document.querySelector("aktion-app");',
     `    const SOURCE = ${json};`,
-    '    customElements.whenDefined("streaming-ui-script").then(() => {',
+    '    customElements.whenDefined("aktion-app").then(() => {',
     "      el.setResponse(SOURCE);",
     "    });",
     "  </script>",

@@ -1,5 +1,5 @@
 /**
- * Pure-data grammar description for Streaming UI Script.
+ * Pure-data grammar description for Aktion.
  *
  * The grammar lives here as plain JSON-style data and a minimal stream
  * tokenizer factory. The stream tokenizer returned by
@@ -17,7 +17,7 @@ export type GrammarTokenKind =
   | "string"         // "double" 'single' `backtick`
   | "number"         // 12, -3.14
   | "atom"           // true / false / null
-  | "builtin"        // @Each, @Sum, @Set, …
+  | "builtin"        // @Each, @Sum, @Filter, @Format, …
   | "state"          // $variable
   | "component"      // Capitalised identifier in call position
   | "identifier"     // lowercase identifier
@@ -27,7 +27,7 @@ export type GrammarTokenKind =
   | "property";      // segment after `.`
 
 export interface GrammarSpec {
-  name: "streaming-ui-script";
+  name: "aktion";
   /** No keywords reserved beyond literal atoms. */
   atoms: readonly string[];
   /** Operators (longest-match first when tokenising). */
@@ -66,7 +66,7 @@ export interface GrammarSpec {
 }
 
 export const grammarSpec: GrammarSpec = {
-  name: "streaming-ui-script",
+  name: "aktion",
   atoms: ["true", "false", "null"],
   operators: ["+", "-", "*", "/", "%", "!", "=", "<", ">", "?", ":", ".", ","],
   // Long operators include `??` and `?.` (nullish coalescing + optional chain)
@@ -248,8 +248,10 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
     }
     if (next === spec.sigils.state) {
       stream.next();
-      // `$$name` — persistent state ref. Eat the second `$` before reading
-      // the identifier body so the whole prefix highlights as one token.
+      // Legacy `$$name` is a hard error in Aktion 0.5; the
+      // tokenizer still highlights both `$`s as one `state` token so the
+      // user sees a single red squiggle pointing at the migration site
+      // instead of two unrelated tokens.
       if (stream.peek() === spec.sigils.state) stream.next();
       stream.eatWhile(spec.identifier.part);
       return "state";

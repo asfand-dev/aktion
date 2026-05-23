@@ -15,12 +15,18 @@
  *     the closure onto a kept element when the tree is patched in place.
  */
 
-import { isComponentNode, type ComponentNode } from "../runtime/evaluator.js";
-import { isActionPayload } from "../runtime/builtins.js";
-import type { ActionRunner } from "../runtime/actions.js";
+import {
+  isComponentNode,
+  isUserComponentNode,
+  evaluateUserComponent,
+  type ComponentNode,
+  type EvaluationContext,
+  type UserComponentNode,
+} from "../runtime/evaluator.js";
+import type { EffectDeclaration } from "../parser/types.js";
 import type { StateStore } from "../runtime/state.js";
-import type { ScriptRunner } from "../runtime/scripts.js";
 import type { Router } from "../runtime/router.js";
+import { sanitiseHref } from "../library/utils.js";
 import { findComponent } from "../library/registry.js";
 import {
   mapPositionalArgs,
@@ -32,14 +38,37 @@ import {
 export interface RenderOptions {
   library: ComponentLibrary;
   state: StateStore;
-  actionRunner: ActionRunner;
-  /** Optional script runner — when omitted, Script() and @Js are no-ops. */
-  scriptRunner?: ScriptRunner;
-  /**
-   * Hash-based router. Required: components read the active path through
-   * it (e.g. `NavLink` to highlight the active link).
-   */
+  /** Hash-based router. Required: components read the active path through it. */
   router: Router;
+  /** Optional callback for `helpers.sendToAssistant(message)` dispatch. */
+  onAssistantMessage?: (message: string) => void;
+  /** Optional override for `helpers.openUrl(url)` (defaults to `window.open`). */
+  onOpenUrl?: (url: string) => void;
+  /**
+   * Evaluation context used to expand user-declared `component` calls
+   * (per-instance state isolation, lazy body evaluation, §7). The host
+   * element passes its program context here; if absent, user components
+   * render as `[unknown component: <Name>]` so the failure is visible.
+   */
+  evaluationContext?: () => EvaluationContext;
+  /**
+   * Mount `effect [ ...deps ] { … }` declarations discovered inside a
+   * `component { … }` body. Called by the renderer after every render of
+   * the instance; the implementation is expected to be idempotent so
+   * re-renders are no-ops once the effects are mounted. The host wires
+   * this to the same `EffectRunner` that handles top-level effects.
+   */
+  mountInstanceEffects?: (
+    instanceKey: string,
+    decls: ReadonlyArray<EffectDeclaration>,
+    getCtx: () => EvaluationContext,
+  ) => void;
+  /**
+   * Tear down every per-instance effect mounted under `instanceKey`.
+   * Invoked when the component instance disappears from the render tree
+   * (between two `beginRender`/`endRender` passes).
+   */
+  unmountInstanceEffects?: (instanceKey: string) => void;
 }
 
 const ROOT_PATH = "$";
@@ -60,6 +89,13 @@ export class Renderer {
   private readonly instanceDisposers = new Map<string, Map<string, () => void>>();
   /** Instance paths seen during the current render — used to GC stale state. */
   private aliveInstances = new Set<string>();
+  /**
+   * User-declared component instances that currently hold per-instance
+   * effects (mounted via `mountInstanceEffects`). Tracked separately from
+   * `instanceStates` so the renderer can fire `unmountInstanceEffects` on
+   * GC even when an instance never registered `useInstanceState`.
+   */
+  private readonly instancesWithEffects = new Set<string>();
 
   constructor(private options: RenderOptions) {}
 
@@ -87,6 +123,20 @@ export class Renderer {
     }
     this.instanceDisposers.clear();
     this.instanceStates.clear();
+    // Tear down any per-instance effects so they don't outlive the
+    // program. The host's `EffectRunner.reset()` clears top-level effects
+    // separately, but instance effects need an explicit per-key unmount.
+    if (this.options.unmountInstanceEffects) {
+      for (const instanceKey of this.instancesWithEffects) {
+        try {
+          this.options.unmountInstanceEffects(instanceKey);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+        }
+      }
+    }
+    this.instancesWithEffects.clear();
     this.aliveInstances = new Set<string>();
   }
 
@@ -118,6 +168,22 @@ export class Renderer {
       for (const dispose of disposers.values()) this.safeDispose(dispose);
       this.instanceDisposers.delete(instancePath);
     }
+    // Tear down per-instance effects (`effect [ … ] { … }` blocks declared
+    // inside a `component { … }` body) for instances that vanished. The
+    // host's EffectRunner clears timers / state subscriptions / cleanup
+    // callbacks owned by that instance.
+    if (this.options.unmountInstanceEffects) {
+      for (const instanceKey of [...this.instancesWithEffects]) {
+        if (alive.has(instanceKey)) continue;
+        try {
+          this.options.unmountInstanceEffects(instanceKey);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+        }
+        this.instancesWithEffects.delete(instanceKey);
+      }
+    }
   }
 
   private safeDispose(dispose: () => void): void {
@@ -125,7 +191,7 @@ export class Renderer {
       dispose();
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("[streaming-ui-script] disposer threw", err);
+      console.error("[aktion] disposer threw", err);
     }
   }
 
@@ -142,11 +208,50 @@ export class Renderer {
       });
       return fragment;
     }
+    if (isUserComponentNode(value)) return this.renderUserComponent(value, path);
     if (isComponentNode(value)) return this.renderComponent(value, path);
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return document.createTextNode(String(value));
     }
     return document.createTextNode("");
+  }
+
+  /**
+   * Expand a user-declared `component Foo(p) { ... }` invocation. Each
+   * instance gets a stable instance key derived from its render path (or
+   * the caller's explicit `key:` override); the evaluator then evaluates
+   * the component's body with a fresh per-instance state-alias scope so
+   * two `Counter()` instances hold independent atoms (§7).
+   */
+  private renderUserComponent(node: UserComponentNode, path: string): Node {
+    const ctxRef = this.options.evaluationContext;
+    if (!ctxRef) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "rui-unknown-component";
+      placeholder.textContent = `[unknown component: ${node.decl.name}]`;
+      return placeholder;
+    }
+    const ctx = ctxRef();
+    // Instance key combines the structural render path with the
+    // declaration name and source location so reordering siblings doesn't
+    // accidentally reuse another instance's state. An explicit `key:` arg
+    // takes precedence (§13 — content-addressed identity).
+    const keyPart = node.explicitKey != null
+      ? `=${String(node.explicitKey)}`
+      : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
+    const instancePath = `${path}#${node.decl.name}${keyPart}`;
+    this.aliveInstances.add(instancePath);
+    const { value, effects } = evaluateUserComponent(node, ctx, instancePath);
+    // Hand any `effect [ ...deps ] { … }` declarations discovered inside
+    // this component's body to the host's effect runner under the stable
+    // instance key. The runner is idempotent across re-renders — it only
+    // mounts effects new to this instance — and `endRender` tears them
+    // down when the instance disappears from the tree.
+    if (this.options.mountInstanceEffects) {
+      this.options.mountInstanceEffects(instancePath, effects, ctxRef);
+      if (effects.length > 0) this.instancesWithEffects.add(instancePath);
+    }
+    return this.renderAt(value, instancePath);
   }
 
   private renderComponent(node: ComponentNode, path: string): Node {
@@ -158,8 +263,14 @@ export class Renderer {
       return placeholder;
     }
     const props = mapPositionalArgs(spec, node.args);
-    const scriptRunner = this.options.scriptRunner;
-    const instancePath = `${path}#${node.name}@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
+    // §13 — when the author passes `key:`, use it as the instance suffix
+    // so reordering siblings keeps per-instance state attached to the
+    // right node. Otherwise fall back to the source location which is
+    // stable for non-reordered trees.
+    const keySuffix = node.explicitKey != null
+      ? `=${String(node.explicitKey)}`
+      : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
+    const instancePath = `${path}#${node.name}${keySuffix}`;
     this.aliveInstances.add(instancePath);
 
     // Track an auto-increment counter so `helpers.renderNode(child)` calls
@@ -168,8 +279,37 @@ export class Renderer {
     let childCounter = 0;
     const helpers: RenderHelpers = {
       renderNode: (childValue) => this.renderAt(childValue, `${instancePath}>${childCounter++}`),
-      runAction: (payload) => {
-        if (isActionPayload(payload)) void this.options.actionRunner.run(payload);
+      invoke: (callable, ...args) => {
+        if (typeof callable !== "function") return;
+        try {
+          const result = callable(...args);
+          if (result && typeof (result as Promise<unknown>).then === "function") {
+            (result as Promise<unknown>).catch((err) => {
+              // eslint-disable-next-line no-console
+              console.error("[aktion] handler rejected", err);
+            });
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[aktion] handler threw", err);
+        }
+      },
+      setState: (name, value) => {
+        this.options.state.set(name, value);
+      },
+      resetState: (...names) => {
+        this.options.state.reset(...names);
+      },
+      sendToAssistant: (message) => {
+        this.options.onAssistantMessage?.(message);
+      },
+      openUrl: (url) => {
+        const safeUrl = sanitiseHref(url, "#");
+        const opener = this.options.onOpenUrl;
+        if (opener) opener(safeUrl);
+        else if (safeUrl !== "#" && typeof window !== "undefined") {
+          window.open(safeUrl, "_blank", "noopener,noreferrer");
+        }
       },
       bindState: (element, name, options) => {
         const eventName = options?.event ?? this.eventFor(element);
@@ -186,9 +326,6 @@ export class Renderer {
           const target = (event.currentTarget ?? event.target ?? element) as HTMLElement;
           this.options.state.set(name, getter(target));
         };
-      },
-      registerScript: (declaration) => {
-        scriptRunner?.declare(declaration);
       },
       useInstanceState: <T>(key: string, initialValue: T): InstanceStateSlot<T> => {
         const storageKey = `${instancePath}::${key}`;
@@ -222,7 +359,7 @@ export class Renderer {
       return spec.render(node, props, helpers);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error(`[streaming-ui-script] failed to render ${spec.name}`, err);
+      console.error(`[aktion] failed to render ${spec.name}`, err);
       const fallback = document.createElement("div");
       fallback.className = "rui-render-error";
       fallback.textContent = `[render error in ${spec.name}]`;

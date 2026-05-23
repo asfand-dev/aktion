@@ -2,13 +2,13 @@
  * Public entry point.
  *
  * Importing this file (or loading the bundled script) registers the
- * `<streaming-ui-script>` custom element. All public types and helpers are
+ * `<aktion-app>` custom element. All public types and helpers are
  * also re-exported so consumers can use them programmatically.
  */
 
-import { StreamingUiScriptElement, defineElement } from "./element.js";
+import { AktionElement, defineElement } from "./element.js";
 
-export { StreamingUiScriptElement, defineElement };
+export { AktionElement, defineElement };
 
 export * from "./parser/index.js";
 export * from "./runtime/index.js";
@@ -20,7 +20,7 @@ export * from "./language/index.js";
 
 declare global {
   interface HTMLElementTagNameMap {
-    "streaming-ui-script": StreamingUiScriptElement;
+    "aktion-app": AktionElement;
   }
 }
 

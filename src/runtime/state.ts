@@ -99,6 +99,24 @@ export class StateStore {
     return out;
   }
 
+  /**
+   * Aktion 0.5 §26 — resumability primitive. Restores
+   * every atom in `snapshot` *without* notifying subscribers, so the
+   * host can seed values before the runtime mounts (SSR hydration,
+   * URL-backed deep links, conversational continuity). Atoms that have
+   * not yet been `declare`d are still written so they show up the
+   * moment the program declares them.
+   *
+   * The persistence adapter is *not* consulted — hydration is
+   * authoritative. If the caller wants persisted reads to win, they
+   * should call `hydrate(snapshot)` before `declare(name, …)`.
+   */
+  hydrate(snapshot: Readonly<Record<string, StateValue>>): void {
+    for (const [name, value] of Object.entries(snapshot)) {
+      this.values.set(name, value);
+    }
+  }
+
   reset(...names: string[]): void {
     let dirty = false;
     for (const name of names) {

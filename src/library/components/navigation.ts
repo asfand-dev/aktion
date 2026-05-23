@@ -8,7 +8,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseHref,
 } from "../utils.js";
@@ -92,11 +91,11 @@ export const Pagination: ComponentSpec = {
     "`$variable` as `page` for two-way binding — clicking a page button " +
     "sets that state to the new (1-indexed) value. Add `total` to render " +
     "a \"Showing N–M of T\" summary, pass `$variable` as `perPage` to " +
-    "expose a per-page selector, or set `compact=true` to drop the " +
+    "expose a per-page selector, or set `compact: true` to drop the " +
     "page-number row for tight toolbars.",
   props: [
     { name: "page", type: "number", description: "Current page (1-indexed); typically a $variable" },
-    { name: "totalPages", type: "number" },
+    { name: "totalPages", type: "number", aliases: ["pages"] },
     { name: "siblings", type: "number", optional: true, description: "Number of page links shown around the current page (default 1)" },
     { name: "total", type: "number", optional: true, description: "Total record count — enables the \"Showing N–M of T\" summary" },
     { name: "perPage", type: "number", optional: true, description: "Bind a `$variable` to expose a per-page selector" },
@@ -116,10 +115,7 @@ export const Pagination: ComponentSpec = {
       if (!stateName) return;
       const clamped = Math.max(1, Math.min(total, next));
       if (clamped === current) return;
-      helpers.runAction({
-        kind: "Action",
-        steps: [{ kind: "Set", name: stateName, value: clamped }],
-      });
+      helpers.setState(stateName, clamped);
     };
 
     // Optional record-count summary ("Showing 21–30 of 123").
@@ -246,7 +242,7 @@ export const NavbarItem: ComponentSpec = {
     { name: "href", type: "string", optional: true, description: "External href; opens in a new tab when set with `external=true`" },
     { name: "icon", type: "string", optional: true },
     { name: "active", type: "boolean", optional: true },
-    { name: "action", type: "Action", optional: true, description: "Action fired on click (alternative to `to`/`href`)" },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable fired on click (alternative to `to`/`href`)" },
     { name: "external", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -277,12 +273,12 @@ export const NavbarItem: ComponentSpec = {
         const evt = event as MouseEvent;
         if (evt.button !== 0 || evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey) return;
         event.preventDefault();
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Navigate", path: to }] });
+        helpers.router.navigate(to);
       };
-    } else if (isActionPayload(props.action)) {
+    } else if (typeof props.action === "function") {
       root.onclick = (event) => {
         event.preventDefault();
-        helpers.runAction(props.action);
+        helpers.invoke(props.action);
       };
     }
     return root;

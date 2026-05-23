@@ -1,57 +1,53 @@
 /**
- * `<streaming-ui-script>` custom element.
+ * `<aktion-app>` custom element.
  *
  * Public surface:
  *   - Attributes:
- *       `theme`             — "light" | "dark" | JSON token map
- *       `streaming`         — "true" while text is still arriving from the LLM
- *       `response`          — Streaming UI Script program (string)
- *       `showerrors`        — "true" to render parse errors in the UI
- *                             (defaults to off; the `error` event still fires)
+ *       `theme`                  — "light" | "dark" | JSON token map
+ *       `streaming`              — "true" while text is still arriving from the LLM
+ *       `response`               — Aktion program (string)
+ *       `showerrors`             — "true" to render parse errors in the UI
+ *                                  (defaults to off; the `error` event still fires)
  *   - Properties:
- *       `response: string`        — current Streaming UI Script text
- *       `tools: ToolRegistry`     — async functions backing Query/Mutation
- *       `streaming: boolean`      — reflects the `streaming` attribute
- *       `showErrors: boolean`     — reflects the `showerrors` attribute
+ *       `response: string`       — current Aktion text
+ *       `streaming: boolean`     — reflects the `streaming` attribute
+ *       `showErrors: boolean`    — reflects the `showerrors` attribute
  *   - Methods:
- *       `setResponse(text)`       — replace the current program
- *       `appendChunk(text)`       — append a streaming chunk and re-render
- *       `setTheme(theme)`         — apply a theme by name or token map
- *       `setTools(tools)`         — register tools used by Query/Mutation
- *       `registerComponents(...)` — extend the built-in library
- *       `getSystemPrompt(opts)`   — build a system prompt for the current library
- *       `clear()`                 — reset state and clear the rendered output
+ *       `setResponse(text)`              — replace the current program
+ *       `appendChunk(text)`              — append a streaming chunk and re-render
+ *       `setTheme(theme)`                — apply a theme by name or token map
+ *       `registerComponents(...)`        — extend the built-in library
+ *       `registerHttpInterceptors(...)`  — install `onRequest`/`onResponse`/`onError`
+ *                                          hooks for the Aktion HTTP layer
+ *       `getSystemPrompt(opts)`          — build a system prompt for the current library
+ *       `clear()`                        — reset state and clear the rendered output
  *
  * Events:
- *   - `assistant-message` — fired when the user clicks a follow-up or a button
- *     runs `@ToAssistant("...")`. `event.detail.message` carries the text.
- *   - `error` — fired with `event.detail.errors` for parse failures.
- *   - `route-change` — fired when the active hash route changes.
- *
- * JavaScript interactions (`Script(...)`, `@Js(...)`) and hash-based routing
- * (`Routes`, `Route`, `NavLink`, `@Navigate`) are always available — no
- * additional attributes required. The system prompt comes in two flavours:
- *   - `getSystemPrompt()` — full prompt (everything the language offers).
- *   - `getSystemPrompt({ mode: "chat" })` — compact chat-focused prompt.
+ *   - `assistant-message` — fired when an action handler calls
+ *     `helpers.sendToAssistant("...")`. `event.detail.message` carries the text.
+ *   - `error`             — fired with `event.detail.errors` for parse failures.
+ *   - `route-change`      — fired when the active hash route changes.
+ *   - Custom events emitted via `emit "name" { detail }` inside
+ *     `effect` / `action` bodies dispatch with the provided name and detail.
  */
 
 import { parse } from "./parser/index.js";
+import { applyDelta, type DeltaOp } from "./tooling/index.js";
 import {
   StateStore,
-  QueryRegistry,
-  ActionRunner,
-  ScriptRunner,
   Router,
   createContext,
   createLocalStorageAdapter,
   planProgram,
   isThemeNode,
-  type ToolRegistry,
   type RouteChangeDetail,
 } from "./runtime/index.js";
+import { HttpRuntime } from "./runtime/http.js";
+import { I18nRuntime } from "./runtime/i18n.js";
+import { EffectRunner, ActionDeclRunner, createInlineJsExecutor } from "./runtime/effects.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
-import { defaultLibrary } from "./library/index.js";
+import { defaultLibrary, validateProgramSchema } from "./library/index.js";
 import { mergeLibraries } from "./library/registry.js";
 import { Renderer } from "./renderer/renderer.js";
 import { morphChildren } from "./renderer/morph.js";
@@ -75,18 +71,93 @@ const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
+
+// Re-exported from `runtime/http.ts` so consumers can import them from
+// `./element.js` (the legacy public surface) without reaching into the
+// runtime internals.
+import type {
+  HttpInterceptors,
+  HttpRequest,
+  HttpResponse,
+} from "./runtime/http.js";
+export type { HttpInterceptors, HttpRequest, HttpResponse };
 /**
- * Reserved reactive state name written by the router. Read it from any
- * expression as `$route` to access the current path. Kept in lock-step with
- * `window.location.hash`.
+ * Internal state slot the router writes to so dependent renders can
+ * subscribe to URL changes. Authors do NOT read this slot directly —
+ * use the `_route_` identifier instead, which is bound to the same
+ * underlying state and additionally exposes `navigate(path)`.
  */
 const STATE_ROUTE = "route";
+
+/**
+ * Build the reactive `_route_` payload from the router's current state.
+ * Returns a plain object with `path`, `params`, `pattern`, `query`, an
+ * imperative `navigate(path)` method, plus a `toString()` so template
+ * literals like `${_route_}` coerce to the path.
+ */
+function buildRouteObject(router: Router): Record<string, unknown> {
+  const path = router.getPath();
+  const params = { ...router.getParams() };
+  const pattern = router.getActivePattern();
+  const query: Record<string, string> = {};
+  if (typeof window !== "undefined" && window.location) {
+    const search = window.location.search || "";
+    if (search) {
+      const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      for (const [k, v] of params) query[k] = v;
+    }
+  }
+  return {
+    path,
+    params,
+    pattern,
+    query,
+    navigate(target: unknown): void {
+      if (typeof target !== "string" || !target) return;
+      router.navigate(target);
+    },
+    toString() {
+      return path;
+    },
+  };
+}
+
+/**
+ * Compare two `_route_` payloads field-by-field. The route store writes a
+ * fresh object on every render — without a content-aware equality check
+ * the reference-only test in `StateStore.set` would treat every replan as
+ * a change and schedule a redundant follow-up render. That cascade also
+ * breaks per-component closures that capture freshly-rendered DOM nodes:
+ * the second render copies new handlers onto the morphed DOM but their
+ * closures still point at the (now-detached) fragment from this tick.
+ */
+function routesEqual(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const left = a as { path?: unknown; pattern?: unknown; params?: Record<string, unknown>; query?: Record<string, unknown> };
+  const right = b as typeof left;
+  if (left.path !== right.path) return false;
+  if (left.pattern !== right.pattern) return false;
+  return (
+    shallowEqualObject(left.params ?? {}, right.params ?? {}) &&
+    shallowEqualObject(left.query ?? {}, right.query ?? {})
+  );
+}
+
+function shallowEqualObject(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
 
 /**
  * Lazily-built `CSSStyleSheet` shared across every instance via
  * `adoptedStyleSheets`. The browser parses the source once and reuses the
  * compiled rules for every shadow root that adopts it, which keeps memory
- * and startup time flat as the number of `<streaming-ui-script>` elements
+ * and startup time flat as the number of `<aktion-app>` elements
  * grows. The boolean tracks whether the platform actually supports the
  * adoption API — older runtimes fall back to per-instance `<style>` tags.
  */
@@ -120,8 +191,8 @@ function getSharedStyleSheet(): CSSStyleSheet | null {
   }
 }
 
-export class StreamingUiScriptElement extends HTMLElement {
-  static readonly tagName = "streaming-ui-script";
+export class AktionElement extends HTMLElement {
+  static readonly tagName = "aktion-app";
 
   static get observedAttributes(): string[] {
     return [
@@ -133,11 +204,19 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   private readonly state = new StateStore();
-  private readonly queries = new QueryRegistry();
-  private readonly scriptRunner: ScriptRunner;
-  private readonly actionRunner: ActionRunner;
   private readonly router = new Router();
   private library: ComponentLibrary = defaultLibrary;
+  private readonly http = new HttpRuntime();
+  private readonly i18n = new I18nRuntime();
+  private readonly effectRunner: EffectRunner;
+  private readonly actionDeclRunner: ActionDeclRunner;
+  /**
+   * Host-registered async tools, exposed to `js{}` blocks (effects + action
+   * bodies) as `ctx.tools.<name>(args)`. The runtime never inspects the
+   * registry — it just forwards calls — so each handler is responsible for
+   * its own validation, auth, and error handling.
+   */
+  private readonly tools: Record<string, (...args: unknown[]) => unknown> = {};
   private renderer: Renderer;
   private context: EvaluationContext;
   private root: ShadowRoot;
@@ -192,31 +271,64 @@ export class StreamingUiScriptElement extends HTMLElement {
       }));
     };
 
-    this.scriptRunner = new ScriptRunner({
+    const emit = (eventName: string, detail: unknown): void => {
+      this.dispatchEvent(new CustomEvent(eventName, {
+        detail,
+        bubbles: true,
+        composed: true,
+      }));
+    };
+    this.effectRunner = new EffectRunner({
       state: this.state,
-      queries: this.queries,
-      getRoot: () => this.root,
-      getHost: () => this,
+      notify: () => this.scheduleRender(),
+      onEmit: emit,
+      host: this,
+      tools: this.tools,
+    });
+    this.actionDeclRunner = new ActionDeclRunner({
+      state: this.state,
+      notify: () => this.scheduleRender(),
+      onEmit: emit,
       onAssistantMessage: dispatchAssistantMessage,
+      host: this,
+      tools: this.tools,
     });
 
-    this.actionRunner = new ActionRunner({
-      getContext: () => this.context,
-      onAssistantMessage: dispatchAssistantMessage,
-      scriptRunner: this.scriptRunner,
+    this.context = createContext(this.state, {
       router: this.router,
+      library: this.library,
+      http: this.http,
+      i18n: this.i18n,
+      actionRunner: this.actionDeclRunner,
+      notify: () => this.scheduleRender(),
+      jsBlockExecutor: createInlineJsExecutor({
+        state: this.state,
+        host: this,
+        tools: this.tools,
+      }),
     });
-
-    this.context = createContext(this.state, this.queries, this.router, this.library);
     this.renderer = new Renderer({
       library: this.library,
       state: this.state,
-      actionRunner: this.actionRunner,
-      scriptRunner: this.scriptRunner,
       router: this.router,
+      onAssistantMessage: dispatchAssistantMessage,
+      // Expose the evaluation context so the renderer can expand
+      // user-declared `component Foo() { ... }` calls (per-instance
+      // state, §7). We pass a getter rather than the live ref because
+      // `this.context` is rebuilt on every `replan()`.
+      evaluationContext: () => this.context,
+      // Per-instance effect lifecycle: the renderer drains effects
+      // discovered inside a `component { … }` body and hands them here
+      // so the EffectRunner mounts them with the instance key as prefix.
+      // Re-renders are idempotent; `unmountInstanceEffects` fires when
+      // the instance disappears from the tree (component-scoped effect
+      // teardown, §8 of the side-effects page).
+      mountInstanceEffects: (instanceKey, decls, getCtx) =>
+        this.effectRunner.syncInstanceEffects(instanceKey, decls, getCtx),
+      unmountInstanceEffects: (instanceKey) =>
+        this.effectRunner.unmountInstance(instanceKey),
     });
 
-    this.queries.setNotify(() => this.scheduleRender());
     this.state.subscribe(() => this.scheduleRender());
     this.router.subscribe((detail) => this.handleRouteChange(detail));
   }
@@ -224,7 +336,6 @@ export class StreamingUiScriptElement extends HTMLElement {
   connectedCallback(): void {
     ensureFontAwesomeLoaded(this.root);
     this.applyThemeFromAttribute();
-    this.syncScriptRunnerStreaming();
     this.startRouter();
     this.attachPersistenceAdapter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
@@ -239,9 +350,8 @@ export class StreamingUiScriptElement extends HTMLElement {
         return;
       }
     }
-    // Reconnect path: scripts were torn down in `disconnectedCallback`, so
-    // we always re-render to give them a chance to re-register. Marking
-    // the program dirty also re-plans queries from a clean slate.
+    // Reconnect path: effects were torn down in `disconnectedCallback`, so we
+    // always re-render to give the program a fresh effect-runner mount cycle.
     if (this.currentResponse) {
       this.programDirty = true;
       this.scheduleRender();
@@ -249,7 +359,7 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
-    this.scriptRunner.reset();
+    this.effectRunner.reset();
     this.router.stop();
   }
 
@@ -259,7 +369,6 @@ export class StreamingUiScriptElement extends HTMLElement {
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
-      this.syncScriptRunnerStreaming();
       this.scheduleRender();
     }
     if (name === ATTRIBUTE_SHOW_ERRORS) {
@@ -271,21 +380,106 @@ export class StreamingUiScriptElement extends HTMLElement {
     }
   }
 
+  /**
+   * Register HTTP interceptors used by the Aktion 0.5 HTTP layer (§22.1 of
+   * the spec). Interceptors are invoked by the HTTP runtime around every
+   * `query`/`mutation`/`subscription` request. Multiple calls merge
+   * incrementally — passing `{ onRequest }` only does not clear an
+   * existing `onResponse`.
+   */
+  registerHttpInterceptors(interceptors: HttpInterceptors): void {
+    this.http.registerInterceptors(interceptors);
+  }
+
   /** Replace the current program with `text` and re-render from scratch. */
   setResponse(text: string): void {
     if (text === this.currentResponse) return;
     this.currentResponse = text;
     this.programDirty = true;
     this.state.rebind([]);
-    this.queries.reset();
-    // Drop any scripts left over from the previous program — they reference
-    // the old state graph and would leak intervals / event listeners.
-    this.scriptRunner.reset();
     // Drop persisted component-local UI state — stale slots from the
     // previous program could otherwise leak into structurally-similar
     // components rendered at the same tree position.
     this.renderer.reset();
     this.parseErrors = [];
+    this.scheduleRender();
+  }
+
+  /**
+   * Aktion 0.5 §26 — serialise the host's current state as
+   * a plain JSON-friendly object. Combine with `programText` to round-
+   * trip the entire app between turns, between tabs, or between
+   * server-rendered HTML and client hydration.
+   */
+  serializeState(): Record<string, unknown> {
+    return this.state.snapshot();
+  }
+
+  /**
+   * Apply a snapshot to the live state store. Values land in `values`
+   * immediately, so any subsequent `$state x = default` declaration
+   * preserves the hydrated value (the planner only writes defaults for
+   * names that do not yet exist).
+   *
+   * If a render is in flight, this call schedules a follow-up render so
+   * the new values surface in the next paint.
+   */
+  hydrateState(snapshot: Readonly<Record<string, unknown>>): void {
+    this.state.hydrate(snapshot);
+    this.scheduleRender();
+  }
+
+  /**
+   * Aktion 0.5 §14 — Delta Protocol. Apply a structured
+   * sequence of operations to the current program; the runtime mounts
+   * the patched program with the user's `$state` preserved across the
+   * diff.
+   *
+   * Op shapes (see `src/tooling/delta.ts` for the full reference):
+   *
+   *   - `{ kind: "patch",   target: "name", value: any }`
+   *   - `{ kind: "replace", binding: "name", source: "Expr" }`
+   *   - `{ kind: "append",  binding: "name", item: "Expr" }`
+   *   - `{ kind: "new",     source: "binding = Expr  // or full decl" }`
+   *   - `{ kind: "delete",  binding: "name" }`
+   *
+   * Returns the advisory warnings raised by the delta (e.g. for ops
+   * that targeted a missing binding). The host can surface them as a
+   * banner or ignore them — partial deltas always still mount the
+   * remaining patched program.
+   */
+  applyDelta(ops: readonly DeltaOp[]): string[] {
+    const snapshot = this.state.snapshot();
+    const result = applyDelta(this.currentResponse, ops);
+    // Apply patch ops on top of the current snapshot, so `applyDelta`
+    // is a single atomic step: state survives the structural diff
+    // *and* picks up the explicit patches.
+    Object.assign(snapshot, result.stateUpdates);
+    this.loadSnapshot({ programText: result.programText, state: snapshot });
+    return result.warnings;
+  }
+
+  /**
+   * Aktion 0.5 §26 — atomic load of a serialised payload.
+   * Sets the program text *and* the state in one shot so the next
+   * render plans the program with the hydrated values already in
+   * place. Use this for SSR hydration, conversational continuity
+   * across turns, and URL-deep-link restoration.
+   */
+  loadSnapshot(payload: { programText: string; state: Record<string, unknown> }): void {
+    this.currentResponse = payload.programText;
+    this.programDirty = true;
+    // Clear *defaults* and any leftover values from the previous program
+    // before seeding from the snapshot — without this, atoms declared
+    // by the previous program would keep their old defaults after the
+    // new program plans them with new initial expressions.
+    this.state.rebind([]);
+    this.renderer.reset();
+    this.parseErrors = [];
+    // Seed values BEFORE the next render plans the new program. Declare
+    // only writes defaults when `has(name) === false`, so the planner
+    // will leave our hydrated values intact.
+    this.state.hydrate(payload.state);
     this.scheduleRender();
   }
 
@@ -312,10 +506,6 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.scheduleRender();
   }
 
-  setTools(tools: ToolRegistry): void {
-    this.queries.setTools(tools);
-  }
-
   registerComponents(components: ComponentSpec[], rootName?: string): void {
     this.library = mergeLibraries(this.library, { components, root: rootName });
     // Swap the library on the existing renderer so per-instance state slots
@@ -339,6 +529,18 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.router.navigate(path);
   }
 
+  /**
+   * Register host-supplied async tools exposed to `js{}` blocks as
+   * `ctx.tools.<name>(args)`. Replaces any previously-registered tools
+   * with the same name.
+   */
+  setTools(tools: Record<string, (...args: unknown[]) => unknown>): void {
+    for (const key of Object.keys(this.tools)) delete this.tools[key];
+    for (const [name, fn] of Object.entries(tools ?? {})) {
+      if (typeof fn === "function") this.tools[name] = fn;
+    }
+  }
+
   /** Current route path (`/`, `/about`, …). */
   get route(): string {
     return this.router.getPath();
@@ -346,9 +548,8 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   clear(): void {
     this.currentResponse = "";
-    this.queries.reset();
-    this.scriptRunner.reset();
     this.state.rebind([]);
+    this.effectRunner.reset();
     // Drop component-local UI state (Tabs active pane, Popover open flag,
     // …). Without this, a fresh program would inherit slot values from
     // the previous program and snap stateful primitives into the wrong
@@ -360,7 +561,7 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
     // Drop any cached active match — the next render will recompute from
-    // the current path against whatever Routes the new program declares.
+    // the current path against whatever routes the new program declares.
     this.router.setActiveMatch(null, {});
   }
 
@@ -372,14 +573,6 @@ export class StreamingUiScriptElement extends HTMLElement {
 
   set response(value: string) {
     this.setResponse(value);
-  }
-
-  get tools(): ToolRegistry {
-    return this.queries.getTools();
-  }
-
-  set tools(value: ToolRegistry | null) {
-    this.setTools(value ?? {});
   }
 
   get streaming(): boolean {
@@ -408,44 +601,51 @@ export class StreamingUiScriptElement extends HTMLElement {
     return style;
   }
 
-  private syncScriptRunnerStreaming(): void {
-    this.scriptRunner.setStreaming(this.streaming);
-  }
-
   /**
-   * Start the router so the hash listener is attached and `$route` is
+   * Start the router so the hash listener is attached and `_route_` is
    * seeded with the current URL. Idempotent — safe to call from
    * `connectedCallback`.
    */
   private startRouter(): void {
     this.router.start();
-    // Seed `$route` immediately so the very first render sees the URL
+    // Seed `_route_` immediately so the very first render sees the URL
     // hash (instead of the default "/").
-    this.state.set(STATE_ROUTE, this.router.getPath());
+    this.writeRouteState();
+  }
+
+  /**
+   * Write `_route_` only when its content actually changed. Avoids
+   * triggering a redundant render-after-replan cascade — see
+   * `routesEqual` for the structural comparison.
+   */
+  private writeRouteState(): void {
+    const next = buildRouteObject(this.router);
+    if (routesEqual(this.state.get(STATE_ROUTE), next)) return;
+    this.state.set(STATE_ROUTE, next);
   }
 
   /**
    * Wire `$$variable` declarations to a `localStorage`-backed adapter.
    * Persistence is namespaced by the element's `id` (falling back to the
-   * tag name when no id is set) so two `<streaming-ui-script>` elements on
+   * tag name when no id is set) so two `<aktion-app>` elements on
    * the same page don't collide. SSR / sandboxed contexts without storage
    * silently degrade to in-memory only — `$$variable` still works, just
    * without survival across reloads.
    */
   private attachPersistenceAdapter(): void {
     const storage = typeof window !== "undefined" ? window.localStorage : null;
-    const prefix = `rui:${StreamingUiScriptElement.tagName}:${this.id || "default"}`;
+    const prefix = `rui:${AktionElement.tagName}:${this.id || "default"}`;
     const adapter = createLocalStorageAdapter(prefix, storage ?? null);
     this.state.setPersistenceAdapter(adapter);
   }
 
   /**
-   * React to any path change: write the new value into `$route` (so
-   * conditional expressions re-evaluate), schedule a re-render, and bubble
-   * a `route-change` event so host pages can sync analytics or sidebars.
+   * React to any path change: write the new value into the route slot (so
+   * `_route_` reads re-evaluate), schedule a re-render, and bubble a
+   * `route-change` event so host pages can sync analytics or sidebars.
    */
   private handleRouteChange(detail: RouteChangeDetail): void {
-    this.state.set(STATE_ROUTE, detail.path);
+    this.writeRouteState();
     this.dispatchEvent(new CustomEvent("route-change", {
       detail,
       bubbles: true,
@@ -496,9 +696,10 @@ export class StreamingUiScriptElement extends HTMLElement {
     this.renderScheduled = false;
     if (!this.isConnected) return;
 
-    // Re-plan only when the program text changed. This is critical: replanning
-    // tears down and re-registers all queries, which would re-fire their
-    // notifies and cause an infinite render loop.
+    // Re-plan only when the program text changed. This is critical:
+    // re-planning tears down and re-mounts effects/actions/endpoint resources,
+    // which would re-fire their notifies and cause an infinite render loop
+    // if we did it every tick.
     if (this.programDirty) {
       this.replan();
       this.programDirty = false;
@@ -509,14 +710,17 @@ export class StreamingUiScriptElement extends HTMLElement {
     // custom properties (charts that grab `--rui-chart-1`, etc.).
     this.applyScriptThemeOverrides();
 
-    const rootBinding = this.context.bindings.get("root");
+    // The program's entry-point binding is `_app_`. Older clients that
+    // still emit `root = …` keep working: we fall back to it when no
+    // `_app_` binding is registered.
+    const appBinding = this.context.bindings.get("_app_") ?? this.context.bindings.get("root");
     let rootValue: unknown = null;
-    if (rootBinding) {
+    if (appBinding) {
       try {
-        rootValue = rootBinding();
+        rootValue = appBinding();
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[streaming-ui-script] root evaluation error", err);
+        console.error("[aktion] _app_ evaluation error", err);
       }
     }
 
@@ -528,16 +732,12 @@ export class StreamingUiScriptElement extends HTMLElement {
     // resets the active tab three components over. The focus snapshot is
     // still useful as a defensive backstop for the rare case where a node's
     // identity actually changes (different tag, replaced subtree).
-    this.syncScriptRunnerStreaming();
-    this.scriptRunner.beginCycle();
     this.renderer.beginRender();
     const focusSnapshot = this.captureFocus();
     const rendered = this.renderer.render(rootValue);
     morphChildren(this.rootEl, rendered);
     this.renderer.endRender();
     this.restoreFocus(focusSnapshot);
-    // Run scripts AFTER the DOM is in place so `ctx.query("id")` resolves.
-    this.scriptRunner.flush();
   }
 
   private captureFocus(): FocusSnapshot | null {
@@ -582,20 +782,51 @@ export class StreamingUiScriptElement extends HTMLElement {
   }
 
   private replan(): void {
-    this.queries.reset();
-    this.context = createContext(this.state, this.queries, this.router, this.library);
-    this.queries.setNotify(() => this.scheduleRender());
+    this.effectRunner.reset();
+    this.context = createContext(this.state, {
+      router: this.router,
+      library: this.library,
+      http: this.http,
+      i18n: this.i18n,
+      actionRunner: this.actionDeclRunner,
+      notify: () => this.scheduleRender(),
+      jsBlockExecutor: createInlineJsExecutor({
+        state: this.state,
+        host: this,
+        tools: this.tools,
+      }),
+    });
 
     const program = parse(this.currentResponse);
+    // Aktion 0.5 — schema validator runs alongside the parser
+    // so multi-positional calls, unknown props, enum mismatches, and
+    // legacy Theme tokens become fatal errors (mirroring the parser-level
+    // migration errors for syntactic legacy forms). The banner surfaces
+    // them together so authors see one unified list.
+    const schemaErrors = validateProgramSchema(program, this.library);
+    if (schemaErrors.length > 0) {
+      program.errors = [...program.errors, ...schemaErrors];
+    }
     planProgram(program, this.context);
 
-    // Seed `$route` so user expressions like `$route == "/about"` resolve
-    // even before the first hashchange fires.
-    this.state.set(STATE_ROUTE, this.router.getPath());
+    // Mount top-level `effect [ ...deps ] { … }` declarations from the
+    // program. The runner manages their lifecycle (mount, re-run on state
+    // changes, teardown). Component-local effects (declared *inside* a
+    // `component { … }` body) are mounted by the renderer per instance —
+    // see the `mountInstanceEffects` hook wired into the Renderer above.
+    const effectDecls = [...this.context.effectDecls.values()];
+    if (effectDecls.length > 0) {
+      this.effectRunner.syncEffects(effectDecls, () => this.context);
+    }
 
-    this.parseErrors = program.errors.map(
-      (e) => `Line ${e.line}: ${e.message}`,
-    );
+    // Seed `_route_` so user expressions like `_route_.path == "/about"`
+    // resolve even before the first hashchange fires.
+    this.writeRouteState();
+
+    this.parseErrors = [
+      ...program.errors.map((e) => `Line ${e.line}: ${e.message}`),
+      ...this.effectRunner.getErrors(),
+    ];
     this.updateErrorBanner();
 
     // While streaming, the in-flight chunk is almost always mid-token, so
@@ -722,7 +953,7 @@ function parseBooleanAttribute(value: string | null): boolean {
 }
 
 export function defineElement(): void {
-  if (!customElements.get(StreamingUiScriptElement.tagName)) {
-    customElements.define(StreamingUiScriptElement.tagName, StreamingUiScriptElement);
+  if (!customElements.get(AktionElement.tagName)) {
+    customElements.define(AktionElement.tagName, AktionElement);
   }
 }

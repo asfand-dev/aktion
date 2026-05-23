@@ -1,5 +1,5 @@
 /**
- * Font Awesome integration for `<streaming-ui-script>`.
+ * Font Awesome integration for `<aktion-app>`.
  *
  * Icons across the library are referenced by Font Awesome name (without the
  * `fa-` prefix). The optional `variant:` prefix (`solid:`, `regular:`,
@@ -64,7 +64,7 @@ function isHappyDomEnvironment(): boolean {
 }
 
 /**
- * Resolve a Streaming UI Script icon string into Font Awesome class tokens.
+ * Resolve a Aktion icon string into Font Awesome class tokens.
  *
  * - `"house"` → `["fa-solid", "fa-house"]`
  * - `"regular:star"` → `["fa-regular", "fa-star"]`

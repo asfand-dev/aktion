@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Framework integration · streaming-ui-script</title>
+  <title>Framework integration · Aktion</title>
   <meta name="description" content="Drop-in setup for React, Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain HTML." />
   <script>
     (function () {
@@ -64,47 +64,28 @@
 </head>
 <body data-page="frameworks">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Integration</span>
         <h1>Drop-in setup for every framework.</h1>
         <p class="lead">
-          <code>&lt;streaming-ui-script&gt;</code> is a standard
+          <code>&lt;aktion-app&gt;</code> is a standard
           <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Element</a>,
-          so it works in every framework that renders HTML — React, Next.js,
-          Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain HTML.
+          so it works in every framework that renders HTML &mdash; React,
+          Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain
+          HTML.
         </p>
       </header>
 
       <div class="callout">
         <h4>Universal pattern</h4>
-        <p>
-          Three things matter no matter which framework you use:
-        </p>
+        <p>Three things matter no matter which framework you use:</p>
         <ol>
           <li>Import the bundle <em>once</em> in client-side code so it registers the custom element.</li>
-          <li>Render <code>&lt;streaming-ui-script&gt;</code> wherever you want the LLM output to appear.</li>
-          <li>Get a reference to the element and call <code>setResponse()</code>, <code>appendChunk()</code>, <code>setTheme()</code>, or <code>setTools()</code>.</li>
+          <li>Render <code>&lt;aktion-app&gt;</code> wherever you want the LLM output to appear.</li>
+          <li>Get a reference to the element and call <code>setResponse()</code>, <code>appendChunk()</code>, or set <code>theme</code>.</li>
         </ol>
       </div>
 
@@ -151,15 +132,23 @@
       <h2>Installation</h2>
       <p>Pick whichever channel suits your project:</p>
 <pre><code># From npm — works for any bundler
-npm install streaming-ui-script
+npm install aktion-runtime
+# yarn add aktion-runtime
+# pnpm add aktion-runtime
+
+# Then, somewhere in your client-side entry point:
+import "aktion-runtime";
 
 # Or load from CDN — no build step required
-&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;</code></pre>
+&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;</code></pre>
 
       <p>
+        The package is published as
+        <a href="https://www.npmjs.com/package/aktion-runtime" target="_blank" rel="noreferrer"><code>aktion-runtime</code></a>.
         The bundle is self-contained: it includes the parser, runtime, the
-        complete component library, and the styles (rendered into the shadow
-        DOM). You only ever need a single import.
+        complete component library, the seven built-in themes, and an optional
+        Font Awesome loader (only injected when your script uses icons). You
+        only ever need a single import.
       </p>
 
       <hr />
@@ -167,18 +156,18 @@ npm install streaming-ui-script
       <h2 id="react" class="framework-section">React</h2>
       <div class="pill-row"><span>React 18+</span><span>Vite / CRA / Parcel</span></div>
       <p>
-        React (&lt; 19) doesn't natively understand custom-element props or
-        events, but it does pass attributes through and accepts a
+        React (&lt; 19) doesn&rsquo;t natively understand custom-element props
+        or events, but it does pass attributes through and accepts a
         <code>ref</code>. The pattern below uses a ref to call methods and a
         <code>useEffect</code> hook to wire events.
       </p>
 <pre><code>// LLMResponse.tsx
 import { useEffect, useRef } from "react";
-import "streaming-ui-script";
+import "aktion-runtime";
 
 interface Props {
   response: string;
-  theme?: "light" | "dark" | "neon" | "pastel" | "glass" | "brutalist";
+  theme?: "light" | "dark" | "neon" | "pastel" | "glass" | "brutalist" | "skyline";
   onAssistantMessage?: (text: string) =&gt; void;
 }
 
@@ -197,22 +186,20 @@ export function LLMResponse({ response, theme = "light", onAssistantMessage }: P
     return () =&gt; el.removeEventListener("assistant-message", handler);
   }, [onAssistantMessage]);
 
-  return &lt;streaming-ui-script ref={ref} theme={theme} transparent /&gt;;
+  return &lt;aktion-app ref={ref} theme={theme} /&gt;;
 }</code></pre>
 
-      <p>
-        Add the JSX intrinsic element type once so TypeScript stops complaining:
-      </p>
-<pre><code>// types/streaming-ui-script.d.ts
+      <p>Add the JSX intrinsic element type once so TypeScript stops complaining:</p>
+<pre><code>// types/aktion.d.ts
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      "streaming-ui-script": DetailedHTMLProps&lt;
+      "aktion-app": DetailedHTMLProps&lt;
         HTMLAttributes&lt;HTMLElement&gt; &amp; {
           theme?: string;
-          transparent?: boolean;
-          showerrors?: string;
+          streaming?: boolean;
+          showerrors?: boolean;
         },
         HTMLElement
       &gt;;
@@ -220,11 +207,8 @@ declare global {
   }
 }</code></pre>
 
-      <p>
-        For React 19+ you can pass props directly as element properties — no ref
-        needed for the simple read-only case:
-      </p>
-<pre><code>&lt;streaming-ui-script theme="dark" response={text} /&gt;</code></pre>
+      <p>For React 19+ you can pass props directly as element properties &mdash; no ref needed for the simple read-only case:</p>
+<pre><code>&lt;aktion-app theme="dark" response={text} /&gt;</code></pre>
 
       <hr />
 
@@ -240,27 +224,24 @@ declare global {
 "use client";
 
 import { useEffect, useRef } from "react";
-import "streaming-ui-script";
+import "aktion-runtime";
 
 export function LLMResponse({ response, theme = "light" }: { response: string; theme?: string }) {
   const ref = useRef&lt;any&gt;(null);
   useEffect(() =&gt; { ref.current?.setResponse(response); }, [response]);
-  return &lt;streaming-ui-script ref={ref} theme={theme} transparent /&gt;;
+  return &lt;aktion-app ref={ref} theme={theme} /&gt;;
 }
 
 // app/page.tsx — server component
 import { LLMResponse } from "./components/LLMResponse";
 
 export default function Page() {
-  const program = `root = Stack([greeting])
-greeting = Card([CardHeader("Hello", "Generative UI in Next.js")])`;
+  const program = `_app_ = Stack([greeting])
+greeting = Card([CardHeader("Hello", subtitle: "Generative UI in Next.js")])`;
   return &lt;LLMResponse response={program} theme="light" /&gt;;
 }</code></pre>
 
-      <p>
-        For SSR-only pages you can skip the wrapper and import via a
-        <code>next/dynamic</code> call with <code>ssr: false</code>:
-      </p>
+      <p>For SSR-only pages you can skip the wrapper and import via a <code>next/dynamic</code> call with <code>ssr: false</code>:</p>
 <pre><code>const LLMResponse = dynamic(() =&gt; import("./components/LLMResponse").then(m =&gt; m.LLMResponse), {
   ssr: false,
 });</code></pre>
@@ -281,7 +262,7 @@ import vue from "@vitejs/plugin-vue";
 export default defineConfig({
   plugins: [
     vue({
-      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "streaming-ui-script" } },
+      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "aktion-app" } },
     }),
   ],
 });</code></pre>
@@ -289,10 +270,10 @@ export default defineConfig({
       <p>Then use it like any other element:</p>
 <pre><code>&lt;script setup lang="ts"&gt;
 import { ref, onMounted, watch } from "vue";
-import "streaming-ui-script";
+import "aktion-runtime";
 
 const target = ref&lt;HTMLElement | null&gt;(null);
-const response = ref(`root = Stack([Card([CardHeader("Hello from Vue")])])`);
+const response = ref(`_app_ = Stack([Card([CardHeader("Hello from Vue")])])`);
 const theme = ref("light");
 
 onMounted(() =&gt; (target.value as any)?.setResponse(response.value));
@@ -300,7 +281,7 @@ watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
 &lt;/script&gt;
 
 &lt;template&gt;
-  &lt;streaming-ui-script ref="target" :theme="theme" transparent /&gt;
+  &lt;aktion-app ref="target" :theme="theme" /&gt;
 &lt;/template&gt;</code></pre>
 
       <hr />
@@ -315,18 +296,18 @@ watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
 <pre><code>// nuxt.config.ts
 export default defineNuxtConfig({
   vue: {
-    compilerOptions: { isCustomElement: (tag) =&gt; tag === "streaming-ui-script" },
+    compilerOptions: { isCustomElement: (tag) =&gt; tag === "aktion-app" },
   },
 });
 
-// plugins/streaming-ui-script.client.ts
-import "streaming-ui-script";
+// plugins/aktion.client.ts
+import "aktion-runtime";
 export default defineNuxtPlugin(() =&gt; {});</code></pre>
 
 <pre><code>&lt;!-- pages/index.vue --&gt;
 &lt;template&gt;
   &lt;ClientOnly&gt;
-    &lt;streaming-ui-script theme="light" transparent ref="renderer" /&gt;
+    &lt;aktion-app theme="light" ref="renderer" /&gt;
   &lt;/ClientOnly&gt;
 &lt;/template&gt;</code></pre>
 
@@ -340,7 +321,7 @@ export default defineNuxtPlugin(() =&gt; {});</code></pre>
         once in <code>main.ts</code>:
       </p>
 <pre><code>// main.ts
-import "streaming-ui-script";
+import "aktion-runtime";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { AppComponent } from "./app/app.component";
 
@@ -352,14 +333,14 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, ViewChild, AfterViewInit
 @Component({
   standalone: true,
   selector: "app-root",
-  template: `&lt;streaming-ui-script #renderer theme="light" transparent&gt;&lt;/streaming-ui-script&gt;`,
+  template: `&lt;aktion-app #renderer theme="light"&gt;&lt;/aktion-app&gt;`,
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AppComponent implements AfterViewInit {
   @ViewChild("renderer") renderer!: ElementRef&lt;HTMLElement &amp; { setResponse(t: string): void }&gt;;
 
   ngAfterViewInit() {
-    this.renderer.nativeElement.setResponse(`root = Stack([Card([CardHeader("Hello, Angular")])])`);
+    this.renderer.nativeElement.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Angular")])])`);
   }
 }</code></pre>
 
@@ -370,24 +351,24 @@ export class AppComponent implements AfterViewInit {
       <p>
         Svelte already understands custom elements. Import the bundle (in a
         client-side <code>+page.ts</code> hook or directly in the component)
-        and you're done.
+        and you&rsquo;re done.
       </p>
 <pre><code>&lt;!-- routes/+page.svelte --&gt;
 &lt;script lang="ts"&gt;
   import { onMount } from "svelte";
-  import "streaming-ui-script";
+  import "aktion-runtime";
 
   let renderer: any;
-  const program = `root = Stack([Card([CardHeader("Hello from Svelte")])])`;
+  const program = `_app_ = Stack([Card([CardHeader("Hello from Svelte")])])`;
   onMount(() =&gt; renderer?.setResponse(program));
 &lt;/script&gt;
 
-&lt;streaming-ui-script bind:this={renderer} theme="light" transparent /&gt;</code></pre>
+&lt;aktion-app bind:this={renderer} theme="light" /&gt;</code></pre>
 
       <p>
         For server-rendered routes wrap the import in
         <code>browser</code>-guarded code (e.g.
-        <code>if (browser) await import("streaming-ui-script");</code>) so it
+        <code>if (browser) await import("aktion-runtime");</code>) so it
         only runs in the client bundle.
       </p>
 
@@ -397,12 +378,12 @@ export class AppComponent implements AfterViewInit {
       <div class="pill-row"><span>SolidJS 1.x</span></div>
 <pre><code>// App.tsx
 import { onMount } from "solid-js";
-import "streaming-ui-script";
+import "aktion-runtime";
 
 export default function App() {
   let renderer: any;
-  onMount(() =&gt; renderer?.setResponse(`root = Stack([Card([CardHeader("Hello, Solid")])])`));
-  return &lt;streaming-ui-script ref={renderer} theme="light" transparent /&gt;;
+  onMount(() =&gt; renderer?.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Solid")])])`));
+  return &lt;aktion-app ref={renderer} theme="light" /&gt;;
 }</code></pre>
 
       <hr />
@@ -416,31 +397,28 @@ export default function App() {
 <pre><code>---
 // src/pages/index.astro
 ---
-&lt;streaming-ui-script id="response" theme="light" transparent&gt;&lt;/streaming-ui-script&gt;
+&lt;aktion-app id="response" theme="light"&gt;&lt;/aktion-app&gt;
 
 &lt;script&gt;
-  import "streaming-ui-script";
+  import "aktion-runtime";
   const el = document.getElementById("response") as any;
-  el.setResponse(`root = Stack([Card([CardHeader("Hello, Astro")])])`);
+  el.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Astro")])])`);
 &lt;/script&gt;</code></pre>
 
       <hr />
 
       <h2 id="html" class="framework-section">Plain HTML</h2>
       <div class="pill-row"><span>No build step</span><span>Works offline</span></div>
-      <p>
-        The CDN build is the smallest possible footprint — no bundler, no
-        framework, just one script tag.
-      </p>
+      <p>The CDN build is the smallest possible footprint &mdash; no bundler, no framework, just one script tag.</p>
 <pre><code>&lt;!doctype html&gt;
 &lt;html&gt;
   &lt;body&gt;
-    &lt;streaming-ui-script theme="light" transparent&gt;&lt;/streaming-ui-script&gt;
+    &lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
 
     &lt;script type="module"&gt;
-      import "https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js";
-      const el = document.querySelector("streaming-ui-script");
-      el.setResponse(`root = Stack([Card([CardHeader("Hello, world")])])`);
+      import "https://asfand-dev.github.io/aktion/dist/aktion.js";
+      const el = document.querySelector("aktion-app");
+      el.setResponse(`_app_ = Stack([Card([CardHeader("Hello, world")])])`);
     &lt;/script&gt;
   &lt;/body&gt;
 &lt;/html&gt;</code></pre>
@@ -451,21 +429,32 @@ export default function App() {
 
       <h3>Streaming an LLM response</h3>
       <p>
-        Set <code>streaming</code> to <code>true</code>, push tokens with
-        <code>appendChunk()</code>, then flip the attribute back when the
-        stream ends. Internally the renderer suppresses transient parse errors
-        while the attribute is set.
+        Set <code>streaming = true</code> while you append tokens, then flip it
+        back when the stream ends. Internally the renderer suppresses transient
+        parse errors while the flag is on.
       </p>
 <pre><code>el.streaming = true;
 el.clear();
 for await (const chunk of stream) el.appendChunk(chunk);
 el.streaming = false;</code></pre>
 
-      <h3>Wiring tools (Query / Mutation)</h3>
+      <h3>Reacting to follow-up clicks</h3>
       <p>
-        Tools are async functions with a single argument object. The runtime
-        invokes them whenever a <code>Query</code> or <code>Mutation</code>
-        references them.
+        Buttons without an explicit <code>action:</code> automatically dispatch
+        an <code>assistant-message</code> event whose
+        <code>event.detail.message</code> is the button label (or the
+        <code>message:</code> prop, when supplied). Hook it into your chat
+        input.
+      </p>
+<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
+  sendToLLM(event.detail.message);
+});</code></pre>
+
+      <h3>Exposing tools to the script</h3>
+      <p>
+        Tools are async functions registered on the host. They&rsquo;re
+        available to <code>js{}</code> blocks inside actions and effects as
+        <code>ctx.tools.&lt;name&gt;(args)</code>.
       </p>
 <pre><code>el.setTools({
   list_orders: async ({ limit }) =&gt; (await fetch(`/api/orders?limit=${limit}`)).json(),
@@ -475,37 +464,41 @@ el.streaming = false;</code></pre>
   },
 });</code></pre>
 
-      <h3>Reacting to follow-up clicks</h3>
+      <h3>HTTP interceptors</h3>
       <p>
-        Buttons that call <code>@ToAssistant("...")</code> dispatch an
-        <code>assistant-message</code> event with <code>event.detail.message</code>.
-        Hook it into your chat input.
+        Hook every <code>http({ ... })</code> call inside the script &mdash;
+        attach auth headers, log requests, fix base URLs.
       </p>
-<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
-  sendToLLM(event.detail.message);
+<pre><code>el.registerHttpInterceptors({
+  onRequest: (req) =&gt; ({ ...req, headers: { ...req.headers, Authorization: `Bearer ${token}` } }),
+  onResponse: (res) =&gt; res,
+  onError:    (err) =&gt; err,
 });</code></pre>
 
-      <h3>Aligning the background with your page</h3>
+      <h3>Reacting to navigation</h3>
       <p>
-        When the surrounding page already has a custom theme, pass the
-        <code>transparent</code> attribute (used in every snippet above) so the
-        host inherits the parent's background. The internal cards retain their
-        own surface colors. See the
-        <a href="themes.html#aligning-the-background-with-your-page">theming page</a>
-        for two more options.
+        Every router transition fires a <code>route-change</code> event with
+        the new path, the previous path, and the navigation source
+        (<code>"init"</code>, <code>"hashchange"</code>,
+        <code>"navigate"</code>, or <code>"external"</code>) &mdash; useful for
+        syncing analytics or your own sidebar.
       </p>
+<pre><code>el.addEventListener("route-change", (event) =&gt; {
+  analytics.track("page-view", event.detail);
+  // event.detail = { path, previousPath, source }
+});</code></pre>
 
       <h3>Generating the system prompt</h3>
-      <p>
-        Either fetch the bundled file or build it programmatically — both
-        return identical text:
-      </p>
-<pre><code>// 1. Fetch the canned prompt
-const promptText = await fetch("https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt").then(r =&gt; r.text());
+      <p>Either fetch the bundled file or build it programmatically &mdash; both return identical text:</p>
+<pre><code>// 1. Fetch the canned prompt (full reference)
+const promptText = await fetch("https://asfand-dev.github.io/aktion/dist/system_prompt.txt").then(r =&gt; r.text());
 
-// 2. Generate at runtime (lets you add tools or extra rules)
-import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "streaming-ui-script";
-const same = SYSTEM_PROMPT_TEXT;
+// Or fetch the compact chat-focused variant
+const chatPromptText = await fetch("https://asfand-dev.github.io/aktion/dist/system_prompt_chat.txt").then(r =&gt; r.text());
+
+// 2. Generate at runtime (lets you add custom rules or component metadata)
+import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "aktion-runtime";
+const same   = SYSTEM_PROMPT_TEXT;
 const custom = generatePrompt(defaultLibrary, {
   preamble: "You are an analytics assistant.",
   additionalRules: ["Always end with a FollowUpBlock."],
@@ -516,8 +509,8 @@ const custom = generatePrompt(defaultLibrary, {
         <p>
           The element relies only on the
           <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Elements v1</a>
-          and ES2020 features. Anywhere you can render HTML and run JavaScript
-          in a modern browser, the bundle just works.
+          API and ES2020 features. Anywhere you can render HTML and run
+          JavaScript in a modern browser, the bundle just works.
         </p>
       </div>
     </main>

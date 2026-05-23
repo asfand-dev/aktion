@@ -1,21 +1,24 @@
 /**
- * Behavioural tests for the built-in JavaScript interactions feature.
- *
- * Covers:
- *   - `Script` / `@Js` always run.
- *   - Script bodies run after render and `ctx` is wired correctly.
- *   - Re-renders dispose obsolete scripts and re-run scripts whose deps changed.
- *   - `@Js("...")` action steps execute on button click.
- *   - The system prompt documents JS in the default (full) flavour and
- *     omits it in the compact `chat` flavour.
+ * Behavioural tests for Aktion effects, actions, and the HTTP
+ * interceptor surface used by the runtime data layer. The tests below
+ * exercise:
+ *   - `effect [ ...deps ] { body }` — declarative side-effects.
+ *   - `action Name() { body }` + lambda handlers — declarative click handlers.
+ *   - `registerHttpInterceptors({ … })` — extension point for the
+ *     HTTP-native data layer.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
 import "../src/index.js";
+import type {
+  HttpRequest,
+  HttpResponse,
+  HttpInterceptors,
+} from "../src/runtime/http.js";
 
-const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+const flush = (): Promise<void> => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
-const waitForRenders = async (n = 10) => {
+const waitForRenders = async (n = 10): Promise<void> => {
   for (let i = 0; i < n; i += 1) await flush();
 };
 
@@ -25,7 +28,7 @@ interface ElementWithApi extends HTMLElement {
   clear(): void;
   streaming: boolean;
   getSystemPrompt(opts?: Record<string, unknown>): string;
-  setTools(tools: Record<string, (args: Record<string, unknown>) => unknown>): void;
+  registerHttpInterceptors(interceptors: HttpInterceptors): void;
   state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
 }
 
@@ -33,7 +36,7 @@ const mount = (attributes: Record<string, string> = {}): ElementWithApi => {
   // Cast through `unknown` because the class declares `state` private but
   // we need to read it here for assertions; structural overlap rules require
   // the intermediate cast.
-  const el = document.createElement("streaming-ui-script") as unknown as ElementWithApi;
+  const el = document.createElement("aktion-app") as unknown as ElementWithApi;
   for (const [name, value] of Object.entries(attributes)) {
     el.setAttribute(name, value);
   }
@@ -41,121 +44,209 @@ const mount = (attributes: Record<string, string> = {}): ElementWithApi => {
   return el;
 };
 
-describe("javascript interactions", () => {
+describe("effects: declaration, mount, and triggers", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("runs a Script body once when the program mounts", async () => {
+  it("runs an effect body once on mount", async () => {
     const el = mount();
-
-    (window as unknown as { __runs?: number }).__runs = 0;
-    el.setResponse(
-      `runner = Script("runner", "window.__runs = (window.__runs ?? 0) + 1;")
-root = Stack([runner])`,
-    );
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(1);
-
-    // Repeated renders without dep changes should NOT re-run the script.
-    el.state.set("__noop__", Math.random());
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(1);
-  });
-
-  it("re-runs the script only when a dep changes, and cleans up between runs", async () => {
-    const el = mount();
-    (window as unknown as { __runs?: number; __cleans?: number }).__runs = 0;
-    (window as unknown as { __runs?: number; __cleans?: number }).__cleans = 0;
-
     el.setResponse(`$count = 0
-runner = Script("runner", "window.__runs += 1; ctx.cleanup(() => { window.__cleans += 1; });", ["count"])
-root = Stack([runner])`);
+effect [on:mount] {
+  $count = 1
+}
+_app_ = Stack([])`);
     await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(1);
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
-
-    el.state.set("count", 1);
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(2);
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
-
-    el.state.set("count", 1);
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(2);
-
-    el.state.set("count", 2);
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(3);
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(2);
+    expect(el.state.get("count")).toBe(1);
   });
 
-  it("disposes scripts when they leave the tree", async () => {
+  it("re-runs the effect body whenever a watched atom changes", async () => {
     const el = mount();
-    (window as unknown as { __cleans?: number }).__cleans = 0;
-    el.setResponse(`$show = true
-runner = Script("runner", "ctx.cleanup(() => { window.__cleans += 1; });", [])
-root = Stack([$show ? runner : null])`);
+    el.setResponse(`$input = "a"
+$runs = 0
+effect [$input] {
+  $runs = $runs + 1
+}
+_app_ = Stack([])`);
     await waitForRenders();
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
-
-    el.state.set("show", false);
+    // Initial run on mount.
+    expect(el.state.get("runs")).toBe(1);
+    el.state.set("input", "b");
     await waitForRenders();
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
+    expect(el.state.get("runs")).toBe(2);
+    el.state.set("input", "c");
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(3);
   });
 
-  it("exposes ctx.state.set so a script can drive reactive UI", async () => {
+  it("does not re-run for state changes that aren't watched", async () => {
     const el = mount();
-    el.setResponse(`$msg = "loading"
-label = TextContent("" + $msg, "large-heavy")
-boot = Script("boot", "ctx.state.set('msg', 'ready');", [])
-root = Stack([label, boot])`);
+    el.setResponse(`$watched = 0
+$ignored = 0
+$runs = 0
+effect [$watched] {
+  $runs = $runs + 1
+}
+_app_ = Stack([])`);
     await waitForRenders();
-    const text = el.shadowRoot!.querySelector(".rui-text")?.textContent;
-    expect(text).toBe("ready");
+    expect(el.state.get("runs")).toBe(1);
+    // Bumping an unwatched atom should not re-fire the effect.
+    el.state.set("ignored", 42);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(1);
   });
 
-  it("exposes ctx.tools as a proxy that calls registered handlers", async () => {
+  it("mounts an effect declared inside a `component { … }` body on first render", async () => {
+    // Effects inside a component body are scoped to the component instance:
+    // the runner mounts them after the instance renders for the first time,
+    // and tears them down when the instance disappears.
     const el = mount();
-    el.setTools({
-      load_data: async ({ id }) => ({ id, hello: "world" }),
-    });
-    el.setResponse(`$result = ""
-label = TextContent($result, "small")
-fetcher = Script("fetcher", "const data = await ctx.tools.load_data({ id: 42 }); ctx.state.set('result', JSON.stringify(data));", [])
-root = Stack([label, fetcher])`);
-    await waitForRenders(20);
-    const text = el.shadowRoot!.querySelector(".rui-text")?.textContent;
-    expect(text).toContain('"id":42');
-    expect(text).toContain('"hello":"world"');
+    el.setResponse(`_app_ = App()
+$ticks = 0
+component App() {
+  effect [on:mount] {
+    $ticks = $ticks + 1
+  }
+  return Stack([])
+}`);
+    await waitForRenders();
+    expect(el.state.get("ticks")).toBe(1);
   });
 
-  it("runs @Js action steps on button click", async () => {
-    const programJs = `$count = 0
-label = TextContent("" + $count, "large-heavy")
-btn = Button("Inc", Action([@Js("ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1);")]))
-root = Stack([label, btn])`;
-
+  it("re-runs a component-local effect when its watched atom changes", async () => {
     const el = mount();
-    el.setResponse(programJs);
+    el.setResponse(`_app_ = App()
+$input = "a"
+$runs = 0
+component App() {
+  effect [$input] {
+    $runs = $runs + 1
+  }
+  return Stack([])
+}`);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(1);
+    el.state.set("input", "b");
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(2);
+  });
+
+  it("tears down a component-local interval effect when the instance unmounts", async () => {
+    // Toggling `$showApp` between true / false causes the `App` instance to
+    // appear and disappear from the tree. The interval effect inside it must
+    // stop firing as soon as the instance leaves the tree, otherwise it
+    // would keep mutating state from the background.
+    const el = mount();
+    el.setResponse(`_app_ = if $showApp { App() } else { Stack([]) }
+$showApp = true
+$ticks = 0
+component App() {
+  effect [on:every(10)] {
+    $ticks = $ticks + 1
+  }
+  return Stack([])
+}`);
+    await waitForRenders();
+    await new Promise((r) => setTimeout(r, 35));
+    await waitForRenders();
+    const ticksWhileMounted = el.state.get("ticks") as number;
+    expect(ticksWhileMounted).toBeGreaterThan(0);
+
+    el.state.set("showApp", false);
+    await waitForRenders();
+    const ticksAtTeardown = el.state.get("ticks") as number;
+
+    // Sleep past several interval periods; the counter must NOT advance
+    // because the per-instance interval was cleared on unmount.
+    await new Promise((r) => setTimeout(r, 60));
+    await waitForRenders();
+    expect(el.state.get("ticks")).toBe(ticksAtTeardown);
+  });
+
+  it("does not register a component-local effect on the global runner", async () => {
+    // Regression: effects nested inside a component body must NOT leak into
+    // `ctx.effectDecls`, otherwise `syncEffects` would mount them once
+    // globally (and they'd outlive the instance).
+    const el = mount() as ElementWithApi & {
+      // Reach into the private evaluation context for the assertion.
+      // The shape mirrors `EvaluationContext.effectDecls`.
+      context?: { effectDecls?: Map<string, unknown> };
+    };
+    el.setResponse(`_app_ = App()
+$runs = 0
+component App() {
+  effect [on:mount] {
+    $runs = $runs + 1
+  }
+  return Stack([])
+}`);
+    await waitForRenders();
+    // The runner still ticked the body once — proves the per-instance mount fired.
+    expect(el.state.get("runs")).toBe(1);
+    // …but the global effectDecls map must be empty.
+    const ctx = (el as unknown as { context?: { effectDecls?: Map<string, unknown> } }).context;
+    expect(ctx?.effectDecls?.size ?? 0).toBe(0);
+  });
+
+  it("resets the effect runner cleanly across setResponse calls", async () => {
+    const el = mount();
+    el.setResponse(`$count = 0
+effect [on:mount] {
+  $count = $count + 1
+}
+_app_ = Stack([])`);
+    await waitForRenders();
+    expect(el.state.get("count")).toBe(1);
+
+    // A fresh program drops the previous effect and mounts the new one.
+    el.setResponse(`$count = 0
+effect [on:mount] {
+  $count = 99
+}
+_app_ = Stack([])`);
+    await waitForRenders();
+    expect(el.state.get("count")).toBe(99);
+  });
+});
+
+describe("actions: declarative click handlers", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("runs an `action` body when a Button passes the action callable", async () => {
+    // `inc()` (call form) returns a callable the renderer invokes on click.
+    // This is the v0.5 equivalent of `Button("Inc", Action([@Set(...)]))`.
+    const el = mount();
+    el.setResponse(`$state count = 0
+action inc() {
+  $count = $count + 1
+}
+label = Text("" + $count, "large-heavy")
+btn = Button("Inc", inc())
+root = Stack([label, btn])`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
     button.click();
     await waitForRenders();
-    expect(el.shadowRoot!.querySelector(".rui-text")?.textContent).toBe("1");
+    expect(el.state.get("count")).toBe(1);
+    button.click();
+    await waitForRenders();
+    expect(el.state.get("count")).toBe(2);
   });
 
-  it("supports the canonical 'add via spread' pattern without any JS", async () => {
-    // The todo-app teaching pattern: adding an item is fully declarative.
-    // No Script/@Js needed. This regression-tests array spread in @Set and
-    // the .length shortcut working together.
+  it("supports the declarative 'add via spread' pattern with no JS at all", async () => {
+    // The canonical todo-app teaching pattern: mutating $todos by replacing
+    // the whole array, with `$draft` cleared explicitly inside the action.
     const el = mount();
-    el.setResponse(
-      "$todos = []\n" +
-      "$draft = \"\"\n" +
-      "addBtn = Button(\"Add\", Action([@Set($todos, [...$todos, {id: $todos.length + 1, text: $draft}]), @Reset($draft)]))\n" +
-      "root = Stack([addBtn])",
-    );
+    el.setResponse(`$state todos = []
+$state draft = ""
+action add() {
+  $todos = [...$todos, {id: $todos.length + 1, text: $draft}]
+  $draft = ""
+}
+addBtn = Button("Add", add())
+root = Stack([addBtn])`);
     await waitForRenders();
     el.state.set("draft", "first task");
     await waitForRenders();
@@ -165,111 +256,130 @@ root = Stack([label, btn])`;
     const todos = el.state.get("todos") as Array<{ id: number; text: string }>;
     expect(todos).toHaveLength(1);
     expect(todos[0]).toEqual({ id: 1, text: "first task" });
-    // @Reset returns the state to its declared default, not undefined.
     expect(el.state.get("draft")).toBe("");
   });
 
-  it("passes per-item args from @Js(body, args) into ctx.args at click time", async () => {
-    // Regression: LLMs were trying to read loop variables via ctx.state, which
-    // does not work. `@Js(body, {id: t.id})` is the correct way to bake the
-    // loop variable into the action step at render time.
+  it("runs inline `() => { js{ … } }` body on Button click (lambda parity)", async () => {
+    // Regression: inline lambda + js{} must fire the JS body on click,
+    // exactly like the named-action form (`action onClick() { js { … } }`).
+    // The runtime wires `jsBlockExecutor` on the lambda call site — without
+    // it, the click resolved to a deferred JsBlock payload and nothing
+    // happened.
     const el = mount();
-    el.setResponse(
-      "$todos = [{id:1, name:\"a\"}, {id:2, name:\"b\"}, {id:3, name:\"c\"}]\n" +
-      "list = @Each($todos, \"t\", row)\n" +
-      "row = Button(t.name, Action([@Js(\"ctx.state.set('clicked', ctx.args.id)\", {id: t.id})]))\n" +
-      "root = Stack([list])",
-    );
+    (globalThis as { __ruiInlineHit?: number }).__ruiInlineHit = 0;
+    el.setResponse(`root = Button("Click Me", onClick: () => { js { globalThis.__ruiInlineHit = (globalThis.__ruiInlineHit || 0) + 1 } })`);
     await waitForRenders();
-    const buttons = el.shadowRoot!.querySelectorAll("button");
-    expect(buttons.length).toBe(3);
-    (buttons[1] as HTMLButtonElement).click();
+    const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    button.click();
     await waitForRenders();
-    expect(el.state.get("clicked")).toBe(2);
-    (buttons[2] as HTMLButtonElement).click();
+    button.click();
     await waitForRenders();
-    expect(el.state.get("clicked")).toBe(3);
+    expect((globalThis as { __ruiInlineHit?: number }).__ruiInlineHit).toBe(2);
   });
 
-  it("ctx.args defaults to an empty object so handlers can safely destructure", async () => {
+  it("repeats an action on multiple clicks", async () => {
+    // The same action callable can be invoked repeatedly from a button and
+    // state updates accumulate.
     const el = mount();
-    el.setResponse(
-      "btn = Button(\"x\", Action([@Js(\"ctx.state.set('args_kind', typeof ctx.args)\")]))\n" +
-      "root = Stack([btn])",
-    );
+    el.setResponse(`$count = 0
+action next() {
+  $count = $count + 1
+}
+btn = Button("Next", next())
+_app_ = Stack([btn])`);
     await waitForRenders();
-    (el.shadowRoot!.querySelector("button") as HTMLButtonElement).click();
+    const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
+    button.click();
     await waitForRenders();
-    expect(el.state.get("args_kind")).toBe("object");
+    button.click();
+    await waitForRenders();
+    button.click();
+    await waitForRenders();
+    expect(el.state.get("count")).toBe(3);
+  });
+});
+
+describe("HTTP interceptors (replacement for setTools)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
   });
 
-  it("runs a Script whose body uses a multi-line backtick string", async () => {
-    // Backtick strings let LLMs write JS bodies with real newlines instead of
-    // having to escape them as \n. This regression-tests both the lexer and
-    // the script runner together.
+  it("`registerHttpInterceptors` is callable and merges multiple registrations", () => {
     const el = mount();
-    (window as unknown as { __bt?: number }).__bt = 0;
-    el.setResponse(
-      "boot = Script(\"boot\", `\n  const next = (window.__bt ?? 0) + 1;\n  window.__bt = next;\n  ctx.state.set('count', next);\n`)\n" +
-      "root = Stack([boot])",
-    );
-    await waitForRenders();
-    expect((window as unknown as { __bt: number }).__bt).toBe(1);
-    expect(el.state.get("count")).toBe(1);
+    const onRequest = (req: HttpRequest): HttpRequest => req;
+    const onResponse = (res: HttpResponse): HttpResponse => res;
+    // Each call merges onto the interceptor chain rather than replacing it.
+    expect(() => el.registerHttpInterceptors({ onRequest })).not.toThrow();
+    expect(() => el.registerHttpInterceptors({ onResponse })).not.toThrow();
   });
 
-  it("skips Script execution while streaming, then runs after streaming ends", async () => {
-    const el = mount();
-    (window as unknown as { __runs?: number }).__runs = 0;
-    el.streaming = true;
-    el.setResponse(
-      `boot = Script("boot", "window.__runs = (window.__runs ?? 0) + 1;")
-root = Stack([boot])`,
-    );
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(0);
+  it("interceptors fire around HTTP requests issued by http({...}) calls", async () => {
+    const phases: Array<"request" | "response"> = [];
+    const requestedUrls: string[] = [];
+    const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    const fetchMock = (async () => new Response(JSON.stringify({ rows: [{ id: 1 }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+    (globalThis as { fetch?: typeof fetch }).fetch = fetchMock;
+    try {
+      const el = mount();
+      el.registerHttpInterceptors({
+        onRequest: (req) => {
+          phases.push("request");
+          requestedUrls.push(req.url);
+          return req;
+        },
+        onResponse: (res) => {
+          phases.push("response");
+          return res;
+        },
+      });
+      el.setResponse(`$items = http({ url: "/items", method: "GET" })
+_app_ = Stack([])`);
+      // Wait for the in-flight fetch to flush through the interceptor chain.
+      await waitForRenders(30);
+      expect(phases).toContain("request");
+      expect(phases).toContain("response");
+      expect(requestedUrls.some((u) => u.includes("/items"))).toBe(true);
+    } finally {
+      if (originalFetch) {
+        (globalThis as { fetch?: typeof fetch }).fetch = originalFetch;
+      }
+    }
+  });
+});
 
-    el.streaming = false;
-    await waitForRenders();
-    expect((window as unknown as { __runs: number }).__runs).toBe(1);
+describe("system prompt: effects + actions", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
   });
 
-  it("includes the JavaScript section in the default (full) system prompt", () => {
+  it("documents the effect surface in the full prompt", () => {
     const el = mount();
     const prompt = el.getSystemPrompt();
-    expect(prompt).toContain("JavaScript interactions");
-    expect(prompt).toContain('Script("id", body, deps?)');
-    expect(prompt).toContain("@Js(");
+    expect(prompt).toContain("Declarative side effects");
+    expect(prompt).toContain("effect");
+    expect(prompt).toContain("on:mount");
+    expect(prompt).toContain("debounce(");
+    // The capability sandbox is gone — no `uses { … }` clause anywhere.
+    expect(prompt).not.toMatch(/uses\s*\{/);
   });
 
-  it("omits the JavaScript section from the chat-mode system prompt", () => {
+  it("documents the `action` declaration surface", () => {
+    const el = mount();
+    const prompt = el.getSystemPrompt();
+    expect(prompt).toContain("## Actions");
+    expect(prompt).toContain("action save(");
+  });
+
+  it("omits the effects deep-dive from the compact chat-mode prompt", () => {
     const el = mount();
     const prompt = el.getSystemPrompt({ mode: "chat" });
-    expect(prompt).not.toContain("## JavaScript interactions");
-    expect(prompt).not.toContain('Script("id", body, deps?)');
-    expect(prompt).not.toContain("@Js(");
-  });
-
-  it("teaches the LLM about backtick-quoted multi-line bodies", () => {
-    // The single biggest LLM authoring error is escaping newlines inside
-    // double-quoted Script bodies. The full prompt should call out backticks
-    // as the preferred surface for multi-line code.
-    const proxy = document.createElement("streaming-ui-script") as unknown as ElementWithApi;
-    const prompt = proxy.getSystemPrompt();
-    expect(prompt).toContain("backtick-quoted string");
-    expect(prompt).toContain("multi-line backtick body");
-  });
-
-  it("resets cleanly on setResponse so old scripts don't leak across programs", async () => {
-    const el = mount();
-    (window as unknown as { __cleans?: number }).__cleans = 0;
-    el.setResponse(`runner = Script("runner", "ctx.cleanup(() => { window.__cleans += 1; });", [])
-root = Stack([runner])`);
-    await waitForRenders();
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(0);
-
-    el.setResponse(`root = Stack([])`);
-    await waitForRenders();
-    expect((window as unknown as { __cleans: number }).__cleans).toBe(1);
+    // The chat-mode prompt is the compact flavour — no effects deep-dive,
+    // no router block walkthrough.
+    expect(prompt).not.toContain("Declarative side effects");
+    expect(prompt).not.toContain("on:every(");
   });
 });

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chat bot · streaming-ui-script</title>
-  <meta name="description" content="Generate complete UIs, websites, and full applications by chatting with an LLM that responds only in Streaming UI Script." />
+  <title>Chat bot · Aktion</title>
+  <meta name="description" content="Generate complete UIs, websites, and full applications by chatting with an LLM that responds only in Aktion." />
   <script>
     (function () {
       try {
@@ -16,7 +16,7 @@
     })();
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
-  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.05.16a" />
+  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.05.22" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body data-page="chat-bot">
@@ -32,7 +32,7 @@
             <h1>Connect to OpenRouter</h1>
             <p class="cb-lede">
               This demo streams an LLM's response into
-              <code>&lt;streaming-ui-script&gt;</code>. Pick a mode, ask for any
+              <code>&lt;aktion-app&gt;</code>. Pick a mode, ask for any
               UI, and watch a complete interface render in real time. Your key
               stays in <code>localStorage</code> — it's never sent anywhere
               except OpenRouter.
@@ -182,6 +182,8 @@
           <!-- Composer -->
           <form class="cb-composer" id="cb-composer">
             <div class="cb-composer-inner">
+              <!-- Attachment chips (images + files) preview row -->
+              <div class="cb-attach-row" id="cb-attach-row" hidden aria-live="polite"></div>
               <textarea
                 id="cb-input"
                 placeholder="Build a project dashboard with KPIs, kanban board, and a recent activity feed…"
@@ -189,6 +191,22 @@
                 aria-label="Message"
               ></textarea>
               <div class="cb-composer-actions">
+                <input
+                  type="file"
+                  id="cb-file-input"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
+                  hidden
+                />
+                <button
+                  type="button"
+                  class="cb-iconbtn cb-attach"
+                  id="cb-attach"
+                  title="Attach images or PDFs"
+                  aria-label="Attach images or PDFs"
+                >
+                  <i class="fa-solid fa-paperclip"></i>
+                </button>
                 <span class="cb-composer-hint" aria-hidden="true">
                   <kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline
                 </span>
@@ -254,6 +272,6 @@
   </div>
 
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
-  <script type="module" src="assets/chat-bot.js?v=2026.05.16a"></script>
+  <script type="module" src="assets/chat-bot.js?v=2026.05.22"></script>
 </body>
 </html>

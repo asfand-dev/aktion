@@ -17,11 +17,25 @@ describe("parser", () => {
     const program = parse(`$days = "7"\nbox = Input("days", "...", "text", null, $days)`);
     expect(program.errors).toEqual([]);
     expect(program.statements).toHaveLength(2);
-    expect(program.statements[0]).toMatchObject({ identifier: "days", isState: true });
+    expect(program.statements[0]).toMatchObject({
+      kind: "Assignment",
+      identifier: "days",
+      isState: true,
+    });
     const callExpr = program.statements[1]?.expression;
     expect(callExpr?.kind).toBe("Call");
     if (callExpr?.kind !== "Call") return;
     expect(callExpr.arguments[4]).toEqual({ kind: "StateRef", name: "days" });
+  });
+
+  it("accepts the bare `$name = value` reactive-atom form (the only state form)", () => {
+    const program = parse(`$days = "7"`);
+    expect(program.errors).toEqual([]);
+    expect(program.statements[0]).toMatchObject({
+      kind: "Assignment",
+      identifier: "days",
+      isState: true,
+    });
   });
 
   it("supports member access (array pluck)", () => {
@@ -62,8 +76,8 @@ describe("parser", () => {
     expect(callExpr?.kind).toBe("Call");
   });
 
-  it("parses inline named call arguments", () => {
-    const program = parse(`cell = GridItem(TextContent("Side"), span="1/4")`);
+  it("parses inline named call arguments using the `name: value` form", () => {
+    const program = parse(`cell = GridItem(Text("Side"), span: "1/4")`);
     expect(program.errors).toEqual([]);
     const callExpr = program.statements[0]?.expression;
     expect(callExpr?.kind).toBe("Call");
@@ -73,6 +87,13 @@ describe("parser", () => {
       name: "span",
       value: { kind: "Literal", value: "1/4" },
     });
+  });
+
+  it("rejects the legacy `name=value` named-arg form with a migration hint", () => {
+    const program = parse(`cell = GridItem(Text("Side"), span="1/4")`);
+    expect(program.errors.length).toBeGreaterThan(0);
+    expect(program.errors[0]?.message).toMatch(/Legacy "name=value"/);
+    expect(program.errors[0]?.message).toMatch(/span: value/);
   });
 
   it("collects errors but keeps parsing", () => {

@@ -1,33 +1,38 @@
 {
-  "name": "streaming-ui-script",
-  "version": "0.1.0",
-  "description": "Framework-agnostic web component for rendering LLM-generated rich UI using Streaming UI Script syntax.",
+  "name": "aktion-runtime",
+  "version": "0.5.0",
+  "description": "Aktion is a single web component that turns a compact, streaming-first DSL into a rich, interactive UI inside its shadow DOM. Works in React, Vue, Angular, Svelte, plain HTML — or no framework at all.",
   "type": "module",
-  "main": "./dist/streaming-ui-script.umd.cjs",
-  "module": "./dist/streaming-ui-script.js",
-  "types": "./dist/types/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/streaming-ui-script.js",
-      "require": "./dist/streaming-ui-script.umd.cjs",
-      "types": "./dist/types/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
-    "./style.css": "./dist/streaming-ui-script.css",
-    "./system_prompt.txt": "./dist/system_prompt.txt"
+    "./style.css": "./dist/aktion.css",
+    "./system_prompt.txt": "./dist/system_prompt.txt",
+    "./system_prompt_chat.txt": "./dist/system_prompt_chat.txt"
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs",
+    "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs && node scripts/emit-entry.mjs",
     "build:lib": "vite build",
     "build:prompt": "node scripts/emit-prompt.mjs",
+    "build:entry": "node scripts/emit-entry.mjs",
     "build:docs": "node scripts/build-docs.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
@@ -41,18 +46,18 @@
     "llm",
     "ai",
     "web-components",
-    "streaming-ui-script",
+    "aktion",
     "generative-ui",
     "rich-ui",
     "custom-elements"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/asfand-dev/streaming-ui-script.git"
+    "url": "git+https://github.com/asfand-dev/aktion.git"
   },
-  "homepage": "https://asfand-dev.github.io/streaming-ui-script/",
+  "homepage": "https://asfand-dev.github.io/aktion/",
   "bugs": {
-    "url": "https://github.com/asfand-dev/streaming-ui-script/issues"
+    "url": "https://github.com/asfand-dev/aktion/issues"
   },
   "license": "MIT"
 }

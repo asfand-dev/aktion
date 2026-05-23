@@ -11,7 +11,11 @@ import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
 import "../src/index.js";
 
-const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+const flush = (): Promise<void> => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+const waitForRenders = async (n = 5): Promise<void> => {
+  for (let i = 0; i < n; i += 1) await flush();
+};
 
 describe("router: normalisePath", () => {
   it.each([
@@ -101,7 +105,7 @@ describe("router: navigation", () => {
     const seen: string[] = [];
     router.subscribe((d) => seen.push(d.path));
     router.navigate("/about");
-    router.navigate("/about"); // dedup — no second listener call
+    router.navigate("/about");
     router.navigate("/contact");
     expect(router.getPath()).toBe("/contact");
     expect(seen).toEqual(["/about", "/contact"]);
@@ -127,72 +131,69 @@ describe("router: navigation", () => {
   });
 });
 
-describe("<streaming-ui-script>: routing", () => {
+interface RoutingElement extends HTMLElement {
+  setResponse(text: string): void;
+  navigate(path: string): void;
+  route: string;
+  getSystemPrompt(opts?: Record<string, unknown>): string;
+}
+
+describe("<aktion-app>: routing", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     if (typeof window !== "undefined") window.location.hash = "";
   });
 
-  const create = () => {
+  const create = (): RoutingElement => {
     if (typeof window !== "undefined") window.location.hash = "";
-    const el = document.createElement("streaming-ui-script");
+    const el = document.createElement("aktion-app") as unknown as RoutingElement;
     document.body.appendChild(el);
-    return el as HTMLElement & {
-      setResponse(text: string): void;
-      navigate(path: string): void;
-      route: string;
-      getSystemPrompt(opts?: Record<string, unknown>): string;
-    };
+    return el;
   };
 
-  it("renders the matching Route's content based on the current path", async () => {
+  it("renders the matching arm of `_router_({ … })` based on the current path", async () => {
     const el = create();
     window.location.hash = "#/about";
-    // hashchange fires async — give the listener a chance.
     await flush();
-    el.setResponse(`root = Stack([nav, outlet])
-nav = Stack([NavLink("Home", "/", null, true), NavLink("About", "/about")], "row", "s")
-outlet = Routes([
-  Route("/", homePage),
-  Route("/about", aboutPage),
-  Route("*", notFoundPage)
-], "/")
-homePage = Card([CardHeader("Home")])
-aboutPage = Card([CardHeader("About")])
-notFoundPage = Callout("warning", "Not found")`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    el.setResponse(`pages = _router_({
+  "/":      Card([CardHeader("Home")]),
+  "/about": Card([CardHeader("About")]),
+  default:  Callout("warning", "Not found")
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     const shadow = el.shadowRoot!;
     const titles = Array.from(shadow.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
     expect(titles).toContain("About");
     expect(titles).not.toContain("Home");
   });
 
-  it("falls back to the default Route when no path matches", async () => {
+  it("falls back to the `default` arm when no path matches", async () => {
     const el = create();
     window.location.hash = "#/nonexistent";
     await flush();
-    el.setResponse(`root = Routes([
-  Route("/", homePage),
-  Route("/about", aboutPage)
-], "/")
-homePage = Card([CardHeader("Home")])
-aboutPage = Card([CardHeader("About")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    el.setResponse(`pages = _router_({
+  "/":      Card([CardHeader("Home")]),
+  "/about": Card([CardHeader("About")]),
+  default:  Card([CardHeader("404")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     const titles = Array.from(el.shadowRoot!.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
-    expect(titles).toContain("Home");
+    expect(titles).toContain("404");
+    expect(titles).not.toContain("Home");
   });
 
-  it("matches a wildcard catch-all last", async () => {
+  it("matches a wildcard catch-all", async () => {
     const el = create();
     window.location.hash = "#/anything-goes/here";
     await flush();
-    el.setResponse(`root = Routes([
-  Route("/", homePage),
-  Route("*", catchAll)
-])
-homePage = Card([CardHeader("Home")])
-catchAll = Card([CardHeader("404")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    el.setResponse(`pages = _router_({
+  "/": Card([CardHeader("Home")]),
+  "*": Card([CardHeader("404")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     const titles = Array.from(el.shadowRoot!.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
     expect(titles).toContain("404");
   });
@@ -201,39 +202,79 @@ catchAll = Card([CardHeader("404")])`);
     const el = create();
     window.location.hash = "#/users/42";
     await flush();
-    el.setResponse(`root = Routes([
-  Route("/users/:id", userPage),
-  Route("*", notFound)
-])
-userPage = Card([CardHeader("User " + params.id, "Detail page")])
-notFound = Card([CardHeader("404")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    el.setResponse(`pages = _router_({
+  "/users/:id": Card([CardHeader("User " + params.id, "Detail page")]),
+  default:      Card([CardHeader("404")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     const title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
     expect(title).toBe("User 42");
   });
 
-  it("re-renders when navigating via @Navigate inside an Action", async () => {
+  it("exposes the reactive `_route_` object with .path / .params / .pattern", async () => {
     const el = create();
-    el.setResponse(`root = Stack([nav, outlet])
-nav = Buttons([
-  Button("Home", Action([@Navigate("/")])),
-  Button("Settings", Action([@Navigate("/settings")]))
-])
-outlet = Routes([
-  Route("/", homePage),
-  Route("/settings", settingsPage)
-])
-homePage = Card([CardHeader("Home")])
-settingsPage = Card([CardHeader("Settings")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    window.location.hash = "#/users/7";
+    await flush();
+    el.setResponse(`pages = _router_({
+  "/users/:id": Card([CardHeader(\`User \${_route_.params.id}\`, _route_.path)]),
+  default:      Card([CardHeader("404")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
+    const shadow = el.shadowRoot!;
+    const title = shadow.querySelector(".rui-card-title")?.textContent;
+    const subtitle = shadow.querySelector(".rui-card-subtitle")?.textContent;
+    expect(title).toBe("User 7");
+    expect(subtitle).toBe("/users/7");
+  });
+
+  it("template literal `${_route_}` coerces to the current path string", async () => {
+    const el = create();
+    window.location.hash = "#/dashboard";
+    await flush();
+    el.setResponse(`_app_ = Card([CardHeader("Path", \`Now at \${_route_}\`)])`);
+    await waitForRenders();
+    const subtitle = el.shadowRoot!.querySelector(".rui-card-subtitle")?.textContent;
+    expect(subtitle).toBe("Now at /dashboard");
+  });
+
+  it("`_route_.navigate(path)` updates the URL hash and re-renders", async () => {
+    const el = create();
+    el.setResponse(`pages = _router_({
+  "/":         Card([CardHeader("Home")]),
+  "/settings": Card([CardHeader("Settings")])
+})
+action goSettings() { _route_.navigate("/settings") }
+trigger = Button("Go", onClick: goSettings)
+_app_ = Stack([trigger, pages])`);
+    await waitForRenders();
+    expect(el.route).toBe("/");
+
+    const button = el.shadowRoot!.querySelector<HTMLButtonElement>(".rui-button");
+    expect(button).not.toBeNull();
+    button!.click();
+    await waitForRenders();
+
+    expect(el.route).toBe("/settings");
+    const title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
+    expect(title).toBe("Settings");
+  });
+
+  it("re-renders when the element's `navigate()` method is called", async () => {
+    const el = create();
+    el.setResponse(`pages = _router_({
+  "/":         Card([CardHeader("Home")]),
+  "/settings": Card([CardHeader("Settings")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     expect(el.route).toBe("/");
     let title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
     expect(title).toBe("Home");
 
-    // Click the second button → action dispatches @Navigate("/settings")
-    const buttons = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".rui-button");
-    buttons[1]!.click();
-    for (let i = 0; i < 10; i += 1) await flush();
+    el.navigate("/settings");
+    await waitForRenders();
     expect(el.route).toBe("/settings");
     title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
     expect(title).toBe("Settings");
@@ -243,19 +284,17 @@ settingsPage = Card([CardHeader("Settings")])`);
     const el = create();
     window.location.hash = "#/settings/profile";
     await flush();
-    el.setResponse(`root = Stack([nav, outlet])
+    el.setResponse(`pages = _router_({
+  "/":           Card([CardHeader("Home")]),
+  "/settings/*": Card([CardHeader("Settings")])
+})
 nav = Stack([
-  NavLink("Home", "/", null, true),
-  NavLink("Settings", "/settings"),
-  NavLink("Profile", "/settings/profile", null, true)
-], "row")
-outlet = Routes([
-  Route("/", home),
-  Route("/settings/*", settings)
-])
-home = Card([CardHeader("Home")])
-settings = Card([CardHeader("Settings")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+  NavLink("Home", to: "/", exact: true),
+  NavLink("Settings", to: "/settings"),
+  NavLink("Profile", to: "/settings/profile", exact: true)
+], direction: "row")
+_app_ = Stack([nav, pages])`);
+    await waitForRenders();
     const links = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>(".rui-nav-link"));
     const states = links.map((a) => ({ label: a.textContent?.trim(), active: a.getAttribute("data-active") }));
     expect(states).toEqual([
@@ -265,41 +304,60 @@ settings = Card([CardHeader("Settings")])`);
     ]);
   });
 
+  it("NavLink onclick navigates to the target route", async () => {
+    const el = create();
+    el.setResponse(`pages = _router_({
+  "/":      Card([CardHeader("Home")]),
+  "/about": Card([CardHeader("About")])
+})
+nav = Stack([
+  NavLink("Home", to: "/"),
+  NavLink("About", to: "/about")
+], direction: "row")
+_app_ = Stack([nav, pages])`);
+    await waitForRenders();
+    expect(el.route).toBe("/");
+
+    const links = el.shadowRoot!.querySelectorAll<HTMLAnchorElement>(".rui-nav-link");
+    expect(links).toHaveLength(2);
+    links[1]!.click();
+    await waitForRenders();
+    expect(el.route).toBe("/about");
+    const title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
+    expect(title).toBe("About");
+  });
+
   it("dispatches a route-change event when the path changes", async () => {
     const el = create();
-    el.setResponse(`root = Stack([Routes([Route("/", a), Route("/b", b)])])
-a = Card([CardHeader("A")])
-b = Card([CardHeader("B")])`);
-    for (let i = 0; i < 5; i += 1) await flush();
+    el.setResponse(`pages = _router_({
+  "/":  Card([CardHeader("A")]),
+  "/b": Card([CardHeader("B")])
+})
+_app_ = Stack([pages])`);
+    await waitForRenders();
     const events: Array<{ path: string; previousPath: string | null }> = [];
     el.addEventListener("route-change", (evt) => {
       events.push((evt as CustomEvent).detail);
     });
     el.navigate("/b");
-    for (let i = 0; i < 5; i += 1) await flush();
+    await waitForRenders();
     expect(events.length).toBeGreaterThan(0);
     expect(events[events.length - 1]!.path).toBe("/b");
   });
 });
 
 describe("system prompt: routing", () => {
-  it("includes the routing section in the full prompt", () => {
+  it("includes a routing section in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## Routing");
-    expect(text).toContain("Routes(items");
-    expect(text).toContain("Route(path");
-    expect(text).toContain("NavLink(label");
-    expect(text).toContain("@Navigate");
-    expect(text).toContain("$route");
-    expect(text).toContain("params.id");
-    expect(text).toContain("### Routing");
+    expect(text).toContain("_router_({");
+    expect(text).toContain("NavLink");
+    expect(text).toContain("_route_");
+    expect(text).not.toContain("$route");
   });
 
   it("omits the routing section from the chat-mode prompt", () => {
     const text = generatePrompt(defaultLibrary, { mode: "chat" });
     expect(text).not.toContain("## Routing");
-    expect(text).not.toContain("Routes(");
     expect(text).not.toContain("NavLink(");
-    expect(text).not.toContain("@Navigate");
   });
 });

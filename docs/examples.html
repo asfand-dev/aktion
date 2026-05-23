@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Examples · streaming-ui-script</title>
-  <meta name="description" content="Copy-paste recipes for forms, dashboards, chats, e-commerce, and every common UI pattern." />
+  <title>Examples · Aktion</title>
+  <meta name="description" content="Copy-paste 0.5 recipes for forms, dashboards, chats, e-commerce, and every common UI pattern." />
   <script>
     (function () {
       try {
@@ -20,67 +20,52 @@
 </head>
 <body data-page="examples">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Recipes</span>
-        <h1>Examples.</h1>
+        <h1>Examples &amp; recipes.</h1>
         <p class="lead">
-          Inline examples that render Streaming UI Script live. Switch to the
-          source tab to see the exact text the renderer receives, and use the
-          theme picker to test contrast.
+          Inline, copy-paste Aktion snippets that render live in
+          this page. Flip between <strong>Preview</strong> and
+          <strong>Source</strong> on any card, then swap themes with the
+          picker to test palette contrast.
         </p>
       </header>
 
-      <p>
-        Looking for a focused tour of <code>Action([...])</code>? The
-        dedicated <a href="actions.html">Actions guide</a> walks through
-        every action step (<code>@Set</code>, <code>@Reset</code>,
-        <code>@Run</code>, <code>@ToAssistant</code>,
-        <code>@OpenUrl</code>, <code>@Navigate</code>,
-        <code>@Js</code>) and the components that accept them.
-      </p>
-      <p>
-        Need to wire up <em>behaviour</em> (timers, fetch, focus, animations,
-        clipboard) inside an assistant response? See the dedicated
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        page — the LLM can always author <code>Script(...)</code> and
-        <code>@Js(...)</code> for anything the declarative components don't
-        cover.
-      </p>
-
-      <div class="callout" style="margin-top:24px">
-        <h4>Looking for end-to-end demos?</h4>
-        <p>
-          Every standalone live demo — chat bots, tools, routing, rich
-          patterns, commerce, inbox, CRM, pricing — now lives in one
-          searchable catalog.
-        </p>
-        <p>
-          <a href="live-examples.html"><strong>Browse the live examples →</strong></a>
-        </p>
+      <div class="demo-grid" style="margin-top:8px">
+        <a class="demo-card" href="#inline-examples">
+          <span class="demo-tag">Below on this page</span>
+          <h3>Inline recipes</h3>
+          <p>Chat answers, forms, tabs, action bodies, follow-ups, code blocks, callouts.</p>
+          <span class="demo-arrow">Browse recipes &rarr;</span>
+        </a>
+        <a class="demo-card" href="live-examples.html">
+          <span class="demo-tag">End-to-end</span>
+          <h3>Live demos</h3>
+          <p>Whole apps &mdash; chat bots, dashboards, commerce, routing, brand themes &mdash; in one searchable catalog.</p>
+          <span class="demo-arrow">Open catalog &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Edit Aktion live with instant preview &mdash; ideal for adapting any recipe to your needs.</p>
+          <span class="demo-arrow">Open playground &rarr;</span>
+        </a>
       </div>
 
-      <h2>Inline examples</h2>
+      <p>
+        Want a focused tour of <code>action Name() { ... }</code> blocks? See
+        the <a href="actions.html">Actions guide</a> &mdash; it walks through
+        assignment, <code>http({...})</code> mutations, <code>emit</code>,
+        programmatic navigation via <code>_route_.navigate("/path")</code>,
+        and inline <code>js{ ... }</code> side effects. For browser API
+        access inside an action or effect body, see
+        <a href="javascript-interactions.html">JavaScript interactions</a>.
+      </p>
+
+      <h2 id="inline-examples">Inline examples</h2>
 
       <div class="theme-picker" style="margin-bottom:18px">
         <label for="theme-picker">Theme</label>
@@ -103,58 +88,24 @@
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([intro, steps, follow])
-intro = Card([CardHeader("Onboarding plan", "3 steps to set up your workspace")])
+<pre><code class="example-source">intro = Card([
+  CardHeader("Onboarding plan", subtitle: "3 steps to set up your workspace")
+])
 steps = Steps([
-  { title: "Invite teammates", details: "Open the Members tab and send invites." },
-  { title: "Connect a data source", details: "Settings → Integrations → choose a provider." },
+  { title: "Invite teammates",        details: "Open the Members tab and send invites." },
+  { title: "Connect a data source",   details: "Settings → Integrations → choose a provider." },
   { title: "Pick a starter template", details: "Seed the workspace with sample content." }
 ])
 follow = FollowUpBlock([
   FollowUpItem("Show invite link"),
   FollowUpItem("List supported integrations"),
   FollowUpItem("Open the templates gallery")
-])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Searchable, sortable table (reactive state)</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: template literal subtitle, @If for the empty branch, $$persistent sort.
-$search = ""
-$$sortBy = "stars"
-data = Query("get_repos", {}, {rows: [
-  {name: "ui-lang",    stars: 120,  forks: 220},
-  {name: "rich-ui",    stars: 940,  forks: 80},
-  {name: "ai-toolkit", stars: 2300, forks: 412}
-]})
-filtered = @Filter(data.rows, "name", "contains", $search)
-sorted   = @Sort(filtered, $$sortBy, "desc")
-searchBox  = FormControl("Search",  SearchBar("search", "Filter repos…", $search, "/"))
-sortSelect = FormControl("Sort by", Select("sortBy", [SelectItem("stars","Stars"), SelectItem("forks","Forks")], null, null, $$sortBy))
-controls = Toolbar([searchBox, sortSelect])
-tbl = Table([
-  Col("Name",  sorted.name),
-  Col("Stars", sorted.stars, "number"),
-  Col("Forks", sorted.forks, "number")
 ])
-empty = EmptyState("No matches", `Nothing matches "${$search}".`, "magnifying-glass")
-view  = @If(@Count(filtered) &gt; 0, tbl, empty)
-root  = Card([CardHeader("Repositories", `${@Count(filtered)} of ${@Count(data.rows)}`), controls, view])</code></pre>
+_app_ = Stack([intro, steps, follow])</code></pre>
         </div>
       </div>
 
@@ -166,121 +117,98 @@ root  = Card([CardHeader("Repositories", `${@Count(filtered)} of ${@Count(data.r
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: template literals replace "" + $title + "…" concatenation.
-$title     = ""
-$priority  = "medium"
+<pre><code class="example-source">$title = ""
+$priority = "medium"
 $lastSaved = "Nothing yet"
-saveBtn = Button("Save", Action([
-  @Set($lastSaved, `${$title} (${$priority})`),
-  @Reset($title, $priority)
-]), "primary")
+
+action save() {
+  $lastSaved = `${$title} (${$priority})`
+  $title = ""
+  $priority = "medium"
+}
+
+saveBtn = Button("Save", action: save, variant: "primary")
 form = Form("ticket", saveBtn, [
-  FormControl("Title",    Input("title",    "Short summary", "text", ["required","minLength:3"], $title)),
-  FormControl("Priority", Select("priority", [SelectItem("low","Low"), SelectItem("medium","Medium"), SelectItem("high","High")], null, null, $priority))
+  FormControl("Title", Input("title",
+    placeholder: "Short summary",
+    validation: ["required", "minLength:3"],
+    value: $title)),
+  FormControl("Priority", Select("priority", [
+    SelectItem("low",    label: "Low"),
+    SelectItem("medium", label: "Medium"),
+    SelectItem("high",   label: "High")
+  ], value: $priority))
 ])
-status = Card([CardHeader("Last saved"), Markdown(`\`${$lastSaved}\``)])
-root = Stack([form, status])</code></pre>
+status = Card([
+  CardHeader("Last saved"),
+  Markdown(`\`${$lastSaved}\``)
+])
+_app_ = Stack([form, status])</code></pre>
         </div>
       </div>
 
       <div class="example">
-        <div class="example-header"><h3>Action chains — every step in one card</h3></div>
+        <div class="example-header"><h3>Action body — every step in one card</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: template literals throughout, ?? to default the log line.
+<pre><code class="example-source"># Every action body composes assignment + emit + js{ ... } statements.
 $count = 0
-$log   = "Click any button below."
+$log = "Click any button below."
 
-incBtn   = Button("@Set: +1", Action([
-  @Set($count, $count + 1),
-  @Set($log,   `@Set wrote ${$count + 1} to $count.`)
-]), "primary")
-resetBtn = Button("@Reset", Action([
-  @Reset($count),
-  @Set($log, "@Reset restored $count to 0.")
-]), "secondary")
-chainBtn = Button("Chain (3 steps)", Action([
-  @Set($count, $count + 5),
-  @Set($log,   `Chained @Set+@Set ran in order. $count is now ${$count + 5}.`),
-  @ToAssistant("Bumped count by 5")
-]), "primary")
-askBtn   = Button("@ToAssistant", Action([
-  @ToAssistant("Tell me more about Action chains."),
-  @Set($log, "@ToAssistant fired an assistant-message event.")
-]))
-linkBtn  = Button("@OpenUrl", Action([
-  @OpenUrl("https://asfand-dev.github.io/streaming-ui-script/actions.html"),
-  @Set($log, "@OpenUrl opened a sanitised URL in a new tab.")
-]), "ghost")
-implicit = Button("Implicit @ToAssistant")
+action inc() {
+  $count = $count + 1
+  $log = `Incremented to ${$count}.`
+}
+action reset() {
+  $count = 0
+  $log = "Reset count to 0."
+}
+action chain() {
+  $count = $count + 5
+  $log = `Chained two writes — $count is now ${$count}.`
+  emit "assistant-message" { message: "Bumped count by 5" }
+}
+action ask() {
+  emit "assistant-message" { message: "Tell me more about action blocks." }
+  $log = "Emitted an assistant-message event."
+}
+action openUrl() {
+  js{ window.open("https://asfand-dev.github.io/aktion/actions.html",
+                  "_blank", "noopener,noreferrer") }
+  $log = "Opened a sanitised URL in a new tab."
+}
 
-counter = Card([CardHeader(`$count = ${$count}`, "Read by every button below"), Buttons([incBtn, resetBtn, chainBtn])])
-extras  = Card([CardHeader("More steps"), Buttons([askBtn, linkBtn, implicit])])
-status  = Callout("info", "Status", $log ?? "(no events yet)", "circle-info")
-
-root = Stack([counter, extras, status], "column", "l")</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Dashboard with KPIs and chart</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: @FormatCurrency, responsive Grid for the chart row, $$persistent range, @Each macro for accounts.
-$$range = "q3"
-header = PageHeader("Q3 performance", `Updated nightly · all amounts in USD · range ${@Uppercase($$range)}`,
-  ["Workspace", "Analytics", "Q3"],
-  [Button("Export", Action([@ToAssistant("Export Q3 performance as PDF")]), "secondary"),
-   Button("Schedule digest", Action([@ToAssistant("Schedule a weekly digest")]), "primary")],
-  Badge("Live", "success"))
-toolbar = Toolbar([
-  FormControl("Range", Select("range", [SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")], null, null, $$range))
-], [StatusDot("Streaming", "success", true)])
-kpis = Stats([
-  StatCard("Revenue",      @Format(48230, "currency", "USD"), "up",   "+12% vs Q2", "sack-dollar"),
-  StatCard("Active users", @Format(12540, "number"),          "up",   "+8% vs Q2",  "users"),
-  StatCard("Churn",        "2.1%",                         "down", "-0.4 pp",    "arrow-trend-down"),
-  StatCard("NPS",          "62",                           "flat", "+1",         "star")
+counter = Card([
+  CardHeader(`$count = ${$count}`, subtitle: "Read by every button below"),
+  Buttons([
+    Button("Increment",   action: inc,   variant: "primary"),
+    Button("Reset",       action: reset, variant: "secondary"),
+    Button("Chain steps", action: chain, variant: "primary")
+  ])
 ])
-trafficCard = Card([SectionHeader("Daily traffic", "Visits vs signups", null, Badge("On track", "success", null, "sm")),
-  LineChart(["Mon","Tue","Wed","Thu","Fri"], [Series("Visits",[120,180,160,210,250]), Series("Signups",[12,18,15,22,28])])])
-mixCard = Card([SectionHeader("Plan mix", "Active subscribers by tier"),
-  PieChart(["Free","Pro","Team"], [240, 95, 32])])
-charts = Grid([trafficCard, mixCard], {sm: 1, md: 2}, "l")
+extras = Card([
+  CardHeader("More steps"),
+  Buttons([
+    Button("Emit assistant-message", action: ask),
+    Button("Open URL",               action: openUrl, variant: "ghost"),
+    Button("Implicit assistant-message")
+  ])
+])
+status = Callout("info", title: "Status", text: $log, icon: "circle-info")
 
-PlanBadge(p) = @Switch(p, {Team: Badge("Team","primary",null,"sm"), Pro: Badge("Pro","success",null,"sm")}, Badge("Free","neutral",null,"sm"))
-accounts = [
-  {name:"Acme",    mrr:4200, plan:"Team"},
-  {name:"Globex",  mrr:2400, plan:"Pro"},
-  {name:"Initech", mrr:1850, plan:"Free"}
-]
-topAccounts = Card([SectionHeader("Top accounts", `Largest MRR contributors · ${@Format(@Sum(accounts.mrr, "currency", "USD"), "USD")} combined`, null, null,
-  [Button("View all", Action([@ToAssistant("Open the accounts list")]), "ghost", "button", "small")]), Table([
-  Col("Account", accounts.name),
-  Col("MRR",     accounts.mrr, "currency"),
-  Col("Plan",    @Each(accounts, "{plan}", PlanBadge(plan)))
-])])
-root = Stack([header, toolbar, kpis, charts, topAccounts], "column", "l")</code></pre>
+_app_ = Stack([counter, extras, status], direction: "column", gap: "l")</code></pre>
         </div>
       </div>
 
@@ -292,22 +220,29 @@ root = Stack([header, toolbar, kpis, charts, topAccounts], "column", "l")</code>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: $$days persists the selected range, template literal in Markdown.
-$$days = "7"
-filter = FormControl("Range", Select("days", [SelectItem("7","7d"), SelectItem("14","14d"), SelectItem("30","30d")], null, null, $$days))
-overview = TabItem("overview", "Overview", [
-  Markdown(`Showing data for the last **${$$days} days**.`),
-  LineChart(["d1","d2","d3","d4","d5"], [Series("Events",[400,500,460,520,580])])
+<pre><code class="example-source">$days = "7"
+
+filter = FormControl("Range", Select("days", [
+  SelectItem("7",  label: "7d"),
+  SelectItem("14", label: "14d"),
+  SelectItem("30", label: "30d")
+], value: $days))
+
+overview = TabItem("overview", label: "Overview", children: [
+  Markdown(`Showing data for the last **${$days} days**.`),
+  LineChart(["d1","d2","d3","d4","d5"],
+    series: [Series("Events", values: [400,500,460,520,580])])
 ])
-errors = TabItem("errors", "Errors", [
-  Callout("success", "System healthy", "No incidents in the selected range.")
+errors = TabItem("errors", label: "Errors", children: [
+  Callout("success", title: "System healthy",
+    text: "No incidents in the selected range.")
 ])
 tabs = Tabs([overview, errors])
-root = Card([CardHeader("Operations"), filter, tabs])</code></pre>
+_app_ = Card([CardHeader("Operations"), filter, tabs])</code></pre>
         </div>
       </div>
 
@@ -319,20 +254,20 @@ root = Card([CardHeader("Operations"), filter, tabs])</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([header, tags, sep, snippet, group])
-header = CardHeader("Release notes", "v1.2 highlights")
-tags = BadgeList(["new", "tabs", "callout", "separator"], "primary", "sm")
+<pre><code class="example-source">header = CardHeader("Release notes", subtitle: "v1.2 highlights")
+tags = BadgeList(["new", "tabs", "callout", "separator"], tone: "primary", size: "sm")
 sep = Separator("horizontal")
-snippet = CodeBlock("ts", "import { defineElement } from \"streaming-ui-script\";\ndefineElement();")
+snippet = CodeBlock("ts", code: "import { defineElement } from \"aktion\";\ndefineElement();")
 group = CheckBoxGroup("notifications", [
-  CheckBoxItem("Product updates", "product", "Major releases & changelogs", true),
-  CheckBoxItem("Security alerts", "security", "Critical fixes", true),
-  CheckBoxItem("Newsletter", "newsletter", "Monthly digest")
-])</code></pre>
+  CheckBoxItem("Product updates", value: "product",    description: "Major releases &amp; changelogs", checked: true),
+  CheckBoxItem("Security alerts", value: "security",   description: "Critical fixes",                 checked: true),
+  CheckBoxItem("Newsletter",      value: "newsletter", description: "Monthly digest")
+])
+_app_ = Stack([header, tags, sep, snippet, group])</code></pre>
         </div>
       </div>
 
@@ -352,68 +287,63 @@ group = CheckBoxGroup("notifications", [
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = AppShell(nav, content, topbar)
+<pre><code class="example-source">action openSettings()    { emit "assistant-message" { message: "Open settings" } }
+action startNewProject() { emit "assistant-message" { message: "Start a new project" } }
 
 nav = Sidebar([
-  SidebarSection("Workspace", [
-    SidebarItem("Overview",  "house", true),
-    SidebarItem("Projects",  "folder", false, "12"),
-    SidebarItem("Calendar",  "calendar"),
-    SidebarItem("Messages",  "comments", false, "3")
+  SidebarSection("Workspace", items: [
+    SidebarItem("Overview", icon: "house",    active: true),
+    SidebarItem("Projects", icon: "folder",   badge: "12"),
+    SidebarItem("Calendar", icon: "calendar"),
+    SidebarItem("Messages", icon: "comments", badge: "3")
   ]),
-  SidebarSection("Insights", [
-    SidebarItem("Analytics", "chart-pie"),
-    SidebarItem("Reports",   "chart-line"),
-    SidebarItem("Billing",   "credit-card")
+  SidebarSection("Insights", items: [
+    SidebarItem("Analytics", icon: "chart-pie"),
+    SidebarItem("Reports",   icon: "chart-line"),
+    SidebarItem("Billing",   icon: "credit-card")
   ])
-], "Acme HQ", "Production · v2.3",
-  Stack([Avatar("Asha Patel", null, "sm"),
-   Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")], 2))
+], brand: "Acme HQ", footer: Stack([
+  Avatar("Asha Patel", size: "sm"),
+  Button("Settings", action: openSettings, variant: "ghost", size: "small")
+], direction: "row", gap: "s"))
 
-topbar = [StatusDot("Realtime", "success", true),
-  Buttons([Button("Invite", null, "ghost", "button", "small"),
-           Button("Upgrade", null, "primary", "button", "small")])]
+topbar = [
+  StatusDot("Realtime", tone: "success", pulse: true),
+  Buttons([
+    Button("Invite",  variant: "ghost",   size: "small"),
+    Button("Upgrade", variant: "primary", size: "small")
+  ])
+]
 
-header = PageHeader("Overview", "Everything happening across your workspace",
-  null,
-  [Button("New project", Action([@ToAssistant("Start a new project")]), "primary")],
-  Badge("Live", "success"))
+header = PageHeader("Overview",
+  subtitle: "Everything happening across your workspace",
+  actions: [Button("New project", action: startNewProject, variant: "primary")],
+  badge: Badge("Live", tone: "success"))
 
 kpis = Stats([
-  StatCard("MRR",          "$48.2k", "up",   "+12%", "sack-dollar"),
-  StatCard("Active users", "2,184",  "up",   "+184", "users"),
-  StatCard("Open tickets", "23",     "down", "-9",   "ticket"),
-  StatCard("NPS",          "62",     "flat", "+1",   "star")
+  StatCard("MRR",          value: "$48.2k", trend: "up",   delta: "+12%", icon: "sack-dollar"),
+  StatCard("Active users", value: "2,184",  trend: "up",   delta: "+184", icon: "users"),
+  StatCard("Open tickets", value: "23",     trend: "down", delta: "-9",   icon: "ticket"),
+  StatCard("NPS",          value: "62",     trend: "flat", delta: "+1",   icon: "star")
 ])
 
-projects = Card([SectionHeader("Active projects", null, "WORK", null,
-  [Button("View all", null, "ghost", "button", "small")]),
+projects = Card([
+  SectionHeader("Active projects",
+    eyebrow: "WORK",
+    actions: [Button("View all", variant: "ghost", size: "small")]),
   List([
-    ListItem("Streaming UI v2.4", "Ada Lovelace · 3 open issues", "rocket"),
-    ListItem("Auth SDK rewrite",  "Linus T · 1 open issue",       "shield-halved"),
-    ListItem("Onboarding revamp", "Grace Hopper · awaiting QA",   "bullseye")
-  ])])
+    ListItem("Streaming UI v2.4", meta: "Ada Lovelace · 3 open issues", icon: "rocket"),
+    ListItem("Auth SDK rewrite",  meta: "Linus T · 1 open issue",       icon: "shield-halved"),
+    ListItem("Onboarding revamp", meta: "Grace Hopper · awaiting QA",   icon: "bullseye")
+  ])
+])
 
-systemCard = Card([SectionHeader("System status", null, "OPS",
-  Badge("All normal", "success", null, "sm")),
-  Stack([
-    StatusDot("API",       "success"),
-    StatusDot("Database",  "success"),
-    StatusDot("Webhooks",  "warning"),
-    StatusDot("Streaming", "success", true)
-  ], "column", "s")])
-
-activity = Card([SectionHeader("Recent activity"), Timeline([
-  TimelineItem("Ada merged PR #248",    "5m ago",   "Patterns ready for review",   "code-pull-request", "primary"),
-  TimelineItem("QA caught regression",  "1h ago",   "Quota dashboard double-count","triangle-exclamation", "warning"),
-  TimelineItem("Tokenizer 2.1 shipped", "Yesterday","Latency -14%",                "circle-check", "success")
-])])
-
-content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity]</code></pre>
+content = Stack([header, kpis, projects], direction: "column", gap: "l")
+_app_ = AppShell(sidebar: nav, content: content, topbar: topbar)</code></pre>
         </div>
       </div>
 
@@ -425,129 +355,124 @@ content = [header, kpis, Grid([projects, systemCard], 2, "l"), activity]</code><
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">header = PageHeader("Alex Rivera", "Product Designer · alex@acme.com",
-  ["Team", "Engineering"],
-  [Button("Message", Action([@ToAssistant("Open chat with Alex")]), "primary"),
-   Button("Edit", Action([@ToAssistant("Edit Alex's profile")]), "ghost")],
-  Badge("Online", "success", "circle-check", "sm"))
+<pre><code class="example-source">action editCustomer() { emit "assistant-message" { message: "Edit Acme Co customer" } }
 
-profile = ProfileCard("Alex Rivera", "Product Designer", "",
-  "Designs the future of generative UI at Acme.",
-  ["design", "ux", "typography"],
-  [Button("Follow", Action([@ToAssistant("Follow Alex")]), "primary", "button", "small"),
-   Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "button", "small")])
+header = PageHeader("Acme Co",
+  subtitle: "Customer · since 2021 · Team plan",
+  breadcrumbs: ["Workspace", "Customers", "Acme Co"],
+  actions: [Button("Edit", action: editCustomer, variant: "primary")],
+  badge: Badge("Active", tone: "success"))
 
-details = Card([SectionHeader("Profile details", null, "OVERVIEW"),
+info = Card([
+  SectionHeader("Account details"),
   DescriptionList([
-    DescriptionItem("Team",     "Design Systems", "users"),
-    DescriptionItem("Manager",  "Margaret Hamilton"),
-    DescriptionItem("Location", "Berlin, DE", "location-dot"),
-    DescriptionItem("Joined",   "Mar 2022"),
-    DescriptionItem("Slack",    Badge("@alex", "primary", null, "sm")),
-    DescriptionItem("Status",   StatusDot("Active", "success"))
-  ], 2)])
+    DescriptionItem("Plan",      value: "Team"),
+    DescriptionItem("MRR",       value: "$4,200", icon: "sack-dollar"),
+    DescriptionItem("Owner",     value: "Asha Patel", icon: "user"),
+    DescriptionItem("Renews",    value: "Aug 14"),
+    DescriptionItem("Seats",     value: "18 / 25", icon: "users"),
+    DescriptionItem("Region",    value: "EU")
+  ], columns: 3)
+])
 
-activity = Card([SectionHeader("Recent activity", "Last 14 days"), Timeline([
-  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components and added the patterns API.", "rocket", "success"),
-  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed the dashboard wireframes.",                "palette", "primary"),
-  TimelineItem("Profile updated",      "3 days ago", "",                                                  "pen")
-])])
+activity = Card([
+  SectionHeader("Recent activity"),
+  ActivityLog([
+    { actor: "Asha",  verb: "renewed", target: "Team plan", time: "2h ago" },
+    { actor: "Linus", verb: "added",   target: "3 seats",   time: "yesterday" },
+    { actor: "Grace", verb: "shared",  target: "invoice #1242", time: "Mon" }
+  ])
+])
 
-danger = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"),
-  Buttons([Button("Delete account", Action([@ToAssistant("Delete Alex's account")]), "danger")])])
-
-root = Stack([header, Grid([profile, details], 2, "l"), activity, danger], "column", "l")</code></pre>
+_app_ = Stack([header, info, activity], direction: "column", gap: "l")</code></pre>
         </div>
       </div>
 
       <div class="example">
-        <div class="example-header"><h3>Pricing page (Hero + PricingTable + FAQ)</h3></div>
+        <div class="example-header"><h3>Pricing page (Hero + PricingCard grid + FAQ)</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">hero = Hero(
-  "Pricing that scales with you",
-  "Start free, upgrade as your team grows. No hidden fees.",
-  Button("Compare plans", Action([@OpenUrl("#tiers")]), "primary"),
-  Button("Contact sales", Action([@OpenUrl("/contact")]), "secondary"),
-  "PRICING",
-  ["Free for hobby projects", "Cancel anytime", "Annual discount: 20%"]
-)
+<pre><code class="example-source">action upgrade(plan) { emit "assistant-message" { message: `Start a ${plan} trial` } }
 
-pricing = PricingTable([
-  PricingCard("Starter", "$0", "/mo", "For hobby projects and side experiments.",
-    ["1 workspace", "Up to 5 contributors", "Community support", "1 GB storage"],
-    Button("Get started", Action([@OpenUrl("/signup?plan=starter")]), "secondary"),
-    null, false),
-  PricingCard("Pro", "$29", "/mo", "For teams shipping LLM features in production.",
-    ["Unlimited workspaces", "All themes + patterns", "Priority support", "100 GB storage", "SOC2 audit logs"],
-    Button("Start free trial", Action([@OpenUrl("/signup?plan=pro")]), "primary"),
-    "Most popular", true),
-  PricingCard("Scale", "Talk to us", null, "For companies with custom requirements.",
-    ["Dedicated success manager", "Custom themes", "SSO + SCIM", "99.99% SLA", "On-prem available"],
-    Button("Contact sales", Action([@OpenUrl("/contact")]), "ghost"),
-    null, false)
+hero = Hero("Simple, predictable pricing",
+  subtitle: "Three plans. Cancel anytime. All include 14-day trials.",
+  eyebrow: "Pricing")
+
+plans = Grid([
+  PricingCard("Starter",
+    price: "$0",      period: "/mo",
+    description: "Everything to get started",
+    features: ["3 projects", "Community support", "Basic analytics"],
+    cta: Button("Get started", () => upgrade("Starter"), variant: "secondary")),
+  PricingCard("Pro",
+    price: "$29",     period: "/mo",
+    description: "For growing teams",
+    features: ["Unlimited projects", "Priority support", "Custom themes", "API access"],
+    cta: Button("Start trial", () => upgrade("Pro"), variant: "primary"),
+    badge: "Most popular",
+    highlighted: true),
+  PricingCard("Team",
+    price: "$99",     period: "/mo",
+    description: "Collaboration at scale",
+    features: ["Everything in Pro", "SSO", "Audit log", "Dedicated success manager"],
+    cta: Button("Contact sales", () => upgrade("Team"), variant: "secondary"))
+], columns: 3, gap: "l")
+
+faqs = Card([
+  SectionHeader("Frequently asked"),
+  Accordion([
+    AccordionItem("Can I switch plans later?",
+      children: Text("Yes — upgrades are prorated and downgrades take effect at renewal.")),
+    AccordionItem("Do you offer non-profit pricing?",
+      children: Text("We offer 50% off Pro and Team plans for registered non-profits.")),
+    AccordionItem("Is my data backed up?",
+      children: Text("Daily encrypted backups with point-in-time restore on Team plans."))
+  ])
 ])
 
-faqs = Card([SectionHeader("Frequently asked questions"), Accordion([
-  AccordionItem("Can I switch plans later?", [Markdown("Yes — upgrade or downgrade any time from **Billing → Subscription**.")]),
-  AccordionItem("Do you offer student discounts?", [Markdown("**50% off Pro** for verified students and educators.")]),
-  AccordionItem("How does the free trial work?", [Markdown("14-day Pro trial. No credit card. Cancel any time.")])
-])])
-
-closing = Banner("Still deciding?", "Talk to a real human about your use case.",
-  Button("Book a call", Action([@OpenUrl("/contact")]), "primary"), "comments", "primary")
-
-
-root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
+_app_ = Stack([hero, plans, faqs], direction: "column", gap: "xl")</code></pre>
         </div>
       </div>
 
       <h2>Richer composition primitives</h2>
       <p>
-        Bite-sized examples for the newer high-density patterns —
-        <code>Cover</code>, <code>MediaCard</code>, <code>Stats</code>,
-        <code>Tile</code>, <code>Notification</code>, <code>PersonChip</code>,
-        <code>Quote</code>, <code>Note</code>, <code>Rating</code>,
-        <code>ProgressRing</code>, <code>ChatBubble</code>, and
-        <code>SearchBar</code>. Use them whenever you'd otherwise be
-        stitching primitives together by hand.
+        These short recipes show off individual patterns: hero covers, media
+        grids, trust strips, quick-action tiles, notification panels and chat
+        threads.
       </p>
 
       <div class="example">
-        <div class="example-header"><h3>Cover hero with caption + actions</h3></div>
+        <div class="example-header"><h3>Hero cover with caption + actions</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Hero(
-  "Build the future of generative UI",
-  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&amp;q=80",
-  "From a single LLM prompt to a streaming, themeable, interactive UI — in 90 seconds.",
-  "Spring release",
-  "Cancel anytime · no credit card to start",
-  [Button("Get started", Action([@ToAssistant("Start the free plan")]), "primary"),
-   Button("Watch the demo", Action([@OpenUrl("https://example.com/demo")]), "ghost")],
-  "primary",
-  "300px"
-)</code></pre>
+<pre><code class="example-source">action requestDemo() { emit "assistant-message" { message: "Book a 15-minute demo" } }
+
+_app_ = Hero("Build assistant UIs in seconds",
+  subtitle: "A declarative library for streaming, theme-aware UIs that ship with every LLM response.",
+  eyebrow: "Aktion 0.5",
+  primary:   Button("Book a demo", action: requestDemo, variant: "primary"),
+  secondary: Button("Read the docs", variant: "ghost"),
+  highlights: ["No bundler required", "Capability sandbox", "Seven built-in themes"])</code></pre>
         </div>
       </div>
 
@@ -559,27 +484,37 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([
-  Grid([
-    MediaCard("Aurora Headphones",
-              "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&amp;q=80",
-              "Studio-grade sound, 40-hour battery.",
-              ["wireless", "ANC"],
-              "$249 · 4.8 stars",
-              [Button("Add to cart", Action([@ToAssistant("Add Aurora to cart")]), "primary")]),
-    MediaCard("Aurora Earbuds",
-              "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=900&amp;q=80",
-              "Same DAC, in-ear comfort.",
-              ["wireless", "in-ear"],
-              "$149 · 4.7 stars",
-              [Button("Add to cart", Action([@ToAssistant("Add earbuds to cart")]), "primary")])
-  ], 2, "m"),
-  Rating(4.8, 5, "Average rating", 1284, "md", false)
-], "column", "l")</code></pre>
+<pre><code class="example-source">cards = [
+  MediaCard("Northern lights tour",
+    src: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&amp;w=560&amp;q=70",
+    description: "Chase aurora trails across Tromsø with a small group.",
+    tags: ["Outdoor", "Winter"],
+    meta: "From $1,290",
+    badge: "Bestseller"),
+  MediaCard("Hidden cenote dive",
+    src: "https://images.unsplash.com/photo-1505228395891-9a51e7e86bf6?auto=format&amp;w=560&amp;q=70",
+    description: "Snorkel through underground caves of the Yucatán.",
+    tags: ["Outdoor", "Adventure"],
+    meta: "From $640"),
+  MediaCard("Kyoto temples walk",
+    src: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?auto=format&amp;w=560&amp;q=70",
+    description: "Guided cultural walk through Higashiyama at dawn.",
+    tags: ["Culture"],
+    meta: "From $320")
+]
+ratings = Stack([
+  Rating(4.7, count: 248, label: "Northern lights"),
+  Rating(4.5, count: 132, label: "Cenote dive"),
+  Rating(4.9, count: 412, label: "Kyoto temples")
+], direction: "column", gap: "s")
+_app_ = Stack([
+  Grid(cards, columns: 3, gap: "l"),
+  ratings
+], direction: "column", gap: "l")</code></pre>
         </div>
       </div>
 
@@ -591,16 +526,16 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stats([
-  {label: "Teams trust it",   value: "2,400+",  hint: "In 40 countries",        tone: "primary"},
-  {label: "Uptime SLA",       value: "99.99%",  hint: "Multi-region",           tone: "success"},
-  {label: "Time to first UI", value: "&lt;90 sec", hint: "Signup → render",        tone: "info"},
-  {label: "Support reply",    value: "&lt;1 hr",   hint: "Median weekday reply",   tone: "warning"}
-], "center")</code></pre>
+<pre><code class="example-source">_app_ = Stats([
+  StatCard("Teams", value: "1,240+", icon: "people-group"),
+  StatCard("Daily messages", value: @Format(184000, "number"), icon: "comments"),
+  StatCard("Uptime",   value: "99.99%",                    icon: "shield-halved"),
+  StatCard("Regions",  value: "12",                        icon: "globe")
+], align: "center")</code></pre>
         </div>
       </div>
 
@@ -612,16 +547,22 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Grid([
-  Tile("Total contacts",   "users", "2,481",  "+128 this week",            "primary",  Action([@ToAssistant("Show contacts")])),
-  Tile("Active deals",     "briefcase", "47",     "$418k ARR pipeline",        "info",     Action([@ToAssistant("Show deals")])),
-  Tile("At-risk accounts", "triangle-exclamation", "12",     "Needs follow-up this week", "warning",  Action([@ToAssistant("Show at-risk")])),
-  Tile("Champions",        "trophy", "63",     "NPS 9 or 10 in last 30d",   "success",  Action([@ToAssistant("Show champions")]))
-], 4, "m")</code></pre>
+<pre><code class="example-source">_app_ = Grid([
+  Tile("Create project", icon: "folder-plus",
+    description: "Spin up a fresh workspace.",
+    tone: "primary"),
+  Tile("Invite teammates", icon: "user-plus",
+    description: "Share a link or send an email.",
+    tone: "success"),
+  Tile("Connect data",   icon: "plug",
+    description: "Wire up a 3rd-party source."),
+  Tile("Schedule a sync", icon: "calendar-days",
+    description: "Book time with your CSM.")
+], columns: 2, gap: "m")</code></pre>
         </div>
       </div>
 
@@ -633,54 +574,55 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([
-  Notification("Stripe receipts",
-               "Receipt for Pro plan — $29.00 charged today.",
-               "10:24 AM", null,
-               "https://i.pravatar.cc/64?img=12",
-               "primary", true,
-               [Button("Open", Action([@ToAssistant("Open the receipt")]), "ghost", "button", "small")]),
-  Notification("GitHub digest",
-               "12 new pull requests waiting for review across 3 repos.",
-               "Yesterday", "code-branch", null,
-               "info", false,
-               [Button("Open", Action([@OpenUrl("https://github.com/")]), "ghost", "button", "small")]),
-  Notification("Linus Torvalds",
-               "Perf review attached. Some easy wins on the parser.",
-               "Mon", null,
-               "https://i.pravatar.cc/64?img=11",
-               "default", false,
-               [Button("Reply", Action([@ToAssistant("Reply to Linus")]), "ghost", "button", "small")])
-], "column", "s")</code></pre>
+<pre><code class="example-source">_app_ = Card([
+  SectionHeader("Notifications", subtitle: "Last 24 hours"),
+  Stack([
+    Notification("Deployment finished",
+      description: "main → production · 4 m 12 s",
+      time: "2m ago",
+      icon: "rocket",
+      tone: "success",
+      unread: true),
+    Notification("New trial signup",
+      description: "Acme Co is on the Pro trial.",
+      time: "12m ago",
+      icon: "user-plus",
+      tone: "primary"),
+    Notification("Storage 80% full",
+      description: "Consider archiving old projects.",
+      time: "1h ago",
+      icon: "triangle-exclamation",
+      tone: "warning")
+  ], direction: "column", gap: "s")
+])</code></pre>
         </div>
       </div>
 
       <div class="example">
-        <div class="example-header"><h3>PersonChip + Quote + Note</h3></div>
+        <div class="example-header"><h3>PersonChip + Quote + Comment</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([
-  Stack([
-    PersonChip("Naomi Rivers", "VP Engineering · Looplog", "https://i.pravatar.cc/64?img=47", "md", "online"),
-    PersonChip("Marc Lee",     "Head of Data · Northwind", "https://i.pravatar.cc/64?img=11", "md", "busy"),
-    PersonChip("Grace Hopper", "Founder · Atlasworks",     "https://i.pravatar.cc/64?img=32", "md", "online")
-  ], "row", "s", "stretch", "start", true),
-  Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
-        "Naomi · last QBR", "primary"),
-  Callout("tip", "Owner: Mei Tanaka · ARR $84,000 · renewal in Q3", null, null, true)
-], "column", "m")</code></pre>
+<pre><code class="example-source">_app_ = Stack([
+  PersonChip("Ada Lovelace", role: "Engineering Lead", status: "online"),
+  Quote("Aktion lets us ship rich assistant responses without juggling templates.",
+    attribution: "— Engineering Lead, Globex",
+    tone: "primary"),
+  Comment("Linus Torvalds",
+    text: "Looks good — can we ship this on Friday?",
+    time: "2h ago")
+], direction: "column", gap: "m")</code></pre>
         </div>
       </div>
 
@@ -692,74 +634,35 @@ root = Stack([hero, pricing, faqs, closing], "column", "xl")</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$query = ""
+<pre><code class="example-source">$q = ""
 
-root = Stack([
-  SearchBar("q", "Search the catalog…", $query, "/"),
-  Stack([
-    ProgressRing(72, 100, null, "In stock",  "success"),
-    ProgressRing(28, 100, null, "Backlog",   "warning"),
-    ProgressRing(100, 100, "circle-check", "Shipped",   "primary")
-  ], "row", "l", "center"),
-  ChatBubble("Support",
-             "Hi! Tracking shows your package landed in the local hub this morning.",
-             "9:12 AM", null, "agent", "delivered"),
-  ChatBubble("You",
-             "Perfect — I can wait. Thank you!",
-             "9:15 AM", null, "me", "read")
-], "column", "m")</code></pre>
+bar = SearchBar("q", placeholder: "Ask anything…", value: $q)
+ring = ProgressRing(72, label: "Indexed",
+  description: "Re-running search index",
+  tone: "primary")
+thread = Stack([
+  ChatBubble("You", text: "Summarise yesterday's standup.",
+    time: "9:01", role: "user"),
+  ChatBubble("Assistant", text: "Three updates: design review shipped, auth migration moved to next sprint, mobile build green.",
+    time: "9:01", role: "assistant"),
+  ChatBubble("You", text: "Send that to Slack #standup.",
+    time: "9:02", role: "user")
+], direction: "column", gap: "s")
+_app_ = Stack([bar, ring, thread], direction: "column", gap: "l")</code></pre>
         </div>
       </div>
 
       <h2>Menus, overlays &amp; toasts</h2>
       <p>
-        Click-triggered surfaces for everything that doesn't belong on the page
-        all the time — <code>DropdownMenu</code> for action menus,
-        <code>Popover</code> for filter panels and rich tooltips,
-        <code>Toast</code> /<code>Toasts</code> for transient feedback. All three
-        keep their open/closed state across re-renders, so unrelated state
-        changes (typing into an input, ticking a checkbox…) never collapse them
-        mid-interaction.
+        Dropdowns, popovers and toasts are first-class. Below the dropdown
+        exposes a sections-based menu; the popover holds a small filter
+        panel; and the toast stack composes <code>Toast(...)</code> children
+        directly inside a <code>Stack</code>.
       </p>
-
-      <div class="example">
-        <div class="example-header"><h3>DropdownMenu with sections, icons &amp; danger action</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([
-  TextContent("Click the avatar to open the menu.", "small-muted"),
-  DropdownMenu(
-    Avatar("Alex Rivera", "https://i.pravatar.cc/64?img=12", "md"),
-    [
-      MenuLabel("Account"),
-      MenuItem("Profile",   Action([@ToAssistant("Open profile")]),   "user"),
-      MenuItem("Settings",  Action([@ToAssistant("Open settings")]),  "gear",         "⌘,"),
-      MenuItem("Keyboard shortcuts", Action([@ToAssistant("Show shortcuts")]), "keyboard", "?"),
-      MenuSeparator(),
-      MenuLabel("Workspace"),
-      MenuItem("Invite teammates", Action([@ToAssistant("Open invite dialog")]), "user-plus"),
-      MenuItem("Billing",          Action([@ToAssistant("Open billing")]),       "credit-card"),
-      MenuSeparator(),
-      MenuItem("Sign out",  Action([@ToAssistant("Sign out")]), "right-from-bracket", null, "danger")
-    ],
-    "bottom",
-    "start"
-  )
-], "column", "s")</code></pre>
-        </div>
-      </div>
 
       <div class="example">
         <div class="example-header"><h3>Popover filter panel</h3></div>
@@ -769,34 +672,33 @@ root = Stack([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$status   = "any"
+<pre><code class="example-source">$status = "open"
 $priority = "any"
 
-statusItems = [SelectItem("any","Any"), SelectItem("open","Open"), SelectItem("closed","Closed")]
-priorityItems = [SelectItem("any","Any"), SelectItem("high","High"), SelectItem("medium","Medium"), SelectItem("low","Low")]
+action apply() {
+  emit "assistant-message" { message: `Filter: ${$status} · ${$priority}` }
+}
 
-root = Stack([
-  Popover(
-    Button("Filters", null, "secondary"),
-    [
-      FormControl("Status",   Select("status",   statusItems,   null, "Pick a status",   $status)),
-      FormControl("Priority", Select("priority", priorityItems, null, "Pick a priority", $priority)),
-      Stack([
-        Button("Reset",   Action([@Set($status, "any"), @Set($priority, "any")]), "ghost", "button", "small"),
-        Button("Apply",   Action([@ToAssistant("Apply filters")]), "primary", "button", "small")
-      ], "row", "s", "stretch", "between", true)
-    ],
-    "Filter board",
-    "bottom",
-    "start",
-    "320px"
-  ),
-  TextContent("Current: status=" + $status + " · priority=" + $priority, "small-muted")
-], "row", "m", "center", "start")</code></pre>
+panel = Stack([
+  FormControl("Status", Select("status", [
+    SelectItem("open",   label: "Open"),
+    SelectItem("closed", label: "Closed"),
+    SelectItem("all",    label: "All")
+  ], value: $status)),
+  FormControl("Priority", Select("priority", [
+    SelectItem("any",    label: "Any"),
+    SelectItem("low",    label: "Low"),
+    SelectItem("high",   label: "High")
+  ], value: $priority)),
+  Button("Apply", action: apply, variant: "primary")
+], direction: "column", gap: "s")
+
+trigger = Button("Filter", icon: "filter", variant: "ghost")
+_app_ = Popover(trigger, children: panel, title: "Filter", placement: "bottom-end", width: 280)</code></pre>
         </div>
       </div>
 
@@ -808,39 +710,32 @@ root = Stack([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">// Every toast shows a × close button. Pass `duration` (ms) to auto-dismiss;
-// omit it for a persistent toast the user must close manually.
-
-root = Stack([
-  Toast("Changes saved",
-        "Your draft was synced across all devices.",
-        "success", "circle-check",
-        4000),                       // auto-dismiss after 4s
-  Toast("Heads up",
-        "Two reviewers were notified for approval.",
-        "info", "circle-info",
-        6000),                       // auto-dismiss after 6s
-  Toast("Couldn't reach the server",
-        "Your edits are queued — we'll retry automatically.",
-        "warning", "triangle-exclamation",
-        null,                         // no auto-dismiss
-        Button("Retry now", Action([@ToAssistant("Retry the save")]), "ghost", "button", "small"))
-], "bottom-right")</code></pre>
+<pre><code class="example-source">_app_ = Stack([
+  Toast("Deployment finished",
+    description: "Production is live · v2.4.0",
+    tone: "success",
+    icon: "rocket"),
+  Toast("Backup completed",
+    description: "Latest snapshot stored in s3://backups",
+    tone: "primary",
+    icon: "cloud-arrow-up"),
+  Toast("Connection unstable",
+    description: "Retrying in 12 s…",
+    tone: "warning",
+    icon: "triangle-exclamation")
+], direction: "column", gap: "s", position: "bottom-right")</code></pre>
         </div>
       </div>
 
       <h2>Extended form inputs</h2>
       <p>
-        Beyond <code>Input</code>/<code>Select</code>: <code>Slider</code>,
-        <code>NumberInput</code>, <code>DatePicker</code>,
-        <code>FileUpload</code>, and the searchable
-        <code>Combobox</code>. Pass a <code>$variable</code> as
-        <code>value</code> to get two-way binding for free; the renderer keeps
-        the input in step with reactive state on every render.
+        Sliders, number inputs, date pickers, comboboxes and file uploads —
+        all bound through the same <code>$</code> reactive atoms as the rest
+        of the library.
       </p>
 
       <div class="example">
@@ -851,25 +746,24 @@ root = Stack([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$volume  = 60
-$qty     = 2
-$date    = "2026-06-01"
+<pre><code class="example-source">$budget = 1000
+$seats = 5
+$startsOn = "2026-06-01"
 
-root = Card([
-  CardHeader("Configure your order", "Live preview reflects the bound state"),
-  Form("order",
-    Buttons([Button("Save", Action([@ToAssistant("Save order")]), "primary")]),
-    [
-      FormControl("Quantity",      NumberInput("qty",  $qty,    1,  99,  1)),
-      FormControl("Delivery date", DatePicker("date",  $date,   null, "2026-01-01", "2026-12-31")),
-      FormControl("Volume",        Slider("vol",       0, 100,  5,  $volume, null, true))
-    ]
-  ),
-  Callout("tip", "Quantity: " + $qty + " · Date: " + $date + " · Volume: " + $volume + "%", null, null, true)
+_app_ = Card([
+  CardHeader("Trip planner"),
+  FormControl("Budget (USD)", Slider("budget",
+    min: 0, max: 5000, step: 50, value: $budget, showValue: true)),
+  FormControl("Seats", NumberInput("seats",
+    value: $seats, min: 1, max: 12)),
+  FormControl("Departs on", DatePicker("startsOn",
+    value: $startsOn,
+    min: "2026-01-01",
+    max: "2027-01-01"))
 ])</code></pre>
         </div>
       </div>
@@ -882,49 +776,30 @@ root = Card([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$country = "us"
+<pre><code class="example-source">$city = ""
 
-countries = [
-  SelectItem("us", "United States"),
-  SelectItem("uk", "United Kingdom"),
-  SelectItem("ca", "Canada"),
-  SelectItem("au", "Australia"),
-  SelectItem("de", "Germany"),
-  SelectItem("fr", "France"),
-  SelectItem("jp", "Japan"),
-  SelectItem("br", "Brazil")
-]
-
-root = Card([
-  CardHeader("Profile setup", "Pick a country and add a photo"),
-  Form("setup",
-    Buttons([Button("Continue", Action([@ToAssistant("Save profile")]), "primary")]),
-    [
-      FormControl("Country",
-        Combobox("country", countries, $country, "Search countries…"),
-        "Start typing to filter the list."),
-      FormControl("Profile photo",
-        FileUpload("avatar", "Click or drop a PNG / JPG", "image/*", false, "Up to 5 MB"),
-        "We'll resize and crop it for you.")
-    ]
-  )
+_app_ = Card([
+  CardHeader("Onboarding"),
+  FormControl("City", Combobox("city", [
+    SelectItem("ams", label: "Amsterdam"),
+    SelectItem("ber", label: "Berlin"),
+    SelectItem("lis", label: "Lisbon"),
+    SelectItem("ny",  label: "New York"),
+    SelectItem("sf",  label: "San Francisco")
+  ], value: $city, placeholder: "Search a city…")),
+  FormControl("Avatar", FileUpload("avatar",
+    label: "Drop an image",
+    hint: "PNG or JPG up to 2 MB",
+    accept: "image/*"))
 ])</code></pre>
         </div>
       </div>
 
       <h2>Hierarchical data &amp; top navigation</h2>
-      <p>
-        <code>Tree</code> + <code>TreeNode</code> render file browsers, org
-        charts, category outlines, settings groups — anything that nests. They
-        ride on the native <code>&lt;details&gt;</code> element, so
-        expand/collapse state survives re-renders for free. Pair with
-        <code>Navbar</code> + <code>NavbarItem</code> when you need a sticky
-        top bar across the surface.
-      </p>
 
       <div class="example">
         <div class="example-header"><h3>File browser tree</h3></div>
@@ -934,34 +809,18 @@ root = Card([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Card([
-  CardHeader("Repository", "src/library/components"),
-  Tree([
-    TreeNode("src", [
-      TreeNode("library", [
-        TreeNode("components", [
-          TreeNode("menu.ts",     null, "file-code"),
-          TreeNode("forms.ts",    null, "file-code"),
-          TreeNode("feedback.ts", null, "file-code", false, true),
-          TreeNode("data.ts",     null, "file-code")
-        ], "folder-open", true, false, "12"),
-        TreeNode("index.ts", null, "file-code")
-      ], "folder-open", true),
-      TreeNode("element.ts", null, "file-code"),
-      TreeNode("theme", [
-        TreeNode("styles.ts", null, "file-code"),
-        TreeNode("index.ts",  null, "file-code")
-      ], "folder", false)
-    ], "folder-open", true),
-    TreeNode("tests", [
-      TreeNode("library.test.ts", null, "file-code"),
-      TreeNode("element.test.ts", null, "file-code")
-    ], "folder", false, false, "11"),
-    TreeNode("README.md", null, "file-lines")
+<pre><code class="example-source">_app_ = Card([
+  CardHeader("Workspace files"),
+  TreeNode("docs", icon: "folder", expanded: true, children: [
+    TreeNode("guides", icon: "folder", children: [
+      TreeNode("get-started.md", icon: "file"),
+      TreeNode("language.md",    icon: "file")
+    ]),
+    TreeNode("api.md", icon: "file", selected: true)
   ])
 ])</code></pre>
         </div>
@@ -975,42 +834,29 @@ root = Card([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([
-  Navbar(
-    "Acme",
-    [
-      NavbarItem("Home",    "/",         "house", true),
-      NavbarItem("Docs",    "/docs",     "book"),
-      NavbarItem("Pricing", "/pricing",  "tag"),
-      NavbarItem("Blog",    "/blog",     "newspaper")
-    ],
-    [
-      Button("Sign in",     Action([@ToAssistant("Sign in")]), "ghost"),
-      Button("Get started", Action([@ToAssistant("Sign up")]),  "primary")
-    ],
-    true,
-    "default"
-  ),
-  Card([
-    CardHeader("Welcome to Acme", "The Navbar above is sticky"),
-    TextContent(
-      "Use Navbar at the top of full-page surfaces. Each NavbarItem fires @Navigate when you pass a `to` path, so it integrates with the built-in router.",
-      "body"
-    )
-  ])
-], "column", "m")</code></pre>
+<pre><code class="example-source">action goPricing() { _route_.navigate("/pricing") }
+
+_app_ = Navbar(
+  brand: "Streaming",
+  items: [
+    NavbarItem("Product",  to: "/product"),
+    NavbarItem("Pricing",  to: "/pricing"),
+    NavbarItem("Docs",     to: "/docs"),
+    NavbarItem("Blog",     to: "/blog")
+  ],
+  actions: [
+    Button("Sign in", variant: "ghost"),
+    Button("Start free trial", action: goPricing, variant: "primary")
+  ],
+  sticky: true)</code></pre>
         </div>
       </div>
 
       <h2>Real-world blocks</h2>
-      <p>
-        Drop-in patterns for the screens you build on every project. Each one
-        uses only the built-in components, so they render the same in any theme.
-      </p>
 
       <div class="example">
         <div class="example-header"><h3>Register / sign-up</h3></div>
@@ -1020,89 +866,30 @@ root = Card([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: template literal status message, ?? for graceful defaults.
-$name     = ""
-$email    = ""
+<pre><code class="example-source">$email = ""
 $password = ""
-$plan     = "starter"
-$accepted = false
-$status   = "Fill in the form to create your account."
+$accept = false
 
-submit = Button("Create account", Action([@Set($status, `Account created for ${$name ?? "you"} on the ${$plan} plan.`)]), "primary")
+action register() {
+  emit "assistant-message" { message: `Register ${$email}` }
+}
 
-form = Form("signup", submit, [
-  FormControl("Full name", Input("name", "Ada Lovelace", "text", ["required","minLength:2"], $name)),
-  FormControl("Work email", Input("email", "ada@example.com", "email", ["required","email"], $email)),
-  FormControl("Password", Input("password", "At least 8 characters", "password", ["required","minLength:8"], $password)),
-  FormControl("Plan", Select("plan", [
-    SelectItem("starter","Starter — free"),
-    SelectItem("pro","Pro — $29/mo"),
-    SelectItem("team","Team — $79/mo")
-  ], null, null, $plan)),
-  FormControl("Terms", Checkbox("accepted", "I agree to the Terms of Service and Privacy Policy", $accepted))
-])
-
-card = Card([
-  CardHeader("Create your account", "Free 14-day trial · no credit card"),
-  form,
-  Callout("info", "What happens next?", $status)
-])
-
-root = Stack([card])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Login</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: template literal welcome line + @If for the success Callout.
-$email    = ""
-$password = ""
-$remember = true
-$msg      = ""
-
-login = Button("Sign in", Action([@Set($msg, `Welcome back, ${$email}!`)]), "primary")
-
-actions = Buttons([
-  login,
-  Button("Continue with Google", null, "secondary"),
-  Button("Continue with GitHub", null, "secondary")
-])
-
-form = Form("login", login, [
-  FormControl("Email", Input("email", "you@example.com", "email", ["required","email"], $email)),
-  FormControl("Password", Input("password", "••••••••", "password", ["required"], $password)),
-  FormControl("Remember me", Checkbox("remember", "Keep me signed in for 30 days", $remember))
-])
-
-footer = Stack([
-  Link("Forgot password?", "#"),
-  Link("Create an account", "#")
-], "row", "s", "center", "between")
-
-card = Card([
-  CardHeader("Welcome back", "Sign in to your workspace"),
-  form,
-  Separator("horizontal", true),
-  actions,
-  footer,
-  @If($msg != "", Callout("success", "Signed in", $msg))
-])
-
-root = Stack([card])</code></pre>
+_app_ = Card([
+  CardHeader("Create your account", subtitle: "Free for 14 days"),
+  FormControl("Email", Input("email",
+    type: "email", placeholder: "you@example.com", value: $email)),
+  FormControl("Password", PasswordInput("password",
+    value: $password, placeholder: "At least 8 characters", showStrength: true)),
+  Checkbox("accept",
+    label: "I agree to the terms of service",
+    checked: $accept),
+  Button("Create account", action: register, variant: "primary",
+    disabled: $email == "" || $password == "" || !$accept)
+])</code></pre>
         </div>
       </div>
 
@@ -1114,127 +901,34 @@ root = Stack([card])</code></pre>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$query    = ""
-$category = "all"
-$$cart    = []
+<pre><code class="example-source">$category = "all"
 
-products = Query("list_products", {}, {rows: [
-  {name: "Aurora Headphones",      price: 149, category: "audio",     rating: 4.7, badge: "New"},
-  {name: "Lumen Desk Lamp",        price: 79,  category: "home",      rating: 4.5, badge: ""},
-  {name: "Nimbus Backpack",        price: 119, category: "travel",    rating: 4.8, badge: "Bestseller"},
-  {name: "Pulse Smartwatch",       price: 229, category: "wearables", rating: 4.4, badge: ""},
-  {name: "Echo Bluetooth Speaker", price: 89,  category: "audio",     rating: 4.6, badge: ""},
-  {name: "Drift Travel Pillow",    price: 29,  category: "travel",    rating: 4.3, badge: "Sale"}
-]})
-
-visible = @If($category == "all", products.rows, @Filter(products.rows, "category", "==", $category))
-hits    = @Filter(visible, "name", "contains", $query)
-
-ProductCard(p) = Card([
-  Stack([
-    TextContent(p.name, "large-heavy"),
-    @If(p.badge != "", Badge(p.badge, "primary", null, "sm"))
-  ], "row", "s", "center", "between"),
-  TextContent(@Format(p.price, "currency", "USD"), "body-heavy", "primary"),
-  Stack([
-    Badge(@Titlecase(p.category), "neutral", null, "sm"),
-    Rating(p.rating, 5, `${p.rating}`, null, "sm")
-  ], "row", "s", "center", "start"),
-  Buttons([
-    Button("Add to cart", Action([[...$$cart, p.name], @ToAssistant(`Add ${p.name} to my cart`)]), "primary", "normal", "small"),
-    Button("Details", null, "secondary", "normal", "small")
-  ])
-])
+products = [
+  { id: "p1", name: "Aurora Hoodie",  price: 78,  category: "apparel", img: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&amp;w=320&amp;q=70" },
+  { id: "p2", name: "Voyager Mug",    price: 24,  category: "home",    img: "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&amp;w=320&amp;q=70" },
+  { id: "p3", name: "Glide Sneakers", price: 142, category: "apparel", img: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&amp;w=320&amp;q=70" },
+  { id: "p4", name: "Halo Lamp",      price: 96,  category: "home",    img: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&amp;w=320&amp;q=70" }
+]
+$visible = if $category == "all" { products } else { @Filter(products, "category", "==", $category) }
 
 filters = Toolbar([
-  FormControl("Search",   SearchBar("q", "Search products", $query, "/")),
-  FormControl("Category", Select("cat", [
-    SelectItem("all","All"),
-    SelectItem("audio","Audio"),
-    SelectItem("home","Home"),
-    SelectItem("travel","Travel"),
-    SelectItem("wearables","Wearables")
-  ], null, null, $category))
+  FormControl("Category", Select("category", [
+    SelectItem("all",     label: "All"),
+    SelectItem("apparel", label: "Apparel"),
+    SelectItem("home",    label: "Home")
+  ], value: $category))
 ])
-
-stats = Stats([
-  {label:"Showing",    value: `${@Count(hits)} of ${@Count(products.rows)}`, hint: `${@Count($$cart)} in cart`, tone:"primary"},
-  {label:"Avg rating", value: `${@Round(@Avg(hits.rating), 1)} ★`,            tone:"success"},
-  {label:"Avg price",  value: @Format(@Avg(hits.price, "currency", "USD"), "USD"),        tone:"info"}
-], "start")
-
-grid  = Grid(@Each(hits, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "m")
-empty = EmptyState("No matches", "Try a different search or category.", "magnifying-glass")
-
-root = Stack([
-  Card([CardHeader("Storefront", "Curated essentials"), filters]),
-  stats,
-  @If(@Count(hits) &gt; 0, grid, empty)
-])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Changelog</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([header, releases])
-
-header = Card([CardHeader("Changelog", "Everything we shipped, in reverse chronological order")])
-
-releases = Stack([v14, v13, v12, v11])
-
-v14 = Card([
-  Stack([
-    TextContent("v1.4.0", "large-heavy"),
-    Badge("Latest", "primary", null, "sm")
-  ], "row", "s", "center", "start"),
-  TextContent("Released May 8, 2026", "small", "muted"),
-  BadgeList(["new", "themes", "performance"], "primary", "sm"),
-  Markdown("- **Two new themes** — `glass` and `brutalist`.\n- **Background alignment** via the new `transparent` attribute.\n- 18% faster initial render on large programs.")
-])
-
-v13 = Card([
-  Stack([
-    TextContent("v1.3.0", "large-heavy"),
-    Badge("Stable", "success", null, "sm")
-  ], "row", "s", "center", "start"),
-  TextContent("Released April 14, 2026", "small", "muted"),
-  BadgeList(["responsive", "tables", "inputs"], "info", "sm"),
-  Markdown("- Phone-first layouts across the entire library.\n- Horizontal scroll on overflowing tables.\n- Fix: text inputs no longer lose focus while streaming.")
-])
-
-v12 = Card([
-  Stack([
-    TextContent("v1.2.0", "large-heavy"),
-    Badge("Stable", "success", null, "sm")
-  ], "row", "s", "center", "start"),
-  TextContent("Released March 22, 2026", "small", "muted"),
-  BadgeList(["components", "language"], "info", "sm"),
-  Markdown("- Added `Separator`, `TagBlock`, and `CheckBoxGroup`.\n- `Tabs` now switches active panels properly.")
-])
-
-v11 = Card([
-  Stack([
-    TextContent("v1.1.0", "large-heavy"),
-    Badge("Archived", "neutral", null, "sm")
-  ], "row", "s", "center", "start"),
-  TextContent("Released February 5, 2026", "small", "muted"),
-  BadgeList(["streaming", "errors"], "warning", "sm"),
-  Markdown("- Streaming-friendly parser tolerates partial lines.\n- Optional `showerrors` attribute.")
-])</code></pre>
+cards = Grid(for p in $visible {
+  MediaCard(p.name,
+    src: p.img,
+    description: @Format(p.price, "currency", "USD"),
+    actions: Button("Add to cart", variant: "primary", size: "small"))
+}, columns: 4, gap: "m")
+_app_ = Stack([CardHeader("Catalog"), filters, cards], direction: "column", gap: "m")</code></pre>
         </div>
       </div>
 
@@ -1246,103 +940,22 @@ v11 = Card([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([hero, faq])
-
-hero = Card([CardHeader("Frequently asked questions", "Can't find an answer? Reach out — we read every message.")])
-
-faq = Accordion([
-  AccordionItem("Is there a free plan?", [
-    Markdown("Yes. The **Starter** plan is free forever for projects up to 5 contributors. Upgrade only when you outgrow it.")
-  ]),
-  AccordionItem("Can I cancel anytime?", [
-    Markdown("Of course. Cancel from **Billing → Subscription** and you'll keep access until the end of the current period.")
-  ]),
-  AccordionItem("Do you support self-hosting?", [
-    Markdown("Self-hosting is included on every paid plan. Download the helm chart from your dashboard, or run the Docker image directly."),
-    CodeBlock("bash", "docker run -p 8080:8080 ghcr.io/example/app:latest")
-  ]),
-  AccordionItem("Which payment methods do you accept?", [
-    BadgeList(["Visa", "Mastercard", "Amex", "Apple Pay", "Google Pay", "ACH", "Wire"], "primary", "sm")
-  ]),
-  AccordionItem("How is my data protected?", [
-    Markdown("All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We're SOC 2 Type II certified."),
-    Callout("success", "Compliance", "SOC 2 Type II · ISO 27001 · GDPR · HIPAA available on Enterprise.")
+<pre><code class="example-source">_app_ = Card([
+  CardHeader("Frequently asked questions"),
+  Accordion([
+    AccordionItem("What's included in the free plan?",
+      children: Text("Three projects, community support and our standard themes.")),
+    AccordionItem("Do you ship internationally?",
+      children: Text("Yes — to 47 countries with standard duties handled at checkout.")),
+    AccordionItem("Can I cancel anytime?",
+      children: Text("Cancellations stop the next billing cycle; you keep access through the period.")),
+    AccordionItem("Is there a long-term contract?",
+      children: Text("No — month-to-month or yearly plans only."))
   ])
-])
-</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Order history</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: fixed "equals" → "==", @Switch replaces 4-way ternary, $$persistent filter,
-$$status = "all"
-
-orders = Query("list_orders", {}, {rows: [
-  {id: "ORD-2041", date: "May 6", customer: "Ada Lovelace",      items: 3, total: 142.40, status: "shipped"},
-  {id: "ORD-2040", date: "May 5", customer: "Grace Hopper",      items: 1, total: 49.00,  status: "processing"},
-  {id: "ORD-2039", date: "May 5", customer: "Linus Torvalds",    items: 2, total: 88.50,  status: "delivered"},
-  {id: "ORD-2038", date: "May 4", customer: "Margaret Hamilton", items: 5, total: 312.99, status: "shipped"},
-  {id: "ORD-2037", date: "May 3", customer: "Alan Turing",       items: 1, total: 19.95,  status: "cancelled"},
-  {id: "ORD-2036", date: "May 2", customer: "Katherine Johnson", items: 4, total: 240.00, status: "delivered"}
-]})
-
-filtered = @If($$status == "all", orders.rows, @Filter(orders.rows, "status", "==", $$status))
-
-statusFilter = FormControl("Filter", Select("status", [
-  SelectItem("all","All orders"),
-  SelectItem("processing","Processing"),
-  SelectItem("shipped","Shipped"),
-  SelectItem("delivered","Delivered"),
-  SelectItem("cancelled","Cancelled")
-], null, null, $$status))
-
-stats = Stats([
-  StatCard("Orders",     `${@Count(filtered)}`,                                  "flat", `${@Plural(@Count(filtered), "match", "matches")}`, "list-check"),
-  StatCard("Revenue",    @Format(@Sum(filtered.total, "currency", "USD"), "USD"),            "up",   "this filter",                                     "sack-dollar"),
-  StatCard("Avg ticket", @Format(@Round(@Avg(filtered.total, "currency", "USD"), 2), "USD"), "flat", "per order",                                       "receipt")
-])
-
-StatusBadge(s) = @Switch(s, {
-  delivered:  Badge("Delivered",  "success", null, "sm"),
-  shipped:    Badge("Shipped",    "info",    null, "sm"),
-  processing: Badge("Processing", "warning", null, "sm")
-}, Badge("Cancelled", "danger", null, "sm"))
-
-statusTags = @Each(filtered, "{status}", StatusBadge(status))
-actions    = @Each(filtered, "{id}", Buttons([
-  Button("View",    Action([@ToAssistant(`Show order ${id}`)]),    "secondary", "normal", "small"),
-  Button("Reorder", Action([@ToAssistant(`Reorder ${id}`)]),       "ghost",     "normal", "small")
-]))
-
-table = Table([
-  Col("Order",    filtered.id),
-  Col("Date",     filtered.date),
-  Col("Customer", filtered.customer),
-  Col("Items",    filtered.items, "number"),
-  Col("Total",    filtered.total, "currency"),
-  Col("Status",   statusTags),
-  Col("Actions",  actions)
-])
-
-root = Stack([
-  Card([CardHeader("Order history", "Last 30 days"), statusFilter]),
-  stats,
-  Card([CardHeader("Orders"), @If(@Count(filtered) &gt; 0, table, EmptyState("Nothing here", "No orders match this filter.", "inbox"))])
 ])</code></pre>
         </div>
       </div>
@@ -1355,194 +968,136 @@ root = Stack([
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source"># Highlights: @Each destructuring, template literals, @FormatCurrency, @If for the discount row.
-cart = Query("get_cart", {}, {items: [
-  {sku: "AUR-01", name: "Aurora Headphones", qty: 1, price: 149.00},
-  {sku: "LUM-02", name: "Lumen Desk Lamp",   qty: 2, price: 79.00},
-  {sku: "NIM-03", name: "Nimbus Backpack",   qty: 1, price: 119.00}
-]})
+<pre><code class="example-source">$cart = [
+  { id: "p1", name: "Aurora Hoodie",  price: 78,  qty: 1 },
+  { id: "p2", name: "Voyager Mug",    price: 24,  qty: 2 }
+]
 
-lineTotals = @Each(cart.items, "{qty, price}", qty * price)
+action checkout() {
+  emit "assistant-message" { message: "Proceed to checkout" }
+}
 
-subtotal = @Sum(lineTotals)
-shipping = @If(subtotal &gt; 200, 0,  12)
-discount = @If(subtotal &gt; 250, @Round(subtotal * 0.10, 2), 0)
-tax      = @Round((subtotal - discount) * 0.085, 2)
-total    = subtotal + shipping + tax - discount
+$lines = for item in $cart { item.qty * item.price }
+$subtotal = @Sum($lines)
+$shipping = if $subtotal &gt;= 100 { 0 } else { 9 }
+$total = $subtotal + $shipping
 
-qtyTags = @Each(cart.items, "{qty}",            Badge(`× ${qty}`,           "neutral", null, "sm"))
-remove  = @Each(cart.items, "{sku}",            Button("Remove", Action([@ToAssistant(`Remove ${sku} from cart`)]), "ghost", "normal", "small"))
-lineCol = @Each(cart.items, "{qty, price}",     @Format(qty * price, "currency", "USD"))
-
-table = Table([
-  Col("Item",       cart.items.name),
-  Col("Qty",        qtyTags),
-  Col("Unit",       cart.items.price, "currency"),
-  Col("Line total", lineCol),
-  Col("",           remove)
-])
-
-Row(label, value, tone) = Stack([TextContent(label, "small", tone), TextContent(value, "small-heavy", tone)], "row", "s", "center", "between")
+items = for item in $cart {
+  ListItem(item.name,
+    meta: `${item.qty} × ${@Format(item.price, "currency", "USD")}`,
+    icon: "box")
+}
 
 summary = Card([
-  CardHeader("Order summary"),
-  Row("Subtotal",   @Format(subtotal, "currency", "USD"), "muted"),
-  Row("Shipping",   @If(shipping == 0, "Free", @Format(shipping, "currency", "USD")), "muted"),
-  Row("Tax (8.5%)", @Format(tax, "currency", "USD"), "muted"),
-  @If(discount &gt; 0, Row("Discount", `- ${@Format(discount, "currency", "USD")}`, "success")),
-  Separator("horizontal", true),
-  Stack([TextContent("Total", "large-heavy"), TextContent(@Format(total, "currency", "USD"), "large-heavy", "primary")], "row", "s", "center", "between"),
-  Buttons([
-    Button("Checkout",    Action([@ToAssistant("Proceed to checkout")]), "primary"),
-    Button("Apply coupon", null, "secondary")
-  ])
+  SectionHeader("Order summary"),
+  DescriptionList([
+    DescriptionItem("Subtotal", value: @Format($subtotal, "currency", "USD")),
+    DescriptionItem("Shipping", value: if $shipping == 0 { "Free" } else { @Format($shipping, "currency", "USD") }),
+    DescriptionItem("Total",    value: @Format($total, "currency", "USD"), icon: "sack-dollar")
+  ]),
+  Button("Checkout", action: checkout, variant: "primary")
 ])
 
-root = Stack([
-  Card([CardHeader("Your cart", `${@Count(cart.items)} ${@Plural(@Count(cart.items), "item", "items")}`), table]),
+_app_ = Stack([
+  Card([CardHeader("Your cart"), List(items)]),
   summary
+], direction: "column", gap: "m")</code></pre>
+        </div>
+      </div>
+
+      <h2>JavaScript-powered recipes</h2>
+      <p>
+        Every program below drops into a <code>js{ ... }</code> block inside
+        an <code>effect</code> or <code>action</code> body. Every runtime
+        primitive is always available &mdash; see the
+        <a href="javascript-interactions.html">JavaScript interactions</a>
+        guide for the full <code>ctx</code> surface.
+      </p>
+
+      <div class="example">
+        <div class="example-header"><h3>Live ticking counter (effect)</h3></div>
+        <div class="example-tabs" role="tablist">
+          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
+          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
+        </div>
+        <div class="example-panel" data-key="preview" data-active="true">
+          <div class="example-output">
+            <aktion-app theme="light"></aktion-app>
+          </div>
+        </div>
+        <div class="example-panel" data-key="source">
+<pre><code class="example-source">$ticks = 0
+
+effect [on:every(1000)] {
+  js{ ctx.state.set("ticks", (ctx.state.get("ticks") ?? 0) + 1) }
+}
+
+action reset() { $ticks = 0 }
+
+_app_ = Card([
+  CardHeader("Live counter", subtitle: "Increments once per second"),
+  Stack([
+    Text(`Ticks: ${$ticks}`, variant: "large-heavy"),
+    Button("Reset", action: reset, variant: "secondary", size: "small")
+  ], direction: "row", gap: "m", align: "center", justify: "between")
 ])</code></pre>
         </div>
       </div>
 
       <div class="example">
-        <div class="example-header"><h3>Services showcase</h3></div>
+        <div class="example-header"><h3>Copy to clipboard (action + js{})</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([hero, services, sla])
+<pre><code class="example-source">$copied = false
+snippet = "npm install aktion"
 
-hero = Card([
-  CardHeader("Services we offer", "End-to-end product engineering for ambitious teams"),
-  BadgeList(["Strategy","Design","Engineering","Launch","Growth"], "primary", "sm")
-])
+action copy() {
+  js{ await navigator.clipboard.writeText(ctx.args.snippet);
+      ctx.state.set("copied", true) }
+}
 
-services = Stack([
-  Card([
-    Stack([Badge("01", "primary", null, "sm"), TextContent("Product strategy", "large-heavy")], "row", "s", "center", "start"),
-    Markdown("Discovery sprints, opportunity mapping, and a roadmap that ships."),
-    BadgeList(["workshops","research","roadmaps"], "info", "sm"),
-    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
-  ]),
-  Card([
-    Stack([Badge("02", "primary", null, "sm"), TextContent("Design systems", "large-heavy")], "row", "s", "center", "start"),
-    Markdown("From brand foundations to a typed component library your engineers will actually use."),
-    BadgeList(["tokens","figma","components"], "info", "sm"),
-    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
-  ]),
-  Card([
-    Stack([Badge("03", "primary", null, "sm"), TextContent("Web & mobile engineering", "large-heavy")], "row", "s", "center", "start"),
-    Markdown("React, Next.js, Vue, Swift, Kotlin — choose your stack and we ship the app."),
-    BadgeList(["next.js","react native","node"], "info", "sm"),
-    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
-  ]),
-  Card([
-    Stack([Badge("04", "primary", null, "sm"), TextContent("AI integrations", "large-heavy")], "row", "s", "center", "start"),
-    Markdown("Production-grade RAG pipelines, agent flows, and evaluation harnesses."),
-    BadgeList(["llm","rag","evals"], "info", "sm"),
-    Buttons([Button("Learn more", null, "ghost", "normal", "small")])
-  ])
-], "row", "m", "stretch", "start", true)
+effect [$copied] {
+  js{ if (!ctx.state.get("copied")) return;
+      const id = setTimeout(() => ctx.state.set("copied", false), 1800);
+      ctx.cleanup(() => clearTimeout(id)) }
+}
 
-sla = Stack([
-  StatCard("Avg engagement", "12 wks"),
-  StatCard("Client NPS", "73", "up", "+9 YoY"),
-  StatCard("Time to MVP", "6 wks", "down", "-2 wks"),
-  StatCard("Retention", "94%", "up")
-], "row", "m", "stretch", "start", true)
+copyBtn = Button(if $copied { "Copied" } else { "Copy" },
+  action: () => copy({ snippet: snippet }),
+  variant: if $copied { "secondary" } else { "primary" },
+  size: "small")
 
-</code></pre>
-        </div>
-      </div>
-
-      <h2 style="margin-top:32px">JavaScript interactions</h2>
-      <p>
-        The example below uses an LLM-authored <code>Script(...)</code> body
-        that runs against the always-on JavaScript runtime. Read the full
-        guide on the
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        page.
-      </p>
-
-      <div class="example">
-        <div class="example-header"><h3>Live ticking counter (Script + @Js)</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">$count = 0
-$running = false
-header = Card([CardHeader("Live counter", "Powered by Script() + @Js()")])
-display = TextContent("" + $count, "large-heavy")
-controls = Buttons([
-  Button($running ? "Pause" : "Start", Action([@Set($running, !$running)]), "primary"),
-  Button("Reset", Action([@Reset($count, $running)]), "secondary"),
-  Button("+10", Action([@Js("ctx.state.set('count', (ctx.state.get('count') ?? 0) + 10);")]), "ghost")
-])
-ticker = Script("ticker", "if (!ctx.state.get('running')) return; const id = setInterval(() => ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1), 1000); ctx.cleanup(() => clearInterval(id));", ["running"])
-root = Stack([header, display, controls, ticker])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Copy to clipboard (@Js + @ToAssistant)</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">$snippet = "npm install streaming-ui-script"
-$copied = false
-
-resetCopied = Script("reset-copied", "if (!ctx.state.get('copied')) return; const id = setTimeout(() => ctx.state.set('copied', false), 1800); ctx.cleanup(() => clearTimeout(id));", ["copied"])
-
-copyBtn = Button($copied ? "Copied" : "Copy", Action([
-  @Js("await navigator.clipboard.writeText(ctx.state.get('snippet') ?? ''); ctx.state.set('copied', true);")
-]), $copied ? "secondary" : "primary", "normal", "small")
-
-snippetCard = Card([
-  CardHeader("Install", "One command via npm"),
+_app_ = Card([
+  CardHeader("Install", subtitle: "One command via npm"),
   Stack([
-    TextContent($snippet, "body-heavy"),
+    Text(snippet, variant: "body-heavy"),
     copyBtn
-  ], "row", "m", "center", "between")
-], "outlined")
-
-root = Stack([snippetCard, resetCopied])</code></pre>
+  ], direction: "row", gap: "m", align: "center", justify: "between")
+])</code></pre>
         </div>
       </div>
 
       <div class="example">
-        <div class="example-header"><h3>Live form validation (Script + reactive errors)</h3></div>
+        <div class="example-header"><h3>Live form validation (effect + reactive errors)</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
           <button class="example-tab" data-target="source" aria-selected="false">Source</button>
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
@@ -1552,93 +1107,45 @@ $emailError = ""
 $pwError = ""
 $strength = ""
 
-validator = Script("validate", "const email = (ctx.state.get('email') ?? '').trim(); const pw = ctx.state.get('password') ?? ''; const emailRe = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/; ctx.state.set('emailError', !email ? '' : (emailRe.test(email) ? '' : 'Looks like an invalid email.')); let strength = ''; if (pw.length === 0) strength = ''; else if (pw.length &lt; 8) strength = 'Too short — use at least 8 characters.'; else if (!/\\d/.test(pw) || !/[A-Z]/.test(pw)) strength = 'Add a number and an uppercase letter.'; else strength = 'Strong enough.'; ctx.state.set('strength', strength); ctx.state.set('pwError', pw &amp;&amp; pw.length &lt; 8 ? 'Password is too short.' : '');", ["email", "password"])
+effect [$email, $password] {
+  js{
+    const email = (ctx.state.get("email") ?? "").trim();
+    const pw = ctx.state.get("password") ?? "";
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    ctx.state.set("emailError",
+      !email ? "" : (emailRe.test(email) ? "" : "Looks like an invalid email."));
+    let strength = "";
+    if (pw.length === 0) strength = "";
+    else if (pw.length &lt; 8) strength = "Too short — use at least 8 characters.";
+    else if (!/\d/.test(pw) || !/[A-Z]/.test(pw)) strength = "Add a number and an uppercase letter.";
+    else strength = "Strong enough.";
+    ctx.state.set("strength", strength);
+    ctx.state.set("pwError", pw && pw.length &lt; 8 ? "Password is too short." : "");
+  }
+}
 
-emailField  = FormControl("Email", Input("email", "you@example.com", "email", null, $email))
-emailHint   = $emailError == "" ? null : Callout("error", "Email", $emailError)
+action createAccount() {
+  emit "assistant-message" { message: "Account created!" }
+}
 
-pwField     = FormControl("Password", Input("password", "At least 8 characters", "password", null, $password))
-pwHint      = $strength == "" ? null : Callout($pwError == "" ? "info" : "warning", "Password strength", $strength)
+$canSubmit = $email != "" &amp;&amp; $password != "" &amp;&amp; $emailError == "" &amp;&amp; $pwError == ""
 
-canSubmit   = $email != "" &amp;&amp; $password != "" &amp;&amp; $emailError == "" &amp;&amp; $pwError == ""
-submitBtn   = Button("Create account", Action([@ToAssistant("Account created!")]), canSubmit ? "primary" : "ghost")
-
-root = Stack([
+_app_ = Stack([
   Card([
-    CardHeader("Sign up", "Validation runs in-browser as you type"),
-    emailField, emailHint,
-    pwField, pwHint,
-    submitBtn,
-    validator
+    CardHeader("Sign up", subtitle: "Validation runs in-browser as you type"),
+    FormControl("Email", Input("email",
+      type: "email", placeholder: "you@example.com", value: $email)),
+    if $emailError != "" { Callout("error", title: "Email", text: $emailError) } else { null },
+    FormControl("Password", Input("password",
+      type: "password", placeholder: "At least 8 characters", value: $password)),
+    if $strength != "" {
+      Callout(if $pwError == "" { "info" } else { "warning" },
+        title: "Password strength", text: $strength)
+    } else { null },
+    Button("Create account",
+      action: createAccount,
+      variant: if $canSubmit { "primary" } else { "ghost" })
   ])
-])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Todo list (reactive)</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">$$tab      = "active"
-$$selected = {t1: true, t6: true}
-
-todos = Query("list_todos", {}, {rows: [
-  {id: "t1", title: "Draft the launch announcement",  project: "Marketing",        due: "Today",     priority: "high",   done: true},
-  {id: "t2", title: "Review pull requests",           project: "Engineering",      due: "Today",     priority: "medium", done: false},
-  {id: "t3", title: "Sync with design on cart UX",    project: "Product",          due: "Tomorrow",  priority: "high",   done: false},
-  {id: "t4", title: "Update onboarding checklist",    project: "Customer success", due: "Fri",       priority: "low",    done: false},
-  {id: "t5", title: "Migrate analytics dashboard",    project: "Engineering",      due: "Next week", priority: "medium", done: false},
-  {id: "t6", title: "Send weekly investor update",    project: "Operations",       due: "Last week", priority: "low",    done: true}
-]})
-
-active = @Filter(todos.rows, "done", "==", false)
-done   = @Filter(todos.rows, "done", "==", true)
-
-visible = @Switch($$tab, {done: done, all: todos.rows}, active)
-
-PriorityBadge(p) = @Switch(p, {high: Badge("High","danger",null,"sm"), medium: Badge("Medium","warning",null,"sm")}, Badge("Low","neutral",null,"sm"))
-priorityTags     = @Each(visible, "{priority}", PriorityBadge(priority))
-
-selectableItems = @Each(visible, "{id, title, project, due, done}",
-  CheckBoxItem(title, id, `${project} · due ${due}`, done))
-
-board = Card([
-  Stack([
-    TextContent("Today's focus", "large-heavy"),
-    Badge(`${@Count(active)} open`, "primary", null, "sm")
-  ], "row", "s", "center", "between"),
-  CheckBoxGroup("todos", selectableItems, $$selected)
-])
-
-stats = Stats([
-  StatCard("Open",          `${@Count(active)}`,                                    "flat", "to do",    "list-check"),
-  StatCard("Done",          `${@Count(done)}`,                                      "up",   "complete", "circle-check"),
-  StatCard("High priority", `${@Count(@Filter(active, "priority", "==", "high"))}`, "flat", "urgent",   "fire")
-])
-
-filter = Tabs([
-  TabItem("active", "Active", [board]),
-  TabItem("done",   "Done",   [board]),
-  TabItem("all",    "All",    [board])
-])
-
-addRow = Stack([
-  Input("new", "Add a todo and press enter…", "text", null, ""),
-  Button("Add", Action([@ToAssistant("Add a todo to my list")]), "primary")
-], "row", "s", "center", "stretch", true)
-
-root = Stack([
-  Card([CardHeader("Todos", "Snapshot of your week · persists across reloads"), addRow]),
-  stats,
-  Card([CardHeader("Inbox"), filter])
 ])</code></pre>
         </div>
       </div>

@@ -14,7 +14,7 @@ describe("getLanguageSpec", () => {
   const spec = getLanguageSpec();
 
   it("returns the static grammar spec", () => {
-    expect(spec.grammar.name).toBe("streaming-ui-script");
+    expect(spec.grammar.name).toBe("aktion");
     expect(spec.grammar.atoms).toContain("true");
     expect(spec.grammar.brackets.map((b) => b.open)).toEqual(["(", "[", "{"]);
     expect(spec.grammar.strings.multiLineQuote).toBe("`");
@@ -24,7 +24,7 @@ describe("getLanguageSpec", () => {
     expect(Array.isArray(spec.components)).toBe(true);
     expect(spec.components.length).toBeGreaterThan(50);
     const names = new Set(spec.components.map((c) => c.name));
-    for (const required of ["Card", "Stack", "Hero", "KanbanBoard", "PageHeader", "Stats", "Routes"]) {
+    for (const required of ["Card", "Stack", "Hero", "KanbanBoard", "PageHeader", "Stats", "NavLink"]) {
       expect(names.has(required), `${required} should be in catalog`).toBe(true);
     }
   });
@@ -44,7 +44,7 @@ describe("getLanguageSpec", () => {
 
   it("includes every built-in @-function with a signature", () => {
     const names = new Set(spec.builtins.map((b) => b.name));
-    for (const required of ["Each", "Set", "Filter", "Sum", "Join", "Case", "Run", "Reset", "Navigate", "Js"]) {
+    for (const required of ["Each", "If", "Switch", "Filter", "Sum", "Join", "Case", "Count", "Format"]) {
       expect(names.has(required), `@${required} should be in catalog`).toBe(true);
     }
     for (const entry of spec.builtins) {
@@ -89,12 +89,12 @@ describe("getComponentCatalog (pure derivation)", () => {
 
 describe("getBuiltinCatalog", () => {
   const builtins = getBuiltinCatalog();
-  it("covers data + action + iteration + javascript categories", () => {
+  it("covers data + iteration categories (legacy action / javascript builtins removed in 0.5)", () => {
     const cats = new Set(builtins.map((b) => b.category));
     expect(cats.has("data")).toBe(true);
-    expect(cats.has("action")).toBe(true);
     expect(cats.has("iteration")).toBe(true);
-    expect(cats.has("javascript")).toBe(true);
+    expect(cats.has("action" as unknown as "data")).toBe(false);
+    expect(cats.has("javascript" as unknown as "data")).toBe(false);
   });
 });
 
@@ -190,7 +190,7 @@ describe("createStreamTokenizer", () => {
   }
 
   it("tags components, state refs, builtins, strings, numbers, and atoms", () => {
-    const tokens = tokenize('root = Card([@Each($items, "x", x.name)])');
+    const tokens = tokenize('_app_ = Card([@Each($items, "x", x.name)])');
     expect(tokens).toContain("component");
     expect(tokens).toContain("builtin");
     expect(tokens).toContain("state");

@@ -19,7 +19,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, renderIcon } from "../utils.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 
@@ -90,9 +89,11 @@ export const DropdownMenu: ComponentSpec = {
     { name: "side", type: "string", optional: true, enum: MENU_SIDES, description: "Where the menu opens relative to the trigger (default \"bottom\")" },
     { name: "align", type: "string", optional: true, enum: MENU_ALIGNS, description: "How the menu aligns along the trigger edge (default \"start\")" },
     { name: "label", type: "string", optional: true, description: "Optional ARIA label for the menu" },
+    { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the menu" },
   ],
   render: (_node, props, helpers) => {
-    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const initialOpen = asBoolean(props.open);
+    const openSlot = helpers.useInstanceState<boolean>("open", initialOpen);
     const isOpen = openSlot.get();
 
     const root = el("div", {
@@ -170,7 +171,7 @@ export const DropdownMenu: ComponentSpec = {
           btn.onclick = (event) => {
             const origin = (event.currentTarget ?? event.target) as Element;
             setDropdownOpen(origin, false, openSlot);
-            if (isActionPayload(action)) helpers.runAction(action);
+            helpers.invoke(action);
           };
         }
         content.append(btn);
@@ -202,7 +203,7 @@ export const MenuItem: ComponentSpec = {
     "argument runs when clicked; the menu closes automatically afterwards.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "Action", optional: true, description: "Action() payload to execute on click" },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable to execute on click" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown before the label" },
     { name: "shortcut", type: "string", optional: true, description: "Trailing keyboard-shortcut hint (e.g. \"⌘ K\")" },
     { name: "variant", type: "string", optional: true, enum: MENU_VARIANTS, description: "Use \"danger\" for destructive actions" },
@@ -226,7 +227,7 @@ export const MenuItem: ComponentSpec = {
     if (shortcut) btn.append(el("span", { class: "rui-menu-item-shortcut" }, [shortcut]));
     if (!disabled) {
       btn.onclick = () => {
-        if (isActionPayload(props.action)) helpers.runAction(props.action);
+        helpers.invoke(props.action);
       };
     }
     return btn;

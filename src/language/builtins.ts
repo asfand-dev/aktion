@@ -20,7 +20,7 @@ export interface BuiltinParam {
 
 export interface BuiltinEntry {
   name: string;
-  category: "data" | "action" | "iteration" | "javascript";
+  category: "data" | "iteration";
   description: string;
   params: BuiltinParam[];
   signature: string;
@@ -332,48 +332,13 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
   },
 };
 
-const ACTION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
-  {
-    name: "Run",
-    category: "action",
-    description: "Run a registered Query or Mutation by name.",
-    params: [{ name: "ref", type: "identifier", required: true }],
-  },
-  {
-    name: "Set",
-    category: "action",
-    description: "Set a $variable to a value.",
-    params: [
-      { name: "$state", type: "$variable", required: true },
-      { name: "value", type: "any", required: true },
-    ],
-  },
-  {
-    name: "Reset",
-    category: "action",
-    description: "Reset one or more $variables to their initial values.",
-    params: [{ name: "...$states", type: "$variable[]", required: true }],
-  },
-  {
-    name: "ToAssistant",
-    category: "action",
-    description: "Send a message back to the assistant (fires `assistant-message`).",
-    params: [{ name: "message", type: "string", required: true }],
-  },
-  {
-    name: "OpenUrl",
-    category: "action",
-    description: "Open a URL in a new browser tab.",
-    params: [{ name: "url", type: "string", required: true }],
-  },
-  {
-    name: "Navigate",
-    category: "action",
-    description: "Navigate to a hash-based route.",
-    params: [{ name: "path", type: "string", required: true }],
-  },
-];
-
+/**
+ * Iteration and conditional builtins. These are *fallbacks* — the blessed
+ * Aktion 0.5 surface uses expression-form `if`, `match`, and
+ * `for`. The `@`-form survives because some templates pre-date the
+ * expression syntax and `@Each` remains the easiest way to inline a one-line
+ * loop inside a positional arg list.
+ */
 const ITERATION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
   {
     name: "Each",
@@ -405,24 +370,6 @@ const ITERATION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
       { name: "default", type: "Node", required: false },
     ],
   },
-  {
-    name: "Const",
-    category: "iteration",
-    description: "Evaluate an expression once per program evaluation and cache the result (memoized by expression shape).",
-    params: [{ name: "expression", type: "any", required: true }],
-  },
-];
-
-const JS_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
-  {
-    name: "Js",
-    category: "javascript",
-    description: "One-shot click handler. The optional args object is exposed inside the body as `ctx.args`.",
-    params: [
-      { name: "body", type: "string", required: true },
-      { name: "args", type: "object", required: false },
-    ],
-  },
 ];
 
 const buildSignature = (entry: Omit<BuiltinEntry, "signature">): string => {
@@ -437,8 +384,11 @@ const finalize = (entry: Omit<BuiltinEntry, "signature">): BuiltinEntry => ({
 
 /**
  * Return the catalog of all `@-builtins`. The list is deterministic — data
- * builtins first (sourced from the runtime registry), then action steps,
- * iteration, and JavaScript helpers.
+ * builtins first (sourced from the runtime registry), then iteration
+ * fallbacks. Aktion 0.5 removed the legacy action-step builtins
+ * (`@Set`, `@Run`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`)
+ * and the `@Const` memo helper; use `action` declarations and `$computed`
+ * bindings instead.
  */
 export function getBuiltinCatalog(): BuiltinEntry[] {
   const dataEntries: BuiltinEntry[] = Object.keys(dataBuiltins).map((name) => {
@@ -455,9 +405,7 @@ export function getBuiltinCatalog(): BuiltinEntry[] {
   });
   return [
     ...dataEntries,
-    ...ACTION_ENTRIES.map(finalize),
     ...ITERATION_ENTRIES.map(finalize),
-    ...JS_ENTRIES.map(finalize),
   ];
 }
 

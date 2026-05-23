@@ -6,7 +6,6 @@
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import type { ComponentNode } from "../../runtime/evaluator.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { extractComboboxItems } from "./forms-shared.js";
@@ -36,8 +35,8 @@ export const Button: ComponentSpec = {
   description: "Clickable button. The action argument runs when clicked.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "Action", optional: true, description: "Action() payload to execute" },
-    { name: "variant", type: "string", optional: true, enum: BUTTON_VARIANTS },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable invoked when clicked" },
+    { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
     { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Canonical `xs|sm|md|lg|xl` (legacy `small|normal|large` still accepted)" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
@@ -79,7 +78,7 @@ export const Button: ComponentSpec = {
     }
     button.onclick = () => {
       if (loading) return;
-      if (isActionPayload(props.action)) helpers.runAction(props.action);
+      helpers.invoke(props.action);
     };
     return button;
   },
@@ -166,7 +165,7 @@ export const Select: ComponentSpec = {
   name: "Select",
   description:
     "Dropdown select. Pass a `$variable` as `value` for two-way binding. " +
-    "Set `searchable=true` for a combobox-style filter UI on long option lists.",
+    "Set `searchable: true` for a combobox-style filter UI on long option lists.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "SelectItem[]" },
@@ -203,16 +202,18 @@ export const Checkbox: ComponentSpec = {
   props: [
     { name: "id", type: "string" },
     { name: "label", type: "string" },
-    { name: "value", type: "boolean", optional: true },
+    { name: "value", type: "boolean", optional: true, aliases: ["checked"] },
   ],
   render: (node, props, helpers) => {
     const wrapper = el("label", { class: "rui-checkbox" });
+    const isChecked = asBoolean(props.value);
     const input = el("input", {
       type: "checkbox",
       id: asString(props.id),
       name: asString(props.id),
-      checked: asBoolean(props.value) ? "" : null,
-    });
+      checked: isChecked ? "" : null,
+    }) as HTMLInputElement;
+    input.checked = isChecked;
     bindToStateAtArg(input, node, 2, helpers);
     wrapper.append(input, el("span", { class: "rui-checkbox-label" }, [asString(props.label)]));
     return wrapper;
@@ -226,13 +227,28 @@ export const CheckBoxItem: ComponentSpec = {
     { name: "label", type: "string" },
     { name: "name", type: "string", description: "Key inside the group's value object" },
     { name: "description", type: "string", optional: true },
-    { name: "defaultChecked", type: "boolean", optional: true },
+    { name: "defaultChecked", type: "boolean", optional: true, aliases: ["checked"] },
   ],
   render: (_node, props) => {
-    return el("label", {
+    const itemName = asString(props.name);
+    const label = asString(props.label);
+    const description = asString(props.description);
+    const isChecked = asBoolean(props.defaultChecked);
+    const wrapper = el("label", {
       class: "rui-checkbox-item",
-      "data-name": asString(props.name),
-    }, [asString(props.label)]);
+      "data-name": itemName,
+    });
+    const input = el("input", {
+      type: "checkbox",
+      name: itemName,
+      checked: isChecked ? "" : null,
+    }) as HTMLInputElement;
+    input.checked = isChecked;
+    const text = el("div", { class: "rui-checkbox-item-text" });
+    text.append(el("div", { class: "rui-checkbox-item-label" }, [label]));
+    if (description) text.append(el("div", { class: "rui-checkbox-item-description" }, [description]));
+    wrapper.append(input, text);
+    return wrapper;
   },
 };
 
@@ -316,13 +332,15 @@ export const Radio: ComponentSpec = {
       const label = asString(item.args?.[1], value);
       const id = `${groupName}-${value}`;
       const itemRoot = el("label", { class: "rui-radio", for: id });
+      const isChecked = asString(props.value) === value;
       const input = el("input", {
         type: "radio",
         id,
         name: groupName,
         value,
-        checked: asString(props.value) === value ? "" : null,
-      });
+        checked: isChecked ? "" : null,
+      }) as HTMLInputElement;
+      input.checked = isChecked;
       bindToStateAtArg(input, node, 2, helpers);
       itemRoot.append(input, el("span", { class: "rui-radio-label" }, [label]));
       root.append(itemRoot);
@@ -336,7 +354,7 @@ export const FormControl: ComponentSpec = {
   description: "Labeled wrapper around a single form field.",
   props: [
     { name: "label", type: "string" },
-    { name: "field", type: "Node" },
+    { name: "field", type: "Node", aliases: ["control"] },
     { name: "hint", type: "string", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -362,14 +380,14 @@ export const SearchBar: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
     { name: "shortcut", type: "string", optional: true, description: "Keyboard hint chip on the right (e.g. \"/\")" },
-    { name: "action", type: "Action", optional: true, description: "Optional submit Action; clicking the trailing button or pressing Enter triggers it" },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onSubmit"], description: "Optional submit callable; clicking the trailing button or pressing Enter invokes it" },
     { name: "submitLabel", type: "string", optional: true, description: "Label for the trailing submit button (default \"Search\"). Omitted when no action is provided." },
   ],
   render: (node, props, helpers) => {
     const root = el("form", { class: "rui-search-bar", role: "search" });
     root.onsubmit = (event) => {
       event.preventDefault();
-      if (isActionPayload(props.action)) helpers.runAction(props.action);
+      helpers.invoke(props.action);
     };
     const iconWrap = renderIcon("magnifying-glass", { className: "rui-search-bar-icon" })
       ?? el("span", { class: "rui-search-bar-icon", "aria-hidden": "true" });
@@ -387,7 +405,7 @@ export const SearchBar: ComponentSpec = {
     root.append(input);
     const shortcut = asString(props.shortcut);
     if (shortcut) root.append(el("span", { class: "rui-search-bar-shortcut" }, [shortcut]));
-    if (isActionPayload(props.action)) {
+    if (props.action != null) {
       const btn = el("button", {
         type: "submit",
         class: "rui-search-bar-submit",
@@ -610,33 +628,36 @@ export const FileUpload: ComponentSpec = {
   description:
     "Styled file picker. Renders a click/drop area with a leading icon, " +
     "label, and helper text. Files cannot round-trip through `$variables` " +
-    "(they are not serialisable), so pass an `action` containing an " +
-    "`@Js(...)` step to handle the picked files via `ctx.query(\"#id\").files`.",
+    "(they are not serialisable), so pass a callable as `action` to handle " +
+    "the picked files via `ctx.query(\"#id\").files`.",
   props: [
     { name: "id", type: "string" },
     { name: "label", type: "string", optional: true, description: "Primary label (default \"Choose a file\")" },
     { name: "hint", type: "string", optional: true, description: "Secondary helper text" },
     { name: "accept", type: "string", optional: true, description: "Comma-separated MIME types or extensions" },
     { name: "multiple", type: "boolean", optional: true },
-    { name: "action", type: "Action", optional: true, description: "Action fired when files are picked" },
+    { name: "action", type: "callable", optional: true, aliases: ["onChange", "onSelect"], description: "Callable fired when files are picked" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon (default \"cloud-arrow-up\")" },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
     const id = asString(props.id);
     const disabled = asBoolean(props.disabled);
-    const root = el("label", {
+    const root = el("div", {
       class: "rui-file-upload",
-      for: id,
       "data-disabled": disabled ? "true" : "false",
     });
+    const dropZone = el("label", {
+      class: "rui-file-upload-dropzone",
+      for: id,
+    });
     const iconNode = renderIcon(asString(props.icon, "cloud-arrow-up"), { className: "rui-file-upload-icon" });
-    if (iconNode) root.append(iconNode);
+    if (iconNode) dropZone.append(iconNode);
     const text = el("div", { class: "rui-file-upload-text" });
     text.append(el("div", { class: "rui-file-upload-label" }, [asString(props.label, "Choose a file")]));
     const hint = asString(props.hint);
     if (hint) text.append(el("div", { class: "rui-file-upload-hint" }, [hint]));
-    root.append(text);
+    dropZone.append(text);
     const input = el("input", {
       type: "file",
       id,
@@ -646,10 +667,45 @@ export const FileUpload: ComponentSpec = {
       multiple: asBoolean(props.multiple) ? "" : null,
       disabled: disabled ? "" : null,
     });
-    input.onchange = () => {
-      if (isActionPayload(props.action)) helpers.runAction(props.action);
+    dropZone.append(input);
+    root.append(dropZone);
+
+    const isImageFile = (file: File, accept: string): boolean =>
+      accept.includes("image") ||
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(file.name);
+
+    input.onchange = (event) => {
+      helpers.invoke(props.action);
+      const fileInput = event.currentTarget as HTMLInputElement;
+      const uploadRoot = fileInput.closest(".rui-file-upload") as HTMLElement | null;
+      if (!uploadRoot) return;
+      const files = fileInput.files;
+      const existing = uploadRoot.querySelector(".rui-file-upload-preview");
+      if (existing) existing.remove();
+      if (!files || files.length === 0) return;
+      const accept = asString(props.accept);
+      const preview = el("div", { class: "rui-file-upload-preview" });
+      Array.from(files).forEach((file) => {
+        const row = el("div", { class: "rui-file-upload-preview-item" });
+        if (isImageFile(file, accept)) {
+          const objectUrl = URL.createObjectURL(file);
+          const img = el("img", {
+            src: objectUrl,
+            alt: file.name,
+            class: "rui-file-upload-thumbnail",
+          }) as HTMLImageElement;
+          // Revoke the object URL when the image has rendered so memory is
+          // released. Browsers keep the bitmap cached after decode so the
+          // src can be safely revoked once `load` fires.
+          img.onload = () => URL.revokeObjectURL(objectUrl);
+          row.append(img);
+        }
+        row.append(el("span", { class: "rui-file-upload-filename" }, [file.name]));
+        preview.append(row);
+      });
+      uploadRoot.append(preview);
     };
-    root.append(input);
     return root;
   },
 };
@@ -669,6 +725,7 @@ export const Combobox: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no items match the filter (default \"No matches\")" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the dropdown" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -678,7 +735,8 @@ export const Combobox: ComponentSpec = {
     const placeholder = asString(props.placeholder, "Select…");
     const emptyLabel = asString(props.emptyLabel, "No matches");
     const disabled = asBoolean(props.disabled);
-    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const initialOpen = asBoolean(props.open);
+    const openSlot = helpers.useInstanceState<boolean>("open", initialOpen);
     const filterSlot = helpers.useInstanceState<string>("filter", "");
     const isOpen = openSlot.get();
 
@@ -715,8 +773,14 @@ export const Combobox: ComponentSpec = {
     const list = el("div", { class: "rui-combobox-list" });
     panel.append(list);
 
-    const renderList = (filter: string): void => {
-      list.replaceChildren();
+    // Re-paint the option list into the supplied container. When the
+    // user types into the filter input on a re-rendered combobox the
+    // closure-captured `list` reference points at the (detached)
+    // freshly-rendered DOM; the live target is the only thing that
+    // actually shows in the page, so we accept it as an argument and let
+    // each call site resolve it from the live tree.
+    const renderList = (target: HTMLElement, filter: string): void => {
+      target.replaceChildren();
       const lower = filter.trim().toLowerCase();
       const matches = lower === ""
         ? items
@@ -725,7 +789,7 @@ export const Combobox: ComponentSpec = {
             item.value.toLowerCase().includes(lower),
           );
       if (matches.length === 0) {
-        list.append(el("div", { class: "rui-combobox-empty" }, [emptyLabel]));
+        target.append(el("div", { class: "rui-combobox-empty" }, [emptyLabel]));
         return;
       }
       for (const item of matches) {
@@ -740,7 +804,7 @@ export const Combobox: ComponentSpec = {
           event.stopPropagation();
           selectComboboxValue(event.currentTarget as Element, item.value);
         };
-        list.append(option);
+        target.append(option);
       }
     };
 
@@ -751,10 +815,7 @@ export const Combobox: ComponentSpec = {
     const selectComboboxValue = (origin: Element, value: string): void => {
       const stateName = node.argMeta?.[2]?.stateRef;
       if (stateName) {
-        helpers.runAction({
-          kind: "Action",
-          steps: [{ kind: "Set", name: stateName, value }],
-        });
+        helpers.setState(stateName, value);
       }
       openSlot.set(false);
       filterSlot.set("");
@@ -765,12 +826,14 @@ export const Combobox: ComponentSpec = {
       disposeDismissListeners(live);
     };
 
-    renderList(filterSlot.get());
+    renderList(list, filterSlot.get());
 
     filterInput.oninput = (event) => {
       const target = event.currentTarget as HTMLInputElement;
       filterSlot.set(target.value);
-      renderList(target.value);
+      const liveList = target.closest(".rui-combobox-panel")
+        ?.querySelector(".rui-combobox-list") as HTMLElement | null;
+      if (liveList) renderList(liveList, target.value);
     };
 
     // Enter on the filter selects the first visible option, matching the
@@ -840,6 +903,7 @@ export const MultiSelect: ComponentSpec = {
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no items match the filter" },
     { name: "max", type: "number", optional: true, description: "Maximum number of selections" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the dropdown" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -854,7 +918,8 @@ export const MultiSelect: ComponentSpec = {
     const selectedSet = new Set(selected);
     const stateName = node.argMeta?.[2]?.stateRef;
 
-    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const initialOpen = asBoolean(props.open);
+    const openSlot = helpers.useInstanceState<boolean>("open", initialOpen);
     const filterSlot = helpers.useInstanceState<string>("filter", "");
     const isOpen = openSlot.get();
 
@@ -875,10 +940,7 @@ export const MultiSelect: ComponentSpec = {
     const chipRow = el("span", { class: "rui-multiselect-chips" });
     const writeSelection = (next: string[]): void => {
       if (!stateName) return;
-      helpers.runAction({
-        kind: "Action",
-        steps: [{ kind: "Set", name: stateName, value: next }],
-      });
+      helpers.setState(stateName, next);
     };
     if (selected.length === 0) {
       chipRow.append(el("span", { class: "rui-multiselect-placeholder" }, [placeholder]));
@@ -918,8 +980,12 @@ export const MultiSelect: ComponentSpec = {
     const list = el("div", { class: "rui-multiselect-list" });
     panel.append(list);
 
-    const renderList = (filter: string): void => {
-      list.replaceChildren();
+    // Paint into the *given* container so the input handler can pass the
+    // live list element it found from `event.currentTarget` (the
+    // closure-captured `list` is detached after morph keeps the previous
+    // multiselect DOM).
+    const renderList = (target: HTMLElement, filter: string): void => {
+      target.replaceChildren();
       const lower = filter.trim().toLowerCase();
       const matches = lower === ""
         ? items
@@ -928,7 +994,7 @@ export const MultiSelect: ComponentSpec = {
             item.value.toLowerCase().includes(lower),
           );
       if (matches.length === 0) {
-        list.append(el("div", { class: "rui-multiselect-empty" }, [emptyLabel]));
+        target.append(el("div", { class: "rui-multiselect-empty" }, [emptyLabel]));
         return;
       }
       for (const item of matches) {
@@ -956,16 +1022,18 @@ export const MultiSelect: ComponentSpec = {
             : [...selected, item.value];
           writeSelection(next);
         };
-        list.append(option);
+        target.append(option);
       }
     };
 
-    renderList(filterSlot.get());
+    renderList(list, filterSlot.get());
 
     filterInput.oninput = (event) => {
       const target = event.currentTarget as HTMLInputElement;
       filterSlot.set(target.value);
-      renderList(target.value);
+      const liveList = target.closest(".rui-multiselect-panel")
+        ?.querySelector(".rui-multiselect-list") as HTMLElement | null;
+      if (liveList) renderList(liveList, target.value);
     };
 
     triggerBtn.onclick = (event) => {

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Playground · streaming-ui-script</title>
-  <meta name="description" content="A polished in-browser playground for Streaming UI Script with syntax highlighting, autocomplete, inspection mode, and live rendering." />
+  <title>Playground · Aktion</title>
+  <meta name="description" content="A polished in-browser playground for Aktion with syntax highlighting, autocomplete, inspection mode, and live rendering." />
   <script>
     (function () {
       try {
@@ -248,12 +248,12 @@
       padding: 16px;
       background: var(--doc-bg);
     }
-    .pg-viewer-frame streaming-ui-script {
+    .pg-viewer-frame aktion-app {
       display: block;
       width: 100%;
       min-height: 100%;
     }
-    .pg-pane--viewer[data-inspect="true"] .pg-viewer-frame streaming-ui-script {
+    .pg-pane--viewer[data-inspect="true"] .pg-viewer-frame aktion-app {
       cursor: crosshair;
     }
 
@@ -544,8 +544,8 @@
 <body data-page="playground">
   <div class="layout" data-wide="true">
     <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
+      <h1>Aktion</h1>
+      <p>Web component runtime for Aktion</p>
       <nav>
         <a href="index.html">Overview</a>
         <a href="get-started.html">Get started</a>
@@ -553,10 +553,10 @@
         <a href="language.html">Language reference</a>
         <a href="components.html">Component reference</a>
         <a href="actions.html">Actions</a>
+        <a href="side-effects.html">Side effects</a>
         <a href="javascript-interactions.html">JavaScript interactions</a>
         <a href="routing.html">Routing</a>
         <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
         <a href="examples.html">Examples</a>
         <a href="playground.html" aria-current="page">Playground</a>
         <a href="live-examples.html">Live examples</a>
@@ -585,6 +585,7 @@
               <option value="chat">Chat reply</option>
               <option value="dashboard">Project dashboard</option>
               <option value="todo">Reactive todo</option>
+              <option value="reactiveApp">Reactive app</option>
               <option value="routing">Routing app</option>
               <option value="counter">JS counter</option>
               <option value="chart">Chart + metrics</option>
@@ -661,7 +662,7 @@
         <div class="pg-workspace" id="pg-workspace" data-mode="split-h">
           <section class="pg-pane pg-pane--editor" aria-label="Editor pane">
             <div class="pg-pane-toolbar">
-              <h3>Streaming UI Script</h3>
+              <h3>Aktion</h3>
               <div class="pg-spacer"></div>
               <span class="pg-pill" id="pg-pill-preset" title="Active example">Chat reply</span>
             </div>
@@ -697,7 +698,7 @@
               </button>
             </div>
             <div class="pg-viewer-frame" id="pg-viewer-frame">
-              <streaming-ui-script id="pg-target" theme="light" data-theme-managed="true"></streaming-ui-script>
+              <aktion-app id="pg-target" theme="light" data-theme-managed="true"></aktion-app>
             </div>
           </section>
         </div>
@@ -710,7 +711,7 @@
       <!-- Help modal -->
       <div class="pg-modal-backdrop" id="pg-modal-backdrop" hidden>
         <div class="pg-modal" role="dialog" aria-labelledby="pg-modal-title" aria-modal="true">
-          <h2 id="pg-modal-title">Keyboard shortcuts</h2>
+          <h2 id="pg-modal-title">Keyboard shortcuts &amp; autocomplete</h2>
           <table>
             <tbody>
               <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
@@ -724,8 +725,19 @@
             </tbody>
           </table>
           <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
-            Type a component name like <code>Card</code> and press <kbd>Tab</kbd> for a snippet,
-            or <code>@</code> followed by a builtin (e.g. <code>@Each</code>) for argument hints.
+            <strong>Autocomplete is context-aware.</strong> At the top level,
+            tab through components, <code>@</code>-builtins, language
+            keywords (<code>if</code>, <code>match</code>, <code>for</code>,
+            <code>component</code>, <code>action</code>, <code>effect</code>),
+            and snippets (<code>router…</code>, <code>component…</code>,
+            <code>http…</code>). Inside a call like
+            <code>Button("Save", <em>cursor</em>)</code> the editor surfaces
+            <strong>named-arg names</strong> with their types
+            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>…);
+            after the colon, enum-typed args (e.g.
+            <code>variant: "primary"|"secondary"|…</code>) show their
+            allowed values inline so you can pick one with a single tab.
+            Hover any identifier for the full signature + per-arg docs.
           </p>
         </div>
       </div>
@@ -734,6 +746,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.05.13d"></script>
+  <script type="module" src="assets/playground.js?v=2026.05.22-router"></script>
 </body>
 </html>

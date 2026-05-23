@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
+import { getBuiltinCatalog } from "../src/language/builtins.js";
 
 describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("Streaming UI Script");
-    expect(text).toContain("root = Stack(");
+    expect(text).toContain("Aktion");
+    expect(text).toContain("_app_ = ...");
     expect(text).toContain("Stack(children: Node[]");
     expect(text).toContain("CardHeader(title: string");
   });
@@ -14,167 +15,182 @@ describe("generatePrompt", () => {
   it("toggles tool/binding sections by feature flag", () => {
     const minimal = generatePrompt(defaultLibrary, { toolCalls: false, bindings: false });
     expect(minimal).not.toContain("## Reactive State");
-    expect(minimal).not.toContain("## Data: Query and Mutation");
+    expect(minimal).not.toContain("## Data — `http({...})`");
     expect(minimal).not.toContain("## Built-in functions");
 
     const full = generatePrompt(defaultLibrary, {
       tools: [{ name: "list_users", description: "Returns users.", argsExample: { limit: 10 } }],
     });
     expect(full).toContain("## Reactive State");
-    expect(full).toContain("## Data: Query and Mutation");
+    expect(full).toContain("## Data — `http({...})`");
     expect(full).toContain("list_users");
+  });
+
+  it("projects the @-builtin catalog from `src/language/builtins.ts`", () => {
+    const text = generatePrompt(defaultLibrary, {
+      tools: [{ name: "lookup", description: "demo" }],
+    });
+    const catalog = getBuiltinCatalog();
+    expect(catalog.length).toBeGreaterThan(20);
+    for (const entry of catalog) {
+      expect(text, `${entry.signature} should appear`).toContain(entry.signature);
+    }
+    expect(text).toContain("### Data helpers");
+    expect(text).toContain("### Iteration helpers");
   });
 
   it("appends additional rules and examples", () => {
     const text = generatePrompt(defaultLibrary, {
       additionalRules: ["Always end with a FollowUpBlock."],
-      examples: [`root = Stack([Card([CardHeader("Demo")])])`],
+      examples: [`_app_ = Stack([Card([CardHeader("Demo")])])`],
     });
     expect(text).toContain("Always end with a FollowUpBlock.");
     expect(text).toContain("Demo");
   });
 
-  it("includes the design principles and composition recipes by default", () => {
-    const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## Design principles");
-    expect(text).toContain("Reach for high-level patterns first");
-    expect(text).toContain("## Composition recipes");
-    expect(text).toContain("Dashboard / analytics page");
-    expect(text).toContain("Landing / marketing page");
+  it("documents the actions, effects, and data surfaces in the full prompt", () => {
+    const text = generatePrompt(defaultLibrary, {
+      toolCalls: true,
+      bindings: true,
+      tools: [{ name: "list_users", description: "Returns users." }],
+    });
+    expect(text).toContain("## Effects");
+    expect(text).toContain("## Actions");
+    expect(text).toContain("## Data — `http({...})`");
+    expect(text).toContain("effect");
+    expect(text).toContain("on:mount");
+    expect(text).toContain("debounce(");
+    expect(text).toContain("http({");
+    expect(text).toContain(".refetch()");
+    expect(text).toContain(".loading");
+    expect(text).toContain("Async(");
   });
 
-  it("documents the new shadcn-parity primitives and pattern composites", () => {
-    const text = generatePrompt(defaultLibrary);
-    // Primitives we added (shadcn parity)
-    for (const name of ["Avatar", "Progress", "Switch", "ToggleGroup", "Tooltip", "Breadcrumb", "Pagination", "Drawer", "Grid"]) {
-      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
-    }
-    // Pattern composites
-    for (const name of ["Hero", "PageHeader", "Stats", "EmptyState", "Timeline", "FeatureGrid", "KanbanBoard"]) {
-      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
-    }
-    // The Patterns group is announced in components section
-    expect(text).toContain("### Patterns");
-    expect(text).toContain("### Feedback & Media");
-    expect(text).toContain("### Navigation");
-  });
-
-  it("documents the new rich-layout patterns and app-shell composites", () => {
-    const text = generatePrompt(defaultLibrary);
-    for (const name of [
-      "SectionHeader", "Toolbar", "DescriptionList", "DescriptionItem",
-      "StatusDot", "PricingTable", "PricingCard",
-      "AppShell", "Sidebar", "SidebarSection", "SidebarItem", "SplitView",
-    ]) {
-      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
-    }
-    // The App shell group is announced
-    expect(text).toContain("### App shell");
-    // Density targets section appears in the design principles
-    expect(text).toContain("Density targets");
-    expect(text).toContain("minimum");
-  });
-
-  it("documents the richer composition primitives", () => {
-    const text = generatePrompt(defaultLibrary);
-    for (const name of [
-      "Container", "Spacer", "Hero", "MediaCard", "Stats", "Tile",
-      "Notification", "PersonChip", "Quote", "Rating",
-      "ProgressRing", "ChatBubble", "SearchBar",
-    ]) {
-      expect(text, `${name} should appear in the prompt`).toContain(`${name}(`);
-    }
-    // Product detail recipe references the new components
-    expect(text).toContain("Hero(");
-    expect(text).toContain("MediaCard(");
-    expect(text).toContain("Rating(");
-  });
-
-  it("falls back to a built-in rich example when none is provided", () => {
-    const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## Examples");
-    expect(text).toContain("Stats");
-    expect(text).toContain("KanbanBoard");
-  });
-
-  it("teaches streaming-friendly statement order", () => {
-    const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## Hoisting & Streaming");
-    expect(text).toContain("emit this FIRST");
-    expect(text).toContain("Leaf data last");
-    expect(text).toContain("## Final verification");
-    expect(text).toContain("is the FIRST line");
-    // The syntax section should mention forward references / hoisting.
-    expect(text).toContain("Forward references are allowed");
-  });
-
-  it("always documents JavaScript interactions in the full prompt", () => {
-    const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## JavaScript interactions");
-    expect(text).toContain('Script("id"');
-    expect(text).toContain("@Js(");
-    expect(text).toContain("ctx.state.set");
-    expect(text).toContain("ctx.tools");
-    expect(text).toContain("ctx.cleanup");
-    expect(text).toContain("### Scripting");
-  });
-
-  it("always documents routing in the full prompt", () => {
+  it("documents the router block surface in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("## Routing");
-    expect(text).toContain("Routes(");
-    expect(text).toContain("NavLink(");
-    expect(text).toContain("@Navigate(");
-    expect(text).toContain("### Routing");
+    expect(text).toContain("_router_({");
+    expect(text).toContain("_route_.path");
+    expect(text).toContain("_route_.params");
+    expect(text).toContain("_route_.navigate");
+    expect(text).not.toContain("$route");
+    // Router arms live inside an object literal — `:` separates pattern
+    // from body, `default:` is the wildcard.
+    expect(text).toContain('"/":             Dashboard()');
+    expect(text).toContain("default:         NotFound()");
   });
 
-  it("never teaches the LLM to escape backticks (regression: \\` in template-literal examples)", () => {
-    // Earlier versions accidentally rendered `\`Hi ${name}\`` (backslash + backtick)
-    // into the prompt because the TS template literal used \\\\` instead of \\`.
-    // The LLM faithfully copied the backslashes into its output, breaking parsing.
-    // Both the full and chat prompts must show backticks literally.
-    const fullPrompt = generatePrompt(defaultLibrary);
+  it("documents the single reactive state model and standard helper components", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("$count = 0");
+    expect(text).toContain("## Standard helper components");
+    for (const helper of ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary"]) {
+      expect(text, `${helper} should appear in the helpers section`).toContain(helper);
+    }
+  });
+
+  it("never teaches the LLM to escape backticks (regression test)", () => {
+    const fullPrompt = generatePrompt(defaultLibrary, {
+      toolCalls: true,
+      tools: [{ name: "list_users", description: "Returns users." }],
+    });
     const chatPrompt = generatePrompt(defaultLibrary, { mode: "chat" });
     expect(fullPrompt).not.toMatch(/\\`/);
     expect(chatPrompt).not.toMatch(/\\`/);
-    // And the correct backtick examples must be present.
-    expect(fullPrompt).toContain("`Hello ${$user.name}");
-    expect(chatPrompt).toContain("`Hi ${name}`");
-    expect(chatPrompt).toContain("`Found ${$rows.length} results`");
+    // Every template literal example must use literal `${expr}` interpolation
+    // — never an escaped backslash-backtick — so the LLM copies it verbatim.
+    expect(chatPrompt).toMatch(/`[^`]*\$\{/);
+    expect(fullPrompt).toMatch(/`[^`]*\$\{/);
   });
 
-  describe("chat mode", () => {
-    it("emits a compact OpenUI-Lang-style prompt", () => {
+  it("never teaches any legacy token that was removed from the language", () => {
+    const fullPrompt = generatePrompt(defaultLibrary, {
+      tools: [{ name: "demo", description: "demo", kind: "Query" }],
+      bindings: true,
+      toolCalls: true,
+      inlineMode: true,
+      editMode: true,
+    });
+    const chatPrompt = generatePrompt(defaultLibrary, { mode: "chat" });
+    const forbidden = [
+      "$$",
+      "$state ",
+      "$persist ",
+      "$session ",
+      "$shared ",
+      "$computed ",
+      "$query ",
+      "$mutation ",
+      "$subscription ",
+      "query GetOrders",
+      "mutation SaveOrder",
+      "subscription LiveTicker",
+      "@Run",
+      "@Set",
+      "@Reset",
+      "@ToAssistant",
+      "@OpenUrl",
+      "@Navigate",
+      "@Js",
+      "@Const",
+      "@Memo",
+      "Routes(",
+      "Route(",
+      "setTools",
+      "registerTools",
+    ];
+    for (const token of forbidden) {
+      expect(fullPrompt, `full prompt must not mention legacy token ${token}`).not.toContain(token);
+      expect(chatPrompt, `chat prompt must not mention legacy token ${token}`).not.toContain(token);
+    }
+  });
+
+  describe("chat mode (read-only UI conversion)", () => {
+    it("emits a compact read-only prompt with the expected section structure", () => {
       const text = generatePrompt(defaultLibrary, { mode: "chat" });
-      expect(text).toContain("Streaming UI Script");
-      expect(text).toContain("root = Stack(");
-      expect(text).toContain("## Syntax Rules");
-      expect(text).toContain("## Component Signatures");
-      expect(text).toContain("## Actions — Button Behaviour");
-      expect(text).toContain("## Hoisting & Streaming");
+      expect(text).toContain("Aktion");
+      expect(text).toContain("_app_ = ...");
+      expect(text).toContain("## Syntax (read-only subset)");
+      expect(text).toContain("## Component library (read-only)");
+      expect(text).toContain("## Built-in `@`-functions");
+      expect(text).toContain("## Hoisting & streaming (CRITICAL)");
       expect(text).toContain("## Examples");
-      expect(text).toContain("## Important Rules");
-      expect(text).toContain("## Final Verification");
+      expect(text).toContain("## Important rules");
+      expect(text).toContain("## Final verification");
     });
 
-    it("omits the JavaScript interactions and routing surfaces", () => {
+    it("never teaches interactive / app-level surfaces in chat mode", () => {
       const text = generatePrompt(defaultLibrary, { mode: "chat" });
-      expect(text).not.toContain("## JavaScript interactions");
-      expect(text).not.toContain('Script("id"');
-      expect(text).not.toContain("@Js(");
+      expect(text).not.toContain("## Effects");
       expect(text).not.toContain("## Routing");
-      expect(text).not.toContain("Routes(");
-      expect(text).not.toContain("NavLink(");
-      expect(text).not.toContain("@Navigate(");
+      expect(text).not.toContain("## Actions");
+      expect(text).not.toContain("_router_({");
+      expect(text).not.toContain("## Data — `http({...})`");
+      expect(text).not.toContain("http({");
+      expect(text).not.toContain("js{");
+      expect(text).not.toContain("bind:value:");
     });
 
-    it("trims component groups to chat-friendly building blocks", () => {
+    it("includes only the read-only display components", () => {
       const text = generatePrompt(defaultLibrary, { mode: "chat" });
-      for (const expected of ["Stack(", "Table(", "BarChart(", "Form(", "FollowUpBlock(", "Button("]) {
+      for (const expected of [
+        "Stack(", "Card(", "Table(", "BarChart(",
+        "FollowUpBlock(", "Text(", "Markdown(", "Callout(",
+      ]) {
         expect(text, `${expected} should appear in the chat prompt`).toContain(expected);
       }
-      for (const omitted of ["AppShell(", "Sidebar(", "SplitView(", "KanbanBoard("]) {
-        expect(text, `${omitted} should NOT appear in the chat prompt`).not.toContain(omitted);
+      // Interactive / app-level components must not be listed as their own
+      // signature lines. (Some patterns mention `Button(...)` inside their
+      // description text — that is fine, we only care about the canonical
+      // `\n- Name(` line that authors would copy.)
+      for (const omitted of [
+        "AppShell", "Sidebar", "SplitView", "KanbanBoard",
+        "Form", "Button", "Input", "TextArea", "Select", "Modal",
+      ]) {
+        expect(
+          text,
+          `${omitted} should NOT be listed as a chat-mode component`,
+        ).not.toMatch(new RegExp(`\\n- ${omitted}\\(`));
       }
     });
 
@@ -188,7 +204,7 @@ describe("generatePrompt", () => {
       const text = generatePrompt(defaultLibrary, {
         mode: "chat",
         preamble: "You are Acme's helpful chat assistant.",
-        examples: ["root = Stack([title])\ntitle = TextContent(\"Hello\")"],
+        examples: ["_app_ = Stack([title])\ntitle = Text(\"Hello\")"],
         tools: [{ name: "lookup_order", description: "Look up an order by id." }],
         additionalRules: ["Be terse."],
       });

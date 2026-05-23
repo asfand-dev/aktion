@@ -643,7 +643,7 @@
     background: var(--doc-bg);
   }
   
-  .cb-msg-preview streaming-ui-script {
+  .cb-msg-preview aktion-app {
     display: block;
     width: 100%;
   }
@@ -740,6 +740,11 @@
     border-color: var(--doc-primary);
     box-shadow: var(--doc-focus-ring);
   }
+
+  .cb-composer-inner.cb-drop-target {
+    border-color: var(--doc-primary);
+    background: color-mix(in srgb, var(--doc-primary) 7%, var(--doc-bg-soft));
+  }
   
   .cb-composer textarea {
     width: 100%;
@@ -789,6 +794,130 @@
   /* When streaming: hide labels on phones to give the stop button room */
   @media (max-width: 520px) {
     .cb-send span { display: none; }
+  }
+
+  /* ---- Attachments (composer) ---- */
+
+  .cb-attach {
+    /* paperclip button — same shape as .cb-iconbtn but explicitly themed */
+    color: var(--doc-text-muted);
+  }
+  .cb-attach:hover { color: var(--doc-text); }
+  .cb-attach[data-active="true"] {
+    color: var(--doc-primary);
+    background: color-mix(in srgb, var(--doc-primary) 12%, transparent);
+  }
+
+  .cb-attach-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 0 8px 0;
+  }
+  .cb-attach-row[hidden] { display: none; }
+
+  .cb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 10px;
+    background: var(--doc-surface);
+    border: 1px solid var(--doc-border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--doc-text);
+    max-width: 100%;
+  }
+  .cb-chip-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--doc-bg-soft);
+    flex-shrink: 0;
+  }
+  .cb-chip-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    background: var(--doc-bg-soft);
+    color: var(--doc-text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .cb-chip-icon i { font-size: 11px; }
+  .cb-chip-meta {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.15;
+    min-width: 0;
+  }
+  .cb-chip-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+  }
+  .cb-chip-size {
+    font-size: 10.5px;
+    color: var(--doc-text-subtle);
+  }
+  .cb-chip-remove {
+    border: 0;
+    background: transparent;
+    color: var(--doc-text-subtle);
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--doc-transition), color var(--doc-transition);
+    margin-left: 2px;
+  }
+  .cb-chip-remove:hover {
+    background: color-mix(in srgb, var(--doc-text) 10%, transparent);
+    color: var(--doc-text);
+  }
+  .cb-chip-remove i { font-size: 10.5px; }
+
+  /* ---- User attachments row (rendered above a user message) ---- */
+
+  .cb-user-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .cb-user-attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: color-mix(in srgb, var(--doc-primary) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--doc-primary) 22%, transparent);
+    border-radius: 999px;
+    color: var(--doc-text);
+    font-size: 11.5px;
+    line-height: 1.2;
+    max-width: 240px;
+  }
+  .cb-user-attachment img {
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    object-fit: cover;
+    margin: -2px -4px -2px -6px;
+  }
+  .cb-user-attachment i { font-size: 11px; color: var(--doc-text-muted); }
+  .cb-user-attachment span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   
   /* -------------------------------------------------------------------------
@@ -1511,7 +1640,7 @@
     padding: 24px;
     background: var(--doc-bg);
   }
-  .cb-fullscreen-body streaming-ui-script { display: block; max-width: 100%; margin: 0 auto; }
+  .cb-fullscreen-body aktion-app { display: block; max-width: 100%; margin: 0 auto; }
   
   /* Composer: gradient ring on focus, send button glow -------------- */
   

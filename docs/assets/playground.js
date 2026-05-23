@@ -1,10 +1,10 @@
 /**
- * Streaming UI Script playground.
+ * Aktion playground.
  *
  * Single-page IDE-style playground built on CodeMirror 6 (loaded from
  * esm.sh) and the language spec exported by `src/language/`. Wiring:
  *   - editor: custom StreamLanguage + autocomplete + linter + snippets
- *   - viewer: live <streaming-ui-script> element
+ *   - viewer: live <aktion-app> element
  *   - inspect: hover overlay + click-to-jump to source line
  *   - persistence: localStorage under `rui:playground:*`
  *   - URL share: gzipped+base64 program in #code=
@@ -15,7 +15,7 @@
 import {
   parse,
   getLanguageSpec,
-} from "../../dist/streaming-ui-script.js";
+} from "../../dist/aktion.js";
 
 // ---------------------------------------------------------------------------
 // CodeMirror 6 — dynamic import from esm.sh
@@ -63,116 +63,168 @@ async function loadCodeMirror() {
 const EXAMPLES = {
   chat: {
     label: "Chat reply",
-    code: `root = Stack([greeting, sample, follow])
-greeting = Card([CardHeader("Hello, world", "Edit this text and watch it update")])
+    code: `# Highlights: one positional + named args everywhere, template literals, FollowUpBlock dispatch.
+_app_ = Stack([greeting, sample, follow])
+
+greeting = Card([
+  CardHeader("Hello, world", subtitle: "Edit this text and watch it update")
+])
+
 sample = Card([
   CardHeader("Sample stats"),
   Stats([
-    StatCard("Active users", \`\${@Format(12540, "number")}\`, "up", "+12% vs last week", "users"),
-    StatCard("Revenue",      \`\${@Format(48230, "currency", "USD")}\`, "flat", "stable", "sack-dollar"),
-    StatCard("Errors",       "12", "down", "-32%", "triangle-exclamation")
+    StatCard("Active users", value: \`\${@Format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users"),
+    StatCard("Revenue",      value: \`\${@Format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar"),
+    StatCard("Errors",       value: "12", trend: "down", delta: "-32%", icon: "triangle-exclamation")
   ])
 ])
+
 follow = FollowUpBlock([
   FollowUpItem("Add a chart"),
   FollowUpItem("Show an alert"),
   FollowUpItem("Export as CSV")
-], "Try editing")`,
+], title: "Try editing")`,
   },
   dashboard: {
     label: "Project dashboard",
-    code: `# Highlights: macro for KanbanCard, @Each with destructuring, template literals.
-root = Stack([header, kpis, board, follow])
-header = PageHeader("Engineering Q3", \`\${@Count(projects)} active · \${@Count(atRisk)} at risk\`, ["Workspace", "Engineering"], headerActions, Badge("On track", "success"))
-headerActions = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
-kpis = Stats([
-  StatCard(\`Active\`,  \`\${@Count(projects)}\`, "flat", "0 vs last week",                          "folder"),
-  StatCard(\`At risk\`, \`\${@Count(atRisk)}\`,   "up",   \`+\${@Count(atRisk) - 2} vs last week\`,    "triangle-exclamation"),
-  StatCard("Shipped", "8",                     "up",   "+3 vs last week",                          "rocket"),
-  StatCard("On-time", "87%",                   "down", "-3% vs last week",                         "clock")
-])
-
-Card2(p) = KanbanCard(p.title, p.summary, p.tags, p.owner, p.tone, p.icon)
-
-board = KanbanBoard([
-  KanbanColumn("To do",  @Each(@Filter(projects, "stage", "==", "todo"),   "p", Card2(p))),
-  KanbanColumn("Doing",  @Each(@Filter(projects, "stage", "==", "doing"),  "p", Card2(p)), "primary"),
-  KanbanColumn("Review", @Each(@Filter(projects, "stage", "==", "review"), "p", Card2(p)), "warning"),
-  KanbanColumn("Done",   @Each(@Filter(projects, "stage", "==", "done"),   "p", Card2(p)), "success")
-])
-
+    code: `# Highlights: component declaration, for-loop with destructuring, named args, Badge tone alias.
 projects = [
-  {title:"Migrate auth",      summary:"Roll out the new SDK.",   tags:["auth"],     owner:"Asha",  tone:"default", icon:"shield-halved",       stage:"todo"},
-  {title:"Streaming UI v2",   summary:"20 new components.",      tags:["frontend"], owner:"Alex",  tone:"primary", icon:"wand-magic-sparkles", stage:"doing"},
-  {title:"Mobile onboarding", summary:"Awaiting design review.", tags:["mobile"],   owner:"Wren",  tone:"warning", icon:"mobile-screen",       stage:"review"},
-  {title:"Activity timeline", summary:"Shipped to everyone.",    tags:["shipped"],  owner:"Mira",  tone:"success", icon:"circle-check",        stage:"done"}
+  {title: "Migrate auth",      description: "Roll out the new SDK.",   tags: ["auth"],     assignee: "Asha", tone: "default", icon: "shield-halved",       stage: "todo"},
+  {title: "Streaming UI v2",   description: "20 new components.",      tags: ["frontend"], assignee: "Alex", tone: "primary", icon: "wand-magic-sparkles", stage: "doing"},
+  {title: "Mobile onboarding", description: "Awaiting design review.", tags: ["mobile"],   assignee: "Wren", tone: "warning", icon: "mobile-screen",       stage: "review"},
+  {title: "Activity timeline", description: "Shipped to everyone.",    tags: ["shipped"],  assignee: "Mira", tone: "success", icon: "circle-check",        stage: "done"}
 ]
-atRisk = @Filter(projects, "tone", "==", "warning")
-follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])`,
+
+$atRisk = @Filter(projects, "tone", "==", "warning")
+
+component Card2(p) {
+  return KanbanCard(p.title, description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon)
+}
+
+_app_ = Stack([
+  PageHeader(
+    "Engineering Q3",
+    subtitle: \`\${@Count(projects)} active · \${@Count($atRisk)} at risk\`,
+    breadcrumbs: ["Workspace", "Engineering"],
+    status: Badge("On track", tone: "success")
+  ),
+  Stats([
+    StatCard("Active",  value: \`\${@Count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder"),
+    StatCard("At risk", value: \`\${@Count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation"),
+    StatCard("Shipped", value: "8",                       trend: "up",   delta: "+3 vs last week",                         icon: "rocket"),
+    StatCard("On-time", value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock")
+  ]),
+  KanbanBoard([
+    KanbanColumn("To do",  items: for p in @Filter(projects, "stage", "==", "todo")   { Card2(p) }),
+    KanbanColumn("Doing",  items: for p in @Filter(projects, "stage", "==", "doing")  { Card2(p) }, tone: "primary"),
+    KanbanColumn("Review", items: for p in @Filter(projects, "stage", "==", "review") { Card2(p) }, tone: "warning"),
+    KanbanColumn("Done",   items: for p in @Filter(projects, "stage", "==", "done")   { Card2(p) }, tone: "success")
+  ])
+])`,
   },
   todo: {
     label: "Reactive todo",
-    code: `# Highlights: $$persistent todos, template literals, @Each destructuring, @If for empty state.
-$$todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done: false}]
-$draft  = ""
+    code: `# Highlights: $-prefixed reactive state, template literals, for-loop destructuring, if expression for empty state.
+$todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done: false}]
+$draft = ""
 
-addBtn = Button("Add", Action([
-  @Set($$todos, [...$$todos, {id: $$todos.length + 1, text: $draft, done: false}]),
-  @Reset($draft)
-]), "primary")
+action addTodo() {
+  $todos = [...$todos, {id: $todos.length + 1, text: $draft, done: false}]
+  $draft = ""
+}
 
-# Destructure each row — \`id\`, \`text\` are bound directly inside \`row\`, no \`t.\` prefix.
-row  = Card([Stack([
-  TextContent(text),
-  Button("Delete", Action([@Set($$todos, @Filter($$todos, "id", "!=", id))]), "ghost", "button", "small")
-], "row", "s", "center", "between")])
+component Row(t) {
+  return Card([Stack([
+    Text(t.text),
+    Button("Delete", action: () => { $todos = @Filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small")
+  ], direction: "row", gap: "s", align: "center", justify: "between")])
+}
 
-list = @Each($$todos, "{id, text}", row)
-body = @If($$todos.length > 0, list, EmptyState("Nothing to do", "Add a task above to get started.", "list-check"))
+list = for t in $todos { Row(t) }
+body = if $todos.length > 0 {
+  list
+} else {
+  EmptyState("Nothing to do", description: "Add a task above to get started.", icon: "list-check")
+}
 
-root = Stack([
-  Card([CardHeader("Todo list", \`\${@Count($$todos)} \${@Plural(@Count($$todos), "task", "tasks")} · persisted across reloads\`)]),
-  Input("draft-input", "What needs doing?", "text", null, $draft),
-  addBtn,
+_app_ = Stack([
+  Card([CardHeader("Todo list", subtitle: \`\${@Count($todos)} \${@Plural(@Count($todos), "task", "tasks")} · persisted across reloads\`)]),
+  Input("draft-input", placeholder: "What needs doing?", value: $draft),
+  Button("Add", action: addTodo, variant: "primary"),
   body
 ])`,
   },
+  reactiveApp: {
+    label: "Reactive app",
+    code: `_app_ = Grid([items, addBtn], 2)
+
+$events = [
+  { title: "Product Sync" },
+  { title: "Design Review" },
+  { title: "Daily Standup" },
+]
+
+action removeItem(name) {
+  $events = @Filter($events, "title", "!=", name)
+}
+
+action addEvent() {
+  $events = [...$events, { title: \`New Event \${@Now()}\` }]
+}
+
+component Item(name) {
+  return Card([
+    Text(name),
+    Button("Remove", size: "xs", action: () => { removeItem(name) })
+  ])
+}
+
+addBtn = Card([Button("New Event", variant: "ghost", action: addEvent)])
+
+items = for { title } in $events { Item(title) }`,
+  },
   routing: {
     label: "Routing demo",
-    code: `# Highlights: template literals replace string concatenation, ?? for fallbacks.
-root = Stack([nav, main])
-nav  = Stack([
-  NavLink("Home",      "/",          "ghost", true),
-  NavLink("Dashboard", "/dashboard", "ghost"),
-  NavLink("Users",     "/users",     "ghost")
-], "row", "s")
+    code: `# Highlights: _router_({…}) call, params injected per-arm, _route_.path reads, named-arg NavLink.
+page = _router_({
+  "/":          Card([CardHeader("Welcome", subtitle: "Click a link above to navigate")]),
+  "/dashboard": Card([
+    CardHeader("Dashboard"),
+    Text(\`Live path: \${_route_.path}\`)
+  ]),
+  "/users/:id": Card([
+    CardHeader(\`User \${params.id}\`),
+    Text(\`Looking at user \${params.id}\`)
+  ]),
+  default:      Callout("Not found", tone: "warning", description: \`Nothing here at \${_route_.path}.\`)
+})
 
-main = Routes([
-  Route("/",           homePage),
-  Route("/dashboard",  dashPage),
-  Route("/users/:id",  userPage),
-  Route("*",           notFoundPage)
-], "/")
+nav = Stack([
+  NavLink("Home",      to: "/",            variant: "ghost"),
+  NavLink("Dashboard", to: "/dashboard",   variant: "ghost"),
+  NavLink("Alice",     to: "/users/alice", variant: "ghost")
+], direction: "row", gap: "s")
 
-homePage     = Card([CardHeader("Welcome", "Click a link above to navigate")])
-dashPage     = Card([CardHeader("Dashboard"), TextContent(\`Live route is \${$route}\`)])
-userPage     = Card([CardHeader("User profile"), TextContent(\`Looking at user \${params.id ?? "(none)"}\`)])
-notFoundPage = Callout("warning", "Not found", \`Nothing here at \${$route}.\`)`,
+_app_ = Stack([nav, page])`,
   },
   counter: {
     label: "JS counter",
-    code: `# Highlights: template literal label, @Clamp for safe arithmetic, optional chaining via ??.
+    code: `# Highlights: actions assign $atoms directly, @Clamp safe arithmetic, ?? for fallbacks.
 $count = 0
 
-root = Card([
-  CardHeader("JS counter", "Powered by a single @Js action."),
+action inc() { $count = ($count ?? 0) + 1 }
+action dec() { $count = ($count ?? 0) - 1 }
+action reset() { $count = 0 }
+
+_app_ = Card([
+  CardHeader("JS counter", subtitle: "Three actions, one $atom."),
   Stack([
-    TextContent(\`Current: \${@Clamp($count, -99, 99)}\`),
+    Text(\`Current: \${@Clamp($count, -99, 99)}\`),
     Stack([
-      Button("-",     Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") ?? 0) - 1)\`)])),
-      Button("Reset", Action([@Reset($count)]), "ghost"),
-      Button("+",     Action([@Js(\`ctx.state.set("count", (ctx.state.get("count") ?? 0) + 1)\`)]), "primary")
-    ], "row", "s")
+      Button("-",     action: dec),
+      Button("Reset", action: reset, variant: "ghost"),
+      Button("+",     action: inc,   variant: "primary")
+    ], direction: "row", gap: "s")
   ])
 ])`,
   },
@@ -180,119 +232,132 @@ root = Card([
     label: "Chart + metrics",
     code: `# Highlights: derived totals via @Sum + template literals, responsive Grid for chart row.
 $range = "7"
-root   = Stack([header, kpis, trendRow])
-header = PageHeader("Analytics", \`Daily traffic last \${$range} days\`)
-kpis   = Stats([
-  StatCard("Sessions",     \`\${@Format(@Sum(thisWk, "number"))}\`, "up",   \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, "chart-line"),
-  StatCard("Avg. duration","3m 12s",                          "flat", "stable", "clock"),
-  StatCard("Bounce rate",  "32%",                             "down", "-2%",    "arrow-trend-down")
-])
-trendRow = Grid([trend, breakdown], {sm: 1, md: 2}, "l")
-trend = Card([
-  CardHeader("Sessions"),
-  Stack([LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"], [Series("This week", thisWk), Series("Last week", lastWk)])])
-])
-breakdown = Card([
-  CardHeader("By channel"),
-  Stack([PieChart(["Organic","Direct","Referral"], [60, 25, 15])])
-])
 thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
-lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]`,
+lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]
+
+_app_ = Stack([
+  PageHeader("Analytics", subtitle: \`Daily traffic last \${$range} days\`),
+  Stats([
+    StatCard("Sessions",     value: \`\${@Format(@Sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line"),
+    StatCard("Avg duration", value: "3m 12s",                              trend: "flat", delta: "stable",                                                     icon: "clock"),
+    StatCard("Bounce rate",  value: "32%",                                 trend: "down", delta: "-2%",                                                        icon: "arrow-trend-down")
+  ]),
+  Grid([
+    Card([
+      CardHeader("Sessions"),
+      LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"],
+        series: [Series("This week", values: thisWk), Series("Last week", values: lastWk)])
+    ]),
+    Card([
+      CardHeader("By channel"),
+      PieChart(["Organic","Direct","Referral"], values: [60, 25, 15])
+    ])
+  ], columns: {sm: 1, md: 2}, gap: "l")
+])`,
   },
   dataGrid: {
     label: "DataGrid + bulk actions",
-    code: `# Highlights: sortable DataGrid, per-column filter chips, $$persistent selection, bulk-action toolbar.
-$$sort        = {key: "Score", direction: "desc"}
-$$selectedIds = []
-$$page        = 1
+    code: `# Highlights: sortable DataGrid, per-column filter chips, $-prefixed selection state, bulk-action toolbar.
+$sort = {key: "Score", direction: "desc"}
+$selectedIds = []
+$page = 1
 
 people = [
-  {id: "u01", name: "Ada Lovelace",   team: "Compilers",  score: 98, commits: 412},
-  {id: "u02", name: "Linus Torvalds", team: "Kernel",     score: 96, commits: 380},
-  {id: "u03", name: "Grace Hopper",   team: "Compilers",  score: 95, commits: 358},
-  {id: "u04", name: "Margaret Hamilton", team: "Apollo",  score: 94, commits: 340},
-  {id: "u05", name: "Donald Knuth",   team: "Algorithms", score: 93, commits: 322},
-  {id: "u06", name: "Anita Borg",     team: "Systems",    score: 91, commits: 296},
-  {id: "u07", name: "Tim Berners-Lee","team":"Web",        score: 90, commits: 284},
-  {id: "u08", name: "Barbara Liskov", team: "Compilers",  score: 89, commits: 272}
+  {id: "u01", name: "Ada Lovelace",      team: "Compilers",   score: 98, commits: 412},
+  {id: "u02", name: "Linus Torvalds",    team: "Kernel",      score: 96, commits: 380},
+  {id: "u03", name: "Grace Hopper",      team: "Compilers",   score: 95, commits: 358},
+  {id: "u04", name: "Margaret Hamilton", team: "Apollo",      score: 94, commits: 340},
+  {id: "u05", name: "Donald Knuth",      team: "Algorithms",  score: 93, commits: 322},
+  {id: "u06", name: "Anita Borg",        team: "Systems",     score: 91, commits: 296},
+  {id: "u07", name: "Tim Berners-Lee",   team: "Web",         score: 90, commits: 284},
+  {id: "u08", name: "Barbara Liskov",    team: "Compilers",   score: 89, commits: 272}
 ]
 
-bulkBar = @If(@Count($$selectedIds) > 0,
+bulkBar = if @Count($selectedIds) > 0 {
   Toolbar(
-    [Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
-    [Button("Email",  Action([@ToAssistant("Email selected")]),   "ghost",   "button", "small", "envelope"),
-     Button("Export", Action([@ToAssistant("Export selected")]),   "secondary","button", "small", "file-csv"),
-     Button("Clear",  Action([@Reset($$selectedIds)]),             "ghost",   "button", "small")]
-  ), null)
+    left: [Badge(\`\${@Count($selectedIds)} selected\`, tone: "primary", icon: "check", size: "sm")],
+    right: [
+      Button("Email",  variant: "ghost",     size: "small", icon: "envelope"),
+      Button("Export", variant: "secondary", size: "small", icon: "file-csv"),
+      Button("Clear",  action: () => { $selectedIds = [] }, variant: "ghost", size: "small")
+    ]
+  )
+} else {
+  null
+}
 
-root = Stack([
-  PageHeader("Top contributors", \`\${@Count(people)} engineers · sorted by \${$$sort.key} \${$$sort.direction}\`, ["Workspace","Engineering"]),
+_app_ = Stack([
+  PageHeader(
+    "Top contributors",
+    subtitle: \`\${@Count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+    breadcrumbs: ["Workspace", "Engineering"]
+  ),
   bulkBar,
   Card([
-    SectionHeader("Leaderboard", null, "DATAGRID", Badge("Live", "success", "circle", "sm")),
+    SectionHeader("Leaderboard", eyebrow: "DATAGRID", actions: [Badge("Live", tone: "success", icon: "circle", size: "sm")]),
     DataGrid([
-      Col("Id",    people.id,      "text",   "left",  false, false),
-      Col("Name",  people.name,    "text",   "left",  true,  true),
-      Col("Team",  people.team,    "text",   "left",  true,  true),
-      Col("Score", people.score,   "number", "right", true,  false),
-      Col("Commits", people.commits, "number","right", true,  false)
-    ], people.id, null, $$sort, $$selectedIds, true, $$page, 5, "No people match")
+      Col("Id",      values: people.id,      align: "left"),
+      Col("Name",    values: people.name,    align: "left",  sortable: true, filterable: true),
+      Col("Team",    values: people.team,    align: "left",  sortable: true, filterable: true),
+      Col("Score",   values: people.score,   align: "right", format: "number", sortable: true),
+      Col("Commits", values: people.commits, align: "right", format: "number", sortable: true)
+    ], rowIds: people.id, sort: $sort, selectedIds: $selectedIds, page: $page, perPage: 5, emptyLabel: "No people match")
   ])
 ])`,
   },
   calendar: {
     label: "CalendarView planner",
-    code: `# Highlights: CalendarView grid, OnboardingChecklist with $$persistent state, ActivityLog timeline.
+    code: `# Highlights: CalendarView grid, OnboardingChecklist with reactive state, ActivityLog timeline.
 $selectedDate = "2026-05-17"
-$$ob1 = false
-$$ob2 = false
-$$ob3 = false
+$ob1 = false
+$ob2 = false
+$ob3 = false
 
-obDone = @If($$ob1, 1, 0) + @If($$ob2, 1, 0) + @If($$ob3, 1, 0)
+$obDone = (if $ob1 { 1 } else { 0 }) + (if $ob2 { 1 } else { 0 }) + (if $ob3 { 1 } else { 0 })
 
 events = [
   {date: "2026-05-04", title: "Sprint planning", time: "09:00", tone: "primary"},
-  {date: "2026-05-12", title: "Standup",          time: "09:00", tone: "primary"},
-  {date: "2026-05-12", title: "1:1 · Ada",        time: "16:00", tone: "info"},
-  {date: "2026-05-15", title: "Release window",   time: "10:00", tone: "success"},
-  {date: "2026-05-17", title: "Demo day",          time: "14:30", tone: "success"},
-  {date: "2026-05-22", title: "Retro",             time: "16:00", tone: "info"}
+  {date: "2026-05-12", title: "Standup",         time: "09:00", tone: "primary"},
+  {date: "2026-05-12", title: "1:1 · Ada",       time: "16:00", tone: "info"},
+  {date: "2026-05-15", title: "Release window",  time: "10:00", tone: "success"},
+  {date: "2026-05-17", title: "Demo day",        time: "14:30", tone: "success"},
+  {date: "2026-05-22", title: "Retro",           time: "16:00", tone: "info"}
 ]
 
-root = Stack([
-  PageHeader("May 2026", \`\${@Count(events)} events · \${obDone}/3 onboarding\`),
+_app_ = Stack([
+  PageHeader("May 2026", subtitle: \`\${@Count(events)} events · \${$obDone}/3 onboarding\`),
   Grid([
     Card([
-      SectionHeader("Calendar", "Focus a day to see details", "PLANNER"),
-      CalendarView($selectedDate, "2026-05", events, "month")
+      SectionHeader("Calendar", subtitle: "Focus a day to see details", eyebrow: "PLANNER"),
+      CalendarView($selectedDate, month: "2026-05", events: events, view: "month")
     ]),
     Stack([
       Card([
-        SectionHeader("Onboarding", "Finish setup to enable publishing", "SETUP"),
+        SectionHeader("Onboarding", subtitle: "Finish setup to enable publishing", eyebrow: "SETUP"),
         OnboardingChecklist([
-          {title: "Connect calendar",      description: "Sync with Google.",     done: $$ob1, action: Action([@Set($$ob1, true)]), cta: "Connect"},
-          {title: "Invite teammates",      description: "Share an invite link.", done: $$ob2, action: Action([@Set($$ob2, true)]), cta: "Invite"},
-          {title: "Schedule first event",  description: "Pick a slot.",          done: $$ob3, action: Action([@Set($$ob3, true)]), cta: "Schedule"}
+          {title: "Connect calendar",     description: "Sync with Google.",     done: $ob1, action: () => { $ob1 = true }, cta: "Connect"},
+          {title: "Invite teammates",     description: "Share an invite link.", done: $ob2, action: () => { $ob2 = true }, cta: "Invite"},
+          {title: "Schedule first event", description: "Pick a slot.",          done: $ob3, action: () => { $ob3 = true }, cta: "Schedule"}
         ])
       ]),
       Card([
         SectionHeader("Activity"),
         ActivityLog([
-          {actor: "Ada",   title: "rescheduled All-hands",  time: "5m",  icon: "calendar-plus", tone: "primary"},
-          {actor: "Linus", title: "RSVPed to Demo day",     time: "1h",  icon: "circle-check",  tone: "success"},
-          {actor: "Grace", title: "added release window",   time: "1d",  icon: "rocket",        tone: "info"}
+          {actor: "Ada",   title: "rescheduled All-hands", time: "5m", icon: "calendar-plus", tone: "primary"},
+          {actor: "Linus", title: "RSVPed to Demo day",    time: "1h", icon: "circle-check",  tone: "success"},
+          {actor: "Grace", title: "added release window",  time: "1d", icon: "rocket",        tone: "info"}
         ])
       ])
-    ], "column", "l")
-  ], {sm: 1, lg: 2}, "l")
+    ], direction: "column", gap: "l")
+  ], columns: {sm: 1, lg: 2}, gap: "l")
 ])`,
   },
   media: {
     label: "Media gallery + Map",
     code: `# Highlights: Carousel hero, Gallery wired to Lightbox via $variable, VideoPlayer + AudioPlayer + Map.
-$slide        = 0
+$slide = 0
 $lightboxOpen = false
-$lightboxIdx  = 0
+$lightboxIdx = 0
 
 photos = [
   {src: "https://picsum.photos/seed/aurora-cliffs/1200/700",  caption: "Cliffs at dawn"},
@@ -303,146 +368,236 @@ photos = [
   {src: "https://picsum.photos/seed/aurora-aurora/1200/700",  caption: "Northern lights"}
 ]
 
-root = Stack([
-  PageHeader("Aurora Expedition", "Iceland · Aug 2026", ["Trips", "Aurora"]),
+slides = for p in photos { {src: p.src, alt: p.caption, caption: p.caption} }
+
+_app_ = Stack([
+  PageHeader("Aurora Expedition", subtitle: "Iceland · Aug 2026", breadcrumbs: ["Trips", "Aurora"]),
   Card([
     SectionHeader("Highlights"),
-    Carousel(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), $slide, "16:9", true)
+    Carousel(slides, activeIndex: $slide, ratio: "16:9", showDots: true)
   ]),
   Card([
-    SectionHeader("Photos", "Tap a thumbnail to zoom"),
-    Gallery(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), 3,
-      Action([@Set($lightboxIdx, 0), @Set($lightboxOpen, true)]))
+    SectionHeader("Photos", subtitle: "Tap a thumbnail to zoom"),
+    Gallery(slides, columns: 3, onSelect: () => { $lightboxIdx = 0; $lightboxOpen = true })
   ]),
   Grid([
-    Card([SectionHeader("Trailer"), VideoPlayer(
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
-      null, true, false, false, false, "Aurora Expedition trailer", "16:9")]),
-    Card([SectionHeader("Soundtrack"), AudioPlayer(
-      "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
-      null, "Northern Skies", "Aurora Strings")])
-  ], {sm: 1, md: 2}, "l"),
+    Card([
+      SectionHeader("Trailer"),
+      VideoPlayer(
+        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+        controls: true,
+        caption: "Aurora Expedition trailer",
+        ratio: "16:9"
+      )
+    ]),
+    Card([
+      SectionHeader("Soundtrack"),
+      AudioPlayer(
+        "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+        title: "Northern Skies",
+        artist: "Aurora Strings"
+      )
+    ])
+  ], columns: {sm: 1, md: 2}, gap: "l"),
   Card([
-    SectionHeader("Itinerary", "Six stops"),
-    Map(65.0, -16.0, 5, [
+    SectionHeader("Itinerary", subtitle: "Six stops"),
+    Map(65.0, lng: -16.0, zoom: 5, markers: [
       {lat: 64.1466, lng: -21.9426, label: "Reykjavík"},
       {lat: 64.7140, lng: -19.0608, label: "Highlands"},
       {lat: 65.6839, lng: -18.0907, label: "Akureyri"}
-    ], "320px")
+    ], height: "320px")
   ]),
-  Lightbox($lightboxOpen, $lightboxIdx, photos)
+  Lightbox(photos, open: $lightboxOpen, index: $lightboxIdx)
 ])`,
   },
   wizard: {
     label: "MultiStepForm wizard",
     code: `# Highlights: MultiStepForm steps, RichTextEditor, ColorPicker, PinInput, ValidationSummary.
-$step  = 0
+$step = 0
 $title = "Streaming UI v3 — release notes"
-$body  = "<h2>What's new</h2><p>Thirty new components — DataGrid, CalendarView, RichTextEditor, six charts.</p>"
-$tags  = ["release", "ui", "v3"]
+$body = "<h2>What's new</h2><p>Thirty new components — DataGrid, CalendarView, RichTextEditor, six charts.</p>"
+$tags = ["release", "ui", "v3"]
 $brand = "#6366f1"
-$pin   = ""
+$pin = ""
 
-errors = @Filter([
-  @If($title == "", {label: "title", message: "Title is required."}, null),
-  @If($pin.length != 4, {label: "pin",   message: "PIN must be 4 digits."}, null)
+$errors = @Filter([
+  if $title == "" { {label: "title", message: "Title is required."} } else { null },
+  if $pin.length != 4 { {label: "pin",   message: "PIN must be 4 digits."} } else { null }
 ], "label", "!=", null)
 
-publishGate = @If(@Count(errors) > 0,
-  Card([ValidationSummary(errors, "Fix these before publishing")]),
-  Card([Callout("success", "Ready to publish", "All gates passed.", "circle-check", true)]))
+publishGate = if @Count($errors) > 0 {
+  Card([ValidationSummary($errors, title: "Fix these before publishing")])
+} else {
+  Card([Callout("Ready to publish", tone: "success", description: "All gates passed.", icon: "circle-check", compact: true)])
+}
 
-root = Stack([
-  PageHeader(["Content", "Drafts", $title], "Compose, brand, gate, publish."),
+_app_ = Stack([
+  PageHeader($title, subtitle: "Compose, brand, gate, publish.", breadcrumbs: ["Content", "Drafts"]),
   MultiStepForm([
     {title: "Compose", details: "Title, body, tags", content: [
-      Card([SectionHeader("Body", null, "EDITOR"), FormSection("Post",
-        [FormControl("Title", Input("title", "Headline…", "text", null, $title)),
-         FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "200px")),
-         FormControl("Tags",  TagInput("tags", $tags, "Press enter to add"))],
-        "All fields stream into the preview.")])
+      Card([
+        SectionHeader("Body", eyebrow: "EDITOR"),
+        FormSection("Post", helper: "All fields stream into the preview.", children: [
+          FormControl("Title", field: Input("title", placeholder: "Headline…",     value: $title)),
+          FormControl("Body",  field: RichTextEditor("body", value: $body, placeholder: "Start composing…", minHeight: "200px")),
+          FormControl("Tags",  field: TagInput("tags", value: $tags, placeholder: "Press enter to add"))
+        ])
+      ])
     ]},
-    {title: "Brand",   details: "Pick an accent", content: [
-      Card([SectionHeader("Brand"), ColorPicker("brand", $brand, "Accent",
-        ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])])
+    {title: "Brand", details: "Pick an accent", content: [
+      Card([
+        SectionHeader("Brand"),
+        ColorPicker("brand", value: $brand, label: "Accent",
+          swatches: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])
+      ])
     ]},
-    {title: "Gate",    details: "4-digit PIN", content: [
-      Card([SectionHeader("Two-factor publish", null, "GATE"),
-        FormControl("PIN", PinInput("pin", 4, $pin, "numeric")),
-        publishGate])
+    {title: "Gate", details: "4-digit PIN", content: [
+      Card([
+        SectionHeader("Two-factor publish", eyebrow: "GATE"),
+        FormControl("PIN", field: PinInput("pin", length: 4, value: $pin, type: "numeric")),
+        publishGate
+      ])
     ]}
-  ], $step, Action([@ToAssistant("Publish the draft")]))
+  ], current: $step)
 ])`,
   },
   advancedCharts: {
     label: "Gauge, Heatmap, Radar, Scatter",
     code: `# Highlights: every new chart primitive in one dashboard.
-root = Stack([
-  PageHeader("Engineering analytics", "Quarterly view"),
+_app_ = Stack([
+  PageHeader("Engineering analytics", subtitle: "Quarterly view"),
   Stats([
-    StatCard("SLA",    "99.3%", "up",   "+0.2 pp", "shield-halved"),
-    StatCard("P95",    "112ms", "down", "-12 ms",  "gauge-high"),
-    StatCard("Errors", "0.42%", "flat", "stable",  "circle-exclamation"),
-    StatCard("MRR",    "$84k",  "up",   "+12%",    "sack-dollar")
+    StatCard("SLA",    value: "99.3%", trend: "up",   delta: "+0.2 pp", icon: "shield-halved"),
+    StatCard("P95",    value: "112ms", trend: "down", delta: "-12 ms",  icon: "gauge-high"),
+    StatCard("Errors", value: "0.42%", trend: "flat", delta: "stable",  icon: "circle-exclamation"),
+    StatCard("MRR",    value: "$84k",  trend: "up",   delta: "+12%",    icon: "sack-dollar")
   ]),
   Grid([
-    Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
-    Card([SectionHeader("P95 latency"), Gauge(112, 0, 250, "ms",             "primary", "lg")]),
-    Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,  "% requests",     "warning", "lg")])
-  ], {sm: 1, md: 3}, "l"),
+    Card([SectionHeader("SLA uptime"),  Gauge(99.3, min: 95, max: 100, caption: "Above target", tone: "success", size: "lg")]),
+    Card([SectionHeader("P95 latency"), Gauge(112,  min: 0,  max: 250, caption: "ms",           tone: "primary", size: "lg")]),
+    Card([SectionHeader("Error rate"),  Gauge(0.42, min: 0,  max: 5,   caption: "% requests",   tone: "warning", size: "lg")])
+  ], columns: {sm: 1, md: 3}, gap: "l"),
   Card([
-    SectionHeader("Signups · last 7 days", "Stacked by source"),
+    SectionHeader("Signups · last 7 days", subtitle: "Stacked by source"),
     LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-      [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
-       Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
-       Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])
+      series: [
+        Series("Organic",  values: [40, 52, 65, 78, 92, 105, 124]),
+        Series("Referral", values: [20, 28, 35, 42, 50, 60,  72]),
+        Series("Paid",     values: [10, 14, 18, 24, 30, 36,  44])
+      ])
   ]),
   Grid([
-    Card([SectionHeader("Office capacity"),
-      Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
-        [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])
+    Card([
+      SectionHeader("Office capacity"),
+      Heatmap(["Mon","Tue","Wed","Thu","Fri"], yLabels: ["9am","12pm","3pm","6pm"],
+        values: [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])
     ]),
-    Card([SectionHeader("Vendor scorecard"),
-      RadarChart(["Speed","Quality","Cost","Coverage","Trust"],
-        [Series("Atlas Cloud", [80,70,60,75,85]),
-         Series("Northwind",   [60,85,70,65,80])])
+    Card([
+      SectionHeader("Vendor scorecard"),
+      RadarChart(["Speed","Quality","Cost","Coverage","Trust"], series: [
+        Series("Atlas Cloud", values: [80,70,60,75,85]),
+        Series("Northwind",   values: [60,85,70,65,80])
+      ])
     ])
-  ], {sm: 1, md: 2}, "l"),
+  ], columns: {sm: 1, md: 2}, gap: "l"),
   Grid([
-    Card([SectionHeader("Sessions vs conversions"),
-      ScatterChart(
-        [Series("Cohort A", [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
-         Series("Cohort B", [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])],
-        "Sessions (k)", "Conversions")
+    Card([
+      SectionHeader("Sessions vs conversions"),
+      ScatterChart([
+        Series("Cohort A", values: [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
+        Series("Cohort B", values: [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])
+      ], xLabel: "Sessions (k)", yLabel: "Conversions")
     ]),
-    Card([SectionHeader("Response time"),
-      Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], null, 6)
+    Card([
+      SectionHeader("Response time"),
+      Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], bins: 6)
     ])
-  ], {sm: 1, md: 2}, "l")
+  ], columns: {sm: 1, md: 2}, gap: "l")
+])`,
+  },
+  storageConsole: {
+    label: "Storage + console globals",
+    code: `# Highlights: \`storage\` namespace (local / session / cookies), \`console\` forwarder, named-arg method calls.
+$name = storage.get("rui:demo:name")
+$theme = storage.session.get("rui:demo:theme")
+$consent = storage.cookies.get("rui:demo:consent")
+
+action saveName(value) {
+  storage.set("rui:demo:name", value)
+  $name = value
+  console.log("Saved name", value)
+}
+
+action setTheme(value) {
+  storage.session.set("rui:demo:theme", value)
+  $theme = value
+  console.info("Theme preference set to", value)
+}
+
+action acceptCookies() {
+  storage.cookies.set("rui:demo:consent", "accepted", expires: 30, path: "/", sameSite: "Lax")
+  $consent = "accepted"
+  console.warn("Cookies accepted — will persist for 30 days")
+}
+
+action clearAll() {
+  storage.clear()
+  storage.session.clear()
+  storage.cookies.clear()
+  $name = null
+  $theme = null
+  $consent = null
+  console.error("Cleared every storage namespace (demo only).")
+}
+
+_app_ = Stack([
+  PageHeader("Storage + console", subtitle: "All values persist across reloads via the matching browser API."),
+  Card([
+    SectionHeader("localStorage", eyebrow: "PERSISTENT"),
+    FormControl("Display name", field: Input("name", placeholder: "Your name", value: $name ?? "")),
+    Button("Save name", action: () => { saveName($name ?? "") }, variant: "primary")
+  ]),
+  Card([
+    SectionHeader("sessionStorage", eyebrow: "PER TAB"),
+    FormControl("Theme", field: Select("theme", items: [
+      SelectItem("light", "Light"),
+      SelectItem("dark",  "Dark"),
+      SelectItem("auto",  "Auto")
+    ], value: $theme ?? "auto")),
+    Button("Save theme", action: () => { setTheme($theme ?? "auto") })
+  ]),
+  Card([
+    SectionHeader("cookies", eyebrow: "NAMED ARGS"),
+    Text(\`Current consent: \${$consent ?? "—"}\`),
+    Stack([
+      Button("Accept cookies", action: acceptCookies, variant: "primary"),
+      Button("Reset everything", action: clearAll, variant: "ghost")
+    ], direction: "row", gap: "s")
+  ])
 ])`,
   },
   gridLayout: {
     label: "12-col grid + named args",
-    code: `# Highlights: Grid(columns=12), GridItem(span="1/4"), inline name=value props.
+    code: `# Highlights: Grid(columns: 12), GridItem(span: "1/4"), named-arg layout props.
 sidebar = Card([
-  CardHeader("Sidebar", "Named args: span='1/4'"),
+  CardHeader("Sidebar", subtitle: "GridItem span='1/4'"),
   Stack([
-    NavLink("Overview", "/", "ghost", true),
-    NavLink("Reports", "/reports",   "ghost"),
-    NavLink("Settings", "/settings", "ghost")
-  ], "column", "s")
+    NavLink("Overview", to: "/",         variant: "ghost"),
+    NavLink("Reports",  to: "/reports",  variant: "ghost"),
+    NavLink("Settings", to: "/settings", variant: "ghost")
+  ], direction: "column", gap: "s")
 ])
 
 content = Card([
-  CardHeader("Main workspace", "GridItem span='3/4' fills the rest"),
-  TextContent("Use Grid(columns=12, gap='l', [...]) with GridItem(child, span='1/4') for sidebar layouts.")
+  CardHeader("Main workspace", subtitle: "GridItem span='3/4' fills the rest"),
+  Text("Use Grid(columns: 12, gap: 'l', [...]) with GridItem(child, span: '1/4') for sidebar layouts.")
 ])
 
-root = Grid(columns=12, gap="l", [
-  GridItem(sidebar, span="1/4"),
-  GridItem(content, span="3/4")
-])`,
+_app_ = Grid([
+  GridItem(sidebar, span: "1/4"),
+  GridItem(content, span: "3/4")
+], columns: 12, gap: "l")`,
   },
 };
 
@@ -559,6 +714,201 @@ const debounce = (fn, ms) => {
 const langSpec = getLanguageSpec();
 const componentNames = new Set(langSpec.components.map((c) => c.name));
 
+/**
+ * Reserved language keywords — surfaced in autocomplete so the LLM-author
+ * (or a human) can discover the full grammar without leaving the editor.
+ * Mirror the lexer's `KEYWORDS_AKTION` set plus the contextual
+ * keywords (`on:mount`, `on:unmount`, `on:every`) that aren't true tokens
+ * but still appear at the surface.
+ */
+const LANGUAGE_KEYWORDS = [
+  { label: "component", info: "Declare a reusable component: `component Name(arg) { return ... }`." },
+  { label: "effect",    info: "Declare an anonymous side-effect: `effect [$atom, on:mount, debounce(N)] { ... }`." },
+  { label: "action",    info: "Declare a callable action body: `action save(payload) { ... }`." },
+  { label: "if",        info: "Expression-form `if cond { ... } else { ... }`." },
+  { label: "else",      info: "`else` arm of an `if` expression." },
+  { label: "match",     info: "Expression-form `match value { \"x\": A(), default: B() }`." },
+  { label: "for",       info: "Expression-form `for x in xs { Card(x) }`." },
+  { label: "in",        info: "Used in `for x in xs { ... }`." },
+  { label: "await",     info: "Wait for an HTTP / promise inside an action body." },
+  { label: "return",    info: "Return from a `component` / `action` / `effect` body." },
+  { label: "cleanup",   info: "Register a teardown handler inside an `effect` body." },
+  { label: "optimistic",info: "Mark an `action` as optimistic: `action save(...) optimistic { ... }`." },
+  { label: "on",        info: "Used inside `effect [...]` lifecycle deps: `on:mount`, `on:unmount`, `on:every(N)`." },
+  { label: "emit",      info: "Dispatch a custom event: `emit \"name\" { detail }`." },
+  { label: "bind",      info: "Two-way binding shorthand: `Input(bind:value: $name)`." },
+  { label: "default",   info: "Wildcard arm inside `_router_({...})` / `match`." },
+  { label: "on:mount",  info: "Effect trigger that fires once on mount." },
+  { label: "on:unmount",info: "Effect trigger that fires once on unmount." },
+  { label: "on:every",  info: "Effect trigger that fires every N ms: `on:every(1000)`." },
+];
+
+/**
+ * Reserved identifiers / special globals exposed by the runtime. Surfaced
+ * in autocomplete so authors learn the names — `_app_` and `_router_` are
+ * underscore-bracketed so they're easy to type but never collide with
+ * user identifiers.
+ */
+const SPECIAL_IDENTIFIERS = [
+  {
+    label: "_app_",
+    info: "Top-level entry binding — the renderer reads `_app_` to draw the UI.",
+    apply: "_app_ = ",
+  },
+  {
+    label: "_router_",
+    info: "Routing primitive. Pass an object literal whose keys are route patterns.",
+    apply: "_router_({\n  \"/\":     ${1:Home()},\n  default: ${2:NotFound()}\n})",
+    snippet: true,
+  },
+  {
+    label: "params",
+    info: "Inside an `_router_({...})` arm, holds the captured path segments (`params.id`, `params._`).",
+    apply: "params",
+  },
+  {
+    label: "_route_",
+    info: "Reserved router handle. Read-only reactive surface: `_route_.path`, `_route_.params`, `_route_.query`, `_route_.pattern`. Call `_route_.navigate(path)` to navigate imperatively.",
+    apply: "_route_",
+  },
+  {
+    label: "$http",
+    info: "HTTP runtime configuration binding: `$http = Http({ baseUrl, headers, retry, timeout })`.",
+    apply: "$http",
+  },
+  {
+    label: "$i18n",
+    info: "i18n runtime binding: `$i18n = i18n({ locale, messages, fallback })`.",
+    apply: "$i18n",
+  },
+  {
+    label: "theme",
+    info: "Per-response theme override: `theme = Theme({ colors: { primary: ... } })`.",
+    apply: "theme",
+  },
+];
+
+/**
+ * Top-level multi-line snippets — surfaced via the `…` ellipsis suffix
+ * so they show up alongside ordinary identifiers without polluting the
+ * inline completion list. Pulled from `langSpec.snippets` plus the
+ * language constructs (`component`, `action`, `effect`, `match`,
+ * `_router_`).
+ */
+const LANGUAGE_SNIPPETS = [
+  {
+    name: "router",
+    description: "Multi-page _router_({...}) with NavLink nav.",
+    template:
+      'pages = _router_({\n' +
+      '  "/":          ${1:Home()},\n' +
+      '  "/users/:id": ${2:UserPage(id: params.id)},\n' +
+      '  default:      ${3:NotFound()}\n' +
+      '})\n\n' +
+      'nav = Stack([\n' +
+      '  NavLink("Home",  to: "/",      variant: "ghost", exact: true),\n' +
+      '  NavLink("Users", to: "/users", variant: "ghost")\n' +
+      '], direction: "row", gap: "s")\n\n' +
+      '_app_ = Stack([nav, pages])',
+  },
+  {
+    name: "component",
+    description: "User-defined component with explicit return.",
+    template:
+      'component ${1:Name}(${2:prop}) {\n' +
+      '  return ${3:Card([CardHeader(${2:prop})])}\n' +
+      '}',
+  },
+  {
+    name: "action",
+    description: "Callable action block — invoked via `action:` props.",
+    template:
+      'action ${1:save}(${2:payload}) {\n' +
+      '  $${3:result} = http({ url: "/api/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
+      '}',
+  },
+  {
+    name: "effect",
+    description: "Side-effect block — anonymous, with bracketed dependency list.",
+    template:
+      'effect [$${1:dep}] {\n' +
+      '  ${2:// side effect body}\n' +
+      '  cleanup(() => { ${3:// teardown} })\n' +
+      '}',
+  },
+  {
+    name: "match",
+    description: "Pattern-matching expression — first match wins.",
+    template:
+      'match ${1:value} {\n' +
+      '  "${2:active}": ${3:onActive()},\n' +
+      '  default:    ${4:otherwise()}\n' +
+      '}',
+  },
+  {
+    name: "for",
+    description: "for-comprehension loop expression.",
+    template: 'for ${1:item} in ${2:items} { ${3:Card(${1:item})} }',
+  },
+  {
+    name: "if",
+    description: "Expression-form if / else.",
+    template:
+      'if ${1:cond} {\n' +
+      '  ${2:Body()}\n' +
+      '} else {\n' +
+      '  ${3:Fallback()}\n' +
+      '}',
+  },
+  {
+    name: "http",
+    description: "Reactive HTTP resource.",
+    template:
+      '$${1:data} = http({ url: "${2:/api/items}", method: "${3:GET}" })',
+  },
+];
+
+/**
+ * Built-in namespace globals — surfaced in autocomplete so authors can
+ * discover the `storage` / `console` API the same way they discover
+ * components and `@`-builtins.
+ */
+const GLOBAL_NAMESPACES = [
+  {
+    name: "storage",
+    signature: "storage.<local|session|cookies>?.<set|get|remove|clear>(...)",
+    description: "Browser storage namespace — localStorage (default), sessionStorage, and cookies share a uniform set/get/remove/clear surface.",
+    members: [
+      { label: "storage.set",            apply: "storage.set(\"${1:key}\", ${2:value})",                                                                                         info: "Persist a value to localStorage (default namespace)." },
+      { label: "storage.get",            apply: "storage.get(\"${1:key}\")",                                                                                                       info: "Read a value from localStorage. Returns null when missing." },
+      { label: "storage.remove",         apply: "storage.remove(\"${1:key}\")",                                                                                                    info: "Delete a key from localStorage." },
+      { label: "storage.clear",          apply: "storage.clear()",                                                                                                                  info: "Wipe every localStorage entry." },
+      { label: "storage.local.set",      apply: "storage.local.set(\"${1:key}\", ${2:value})",                                                                                     info: "Alias of `storage.set`." },
+      { label: "storage.local.get",      apply: "storage.local.get(\"${1:key}\")",                                                                                                  info: "Alias of `storage.get`." },
+      { label: "storage.session.set",    apply: "storage.session.set(\"${1:key}\", ${2:value})",                                                                                   info: "Per-tab sessionStorage write." },
+      { label: "storage.session.get",    apply: "storage.session.get(\"${1:key}\")",                                                                                                info: "Per-tab sessionStorage read." },
+      { label: "storage.session.remove", apply: "storage.session.remove(\"${1:key}\")",                                                                                             info: "Drop a sessionStorage entry." },
+      { label: "storage.session.clear",  apply: "storage.session.clear()",                                                                                                          info: "Wipe sessionStorage." },
+      { label: "storage.cookies.set",    apply: "storage.cookies.set(\"${1:key}\", ${2:value}, expires: ${3:7}, path: \"/\")",                                                       info: "Set a cookie. Named-arg options: expires, maxAge, path, domain, secure, sameSite." },
+      { label: "storage.cookies.get",    apply: "storage.cookies.get(\"${1:key}\")",                                                                                                info: "Read a cookie value." },
+      { label: "storage.cookies.remove", apply: "storage.cookies.remove(\"${1:key}\", path: \"/\")",                                                                                info: "Delete a cookie. Path/domain must match the original set call." },
+      { label: "storage.cookies.clear",  apply: "storage.cookies.clear()",                                                                                                          info: "Clear every cookie on this document." },
+    ],
+  },
+  {
+    name: "console",
+    signature: "console.<log|error|warn|info|debug>(...)",
+    description: "Forwards to the browser console. Useful for stream-time debugging without an `js{}` escape hatch.",
+    members: [
+      { label: "console.log",   apply: "console.log(${1})",   info: "Log a message at the default level." },
+      { label: "console.error", apply: "console.error(${1})", info: "Log an error." },
+      { label: "console.warn",  apply: "console.warn(${1})",  info: "Log a warning." },
+      { label: "console.info",  apply: "console.info(${1})",  info: "Log an informational message." },
+      { label: "console.debug", apply: "console.debug(${1})", info: "Log a verbose debug message." },
+    ],
+  },
+];
+
 // Build the inverse mapping (rui-* class → component name) for inspect mode.
 function kebab(name) {
   return name.replace(/[A-Z]/g, (m, i) => (i === 0 ? m.toLowerCase() : "-" + m.toLowerCase()));
@@ -607,7 +957,7 @@ function initPlayground(cm) {
   };
 
   const streamLanguage = lang.StreamLanguage.define({
-    name: "streaming-ui-script",
+    name: "aktion-app",
     startState: () => baseTokenizer.startState(),
     copyState: (s) => baseTokenizer.copyState(s),
     token: (stream, st) => {
@@ -638,76 +988,100 @@ function initPlayground(cm) {
   ]);
 
   // ---- Autocomplete sources ----
-  function completions(ctx) {
-    const word = ctx.matchBefore(/[\w@$]*/);
-    if (!word) return null;
-    if (word.from === word.to && !ctx.explicit) return null;
 
-    const text = word.text;
-    const options = [];
-
-    // @builtins
-    if (text.startsWith("@") || text === "") {
-      for (const b of langSpec.builtins) {
-        options.push({
-          label: `@${b.name}`,
-          type: "function",
-          info: () => makeInfoPopup(b.signature, b.description, b.params),
-          apply: `@${b.name}(`,
-        });
+  /**
+   * Inspect the slice of the current argument from the last comma (or `(`)
+   * at depth 0 inside `call.openParen` up to `pos`. Returns the raw text
+   * and the absolute start offset so completion handlers can compute the
+   * replace range precisely.
+   */
+  function readCurrentArg(text, call, pos) {
+    let i = call.openParen + 1;
+    let depth = 0;
+    let str = null;
+    let comment = null;
+    let argStart = i;
+    while (i < pos) {
+      const ch = text[i];
+      if (comment === "line") {
+        if (ch === "\n") comment = null;
+        i++; continue;
       }
-    }
-
-    // Components
-    if (!text.startsWith("@") && !text.startsWith("$")) {
-      for (const c of langSpec.components) {
-        const snippet = langSpec.snippets.find((s) => s.name === c.name);
-        const apply = snippet
-          ? autocomplete.snippet(snippet.template)
-          : autocomplete.snippet(`${c.name}(\${})`);
-        options.push({
-          label: c.name,
-          type: "class",
-          detail: c.group,
-          info: () => makeInfoPopup(c.signature, c.description, c.params),
-          apply,
-        });
+      if (comment === "block") {
+        if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; }
+        i++; continue;
       }
-    }
-
-    // Snippets (composite templates) — surface them as top-level completions
-    for (const s of langSpec.snippets) {
-      options.push({
-        label: s.name + "…",
-        type: "snippet",
-        detail: "snippet",
-        info: s.description,
-        apply: autocomplete.snippet(s.template),
-      });
-    }
-
-    // $variables — scan the program for stateRefs declared elsewhere.
-    if (text.startsWith("$") || ctx.explicit) {
-      const stateNames = scanStateRefs(ctx.state.doc.toString());
-      for (const name of stateNames) {
-        options.push({
-          label: `$${name}`,
-          type: "variable",
-          detail: "$state",
-        });
+      if (str) {
+        if (ch === "\\") { i += 2; continue; }
+        if (ch === str) str = null;
+        i++; continue;
       }
+      if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
+      if (ch === "#") { comment = "line"; i++; continue; }
+      if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
+      if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") { depth++; i++; continue; }
+      if (ch === ")" || ch === "]" || ch === "}") { depth--; i++; continue; }
+      if (ch === "," && depth === 0) { argStart = i + 1; }
+      i++;
     }
-
-    // Theme names
-    if (ctx.state.doc.lineAt(ctx.pos).text.match(/theme\s*=\s*$|"theme"\s*:\s*$|setTheme\(\s*$/)) {
-      for (const t of langSpec.themeNames) {
-        options.push({ label: `"${t}"`, type: "constant", detail: "theme" });
-      }
-    }
-
-    return { from: word.from, options, validFor: /[\w@$]*/ };
+    return { argStart, argText: text.slice(argStart, pos) };
   }
 
+  /**
+   * Collect named-arg names already used inside `call` so we can hide
+   * duplicates from the suggestion list. Walks every arg slot bounded by
+   * top-level commas; only `name:` shapes count.
+   */
+  function collectUsedNamedArgs(text, call) {
+    const used = new Set();
+    let i = call.openParen + 1;
+    let depth = 0;
+    let str = null;
+    let comment = null;
+    let argStart = i;
+    const len = text.length;
+    const consider = (start, end) => {
+      const chunk = text.slice(start, end).trim();
+      const m = chunk.match(/^([A-Za-z_][\w]*)\s*:/);
+      if (m) used.add(m[1]);
+    };
+    while (i < len) {
+      const ch = text[i];
+      if (comment === "line") {
+        if (ch === "\n") comment = null;
+        i++; continue;
+      }
+      if (comment === "block") {
+        if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; }
+        i++; continue;
+      }
+      if (str) {
+        if (ch === "\\") { i += 2; continue; }
+        if (ch === str) str = null;
+        i++; continue;
+      }
+      if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
+      if (ch === "#") { comment = "line"; i++; continue; }
+      if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
+      if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") { depth++; i++; continue; }
+      if (ch === ")" || ch === "]" || ch === "}") {
+        if (depth === 0) { consider(argStart, i); return used; }
+        depth--; i++; continue;
+      }
+      if (ch === "," && depth === 0) { consider(argStart, i); argStart = i + 1; }
+      i++;
+    }
+    consider(argStart, i);
+    return used;
+  }
+
+  /**
+   * Render a tiny inline doc body (signature + description + bullet list
+   * of params) for a completion's `info` callback. Used by both
+   * named-arg and top-level component completions.
+   */
   function makeInfoPopup(signature, description, params) {
     const wrap = document.createElement("div");
     wrap.style.maxWidth = "320px";
@@ -741,6 +1115,367 @@ function initPlayground(cm) {
       wrap.append(ul);
     }
     return wrap;
+  }
+
+  /**
+   * Build a small info DOM for a single named-arg suggestion (param spec)
+   * — name, type, enum values, description. Distinguished from the
+   * component-level popup by surfacing the enum values prominently.
+   */
+  function makeParamInfo(param) {
+    const wrap = document.createElement("div");
+    wrap.style.maxWidth = "300px";
+    wrap.style.fontSize = "12px";
+    wrap.style.lineHeight = "1.45";
+    const head = document.createElement("code");
+    head.style.display = "block";
+    head.style.padding = "4px 6px";
+    head.style.background = "rgba(0,0,0,.06)";
+    head.style.borderRadius = "4px";
+    head.style.marginBottom = "6px";
+    head.textContent = `${param.name}${param.required ? "" : "?"}: ${param.type}`;
+    wrap.append(head);
+    if (param.description) {
+      const p = document.createElement("p");
+      p.textContent = param.description;
+      p.style.margin = "0 0 6px";
+      p.style.color = "var(--doc-text-muted)";
+      wrap.append(p);
+    }
+    if (param.enumValues && param.enumValues.length > 0) {
+      const lbl = document.createElement("div");
+      lbl.style.color = "var(--doc-text-muted)";
+      lbl.style.fontSize = "11px";
+      lbl.style.textTransform = "uppercase";
+      lbl.style.letterSpacing = "0.05em";
+      lbl.textContent = "Allowed values";
+      lbl.style.marginBottom = "4px";
+      wrap.append(lbl);
+      const list = document.createElement("div");
+      list.style.display = "flex";
+      list.style.flexWrap = "wrap";
+      list.style.gap = "4px";
+      for (const v of param.enumValues) {
+        const badge = document.createElement("span");
+        badge.textContent = v;
+        badge.style.padding = "2px 6px";
+        badge.style.borderRadius = "4px";
+        badge.style.background = "rgba(99, 102, 241, 0.10)";
+        badge.style.color = "var(--doc-primary)";
+        badge.style.fontFamily = "monospace";
+        badge.style.fontSize = "11px";
+        list.append(badge);
+      }
+      wrap.append(list);
+    }
+    return wrap;
+  }
+
+  function completions(ctx) {
+    const text = ctx.state.doc.toString();
+    const pos = ctx.pos;
+
+    // What did the user just type? `matchBefore` returns the longest
+    // matching word + its absolute range, or null when the cursor sits
+    // on whitespace and the trigger wasn't explicit.
+    const word = ctx.matchBefore(/[\w@$_]*/);
+    if (!word) return null;
+
+    // ---------- Context: enclosing call ----------
+    const call = findEnclosingCall(text, pos);
+    if (call && call.name) {
+      const ctxKind = call.name.startsWith("@") ? "builtin" : "component";
+      const spec = ctxKind === "builtin"
+        ? langSpec.builtinsByName[call.name.slice(1)]
+        : langSpec.componentsByName[call.name];
+
+      if (spec) {
+        const { argStart, argText } = readCurrentArg(text, call, pos);
+
+        // CASE 1: cursor sits in a named-arg VALUE position
+        //         (`Button("Save", variant: <here>)`). Surface the enum
+        //         values inline so the user can tab through them.
+        const valueMatch = argText.match(/^\s*([A-Za-z_]\w*)\s*:\s*(.*)$/s);
+        if (valueMatch) {
+          const paramName = valueMatch[1];
+          const partialValue = valueMatch[2];
+          // Allow nested expression edits — only short-circuit when the
+          // partial value has no opening bracket that hasn't been closed.
+          const valueHasBracket =
+            /[(\[{`"']/.test(partialValue) &&
+            !looksClosed(partialValue);
+          if (!valueHasBracket) {
+            const param = spec.params.find((p) => p.name === paramName);
+            const enumOptions = enumValueOptions(param);
+            if (enumOptions.length > 0) {
+              // Token under the cursor inside the value — quote prefix
+              // is fine, we just want to replace whatever is being typed
+              // (including a leading `"`).
+              const valueStart = pos - partialValue.length;
+              return {
+                from: valueStart,
+                options: enumOptions,
+              };
+            }
+          }
+        }
+
+        // CASE 2: cursor sits at the start of an arg, OR is typing a
+        //         bare identifier with no colon after it. Suggest the
+        //         remaining named args of the enclosing call so the
+        //         user can fill them in `name:` form.
+        const couldBeNamedArgName = /^\s*[A-Za-z_]?[\w]*$/.test(argText);
+        if (couldBeNamedArgName && ctxKind === "component") {
+          const used = collectUsedNamedArgs(text, call);
+          const remaining = spec.params.filter((p) => !used.has(p.name));
+          if (remaining.length > 0) {
+            const options = remaining.map((p) => ({
+              label: `${p.name}:`,
+              type: "property",
+              detail: p.type + (p.required ? "" : " (optional)"),
+              boost: p.required ? 50 : 30,
+              info: () => makeParamInfo(p),
+              apply: applyNamedArg(p),
+            }));
+            // When we have something to offer for named args, return them
+            // as the only suggestions — anything else (component names,
+            // builtins) would be wrong here. The user can still escape
+            // with `Esc` if they want a positional value.
+            const from = word.from;
+            return { from, options, validFor: /[\w]*/ };
+          }
+        }
+      }
+    }
+
+    // ---------- General completions ----------
+    if (word.from === word.to && !ctx.explicit) return null;
+
+    const wordText = word.text;
+    const options = [];
+
+    // @builtins
+    if (wordText.startsWith("@") || wordText === "") {
+      for (const b of langSpec.builtins) {
+        options.push({
+          label: `@${b.name}`,
+          type: "function",
+          detail: b.category ?? "builtin",
+          info: () => makeInfoPopup(b.signature, b.description, b.params),
+          apply: `@${b.name}(`,
+        });
+      }
+    }
+
+    // Components (with snippet-aware apply)
+    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
+      for (const c of langSpec.components) {
+        const snippet = langSpec.snippets.find((s) => s.name === c.name);
+        const apply = snippet
+          ? autocomplete.snippet(snippet.template)
+          : autocomplete.snippet(componentCallTemplate(c));
+        options.push({
+          label: c.name,
+          type: "class",
+          detail: c.group,
+          info: () => makeInfoPopup(c.signature, c.description, c.params),
+          apply,
+        });
+      }
+    }
+
+    // Built-in namespace globals (`storage`, `console`).
+    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
+      for (const ns of GLOBAL_NAMESPACES) {
+        options.push({
+          label: ns.name,
+          type: "namespace",
+          detail: "global",
+          info: ns.description,
+          apply: `${ns.name}.`,
+        });
+        for (const member of ns.members) {
+          options.push({
+            label: member.label,
+            type: "method",
+            detail: ns.name,
+            info: member.info,
+            apply: autocomplete.snippet(member.apply),
+          });
+        }
+      }
+    }
+
+    // Language keywords (`if`, `match`, `for`, `component`, …).
+    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
+      for (const kw of LANGUAGE_KEYWORDS) {
+        options.push({
+          label: kw.label,
+          type: "keyword",
+          detail: "keyword",
+          info: kw.info,
+        });
+      }
+    }
+
+    // Reserved identifiers (`_app_`, `_router_`, `_route_`, `params`, …).
+    if (!wordText.startsWith("@")) {
+      for (const id of SPECIAL_IDENTIFIERS) {
+        if (wordText.startsWith("$") && !id.label.startsWith("$")) continue;
+        if (!wordText.startsWith("$") && id.label.startsWith("$") && wordText !== "") continue;
+        options.push({
+          label: id.label,
+          type: id.label.startsWith("$") ? "variable" : "constant",
+          detail: id.label.startsWith("_") ? "runtime" : "reactive",
+          info: id.info,
+          apply: id.snippet ? autocomplete.snippet(id.apply) : id.apply,
+        });
+      }
+    }
+
+    // Multi-line snippets — language-level templates first, then the
+    // library's component-shaped snippets.
+    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
+      for (const s of LANGUAGE_SNIPPETS) {
+        options.push({
+          label: s.name + "…",
+          type: "snippet",
+          detail: "language",
+          info: s.description,
+          apply: autocomplete.snippet(s.template),
+        });
+      }
+      for (const s of langSpec.snippets) {
+        // Skip snippets that are already surfaced as `LANGUAGE_SNIPPETS`
+        // (router) — they share a name and the language version is more
+        // up-to-date.
+        if (LANGUAGE_SNIPPETS.some((ls) => ls.name === s.name.toLowerCase())) continue;
+        options.push({
+          label: s.name + "…",
+          type: "snippet",
+          detail: "snippet",
+          info: s.description,
+          apply: autocomplete.snippet(s.template),
+        });
+      }
+    }
+
+    // $variables — scan the program for stateRefs declared elsewhere.
+    if (wordText.startsWith("$") || ctx.explicit) {
+      const stateNames = scanStateRefs(ctx.state.doc.toString());
+      for (const name of stateNames) {
+        options.push({
+          label: `$${name}`,
+          type: "variable",
+          detail: "$state",
+        });
+      }
+    }
+
+    // Theme names — fire when we're clearly in a theme=, "theme":, or
+    // setTheme( context.
+    if (ctx.state.doc.lineAt(ctx.pos).text.match(/theme\s*=\s*$|"theme"\s*:\s*$|setTheme\(\s*$/)) {
+      for (const t of langSpec.themeNames) {
+        options.push({ label: `"${t}"`, type: "constant", detail: "theme" });
+      }
+    }
+
+    return { from: word.from, options, validFor: /[\w@$_]*/ };
+  }
+
+  /**
+   * Build the apply text for a named-arg completion. For enum-typed
+   * params we prefer to insert the first allowed value as a placeholder
+   * the user can tab through; for plain string / number params we just
+   * leave the cursor after the colon. Boolean params get a `true` /
+   * `false` template choice.
+   */
+  function applyNamedArg(param) {
+    const enumValues = param.enumValues ?? [];
+    if (enumValues.length > 0) {
+      const choices = enumValues.map((v) => `"${v}"`).join("|");
+      return autocomplete.snippet(`${param.name}: \${1|${choices}|}`);
+    }
+    if (param.type === "boolean") {
+      return autocomplete.snippet(`${param.name}: \${1|true,false|}`);
+    }
+    if (param.type === "string") {
+      return autocomplete.snippet(`${param.name}: "\${1}"`);
+    }
+    if (param.type === "number") {
+      return autocomplete.snippet(`${param.name}: \${1:0}`);
+    }
+    return autocomplete.snippet(`${param.name}: \${1}`);
+  }
+
+  /**
+   * Suggestion list for a named arg's value position — enum values,
+   * theme names (for theme-shaped props), and `true` / `false` for
+   * boolean params. Returns an empty array when nothing useful to add.
+   */
+  function enumValueOptions(param) {
+    if (!param) return [];
+    const out = [];
+    if (param.enumValues && param.enumValues.length > 0) {
+      for (const v of param.enumValues) {
+        out.push({ label: `"${v}"`, type: "constant", detail: param.name });
+      }
+    }
+    if (param.type === "boolean") {
+      out.push({ label: "true",  type: "constant", detail: "boolean" });
+      out.push({ label: "false", type: "constant", detail: "boolean" });
+    }
+    if (/theme/i.test(param.name)) {
+      for (const t of langSpec.themeNames) {
+        out.push({ label: `"${t}"`, type: "constant", detail: "theme" });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Quick balanced-brackets / quotes check used to decide whether an
+   * already-started argument value is "still open" (i.e. the user is
+   * editing inside a nested expression and we shouldn't fire enum
+   * completions over the top of it).
+   */
+  function looksClosed(text) {
+    let depth = 0;
+    let str = null;
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (str) {
+        if (ch === "\\") { i += 1; continue; }
+        if (ch === str) str = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") { str = ch; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") { depth += 1; continue; }
+      if (ch === ")" || ch === "]" || ch === "}") { depth -= 1; continue; }
+    }
+    return depth <= 0 && str === null;
+  }
+
+  /**
+   * Compose a snippet template for a component call that pre-fills the
+   * canonical positional slot and exposes every required prop as a
+   * named-arg tab stop. Optional props are skipped so the inserted call
+   * stays minimal.
+   */
+  function componentCallTemplate(spec) {
+    if (!spec.params || spec.params.length === 0) return `${spec.name}()`;
+    const positional = spec.params.find((p) => p.positional || p.required) ?? spec.params[0];
+    const required = spec.params.filter((p) => p !== positional && p.required);
+    const stops = [];
+    let i = 1;
+    const posStop = `\${${i++}:${positional.name}}`;
+    if (required.length === 0) {
+      return `${spec.name}(${posStop})`;
+    }
+    for (const p of required) {
+      stops.push(`${p.name}: \${${i++}:${p.name}}`);
+    }
+    return `${spec.name}(${posStop}, ${stops.join(", ")})`;
   }
 
   function scanStateRefs(source) {
@@ -1134,7 +1869,7 @@ function initPlayground(cm) {
   // Make sure the custom element is upgraded before we start dispatching
   // property updates — otherwise the initial `response` assignment would
   // hit a plain HTMLElement and be lost.
-  customElements.whenDefined("streaming-ui-script").then(() => {
+  customElements.whenDefined("aktion-app").then(() => {
     scheduleViewerUpdate(true);
   });
 
@@ -1538,7 +2273,7 @@ function initPlayground(cm) {
         node instanceof Element &&
         node !== target &&
         node !== target.shadowRoot &&
-        node.tagName !== "STREAMING-UI-SCRIPT" &&
+        node.tagName !== "AKTION-APP" &&
         node.classList && node.classList.length > 0,
       );
       if (!el) return hideInspectOverlay();
@@ -1553,7 +2288,7 @@ function initPlayground(cm) {
       const el = path.find((node) =>
         node instanceof Element &&
         node.classList && node.classList.length > 0 &&
-        node.tagName !== "STREAMING-UI-SCRIPT",
+        node.tagName !== "AKTION-APP",
       );
       if (!el) return;
       const matched = matchComponentForElement(el);

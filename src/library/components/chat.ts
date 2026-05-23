@@ -3,8 +3,7 @@
  * These wrap content with the right typography for assistant responses.
  */
 
-import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
+import type { ComponentSpec, RenderHelpers } from "../types.js";
 import { el, asArray, asBoolean, asString } from "../utils.js";
 
 export const SectionBlock: ComponentSpec = {
@@ -44,7 +43,7 @@ export const ListBlock: ComponentSpec = {
 
 export const FollowUpBlock: ComponentSpec = {
   name: "FollowUpBlock",
-  description: "Suggested follow-up prompts shown as buttons. Each item triggers @ToAssistant.",
+  description: "Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit \"assistant-message\" { message }`).",
   props: [
     { name: "items", type: "FollowUpItem[]", description: "Array of FollowUpItem(label, message?), {label, message} objects, or plain strings" },
     { name: "title", type: "string", optional: true },
@@ -64,12 +63,12 @@ export const FollowUpBlock: ComponentSpec = {
 
 const buildFollowUpButton = (
   item: unknown,
-  helpers: { runAction: (payload: unknown) => void },
+  helpers: Pick<RenderHelpers, "sendToAssistant">,
 ): HTMLButtonElement => {
   const { label, message } = extractFollowUp(item);
   const button = el("button", { class: "rui-follow-up-button", type: "button" }, [label]);
   button.onclick = () => {
-    helpers.runAction({ kind: "Action", steps: [{ kind: "ToAssistant", message }] });
+    helpers.sendToAssistant(message);
   };
   return button;
 };
@@ -103,7 +102,7 @@ export const FollowUpItem: ComponentSpec = {
     const message = asString(props.message, label);
     const button = el("button", { class: "rui-follow-up-button", type: "button" }, [label]);
     button.onclick = () => {
-      helpers.runAction({ kind: "Action", steps: [{ kind: "ToAssistant", message }] });
+      helpers.sendToAssistant(message);
     };
     return button;
   },
@@ -114,13 +113,13 @@ export const ActionLink: ComponentSpec = {
   description: "Inline link that runs an Action when clicked instead of navigating.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "Action" },
+    { name: "action", type: "callable", aliases: ["onClick", "onclick"] },
   ],
   render: (_node, props, helpers) => {
     const link = el("a", { class: "rui-action-link", href: "#", role: "button" }, [asString(props.label)]);
     link.onclick = (event) => {
       event.preventDefault();
-      if (isActionPayload(props.action)) helpers.runAction(props.action);
+      helpers.invoke(props.action);
     };
     return link;
   },

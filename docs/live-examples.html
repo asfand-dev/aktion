@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Live demos · streaming-ui-script</title>
+  <title>Live demos · Aktion</title>
   <meta name="description" content="Every live example, in one place — chat, dashboards, commerce, routing, JavaScript apps, with source." />
   <script>
     (function () {
@@ -142,25 +142,7 @@
 </head>
 <body data-page="live-demos">
   <div class="layout" data-wide="true">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="live-examples.html">Live examples</a>
-        <a href="playground.html">Playground</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
@@ -179,15 +161,15 @@
         <p>
           Filter the catalog by tag (LLM streaming, JavaScript, routing,
           patterns…) and pop the demo into a new tab. Each demo shows the
-          full Streaming UI Script source, the tools wiring, and the rendered
+          full Aktion source, the tools wiring, and the rendered
           UI — so you can copy any pattern straight into your own app.
         </p>
         <p style="margin-top:8px">
           Looking for a focused walkthrough of how buttons, forms, and
           follow-ups wire to the runtime? Read the
           <a href="actions.html">Actions guide</a> — it covers
-          <code>Action([...])</code>, every action step, and the components
-          that accept them.
+          <code>action Name() { ... }</code> blocks, every step-equivalent
+          statement, and the components that accept them.
         </p>
       </div>
 
@@ -195,22 +177,6 @@
         <div class="live-section-head">
           <h2>All live examples</h2>
           <span class="live-section-meta" id="live-count"></span>
-        </div>
-        <p class="live-section-sub">
-          Tap a tag to narrow the catalog. Reset to "All" to see every demo.
-        </p>
-        <div class="live-filter" role="group" aria-label="Filter live examples">
-          <button type="button" data-tag="all" aria-pressed="true">All</button>
-          <button type="button" data-tag="llm" aria-pressed="false">LLM &amp; streaming</button>
-          <button type="button" data-tag="tools" aria-pressed="false">Tools &amp; data</button>
-          <button type="button" data-tag="patterns" aria-pressed="false">Patterns</button>
-          <button type="button" data-tag="app-shell" aria-pressed="false">App shells</button>
-          <button type="button" data-tag="javascript" aria-pressed="false">JavaScript</button>
-          <button type="button" data-tag="routing" aria-pressed="false">Routing</button>
-          <button type="button" data-tag="commerce" aria-pressed="false">Commerce &amp; content</button>
-          <button type="button" data-tag="media" aria-pressed="false">Media &amp; editors</button>
-          <button type="button" data-tag="data" aria-pressed="false">Data &amp; charts</button>
-          <button type="button" data-tag="theming" aria-pressed="false">Theming</button>
         </div>
         <div class="live-grid" id="live-grid">
           <a class="live-card" href="live-example.html?example=data-explorer" data-tags="data patterns">
@@ -220,7 +186,7 @@
               <span class="live-card-pill">New</span>
             </div>
             <h3>Data explorer</h3>
-            <p>A full analytics surface — sortable <code>DataGrid</code> with bulk-action toolbar, <code>Gauge</code> SLA dials, <code>AreaChart</code>, <code>Heatmap</code>, <code>RadarChart</code>, <code>ScatterChart</code>, <code>Histogram</code>, <code>InfiniteList</code>, and <code>AuditTrail</code>.</p>
+            <p>A full analytics surface — sortable <code>DataGrid</code> with bulk-action toolbar, <code>Gauge</code> SLA dials, filled <code>LineChart</code>, <code>Heatmap</code>, <code>RadarChart</code>, <code>ScatterChart</code>, <code>Histogram</code>, <code>InfiniteList</code>, and <code>ActivityLog</code>.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
           <a class="live-card" href="live-example.html?example=media-gallery" data-tags="media patterns commerce">
@@ -238,16 +204,7 @@
               <span class="live-card-pill">New</span>
             </div>
             <h3>Content studio</h3>
-            <p>A CMS-style authoring surface: <code>RichTextEditor</code>, <code>CodeEditor</code>, <code>MultiStepForm</code>, <code>ColorPicker</code>, <code>TagInput</code>, <code>MentionInput</code>, <code>PinInput</code>/<code>OtpInput</code>, plus <code>ValidationSummary</code> and the new <code>TopBar</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=scheduler" data-tags="patterns app-shell">
-            <div class="live-card-pills">
-              <span class="live-card-pill">CalendarView</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Scheduler &amp; onboarding</h3>
-            <p>Full-month <code>CalendarView</code>, an <code>OnboardingChecklist</code>, an <code>InboxPanel</code>, an <code>ActivityLog</code>, and three state primitives (<code>LoadingState</code>/<code>ErrorState</code>/<code>SuccessState</code>) wired through one <code>@Switch</code>.</p>
+            <p>A CMS-style authoring surface: <code>RichTextEditor</code>, <code>CodeEditor</code>, <code>MultiStepForm</code>, <code>ColorPicker</code>, <code>TagInput</code>, <code>MentionInput</code>, <code>PinInput</code>, plus <code>ValidationSummary</code> and the new <code>TopBar</code>.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
           <a class="live-card" href="brand-themes.html" data-tags="theming patterns">
@@ -259,64 +216,14 @@
             <p>The same dashboard reskinned to GitHub, Apple, Stripe, IONOS, Notion, and Vercel — using only a <code>theme = Theme({...})</code> line in the script.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
-          <a class="live-card" href="chat-bot.html" data-tags="llm tools">
+          <a class="live-card" href="chat-bot.html" data-tags="llm tools files images">
             <div class="live-card-pills">
               <span class="live-card-pill">Streaming</span>
-              <span class="live-card-pill">OpenAI</span>
+              <span class="live-card-pill">OpenRouter</span>
+              <span class="live-card-pill">Image + PDF upload</span>
             </div>
             <h3>Chat bot</h3>
-            <p>OpenAI-powered chat that streams replies straight into the renderer. Bring your own API key.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="chat-bot-advanced.html" data-tags="llm tools theming">
-            <div class="live-card-pills">
-              <span class="live-card-pill">4-stage pipeline</span>
-              <span class="live-card-pill">14+ intents</span>
-              <span class="live-card-pill">Brief · Blueprint · UI</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Chat bot · advanced pipeline</h3>
-            <p>Production-grade pipeline that turns one prompt into a hostable product: brief → blueprint (pages + schemas + sample records) → brand <code>Theme({...})</code> → specialised generator (dashboard, app, website, storefront, CRM, booking, directory, portfolio, docs, form, data-view, profile, …). Includes per-turn refine and a saved-apps gallery.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=tools-example" data-tags="tools">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Tools</span>
-            </div>
-            <h3>Tools integration</h3>
-            <p>Read, write, and poll patterns wired to in-page <code>setTools()</code> handlers.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=support-agent" data-tags="llm tools">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Async tools</span>
-            </div>
-            <h3>Support agent</h3>
-            <p>AI triage workspace: pick a ticket, the agent suggests priority, routing, and a draft reply.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=analytics-assistant" data-tags="llm tools patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">NL → chart</span>
-            </div>
-            <h3>Analytics assistant</h3>
-            <p>Type a question about revenue, signups, or churn — the renderer composes the right chart, KPIs, and breakdown.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=javascript-todo-app" data-tags="javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">JS · Script + tools</span>
-            </div>
-            <h3>Todo app (localStorage)</h3>
-            <p>A full reactive todo list with filters, keyboard shortcut, and localStorage persistence — wired via <code>Query</code>, <code>Mutation</code>, and a single <code>Script</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=javascript-stopwatch" data-tags="javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">JS · rAF + cleanup</span>
-            </div>
-            <h3>Stopwatch + laps</h3>
-            <p>Sub-second precision via <code>requestAnimationFrame</code>, lap splits, and proper teardown when the timer pauses.</p>
+            <p>OpenRouter-powered chat that streams replies straight into the renderer. Bring your own API key, attach images / PDFs, switch between chat, website, and app modes.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
           <a class="live-card" href="live-example.html?example=routing-demo" data-tags="routing">
@@ -324,31 +231,7 @@
               <span class="live-card-pill">Routing · hash-based</span>
             </div>
             <h3>Multi-page routing</h3>
-            <p>A four-page app driven by <code>Routes</code> + <code>NavLink</code> + <code>@Navigate</code>. Deep links, browser back/forward, and <code>$route</code> reactivity.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=app-workspace" data-tags="patterns app-shell">
-            <div class="live-card-pills">
-              <span class="live-card-pill">App shell</span>
-            </div>
-            <h3>App workspace</h3>
-            <p>A full SaaS workspace with sticky <code>Sidebar</code>, topbar, <code>MetricGrid</code>, status pips, timeline, and a <code>DescriptionList</code> summary — all from one program.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=marketing-landing" data-tags="patterns commerce">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Landing</span>
-            </div>
-            <h3>Marketing landing</h3>
-            <p>Hero, feature grid, pricing tiers, testimonials, team line-up, FAQ, and a closing banner — generated from one program.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=team-directory" data-tags="patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Directory</span>
-            </div>
-            <h3>Team directory</h3>
-            <p>Profile cards, avatar groups, search-with-pagination, an empty state, and a slide-in <code>Sheet</code> for full member detail.</p>
+            <p>A four-page app driven by a top-level <code>pages = _router_({ ... })</code> call, <code>NavLink</code>, and <code>_route_.navigate(...)</code> from action bodies. Deep links, browser back/forward, and <code>_route_</code> reactivity.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
           <a class="live-card" href="live-example.html?example=settings-app" data-tags="patterns">
@@ -356,100 +239,9 @@
               <span class="live-card-pill">Settings</span>
             </div>
             <h3>Settings app</h3>
-            <p>Tabs, <code>Switch</code>, <code>ToggleGroup</code>, <code>Progress</code>, <code>Kbd</code>, and a danger-zone confirmation <code>Sheet</code>.</p>
+            <p>Tabs, <code>Switch</code>, <code>ToggleGroup</code>, <code>Progress</code>, <code>Kbd</code>, and a danger-zone confirmation <code>Drawer</code>.</p>
             <span class="live-card-arrow">Open demo →</span>
           </a>
-          <a class="live-card" href="live-example.html?example=ecommerce-product" data-tags="patterns commerce">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Commerce</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Product detail</h3>
-            <p>An end-to-end product page — <code>Cover</code> hero, <code>MediaCard</code> related items, <code>Rating</code>, <code>ProgressRing</code>, <code>Stats</code>, and review chat bubbles.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=inbox-app" data-tags="patterns app-shell">
-            <div class="live-card-pills">
-              <span class="live-card-pill">SplitView</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Inbox app</h3>
-            <p>A focused mail/chat inbox — <code>SplitView</code>, <code>SearchBar</code>, <code>PersonChip</code>, <code>Notification</code>, and a threaded conversation built from <code>ChatBubble</code>s.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=pricing-page" data-tags="patterns commerce">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Pricing</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Pricing page</h3>
-            <p>A polished pricing surface: <code>Cover</code>, <code>Stats</code> trust strip, <code>PricingTable</code>, <code>FeatureGrid</code>, <code>Quote</code>, FAQ, and a closing CTA.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=crm-contacts" data-tags="patterns tools">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Directory</span>
-            </div>
-            <h3>CRM contacts</h3>
-            <p>A directory view with <code>SearchBar</code>, segmented filters, <code>Tile</code> quick stats, paginated person cards, and a slide-in detail <code>Sheet</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=status-page" data-tags="patterns tools">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Monitoring</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Status page</h3>
-            <p>A public SRE status page: incident <code>Banner</code>, <code>MetricGrid</code>, latency <code>LineChart</code>, services with <code>StatusDot</code> pulses, and a <code>Timeline</code> of incidents.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=file-manager" data-tags="patterns app-shell">
-            <div class="live-card-pills">
-              <span class="live-card-pill">File browser</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>File manager</h3>
-            <p>A Dropbox-style explorer: <code>Tree</code> sidebar, <code>Toolbar</code> with view toggle, <code>Table</code> of files, slide-in preview <code>Sheet</code>, and a storage <code>ProgressRing</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=calendar-app" data-tags="patterns tools">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Calendar</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Calendar &amp; scheduler</h3>
-            <p>Agenda view with <code>DatePicker</code>, category chips, busy-hours <code>ProgressRing</code>, day <code>Timeline</code>, and a detail <code>Sheet</code> with attendees and RSVP.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=docs-portal" data-tags="patterns commerce">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Help center</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Docs portal</h3>
-            <p>A help-center surface: <code>SearchBar</code>, <code>Tree</code> categories, <code>Markdown</code> article body, <code>Rating</code>-driven feedback, related <code>MediaCard</code> grid, and FAQ <code>Accordion</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=issue-tracker" data-tags="patterns app-shell">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Kanban</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Issue tracker</h3>
-            <p>A Linear-style tracker: <code>KanbanBoard</code> with priority/assignee filters, <code>Tile</code> quick stats, <code>Timeline</code> of activity, an <code>AvatarGroup</code> squad row, and a slide-in detail <code>Sheet</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-          <a class="live-card" href="live-example.html?example=expense-tracker" data-tags="patterns commerce">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Finance</span>
-              <span class="live-card-pill">Charts</span>
-              <span class="live-card-pill">New</span>
-            </div>
-            <h3>Expense tracker</h3>
-            <p>Personal finance dashboard: 6-month <code>LineChart</code>, category <code>BarChart</code>, <code>ProgressRing</code> savings goal, per-budget <code>Progress</code> bars, and a filterable transaction list with a detail <code>Sheet</code>.</p>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
         </div>
         <div class="live-empty" id="live-empty" hidden>No live examples match this filter.</div>
       </section>

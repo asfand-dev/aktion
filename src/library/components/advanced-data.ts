@@ -13,7 +13,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 
 const COL_ALIGN = ["left", "center", "right"] as const;
@@ -97,7 +96,7 @@ export const DataGrid: ComponentSpec = {
     { name: "page", type: "number", optional: true, description: "1-indexed current page — bind a $variable" },
     { name: "perPage", type: "number", optional: true, description: "Page size (default 20)" },
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no rows match (default `No results`)" },
-    { name: "rowAction", type: "Action", optional: true, description: "Action fired when a row is clicked" },
+    { name: "rowAction", type: "callable", optional: true, description: "Callable fired when a row is clicked" },
     { name: "toolbar", type: "Node[]", optional: true, description: "Bulk-action toolbar shown above the table when any rows are selected" },
     { name: "density", type: "string", optional: true, enum: ["comfortable", "compact"] },
     { name: "striped", type: "boolean", optional: true },
@@ -210,10 +209,7 @@ export const DataGrid: ComponentSpec = {
             const id = idFor(r);
             if (target.checked) next.add(id); else next.delete(id);
           }
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: selectedStateName, value: Array.from(next) }],
-          });
+          helpers.setState(selectedStateName, Array.from(next));
         };
       }
       th.append(cb);
@@ -240,10 +236,7 @@ export const DataGrid: ComponentSpec = {
         if (dirNode) btn.append(dirNode);
         btn.onclick = () => {
           const nextDir = col.key === sortKey && sortDir === "asc" ? "desc" : "asc";
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: sortStateName, value: { key: col.key, direction: nextDir } }],
-          });
+          helpers.setState(sortStateName, { key: col.key, direction: nextDir });
         };
         th.append(btn);
       } else {
@@ -270,9 +263,11 @@ export const DataGrid: ComponentSpec = {
             const target = event.currentTarget as HTMLInputElement;
             const next = { ...filterSlot.get(), [col.key]: target.value };
             filterSlot.set(next);
-            // Re-render the table body in place — cheap because we walk the
-            // live DOM rather than triggering a full state-driven render.
-            requestRebody();
+            // Resolve the *live* tbody from the input target — the
+            // closure-captured `wrapper`/`tbody` references are detached
+            // once morph keeps the previously mounted grid in place.
+            const liveTbody = target.closest("table")?.querySelector("tbody") as HTMLElement | null;
+            requestRebody(liveTbody);
           };
           td.append(input);
         }
@@ -317,10 +312,7 @@ export const DataGrid: ComponentSpec = {
               const target = event.currentTarget as HTMLInputElement;
               const next = new Set(selectedIds);
               if (target.checked) next.add(id); else next.delete(id);
-              helpers.runAction({
-                kind: "Action",
-                steps: [{ kind: "Set", name: selectedStateName, value: Array.from(next) }],
-              });
+              helpers.setState(selectedStateName, Array.from(next));
             };
           }
           cellTd.append(cb);
@@ -341,21 +333,20 @@ export const DataGrid: ComponentSpec = {
           }
           tr.append(td);
         });
-        if (isActionPayload(props.rowAction)) {
+        if (typeof props.rowAction === "function") {
           tr.setAttribute("data-clickable", "true");
           tr.onclick = (event) => {
             const target = event.target as Element | null;
             if (target?.closest("input,button,a,label,select,textarea")) return;
-            helpers.runAction(props.rowAction);
+            helpers.invoke(props.rowAction);
           };
         }
         tbody.append(tr);
       }
     };
 
-    const requestRebody = (): void => {
-      const liveRoot = wrapper.isConnected ? wrapper : null;
-      const liveTbody = liveRoot?.querySelector("tbody") ?? tbody;
+    const requestRebody = (liveOverride?: HTMLElement | null): void => {
+      const liveTbody = liveOverride ?? tbody;
       const localFilters = filterSlot.get();
       const filtered: number[] = [];
       for (let r = 0; r < rowCount; r += 1) {
@@ -456,11 +447,11 @@ export const DataGrid: ComponentSpec = {
       if (pageStateName) {
         prev.onclick = () => {
           if (page <= 1) return;
-          helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: pageStateName, value: page - 1 }] });
+          helpers.setState(pageStateName, page - 1);
         };
         next.onclick = () => {
           if (page >= totalPages) return;
-          helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: pageStateName, value: page + 1 }] });
+          helpers.setState(pageStateName, page + 1);
         };
       }
       buttons.append(prev);
@@ -531,7 +522,7 @@ export const CalendarView: ComponentSpec = {
     { name: "events", type: "object[]", optional: true, description: "Array of {date, title, tone?, time?} objects" },
     { name: "view", type: "string", optional: true, enum: ["month", "week"] },
     { name: "firstDay", type: "number", optional: true, description: "0=Sunday, 1=Monday (default 1)" },
-    { name: "onSelect", type: "Action", optional: true, description: "Action fired when a day is clicked (write to a $variable via @Set if needed)" },
+    { name: "onSelect", type: "callable", optional: true, description: "Callable fired when a day is clicked; receives the ISO date string" },
   ],
   render: (node, props, helpers) => {
     const view = asString(props.view, "month");
@@ -630,13 +621,8 @@ export const CalendarView: ComponentSpec = {
         dayBtn.append(evts);
       }
       dayBtn.onclick = () => {
-        if (onSelectState) {
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: onSelectState, value: iso }],
-          });
-        }
-        if (isActionPayload(props.onSelect)) helpers.runAction(props.onSelect);
+        if (onSelectState) helpers.setState(onSelectState, iso);
+        helpers.invoke(props.onSelect, iso);
       };
       grid.append(dayBtn);
     }
@@ -812,13 +798,13 @@ export const InfiniteList: ComponentSpec = {
   name: "InfiniteList",
   description:
     "Vertical list that fires `onLoadMore` when the user scrolls near the " +
-    "bottom. Pass already-rendered child nodes as `items`; the runtime is " +
-    "responsible for appending more items into the bound state from the " +
-    "Action (typically a `@Run(load_more)` Mutation). Use `loading=true` " +
-    "to show the spinner row, `hasMore=false` to suppress further loads.",
+    "bottom. Pass already-rendered child nodes as `items`; wire `onLoadMore` " +
+    "to an `action` that awaits a `$mutation` or `$query` (e.g. " +
+    "`await loadMore.invoke()`) and appends to the bound state. Use " +
+    "`loading=true` to show the spinner row, `hasMore=false` to suppress further loads.",
   props: [
     { name: "items", type: "Node[]", description: "Already-rendered child nodes" },
-    { name: "onLoadMore", type: "Action", optional: true, description: "Action fired when the sentinel scrolls into view" },
+    { name: "onLoadMore", type: "callable", optional: true, description: "Callable fired when the sentinel scrolls into view" },
     { name: "loading", type: "boolean", optional: true },
     { name: "hasMore", type: "boolean", optional: true, description: "Default true — set false to hide the sentinel" },
     { name: "loaderLabel", type: "string", optional: true, description: "Label rendered while loading (default `Loading…`)" },
@@ -836,24 +822,24 @@ export const InfiniteList: ComponentSpec = {
         const spin = renderIcon("spinner", { className: "rui-infinite-list-spin" });
         if (spin) sentinel.append(spin);
         sentinel.append(el("span", {}, [asString(props.loaderLabel, "Loading…")]));
-      } else if (isActionPayload(props.onLoadMore)) {
+      } else if (typeof props.onLoadMore === "function") {
         const btn = el("button", {
           type: "button",
           class: "rui-infinite-list-load-more",
         }, ["Load more"]);
-        btn.onclick = () => helpers.runAction(props.onLoadMore);
+        btn.onclick = () => helpers.invoke(props.onLoadMore);
         sentinel.append(btn);
       }
       root.append(sentinel);
-      // Lightweight IntersectionObserver fallback — fires the load action
+      // Lightweight IntersectionObserver fallback — fires the load callback
       // when the sentinel enters the viewport. Cleaned up automatically
       // when the list is unmounted.
-      if (!loading && isActionPayload(props.onLoadMore) && typeof IntersectionObserver !== "undefined") {
-        const action = props.onLoadMore;
+      if (!loading && typeof props.onLoadMore === "function" && typeof IntersectionObserver !== "undefined") {
+        const callback = props.onLoadMore;
         const observer = new IntersectionObserver((entries) => {
           for (const entry of entries) {
             if (entry.isIntersecting) {
-              helpers.runAction(action);
+              helpers.invoke(callback);
               break;
             }
           }

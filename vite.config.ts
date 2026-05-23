@@ -1,16 +1,27 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import dts from "vite-plugin-dts";
 
 export default defineConfig({
+  plugins: [
+    dts({
+      outDir: "dist/types",
+      include: ["src/**/*"],
+      entryRoot: "src",
+      insertTypesEntry: false,
+      copyDtsFiles: false,
+      rollupTypes: false,
+    }),
+  ],
   build: {
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
-      name: "StreamingUiScript",
+      name: "Aktion",
       formats: ["es", "umd", "iife"],
       fileName: (format) => {
-        if (format === "es") return "streaming-ui-script.js";
-        if (format === "iife") return "streaming-ui-script.iife.js";
-        return "streaming-ui-script.umd.cjs";
+        if (format === "es") return "aktion.js";
+        if (format === "iife") return "aktion.iife.js";
+        return "aktion.umd.cjs";
       },
     },
     cssCodeSplit: false,
@@ -22,7 +33,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         assetFileNames: (asset) => {
-          if (asset.name?.endsWith(".css")) return "streaming-ui-script.css";
+          if (asset.name?.endsWith(".css")) return "aktion.css";
           return "assets/[name]-[hash][extname]";
         },
       },

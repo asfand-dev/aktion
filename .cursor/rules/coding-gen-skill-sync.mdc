@@ -6,7 +6,7 @@ alwaysApply: true
 # Keep coding-gen-skill.md in sync with the codebase
 
 `coding-gen-skill.md` is the **deep knowledge base** that teaches LLMs how to
-author complete applications in Streaming UI Script. It documents every
+author complete applications in Aktion. It documents every
 component signature, builtin, action step, theme, application pattern, and
 authoring rule the runtime exposes. If it drifts, every LLM consuming this
 library will generate broken or stylistically wrong responses.

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Side effects · Aktion</title>
+  <meta name="description" content="The effect block — anonymous, declarative side effects with a bracketed dependency list mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="side-effects">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Behaviour</span>
+        <h1>Side effects.</h1>
+        <p class="lead">
+          <code>effect [ ...deps ] { &hellip; }</code> blocks attach
+          declarative, anonymous side effects to the program or to a
+          single component instance. Use them for polling, hydration,
+          analytics, keyboard listeners, autosave &mdash; anything that
+          should run when dependencies change rather than when a user
+          clicks a button.
+        </p>
+      </header>
+
+      <h2 id="anatomy">Anatomy of an effect</h2>
+      <p>An effect declaration has three parts:</p>
+<pre><code>effect [ ...dependencies ] {
+  // body
+}</code></pre>
+      <ul>
+        <li>The <code>effect</code> keyword &mdash; effects are <strong>anonymous</strong>; there is no name and no <code>on</code> keyword.</li>
+        <li>An optional bracketed <strong>dependency list</strong> that controls when the body runs.</li>
+        <li>A <code>{ &hellip; }</code> body that performs the side effect &mdash; HTTP calls, state writes, <code>js{ &hellip; }</code> blocks, <code>emit</code>, <code>cleanup(&hellip;)</code>, &hellip;</li>
+      </ul>
+
+      <p>
+        <code>effect { &hellip; }</code> with no brackets is equivalent
+        to <code>effect [on:mount] { &hellip; }</code> &mdash; both run
+        the body once when the surrounding scope mounts.
+      </p>
+
+      <h2 id="dependencies">Dependency entries</h2>
+      <p>Each entry in the bracketed list is one of the following:</p>
+
+      <table class="signature-table">
+        <thead><tr><th>Entry</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>$atom</code></td>
+            <td>Re-run the body whenever the named reactive atom changes. Mix multiple state triggers freely: <code>[$query, $page]</code> re-runs when either changes.</td>
+          </tr>
+          <tr>
+            <td><code>on:mount</code></td>
+            <td>Run the body once when the surrounding component (or top-level scope) mounts.</td>
+          </tr>
+          <tr>
+            <td><code>on:unmount</code></td>
+            <td>Run the body once when it unmounts. Useful for teardown / analytics on close.</td>
+          </tr>
+          <tr>
+            <td><code>on:every(N)</code></td>
+            <td>Re-run the body every <code>N</code> milliseconds. Driven by <code>setInterval</code>; cleared automatically on unmount.</td>
+          </tr>
+          <tr>
+            <td><code>debounce(N)</code></td>
+            <td>Wrap the body with a trailing-edge debounce &mdash; the body only runs <code>N</code> ms after the last trigger. Combine with state / interval triggers.</td>
+          </tr>
+          <tr>
+            <td><code>throttle(N)</code></td>
+            <td>Wrap the body with a throttle &mdash; the body runs immediately, then suppresses further calls until <code>N</code> ms have elapsed (with a trailing call for the most recent state).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Order inside the brackets does not matter. Only one rate-limit
+        modifier (<code>debounce</code> or <code>throttle</code>) takes
+        effect per declaration.
+      </p>
+
+      <h2 id="scope">Scope: top-level vs. component-local</h2>
+      <p>
+        An <code>effect</code> can live at the <strong>program top level</strong>
+        or <strong>inside a component body</strong>. The dependency-list
+        syntax is identical; only the lifecycle differs.
+      </p>
+
+      <table class="signature-table">
+        <thead><tr><th></th><th>Top-level effect</th><th>Component-local effect</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Location</td>
+            <td>Declared next to other top-level bindings.</td>
+            <td>Declared inside a <code>component Name() { &hellip; }</code> body.</td>
+          </tr>
+          <tr>
+            <td>Mounted</td>
+            <td>Once, when the program first runs.</td>
+            <td>Once per component instance, the first time it renders.</td>
+          </tr>
+          <tr>
+            <td>Unmounted</td>
+            <td>When the program is replaced (<code>setResponse</code> / <code>clear()</code>).</td>
+            <td>When the instance disappears from the render tree.</td>
+          </tr>
+          <tr>
+            <td>Multiplicity</td>
+            <td>One copy, regardless of who uses it.</td>
+            <td>One copy per instance &mdash; two <code>App()</code> calls = two
+                independent effects with independent timers / cleanups.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Top-level effect</h3>
+      <p>
+        Declared next to the rest of the program. It mounts as soon as the
+        program is parsed and lives until <code>setResponse</code> /
+        <code>clear()</code> swaps the program.
+      </p>
+<pre><code>_app_ = App()
+$value = 10
+
+effect [on:every(1000)] {
+  $value = $value + 1
+}
+
+component App() {
+  return Box([
+    Text("Value: " + $value)
+  ])
+}</code></pre>
+
+      <h3>Component-local effect</h3>
+      <p>
+        Declare the same effect inside the component body and the runtime
+        scopes it to that <em>instance</em>: the interval starts when the
+        component mounts and is cleared as soon as it leaves the tree.
+        Two <code>App()</code> calls give you two independent intervals.
+      </p>
+<pre><code>_app_ = App()
+$value = 10
+
+component App() {
+  effect [on:every(1000)] {
+    $value = $value + 1
+  }
+  return Box([
+    Text("Value: " + $value)
+  ])
+}</code></pre>
+
+      <h3>Conditional component &mdash; effect tears down with the instance</h3>
+      <p>
+        Component-local effects are the cleanest way to scope background
+        work to a piece of UI that is conditionally mounted. When
+        <code>$showWidget</code> flips to <code>false</code> the
+        <code>Widget()</code> instance is removed from the tree, and the
+        runtime tears down its <code>on:every</code> interval, its
+        <code>cleanup(&hellip;)</code> handlers, and any state
+        subscriptions it registered.
+      </p>
+<pre><code>_app_ = Stack([
+  Toggle("Show widget", value: $showWidget, onChange: () =&gt; { $showWidget = !$showWidget }),
+  if $showWidget { Widget() } else { null }
+])
+$showWidget = true
+$ticks = 0
+
+component Widget() {
+  effect [on:every(500)] {
+    $ticks = $ticks + 1
+  }
+  return Card([CardHeader("Widget"), Text("Ticks: " + $ticks)])
+}</code></pre>
+
+      <h3>Per-instance polling</h3>
+      <p>
+        Each rendered <code>UserCard</code> mounts its own poll &mdash;
+        rendering five of them produces five independent intervals, and
+        removing one stops only that one.
+      </p>
+<pre><code>_app_ = Stack([
+  UserCard("alice"),
+  UserCard("bob"),
+  UserCard("carol")
+])
+
+component UserCard(username) {
+  $status = "loading"
+  effect [on:every(5000)] {
+    $status = http({ url: "/api/users/" + username + "/status", method: "GET" }).data
+  }
+  return Card([
+    CardHeader(username),
+    Text("Status: " + $status)
+  ])
+}</code></pre>
+
+      <h2 id="examples">Examples</h2>
+
+      <h3>Once on mount</h3>
+<pre><code>effect [on:mount] {
+  $session = http({ url: "/api/session", method: "GET" })
+}
+
+# Empty deps list is equivalent
+effect {
+  console.log("App mounted")
+}</code></pre>
+
+      <h3>React to a single atom</h3>
+<pre><code>$selectedId = null
+
+effect [$selectedId] {
+  if $selectedId {
+    $detail = http({ url: "/api/items/" + $selectedId, method: "GET" })
+  }
+}</code></pre>
+
+      <h3>React to multiple atoms with debouncing</h3>
+<pre><code>$query = ""
+$page  = 1
+
+effect [$query, $page, debounce(250)] {
+  $results = http({
+    url:   "/api/search",
+    query: { q: $query, page: $page }
+  })
+}</code></pre>
+
+      <h3>Polling on an interval</h3>
+<pre><code>effect [on:every(30000)] {
+  $orders.refetch()
+}
+
+# Throttled interval — fire at most once per 500ms
+effect [on:every(1000), throttle(500)] {
+  $now = @Now()
+}</code></pre>
+
+      <h3>Autosave with debounce</h3>
+<pre><code>$draft = ""
+
+effect [$draft, debounce(500)] {
+  $save = http({
+    url:    "/api/draft",
+    method: "PUT",
+    body:   { draft: $draft }
+  })
+}</code></pre>
+
+      <h3>Sync to <code>storage</code></h3>
+<pre><code>effect [$draft, debounce(500)] {
+  storage.set("draft", $draft)
+}
+
+effect [on:mount] {
+  $draft = storage.get("draft") ?? ""
+}</code></pre>
+
+      <h2 id="cleanup">Cleanup</h2>
+      <p>
+        Long-running listeners (timers, observers, event handlers, network
+        subscriptions) MUST be torn down so they don&rsquo;t leak across
+        re-runs or unmount. Register a teardown with
+        <code>cleanup(fn)</code> from inside the body &mdash; or from
+        inside a <code>js{}</code> block via <code>ctx.cleanup(fn)</code>.
+        Cleanups run before the next re-fire AND on unmount.
+      </p>
+
+<pre><code>effect [on:mount] {
+  js{
+    const onKey = (e) =&gt; {
+      if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true }))
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+  }
+}</code></pre>
+
+      <h3>WebSocket subscription</h3>
+<pre><code>effect [on:mount] {
+  js{
+    const socket = new WebSocket("wss://example.com/ticker")
+    socket.addEventListener("message", (event) =&gt; {
+      ctx.state.set("ticker", JSON.parse(event.data))
+    })
+    ctx.cleanup(() =&gt; socket.close())
+  }
+}</code></pre>
+
+      <h3>IntersectionObserver for infinite scroll</h3>
+<pre><code>effect [on:mount] {
+  js{
+    const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
+    if (!sentinel) return
+    const observer = new IntersectionObserver((entries) =&gt; {
+      if (entries.some((e) =&gt; e.isIntersecting)) {
+        const page = ctx.state.get("page") || 1
+        ctx.state.set("page", page + 1)
+      }
+    })
+    observer.observe(sentinel)
+    ctx.cleanup(() =&gt; observer.disconnect())
+  }
+}</code></pre>
+
+      <h2 id="use-cases">When to reach for an effect</h2>
+      <ul>
+        <li><strong>Background data refresh</strong> &mdash; interval polling, retry-on-focus, periodic stat updates.</li>
+        <li><strong>Lifecycle setup &amp; teardown</strong> &mdash; one-time hydration on mount, listener teardown on unmount.</li>
+        <li><strong>Reactive autosave</strong> &mdash; persist a form / draft when a watched atom changes, debounced so you don&rsquo;t flood the network.</li>
+        <li><strong>Derived async work</strong> &mdash; refetch search results when filters change, fetch detail data when a selection is made.</li>
+        <li><strong>Analytics &amp; logging</strong> &mdash; track page views, log state transitions, instrument feature usage.</li>
+        <li><strong>Browser APIs</strong> &mdash; clipboard listeners, keyboard shortcuts, <code>IntersectionObserver</code>, <code>MutationObserver</code>, <code>matchMedia</code> &mdash; usually inside a <code>js{}</code> block.</li>
+      </ul>
+
+      <h2 id="when-not">When NOT to use an effect</h2>
+      <ul>
+        <li><strong>User-driven side effects</strong> &mdash; declare an <code>action</code> and wire it to a button instead.</li>
+        <li><strong>HTTP that already depends on a reactive atom</strong> &mdash; <code>$results = http({ query: { q: $query } })</code> already re-issues when <code>$query</code> changes; no effect is needed.</li>
+        <li><strong>Pure computations</strong> &mdash; a plain binding (<code>total = @Sum($cart.price)</code>) is reactive and re-derives automatically.</li>
+        <li><strong>Per-element listeners</strong> &mdash; component event props (<code>onClick</code>, <code>onChange</code>, <code>onSubmit</code>) are simpler and don&rsquo;t need cleanup.</li>
+      </ul>
+
+      <h2 id="effect-vs-action">Effect vs. Action</h2>
+      <table class="signature-table">
+        <thead><tr><th></th><th><code>effect [ ...deps ] { &hellip; }</code></th><th><code>action Name(args) { &hellip; }</code></th></tr></thead>
+        <tbody>
+          <tr><td>Trigger</td><td>Mount, unmount, interval, watched atoms.</td><td>Explicit call from a handler or expression.</td></tr>
+          <tr><td>Identity</td><td>Anonymous &mdash; the runtime keys on the source location.</td><td>Named &mdash; referenced by identifier from <code>onClick</code> / expressions.</td></tr>
+          <tr><td>Arguments</td><td>None.</td><td>Positional / named params bound inside the body.</td></tr>
+          <tr><td>Return value</td><td>None.</td><td>Optional &mdash; observable when called as <code>$x = name(args)</code>.</td></tr>
+          <tr><td>Lifecycle</td><td>Mounted / re-fired / torn down by the runtime &mdash; at program level or per component instance.</td><td>Runs once per call.</td></tr>
+          <tr><td>Cleanup</td><td>Registered with <code>cleanup(fn)</code>; fires on re-run + unmount.</td><td>Not applicable.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>Imperative blocks triggered by events &mdash; the user-driven counterpart to <code>effect</code>.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="javascript-interactions.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>JavaScript interactions</h3>
+          <p>The <code>js{ &hellip; }</code> escape hatch &mdash; browser APIs the declarative surface doesn&rsquo;t cover.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language reference</h3>
+          <p>Reactive state, effects, control flow, built-in <code>@</code>-functions.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

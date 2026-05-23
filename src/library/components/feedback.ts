@@ -4,13 +4,12 @@
  * HoverCard, Popover, Toast, Toasts, Kbd.
  *
  * These cover the most common "small bits of UI" that the LLM otherwise has
- * to fake with TextContent + emoji combinations. Every component is purely
+ * to fake with Text + emoji combinations. Every component is purely
  * declarative — state binding is done at the prop level so a `$variable`
  * passed to `Switch` two-way-binds the same way it does for `Checkbox`.
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength, sanitiseImageSrc,
@@ -206,7 +205,7 @@ export const Switch: ComponentSpec = {
   props: [
     { name: "id", type: "string" },
     { name: "label", type: "string", optional: true },
-    { name: "value", type: "boolean", optional: true, description: "Bound value (typically $variable)" },
+    { name: "value", type: "boolean", optional: true, aliases: ["checked"], description: "Bound value (typically $variable)" },
     { name: "description", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
   ],
@@ -217,15 +216,17 @@ export const Switch: ComponentSpec = {
       for: id,
       "data-disabled": asBoolean(props.disabled) ? "true" : "false",
     });
+    const isChecked = asBoolean(props.value);
     const input = el("input", {
       type: "checkbox",
       id,
       name: id,
       class: "rui-switch-input",
       role: "switch",
-      checked: asBoolean(props.value) ? "" : null,
+      checked: isChecked ? "" : null,
       disabled: asBoolean(props.disabled) ? "" : null,
-    });
+    }) as HTMLInputElement;
+    input.checked = isChecked;
     const track = el("span", { class: "rui-switch-track" }, [
       el("span", { class: "rui-switch-thumb" }),
     ]);
@@ -292,10 +293,7 @@ export const ToggleGroup: ComponentSpec = {
       btn.append(el("span", { class: "rui-toggle-label" }, [label]));
       if (stateName) {
         btn.onclick = () => {
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value }],
-          });
+          helpers.setState(stateName, value);
         };
       }
       root.append(btn);
@@ -329,8 +327,8 @@ export const Tooltip: ComponentSpec = {
     "reach for HoverCard when you need rich content.",
   props: [
     { name: "label", type: "string" },
-    { name: "trigger", type: "Node" },
-    { name: "side", type: "string", optional: true, enum: ["top", "bottom", "left", "right"] },
+    { name: "trigger", type: "Node", aliases: ["children"] },
+    { name: "side", type: "string", optional: true, enum: ["top", "bottom", "left", "right"], aliases: ["placement"] },
   ],
   render: (_node, props, helpers) => {
     const root = el("span", {
@@ -355,13 +353,15 @@ export const HoverCard: ComponentSpec = {
     "Use for previewing a referenced item (profile, link target, definition).",
   props: [
     { name: "trigger", type: "Node" },
-    { name: "content", type: "Node[]" },
-    { name: "side", type: "string", optional: true, enum: ["top", "bottom", "left", "right"] },
+    { name: "content", type: "Node[]", aliases: ["children"] },
+    { name: "side", type: "string", optional: true, enum: ["top", "bottom", "left", "right"], aliases: ["placement"] },
+    { name: "open", type: "boolean", optional: true, description: "Force the card open (otherwise reveal on hover/focus)" },
   ],
   render: (_node, props, helpers) => {
     const root = el("span", {
       class: "rui-hover-card",
       "data-side": asString(props.side, "bottom"),
+      "data-open": asBoolean(props.open) ? "true" : null,
       tabindex: "0",
     });
     root.append(el("span", { class: "rui-hover-card-trigger" }, [
@@ -399,6 +399,7 @@ export const Rating: ComponentSpec = {
     { name: "count", type: "number", optional: true, description: "Review/voter count rendered in parentheses" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
     { name: "interactive", type: "boolean", optional: true, description: "Allow clicking a star to set the value" },
+    { name: "readonly", type: "boolean", optional: true, description: "Force read-only (overrides `interactive`)" },
     { name: "halfStep", type: "boolean", optional: true, description: "Allow half-star resolution when interactive" },
     { name: "icon", type: "string", optional: true, description: "Icon family — `star` (default), `heart`, `thumb`, `fire`, `bolt`, or any FA name" },
   ],
@@ -406,7 +407,7 @@ export const Rating: ComponentSpec = {
     const max = Math.max(1, Math.floor(asNumber(props.max, 5)));
     const raw = Math.max(0, Math.min(max, asNumber(props.value, 0)));
     const size = asString(props.size, "md");
-    const interactive = asBoolean(props.interactive);
+    const interactive = asBoolean(props.interactive) && !asBoolean(props.readonly);
     const halfStep = asBoolean(props.halfStep);
     const stateName = node.argMeta?.[0]?.stateRef;
     const iconChoice = resolveRatingIcons(asString(props.icon));
@@ -447,10 +448,7 @@ export const Rating: ComponentSpec = {
               next = halfValue;
             }
           }
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value: next }],
-          });
+          helpers.setState(stateName, next);
         };
       }
       stars.append(star);
@@ -485,7 +483,7 @@ export const ProgressRing: ComponentSpec = {
     { name: "value", type: "number", optional: true, description: "Current value (ignored when indeterminate)" },
     { name: "max", type: "number", optional: true, description: "Upper bound (default 100)" },
     { name: "label", type: "string", optional: true, description: "Text shown inside the ring (default \"{percent}%\")" },
-    { name: "caption", type: "string", optional: true, description: "Small caption rendered under the ring" },
+    { name: "caption", type: "string", optional: true, aliases: ["description"], description: "Small caption rendered under the ring" },
     { name: "tone", type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
     { name: "indeterminate", type: "boolean", optional: true },
@@ -563,10 +561,10 @@ export const ChatBubble: ComponentSpec = {
     "bubble on the left.",
   props: [
     { name: "author", type: "string" },
-    { name: "body", type: "string" },
+    { name: "body", type: "string", aliases: ["text", "message"] },
     { name: "time", type: "string", optional: true },
-    { name: "avatarSrc", type: "string", optional: true },
-    { name: "from", type: "string", optional: true, enum: ["agent", "me", "system"], description: "Lane (default agent)" },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"] },
+    { name: "from", type: "string", optional: true, enum: ["agent", "me", "system"], aliases: ["role"], description: "Lane (default agent)" },
     { name: "status", type: "string", optional: true, enum: ["sending", "sent", "delivered", "read", "error"] },
   ],
   render: (_node, props) => {
@@ -643,14 +641,16 @@ export const Popover: ComponentSpec = {
     "clicking the built-in × button all close it.",
   props: [
     { name: "trigger", type: "Node", description: "Clickable trigger element (Button, Avatar, IconButton, …). The trigger remains visible while the popover is open." },
-    { name: "content", type: "Node[]", description: "Body rendered inside the popover" },
+    { name: "content", type: "Node[]", aliases: ["children"], description: "Body rendered inside the popover" },
     { name: "title", type: "string", optional: true, description: "Optional bold heading rendered above the content" },
-    { name: "side", type: "string", optional: true, enum: POPOVER_SIDES, description: "Where the popover opens relative to the trigger (default \"bottom\")" },
+    { name: "side", type: "string", optional: true, enum: POPOVER_SIDES, aliases: ["placement"], description: "Where the popover opens relative to the trigger (default \"bottom\")" },
     { name: "align", type: "string", optional: true, enum: POPOVER_ALIGNS, description: "Alignment along the trigger edge (default \"start\")" },
     { name: "width", type: "string", optional: true, description: "CSS width for the popover panel (default \"280px\")" },
+    { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the popover" },
   ],
   render: (_node, props, helpers) => {
-    const openSlot = helpers.useInstanceState<boolean>("open", false);
+    const initialOpen = asBoolean(props.open);
+    const openSlot = helpers.useInstanceState<boolean>("open", initialOpen);
     const isOpen = openSlot.get();
     const width = sanitiseCssLength(props.width, "");
     const root = el("div", {
@@ -786,12 +786,12 @@ export const Toast: ComponentSpec = {
     "announcements and `Notification` for permanent inbox entries.",
   props: [
     { name: "title", type: "string" },
-    { name: "message", type: "string", optional: true },
+    { name: "message", type: "string", optional: true, aliases: ["description"] },
     { name: "tone", type: "string", optional: true, enum: TOAST_TONES, description: "Visual accent (default \"default\")" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (default picked from tone)" },
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: true, description: "Optional inline action Button(...) shown above the message" },
-    { name: "onClose", type: "Action", optional: true, description: "Action fired when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
+    { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
     { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)`" },
   ],
   render: (_node, props, helpers) => {
@@ -867,7 +867,7 @@ export const Toast: ComponentSpec = {
           removalTimerSlot.set(null);
         }
       }, "exit-animation-timer");
-      if (isActionPayload(props.onClose)) helpers.runAction(props.onClose);
+      helpers.invoke(props.onClose);
     };
 
     const closeBtn = el("button", {

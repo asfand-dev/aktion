@@ -12,7 +12,7 @@
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
  * `element.setTheme({...})`, or declare `theme = Theme({...})` inside a
- * Streaming UI Script program. All three paths flow through `mergeTheme`
+ * Aktion program. All three paths flow through `mergeTheme`
  * so partial token maps are layered on top of the `light` defaults.
  *
  * Token taxonomy:
@@ -642,8 +642,8 @@ export function clearTokenOverrides(
 
 /**
  * Filter an arbitrary object down to the keys recognised by `ThemeTokens`,
- * stringifying primitive values along the way. Used when a Streaming UI
- * Script program declares `theme = Theme({...})` — the evaluator hands us
+ * stringifying primitive values along the way. Used when an Aktion program
+ * declares `theme = Theme({...})` — the evaluator hands us
  * a plain JS object, and we want to ignore anything that isn't a real token
  * (LLM typo guard) before applying it.
  */

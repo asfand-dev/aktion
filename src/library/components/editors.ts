@@ -8,7 +8,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 
 /* ----------------------------------------------------------------------- *
@@ -113,18 +112,32 @@ export const RichTextEditor: ComponentSpec = {
       style: `min-height:${asString(props.minHeight, "160px")};`,
       html: initial,
     });
-    const refreshEmpty = (): void => {
-      editor.setAttribute("data-empty", isEmpty(editor.innerHTML) ? "true" : "false");
+    const refreshEmpty = (target: HTMLElement): void => {
+      target.setAttribute("data-empty", isEmpty(target.innerHTML) ? "true" : "false");
     };
-    editor.addEventListener("input", refreshEmpty);
-    editor.addEventListener("blur", refreshEmpty);
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName && !disabled) {
       helpers.bindState(editor, stateName, {
         event: "input",
-        getValue: (n) => (n as HTMLElement).innerHTML,
+        // Sync the placeholder state on every keystroke, alongside the
+        // state write — keeps both behaviours in the single property-based
+        // `oninput` slot so the morph reconciler transfers them as a unit.
+        getValue: (n) => {
+          const target = n as HTMLElement;
+          refreshEmpty(target);
+          return target.innerHTML;
+        },
       });
+    } else {
+      editor.oninput = (event) => {
+        const target = (event.currentTarget ?? event.target) as HTMLElement;
+        refreshEmpty(target);
+      };
     }
+    editor.onblur = (event) => {
+      const target = (event.currentTarget ?? event.target) as HTMLElement;
+      refreshEmpty(target);
+    };
     root.append(editor);
     return root;
   },
@@ -335,7 +348,7 @@ export const ContextMenu: ComponentSpec = {
       if (item.shortcut) btn.append(el("span", { class: "rui-menu-item-shortcut" }, [item.shortcut]));
       if (!item.disabled) {
         btn.onclick = () => {
-          if (isActionPayload(item.action)) helpers.runAction(item.action);
+          helpers.invoke(item.action);
           menu.setAttribute("data-open", "false");
         };
       }

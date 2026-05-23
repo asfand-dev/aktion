@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Themes & customization · streaming-ui-script</title>
-  <meta name="description" content="Seven built-in themes plus a full live token studio — preview, compare, customize, and copy theme tokens for streaming-ui-script." />
+  <title>Themes & customization · Aktion</title>
+  <meta name="description" content="Seven built-in themes plus a full live token studio — preview, compare, customize, and copy theme tokens for Aktion." />
   <script>
     (function () {
       try {
@@ -237,7 +237,7 @@
       padding: 3px 10px;
       border-radius: var(--doc-radius-pill);
     }
-    .gallery-card streaming-ui-script {
+    .gallery-card aktion-app {
       flex: 1;
       min-height: 200px;
       display: block;
@@ -353,7 +353,7 @@
       background: var(--doc-bg);
       transition: background 200ms ease;
     }
-    .preview-shell streaming-ui-script {
+    .preview-shell aktion-app {
       display: block;
       min-height: 360px;
       padding: 18px;
@@ -475,7 +475,7 @@
       overflow-y: auto;
       padding: 14px;
     }
-    .compare-pane streaming-ui-script {
+    .compare-pane aktion-app {
       display: block;
     }
 
@@ -616,7 +616,7 @@
       background: var(--doc-bg);
       transition: background 200ms ease;
     }
-    .studio-preview streaming-ui-script {
+    .studio-preview aktion-app {
       display: block;
       padding: 18px;
       min-height: 380px;
@@ -840,32 +840,15 @@
     @media (max-width: 760px) {
       .section { margin-top: 36px; }
       .studio-panel { padding: 14px; }
-      .preview-shell streaming-ui-script,
-      .studio-preview streaming-ui-script { min-height: 320px; padding: 14px; }
+      .preview-shell aktion-app,
+      .studio-preview aktion-app { min-height: 320px; padding: 14px; }
       .compare-pane-body { max-height: 360px; }
     }
   </style>
 </head>
 <body data-page="themes">
   <div class="layout" data-wide="true">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <div class="page-grid">
@@ -919,7 +902,7 @@
           <section id="gallery" class="section">
             <h2><i class="fa-solid fa-swatchbook" aria-hidden="true"></i> Built-in theme gallery</h2>
             <p>
-              Each card below is a real <code>&lt;streaming-ui-script&gt;</code>
+              Each card below is a real <code>&lt;aktion-app&gt;</code>
               running the same tiny program in a different theme. Click <em>Try in
               preview</em> to load that theme into the live preview further down
               the page.
@@ -948,7 +931,7 @@
             </div>
 
             <div class="preview-shell" id="preview-shell">
-              <streaming-ui-script id="picker-preview" theme="light" transparent></streaming-ui-script>
+              <aktion-app id="picker-preview" theme="light" transparent></aktion-app>
             </div>
 
             <details class="preview-editor" id="preview-editor">
@@ -987,13 +970,13 @@
               <div class="compare-pane" id="compare-pane-left">
                 <div class="compare-pane-header"><span id="compare-label-left">light</span><i class="fa-solid fa-arrow-left"></i></div>
                 <div class="compare-pane-body" data-side="left">
-                  <streaming-ui-script id="compare-preview-left" theme="light" transparent></streaming-ui-script>
+                  <aktion-app id="compare-preview-left" theme="light" transparent></aktion-app>
                 </div>
               </div>
               <div class="compare-pane" id="compare-pane-right">
                 <div class="compare-pane-header"><span id="compare-label-right">dark</span><i class="fa-solid fa-arrow-right"></i></div>
                 <div class="compare-pane-body" data-side="right">
-                  <streaming-ui-script id="compare-preview-right" theme="dark" transparent></streaming-ui-script>
+                  <aktion-app id="compare-preview-right" theme="dark" transparent></aktion-app>
                 </div>
               </div>
             </div>
@@ -1082,7 +1065,7 @@
 
               <div class="studio-output">
                 <div class="studio-preview" id="studio-preview-shell">
-                  <streaming-ui-script id="studio-preview" theme="light" transparent></streaming-ui-script>
+                  <aktion-app id="studio-preview" theme="light" transparent></aktion-app>
                 </div>
 
                 <div class="output-header">
@@ -1127,15 +1110,15 @@
             </p>
 
             <h3>1. Built-in name (attribute)</h3>
-<pre><code>&lt;streaming-ui-script theme="neon"&gt;&lt;/streaming-ui-script&gt;</code></pre>
+<pre><code>&lt;aktion-app theme="neon"&gt;&lt;/aktion-app&gt;</code></pre>
 
             <h3>2. JSON token map (attribute)</h3>
-<pre><code>&lt;streaming-ui-script
+<pre><code>&lt;aktion-app
   theme='{"colorPrimary":"#16a34a","radiusMd":"14px"}'&gt;
-&lt;/streaming-ui-script&gt;</code></pre>
+&lt;/aktion-app&gt;</code></pre>
 
             <h3>3. Programmatic <code>setTheme()</code></h3>
-<pre><code>const el = document.querySelector("streaming-ui-script");
+<pre><code>const el = document.querySelector("aktion-app");
 
 el.setTheme("dark");
 
@@ -1147,7 +1130,7 @@ el.setTheme({
 });</code></pre>
 
             <h3>4. Host-page CSS variable override</h3>
-<pre><code>streaming-ui-script {
+<pre><code>aktion-app {
   --rui-color-primary: #16a34a;
   --rui-radius-md: 14px;
 }</code></pre>
@@ -1175,23 +1158,30 @@ el.setTheme({
             </p>
 
 <pre><code>theme = Theme({
-  colorPrimary:     "#0969da",
-  colorAccent:      "#1f883d",
-  fontFamily:       "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  radiusButton:     "6px",
-  buttonFontWeight: "500"
+  colors: {
+    primary:      "#0969da",
+    primaryHover: "#0860c7",
+    accent:       "#1f883d"
+  },
+  font: {
+    family:      "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    weightBody:  "400"
+  },
+  radius: { button: "6px" }
 })
 
-root = Stack([
-  CardHeader("Welcome", "Sign in to your workspace"),
-  Buttons([Button("Sign in"), Button("Cancel", null, "secondary")])
+_app_ = Stack([
+  CardHeader("Welcome", subtitle: "Sign in to your workspace"),
+  Buttons([Button("Sign in"), Button("Cancel", variant: "secondary")])
 ])</code></pre>
 
             <ul>
-              <li><strong>Reserved name.</strong> Only <code>theme</code> (alongside <code>root</code>) is allowed without being referenced elsewhere. The runtime picks both up by name.</li>
-              <li><strong>Partial maps.</strong> Pass only the tokens you want to brand &mdash; everything else inherits from the base theme set on the host (<code>theme="light"</code>, <code>theme="dark"</code>, …).</li>
+              <li><strong>Reserved name.</strong> Only <code>theme</code> (alongside <code>_app_</code>) is allowed without being referenced elsewhere. The runtime picks both up by name.</li>
+              <li><strong>Structured groups only.</strong> The top-level keys must be <code>colors</code>, <code>radius</code>, <code>font</code>, <code>motion</code>, <code>elevation</code> (plus the metadata keys <code>name</code> and <code>direction</code>). Flat-shape tokens (<code>colorPrimary</code>, <code>radiusMd</code>) and free-form CSS variables (<code>--rui-color-x</code>) raise a schema-validator warning and are dropped.</li>
+              <li><strong>Naming convention.</strong> Inside each group, camel-case keys flatten predictably: <code>colors.primary</code> &rarr; <code>colorPrimary</code>, <code>colors.primaryHover</code> &rarr; <code>colorPrimaryHover</code>, <code>radius.md</code> &rarr; <code>radiusMd</code>, <code>radius.button</code> &rarr; <code>radiusButton</code>, <code>font.familyHeading</code> &rarr; <code>fontFamilyHeading</code>.</li>
+              <li><strong>Partial maps.</strong> Pass only the groups you want to override &mdash; everything else inherits from the base theme set on the host (<code>theme="light"</code>, <code>theme="dark"</code>, &hellip;).</li>
               <li><strong>Live updates.</strong> Streaming a different <code>Theme({...})</code> block on the next render re-applies the override; the previous tokens are cleared first so themes never leak across responses.</li>
-              <li><strong>Same token surface.</strong> Every key in the reference table below works inside <code>Theme(...)</code>. Unknown keys are silently ignored.</li>
+              <li><strong>Host-side <code>setTheme()</code> uses flat tokens.</strong> The structured-only rule applies to the in-script <code>Theme({...})</code> call. <code>el.setTheme({...})</code> from the host (see below) takes the flat token names listed in the reference table.</li>
             </ul>
 
             <div class="callout">
@@ -1220,7 +1210,7 @@ root = Stack([
             <div class="recipe-grid">
               <div class="recipe">
                 <header><span class="recipe-step">1</span><h3>Pick a base</h3></header>
-                <p>Start from <code>light</code>, <code>dark</code>, or <code>skyline</code> depending on whether you need a light or dark surface.</p>
+                <p>Start from one of the seven built-in themes: <code>light</code>, <code>dark</code>, <code>neon</code>, <code>pastel</code>, <code>glass</code>, <code>brutalist</code>, or <code>skyline</code> &mdash; whichever surface and vibe best fits your brand.</p>
               </div>
               <div class="recipe">
                 <header><span class="recipe-step">2</span><h3>Override 4&ndash;6 tokens</h3></header>
@@ -1248,7 +1238,7 @@ export const brandTheme = {
 
 // app.js
 import { brandTheme } from "./brand-theme.js";
-const el = document.querySelector("streaming-ui-script");
+const el = document.querySelector("aktion-app");
 el.setTheme(brandTheme);</code></pre>
 
             <p>
@@ -1267,6 +1257,25 @@ el.setTheme(brandTheme);</code></pre>
               Every theme token, its corresponding CSS custom property, and what it
               affects. Use the search box to filter by name or description.
             </p>
+            <div class="callout">
+              <h4>Flat &harr; structured cheatsheet for in-script <code>Theme({...})</code></h4>
+              <p>
+                The flat tokens below are the canonical names for host-side
+                <code>el.setTheme({...})</code> calls, the <code>theme</code>
+                attribute&rsquo;s JSON form, and direct CSS custom-property
+                overrides. Inside an in-script <code>Theme({...})</code>
+                binding the runtime requires the <strong>structured</strong>
+                form: every <code>colorX</code> token lives under
+                <code>colors.x</code>, every <code>radiusX</code> under
+                <code>radius.x</code>, every <code>fontX</code> under
+                <code>font.x</code>, and so on. Camel-case is preserved (e.g.
+                <code>colorPrimaryHover</code> &rarr;
+                <code>colors.primaryHover</code>; <code>radiusButton</code>
+                &rarr; <code>radius.button</code>;
+                <code>fontFamilyHeading</code> &rarr;
+                <code>font.familyHeading</code>).
+              </p>
+            </div>
 
             <div class="reference-search">
               <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -1316,7 +1325,7 @@ el.setTheme(brandTheme);</code></pre>
   </div>
 
   <script type="module">
-    import { builtInThemes } from "../dist/streaming-ui-script.js";
+    import { builtInThemes } from "../dist/aktion.js";
 
     /* -------------------------------------------------------------------
        Static metadata (single source of truth — copied locally so the
@@ -1460,10 +1469,10 @@ el.setTheme(brandTheme);</code></pre>
        Preview programs.
        ------------------------------------------------------------------- */
 
-    const PREVIEW_PROGRAM = `root = Stack([hero, kpis, form, follow])
+    const PREVIEW_PROGRAM = `_app_ = Stack([hero, kpis, form, follow])
 hero = Card([
   CardHeader("Theme preview", "Same content, different palettes"),
-  Markdown("This card lives inside <streaming-ui-script>. Try swapping themes — every component picks up the new tokens instantly, no re-render needed.")
+  Markdown("This card lives inside <aktion-app>. Try swapping themes — every component picks up the new tokens instantly, no re-render needed.")
 ])
 kpis = Stack([
   StatCard("Active", "12,540", "up", "+18%"),
@@ -1482,7 +1491,7 @@ follow = FollowUpBlock([
   FollowUpItem("Customize the chart palette")
 ], "Try editing")`;
 
-    const MINI_PROGRAM = `root = Stack([head, kpi, btns])
+    const MINI_PROGRAM = `_app_ = Stack([head, kpi, btns])
 head = Card([CardHeader("Theme preview", "Identical content")])
 kpi = Stack([
   StatCard("Active", "1.2k", "up", "+12%"),
@@ -1553,7 +1562,7 @@ btns = Buttons([
           makeEl("span", { class: "name" }, meta.label),
           makeEl("span", { class: "tag" }, meta.tag),
         );
-        const preview = makeEl("streaming-ui-script", { theme: name, transparent: true });
+        const preview = makeEl("aktion-app", { theme: name, transparent: true });
         const tryBtn = makeEl(
           "button",
           {
@@ -1891,10 +1900,10 @@ btns = Buttons([
       const fmt = activeOutputFormat();
       if (fmt === "js") {
         target.textContent =
-          'const el = document.querySelector("streaming-ui-script");\n' +
+          'const el = document.querySelector("aktion-app");\n' +
           `el.setTheme(${JSON.stringify(workingTheme, null, 2)});`;
       } else if (fmt === "css") {
-        const lines = ["streaming-ui-script {"];
+        const lines = ["aktion-app {"];
         for (const token of TOKENS) {
           const value = workingTheme[token.key];
           if (value == null) continue;
@@ -1926,7 +1935,7 @@ btns = Buttons([
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `streaming-ui-script-theme-${studioPreset}.json`;
+      a.download = `aktion-theme-${studioPreset}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();

@@ -13,7 +13,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength,
@@ -67,17 +66,17 @@ export const InboxPanel: ComponentSpec = {
   props: [
     { name: "items", type: "object[]" },
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when there are no notifications" },
-    { name: "onMarkAllRead", type: "Action", optional: true, description: "Action fired by the \"Mark all as read\" button" },
+    { name: "onMarkAllRead", type: "callable", optional: true, description: "Callable fired by the \"Mark all as read\" button" },
   ],
   render: (_node, props, helpers) => {
     const entries = readInboxEntries(props.items);
     const unread = entries.filter((e) => e.unread);
     const read = entries.filter((e) => !e.unread);
     const root = el("div", { class: "rui-inbox-panel" });
-    if (isActionPayload(props.onMarkAllRead) && unread.length > 0) {
+    if (typeof props.onMarkAllRead === "function" && unread.length > 0) {
       const toolbar = el("div", { class: "rui-inbox-panel-toolbar" });
       const btn = el("button", { type: "button", class: "rui-inbox-panel-mark-all" }, ["Mark all as read"]);
-      btn.onclick = () => helpers.runAction(props.onMarkAllRead);
+      btn.onclick = () => helpers.invoke(props.onMarkAllRead);
       toolbar.append(btn);
       root.append(toolbar);
     }
@@ -106,9 +105,9 @@ export const InboxPanel: ComponentSpec = {
           },
           helpers,
         ) as HTMLElement;
-        if (isActionPayload(entry.action)) {
+        if (typeof entry.action === "function") {
           card.setAttribute("data-clickable", "true");
-          card.onclick = () => helpers.runAction(entry.action);
+          card.onclick = () => helpers.invoke(entry.action);
         }
         group.append(card);
       }
@@ -197,14 +196,14 @@ export const OnboardingChecklist: ComponentSpec = {
       body.append(el("div", { class: "rui-onboarding-checklist-item-title" }, [item.title]));
       if (item.description) body.append(el("p", { class: "rui-onboarding-checklist-item-description" }, [item.description]));
       li.append(body);
-      if (!item.done && isActionPayload(item.action)) {
+      if (!item.done && typeof item.action === "function") {
         const btn = el("button", {
           type: "button",
           class: "rui-button",
           "data-variant": "secondary",
           "data-size": "sm",
         }, [item.cta]);
-        btn.onclick = () => helpers.runAction(item.action);
+        btn.onclick = () => helpers.invoke(item.action);
         li.append(btn);
       }
       list.append(li);
@@ -334,7 +333,7 @@ export const Tour: ComponentSpec = {
     { name: "steps", type: "object[]" },
     { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
     { name: "open", type: "boolean", optional: true, description: "Whether the tour is visible" },
-    { name: "onComplete", type: "Action", optional: true },
+    { name: "onComplete", type: "callable", optional: true },
   ],
   render: (node, props, helpers) => {
     const steps: TourStep[] = asArray<unknown>(props.steps).map((entry) => {
@@ -357,9 +356,7 @@ export const Tour: ComponentSpec = {
     if (step.target) card.append(el("div", { class: "rui-tour-target" }, [`Target: ${step.target}`]));
     const footer = el("div", { class: "rui-tour-footer" });
     const skip = el("button", { type: "button", class: "rui-button", "data-variant": "ghost" }, ["Skip"]);
-    skip.onclick = () => {
-      if (isActionPayload(props.onComplete)) helpers.runAction(props.onComplete);
-    };
+    skip.onclick = () => helpers.invoke(props.onComplete);
     const prev = el("button", {
       type: "button",
       class: "rui-button",
@@ -367,17 +364,15 @@ export const Tour: ComponentSpec = {
       disabled: current <= 0 ? "" : null,
     }, ["Back"]);
     if (stateName && current > 0) {
-      prev.onclick = () => {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current - 1 }] });
-      };
+      prev.onclick = () => helpers.setState(stateName, current - 1);
     }
     const isLast = current >= total - 1;
     const next = el("button", { type: "button", class: "rui-button", "data-variant": "primary" }, [isLast ? "Finish" : "Next"]);
     next.onclick = () => {
       if (isLast) {
-        if (isActionPayload(props.onComplete)) helpers.runAction(props.onComplete);
+        helpers.invoke(props.onComplete);
       } else if (stateName) {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current + 1 }] });
+        helpers.setState(stateName, current + 1);
       }
     };
     footer.append(skip, prev, next);
@@ -396,12 +391,12 @@ export const Spotlight: ComponentSpec = {
     "`open` to a `$variable` to dismiss.",
   props: [
     { name: "title", type: "string" },
-    { name: "open", type: "boolean", description: "Whether the spotlight is visible — typically a $variable" },
+    { name: "open", type: "boolean", optional: true, description: "Whether the spotlight is visible — typically a $variable (default true)" },
     { name: "description", type: "string", optional: true },
-    { name: "actions", type: "Node[]", optional: true },
+    { name: "actions", type: "Node[]", optional: true, aliases: ["action"] },
   ],
   render: (node, props, helpers) => {
-    const isOpen = asBoolean(props.open);
+    const isOpen = props.open === undefined ? true : asBoolean(props.open);
     const overlay = el("div", { class: "rui-spotlight", "data-open": isOpen ? "true" : "false" });
     if (!isOpen) return overlay;
     const card = el("div", { class: "rui-spotlight-card" });
@@ -418,7 +413,7 @@ export const Spotlight: ComponentSpec = {
     if (stateName) {
       overlay.onclick = (event) => {
         if (event.target !== overlay) return;
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: false }] });
+        helpers.setState(stateName, false);
       };
     }
     overlay.append(card);
@@ -570,19 +565,9 @@ export const Drawer: ComponentSpec = {
     }, ["×"]);
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName) {
-      closeBtn.onclick = () => {
-        helpers.runAction({
-          kind: "Action",
-          steps: [{ kind: "Set", name: stateName, value: false }],
-        });
-      };
+      closeBtn.onclick = () => helpers.setState(stateName, false);
       overlay.onclick = (event) => {
-        if (event.target === overlay) {
-          helpers.runAction({
-            kind: "Action",
-            steps: [{ kind: "Set", name: stateName, value: false }],
-          });
-        }
+        if (event.target === overlay) helpers.setState(stateName, false);
       };
     }
     header.append(closeBtn);
@@ -611,9 +596,9 @@ export const TopBar: ComponentSpec = {
   props: [
     { name: "title", type: "string", optional: true },
     { name: "subtitle", type: "string", optional: true },
-    { name: "left", type: "Node[]", optional: true, description: "Leading slot (breadcrumbs, brand, status)" },
-    { name: "center", type: "Node[]", optional: true, description: "Centered slot (search bar, segmented control)" },
-    { name: "right", type: "Node[]", optional: true, description: "Trailing slot (actions, avatar)" },
+    { name: "left", type: "Node[]", optional: true, aliases: ["badges"], description: "Leading slot (breadcrumbs, brand, status, badges)" },
+    { name: "center", type: "Node[]", optional: true, aliases: ["search"], description: "Centered slot (search bar, segmented control)" },
+    { name: "right", type: "Node[]", optional: true, aliases: ["actions"], description: "Trailing slot (actions, avatar)" },
     { name: "sticky", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {

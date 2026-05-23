@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FollowUpBlock, FollowUpItem } from "../src/library/components/chat.js";
 import {
   Avatar, AvatarGroup, Progress, ProgressRing, Switch, ToggleGroup,
@@ -25,7 +25,7 @@ import {
 } from "../src/library/components/patterns.js";
 import {
   Container, Spacer, Quote, Markdown, Image, Link, Skeleton,
-  Spinner, Badge, BadgeList, Callout, CodeBlock,
+  Spinner, Badge, BadgeList, Callout, CodeBlock, Text, TextContent,
 } from "../src/library/components/content.js";
 import { SearchBar, MultiSelect, DateRangePicker, Button } from "../src/library/components/forms.js";
 import {
@@ -54,9 +54,12 @@ const helpers: RenderHelpers = {
     if (typeof value === "string") return document.createTextNode(value);
     return document.createTextNode("");
   },
-  runAction: noop,
+  invoke: noop,
+  setState: noop,
+  resetState: noop,
+  sendToAssistant: noop,
+  openUrl: noop,
   bindState: noop,
-  registerScript: noop,
   // Tests use a per-call ephemeral store so each render is independent.
   useInstanceState: <T,>(_key: string, initial: T) => {
     let value = initial;
@@ -230,10 +233,10 @@ describe("Switch", () => {
 
 describe("ToggleGroup", () => {
   it("sets the bound state to the clicked value", () => {
-    let payload: unknown = null;
+    let captured: { name: string; value: unknown } | null = null;
     const localHelpers = {
       ...helpers,
-      runAction: (p: unknown) => { payload = p; },
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
     };
     const items = [["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]];
     const node = makeNode("ToggleGroup", ["digest", items, "weekly"], [{}, {}, { stateRef: "digest" }]);
@@ -242,10 +245,7 @@ describe("ToggleGroup", () => {
     expect(buttons).toHaveLength(3);
     expect(buttons[1]?.getAttribute("aria-checked")).toBe("true");
     buttons[0]?.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "digest", value: "daily" }],
-    });
+    expect(captured).toEqual({ name: "digest", value: "daily" });
   });
 });
 
@@ -290,10 +290,10 @@ describe("Breadcrumb", () => {
 
 describe("Pagination", () => {
   it("dispatches a Set action with the clicked page number", () => {
-    let payload: unknown = null;
+    let captured: { name: string; value: unknown } | null = null;
     const localHelpers = {
       ...helpers,
-      runAction: (p: unknown) => { payload = p; },
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
     };
     const node = makeNode("Pagination", [5, 10], [{ stateRef: "page" }, {}]);
     const root = Pagination.render(node, { page: 5, totalPages: 10 }, localHelpers) as HTMLElement;
@@ -301,10 +301,7 @@ describe("Pagination", () => {
     const fourBtn = buttons.find((b) => b.textContent === "4");
     expect(fourBtn).toBeDefined();
     fourBtn?.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "page", value: 4 }],
-    });
+    expect(captured).toEqual({ name: "page", value: 4 });
   });
 
   it("disables prev on the first page and next on the last page", () => {
@@ -318,19 +315,16 @@ describe("Pagination", () => {
 
 describe("Drawer", () => {
   it("closes by dispatching a Set false action when the close button is clicked", () => {
-    let payload: unknown = null;
+    let captured: { name: string; value: unknown } | null = null;
     const localHelpers = {
       ...helpers,
-      runAction: (p: unknown) => { payload = p; },
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
     };
     const node = makeNode("Drawer", ["Details", true, []], [{}, { stateRef: "panelOpen" }, {}]);
     const overlay = Drawer.render(node, { title: "Details", open: true, children: [] }, localHelpers) as HTMLElement;
     expect(overlay.getAttribute("data-open")).toBe("true");
     overlay.querySelector<HTMLButtonElement>(".rui-sheet-close")?.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "panelOpen", value: false }],
-    });
+    expect(captured).toEqual({ name: "panelOpen", value: false });
   });
 });
 
@@ -370,7 +364,7 @@ describe("Stack", () => {
 
 describe("StackItem", () => {
   it("renders flex item data attributes and child", () => {
-    const child = makeNode("TextContent", ["Hello"]);
+    const child = makeNode("Text", ["Hello"]);
     const node = StackItem.render(
       makeNode("StackItem", [child, 0, 1]),
       { child, grow: 0, shrink: 0, alignSelf: "center", order: 2 },
@@ -416,13 +410,28 @@ describe("Grid", () => {
   });
 
   it("auto-enables 12-column mode when children include GridItem", () => {
-    const item = makeNode("GridItem", [makeNode("TextContent", ["x"]), 6]);
+    const item = makeNode("GridItem", [makeNode("Text", ["x"]), 6]);
     const node = Grid.render(
       makeNode("Grid", [[item]]),
       { children: [item] },
       helpers,
     ) as HTMLElement;
     expect(node.getAttribute("data-grid-mode")).toBe("12");
+  });
+
+  it("does NOT force 12-column mode when columns:N (N != 12) is explicit with GridItem children", () => {
+    // Regression: `Grid([GridItem(...), GridItem(...), GridItem(...)], 3, "l")`
+    // used to silently switch to a 12-column grid because GridItem children
+    // were present, squashing each card to ~8% width. When the author sets
+    // `columns: 3` explicitly, that wins and the cards take 1/3 of the row.
+    const item = makeNode("GridItem", [makeNode("Card", [[]])]);
+    const node = Grid.render(
+      makeNode("Grid", [[item, item, item], 3]),
+      { children: [item, item, item], columns: 3 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-columns")).toBe("3");
+    expect(node.getAttribute("data-grid-mode")).not.toBe("12");
   });
 
   it("falls back to auto-fit when no columns provided", () => {
@@ -438,7 +447,7 @@ describe("Grid", () => {
 
 describe("GridItem", () => {
   it("renders span, offset, and responsive span CSS vars", () => {
-    const child = makeNode("TextContent", ["Cell"]);
+    const child = makeNode("Text", ["Cell"]);
     const node = GridItem.render(
       makeNode("GridItem", [child, "1/3", 2]),
       { child, span: "1/3", offset: 2, spanAt: { base: 12, md: 4 } },
@@ -603,12 +612,15 @@ describe("Pattern composites", () => {
   });
 
   it("KanbanCard exposes a click action when an Action is provided", () => {
-    let payload: unknown = null;
+    const action = vi.fn();
+    let invokedWith: unknown = null;
     const localHelpers = {
       ...helpers,
-      runAction: (p: unknown) => { payload = p; },
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
     };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "open" }] };
     const node = KanbanCard.render(
       makeNode("KanbanCard", []),
       { title: "Task", action },
@@ -616,7 +628,8 @@ describe("Pattern composites", () => {
     ) as HTMLElement;
     expect(node.getAttribute("role")).toBe("button");
     node.click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 
   it("ProfileCard renders avatar and tags", () => {
@@ -707,9 +720,15 @@ describe("Rich layout patterns", () => {
   });
 
   it("SidebarItem marks active and fires action on click", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "open" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = SidebarItem.render(
       makeNode("SidebarItem", []),
       { label: "Projects", icon: "folder", active: true, badge: "12", action },
@@ -720,7 +739,8 @@ describe("Rich layout patterns", () => {
     expect(sidebarIcon?.classList.contains("fa-folder")).toBe(true);
     expect(node.querySelector(".rui-sidebar-item-badge")?.textContent).toBe("12");
     node.click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 
   it("SidebarSection labels and contains its items", () => {
@@ -852,6 +872,58 @@ describe("Spacer", () => {
     const node = Spacer.render(makeNode("Spacer", []), { size: "l" }, helpers) as HTMLElement;
     expect(node.getAttribute("data-flex")).toBe("false");
     expect(node.getAttribute("data-size")).toBe("l");
+  });
+});
+
+describe("Text", () => {
+  it("renders text with the requested variant and tone data attributes", () => {
+    const node = Text.render(
+      makeNode("Text", ["Hello"]),
+      { value: "Hello", variant: "large-heavy", tone: "primary" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.tagName).toBe("SPAN");
+    expect(node.className).toBe("rui-text");
+    expect(node.getAttribute("data-variant")).toBe("large-heavy");
+    expect(node.getAttribute("data-color")).toBe("primary");
+    expect(node.textContent).toBe("Hello");
+    expect(node.hasAttribute("style")).toBe(false);
+  });
+
+  it("applies a sanitised inline style declaration string", () => {
+    const node = Text.render(
+      makeNode("Text", ["Styled"]),
+      { value: "Styled", style: "font-size: 16px; font-weight: bold; color: #000;" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("style")).toBe(
+      "font-size: 16px; font-weight: bold; color: #000;",
+    );
+  });
+
+  it("drops the style attribute when input contains an XSS vector", () => {
+    const cases = [
+      "color: red; expression(alert(1))",
+      "background: url(javascript:alert(1))",
+      "behavior: url(#default#userdata)",
+      "color: red; @import url(evil.css)",
+      "color: red; <script>",
+    ];
+    for (const style of cases) {
+      const node = Text.render(
+        makeNode("Text", ["Hi"]),
+        { value: "Hi", style },
+        helpers,
+      ) as HTMLElement;
+      expect(node.hasAttribute("style")).toBe(false);
+    }
+  });
+
+  it("TextContent renders identically (deprecated alias)", () => {
+    const props = { value: "Aloha", variant: "body", tone: "muted" } as const;
+    const newNode = Text.render(makeNode("Text", ["Aloha"]), props, helpers) as HTMLElement;
+    const oldNode = TextContent.render(makeNode("TextContent", ["Aloha"]), props, helpers) as HTMLElement;
+    expect(oldNode.outerHTML).toBe(newNode.outerHTML);
   });
 });
 
@@ -1199,9 +1271,15 @@ describe("Stats", () => {
 
 describe("Tile", () => {
   it("renders a button when an action is provided", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "open" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = Tile.render(
       makeNode("Tile", []),
       { label: "Inbox", icon: "inbox", value: "12", description: "Unread", tone: "primary", action },
@@ -1214,7 +1292,8 @@ describe("Tile", () => {
     expect(node.querySelector(".rui-tile-label")?.textContent).toBe("Inbox");
     expect(node.querySelector(".rui-tile-value")?.textContent).toBe("12");
     (node as HTMLButtonElement).click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 
   it("renders a div when no action is provided", () => {
@@ -1258,9 +1337,15 @@ describe("PersonChip", () => {
   });
 
   it("becomes a button when an action is provided", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "open" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = PersonChip.render(
       makeNode("PersonChip", []),
       { name: "Asha", action },
@@ -1268,7 +1353,8 @@ describe("PersonChip", () => {
     ) as HTMLElement;
     expect(node.tagName.toLowerCase()).toBe("button");
     (node as HTMLButtonElement).click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1312,8 +1398,11 @@ describe("Rating", () => {
   });
 
   it("fires a Set action with the clicked rating when interactive", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
+    let captured: { name: string; value: unknown } | null = null;
+    const localHelpers = {
+      ...helpers,
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
+    };
     const node = makeNode("Rating", [3], [{ stateRef: "stars" }]);
     const root = Rating.render(
       node,
@@ -1323,10 +1412,7 @@ describe("Rating", () => {
     const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button.rui-rating-star"));
     expect(buttons).toHaveLength(5);
     buttons[4]?.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "stars", value: 5 }],
-    });
+    expect(captured).toEqual({ name: "stars", value: 5 });
   });
 });
 
@@ -1417,9 +1503,15 @@ describe("SearchBar", () => {
   });
 
   it("renders a submit button and fires the action on submit", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "search" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const form = SearchBar.render(
       makeNode("SearchBar", ["q"]),
       { id: "q", action, submitLabel: "Go" },
@@ -1429,14 +1521,18 @@ describe("SearchBar", () => {
     expect(submit).not.toBeNull();
     expect(submit?.textContent).toBe("Go");
     form.dispatchEvent(new Event("submit"));
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("FollowUpBlock", () => {
   it("renders FollowUpItem ComponentNodes via positional args", () => {
-    let captured: unknown = null;
-    const localHelpers = { ...helpers, runAction: (payload: unknown) => { captured = payload; } };
+    let capturedMessage: string | null = null;
+    const localHelpers = {
+      ...helpers,
+      sendToAssistant: (message: string) => { capturedMessage = message; },
+    };
     const itemNode = {
       __kind: "Component" as const,
       name: "FollowUpItem",
@@ -1455,10 +1551,7 @@ describe("FollowUpBlock", () => {
     expect(button!.textContent).toContain("Show invite link");
 
     button!.click();
-    expect(captured).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "ToAssistant", message: "Show me how to invite teammates" }],
-    });
+    expect(capturedMessage).toBe("Show me how to invite teammates");
   });
 
   it("falls back to label when message is omitted", () => {
@@ -1529,9 +1622,15 @@ describe("DropdownMenu", () => {
   });
 
   it("runs a MenuItem's action and closes the menu", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "save" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const items = [makeNode("MenuItem", ["Save", action])];
     const node = DropdownMenu.render(
       makeNode("DropdownMenu", ["Open", items]),
@@ -1541,14 +1640,19 @@ describe("DropdownMenu", () => {
     node.querySelector<HTMLElement>(".rui-dropdown-menu-trigger")?.click();
     expect(node.getAttribute("data-open")).toBe("true");
     node.querySelector<HTMLButtonElement>(".rui-menu-item")?.click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
     expect(node.getAttribute("data-open")).toBe("false");
   });
 
   it("disabled MenuItems do not fire actions", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "save" }] };
+    const action = vi.fn();
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const items = [makeNode("MenuItem", ["Save", action, null, null, "default", true])];
     const node = DropdownMenu.render(
       makeNode("DropdownMenu", ["Open", items]),
@@ -1558,7 +1662,7 @@ describe("DropdownMenu", () => {
     const itemBtn = node.querySelector<HTMLButtonElement>(".rui-menu-item");
     expect(itemBtn?.disabled).toBe(true);
     itemBtn?.click();
-    expect(payload).toBeNull();
+    expect(action).not.toHaveBeenCalled();
   });
 });
 
@@ -1643,23 +1747,36 @@ describe("Toast & Toast", () => {
   });
 
   it("Toast fires onClose action via the close button", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const onClose = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "dismiss" }] };
+    const onClose = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = Toast.render(
       makeNode("Toast", []),
       { title: "Done", onClose },
       localHelpers,
     ) as HTMLElement;
     node.querySelector<HTMLButtonElement>(".rui-toast-close")?.click();
-    expect(payload).toBe(onClose);
+    expect(invokedWith).toBe(onClose);
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(node.classList.contains("is-dismissed")).toBe(true);
   });
 
   it("Toast auto-dismisses after the configured duration", async () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const onClose = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "auto" }] };
+    const onClose = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = Toast.render(
       makeNode("Toast", []),
       { title: "Saved", duration: 20, onClose },
@@ -1668,15 +1785,20 @@ describe("Toast & Toast", () => {
     // Hosted in the document so `root.isConnected` is true when the timer fires.
     document.body.appendChild(node);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(payload).toBe(onClose);
+    expect(invokedWith).toBe(onClose);
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(node.classList.contains("is-dismissed")).toBe(true);
     node.remove();
   });
 
   it("Toast without duration does not auto-dismiss", async () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const onClose = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "auto" }] };
+    const onClose = vi.fn();
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = Toast.render(
       makeNode("Toast", []),
       { title: "Persistent", onClose },
@@ -1684,7 +1806,7 @@ describe("Toast & Toast", () => {
     ) as HTMLElement;
     document.body.appendChild(node);
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(payload).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
     expect(node.classList.contains("is-dismissed")).toBe(false);
     node.remove();
   });
@@ -1797,9 +1919,15 @@ describe("DatePicker", () => {
 
 describe("FileUpload", () => {
   it("fires the action when a file is picked", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "upload" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = FileUpload.render(
       makeNode("FileUpload", ["avatar"]),
       { id: "avatar", label: "Drop a photo", accept: "image/*", action },
@@ -1811,14 +1939,18 @@ describe("FileUpload", () => {
     expect(input?.getAttribute("type")).toBe("file");
     expect(input?.getAttribute("accept")).toBe("image/*");
     input?.dispatchEvent(new Event("change"));
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("Combobox", () => {
   it("renders the selected label and filters matching options on type", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
+    let captured: { name: string; value: unknown } | null = null;
+    const localHelpers = {
+      ...helpers,
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
+    };
     const items = [
       makeNode("SelectItem", ["us", "United States"]),
       makeNode("SelectItem", ["uk", "United Kingdom"]),
@@ -1846,12 +1978,9 @@ describe("Combobox", () => {
     const visible = Array.from(root.querySelectorAll<HTMLButtonElement>(".rui-combobox-option"));
     expect(visible.map((b) => b.textContent)).toEqual(["United Kingdom"]);
 
-    // Picking an option fires a Set action with the new value
+    // Picking an option fires a setState with the new value
     visible[0]?.click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Set", name: "country", value: "uk" }],
-    });
+    expect(captured).toEqual({ name: "country", value: "uk" });
   });
 });
 
@@ -1894,16 +2023,23 @@ describe("Tree & TreeNode", () => {
   });
 
   it("TreeNode runs its action on click", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "open" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = TreeNode.render(
       makeNode("TreeNode", ["index.ts"]),
       { label: "index.ts", action },
       localHelpers,
     ) as HTMLElement;
     (node as HTMLButtonElement).click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1927,8 +2063,10 @@ describe("Navbar & NavbarItem", () => {
   });
 
   it("NavbarItem marks active and navigates on click when `to` is set", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
+    let navigatedTo: string | null = null;
+    const router = new Router();
+    router.navigate = (path: string) => { navigatedTo = path; };
+    const localHelpers = { ...helpers, router };
     const node = NavbarItem.render(
       makeNode("NavbarItem", ["Docs", "/docs"]),
       { label: "Docs", to: "/docs", active: true, icon: "book" },
@@ -1939,16 +2077,19 @@ describe("Navbar & NavbarItem", () => {
     const navIcon = node.querySelector(".rui-navbar-item-icon");
     expect(navIcon?.classList.contains("fa-book")).toBe(true);
     (node as HTMLAnchorElement).click();
-    expect(payload).toMatchObject({
-      kind: "Action",
-      steps: [{ kind: "Navigate", path: "/docs" }],
-    });
+    expect(navigatedTo).toBe("/docs");
   });
 
   it("MenuItem (standalone) renders a button with icon and shortcut", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
-    const action = { kind: "Action" as const, steps: [{ kind: "Run" as const, ref: "go" }] };
+    const action = vi.fn();
+    let invokedWith: unknown = null;
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => {
+        invokedWith = fn;
+        if (typeof fn === "function") (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    };
     const node = MenuItem.render(
       makeNode("MenuItem", ["Save", action, "save", "⌘S"]),
       { label: "Save", action, icon: "save", shortcut: "⌘S" },
@@ -1958,7 +2099,8 @@ describe("Navbar & NavbarItem", () => {
     expect(node.querySelector(".rui-menu-item-label")?.textContent).toBe("Save");
     expect(node.querySelector(".rui-menu-item-shortcut")?.textContent).toBe("⌘S");
     (node as HTMLButtonElement).click();
-    expect(payload).toBe(action);
+    expect(invokedWith).toBe(action);
+    expect(action).toHaveBeenCalledTimes(1);
   });
 
   it("MenuSeparator and MenuLabel render the expected elements", () => {
@@ -2030,10 +2172,10 @@ describe("new components — phase 1-4 rollout", () => {
     expect(node.querySelector(".rui-stat-spark svg")).not.toBeNull();
   });
 
-  it("Badge with size + icon falls back to default tone", () => {
+  it("Badge with size + icon honors the tone prop (variant alias supported)", () => {
     const node = Badge.render(
       makeNode("Badge", ["New", "primary", "star", "sm"]),
-      { label: "New", variant: "primary", icon: "star", size: "sm" },
+      { label: "New", tone: "primary", icon: "star", size: "sm" },
       helpers,
     ) as HTMLElement;
     expect(node.getAttribute("data-variant")).toBe("primary");
@@ -2055,7 +2197,7 @@ describe("new components — phase 1-4 rollout", () => {
   it("Callout(compact=true) marks the wrapper as compact", () => {
     const node = Callout.render(
       makeNode("Callout", ["info", "Heads up", "Saved!", null, true]),
-      { variant: "info", title: "Heads up", description: "Saved!", compact: true },
+      { tone: "info", title: "Heads up", description: "Saved!", compact: true },
       helpers,
     ) as HTMLElement;
     expect(node.getAttribute("data-compact")).toBe("true");
@@ -2149,8 +2291,11 @@ describe("new components — phase 1-4 rollout", () => {
   });
 
   it("MultiSelect renders chip-trigger + filter + options and selected chips removal", () => {
-    let captured: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { captured = p; } };
+    let captured: { name: string; value: unknown } | null = null;
+    const localHelpers = {
+      ...helpers,
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
+    };
     const items = [
       { value: "a", label: "Alpha" },
       { value: "b", label: "Beta" },
@@ -2164,12 +2309,15 @@ describe("new components — phase 1-4 rollout", () => {
     expect(node.querySelector(".rui-multiselect-chip-label")?.textContent).toBe("Alpha");
     const removeBtn = node.querySelector(".rui-multiselect-chip-remove") as HTMLButtonElement;
     removeBtn.click();
-    expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toEqual([]);
+    expect(captured).toEqual({ name: "picks", value: [] });
   });
 
   it("ToggleGroup marks the active option + sets the bound state on click", () => {
-    let captured: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { captured = p; } };
+    let captured: { name: string; value: unknown } | null = null;
+    const localHelpers = {
+      ...helpers,
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
+    };
     const items = [
       { value: "grid", label: "Grid", icon: "grip" },
       { value: "list", label: "List" },
@@ -2183,7 +2331,7 @@ describe("new components — phase 1-4 rollout", () => {
     expect(buttons.length).toBe(2);
     expect(buttons[0]?.getAttribute("aria-checked")).toBe("true");
     buttons[1]?.click();
-    expect((captured as { steps?: Array<{ value: unknown }> })?.steps?.[0]?.value).toBe("list");
+    expect(captured).toEqual({ name: "view", value: "list" });
   });
 
   it("DateRangePicker renders two date inputs with shared min/max", () => {
@@ -2266,8 +2414,11 @@ describe("new components — phase 1-4 rollout", () => {
   });
 
   it("Rating(halfStep) emits a half value when clicking the left half of a star", () => {
-    let payload: unknown = null;
-    const localHelpers = { ...helpers, runAction: (p: unknown) => { payload = p; } };
+    let captured: { name: string; value: unknown } | null = null;
+    const localHelpers = {
+      ...helpers,
+      setState: (name: string, value: unknown) => { captured = { name, value }; },
+    };
     const node = Rating.render(
       makeNode("Rating", [0, 5, undefined, undefined, "md", true, true], [{ stateRef: "score" }, {}, {}, {}, {}, {}, {}]),
       { value: 0, max: 5, interactive: true, halfStep: true },
@@ -2280,8 +2431,7 @@ describe("new components — phase 1-4 rollout", () => {
     const fakeRect = { left: 0, width: 20 } as DOMRect;
     star.getBoundingClientRect = () => fakeRect;
     star.dispatchEvent(new MouseEvent("click", { clientX: 5, bubbles: true }));
-    const step = (payload as { steps?: Array<{ value: unknown }> })?.steps?.[0];
-    expect(step?.value).toBe(2.5);
+    expect(captured).toEqual({ name: "score", value: 2.5 });
   });
 
   it("Toast(position) marks itself as standalone with the corner anchor", () => {
@@ -2476,7 +2626,9 @@ const ADVANCED_SMOKE_TESTS: Array<{
     name: "Lightbox",
     spec: Lightbox,
     props: { open: true, index: 0, items: [{ src: "a.png" }] },
-    rootClass: "rui-lightbox-overlay",
+    // Lightbox returns a `rui-lightbox-root` wrapper that contains both
+    // the optional thumbnail and the overlay (rui-lightbox-overlay).
+    rootClass: "rui-lightbox-root",
   },
   {
     name: "VideoPlayer",

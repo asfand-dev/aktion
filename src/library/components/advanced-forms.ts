@@ -14,7 +14,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 
 const PIN_TYPES = ["numeric", "alphanumeric"] as const;
@@ -52,42 +51,51 @@ function renderPin(
     inputs.push(input);
     root.append(input);
   }
-  const collect = (): string => inputs.map((i) => i.value).join("").slice(0, length);
+  const getLiveSlots = (origin: Element): HTMLInputElement[] => {
+    const pinRoot = origin.closest(".rui-pin-input");
+    if (!pinRoot) return inputs;
+    return Array.from(pinRoot.querySelectorAll<HTMLInputElement>(".rui-pin-input-slot"));
+  };
+  const collectLive = (origin: Element): string => {
+    return getLiveSlots(origin).map((i) => i.value).join("").slice(0, length);
+  };
   inputs.forEach((input, idx) => {
     input.oninput = (event) => {
       const target = event.currentTarget as HTMLInputElement;
+      const liveSlots = getLiveSlots(target);
       let v = target.value;
       if (type === "numeric") v = v.replace(/\D/g, "");
       else v = v.replace(/[^A-Za-z0-9]/g, "");
       if (v.length > 1) {
-        // Paste support — distribute the typed characters across slots.
         const chars = v.split("");
         chars.slice(0, length - idx).forEach((c, k) => {
-          const next = inputs[idx + k];
+          const next = liveSlots[idx + k];
           if (next) next.value = c;
         });
         const lastFilled = Math.min(idx + chars.length, length - 1);
-        inputs[lastFilled]?.focus();
+        liveSlots[lastFilled]?.focus();
       } else {
         target.value = v;
-        if (v && idx < length - 1) inputs[idx + 1]?.focus();
+        if (v && idx < length - 1) liveSlots[idx + 1]?.focus();
       }
-      onChange?.(collect());
+      onChange?.(collectLive(target));
     };
     input.onkeydown = (event) => {
       const e = event as KeyboardEvent;
-      if (e.key === "Backspace" && !input.value && idx > 0) {
+      const target = e.currentTarget as HTMLInputElement;
+      const liveSlots = getLiveSlots(target);
+      if (e.key === "Backspace" && !target.value && idx > 0) {
         e.preventDefault();
-        inputs[idx - 1]?.focus();
-        const prev = inputs[idx - 1];
+        liveSlots[idx - 1]?.focus();
+        const prev = liveSlots[idx - 1];
         if (prev) prev.value = "";
-        onChange?.(collect());
+        onChange?.(collectLive(target));
       } else if (e.key === "ArrowLeft" && idx > 0) {
         e.preventDefault();
-        inputs[idx - 1]?.focus();
+        liveSlots[idx - 1]?.focus();
       } else if (e.key === "ArrowRight" && idx < length - 1) {
         e.preventDefault();
-        inputs[idx + 1]?.focus();
+        liveSlots[idx + 1]?.focus();
       }
     };
   });
@@ -118,9 +126,7 @@ export const PinInput: ComponentSpec = {
     const mask = asBoolean(props.mask);
     const stateName = node.argMeta?.[2]?.stateRef;
     return renderPin(id, length, type, value, disabled, mask, (next) => {
-      if (stateName) {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: next }] });
-      }
+      if (stateName) helpers.setState(stateName, next);
     });
   },
 };
@@ -152,7 +158,8 @@ export const PasswordInput: ComponentSpec = {
     { name: "id", type: "string" },
     { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
     { name: "placeholder", type: "string", optional: true },
-    { name: "strengthMeter", type: "boolean", optional: true },
+    { name: "label", type: "string", optional: true, description: "Inline label above the field" },
+    { name: "strengthMeter", type: "boolean", optional: true, aliases: ["showStrength"] },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (node, props, helpers) => {
@@ -161,6 +168,10 @@ export const PasswordInput: ComponentSpec = {
     const visible = visibleSlot.get();
     const disabled = asBoolean(props.disabled);
     const root = el("div", { class: "rui-password-input", "data-disabled": disabled ? "true" : "false" });
+    const labelText = asString(props.label);
+    if (labelText) {
+      root.append(el("label", { class: "rui-password-input-label", for: id }, [labelText]));
+    }
     const row = el("div", { class: "rui-password-input-row" });
     const input = el("input", {
       type: visible ? "text" : "password",
@@ -231,6 +242,7 @@ export const TagInput: ComponentSpec = {
     { name: "id", type: "string" },
     { name: "value", type: "string[]", optional: true, description: "Bound array of tag values" },
     { name: "placeholder", type: "string", optional: true },
+    { name: "label", type: "string", optional: true, description: "Inline label above the field" },
     { name: "max", type: "number", optional: true, description: "Maximum number of tags" },
     { name: "disabled", type: "boolean", optional: true },
   ],
@@ -242,8 +254,9 @@ export const TagInput: ComponentSpec = {
     const stateName = node.argMeta?.[1]?.stateRef;
     const setTags = (next: string[]) => {
       if (!stateName) return;
-      helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: next }] });
+      helpers.setState(stateName, next);
     };
+    const labelText = asString(props.label);
     const root = el("div", {
       class: "rui-tag-input",
       "data-disabled": disabled ? "true" : "false",
@@ -271,23 +284,33 @@ export const TagInput: ComponentSpec = {
     }) as HTMLInputElement;
     input.onkeydown = (event) => {
       const e = event as KeyboardEvent;
+      // Read the value from the *live* input — morph keeps the previously
+      // mounted DOM node, so the closure-captured `input` reference points
+      // at the freshly rendered (detached) field and its `.value` is empty.
+      const liveInput = e.currentTarget as HTMLInputElement;
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
-        const value = input.value.trim();
+        const value = liveInput.value.trim();
         if (!value) return;
         if (max > 0 && tags.length >= max) return;
         if (tags.includes(value)) {
-          input.value = "";
+          liveInput.value = "";
           return;
         }
         setTags([...tags, value]);
-        input.value = "";
-      } else if (e.key === "Backspace" && input.value === "" && tags.length > 0) {
+        liveInput.value = "";
+      } else if (e.key === "Backspace" && liveInput.value === "" && tags.length > 0) {
         e.preventDefault();
         setTags(tags.slice(0, -1));
       }
     };
     root.append(input);
+    if (labelText) {
+      const wrapper = el("div", { class: "rui-tag-input-wrapper" });
+      wrapper.append(el("label", { class: "rui-tag-input-label", for: id }, [labelText]));
+      wrapper.append(root);
+      return wrapper;
+    }
     return root;
   },
 };
@@ -524,6 +547,7 @@ export const MaskedInput: ComponentSpec = {
     { name: "mask", type: "string", description: "Mask pattern" },
     { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
     { name: "placeholder", type: "string", optional: true },
+    { name: "label", type: "string", optional: true, description: "Inline label above the field" },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (node, props, helpers) => {
@@ -531,6 +555,7 @@ export const MaskedInput: ComponentSpec = {
     const mask = asString(props.mask);
     const disabled = asBoolean(props.disabled);
     const initial = applyMask(asString(props.value), mask);
+    const labelText = asString(props.label);
     const input = el("input", {
       type: "text",
       class: "rui-masked-input",
@@ -551,6 +576,12 @@ export const MaskedInput: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
+    if (labelText) {
+      const wrapper = el("div", { class: "rui-masked-input-wrapper" });
+      wrapper.append(el("label", { class: "rui-masked-input-label", for: id }, [labelText]));
+      wrapper.append(input);
+      return wrapper;
+    }
     return input;
   },
 };
@@ -568,9 +599,9 @@ export const FormSection: ComponentSpec = {
     "`SectionHeader` by hand. Pair with `FieldSet` when the group is a " +
     "true `<fieldset>` (radio sets, checkbox groups).",
   props: [
-    { name: "label", type: "string" },
-    { name: "children", type: "Node[]" },
-    { name: "helper", type: "string", optional: true, description: "Description rendered below the label" },
+    { name: "label", type: "string", aliases: ["title"] },
+    { name: "children", type: "Node[]", aliases: ["fields"] },
+    { name: "helper", type: "string", optional: true, aliases: ["description"], description: "Description rendered below the label" },
   ],
   render: (_node, props, helpers) => {
     const root = el("section", { class: "rui-form-section" });
@@ -594,9 +625,9 @@ export const FieldSet: ComponentSpec = {
     "wrapper (radio sets, checkbox groups). For purely visual grouping " +
     "prefer `FormSection`.",
   props: [
-    { name: "legend", type: "string" },
-    { name: "children", type: "Node[]" },
-    { name: "helper", type: "string", optional: true },
+    { name: "legend", type: "string", aliases: ["title", "label"] },
+    { name: "children", type: "Node[]", aliases: ["fields"] },
+    { name: "helper", type: "string", optional: true, aliases: ["hint", "description"] },
     { name: "disabled", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -701,7 +732,7 @@ export const MultiStepForm: ComponentSpec = {
   props: [
     { name: "steps", type: "object[]", description: "Array of {title, details?, content} step objects" },
     { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
-    { name: "onSubmit", type: "Action", optional: true, description: "Action fired when the user clicks Submit on the final step" },
+    { name: "onSubmit", type: "callable", optional: true, description: "Callable fired when the user clicks Submit on the final step" },
     { name: "prevLabel", type: "string", optional: true, description: "Default \"Back\"" },
     { name: "nextLabel", type: "string", optional: true, description: "Default \"Continue\"" },
     { name: "submitLabel", type: "string", optional: true, description: "Default \"Submit\" (final step)" },
@@ -738,9 +769,7 @@ export const MultiStepForm: ComponentSpec = {
       disabled: current <= 0 ? "" : null,
     }, [asString(props.prevLabel, "Back")]);
     if (stateName && current > 0) {
-      prevBtn.onclick = () => {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current - 1 }] });
-      };
+      prevBtn.onclick = () => helpers.setState(stateName, current - 1);
     }
     const isFinal = current >= total - 1;
     const nextLabel = isFinal ? asString(props.submitLabel, "Submit") : asString(props.nextLabel, "Continue");
@@ -751,9 +780,9 @@ export const MultiStepForm: ComponentSpec = {
     }, [nextLabel]);
     nextBtn.onclick = () => {
       if (isFinal) {
-        if (isActionPayload(props.onSubmit)) helpers.runAction(props.onSubmit);
+        helpers.invoke(props.onSubmit);
       } else if (stateName) {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: stateName, value: current + 1 }] });
+        helpers.setState(stateName, current + 1);
       }
     };
     footer.append(prevBtn);

@@ -8,1152 +8,9 @@
  */
 
 const EXAMPLES = {
-  "analytics-assistant": {
-    slug: "analytics-assistant",
-    docTitle: `Analytics assistant · streaming-ui-script`,
-    eyebrow: `Live demo · NL → chart`,
-    heroTitleHtml: `Type a question, get a chart back`,
-    heroDescriptionHtml: `A natural-language analytics assistant that maps free-text questions
-        onto a small mock warehouse. The same UI Script program renders the
-        suggestion chips, the active chart, the breakdown table, and a written
-        summary. All powered by one tool: <code>analytics_query</code>.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · analytics assistant`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Ask the warehouse`,
-      lede: `Click a suggestion or type your own question. The mock router maps to one of
-        five intents (revenue, signups, churn, plan-mix, top-customers) and returns
-        the appropriate shape — labels, series, summary, and a few KPIs. The UI Script
-        program is unaware of which intent fired; it just renders whatever
-        <code>data</code> looks like.`,
-      codeBlocks: [
-      { codeId: "src-analytics", content: `$question = "How is revenue trending this quarter?"
-$$range   = "90d"
-
-result = Query("analytics_query", {q: $question, range: $$range}, {
-  intent: "loading",
-  title: "Loading…",
-  summary: "",
-  metric: "",
-  delta: "",
-  trend: "",
-  labels: [],
-  series: [],
-  colA: "",
-  colB: "",
-  colC: "",
-  rows: []
-})
-
-questionField = FormControl("Ask a question", Input("question", "Try: how is revenue trending this quarter?", "text", null, $question))
-
-rangeField = FormControl("Range", Select("range", [
-  SelectItem("30d",  "Last 30 days"),
-  SelectItem("90d",  "Last 90 days"),
-  SelectItem("365d", "Last year")
-], "90d", $$range))
-
-queryRow = Stack([questionField, rangeField], "row", "m", "stretch")
-
-SuggestionBtn(label, prompt) = Button(label, Action([@Set($question, prompt)]), "secondary", "normal", "small")
-
-suggestions = Buttons([
-  SuggestionBtn("Revenue trend",   "How is revenue trending this quarter?"),
-  Button("Daily signups",          Action([@Set($question, "Daily signups in the last 30 days"), @Set($$range, "30d")]), "secondary", "normal", "small"),
-  SuggestionBtn("Plan mix",        "Show me the plan mix"),
-  SuggestionBtn("Recent churn",    "Which customers churned recently?"),
-  SuggestionBtn("Top 5 customers", "Top 5 customers by revenue")
-])
-
-trendTone = @Switch(result.trend, {up: "success", down: "danger"}, "neutral")
-
-intentBadge = Badge(\`Intent: \${result.intent}\`, "primary", null, "sm")
-trendTag    = Badge(result.trend,               trendTone, null, "sm")
-
-kpis = Stack([
-  StatCard(result.metric,      result.delta,   result.trend),
-  StatCard("Detected intent",  result.intent),
-  StatCard("Time range",       $$range)
-], "row", "m", "stretch", "start", true)
-
-chartLine = LineChart(result.labels, [Series(result.metric, result.series)], "natural", "Date", result.metric)
-chartBar  = BarChart(result.labels,  [Series(result.metric, result.series)])
-
-chartTabs = Tabs([
-  TabItem("trend", "Trend", [chartLine]),
-  TabItem("bars",  "Bars",  [chartBar])
-])
-
-tbl = Table([
-  Col(result.colA, result.rows.label),
-  Col(result.colB, result.rows.value, "number"),
-  Col(result.colC, @Each(result.rows, "{delta, deltaVariant}", Badge(delta, deltaVariant, null, "sm")))
-])
-
-chartCard     = Card([CardHeader(result.title, result.summary),  kpis, chartTabs])
-breakdownCard = Card([CardHeader("Breakdown", "Detail rows used to build the chart"), tbl])
-
-view = @If(result.intent == "loading", Skeleton(4), Stack([chartCard, breakdownCard]))
-
-root = Stack([
-  Card([
-    CardHeader("Analytics assistant", "Ask anything about revenue, signups, churn, or customers"),
-    Stack([intentBadge, trendTag], "row", "s", "center", "start", true),
-    queryRow,
-    suggestions
-  ], "elevated"),
-  view
-])` }
-      ],
-      render: { elId: "rui-analytics", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The router`,
-      lede: `A tiny rule-based router stands in for a real LLM. Replace it with a model
-        call (or a function-calling endpoint) and the front-end stays the same.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  analytics_query: async ({ q, range }) =&gt; {
-    await sleep(450);
-    const intent = routeIntent(q);          // "revenue" | "signups" | "churn" | "plan-mix" | "top-customers"
-    return buildPayload(intent, range);     // { intent, title, summary, metric, delta, trend, labels, series, table }
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    /* ----------------------------- Mock warehouse --------------------------- */
-
-    function dailyLabels(days) {
-      const out = [];
-      const now = new Date();
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        out.push(`${d.getMonth() + 1}/${d.getDate()}`);
-      }
-      return out;
-    }
-
-    function noisyTrend(days, base, slope, noise) {
-      const out = [];
-      let v = base;
-      for (let i = 0; i < days; i++) {
-        v += slope + (Math.random() - 0.5) * noise;
-        out.push(Math.max(0, Math.round(v)));
-      }
-      return out;
-    }
-
-    function deltaTag(curr, prev) {
-      if (prev === 0) return { delta: "—", deltaVariant: "neutral" };
-      const pct = Math.round(((curr - prev) / prev) * 100);
-      const sign = pct >= 0 ? "+" : "";
-      return {
-        delta: `${sign}${pct}%`,
-        deltaVariant: pct > 5 ? "success" : pct < -5 ? "danger" : "neutral",
-      };
-    }
-
-    function rangeDays(range) {
-      if (range === "30d") return 30;
-      if (range === "365d") return 90; // collapse a year into 90 monthly-style buckets for the chart
-      return 90;
-    }
-
-    /* ----------------------------- Intent router ---------------------------- */
-
-    function routeIntent(q) {
-      const text = (q ?? "").toLowerCase();
-      if (/(churn|cancel|downgrad)/.test(text)) return "churn";
-      if (/(plan|tier|mix|distribution)/.test(text)) return "plan-mix";
-      if (/(top|ranking|biggest|largest|highest).*(customer|account|user)/.test(text)) return "top-customers";
-      if (/(signup|sign-up|new user|registration)/.test(text)) return "signups";
-      if (/(revenue|mrr|arr|sales|income)/.test(text)) return "revenue";
-      return "revenue";
-    }
-
-    /* ------------------------------ Payload --------------------------------- */
-
-    function buildPayload(intent, range) {
-      const days = rangeDays(range);
-      const labels = dailyLabels(days);
-
-      switch (intent) {
-        case "revenue": {
-          const series = noisyTrend(days, 4200, 35, 700);
-          const last = series[series.length - 1];
-          const prev = series[series.length - 8] ?? series[0];
-          const cmp = deltaTag(last, prev);
-          const rows = labels.slice(-7).map((label, i) => {
-            const idx = series.length - 7 + i;
-            const value = series[idx];
-            const prevDay = series[idx - 1] ?? value;
-            return { label, value, ...deltaTag(value, prevDay) };
-          });
-          return {
-            intent,
-            title: "Daily revenue",
-            summary: `Revenue is trending ${cmp.delta} week-over-week. Strongest day: ${Math.max(...series).toLocaleString()}.`,
-            metric: "Revenue €",
-            delta: cmp.delta,
-            trend: cmp.deltaVariant === "success" ? "up" : cmp.deltaVariant === "danger" ? "down" : "neutral",
-            labels,
-            series,
-            colA: "Day", colB: "Revenue", colC: "vs prev",
-            rows,
-          };
-        }
-        case "signups": {
-          const series = noisyTrend(days, 90, 1.2, 35);
-          const last = series[series.length - 1];
-          const prev = series[series.length - 8] ?? series[0];
-          const cmp = deltaTag(last, prev);
-          const rows = labels.slice(-7).map((label, i) => {
-            const idx = series.length - 7 + i;
-            const value = series[idx];
-            const prevDay = series[idx - 1] ?? value;
-            return { label, value, ...deltaTag(value, prevDay) };
-          });
-          return {
-            intent,
-            title: "Daily signups",
-            summary: `Signups are ${cmp.delta} week-over-week. Average: ${Math.round(series.reduce((a, b) => a + b, 0) / series.length)} per day.`,
-            metric: "Signups",
-            delta: cmp.delta,
-            trend: cmp.deltaVariant === "success" ? "up" : cmp.deltaVariant === "danger" ? "down" : "neutral",
-            labels,
-            series,
-            colA: "Day", colB: "Signups", colC: "vs prev",
-            rows,
-          };
-        }
-        case "churn": {
-          const series = noisyTrend(days, 6, 0.04, 4).map((v) => Math.max(0, Math.min(40, v)));
-          const last = series[series.length - 1];
-          const prev = series[series.length - 8] ?? series[0];
-          const cmp = deltaTag(last, prev);
-          const churnRows = [
-            { label: "Acme Robotics",  value: 1280, delta: "Pro → Starter", deltaVariant: "warning" },
-            { label: "Northwind",      value: 940,  delta: "Cancelled",     deltaVariant: "danger"  },
-            { label: "Cobalt Labs",    value: 620,  delta: "Cancelled",     deltaVariant: "danger"  },
-            { label: "Bytecanvas",     value: 410,  delta: "Pro → Starter", deltaVariant: "warning" },
-            { label: "Pastel Studio",  value: 290,  delta: "Cancelled",     deltaVariant: "danger"  },
-          ];
-          return {
-            intent,
-            title: "Churn risk",
-            summary: `Daily cancellations are ${cmp.delta} week-over-week. ${churnRows.length} at-risk accounts surfaced.`,
-            metric: "Cancellations",
-            delta: cmp.delta,
-            trend: cmp.deltaVariant === "success" ? "down" : cmp.deltaVariant === "danger" ? "up" : "neutral",
-            labels,
-            series,
-            colA: "Account", colB: "MRR €", colC: "Reason",
-            rows: churnRows,
-          };
-        }
-        case "plan-mix": {
-          const labels = ["Starter", "Pro", "Team", "Enterprise"];
-          const series = [3210, 1480, 410, 92];
-          const rows = labels.map((label, i) => ({
-            label,
-            value: series[i],
-            delta: i === 1 ? "+12%" : i === 3 ? "+18%" : i === 0 ? "-3%" : "+2%",
-            deltaVariant: i === 1 || i === 3 ? "success" : i === 0 ? "warning" : "neutral",
-          }));
-          return {
-            intent: "plan-mix",
-            title: "Customers by plan",
-            summary: "Pro is the fastest-growing tier (+12%). Enterprise is small but adding strategic logos.",
-            metric: "Total accounts",
-            delta: `${series.reduce((a, b) => a + b, 0).toLocaleString()}`,
-            trend: "up",
-            labels,
-            series,
-            colA: "Plan", colB: "Accounts", colC: "vs prev",
-            rows,
-          };
-        }
-        case "top-customers": {
-          const labels = ["Aurora Health", "Northwind", "Helix Bio", "Orbitcorp", "Flowmark"];
-          const series = [12_800, 9_460, 7_120, 6_540, 4_980];
-          const rows = labels.map((label, i) => ({
-            label,
-            value: series[i],
-            delta: i === 0 ? "+22%" : i === 1 ? "-4%" : "+6%",
-            deltaVariant: i === 1 ? "warning" : "success",
-          }));
-          return {
-            intent: "top-customers",
-            title: "Top customers by MRR",
-            summary: `Aurora Health remains #1 at €${series[0].toLocaleString()} MRR (+22%). Northwind slipping after a downgrade.`,
-            metric: "Top MRR €",
-            delta: `+${Math.round(((series[0] - series[1]) / series[1]) * 100)}% vs #2`,
-            trend: "up",
-            labels,
-            series,
-            colA: "Customer", colB: "MRR €", colC: "vs prev",
-            rows,
-          };
-        }
-        default:
-          return { intent: "unknown", title: "—", summary: "I couldn't classify that question.", metric: "", delta: "", trend: "neutral", labels: [], series: [], colA: "A", colB: "B", colC: "C", rows: [] };
-      }
-    }
-
-    /* -------------------------- Wire up the element ------------------------- */
-
-    const el = document.getElementById("rui-analytics");
-
-    el.setTools({
-      analytics_query: async ({ q, range }) => {
-        await sleep(450);
-        const intent = routeIntent(q);
-        return buildPayload(intent, range);
-      },
-    });
-
-    el.setResponse(document.getElementById("src-analytics").textContent);
-    }
-  },
-  "app-workspace": {
-    slug: "app-workspace",
-    docTitle: `App workspace · streaming-ui-script`,
-    eyebrow: `Live demo · AppShell + Sidebar + dense sections`,
-    heroTitleHtml: `A full SaaS workspace, generated from one program`,
-    heroDescriptionHtml: `This single Streaming UI Script program produces a complete product
-        surface: a sticky <code>Sidebar</code> with sections + active state,
-        a thin topbar with live status, a <code>PageHeader</code>, a
-        <code>MetricGrid</code> KPI strip, a two-column content grid mixing
-        <code>List</code>s, <code>StatusDot</code>s, a <code>Timeline</code>,
-        and a <code>DescriptionList</code> — closing with follow-ups. Every
-        section reaches for the matching pattern instead of hand-rolling
-        layouts.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · app workspace`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live workspace`,
-      lede: `Click a sidebar entry to switch the focused page — the workspace
-        re-renders with that page's KPIs, project list, and activity feed.`,
-      codeBlocks: [
-      { codeId: "src-workspace", content: `$$active = "overview"
-
-data = Query("workspace_overview", {page: $$active}, {
-  title: "", subtitle: "", status: "",
-  kpis: [], projects: [], statuses: [], activity: [], summary: []
-})
-
-root = AppShell(nav, content, topbar)
-
-NavRow(label, icon, key, badge) = SidebarItem(label, icon, $$active == key, badge, Action([@Set($$active, key)]))
-
-nav = Sidebar([
-  SidebarSection("Workspace", [
-    NavRow("Overview", "house",    "overview", null),
-    NavRow("Projects", "folder",   "projects", "12"),
-    NavRow("Calendar", "calendar", "calendar", null),
-    NavRow("Messages", "comments", "messages", "3")
-  ]),
-  SidebarSection("Insights", [
-    NavRow("Analytics", "chart-pie",   "analytics", null),
-    NavRow("Reports",   "chart-line",  "reports",   null),
-    NavRow("Billing",   "credit-card", "billing",   null)
-  ])
-], "Acme HQ", "Production · v2.3", [
-  Stack([
-    Avatar("Asha Patel", null, "sm"),
-    Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")
-  ], 2)
-])
-
-topbar = [
-  StatusDot("Realtime", "success", true),
-  Buttons([
-    Button("Invite",  Action([@ToAssistant("Invite a teammate")]),       "ghost",   "button", "small"),
-    Button("Upgrade", Action([@ToAssistant("Open the upgrade flow")]),   "primary", "button", "small")
-  ])
-]
-
-header = PageHeader(data.title, data.subtitle, null,
-  [Button("New", Action([@ToAssistant(\`Open the new-item flow on \${$$active}\`)]), "primary")],
-  Badge(data.status, "success", null, "sm"))
-
-kpis = Stats(@Each(data.kpis, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon)))
-
-projectsCard = Card([
-  SectionHeader("Active projects", null, "WORK", null,
-    [Button("View all", Action([@ToAssistant("View all projects")]), "ghost", "button", "small")]),
-  List(@Each(data.projects, "{title, subtitle, icon}", ListItem(title, subtitle, icon)))
-])
-
-statusCard = Card([
-  SectionHeader("System status", null, "OPS", Badge("All normal", "success", null, "sm")),
-  Stack(@Each(data.statuses, "{label, tone, pulse}", StatusDot(label, tone, pulse)), "column", "s")
-])
-
-activityCard = Card([
-  SectionHeader("Recent activity"),
-  Timeline(@Each(data.activity, "{title, time, description, icon, tone}", TimelineItem(title, time, description, icon, tone)))
-])
-
-summaryCard = Card([
-  SectionHeader("Workspace summary", null, "AT A GLANCE"),
-  DescriptionList(@Each(data.summary, "{label, value, icon}", DescriptionItem(label, value, icon)), 2)
-])
-
-contentGrid = Grid([projectsCard, statusCard], {sm: 1, md: 2}, "l")
-detailGrid  = Grid([activityCard, summaryCard], {sm: 1, md: 2}, "l")
-followUps   = FollowUpBlock([
-  FollowUpItem("Show at-risk projects"),
-  FollowUpItem("Open billing"),
-  FollowUpItem("Invite my team")
-])
-
-content = [header, kpis, contentGrid, detailGrid, followUps]` }
-      ],
-      render: { elId: "rui-workspace", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `One tool, every section`,
-      lede: `The whole workspace is driven by a single
-        <code>workspace_overview</code> tool. The tool returns the title,
-        subtitle, KPI list, project list, status pips, activity feed, and
-        summary key/values for the active page. Swapping pages is one
-        <code>@Set($active, …)</code> — no manual routing, no extra plumbing.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  workspace_overview: async ({ page }) =&gt; {
-    await sleep(220);
-    return PAGES[page] ?? PAGES.overview;
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const PAGES = {
-      overview: {
-        title: "Overview",
-        subtitle: "Everything happening across your workspace",
-        status: "Live",
-        kpis: [
-          { label: "MRR",          value: "$48.2k", trend: "up",   delta: "+12%", icon: "sack-dollar" },
-          { label: "Active users", value: "2,184",  trend: "up",   delta: "+184", icon: "users" },
-          { label: "Open tickets", value: "23",     trend: "down", delta: "-9",   icon: "ticket" },
-          { label: "NPS",          value: "62",     trend: "flat", delta: "+1",   icon: "star" },
-        ],
-        projects: [
-          { title: "Streaming UI v2.4", subtitle: "Ada Lovelace · 3 open issues", icon: "rocket" },
-          { title: "Auth SDK rewrite",  subtitle: "Linus T · 1 open issue",       icon: "shield-halved" },
-          { title: "Onboarding revamp", subtitle: "Grace Hopper · awaiting QA",   icon: "bullseye" },
-        ],
-        statuses: [
-          { label: "API",       tone: "success", pulse: false },
-          { label: "Database",  tone: "success", pulse: false },
-          { label: "Webhooks",  tone: "warning", pulse: false },
-          { label: "Streaming", tone: "success", pulse: true },
-        ],
-        activity: [
-          { title: "Ada merged PR #248",    time: "5m ago",    description: "Patterns ready for review",   icon: "code-pull-request", tone: "primary" },
-          { title: "QA caught regression",  time: "1h ago",    description: "Quota dashboard miscount",    icon: "triangle-exclamation", tone: "warning" },
-          { title: "Tokenizer 2.1 shipped", time: "Yesterday", description: "Latency -14%",                icon: "circle-check", tone: "success" },
-        ],
-        summary: [
-          { label: "Plan",       value: "Pro · annual", icon: "credit-card" },
-          { label: "Seats",      value: "18 / 25",      icon: "users" },
-          { label: "Renews",     value: "Aug 14, 2026", icon: "calendar" },
-          { label: "Region",     value: "EU-west",      icon: "earth-americas" },
-        ],
-      },
-      projects: {
-        title: "Projects",
-        subtitle: "12 active · 4 in review",
-        status: "Healthy",
-        kpis: [
-          { label: "Active",    value: "12", trend: "up",   delta: "+2",  icon: "folder" },
-          { label: "In review", value: "4",  trend: "flat", delta: "+0",  icon: "magnifying-glass" },
-          { label: "Blocked",   value: "1",  trend: "down", delta: "-1",  icon: "circle-stop" },
-          { label: "Shipped",   value: "7",  trend: "up",   delta: "+3",  icon: "rocket" },
-        ],
-        projects: [
-          { title: "Streaming UI v2.4", subtitle: "Ada · launching Fri",  icon: "rocket" },
-          { title: "Auth SDK rewrite",  subtitle: "Linus · API contract", icon: "shield-halved" },
-          { title: "Mobile push",       subtitle: "Grace · iOS beta",     icon: "mobile-screen" },
-          { title: "Audit log export",  subtitle: "Ada · SOC2",           icon: "inbox" },
-        ],
-        statuses: [
-          { label: "Backend",   tone: "success", pulse: false },
-          { label: "Frontend",  tone: "success", pulse: false },
-          { label: "Mobile",    tone: "warning", pulse: false },
-          { label: "Infra",     tone: "success", pulse: true  },
-        ],
-        activity: [
-          { title: "v2.4 cut",                time: "Today",    description: "Ada created release branch", icon: "leaf", tone: "primary" },
-          { title: "Mobile beta accepted",    time: "Yesterday", description: "Apple approved build 33",   icon: "mobile-screen", tone: "success" },
-          { title: "Audit log review",        time: "2 days ago",description: "SOC2 reviewer feedback",   icon: "clipboard-list", tone: "info" },
-        ],
-        summary: [
-          { label: "Owner",    value: "Engineering", icon: "user" },
-          { label: "Squads",   value: "5",           icon: "users" },
-          { label: "Roadmap",  value: "Q3-Q4 2026",  icon: "map" },
-          { label: "Velocity", value: "42 pts/wk",   icon: "bolt" },
-        ],
-      },
-      calendar: {
-        title: "Calendar",
-        subtitle: "This week",
-        status: "On schedule",
-        kpis: [
-          { label: "Meetings",    value: "14", trend: "flat", delta: "+0", icon: "calendar" },
-          { label: "Focus hours", value: "12", trend: "up",   delta: "+3", icon: "person" },
-          { label: "1:1s",        value: "5",  trend: "flat", delta: "+0", icon: "handshake" },
-          { label: "Heads-down",  value: "4",  trend: "up",   delta: "+1", icon: "pen-to-square" },
-        ],
-        projects: [
-          { title: "Design review", subtitle: "Mon · 10:00",  icon: "palette" },
-          { title: "Eng all-hands", subtitle: "Tue · 14:00",  icon: "bullhorn" },
-          { title: "Customer call · Globex", subtitle: "Wed · 09:00", icon: "phone" },
-          { title: "Friday demos",  subtitle: "Fri · 16:00",  icon: "clapperboard" },
-        ],
-        statuses: [
-          { label: "Calendar sync", tone: "success", pulse: false },
-          { label: "Zoom",          tone: "success", pulse: false },
-          { label: "Slack reminders", tone: "warning", pulse: false },
-          { label: "Notifications", tone: "success", pulse: false },
-        ],
-        activity: [
-          { title: "Moved 1:1 with Linus",  time: "Today",     description: "Pushed to Thursday", icon: "calendar", tone: "info" },
-          { title: "Accepted demo invite",  time: "Yesterday", description: "Friday demos",       icon: "circle-check", tone: "success" },
-          { title: "Declined Q4 planning",  time: "2 days ago", description: "Conflicts with launch", icon: "circle-xmark", tone: "warning" },
-        ],
-        summary: [
-          { label: "Working hours", value: "09:00–18:00",   icon: "clock" },
-          { label: "Timezone",      value: "Europe/Berlin", icon: "earth-americas" },
-          { label: "Default block", value: "30m",           icon: "clock" },
-          { label: "Free / busy",   value: "Public",        icon: "lock-open" },
-        ],
-      },
-      messages: {
-        title: "Messages",
-        subtitle: "3 unread",
-        status: "Synced",
-        kpis: [
-          { label: "Unread",   value: "3",   trend: "up",   delta: "+1",  icon: "comments" },
-          { label: "Threads",  value: "42",  trend: "flat", delta: "+0",  icon: "comments" },
-          { label: "Mentions", value: "7",   trend: "up",   delta: "+2",  icon: "at" },
-          { label: "Avg reply",value: "1.2h",trend: "down", delta: "-12m",icon: "bolt" },
-        ],
-        projects: [
-          { title: "Ada Lovelace",   subtitle: "Patterns API decision",  icon: "comments" },
-          { title: "Grace Hopper",   subtitle: "Quota dashboard QA",     icon: "comments" },
-          { title: "Linus Torvalds", subtitle: "Tokenizer 2.1 retro",    icon: "comments" },
-        ],
-        statuses: [
-          { label: "Slack",   tone: "success", pulse: false },
-          { label: "Email",   tone: "success", pulse: false },
-          { label: "DMs",     tone: "warning", pulse: false },
-          { label: "Push",    tone: "success", pulse: true  },
-        ],
-        activity: [
-          { title: "Ada @ you",   time: "5m ago",     description: "On #patterns-rfc", icon: "at", tone: "primary" },
-          { title: "Grace replied",time: "30m ago",   description: "Re: quota dashboard", icon: "comments", tone: "info" },
-          { title: "Linus closed thread", time: "1h ago", description: "Tokenizer 2.1", icon: "circle-check", tone: "success" },
-        ],
-        summary: [
-          { label: "DND",         value: "Off",         icon: "bell-slash" },
-          { label: "Auto-reply",  value: "Off",         icon: "bed" },
-          { label: "Default channel", value: "#general", icon: "hashtag"  },
-          { label: "Push device", value: "iPhone 15",   icon: "mobile-screen" },
-        ],
-      },
-      analytics: {
-        title: "Analytics",
-        subtitle: "Last 30 days",
-        status: "Live",
-        kpis: [
-          { label: "Visits",       value: "184k",  trend: "up",   delta: "+18%", icon: "chart-line" },
-          { label: "Signups",      value: "4,310", trend: "up",   delta: "+22%", icon: "wand-magic-sparkles" },
-          { label: "Conversion",   value: "2.34%", trend: "flat", delta: "+0.1%",icon: "rotate" },
-          { label: "ARPU",         value: "$11.20",trend: "up",   delta: "+$0.6",icon: "sack-dollar" },
-        ],
-        projects: [
-          { title: "Top page · /pricing",  subtitle: "42k visits · 4.2% CTR",  icon: "file" },
-          { title: "Top source · GitHub",  subtitle: "12k referrals",          icon: "code-branch" },
-          { title: "Top exit · /signup",   subtitle: "18% drop-off",           icon: "door-open" },
-        ],
-        statuses: [
-          { label: "Pageview pipeline", tone: "success", pulse: false },
-          { label: "Event ingestion",   tone: "success", pulse: true  },
-          { label: "Reports",           tone: "warning", pulse: false },
-          { label: "Exports",           tone: "success", pulse: false },
-        ],
-        activity: [
-          { title: "Conversion +0.1pp",    time: "Today",     description: "vs last week",        icon: "chart-line", tone: "success" },
-          { title: "GitHub referral peak", time: "Yesterday", description: "v2.4 announcement",   icon: "code-branch", tone: "primary" },
-          { title: "Signup drop-off",      time: "2 days ago", description: "Step 2 (verify)",    icon: "triangle-exclamation", tone: "warning" },
-        ],
-        summary: [
-          { label: "Tracking",   value: "GDPR-compliant", icon: "shield" },
-          { label: "Retention",  value: "365 days",       icon: "box-archive" },
-          { label: "Sampling",   value: "100%",           icon: "microscope" },
-          { label: "Data region",value: "EU-west",        icon: "earth-americas" },
-        ],
-      },
-      reports: {
-        title: "Reports",
-        subtitle: "Weekly · automated",
-        status: "Scheduled",
-        kpis: [
-          { label: "Scheduled", value: "8",  trend: "flat", delta: "+0",  icon: "calendar" },
-          { label: "Run today", value: "3",  trend: "up",   delta: "+1",  icon: "play" },
-          { label: "Failed",    value: "0",  trend: "down", delta: "-1",  icon: "circle-check" },
-          { label: "Saved",     value: "24", trend: "up",   delta: "+4",  icon: "database" },
-        ],
-        projects: [
-          { title: "Weekly digest",         subtitle: "Mondays · 09:00",        icon: "envelope" },
-          { title: "Quarterly board deck",  subtitle: "Last day of quarter",    icon: "chart-pie" },
-          { title: "SLA report",            subtitle: "Daily · 06:00",          icon: "clipboard-list" },
-        ],
-        statuses: [
-          { label: "Scheduler",  tone: "success", pulse: false },
-          { label: "Email sender", tone: "success", pulse: false },
-          { label: "PDF render",  tone: "success", pulse: false },
-          { label: "Slack share", tone: "warning", pulse: false },
-        ],
-        activity: [
-          { title: "Weekly digest sent", time: "Mon 09:01", description: "234 recipients",       icon: "envelope", tone: "success" },
-          { title: "SLA report ran",     time: "Today 06:00", description: "All targets met",    icon: "clipboard-list", tone: "success" },
-          { title: "Board deck queued",  time: "Yesterday", description: "Renders Sun night",   icon: "clock", tone: "info" },
-        ],
-        summary: [
-          { label: "Default format", value: "PDF",      icon: "file" },
-          { label: "Recipients",     value: "Team + execs", icon: "users" },
-          { label: "Retention",      value: "1 year",    icon: "box-archive" },
-          { label: "Templates",      value: "12",        icon: "clipboard-list" },
-        ],
-      },
-      billing: {
-        title: "Billing",
-        subtitle: "Pro · annual",
-        status: "Current",
-        kpis: [
-          { label: "MRR",        value: "$245",   trend: "flat", delta: "+$0", icon: "sack-dollar" },
-          { label: "Seats",      value: "18 / 25",trend: "up",   delta: "+1",  icon: "users" },
-          { label: "Usage",      value: "68%",    trend: "up",   delta: "+4%", icon: "box" },
-          { label: "Next bill",  value: "Aug 14", trend: "flat", delta: "+0",  icon: "calendar" },
-        ],
-        projects: [
-          { title: "Invoice INV-0042", subtitle: "Paid · May 14",    icon: "circle-check" },
-          { title: "Invoice INV-0041", subtitle: "Paid · Apr 14",    icon: "circle-check" },
-          { title: "Invoice INV-0040", subtitle: "Paid · Mar 14",    icon: "circle-check" },
-        ],
-        statuses: [
-          { label: "Card on file",  tone: "success", pulse: false },
-          { label: "Auto-renew",    tone: "success", pulse: false },
-          { label: "Receipts",      tone: "success", pulse: false },
-          { label: "Webhook",       tone: "warning", pulse: false },
-        ],
-        activity: [
-          { title: "Payment received", time: "May 14",   description: "INV-0042 · $245",          icon: "credit-card", tone: "success" },
-          { title: "Seat added",       time: "Apr 28",   description: "Asha Patel · Designer",     icon: "user", tone: "info" },
-          { title: "Plan changed",     time: "Mar 14",   description: "Starter → Pro",            icon: "arrow-up", tone: "primary" },
-        ],
-        summary: [
-          { label: "Plan",      value: "Pro · annual",  icon: "credit-card" },
-          { label: "Card",      value: "Visa · 4242",   icon: "credit-card" },
-          { label: "Renews",    value: "Aug 14, 2026",  icon: "calendar" },
-          { label: "Tax ID",    value: "DE123456789",   icon: "receipt" },
-        ],
-      },
-    };
-
-    const el = document.getElementById("rui-workspace");
-
-    el.setTools({
-      workspace_overview: async ({ page }) => {
-        await sleep(220);
-        return PAGES[page] ?? PAGES.overview;
-      },
-    });
-
-    el.setResponse(document.getElementById("src-workspace").textContent);
-    }
-  },
-  "calendar-app": {
-    slug: "calendar-app",
-    docTitle: `Calendar app · streaming-ui-script`,
-    eyebrow: `Live demo · agenda + scheduling`,
-    heroTitleHtml: `A working calendar &amp; scheduler, generated from one program`,
-    heroDescriptionHtml: `Google Calendar-style agenda with a <code>DatePicker</code> anchor,
-        view toggles (agenda / week / availability), category chips, a
-        <code>Timeline</code> agenda for the focused day, a busy-hours
-        <code>ProgressRing</code>, and a detail <code>Sheet</code> for
-        every event. Switching day, category, or view is one
-        <code>@Set</code> — no JS required.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · calendar`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Pick a date, filter by category, or click any agenda row to open
-        the event sheet (RSVP, add attendees, reschedule). The "Book
-        focus" follow-up demonstrates how the LLM can chain new events
-        into the day with a single follow-up.`,
-      codeBlocks: [
-      { codeId: "src-calendar", content: `$$date     = "2026-05-13"
-$$view     = "agenda"
-$$category = "all"
-$$selected = ""
-$rsvp      = "yes"
-
-events = Query("agenda_for", {date: $$date, category: $$category}, {
-  day: "",
-  busyMinutes: 0,
-  totalMinutes: 480,
-  busyPercent: 0,
-  freeBlocks: [],
-  rows: [],
-  weekStats: {meetings: 0, focus: 0, deepWork: "0h", attendees: 0}
-})
-
-eventCount     = @Count(events.rows)
-selected       = @First(@Filter(events.rows, "id", "==", $$selected))
-selectedExists = @Count(@Filter(events.rows, "id", "==", $$selected))
-
-header = PageHeader(
-  "Calendar",
-  \`\${events.day} · \${eventCount} \${@Plural(eventCount, "event", "events")} scheduled\`,
-  Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Calendar")]),
-  [
-    Button("Today",        Action([@Set($$date, "2026-05-13")]),                 "ghost"),
-    Button("Create event", Action([@ToAssistant("Open the create-event form")]), "primary")
-  ],
-  Badge("Synced just now", "success")
-)
-
-dateBar = Card([
-  Stack([
-    Stack([
-      DatePicker("anchor", $$date, "Focused day", "2026-05-01", "2026-05-31"),
-      Buttons([
-        Button("◀", Action([@ToAssistant("Go to previous day")]), "ghost", "button", "small"),
-        Button("▶", Action([@ToAssistant("Go to next day")]),     "ghost", "button", "small")
-      ])
-    ], "row", "s", "end"),
-    Spacer(),
-    ToggleGroup("view", [
-      {value: "agenda", label: "Agenda",    icon: "list-ul"},
-      {value: "week",   label: "Week",      icon: "calendar-week"},
-      {value: "free",   label: "Find time", icon: "magnifying-glass"}
-    ], $$view),
-    Spacer(),
-    ToggleGroup("category", [
-      {value: "all",      label: "All",       icon: "circle"},
-      {value: "meetings", label: "Meetings",  icon: "users"},
-      {value: "focus",    label: "Focus",     icon: "headphones"},
-      {value: "personal", label: "Personal",  icon: "mug-hot"},
-      {value: "team",     label: "Team",      icon: "building-user"}
-    ], $$category)
-  ], "row", "m", "center")
-])
-
-busyTone = @If(events.busyPercent > 75, "danger", @If(events.busyPercent > 50, "warning", "success"))
-
-busyRing = Card([
-  SectionHeader("Day load", "How packed is today?"),
-  ProgressRing(events.busyPercent, 100, \`\${events.busyPercent}%\`, "Busy", busyTone, "lg"),
-  Stats([
-    {label: "Busy",     value: \`\${events.busyMinutes}m\`,                                                tone: @If(events.busyPercent > 75, "danger", "primary")},
-    {label: "Free",     value: \`\${events.totalMinutes - events.busyMinutes}m\`,                          tone: "success"},
-    {label: "Meetings", value: \`\${@Count(@Filter(events.rows, "category", "==", "meetings"))}\`,         tone: "info"},
-    {label: "Focus",    value: \`\${@Count(@Filter(events.rows, "category", "==", "focus"))}\`,             tone: "default"}
-  ])
-])
-
-agendaTimeline = Timeline(@Each(events.rows, "{time, title, duration, location, summary, icon, tone}",
-  TimelineItem(\`\${time} · \${title}\`, \`\${duration} · \${location}\`, summary, icon, tone)
-))
-
-agendaList = Stack(@Each(events.rows, "{id, time, title, location, duration, attendeeSummary, relative, icon, tone, unread, joinUrl}",
-  Notification(
-    \`\${time} · \${title}\`,
-    \`\${location} · \${duration} · \${attendeeSummary}\`,
-    relative,
-    icon,
-    null,
-    tone,
-    unread,
-    [
-      Button("Open", Action([@Set($$selected, id)]),  "secondary", "button", "small"),
-      Button("Join", Action([@OpenUrl(joinUrl)]),     "primary",   "button", "small")
-    ]
-  )
-), "column", "s")
-
-emptyAgenda = EmptyState(
-  "Nothing scheduled",
-  "You have the whole day free. Block focus time or invite the team.",
-  "mug-hot",
-  Button("Block 2h of focus", Action([@ToAssistant(\`Block 2 hours of focus time on \${$$date}\`)]), "primary")
-)
-
-freeBlocks = Stack(@Each(events.freeBlocks, "{label, duration}",
-  Stack([
-    StatusDot(\`\${label} · \${duration}\`, "success"),
-    Spacer(),
-    Badge("Available", "success", "circle-check", "sm"),
-    Button("Book", Action([@ToAssistant(\`Book \${label} for focus\`)]), "secondary", "button", "small")
-  ], "row", "s", "center")
-), "column", "s")
-
-weekCard = Card([
-  SectionHeader("Week at a glance", "Mon–Fri overview", null, Badge("Week 20", "info", null, "sm")),
-  Stats([
-    StatCard("Meetings",        \`\${events.weekStats.meetings}\`,  "down", "-3 vs last week",  "users"),
-    StatCard("Focus blocks",    \`\${events.weekStats.focus}\`,     "up",   "+2",                "headphones"),
-    StatCard("Deep work",       events.weekStats.deepWork,        "up",   "longest in 3 wks",  "clock"),
-    StatCard("Total attendees", \`\${events.weekStats.attendees}\`,  "flat", "across meetings",   "user-group")
-  ])
-])
-
-freePane = Card([
-  SectionHeader("Free time", \`30+ minute blocks on \${events.day}\`),
-  @If(@Count(events.freeBlocks) == 0,
-      EmptyState("No free slots today", "Try tomorrow or shorten a meeting.", "circle-info", null),
-      freeBlocks)
-])
-
-mainBody = @Switch($$view, {
-  agenda: @If(eventCount == 0, emptyAgenda, agendaList),
-  free:   freePane
-}, weekCard)
-
-agendaCard = Card([
-  SectionHeader("Agenda", events.day, null, Badge(\`\${eventCount} events\`, "primary", null, "sm")),
-  mainBody,
-  Separator("horizontal", true),
-  SectionHeader("Day timeline", "Sequential view of every event"),
-  @If(eventCount == 0, TextContent("No events to plot.", "small", "muted"), agendaTimeline)
-])
-
-QuickDateBtn(label, isoDate) = Button(label, Action([@Set($$date, isoDate)]), @If($$date == isoDate, "primary", "ghost"), "button", "small")
-
-quickPicker = Card([
-  SectionHeader("Jump to date", "Quick picks for this week"),
-  Buttons([
-    QuickDateBtn("Mon · 12 May", "2026-05-12"),
-    QuickDateBtn("Tue · 13 May", "2026-05-13"),
-    QuickDateBtn("Wed · 14 May", "2026-05-14"),
-    QuickDateBtn("Thu · 15 May", "2026-05-15"),
-    QuickDateBtn("Fri · 16 May", "2026-05-16")
-  ])
-])
-
-myCalendars = Card([
-  SectionHeader("My calendars"),
-  List([
-    ListItem("Personal",    "Default · You",                    "circle"),
-    ListItem("Team standups","From Naomi Rivers",                "user-group"),
-    ListItem("Releases",    "From engineering@acme.com",         "rocket"),
-    ListItem("Focus time",  "Auto-blocked by Reclaim",           "shield-halved")
-  ])
-])
-
-sidePane = Stack([busyRing, quickPicker, myCalendars], "column", "m")
-
-splitLayout = SplitView([agendaCard], [sidePane], "1.6fr")
-
-detailEmpty = EmptyState(
-  "No event selected",
-  "Open an event on the left to see attendees, location, and the meeting agenda.",
-  "calendar-day",
-  null
-)
-
-AttendeeChip(a) = PersonChip(a.name, a.role, a.avatar, "md", @If(a.online, "online", null))
-
-detailLoaded = Stack([
-  PageHeader(
-    selected.title,
-    \`\${selected.time} · \${selected.duration} · \${selected.location}\`,
-    null,
-    null,
-    Badge(selected.statusLabel, selected.tone, null, "sm")
-  ),
-  DescriptionList([
-    DescriptionItem("Date",     events.day,                                     "calendar"),
-    DescriptionItem("Time",     \`\${selected.time} (\${selected.duration})\`,       "clock"),
-    DescriptionItem("Location", selected.location,                              "location-dot"),
-    DescriptionItem("Host",     selected.host,                                  "user-tie"),
-    DescriptionItem("Calendar", selected.calendar,                              "tag")
-  ]),
-  Separator("horizontal", true),
-  SectionHeader("Agenda", "Topics planned for this meeting"),
-  List(@Each(selected.agenda, "topic", ListItem(topic, null, "circle-check"))),
-  Separator("horizontal", true),
-  SectionHeader("Attendees", \`\${@Count(selected.attendees)} invited\`),
-  Stack(@Each(selected.attendees, "a", AttendeeChip(a)), "column", "s"),
-  Separator("horizontal", true),
-  SectionHeader("Your RSVP"),
-  Radio("rsvp", [
-    SelectItem("yes",   "Yes — I'll be there"),
-    SelectItem("maybe", "Maybe"),
-    SelectItem("no",    "Decline")
-  ], $rsvp),
-  Stack([
-    Spacer(),
-    Buttons([
-      Button("Reschedule", Action([@ToAssistant(\`Reschedule \${selected.title}\`)]),                 "secondary"),
-      Button("Send RSVP",  Action([@ToAssistant(\`RSVP \${$rsvp} for \${selected.title}\`)]),          "primary")
-    ])
-  ], "row", "m", "center")
-], "column", "m")
-
-eventSheet = Drawer(
-  "Event detail",
-  $$selected != "",
-  [@If(selectedExists == 0, detailEmpty, detailLoaded)],
-  "right",
-  [Buttons([
-    Button("Close",    Action([@Set($$selected, "")]),                                            "ghost"),
-    Button("Join now", Action([@OpenUrl(\`https://meet.example.com/\${$$selected}\`)]),              "primary")
-  ])]
-)
-
-dayStats = Stats([
-  {label: events.day, value: \`\${eventCount} events\`,                                          hint: "today",            tone: "primary"},
-  {label: "Busy",     value: \`\${events.busyMinutes} min\`,                                     hint: \`\${events.busyPercent}% of day\`, tone: @If(events.busyPercent > 75, "danger", "info")},
-  {label: "Free",     value: \`\${events.totalMinutes - events.busyMinutes} min\`,                hint: "longest block",   tone: "success"},
-  {label: "Focus",    value: \`\${@Count(@Filter(events.rows, "category", "==", "focus"))}\`,    hint: "blocks scheduled", tone: "default"}
-])
-
-followUps = FollowUpBlock([
-  FollowUpItem("Find 2h of focus on Thursday"),
-  FollowUpItem('Reschedule "Roadmap review"'),
-  FollowUpItem("Send agenda to next standup")
-], "Quick actions")
-
-root = Stack([header, dateBar, dayStats, splitLayout, eventSheet, followUps], "column", "l")` }
-      ],
-      render: { elId: "rui-calendar", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The host's single agenda tool`,
-      lede: `<code>agenda_for({date, category})</code> returns everything the UI
-        needs for the focused day: rows, busy minutes, free blocks, and a
-        week-level summary. The DatePicker, view toggle, and category
-        toggle all pass bare <code>$variables</code> so the query re-runs
-        automatically when any of them changes.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  agenda_for: async ({ date, category }) =&gt; {
-    await sleep(220);
-    return buildAgenda(date, category);
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const PEOPLE = {
-      naomi: { name: "Naomi Rivers", role: "VP Engineering",  avatar: "https://i.pravatar.cc/64?img=47", online: true  },
-      ada:   { name: "Ada Lovelace",  role: "CTO",              avatar: "https://i.pravatar.cc/64?img=20", online: true  },
-      mei:   { name: "Mei Tanaka",    role: "Engineering Lead", avatar: "https://i.pravatar.cc/64?img=14", online: false },
-      linus: { name: "Linus Torvalds",role: "Staff Engineer",   avatar: "https://i.pravatar.cc/64?img=11", online: true  },
-      grace: { name: "Grace Hopper",  role: "Designer",         avatar: "https://i.pravatar.cc/64?img=32", online: false },
-      sam:   { name: "Sam Reyes",     role: "Architect",        avatar: "https://i.pravatar.cc/64?img=15", online: false },
-      jordan:{ name: "Jordan Patel",  role: "Founder",          avatar: "https://i.pravatar.cc/64?img=22", online: true  },
-    };
-
-    function person(id) { return { ...PEOPLE[id], id }; }
-    function attendeeSummary(ids) {
-      if (ids.length === 0) return "Solo";
-      if (ids.length === 1) return PEOPLE[ids[0]].name;
-      if (ids.length === 2) return `${PEOPLE[ids[0]].name} & ${PEOPLE[ids[1]].name}`;
-      return `${PEOPLE[ids[0]].name}, ${PEOPLE[ids[1]].name} +${ids.length - 2}`;
-    }
-
-    const DAYS = {
-      "2026-05-12": {
-        label: "Monday, May 12",
-        events: [
-          { id: "standup-12",  hour: 9,  durationMin: 25,  category: "meetings", title: "Engineering standup",   icon: "users",      tone: "primary", attendees: ["naomi","linus","mei","ada","grace"], host: "Naomi Rivers",  calendar: "Team standups", location: "Zoom · #eng-standup", agenda: ["Yesterday's wins", "Today's plan", "Blockers"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/standup", unread: false },
-          { id: "focus-12",    hour: 14, durationMin: 120, category: "focus",    title: "Deep work · streaming-ui v2", icon: "headphones", tone: "default", attendees: [], host: "You", calendar: "Focus time", location: "Headphones on", agenda: ["Ship pricing-page demo", "Review CRM PR"], statusLabel: "Focused", joinUrl: "https://meet.example.com/focus", unread: false },
-        ],
-      },
-      "2026-05-13": {
-        label: "Tuesday, May 13",
-        events: [
-          { id: "standup",  hour: 9,  durationMin: 25,  category: "meetings", title: "Engineering standup",      icon: "users",            tone: "primary", attendees: ["naomi","linus","mei","ada","grace"], host: "Naomi Rivers",   calendar: "Team standups", location: "Zoom · #eng-standup",     agenda: ["Yesterday's wins", "Today's plan", "Blockers"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/standup", unread: true  },
-          { id: "design",   hour: 10, durationMin: 45,  category: "team",     title: "Design crit · onboarding",  icon: "palette",          tone: "info",    attendees: ["grace","mei","ada"],                  host: "Grace Hopper",    calendar: "Personal",       location: "Figma room",              agenda: ["Hero variants", "Empty-state copy", "Mobile cuts"], statusLabel: "Confirmed", joinUrl: "https://figma.com/room", unread: false },
-          { id: "focus",    hour: 11, durationMin: 90,  category: "focus",    title: "Focus · streaming UI tests",icon: "headphones",        tone: "default", attendees: [],                                       host: "You",             calendar: "Focus time",    location: "Headphones on",           agenda: ["Finish snapshot fixtures", "Land morph tests"], statusLabel: "Focused", joinUrl: "https://meet.example.com/focus", unread: false },
-          { id: "lunch",    hour: 13, durationMin: 45,  category: "personal", title: "Lunch with Jordan",          icon: "mug-hot",           tone: "warning", attendees: ["jordan"],                              host: "You",             calendar: "Personal",       location: "Souvla",                  agenda: ["Catch up", "Q3 referrals"], statusLabel: "Tentative", joinUrl: "https://maps.google.com/souvla", unread: false },
-          { id: "roadmap",  hour: 15, durationMin: 60,  category: "meetings", title: "Roadmap review · Q3",       icon: "diagram-project",    tone: "primary", attendees: ["ada","naomi","linus","sam"],            host: "Ada Lovelace",    calendar: "Releases",       location: "Boardroom + Zoom",        agenda: ["Top initiatives", "Risk log", "Decisions"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/q3review", unread: false },
-          { id: "interview",hour: 16, durationMin: 45,  category: "team",     title: "Interview · Staff Eng",      icon: "user-tie",          tone: "info",    attendees: ["linus","sam"],                          host: "Linus Torvalds",  calendar: "Team standups",  location: "Greenhouse · Loop 3",     agenda: ["Systems design", "Wrap up"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/interview", unread: false },
-          { id: "release",  hour: 17, durationMin: 30,  category: "meetings", title: "Release prep · v2.3",        icon: "rocket",            tone: "success", attendees: ["naomi","linus"],                        host: "Naomi Rivers",    calendar: "Releases",       location: "Zoom · #release",         agenda: ["Open bugs", "Cut date", "Comms plan"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/release", unread: false },
-        ],
-      },
-      "2026-05-14": {
-        label: "Wednesday, May 14",
-        events: [
-          { id: "standup-14",  hour: 9,  durationMin: 25,  category: "meetings", title: "Engineering standup",   icon: "users",      tone: "primary", attendees: ["naomi","linus","mei","ada","grace"], host: "Naomi Rivers",   calendar: "Team standups", location: "Zoom · #eng-standup",  agenda: ["Yesterday's wins", "Today's plan", "Blockers"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/standup", unread: false },
-          { id: "demo-14",     hour: 11, durationMin: 60,  category: "team",     title: "Customer demo · Compute Lab", icon: "presentation-screen", tone: "info", attendees: ["ada","naomi"], host: "Ada Lovelace", calendar: "Personal", location: "Zoom · #demo", agenda: ["Use case walkthrough", "Q&A"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/demo", unread: false },
-          { id: "1-1-14",      hour: 14, durationMin: 30,  category: "team",     title: "1:1 · Mei",              icon: "comments",          tone: "primary", attendees: ["mei"],                                  host: "You",             calendar: "Personal",       location: "Coffee shop",             agenda: ["Career growth", "Quick wins"], statusLabel: "Confirmed", joinUrl: "https://maps.google.com/", unread: false },
-        ],
-      },
-      "2026-05-15": {
-        label: "Thursday, May 15",
-        events: [
-          { id: "standup-15",  hour: 9,  durationMin: 25,  category: "meetings", title: "Engineering standup",  icon: "users",     tone: "primary", attendees: ["naomi","linus","mei","ada","grace"], host: "Naomi Rivers", calendar: "Team standups", location: "Zoom · #eng-standup", agenda: ["Yesterday's wins", "Today's plan", "Blockers"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/standup", unread: false },
-          { id: "focus-15",    hour: 10, durationMin: 180, category: "focus",    title: "Deep work · pricing page",   icon: "headphones",        tone: "default", attendees: [],                                       host: "You",             calendar: "Focus time",    location: "Headphones on",          agenda: ["Final copy", "Conversion testing"], statusLabel: "Focused", joinUrl: "https://meet.example.com/focus", unread: false },
-          { id: "qbr-15",      hour: 15, durationMin: 90,  category: "meetings", title: "QBR · Northwind",        icon: "chart-line",       tone: "info",    attendees: ["naomi","sam","mei"],                    host: "Naomi Rivers",    calendar: "Releases",       location: "Boardroom + Zoom",       agenda: ["Recap", "Risks", "Asks"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/qbr", unread: false },
-        ],
-      },
-      "2026-05-16": {
-        label: "Friday, May 16",
-        events: [
-          { id: "standup-16",  hour: 9,  durationMin: 25,  category: "meetings", title: "Engineering standup", icon: "users", tone: "primary", attendees: ["naomi","linus","mei","ada","grace"], host: "Naomi Rivers", calendar: "Team standups", location: "Zoom · #eng-standup", agenda: ["Yesterday's wins", "Today's plan", "Blockers"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/standup", unread: false },
-          { id: "ship-16",     hour: 12, durationMin: 60,  category: "meetings", title: "v2.3 ship review",    icon: "rocket", tone: "success", attendees: ["naomi","linus","ada","sam"], host: "Naomi Rivers", calendar: "Releases", location: "Boardroom", agenda: ["Sign-off", "Comms plan", "Rollback"], statusLabel: "Confirmed", joinUrl: "https://zoom.us/ship", unread: false },
-          { id: "social-16",   hour: 17, durationMin: 90,  category: "team",     title: "Team social · Friday",    icon: "champagne-glasses", tone: "warning", attendees: ["naomi","linus","mei","ada","grace","sam"], host: "Naomi Rivers", calendar: "Personal", location: "Trick Dog", agenda: ["Drinks", "Trivia"], statusLabel: "Tentative", joinUrl: "https://maps.google.com/trickdog", unread: false },
-        ],
-      },
-    };
-
-    function fmtTime(h, m = 0) {
-      const period = h >= 12 ? "PM" : "AM";
-      const display = h % 12 === 0 ? 12 : h % 12;
-      return `${display}:${m.toString().padStart(2, "0")} ${period}`;
-    }
-
-    function duration(min) {
-      if (min < 60) return `${min} min`;
-      const h = Math.floor(min / 60);
-      const m = min % 60;
-      return m === 0 ? `${h}h` : `${h}h ${m}m`;
-    }
-
-    function relative(date) {
-      if (date === "2026-05-13") return "Today";
-      if (date === "2026-05-14") return "Tomorrow";
-      const map = { "2026-05-12": "Yesterday", "2026-05-15": "In 2 days", "2026-05-16": "In 3 days" };
-      return map[date] ?? date;
-    }
-
-    function freeBlocks(events, busyEnd) {
-      const minutes = new Array(24).fill(false);
-      events.forEach((e) => {
-        const start = e.hour * 60;
-        const end = start + e.durationMin;
-        for (let m = start; m < end; m += 60) minutes[Math.floor(m / 60)] = true;
-      });
-      const blocks = [];
-      let blockStart = null;
-      for (let h = 9; h <= 18; h++) {
-        if (!minutes[h]) {
-          if (blockStart === null) blockStart = h;
-        } else if (blockStart !== null) {
-          if (h - blockStart >= 1) {
-            blocks.push({
-              label: `${fmtTime(blockStart)} – ${fmtTime(h)}`,
-              duration: duration((h - blockStart) * 60),
-            });
-          }
-          blockStart = null;
-        }
-      }
-      if (blockStart !== null && busyEnd > blockStart) {
-        blocks.push({
-          label: `${fmtTime(blockStart)} – ${fmtTime(busyEnd)}`,
-          duration: duration((busyEnd - blockStart) * 60),
-        });
-      }
-      return blocks.slice(0, 4);
-    }
-
-    function buildAgenda(date, category) {
-      const day = DAYS[date] ?? { label: date, events: [] };
-      const filtered = (category === "all")
-        ? day.events
-        : day.events.filter((e) => e.category === category);
-
-      const rows = filtered.map((e) => ({
-        ...e,
-        time: fmtTime(e.hour, 0),
-        duration: duration(e.durationMin),
-        relative: e.unread ? "starts soon" : (e.category === "focus" ? "focus block" : "scheduled"),
-        attendees: e.attendees.map((id) => person(id)),
-        attendeeSummary: attendeeSummary(e.attendees),
-        summary: e.location,
-      }));
-
-      const busyMinutes = filtered.reduce((acc, e) => acc + (e.category === "focus" ? 0 : e.durationMin), 0);
-      const totalMinutes = 9 * 60;
-      const busyPercent = Math.round((busyMinutes / totalMinutes) * 100);
-
-      const weeklyEvents = Object.values(DAYS).flatMap((d) => d.events);
-      const weekStats = {
-        meetings: weeklyEvents.filter((e) => e.category === "meetings").length,
-        focus:    weeklyEvents.filter((e) => e.category === "focus").length,
-        deepWork: duration(weeklyEvents.filter((e) => e.category === "focus").reduce((acc, e) => acc + e.durationMin, 0)),
-        attendees: weeklyEvents.reduce((acc, e) => acc + e.attendees.length, 0),
-      };
-
-      return {
-        day: day.label,
-        rows,
-        busyMinutes,
-        totalMinutes,
-        busyPercent,
-        freeBlocks: freeBlocks(filtered, 18),
-        weekStats,
-      };
-    }
-
-    const el = document.getElementById("rui-calendar");
-
-    el.setTools({
-      agenda_for: async ({ date, category }) => {
-        await sleep(220);
-        return buildAgenda(date || "2026-05-13", category || "all");
-      },
-    });
-
-    el.setResponse(document.getElementById("src-calendar").textContent);
-    }
-  },
   "content-studio": {
     slug: "content-studio",
-    docTitle: `Content studio · streaming-ui-script`,
+    docTitle: `Content studio · Aktion`,
     eyebrow: `Live demo · editors + advanced forms`,
     heroTitleHtml: `A CMS-style studio: RichTextEditor, CodeEditor, MultiStepForm, and every advanced input`,
     heroDescriptionHtml: `A complete content authoring surface — write the body in
@@ -1167,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         <code>FormSection</code>/<code>FieldSet</code>, and wrapped in
         the new <code>TopBar</code>+<code>BreadcrumbPageHeader</code>.`,
     brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · content studio`,
+    brandText: `Aktion · content studio`,
     backHref: "live-examples.html",
     backText: `← Back to live examples`,
     cards: [
@@ -1179,35 +36,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         Switch wizard steps with the <code>MultiStepForm</code> stepper —
         each step's content is just an array of controls.`,
       codeBlocks: [
-      { codeId: "src-studio", content: `$title       = "Streaming UI v3 — release notes"
-$body        = "&lt;h2&gt;What's new&lt;/h2&gt;&lt;p&gt;Thirty new components — &lt;b&gt;DataGrid&lt;/b&gt;, &lt;b&gt;CalendarView&lt;/b&gt;, &lt;b&gt;RichTextEditor&lt;/b&gt;, six charts, and a media stack.&lt;/p&gt;&lt;p&gt;Read on for the highlights.&lt;/p&gt;"
-$snippet     = "import { defineStreamingUI } from 'streaming-ui-script'\\n\\ndefineStreamingUI()\\n"
-$tags        = ["release", "ui", "v3"]
-$mention     = "Heads up @"
-$brand       = "#6366f1"
-$pin         = ""
-$otp         = ""
-$pwd         = ""
-$phone       = ""
-$publishAt   = "2026-06-01T09:00"
-$slot        = "09:30"
-$step        = 0
-$published   = false
+      { codeId: "src-studio", content: `$title = "Streaming UI v3 — release notes"
+$body = "&lt;h2&gt;What's new&lt;/h2&gt;&lt;p&gt;Thirty new components — &lt;b&gt;DataGrid&lt;/b&gt;, &lt;b&gt;CalendarView&lt;/b&gt;, &lt;b&gt;RichTextEditor&lt;/b&gt;, six charts, and a media stack.&lt;/p&gt;&lt;p&gt;Read on for the highlights.&lt;/p&gt;"
+$snippet = "import { defineElement } from 'aktion'\\n\\ndefineElement()\\n"
+$tags = ["release", "ui", "v3"]
+$mention = "Heads up @"
+$brand = "#6366f1"
+$pin = ""
+$otp = ""
+$pwd = ""
+$phone = ""
+$publishAt = "2026-06-01T09:00"
+$slot = "09:30"
+$step = 0
+$published = false
 
 topbar = TopBar(
   "Acme CMS · Studio",
   "Draft · autosaved 12s ago",
   [Badge("v3 release", "primary", "tag", "sm"), StatusDot("Realtime", "success", true)],
   [SearchBar("q", "Search posts, drafts, schedules…", null, "/")],
-  [Button("Preview", Action([@ToAssistant("Preview the draft")]), "ghost",   "button", "small", "eye"),
-   Button("Publish", Action([@Set($published, true), @ToAssistant("Publish the post")]), "primary", "button", "small", "rocket")]
+  [Button("Preview", null, "ghost",   "button", "small", "eye"),
+   Button("Publish", () => { $published = true; emit "assistant-message" { message: "Publish the post" } }, "primary", "button", "small", "rocket")]
 )
 
 header = PageHeader(
   ["Workspace", "Content", "Drafts", $title],
   "Compose, brand, schedule, and gate the release in one place.",
-  [Button("Save draft", Action([@ToAssistant("Save draft")]), "ghost",   "button", "small", "floppy-disk"),
-   Button("Discard",    Action([@Reset($title, $body, $tags, $snippet)]),"danger",  "button", "small", "trash")]
+  [Button("Save draft", null, "ghost",   "button", "small", "floppy-disk"),
+   Button("Discard",    () => { $title = ""; $body = ""; $tags = ""; $snippet = "" },"danger",  "button", "small", "trash")]
 )
 
 teammates = [
@@ -1261,14 +118,12 @@ gateSection = Card([
 ])
 
 formErrors = [
-  @If($title == "",                       {label: "title",   message: "Title is required."}, null),
-  @If($pin.length != 4,                   {label: "pin",     message: "PIN must be 4 digits."}, null),
-  @If($otp.length != 6,                   {label: "otp",     message: "Enter the 6-digit OTP."}, null)
+  if $title == "" { {label: "title",   message: "Title is required."} } else { null },
+  if $pin.length != 4 { {label: "pin",     message: "PIN must be 4 digits."} } else { null },
+  if $otp.length != 6 { {label: "otp",     message: "Enter the 6-digit OTP."} } else { null }
 ]
 
-validationCard = @If(@Count(@Filter(formErrors, "label", "!=", null)) > 0,
-  Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), "Fix these before publishing")]),
-  Card([Callout("success", "Ready to publish", "All gates passed — hit Publish to go live.", "circle-check", true)]))
+validationCard = if @Count(@Filter(formErrors, "label", "!=", null)) > 0 { Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), "Fix these before publishing")]) } else { Card([Callout("success", "Ready to publish", "All gates passed — hit Publish to go live.", "circle-check", true)]) }
 
 wizardSteps = [
   {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
@@ -1277,21 +132,20 @@ wizardSteps = [
   {title: "Confirm",  details: "PIN + OTP",          content: [gateSection, validationCard]}
 ]
 
-wizard = MultiStepForm(wizardSteps, $step, Action([@Set($published, true), @ToAssistant("Wizard submitted")]))
+wizard = MultiStepForm(wizardSteps, $step, () => { $published = true; emit "assistant-message" { message: "Wizard submitted" } })
 
-tagBadges = Stack(@Each($tags, "t", Badge(t, "primary", "tag", "sm")), "row", "xs")
+tagBadges = Stack(for t in $tags { Badge(t, "primary", "tag", "sm") }, "row", "xs")
 
 previewCard = Card([
   SectionHeader("Live preview", $title, "OUTPUT",
     Badge(\`Accent \${$brand}\`, "primary", "palette", "sm")),
   tagBadges,
   Separator("horizontal"),
-  TextContent($body, "body")
+  Text($body, "body")
 ])
 
 teammateChips = Stack(
-  @Each(teammates, "{name, handle, role}",
-    PersonChip(name, role, null, "sm")),
+  for {name, handle, role} in teammates { PersonChip(name, role, null, "sm") },
   "row", "s"
 )
 
@@ -1300,9 +154,7 @@ teammatesCard = Card([
   teammateChips
 ])
 
-publishedBanner = @If($published,
-  Banner("Published!", \`\${$title} went live.\`, Button("View live post", Action([@OpenUrl("/blog")]), "primary", "button", "small"), "rocket", "success"),
-  null)
+publishedBanner = if $published { Banner("Published!", \`\${$title} went live.\`, Button("View live post", () => { js{ window.open("/blog", "_blank", "noopener,noreferrer") } }, "primary", "button", "small"), "rocket", "success") } else { null }
 
 contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], "column", "l")], {sm: 1, lg: 2}, "l")
 
@@ -1312,7 +164,7 @@ followUps = FollowUpBlock([
   FollowUpItem("Add a hero image")
 ], "Try next")
 
-root = Stack([
+_app_ = Stack([
   topbar,
   header,
   publishedBanner,
@@ -1347,248 +199,9 @@ const el = document.getElementById("rui-studio");
     el.setResponse(document.getElementById("src-studio").textContent);
     }
   },
-  "crm-contacts": {
-    slug: "crm-contacts",
-    docTitle: `CRM contacts · streaming-ui-script`,
-    eyebrow: `Live demo · directory`,
-    heroTitleHtml: `A working CRM directory, generated from one program`,
-    heroDescriptionHtml: `A polished directory with a <code>SearchBar</code>, segmented filter
-        chips, four <code>Tile</code> quick stats, a grid of person cards,
-        pagination, and a slide-in detail <code>Sheet</code>. Filtering and
-        search drive a single <code>$contacts</code> array through
-        <code>@Filter</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · CRM contacts`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Tap a stat tile to filter, type into the search bar, or click
-        "View profile" on any card to open the detail sheet.`,
-      codeBlocks: [
-      { codeId: "src-crm", content: `$$segment  = "all"
-$$selected = ""
-$query     = ""
-
-$contacts = [
-  {id: "naomi",
-   name: "Naomi Rivers",
-   role: "VP Engineering · Looplog",
-   avatar: "https://i.pravatar.cc/120?img=47",
-   bio: "Built Looplog from 0 → 1.2M sessions/day. Owns the Q3 expansion deal.",
-   segment: "champions",
-   tags: ["champion", "enterprise"],
-   company: "Looplog · 240 seats",
-   owner: "Mei Tanaka",
-   arr: "$84,000",
-   renewal: "Q3 · Sep 14"},
-  {id: "marc",
-   name: "Marc Lee",
-   role: "Head of Data · Northwind",
-   avatar: "https://i.pravatar.cc/120?img=11",
-   bio: "Renewing in 14 days. Wants a custom dashboard demo before signing.",
-   segment: "customers",
-   tags: ["renewal", "data"],
-   company: "Northwind · 120 seats",
-   owner: "Naomi Rivers",
-   arr: "$56,000",
-   renewal: "Q2 · Jun 02"},
-  {id: "grace",
-   name: "Grace Hopper",
-   role: "Founder · Atlasworks",
-   avatar: "https://i.pravatar.cc/120?img=32",
-   bio: "Just upgraded to Scale. Asked about SSO + audit logs.",
-   segment: "champions",
-   tags: ["scale", "sso"],
-   company: "Atlasworks · 80 seats",
-   owner: "Naomi Rivers",
-   arr: "$42,000",
-   renewal: "Q1 · Mar 18"},
-  {id: "linus",
-   name: "Linus Torvalds",
-   role: "Staff Eng · Kernelist",
-   avatar: "https://i.pravatar.cc/120?img=12",
-   bio: "Trial expires Friday. Hands-on with the JavaScript interactions feature.",
-   segment: "prospects",
-   tags: ["trial", "perf"],
-   company: "Kernelist",
-   owner: "Sam Reyes",
-   arr: "$0 (trial)",
-   renewal: "—"},
-  {id: "ada",
-   name: "Ada Lovelace",
-   role: "CTO · Compute Lab",
-   avatar: "https://i.pravatar.cc/120?img=20",
-   bio: "Pilot signed. Needs onboarding for 12 engineers in two weeks.",
-   segment: "customers",
-   tags: ["onboarding", "enterprise"],
-   company: "Compute Lab · 12 seats",
-   owner: "Mei Tanaka",
-   arr: "$24,000",
-   renewal: "Q4 · Dec 08"},
-  {id: "mei",
-   name: "Mei Tanaka",
-   role: "Eng lead · Atlasworks",
-   avatar: "https://i.pravatar.cc/120?img=14",
-   bio: "Open question on theming for a customer-facing portal.",
-   segment: "champions",
-   tags: ["theming", "champion"],
-   company: "Atlasworks · 80 seats",
-   owner: "Naomi Rivers",
-   arr: "$42,000",
-   renewal: "Q1 · Mar 18"},
-  {id: "sam",
-   name: "Sam Reyes",
-   role: "Architect · Northwind",
-   avatar: "https://i.pravatar.cc/120?img=15",
-   bio: "Quiet for 30 days. Worth a check-in before the QBR.",
-   segment: "at-risk",
-   tags: ["at-risk", "qbr"],
-   company: "Northwind · 120 seats",
-   owner: "Naomi Rivers",
-   arr: "$56,000",
-   renewal: "Q2 · Jun 02"},
-  {id: "jordan",
-   name: "Jordan Patel",
-   role: "Founder · Looplog",
-   avatar: "https://i.pravatar.cc/120?img=22",
-   bio: "References us in their public roadmap. Great expansion candidate.",
-   segment: "champions",
-   tags: ["champion", "advocacy"],
-   company: "Looplog · 240 seats",
-   owner: "Mei Tanaka",
-   arr: "$84,000",
-   renewal: "Q3 · Sep 14"}
-]
-
-segmentRows  = @If($$segment == "all", $contacts, @Filter($contacts, "segment", "==", $$segment))
-visibleRows  = @If($query == "",       segmentRows, @Filter(segmentRows, "name", "contains", $query))
-visibleCount = @Count(visibleRows)
-totalCount   = @Count($contacts)
-
-searchBar = SearchBar("crm-q", "Search contacts by name…", $query, "/")
-
-segments = ToggleGroup("segment", [
-  {value: "all",       label: "All",       icon: "users"},
-  {value: "customers", label: "Customers", icon: "handshake"},
-  {value: "prospects", label: "Prospects", icon: "seedling"},
-  {value: "champions", label: "Champions", icon: "trophy"},
-  {value: "at-risk",   label: "At-risk",   icon: "triangle-exclamation"}
-], $$segment)
-
-StatTile(label, icon, value, hint, tone, seg) = Tile(label, icon, value, hint, tone, Action([@Set($$segment, seg)]))
-
-statTiles = Grid([
-  StatTile("Total contacts",   "users",                "2,481", "+128 this week",            "primary", "all"),
-  StatTile("Active deals",     "briefcase",            "47",    "$418k ARR pipeline",         "info",    "customers"),
-  StatTile("At-risk accounts", "triangle-exclamation", "12",    "Needs follow-up this week",  "warning", "at-risk"),
-  StatTile("Champions",        "trophy",               "63",    "NPS 9 or 10 in last 30d",    "success", "champions")
-], {sm: 1, md: 2, lg: 4}, "m")
-
-filterRow = Stack([searchBar, segments], "column", "m")
-
-emptyResults = EmptyState(
-  "No contacts match",
-  "Adjust the segment or clear the search to see more results.",
-  "magnifying-glass",
-  Button("Reset filters", Action([@Set($$segment, "all"), @Reset($query)]), "secondary")
-)
-
-ContactCard(c) = ProfileCard(c.name, c.role, c.avatar, c.bio, c.tags, [
-  Button("View profile", Action([@Set($$selected, c.id)]), "secondary", "button", "small")
-])
-
-contactGrid = Grid(@Each(visibleRows, "c", ContactCard(c)), {sm: 1, md: 2, lg: 4}, "m")
-
-cards = @If(visibleCount == 0, emptyResults, contactGrid)
-
-selected       = @First(@Filter($contacts, "id", "==", $$selected))
-selectedExists = @Count(@Filter($contacts, "id", "==", $$selected))
-
-detailGeneric = EmptyState("Profile not loaded",
-                            "Pick a contact card on the left to see their details here.",
-                            "user",
-                            null)
-
-detailLoaded = Stack([
-  PersonChip(selected.name, selected.role, selected.avatar, "lg", "online"),
-  DescriptionList([
-    DescriptionItem("Company", selected.company),
-    DescriptionItem("Owner",   selected.owner),
-    DescriptionItem("ARR",     selected.arr),
-    DescriptionItem("Renewal", selected.renewal)
-  ]),
-  Callout("info", selected.bio, null, null, true),
-  Quote("Streaming-ui-script took our recap email from 4k lines of glue to 40.",
-        \`\${selected.name} · last QBR\`,
-        "primary"),
-  Stack(@Each(selected.tags, "t", Badge(t, "info", null, "sm")), "row", "s")
-], "column", "m")
-
-detailBody = @If(selectedExists == 0, detailGeneric, detailLoaded)
-
-detailSheet = Drawer(
-  "Contact detail",
-  $$selected != "",
-  [detailBody],
-  "right",
-  [Buttons([
-    Button("Close",       Action([@Set($$selected, "")]),                                 "secondary"),
-    Button("Open in CRM", Action([@ToAssistant(\`Open \${$$selected} in the CRM\`)]),         "primary")
-  ])]
-)
-
-resultSummary = TextContent(
-  \`Showing \${visibleCount} of \${totalCount} contacts\${@If($query == "", "", \` · matching "\${$query}"\`)}\`,
-  "small",
-  "muted"
-)
-
-root = Stack([
-  PageHeader(
-    "Contacts",
-    "2,481 contacts · 12 at-risk",
-    null,
-    [Button("New contact",
-            Action([@ToAssistant("Open the new-contact form")]),
-            "primary")],
-    Badge("CRM v3.1", "info")
-  ),
-  statTiles,
-  filterRow,
-  resultSummary,
-  cards,
-  detailSheet
-], "column", "l")` }
-      ],
-      render: { elId: "rui-crm", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `Cards, filter chips, the search bar, the result summary, and the
-        detail sheet all read from the same <code>$contacts</code> array.
-        Segmenting and searching are one <code>@Filter</code> chain;
-        opening a contact is a single <code>@Set</code> on
-        <code>$selected</code>. No host code runs for any of the
-        interactions.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-crm");
-    el.setResponse(document.getElementById("src-crm").textContent);
-    }
-  },
   "data-explorer": {
     slug: "data-explorer",
-    docTitle: `Data explorer · streaming-ui-script`,
+    docTitle: `Data explorer · Aktion`,
     eyebrow: `Live demo · DataGrid + 6 charts`,
     heroTitleHtml: `A full analytics surface — DataGrid, Heatmap, Radar, Scatter, Histogram, Gauge, Area`,
     heroDescriptionHtml: `One workspace that puts every <em>new</em> data primitive to work:
@@ -1601,7 +214,7 @@ const el = document.getElementById("rui-crm");
         <code>InfiniteList</code> activity feed and an
         <code>AuditTrail</code>.`,
     brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · data explorer`,
+    brandText: `Aktion · data explorer`,
     backHref: "live-examples.html",
     backText: `← Back to live examples`,
     cards: [
@@ -1612,10 +225,10 @@ const el = document.getElementById("rui-crm");
         bulk toolbar appears with a live count. Every metric, chart, and
         gauge stays in sync.`,
       codeBlocks: [
-      { codeId: "src-explorer", content: `$$page        = 1
-$$sort        = {key: "Score", direction: "desc"}
-$$selectedIds = []
-$$tab         = "grid"
+      { codeId: "src-explorer", content: `$page = 1
+$sort = {key: "Score", direction: "desc"}
+$selectedIds = []
+$tab = "grid"
 
 contributors = [
   {id: "u01", name: "Ada Lovelace",   team: "Compilers", role: "Staff",    score: 98, commits: 412, latencyMs: 84,  signups: [12, 18, 25, 31, 42, 50, 58]},
@@ -1641,23 +254,21 @@ cols = [
   Col("Commits",contributors.commits,   "number",   "right", true,  false)
 ]
 
-bulkToolbar = @If(@Count($$selectedIds) > 0,
-  Toolbar(
-    [Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
-    [Button("Email selected", Action([@ToAssistant("Email selected contributors")]), "ghost",   "button", "small", "envelope"),
-     Button("Export CSV",     Action([@ToAssistant("Export selected to CSV")]),       "secondary","button", "small", "file-csv"),
-     Button("Clear",          Action([@Reset($$selectedIds)]),                        "ghost",   "button", "small")]
-  ),
-  null)
+bulkToolbar = if @Count($selectedIds) > 0 { Toolbar(
+    [Badge(\`\${@Count($selectedIds)} selected\`, "primary", "check", "sm")],
+    [Button("Email selected", null, "ghost",   "button", "small", "envelope"),
+     Button("Export CSV",     null,       "secondary","button", "small", "file-csv"),
+     Button("Clear",          () => { $selectedIds = "" },                        "ghost",   "button", "small")]
+  ) } else { null }
 
 leaderboard = Card([
-  SectionHeader("Top contributors", \`\${@Count(contributors)} engineers · sorted by \${$$sort.key} \${$$sort.direction}\`,
+  SectionHeader("Top contributors", \`\${@Count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
     "DATAGRID",
     Badge("Live", "success", "circle", "sm"),
-    [Button("Search",  Action([@ToAssistant("Open search")]),  "ghost", "button", "small", "magnifying-glass"),
-     Button("Refresh", Action([@ToAssistant("Refresh data")]), "ghost", "button", "small", "rotate-right")]),
+    [Button("Search",  null,  "ghost", "button", "small", "magnifying-glass"),
+     Button("Refresh", null, "ghost", "button", "small", "rotate-right")]),
   bulkToolbar,
-  DataGrid(cols, contributors.id, null, $$sort, $$selectedIds, true, $$page, 6, "No contributors match")
+  DataGrid(cols, contributors.id, null, $sort, $selectedIds, true, $page, 6, "No contributors match")
 ])
 
 slaGauge = Card([
@@ -1739,7 +350,7 @@ activityCard = Card([
     ListItem("Margaret Hamilton reviewed PR #141", "LGTM with one nit.", "circle-check"),
     ListItem("Donald Knuth published article", "On the art of computer programming.", "newspaper"),
     ListItem("Edsger Dijkstra commented", "Beware of bugs in the above code.", "comment")
-  ], Action([@ToAssistant("Load more activity")]), false, true)
+  ], null, false, true)
 ])
 
 auditCard = Card([
@@ -1766,12 +377,12 @@ pageHeader = PageHeader(
   "Engineering analytics",
   \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`,
   ["Workspace", "Engineering", "Analytics"],
-  [Button("Export PDF", Action([@ToAssistant("Export the dashboard as PDF")]), "secondary"),
-   Button("Share view", Action([@ToAssistant("Share this view")]),             "primary")],
+  [Button("Export PDF", null, "secondary"),
+   Button("Share view", null,             "primary")],
   Badge("Realtime", "success", "circle", "sm")
 )
 
-root = Stack([
+_app_ = Stack([
   pageHeader,
   kpiStrip,
   gaugeGrid,
@@ -1789,10 +400,10 @@ root = Stack([
       heading: `What's powerful here`,
       lede: `<code>DataGrid</code> ships with a sticky header, sortable
         columns, per-column filter chips, row selection (the toolbar
-        renders only when <code>@Count($$selectedIds) &gt; 0</code>), and
-        built-in pagination via <code>$$page</code>. The six charts share
+        renders only when <code>@Count($selectedIds) &gt; 0</code>), and
+        built-in pagination via <code>$page</code>. The six charts share
         the same <code>Series([...])</code> grammar — swap in a
-        <code>Query()</code> result and they all redraw. The
+        <code>$foo.data</code> result from <code>http({...})</code> and they all redraw. The
         <code>Gauge</code>, <code>Heatmap</code>, <code>RadarChart</code>,
         <code>ScatterChart</code>, <code>Histogram</code>, and
         <code>AreaChart</code> are all SVG primitives so they print
@@ -1808,2298 +419,9 @@ const el = document.getElementById("rui-explorer");
     el.setResponse(document.getElementById("src-explorer").textContent);
     }
   },
-  "docs-portal": {
-    slug: "docs-portal",
-    docTitle: `Docs portal · streaming-ui-script`,
-    eyebrow: `Live demo · knowledge base`,
-    heroTitleHtml: `A working help center &amp; knowledge base, from one program`,
-    heroDescriptionHtml: `A documentation portal: <code>SearchBar</code> with keyboard hint,
-        a <code>Tree</code> of categories, a rich <code>Markdown</code>
-        article body, a <code>Rating</code>-driven "was this helpful?"
-        block, a related-articles <code>MediaCard</code> grid, and a
-        contact-support panel. Filtering by category or jumping to an
-        article is one <code>@Set</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · docs portal`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Search for "stream", "theme", or "rate", pick a category on the
-        left, or click a related article to swap the body. The "Was this
-        helpful" rating fires a follow-up message to the assistant.`,
-      codeBlocks: [
-      { codeId: "src-docs", content: `$$category     = "all"
-$$article      = "stream-llm"
-$query         = ""
-$helpful       = ""
-$rating        = 0
-$contactReason = "general"
-
-$articles = [
-  {id: "quickstart",
-   title: "Quick start: drop the script tag",
-   category: "getting-started",
-   tags: ["install", "html", "5 min"],
-   readMin: 3,
-   updated: "Updated May 12 · v2.3",
-   image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=480&h=240&fit=crop",
-   excerpt: "Add one script tag and one \`<streaming-ui-script>\` element tag. That's it.",
-   body: "Streaming UI Script ships as a single web component. Add the ESM bundle and the tag — every framework treats it like a native HTML element. See the [framework integration recipes](#frameworks) for React, Vue, Angular, Svelte, and plain HTML walkthroughs."},
-
-  {id: "stream-llm",
-   title: "Stream LLM tokens straight into the renderer",
-   category: "getting-started",
-   tags: ["streaming", "llm", "tools", "10 min"],
-   readMin: 8,
-   updated: "Updated May 11 · v2.3",
-   image: "https://images.unsplash.com/photo-1517511620798-cec17d428bc0?w=480&h=240&fit=crop",
-   excerpt: "Set streaming = true, pipe tokens into appendChunk(), set streaming = false. The renderer handles partial parses.",
-   body: "Streaming-first design. The parser commits every fully-streamed line so users see the page shell before the body finishes."},
-
-  {id: "themes",
-   title: "Themes, tokens, and runtime customisation",
-   category: "guides",
-   tags: ["theming", "tokens", "css", "6 min"],
-   readMin: 5,
-   updated: "Updated May 09 · v2.3",
-   image: "https://images.unsplash.com/photo-1503424886307-b090341d25d1?w=480&h=240&fit=crop",
-   excerpt: "Seven built-in themes plus full token overrides. Authored programs never hard-code colours.",
-   body: '**Pick a theme** via the theme attribute or pass a partial token map. Authored Streaming UI Script must work across every theme — use semantic tone props (primary, success, warning, danger) and let the runtime resolve the colour.'},
-
-  {id: "rate-limits",
-   title: "Rate limits, batching, and retries",
-   category: "api",
-   tags: ["api", "rate-limit", "tools", "4 min"],
-   readMin: 4,
-   updated: "Updated May 08 · v2.3",
-   image: "https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=480&h=240&fit=crop",
-   excerpt: "Default limits, retry-with-backoff strategy, and how the tool layer handles failure.",
-   body: "The renderer does not call your APIs directly — tool functions own that. Use **exponential backoff** with jitter for 429 / 503 responses, and surface a \`Banner\` to the user if retries exhaust. The \`Query\` re-runs automatically when any of its \`$variable\` args changes."},
-
-  {id: "billing-cycle",
-   title: "Understanding your billing cycle",
-   category: "billing",
-   tags: ["billing", "invoice", "plan", "3 min"],
-   readMin: 3,
-   updated: "Updated May 02 · v2.2",
-   image: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=480&h=240&fit=crop",
-   excerpt: "Plans bill on the calendar month; trials end at midnight UTC on the next renewal anchor.",
-   body: "Every plan bills on the **anchor day** you signed up on. Mid-cycle plan changes prorate the next invoice. Trials never auto-charge — you'll get an email five days before the renewal anchor."},
-
-  {id: "refund-policy",
-   title: "Refund policy and prorations",
-   category: "billing",
-   tags: ["billing", "refund", "policy", "2 min"],
-   readMin: 2,
-   updated: "Updated May 02 · v2.2",
-   image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=480&h=240&fit=crop",
-   excerpt: "Full refund inside 14 days, prorated otherwise. Annual plans refundable within 60 days.",
-   body: "Inside the first 14 days, you can request a full refund — no questions asked. After that, monthly plans prorate the unused window. Annual plans refund the remaining months at the monthly rate up to 60 days."},
-
-  {id: "errors-blank",
-   title: "Nothing renders — what to check first",
-   category: "troubleshooting",
-   tags: ["errors", "shadow-dom", "html", "5 min"],
-   readMin: 5,
-   updated: "Updated May 12 · v2.3",
-   image: "https://images.unsplash.com/photo-1505816014357-96b5ff457e9a?w=480&h=240&fit=crop",
-   excerpt: "Walks through the four most common reasons the element appears blank.",
-   body: "When nothing renders, verify the module script URL, ensure root = Stack(...) is first, set streaming false after the last chunk, and check the console for parse errors."},
-
-  {id: "errors-tools",
-   title: "Why is my tool called with undefined args?",
-   category: "troubleshooting",
-   tags: ["tools", "query", "mutation", "3 min"],
-   readMin: 3,
-   updated: "Updated May 11 · v2.3",
-   image: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=480&h=240&fit=crop",
-   excerpt: "Args reflect the call site verbatim — interpolate to empty strings, never to undefined.",
-   body: "Tools receive whatever object the call site emits. Default missing fields inside the tool with nullish coalescing rather than relying on absence."}
-]
-
-categoryRows = @If($$category == "all", $articles, @Filter($articles, "category", "==", $$category))
-visibleRows  = @If($query == "",        categoryRows, @Filter(categoryRows, "title", "contains", $query))
-visibleCount = @Count(visibleRows)
-totalCount   = @Count($articles)
-
-current       = @First(@Filter($articles, "id", "==", $$article))
-currentExists = @Count(@Filter($articles, "id", "==", $$article))
-
-related         = @If($query == "", @Filter($articles, "category", "==", current.category), visibleRows)
-relatedFiltered = @Filter(related, "id", "!=", $$article)
-
-categoryLabel = @Switch($$category, {
-  "getting-started": "Getting started",
-  guides:            "Guides",
-  api:               "API reference",
-  billing:           "Billing & plans",
-  troubleshooting:   "Troubleshooting"
-}, "All categories")
-
-categoryCount(key) = @If(key == "all", totalCount, @Count(@Filter($articles, "category", "==", key)))
-CategoryRow(key, label, icon) = TreeNode(label, null, icon, $$category == key, $$category == key, \`\${categoryCount(key)}\`, Action([@Set($$category, key)]))
-
-navTree = Tree([
-  CategoryRow("all",             "All articles",     "book-open"),
-  CategoryRow("getting-started", "Getting started",  "rocket"),
-  CategoryRow("guides",          "Guides",           "compass"),
-  CategoryRow("api",             "API reference",    "plug"),
-  CategoryRow("billing",         "Billing & plans",  "credit-card"),
-  CategoryRow("troubleshooting", "Troubleshooting",  "screwdriver-wrench")
-])
-
-quickLinksCard = Card([
-  SectionHeader("Trending"),
-  List([
-    ListItem("Stream LLM tokens into the renderer", "+312 reads", "fire"),
-    ListItem("Themes, tokens, and customisation",   "+182 reads", "fire"),
-    ListItem("Quick start: drop the script tag",     "+91 reads",  "fire"),
-    ListItem("Nothing renders — what to check first","+68 reads",  "fire")
-  ])
-])
-
-contactCard = Card([
-  SectionHeader("Still stuck?", "We answer in 2 hours on business days."),
-  FormControl("What's it about?", Select("contactReason", [
-    SelectItem("general", "General question"),
-    SelectItem("bug",     "Bug or unexpected behaviour"),
-    SelectItem("billing", "Billing or invoices"),
-    SelectItem("feature", "Feature request")
-  ], null, null, $contactReason)),
-  Buttons([
-    Button("Open live chat",  Action([@ToAssistant(\`Open live chat for \${$contactReason}\`)]), "primary"),
-    Button("Email support",   Action([@OpenUrl("mailto:support@example.com")]),                "secondary"),
-    Button("Community Slack", Action([@OpenUrl("https://slack.example.com")]),                 "ghost")
-  ])
-])
-
-sidePane = Stack([
-  Card([
-    SectionHeader("Categories"),
-    navTree
-  ]),
-  quickLinksCard,
-  contactCard
-], "column", "m")
-
-searchToolbar = Card([
-  SearchBar("docs-q", "Search the docs…", $query, "/"),
-  Stack([
-    BadgeList(["streaming", "themes", "tools", "routing", "javascript", "components"]),
-    Spacer(),
-    TextContent("Press / to search", "small", "muted")
-  ], "row", "m", "center")
-])
-
-resultListEmpty = EmptyState(
-  "No articles match",
-  "Try a different search or clear the category filter.",
-  "magnifying-glass",
-  Button("Reset filters", Action([@Set($$category, "all"), @Reset($query)]), "secondary")
-)
-
-searchResultsRow = @Each(visibleRows, "{id, title, excerpt, readMin, updated}",
-  Notification(
-    title,
-    excerpt,
-    \`\${readMin} min · \${updated}\`,
-    "book",
-    null,
-    "info",
-    false,
-    [Button("Read", Action([@Set($$article, id), @Reset($query)]), "secondary", "button", "small")]
-  )
-)
-
-searchResults = @If($query != "",
-  Card([
-    SectionHeader("Search results", \`\${visibleCount} matches for "\${$query}"\`),
-    @If(visibleCount == 0, resultListEmpty, Stack(searchResultsRow, "column", "s"))
-  ])
-)
-
-articleHeader = @If(currentExists == 0,
-  EmptyState("Pick an article", "Choose a tile on the left to read.", "book", null),
-  Stack([
-    Breadcrumb([BreadcrumbItem("Help center", "#"), BreadcrumbItem(categoryLabel, "#"), BreadcrumbItem(current.title)]),
-    Hero(
-      current.title,
-      current.image,
-      current.excerpt,
-      categoryLabel,
-      \`\${current.readMin} min read · \${current.updated}\`,
-      [
-        Button("Print",         Action([@ToAssistant(\`Print \${current.title}\`)]),                   "secondary"),
-        Button("Share article", Action([@OpenUrl(\`https://example.com/help/\${current.id}\`)]),       "ghost")
-      ],
-      "primary"
-    ),
-    BadgeList(current.tags)
-  ], "column", "m"))
-
-feedbackNote = @Switch($helpful, {
-  no:  Callout("info",    "Thanks — your feedback opens a short improvement ticket on this article.", null, "circle-info",   true),
-  yes: Callout("success", "Glad it helped! Star the article to find it later.",                       null, "circle-check",  true)
-})
-
-articleBody = @If(currentExists != 0,
-  Card([
-    Markdown(current.body),
-    Separator("horizontal", true),
-    SectionHeader("Was this helpful?", "Your feedback shapes which articles we prioritise."),
-    Stack([
-      Rating($rating, 5, null, null, "md", true),
-      Spacer(),
-      Buttons([
-        Button("👍 Yes",
-               Action([@Set($helpful, "yes"), @ToAssistant(\`User found the article useful: \${current.title}\`)]),
-               @If($helpful == "yes", "primary", "secondary")),
-        Button("👎 No",
-               Action([@Set($helpful, "no"),  @ToAssistant(\`User didn't find the article useful: \${current.title}\`)]),
-               @If($helpful == "no", "danger", "secondary"))
-      ])
-    ], "row", "m", "center"),
-    feedbackNote
-  ]))
-
-relatedHeader = @If(currentExists != 0,
-  SectionHeader("Related articles", \`Hand-picked next reads in \${categoryLabel}\`, null,
-                Badge(\`\${@Count(relatedFiltered)} items\`, "info", null, "sm")))
-
-relatedGrid = @If(currentExists != 0,
-  Grid(@Each(relatedFiltered, "{id, title, image, excerpt, tags, readMin, updated}",
-    MediaCard(
-      title, image, excerpt, tags,
-      \`\${readMin} min · \${updated}\`,
-      [Button("Read", Action([@Set($$article, id)]), "secondary", "button", "small")]
-    )
-  ), {sm: 1, md: 2, lg: 3}, "m"))
-
-contentCard = @If(currentExists == 0,
-  Card([articleHeader]),
-  Stack([articleHeader, articleBody, relatedHeader, relatedGrid], "column", "l"))
-
-popularFaqs = Card([
-  SectionHeader("Popular FAQs", "Quick answers without leaving the page"),
-  Accordion([
-    AccordionItem("How do I switch themes at runtime?",
-                  [TextContent("Pass a theme name to setTheme on the element, or pass a partial token map. Themes are CSS custom properties under the hood.")],
-                  true),
-    AccordionItem("Where does the system prompt live?",
-                  [Markdown("Two flavours ship in \`dist/\`: \`system_prompt.txt\` (full) and \`system_prompt_chat.txt\` (chat). Fetch one and prepend it to every model call. Programmatic prompts: \`el.getSystemPrompt({ tools: [...] })\`.")]),
-    AccordionItem("Can I add my own components?",
-                  [Markdown("Yes — call \`el.registerComponents([...])\`. Each spec contributes a name, description, props, and a \`render(node, props, helpers)\` function. The next \`getSystemPrompt()\` call automatically advertises the new component.")]),
-    AccordionItem("How do I keep Tabs state across re-renders?",
-                  [TextContent("Bind the active tab to a $variable. Internal renderer state is keyed by tree path, so the active tab persists as long as the surrounding shape does not change.")])
-  ])
-])
-
-splitLayout = SplitView([contentCard], [sidePane], "1.5fr")
-
-header = PageHeader(
-  "Help center",
-  \`\${totalCount} articles · last updated \${@If(currentExists == 0, "today", current.updated)}\`,
-  Breadcrumb([BreadcrumbItem("Product", "#"), BreadcrumbItem("Help center")]),
-  [
-    Button("Status",          Action([@OpenUrl("https://status.example.com")]),  "ghost"),
-    Button("Contact support", Action([@ToAssistant("Open the contact form")]),    "primary")
-  ],
-  Badge("Live", "success")
-)
-
-stats = Stats([
-  {label: "Articles",     value: \`\${totalCount}\`,                                                       hint: "across 5 categories", tone: "primary"},
-  {label: "Reading time", value: @If(currentExists == 0, "—", \`\${current.readMin} min\`),                hint: "current article",     tone: "info"},
-  {label: "Helpful",      value: "94%",                                                                 hint: "rated useful",        tone: "success"},
-  {label: "Response",     value: "2 hours",                                                             hint: "support reply time",  tone: "default"}
-])
-
-followUps = FollowUpBlock([
-  FollowUpItem("Find articles about streaming"),
-  FollowUpItem("Explain the theme token map"),
-  FollowUpItem("Open the API rate-limit guide")
-], "Need something specific?")
-
-root = Stack([header, searchToolbar, stats, searchResults, splitLayout, popularFaqs, followUps], "column", "l")` }
-      ],
-      render: { elId: "rui-docs", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `Everything is in the program`,
-      lede: `This demo doesn't register any tools at all — the article corpus
-        lives in <code>$articles</code> and every navigation is a
-        declarative <code>@Set</code>. Plug your own tools in to fetch
-        articles from a CMS, and the surface above won't have to change.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setResponse(document.getElementById("src-docs").textContent);` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-docs");
-    el.setResponse(document.getElementById("src-docs").textContent);
-    }
-  },
-  "ecommerce-product": {
-    slug: "ecommerce-product",
-    docTitle: `Product detail · streaming-ui-script`,
-    eyebrow: `Live demo · commerce`,
-    heroTitleHtml: `A polished product detail page, generated from one program`,
-    heroDescriptionHtml: `Two-column hero with an image gallery, a sticky-feeling buy box,
-        tabbed product info, related products, FAQ, and a trust strip.
-        Variants, gallery, and quantity are all wired through
-        <code>$variables</code> — no host code required.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · product detail`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Click a thumbnail to swap the hero image. Switch the colorway to
-        re-bind the price card and the "Add to cart" CTA. Open the
-        "Specifications" tab for the full data sheet.`,
-      codeBlocks: [
-      { codeId: "src-product", content: `$$variant = "midnight"
-$$qty     = "1"
-$$tab     = "overview"
-
-imgMidnight = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1400&q=80"
-imgSunset   = "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=1400&q=80"
-imgLagoon   = "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=1400&q=80"
-
-heroSrc = @Switch($$variant, {midnight: imgMidnight, sunset: imgSunset}, imgLagoon)
-
-heroImage = Card([Image(heroSrc, \`Aurora Wireless Headphones — \${$$variant}\`, null)], "elevated")
-
-VariantTile(label, icon, desc, key) = Tile(label, icon, null, desc, @If($$variant == key, "primary", "default"), Action([@Set($$variant, key)]))
-
-thumbStrip = Grid([
-  VariantTile("Midnight", "moon",  "Stealth black",    "midnight"),
-  VariantTile("Sunset",   "sun",   "Warm copper",       "sunset"),
-  VariantTile("Lagoon",   "water", "Cool ocean blue",   "lagoon")
-], {sm: 3, md: 3}, "s")
-
-gallery = Stack([
-  heroImage,
-  thumbStrip
-], "column", "m")
-
-priceTag = Stack([
-  TextContent("$299", "title"),
-  TextContent("$349", "small"),
-  Badge("14% off", "success")
-], "row", "s", "end")
-
-ratingRow = Stack([
-  Rating(4.8, 5, null, 1284, "md", false),
-  Spacer(),
-  Badge("Free returns", "info", "rotate-left", "sm")
-], "row", "m", "center")
-
-variantPicker = FormControl(
-  "Colorway",
-  ToggleGroup("variant", [
-    {value: "midnight", label: "Midnight", icon: "moon"},
-    {value: "sunset",   label: "Sunset",   icon: "sun"},
-    {value: "lagoon",   label: "Lagoon",   icon: "water"}
-  ], $$variant),
-  null
-)
-
-qtyPicker = FormControl(
-  "Quantity",
-  Select("qty", [
-    SelectItem("1", "1"),
-    SelectItem("2", "2"),
-    SelectItem("3", "3"),
-    SelectItem("5", "5")
-  ], null, null, $$qty),
-  null
-)
-
-stockBadge = Stack([
-  Badge("In stock — ships today", "success"),
-  Spacer(),
-  TextContent("72% of warehouse", "small", "muted")
-], "row", "m", "center")
-
-ctaButtons = Stack([
-  Button(\`Add \${$$qty} to cart\`,
-         Action([@ToAssistant(\`Add \${$$qty} Aurora (\${$$variant}) to my cart\`)]),
-         "primary", "button", "large"),
-  Button("Buy now",
-         Action([@ToAssistant(\`Buy \${$$qty} Aurora (\${$$variant}) now\`)]),
-         "secondary", "button", "large")
-], "column", "s")
-
-perks = Stack([
-  Stack([Badge("truck", "info", null, "sm"),    TextContent("Free 2-day shipping", "body")], "row", "s", "center"),
-  Stack([Badge("rotate-left", "info", null, "sm"),    TextContent("30-day returns",      "body")], "row", "s", "center"),
-  Stack([Badge("shield", "success", null, "sm"), TextContent("2-year warranty",     "body")], "row", "s", "center"),
-  Stack([Badge("headphones", "primary", null, "sm"), TextContent("Free Aurora app",     "body")], "row", "s", "center")
-], "column", "s")
-
-buyBox = Card([
-  TextContent("AURORA AUDIO", "small-heavy", "primary"),
-  PageHeader("Aurora Wireless Headphones"),
-  ratingRow,
-  priceTag,
-  Separator("horizontal", true),
-  variantPicker,
-  qtyPicker,
-  stockBadge,
-  ctaButtons,
-  Separator("horizontal", true),
-  perks
-], "elevated")
-
-hero = SplitView([gallery], [buyBox], "560px")
-
-trustStrip = Stats([
-  {label: "Average rating", value: "4.8 / 5", hint: "1,284 reviews",        tone: "warning"},
-  {label: "Battery life",   value: "40 hrs",  hint: "Quick-charge 10 min",  tone: "success"},
-  {label: "Warranty",       value: "2 yrs",   hint: "Free repair coverage", tone: "info"},
-  {label: "Shipping",       value: "Free",    hint: "Carbon-neutral",       tone: "primary"}
-], "start")
-
-overviewTab = Stack([
-  PageHeader("Engineered for the long sessions"),
-  TextContent("Aurora Wireless Headphones pair a 40 mm beryllium driver with adaptive ANC and 40-hour battery life. The result: a quiet, low-fatigue listening experience whether you're mixing, on a call, or on a 14-hour flight.", "body"),
-  PageHeader("Why people choose Aurora"),
-  Stack([
-    Stack([Badge("sliders", "primary", null, "md"), TextContent("Studio EQ — 12 presets and a 31-band custom curve", "body")], "row", "s", "center"),
-    Stack([Badge("volume-xmark", "info", null, "md"),    TextContent("Adaptive ANC + transparency that follows your environment", "body")], "row", "s", "center"),
-    Stack([Badge("microphone", "success", null, "md"), TextContent("Beam-forming mics that work in cafés, offices, and wind", "body")], "row", "s", "center"),
-    Stack([Badge("battery-full", "warning", null, "md"), TextContent("40 h battery · 6 h playback from a 10-min top-up", "body")], "row", "s", "center")
-  ], "column", "s")
-], "column", "m")
-
-specsTab = Stack([
-  PageHeader("Specifications"),
-  DescriptionList([
-    DescriptionItem("Driver",        "40 mm beryllium",                 "volume-high"),
-    DescriptionItem("Frequency",     "10 Hz – 40 kHz",                  "chart-line"),
-    DescriptionItem("Bluetooth",     "5.3 with multipoint (2 devices)", "signal"),
-    DescriptionItem("Codecs",        "AAC, aptX HD, LDAC",              "sliders"),
-    DescriptionItem("ANC",           "Adaptive + transparency",         "ear-listen"),
-    DescriptionItem("Battery",       "40 hrs ANC on · 60 hrs off",      "battery-full"),
-    DescriptionItem("Charging",      "USB-C · 10 min = 6 hrs",          "plug"),
-    DescriptionItem("Weight",        "248 g",                           "scale-balanced"),
-    DescriptionItem("In the box",    "Headphones · case · USB-C · 3.5mm", "box"),
-    DescriptionItem("Warranty",      "2 years · free repairs",          "shield")
-  ], 2),
-  Callout("tip", "All specs measured at 1 mW into 32 Ω at 1 kHz, average of three sample units.", null, null, true)
-], "column", "m")
-
-reviewsTab = Stack([
-  PageHeader("Reviews"),
-  Stack([
-    Rating(4.8, 5, "Average rating", 1284, "lg", false),
-    Spacer(),
-    Stack([
-      Badge("96% recommend", "success"),
-      Button("Write a review",
-             Action([@ToAssistant("Open the write-a-review form")]),
-             "secondary",
-             "button",
-             "small")
-    ], "row", "s", "center")
-  ], "row", "m", "center"),
-  Separator("horizontal", true),
-  ChatBubble("Naomi Rivers",
-             "Sound stage is huge — I can hear the room around the piano. Worth every penny.",
-             "2h ago", "https://i.pravatar.cc/64?img=47", "agent", "delivered"),
-  ChatBubble("Aurora team",
-             "Glad you're loving them! Pro tip: enable 'Studio EQ' in the app for orchestral recordings.",
-             "1h ago", "https://i.pravatar.cc/64?img=5", "agent", "delivered"),
-  ChatBubble("Marc Lee",
-             "Battery has lasted me three flights without charging. Bought a second pair.",
-             "Yesterday", "https://i.pravatar.cc/64?img=11", "agent", "delivered"),
-  ChatBubble("Ada Lovelace",
-             "Calls are crystal clear even on a noisy train. The transparency mode is the best I've used.",
-             "3d ago", "https://i.pravatar.cc/64?img=20", "agent", "delivered")
-], "column", "m")
-
-faqTab = Stack([
-  PageHeader("Frequently asked"),
-  Accordion([
-    AccordionItem("Can I pair it with two devices at once?",
-      [TextContent("Yes — Bluetooth 5.3 multipoint lets you stay connected to your laptop and phone simultaneously, and Aurora swaps audio sources automatically.")]),
-    AccordionItem("Is it good for calls?",
-      [TextContent("Three beam-forming mics with adaptive noise reduction handle open offices, busy cafés, and windy commutes.")]),
-    AccordionItem("Does it fold?",
-      [TextContent("The cups fold flat so the headphones slide into the included rigid case (15 cm wide).")]),
-    AccordionItem("What's the return policy?",
-      [TextContent("Free 30-day returns, no restocking fee. We pay shipping both ways and the case + cables can come back in the box.")]),
-    AccordionItem("Is there a wired mode?",
-      [TextContent("Yes — 3.5 mm jack with a 16-bit DAC bypass for lossless playback when you don't want to use Bluetooth.")])
-  ])
-], "column", "m")
-
-productTabs = Tabs([
-  TabItem("overview", "Overview",        [overviewTab]),
-  TabItem("specs",    "Specifications",  [specsTab]),
-  TabItem("reviews",  "Reviews (1,284)", [reviewsTab]),
-  TabItem("faq",      "FAQ",             [faqTab])
-], $$tab)
-
-related = Grid([
-  MediaCard("Aurora ANC Earbuds",
-            "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=900&q=80",
-            "Same DAC, in-ear comfort.",
-            ["wireless", "in-ear"],
-            "$149 · 4.7 stars",
-            [Button("View", Action([@ToAssistant("Show me the Aurora earbuds")]),     "secondary")]),
-  MediaCard("Aurora Travel Case",
-            "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=900&q=80",
-            "Hard shell, magnetic clasp.",
-            ["accessory"],
-            "$39 · 4.6 stars",
-            [Button("View", Action([@ToAssistant("Show me the Aurora travel case")]), "secondary")]),
-  MediaCard("Aurora Cable Kit",
-            "https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=900&q=80",
-            "USB-C, 3.5 mm, airplane adapter.",
-            ["accessory"],
-            "$19 · 4.8 stars",
-            [Button("View", Action([@ToAssistant("Show me the Aurora cable kit")]),   "secondary")])
-], {sm: 1, md: 2, lg: 3}, "m")
-
-closing = Notification(
-  "Free Aurora app",
-  "Custom EQ, find-my-headphones, and over-the-air firmware updates.",
-  "Available on iOS & Android",
-  "mobile-screen",
-  null,
-  "info",
-  false,
-  [Button("Get the app",
-          Action([@OpenUrl("https://example.com/aurora-app")]),
-          "ghost")]
-)
-
-breadcrumbs = Breadcrumb([
-  BreadcrumbItem("Home",         null),
-  BreadcrumbItem("Audio",        null),
-  BreadcrumbItem("Headphones",   null),
-  BreadcrumbItem("Aurora Wireless", null)
-])
-
-root = Stack([
-  breadcrumbs,
-  hero,
-  trustStrip,
-  Section([productTabs],   "Product details"),
-  Section([related],       "Customers also buy"),
-  closing
-], "column", "xl")` }
-      ],
-      render: { elId: "rui-product", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `The hero uses <code>SplitView</code> to put the image gallery and
-        the buy box side-by-side; the gallery's <code>Tile</code>
-        thumbnails and the buy-box <code>ToggleGroup</code> both drive the
-        same <code>$variant</code>, which a ternary uses to pick the hero
-        image. <code>Tabs</code> isolate the long-form product info, and
-        the "Add to cart" button reads back <code>$qty</code> and
-        <code>$variant</code> so its label and outgoing message stay in
-        sync.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-product");
-    el.setResponse(document.getElementById("src-product").textContent);
-    }
-  },
-  "expense-tracker": {
-    slug: "expense-tracker",
-    docTitle: `Expense tracker · streaming-ui-script`,
-    eyebrow: `Live demo · personal finance`,
-    heroTitleHtml: `A personal finance dashboard, charts &amp; all`,
-    heroDescriptionHtml: `Income, budgets, category breakdowns, a 6-month
-        <code>LineChart</code>, a <code>BarChart</code> by category, and
-        every <code>ProgressRing</code>/<code>Progress</code> bar driven
-        by live <code>@Sum</code> and <code>@Filter</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · expense tracker`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Filter by category — every metric, every chart, and the
-        transaction list recompute. The current view persists across
-        reloads via <code>$$</code> state.`,
-      codeBlocks: [
-      { codeId: "src-expenses", content: `$$range    = "month"
-$$category = "all"
-$$selected = ""
-
-transactions = [
-  {id: "t01", date: "May 14", merchant: "Whole Foods",     category: "groceries",    amount: 86.42,  icon: "basket-shopping", note: "Weekly run"},
-  {id: "t02", date: "May 13", merchant: "Spotify",         category: "subscriptions",amount: 11.99,  icon: "music",           note: "Family plan"},
-  {id: "t03", date: "May 12", merchant: "Uber",            category: "transport",    amount: 23.50,  icon: "car",             note: "Airport ride"},
-  {id: "t04", date: "May 12", merchant: "Bistro Vibrato",  category: "dining",       amount: 64.20,  icon: "utensils",        note: "Anniversary dinner"},
-  {id: "t05", date: "May 11", merchant: "Acme Energy",     category: "utilities",    amount: 92.30,  icon: "bolt",            note: "April bill"},
-  {id: "t06", date: "May 11", merchant: "Amazon",          category: "shopping",     amount: 34.99,  icon: "cart-shopping",   note: "USB-C cable"},
-  {id: "t07", date: "May 10", merchant: "Trader Joe's",    category: "groceries",    amount: 41.18,  icon: "basket-shopping", note: "Mid-week refill"},
-  {id: "t08", date: "May 09", merchant: "Lyft",            category: "transport",    amount: 14.20,  icon: "car",             note: "To the office"},
-  {id: "t09", date: "May 08", merchant: "Netflix",         category: "subscriptions",amount: 17.99,  icon: "film",            note: "Standard plan"},
-  {id: "t10", date: "May 07", merchant: "Sushi Park",      category: "dining",       amount: 38.50,  icon: "utensils",        note: "Lunch with Mei"},
-  {id: "t11", date: "May 06", merchant: "Verizon",         category: "utilities",    amount: 65.00,  icon: "wifi",            note: "Internet"},
-  {id: "t12", date: "May 05", merchant: "Apple",           category: "shopping",     amount: 129.00, icon: "apple",           note: "AirPods replacement"},
-  {id: "t13", date: "May 04", merchant: "Whole Foods",     category: "groceries",    amount: 52.71,  icon: "basket-shopping", note: "Weekly run"},
-  {id: "t14", date: "May 03", merchant: "Notion",          category: "subscriptions",amount: 10.00,  icon: "pen-to-square",   note: "Personal plan"},
-  {id: "t15", date: "May 02", merchant: "Cinema City",     category: "entertainment",amount: 22.50,  icon: "ticket",          note: "Movie night"},
-  {id: "t16", date: "May 01", merchant: "Local Cafe",      category: "dining",       amount: 8.75,   icon: "mug-hot",         note: "Morning coffee"}
-]
-
-budgets = [
-  {category: "groceries",     label: "Groceries",     budget: 250, icon: "basket-shopping"},
-  {category: "dining",        label: "Dining out",    budget: 200, icon: "utensils"},
-  {category: "transport",     label: "Transport",     budget: 120, icon: "car"},
-  {category: "subscriptions", label: "Subscriptions", budget: 60,  icon: "music"},
-  {category: "utilities",     label: "Utilities",     budget: 200, icon: "bolt"},
-  {category: "shopping",      label: "Shopping",      budget: 200, icon: "cart-shopping"},
-  {category: "entertainment", label: "Entertainment", budget: 80,  icon: "ticket"}
-]
-
-categoryRows = @If($$category == "all", transactions, @Filter(transactions, "category", "==", $$category))
-
-totalSpent  = @Sum(categoryRows.amount)
-monthBudget = @Sum(budgets.budget)
-totalCount  = @Count(transactions)
-income      = 4250
-remaining   = income - @Sum(transactions.amount)
-savingsRate = @Round((remaining / income) * 100, 0)
-
-categoryLabel = @Switch($$category, {
-  groceries:     "Groceries",
-  dining:        "Dining out",
-  transport:     "Transport",
-  subscriptions: "Subscriptions",
-  utilities:     "Utilities",
-  shopping:      "Shopping",
-  entertainment: "Entertainment"
-}, "All categories")
-
-header = PageHeader(
-  "Personal finance",
-  \`May 2026 · \${@Format(income, "currency", "USD")} in · \${@Format(@Sum(transactions.amount, "currency", "USD"), "USD")} out\`,
-  ["Money", categoryLabel],
-  [Button("Add transaction", Action([@ToAssistant("Add a new transaction")]),     "primary"),
-   Button("Export CSV",      Action([@ToAssistant("Export this month as CSV")]),  "secondary")],
-  Badge(\`\${savingsRate}% saved\`, @If(savingsRate >= 25, "success", @If(savingsRate >= 10, "warning", "danger")), null, "sm")
-)
-
-kpis = Stats([
-  StatCard("Income",     @Format(income, "currency", "USD"),                    "flat", "Monthly net",                            "sack-dollar"),
-  StatCard("Spent",      @Format(@Sum(transactions.amount, "currency", "USD"), "USD"), "up",   \`\${totalCount} \${@Plural(totalCount, "txn", "txns")}\`, "receipt"),
-  StatCard("Remaining",  @Format(remaining, "currency", "USD"),                  "down", \`\${savingsRate}% savings rate\`,           "piggy-bank"),
-  StatCard("Top cat.",   "Groceries",                                        "up",   "$180 spent · 22% of budget",             "basket-shopping")
-])
-
-trendCard = Card([
-  SectionHeader("6-month trend", "Income vs. spending"),
-  LineChart(
-    ["Dec", "Jan", "Feb", "Mar", "Apr", "May"],
-    [
-      Series("Income",   [4200, 4250, 4250, 4250, 4250, 4250]),
-      Series("Spending", [3120, 3260, 3450, 2980, 3380, 3260])
-    ]
-  )
-])
-
-byCategoryBars = BarChart(
-  ["Groceries", "Dining", "Transport", "Subs", "Utilities", "Shop", "Fun"],
-  [Series("Spent",  [180, 112, 38, 40, 157, 164, 23]),
-   Series("Budget", [250, 200, 120, 60, 200, 200, 80])]
-)
-
-barsCard = Card([
-  SectionHeader("Category spend vs. budget", "May 2026"),
-  byCategoryBars
-])
-
-BudgetBar(category, label, budget, icon) = Stack([
-  Stack([
-    Icon(icon, "solid", "md"),
-    TextContent(label, "small-heavy"),
-    Spacer(),
-    TextContent(\`\${@Format(@Sum(@Filter(transactions, "category", "==", category, "currency", "USD").amount), "USD")} / \${@Format(budget, "currency", "USD")}\`, "small", "muted")
-  ], "row", "s", "center"),
-  Progress(@Round(@Sum(@Filter(transactions, "category", "==", category).amount) / budget * 100, 0), 100, @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget, "danger", @If(@Sum(@Filter(transactions, "category", "==", category).amount) > budget * 0.8, "warning", "success")), "sm")
-], "column", "xs")
-
-budgetCard = Card([
-  SectionHeader("Budgets", "Tap a row to filter the transaction list"),
-  Stack(@Each(budgets, "{category, label, budget, icon}", BudgetBar(category, label, budget, icon)), "column", "m")
-])
-
-savingsCard = Card([
-  SectionHeader("Savings goal", "Vacation fund · July"),
-  ProgressRing(remaining, 1500, @Format(remaining, "currency", "USD"), \`of \${@Format(1500, "currency", "USD")}\`, @If(remaining > 750, "success", "warning"), "lg"),
-  Stats([
-    {label: "This month", value: @Format(remaining, "currency", "USD"), tone: "success"},
-    {label: "Last month", value: @Format(870, "currency", "USD"),       tone: "info"},
-    {label: "Target",     value: @Format(1500, "currency", "USD"),       tone: "primary"}
-  ])
-])
-
-categoryToggle = ToggleGroup("cat", [
-  {value: "all",           label: "All",           icon: "circle"},
-  {value: "groceries",     label: "Groceries",     icon: "basket-shopping"},
-  {value: "dining",        label: "Dining",        icon: "utensils"},
-  {value: "transport",     label: "Transport",     icon: "car"},
-  {value: "subscriptions", label: "Subs",          icon: "music"},
-  {value: "utilities",     label: "Utilities",     icon: "bolt"},
-  {value: "shopping",      label: "Shopping",      icon: "cart-shopping"},
-  {value: "entertainment", label: "Fun",           icon: "ticket"}
-], $$category)
-
-CategoryBadge(c) = @Switch(c, {
-  groceries:     Badge("Groceries",     "success", "basket-shopping", "sm"),
-  dining:        Badge("Dining",        "warning", "utensils",        "sm"),
-  transport:     Badge("Transport",     "info",    "car",             "sm"),
-  subscriptions: Badge("Subscriptions", "primary", "music",           "sm"),
-  utilities:     Badge("Utilities",     "danger",  "bolt",            "sm"),
-  shopping:      Badge("Shopping",      "neutral", "cart-shopping",   "sm")
-}, Badge("Fun", "info", "ticket", "sm"))
-
-TxnRow(id, date, merchant, category, amount, icon, note) = Card([
-  Stack([
-    Icon(icon, "solid", "lg"),
-    Stack([
-      TextContent(merchant, "body-heavy"),
-      TextContent(\`\${date} · \${note}\`, "small", "muted")
-    ], "column", "xs"),
-    Spacer(),
-    CategoryBadge(category),
-    TextContent(\`-\${@Format(amount, "currency", "USD")}\`, "body-heavy", "danger"),
-    Button(@If(id == $$selected, "Selected", "Detail"),
-           Action([@Set($$selected, id)]),
-           @If(id == $$selected, "primary", "ghost"),
-           "button", "small")
-  ], "row", "m", "center")
-], "outlined")
-
-txnRows = @Each(categoryRows, "{id, date, merchant, category, amount, icon, note}",
-  TxnRow(id, date, merchant, category, amount, icon, note))
-
-emptyTxns = EmptyState(
-  "No transactions for this category",
-  "Pick a different category, or import this month's spending.",
-  "receipt",
-  Button("Reset filter", Action([@Set($$category, "all")]), "primary")
-)
-
-txnList = Card([
-  SectionHeader(\`\${categoryLabel}\`, \`\${@Count(categoryRows)} \${@Plural(@Count(categoryRows), "transaction", "transactions")} · \${@Format(totalSpent, "currency", "USD")}\`, null, null,
-    [Button("Sort by date",   Action([@ToAssistant("Sort by date")]),   "ghost", "button", "small"),
-     Button("Sort by amount", Action([@ToAssistant("Sort by amount")]), "ghost", "button", "small")]),
-  categoryToggle,
-  @If(@Count(categoryRows) == 0, emptyTxns, Stack(txnRows, "column", "s"))
-])
-
-selectedTxn       = @First(@Filter(transactions, "id", "==", $$selected))
-selectedTxnExists = @Count(@Filter(transactions, "id", "==", $$selected))
-
-detailLoaded = Stack([
-  Stack([
-    Icon(selectedTxn.icon, "solid", "lg"),
-    Stack([
-      TextContent(selectedTxn.merchant, "large-heavy"),
-      TextContent(\`\${selectedTxn.date} · \${selectedTxn.note}\`, "small", "muted")
-    ], "column", "xs"),
-    Spacer(),
-    TextContent(\`-\${@Format(selectedTxn.amount, "currency", "USD")}\`, "large-heavy", "danger")
-  ], "row", "m", "center"),
-  CategoryBadge(selectedTxn.category),
-  DescriptionList([
-    DescriptionItem("Category", categoryLabel,                   "tag"),
-    DescriptionItem("Date",     selectedTxn.date,                "calendar"),
-    DescriptionItem("Amount",   @Format(selectedTxn.amount, "currency", "USD"), "dollar-sign"),
-    DescriptionItem("Note",     selectedTxn.note,                "comment")
-  ]),
-  Buttons([
-    Button("Recategorise", Action([@ToAssistant(\`Move \${selectedTxn.merchant} to a different category\`)]), "primary"),
-    Button("Split",        Action([@ToAssistant(\`Split \${selectedTxn.merchant}\`)]),                          "secondary"),
-    Button("Delete",       Action([@ToAssistant(\`Delete the \${selectedTxn.merchant} transaction\`)]),         "ghost")
-  ])
-], "column", "m")
-
-detailEmpty = EmptyState(
-  "No transaction selected",
-  "Click a row to inspect that purchase, recategorise it, or split it.",
-  "receipt",
-  null
-)
-
-detailSheet = Drawer(
-  "Transaction detail",
-  $$selected != "",
-  [@If(selectedTxnExists == 0, detailEmpty, detailLoaded)],
-  "right",
-  [Buttons([
-    Button("Close", Action([@Set($$selected, "")]), "secondary"),
-    Button("Add a similar", Action([@ToAssistant(\`Add another \${selectedTxn.merchant} entry\`)]), "primary")
-  ])]
-)
-
-chartsGrid    = Grid([trendCard,  barsCard],   {sm: 1, md: 2}, "l")
-budgetGrid    = Grid([budgetCard, savingsCard], {sm: 1, md: 2}, "l")
-
-followUps = FollowUpBlock([
-  FollowUpItem("Forecast next month's spending"),
-  FollowUpItem("Find subscriptions I forgot about"),
-  FollowUpItem("Compare to last year")
-], "Try next")
-
-root = Stack([
-  header,
-  kpis,
-  chartsGrid,
-  budgetGrid,
-  txnList,
-  followUps,
-  detailSheet
-], "column", "l")` }
-      ],
-      render: { elId: "rui-expenses", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `One <code>BudgetBar</code> macro generates every progress bar in
-        the budgets card — and its colour comes from the data itself,
-        comparing actual <code>@Sum</code> against the configured budget.
-        The category toggle drives the transaction list, the page badge,
-        and the breadcrumb in <code>PageHeader</code> — all from one
-        <code>$$category</code> read.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-expenses");
-    el.setResponse(document.getElementById("src-expenses").textContent);
-    }
-  },
-  "file-manager": {
-    slug: "file-manager",
-    docTitle: `File manager · streaming-ui-script`,
-    eyebrow: `Live demo · tree + table + preview`,
-    heroTitleHtml: `A working cloud file manager, generated from one program`,
-    heroDescriptionHtml: `A Dropbox/Drive-style file browser: a <code>Tree</code> sidebar with
-        nested folders, a <code>Toolbar</code> with breadcrumbs and view
-        toggles, a <code>Table</code> of files with owner + size + modified
-        columns, a slide-in <code>Sheet</code> for file previews, and a
-        bottom storage <code>ProgressRing</code>. Selecting a folder or
-        file is just one <code>@Set</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · file manager`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Click a folder in the tree to focus it, search by name, or open the
-        detail sheet on any file. Switch between grid and table layouts
-        with the view toggle.`,
-      codeBlocks: [
-      { codeId: "src-files", content: `$$folder   = "design"
-$$view     = "table"
-$$selected = ""
-$query     = ""
-
-storage = Query("storage_usage", {}, {used: 0, total: 0, percent: 0, label: ""})
-
-$files = [
-  {id: "logo.fig",       name: "Logo.fig",                   folder: "design",    type: "Figma",    size: "4.2 MB",   modified: "2 hours ago",  owner: "Naomi Rivers",  starred: true,  shared: ["You", "Naomi", "Mei"]},
-  {id: "wireframes.fig", name: "Wireframes — onboarding.fig",folder: "design",    type: "Figma",    size: "12.7 MB",  modified: "Yesterday",     owner: "Mei Tanaka",    starred: false, shared: ["You", "Naomi"]},
-  {id: "icons.zip",      name: "Brand icons v2.zip",         folder: "design",    type: "Archive",  size: "28.1 MB",  modified: "3 days ago",    owner: "Naomi Rivers",  starred: false, shared: ["You"]},
-  {id: "cover.png",      name: "Cover hero — fall.png",      folder: "design",    type: "Image",    size: "1.8 MB",   modified: "Last week",     owner: "Linus Torvalds",starred: true,  shared: ["You", "Naomi", "Mei", "Linus"]},
-  {id: "roadmap.doc",    name: "Q3 roadmap.docx",            folder: "docs",      type: "Word",     size: "240 KB",   modified: "1 hour ago",    owner: "Ada Lovelace",  starred: true,  shared: ["You", "Ada"]},
-  {id: "okrs.doc",       name: "OKRs · Engineering.docx",    folder: "docs",      type: "Word",     size: "180 KB",   modified: "Yesterday",     owner: "Ada Lovelace",  starred: false, shared: ["You"]},
-  {id: "brief.pdf",      name: "Customer brief.pdf",         folder: "docs",      type: "PDF",      size: "1.1 MB",   modified: "3 days ago",    owner: "Naomi Rivers",  starred: false, shared: ["You", "Naomi"]},
-  {id: "budget.xlsx",    name: "FY26 budget.xlsx",           folder: "finance",   type: "Excel",    size: "640 KB",   modified: "2 days ago",    owner: "Sam Reyes",     starred: true,  shared: ["You", "Sam"]},
-  {id: "invoices.csv",   name: "Open invoices.csv",          folder: "finance",   type: "CSV",      size: "92 KB",    modified: "5 days ago",    owner: "Sam Reyes",     starred: false, shared: ["You"]},
-  {id: "demo.mov",       name: "Product demo · v2.mov",      folder: "marketing", type: "Video",    size: "184 MB",   modified: "1 week ago",    owner: "Mei Tanaka",    starred: false, shared: ["You", "Mei"]},
-  {id: "launch.key",     name: "Launch deck.key",            folder: "marketing", type: "Keynote",  size: "26 MB",    modified: "2 weeks ago",   owner: "Mei Tanaka",    starred: true,  shared: ["You", "Mei", "Naomi"]},
-  {id: "scripts.zip",    name: "Migration scripts.zip",      folder: "engineering",type: "Archive", size: "8.4 MB",  modified: "Yesterday",     owner: "Linus Torvalds",starred: false, shared: ["You", "Linus"]},
-  {id: "schema.sql",     name: "Schema · v3.sql",            folder: "engineering",type: "SQL",     size: "112 KB",  modified: "Today · 09:24", owner: "Linus Torvalds",starred: true,  shared: ["You"]},
-  {id: "ci.yml",         name: ".github/workflows/ci.yml",   folder: "engineering",type: "YAML",    size: "8 KB",    modified: "Today · 11:02", owner: "Linus Torvalds",starred: false, shared: ["You"]}
-]
-
-folderRows = @Switch($$folder, {
-  starred: @Filter($files, "starred", "==", true),
-  recent:  $files
-}, @Filter($files, "folder", "==", $$folder))
-
-visibleRows  = @If($query == "", folderRows, @Filter(folderRows, "name", "contains", $query))
-visibleCount = @Count(visibleRows)
-totalCount   = @Count($files)
-
-selected       = @First(@Filter($files, "id", "==", $$selected))
-selectedExists = @Count(@Filter($files, "id", "==", $$selected))
-
-FolderRow(key, label, icon) = TreeNode(label, null, icon, $$folder == key, $$folder == key, \`\${@Count(@Filter($files, "folder", "==", key))}\`, Action([@Set($$folder, key)]))
-
-navTree = Tree([
-  TreeNode("My drive", [
-    FolderRow("design",      "Design",      "palette"),
-    FolderRow("docs",        "Docs",        "file-lines"),
-    FolderRow("finance",     "Finance",     "sack-dollar"),
-    FolderRow("marketing",   "Marketing",   "bullhorn"),
-    FolderRow("engineering", "Engineering", "code")
-  ], "folder-open", true),
-  TreeNode("Shared with me", [
-    TreeNode("From Naomi",  null, "user", false, false, "3", Action([@ToAssistant("Open shared from Naomi")])),
-    TreeNode("From Linus",  null, "user", false, false, "2", Action([@ToAssistant("Open shared from Linus")]))
-  ], "users", false),
-  TreeNode("Starred", null, "star",  $$folder == "starred", $$folder == "starred", \`\${@Count(@Filter($files, "starred", "==", true))}\`, Action([@Set($$folder, "starred")])),
-  TreeNode("Recent",  null, "clock", $$folder == "recent",  $$folder == "recent",  \`\${totalCount}\`, Action([@Set($$folder, "recent")])),
-  TreeNode("Trash",   null, "trash", false,              false,              null,              Action([@ToAssistant("Open trash")]))
-])
-
-quickActions = Stack([
-  Button("Upload",     Action([@ToAssistant("Open the upload dialog")]),                           "primary",   "button", "small"),
-  Button("New folder", Action([@ToAssistant(\`Create a new folder under \${$$folder}\`)]),            "secondary", "button", "small"),
-  Button("Invite",     Action([@ToAssistant(\`Invite a teammate to \${$$folder}\`)]),                 "ghost",     "button", "small")
-], "column", "s")
-
-storageCard = Card([
-  SectionHeader("Storage", storage.label),
-  ProgressRing(storage.percent, 100, \`\${storage.percent}%\`, \`\${storage.used} GB used\`, "primary", "md"),
-  TextContent(\`\${storage.used} GB of \${storage.total} GB used\`, "small", "muted"),
-  Button("Upgrade plan", Action([@ToAssistant("Open the upgrade flow")]), "primary", "button", "small")
-])
-
-sidePane = Stack([
-  Card([
-    SectionHeader("Locations"),
-    navTree
-  ]),
-  Card([
-    SectionHeader("Quick actions"),
-    quickActions
-  ]),
-  storageCard
-], "column", "m")
-
-folderLabel = @Switch($$folder, {
-  design:      "Design",
-  docs:        "Docs",
-  finance:     "Finance",
-  marketing:   "Marketing",
-  engineering: "Engineering",
-  starred:     "Starred",
-  recent:      "Recent"
-}, "Files")
-
-folderBreadcrumb = Breadcrumb([
-  BreadcrumbItem("My drive", "#"),
-  BreadcrumbItem(folderLabel)
-])
-
-filterToolbar = Toolbar(
-  [
-    SearchBar("file-q", \`Search \${folderLabel}…\`, $query, "/"),
-    ToggleGroup("view", [
-      {value: "table", label: "Table", icon: "table"},
-      {value: "grid",  label: "Grid",  icon: "grip"}
-    ], $$view)
-  ],
-  [
-    Button("Sort: modified", Action([@ToAssistant("Change sort order")]),  "ghost", "button", "small"),
-    Button("Filter",         Action([@ToAssistant("Open filter sheet")]),   "ghost", "button", "small")
-  ]
-)
-
-typeIconName(type) = @Switch(type, {
-  Figma:   "vector-square",
-  Image:   "image",
-  Word:    "file-word",
-  PDF:     "file-pdf",
-  Excel:   "file-excel",
-  CSV:     "file-csv",
-  Video:   "file-video",
-  Keynote: "wand-magic-sparkles",
-  SQL:     "database",
-  Archive: "file-zipper",
-  YAML:    "file-code"
-}, "file")
-
-TypeIcon(type, size)   = Icon(typeIconName(type), "solid", size)
-TypeIconSm(type)       = TypeIcon(type, "md")
-TypeIconLg(type)       = TypeIcon(type, "lg")
-
-nameCells = @Each(visibleRows, "{name, type, starred}",
-  Stack([
-    TypeIconSm(type),
-    TextContent(name, "body-heavy"),
-    @If(starred, Icon("star", "solid", "sm"))
-  ], "row", "s", "center")
-)
-
-typeCells   = @Each(visibleRows, "{type}",     Badge(type, "neutral", null, "sm"))
-sizeCells   = @Each(visibleRows, "{size}",     TextContent(size,     "small", "muted"))
-modCells    = @Each(visibleRows, "{modified}", TextContent(modified, "small", "muted"))
-ownerCells  = @Each(visibleRows, "{owner}",    PersonChip(owner, null, null, "sm"))
-actionCells = @Each(visibleRows, "{id, name}",
-  Buttons([
-    Button("Preview", Action([@Set($$selected, id)]),                  "secondary", "button", "small"),
-    Button("Share",   Action([@ToAssistant(\`Share \${name}\`)]),         "ghost",     "button", "small")
-  ])
-)
-
-filesTable = Table([
-  Col("Name",     nameCells),
-  Col("Type",     typeCells),
-  Col("Size",     sizeCells),
-  Col("Modified", modCells),
-  Col("Owner",    ownerCells),
-  Col("",         actionCells)
-])
-
-FileTile(f) = Card([
-  Stack([
-    TypeIconLg(f.type),
-    TextContent(f.name, "small-heavy"),
-    TextContent(\`\${f.size} · \${f.modified}\`, "small", "muted"),
-    PersonChip(f.owner, null, null, "sm"),
-    Buttons([
-      Button("Open", Action([@Set($$selected, f.id)]), "ghost", "button", "small")
-    ])
-  ], "column", "s")
-])
-
-gridCards = Grid(@Each(visibleRows, "f", FileTile(f)), {sm: 1, md: 2, lg: 3}, "m")
-
-emptyResults = @If($query == "",
-  EmptyState("Folder is empty", \`Drop files here or click upload to add to \${folderLabel}.\`, "folder-open",
-             Button("Upload files", Action([@ToAssistant(\`Open the upload dialog for \${folderLabel}\`)]), "primary")),
-  EmptyState("No files match", "Try a different search term or clear the search.", "magnifying-glass",
-             Button("Clear search", Action([@Reset($query)]), "secondary"))
-)
-
-filesView = @If(visibleCount == 0, emptyResults, @Switch($$view, {table: filesTable, grid: gridCards}, filesTable))
-
-resultBar = Stack([
-  TextContent(\`Showing \${visibleCount} of \${totalCount} files\${@If($query == "", "", \` · matching "\${$query}"\`)}\`, "small", "muted"),
-  Spacer(),
-  Stack([
-    StatusDot("Synced",    "success", false),
-    StatusDot("Real-time", "info",    true)
-  ], "row", "s")
-], "row", "m", "center")
-
-filesCard = Card([
-  filterToolbar,
-  Separator("horizontal", true),
-  resultBar,
-  filesView
-])
-
-detailEmpty = EmptyState(
-  "No file selected",
-  "Open a file from the table to preview it here.",
-  "file-circle-question",
-  null
-)
-
-detailLoaded = Stack([
-  Stack([
-    TypeIconLg(selected.type),
-    Stack([
-      TextContent(selected.name, "large-heavy"),
-      TextContent(\`\${selected.type} · \${selected.size}\`,                         "small", "muted"),
-      TextContent(\`Modified \${selected.modified} by \${selected.owner}\`,          "small", "muted")
-    ], "column", "xs")
-  ], "row", "m", "center"),
-  Separator("horizontal", true),
-  DescriptionList([
-    DescriptionItem("Folder",   folderLabel,                              "folder"),
-    DescriptionItem("Type",     selected.type,                            "file"),
-    DescriptionItem("Size",     selected.size,                            "weight-hanging"),
-    DescriptionItem("Modified", selected.modified,                        "clock"),
-    DescriptionItem("Owner",    selected.owner,                           "user"),
-    DescriptionItem("Starred",  @If(selected.starred, "Yes", "No"),       "star")
-  ]),
-  Separator("horizontal", true),
-  SectionHeader("Shared with"),
-  AvatarGroup(@Each(selected.shared, "u", Avatar(u, null, "sm")), "sm"),
-  Separator("horizontal", true),
-  SectionHeader("Activity", "Last 5 events on this file"),
-  Timeline([
-    TimelineItem("File previewed",       "Just now",          "Opened in the file detail sheet.",         "eye",            "info"),
-    TimelineItem("Re-shared with team",  "Yesterday · 16:42", "Naomi added Mei to the share list.",       "share-nodes",    "primary"),
-    TimelineItem("Comment added",        "Yesterday · 09:10", "Ada: Let's lock the gradient by Fri.",  "comment",        "default"),
-    TimelineItem("New version uploaded", "2 days ago",        "v3 replaced v2. Auto-versioned.",          "cloud-arrow-up", "success"),
-    TimelineItem("File created",         "Last week",         "Imported from local Drive.",               "circle-plus",    "default")
-  ])
-], "column", "m")
-
-detailSheet = Drawer(
-  "File detail",
-  $$selected != "",
-  [@If(selectedExists == 0, detailEmpty, detailLoaded)],
-  "right",
-  [Buttons([
-    Button("Download", Action([@OpenUrl(\`https://example.com/files/\${$$selected}\`)]), "primary"),
-    Button("Share",    Action([@ToAssistant(\`Share \${$$selected}\`)]),                 "secondary"),
-    Button("Close",    Action([@Set($$selected, "")]),                                "ghost")
-  ])]
-)
-
-splitLayout = SplitView([sidePane], [filesCard], "280px")
-
-header = PageHeader(
-  "Files",
-  \`\${totalCount} files across 5 folders · synced just now\`,
-  folderBreadcrumb,
-  [
-    Button("New",    Action([@ToAssistant("New folder or file")]),     "primary"),
-    Button("Upload", Action([@ToAssistant("Open the upload dialog")]),  "secondary")
-  ],
-  Badge("Pro plan", "primary")
-)
-
-storageBanner = @If(storage.percent > 80,
-  Banner("Storage almost full", "Free up space or upgrade before uploads pause.",
-         Button("Upgrade", Action([@ToAssistant("Open upgrade")]), "primary", "button", "small"),
-         "triangle-exclamation", "warning"))
-
-quickStats = Stats([
-  StatCard("Total files",     \`\${totalCount}\`,                                                "up",   "+12 this week",   "file"),
-  StatCard("Folders",          "5",                                                            "flat", "across drive",    "folder"),
-  StatCard("Starred",         \`\${@Count(@Filter($files, "starred", "==", true))}\`,            "up",   "your top picks",  "star"),
-  StatCard("Shared with you",  "5",                                                            "flat", "from teammates",  "share-nodes")
-])
-
-followUps = FollowUpBlock([
-  FollowUpItem("Find files I shared last week"),
-  FollowUpItem("Move scripts to engineering"),
-  FollowUpItem("Empty trash older than 30 days")
-], "Quick filters")
-
-root = Stack([storageBanner, header, quickStats, splitLayout, detailSheet, followUps], "column", "l")` }
-      ],
-      render: { elId: "rui-files", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The single host tool returns storage`,
-      lede: `Everything else lives in the program. <code>Tree</code> + <code>Table</code>
-        + <code>Sheet</code> + <code>ProgressRing</code> read directly from
-        <code>$files</code> via <code>@Filter</code> / <code>@First</code> /
-        <code>@Count</code>. The host's only job is to surface a free-tier
-        quota so the storage banner and ring stay accurate.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  storage_usage: () =&gt; ({
-    used: 12.4,
-    total: 15,
-    percent: 83,
-    label: "Renews March 14 · Pro plan",
-  }),
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-files");
-
-    el.setTools({
-      storage_usage: () => ({
-        used: 12.4,
-        total: 15,
-        percent: 83,
-        label: "Renews March 14 · Pro plan",
-      }),
-    });
-
-    el.setResponse(document.getElementById("src-files").textContent);
-    }
-  },
-  "inbox-app": {
-    slug: "inbox-app",
-    docTitle: `Inbox app · streaming-ui-script`,
-    eyebrow: `Live demo · split view`,
-    heroTitleHtml: `A working inbox app, generated from one program`,
-    heroDescriptionHtml: `Master/detail UI built around <code>SplitView</code>, a polished
-        <code>SearchBar</code>, <code>PersonChip</code> sender lines,
-        <code>Notification</code> entries for the list, and a threaded
-        conversation rendered with <code>ChatBubble</code>. Filtering and
-        search are wired with <code>@Filter</code> over a single
-        <code>$messages</code> array.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · inbox app`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Pick a thread from the left list to focus it. Type in the search box
-        or change the folder to filter the list. Compose a reply on the
-        right — <code>$reply</code> binds to the textarea and the send
-        button.`,
-      codeBlocks: [
-      { codeId: "src-inbox", content: `$$thread = "billing"
-$$folder = "inbox"
-$query   = ""
-$reply   = ""
-
-$messages = [
-  {id: "billing",
-   from: "Stripe Receipts",
-   email: "billing@stripe.com",
-   avatar: "https://i.pravatar.cc/64?img=12",
-   subject: "Receipt for Pro plan — $29.00 charged today.",
-   preview: "Receipt for Pro plan — $29.00 charged today.",
-   time: "10:24 AM",
-   folder: "inbox",
-   tag: "Receipt",
-   tagTone: "info",
-   unread: true,
-   priority: false},
-  {id: "release",
-   from: "Naomi Rivers",
-   email: "Eng manager · Looplog",
-   avatar: "https://i.pravatar.cc/64?img=47",
-   subject: "Re: Q3 release — pushed to Friday",
-   preview: "Pushed the date to Friday, ready for sign-off.",
-   time: "9:02 AM",
-   folder: "inbox",
-   tag: "Release",
-   tagTone: "success",
-   unread: true,
-   priority: true},
-  {id: "github",
-   from: "GitHub Digest",
-   email: "Activity digest · 12 PRs",
-   avatar: "",
-   subject: "12 new pull requests waiting",
-   preview: "12 new pull requests waiting for review across 3 repos.",
-   time: "Yesterday",
-   folder: "inbox",
-   tag: "Activity",
-   tagTone: "info",
-   unread: false,
-   priority: false},
-  {id: "perf",
-   from: "Linus Torvalds",
-   email: "Perf · streaming-ui-script",
-   avatar: "https://i.pravatar.cc/64?img=11",
-   subject: "Perf review attached",
-   preview: "Some easy wins on the parser — caching regex drops parse time by ~38%.",
-   time: "Mon",
-   folder: "inbox",
-   tag: "Review",
-   tagTone: "warning",
-   unread: false,
-   priority: true},
-  {id: "ada",
-   from: "Ada Lovelace",
-   email: "CTO · Compute Lab",
-   avatar: "https://i.pravatar.cc/64?img=20",
-   subject: "Re: Onboarding for 12 engineers",
-   preview: "Pilot signed. Need onboarding for 12 engineers in two weeks.",
-   time: "Mon",
-   folder: "starred",
-   tag: "Pilot",
-   tagTone: "primary",
-   unread: false,
-   priority: false},
-  {id: "mei",
-   from: "Mei Tanaka",
-   email: "Eng lead · Atlasworks",
-   avatar: "https://i.pravatar.cc/64?img=14",
-   subject: "Theming question",
-   preview: "Open question on theming for a customer-facing portal.",
-   time: "Sun",
-   folder: "starred",
-   tag: "Question",
-   tagTone: "info",
-   unread: false,
-   priority: false},
-  {id: "draft1",
-   from: "Draft to support",
-   email: "support@acme.com",
-   avatar: "",
-   subject: "Updating my billing address",
-   preview: "Hi team, please update my billing address to ACME Inc., 1 Market St…",
-   time: "Sun",
-   folder: "sent",
-   tag: "Draft",
-   tagTone: "neutral",
-   unread: false,
-   priority: false},
-  {id: "lottery",
-   from: "You've won!",
-   email: "no-reply@suspicious.tld",
-   avatar: "",
-   subject: "$1,000,000 prize waiting",
-   preview: "Claim your prize before midnight!",
-   time: "Sun",
-   folder: "spam",
-   tag: "Spam",
-   tagTone: "danger",
-   unread: true,
-   priority: false}
-]
-
-folderRows  = @Filter($messages, "folder", "==", $$folder)
-visibleRows = @If($query == "", folderRows, @Filter(folderRows, "subject", "contains", $query))
-
-unreadCount   = @Count(@Filter($messages, "unread",   "==", true))
-priorityCount = @Count(@Filter($messages, "priority", "==", true))
-visibleCount  = @Count(visibleRows)
-
-folderChips = ToggleGroup("folder", [
-  {value: "inbox",   label: "Inbox",   icon: "inbox"},
-  {value: "starred", label: "Starred", icon: "star"},
-  {value: "sent",    label: "Sent",    icon: "paper-plane"},
-  {value: "spam",    label: "Spam",    icon: "ban"}
-], $$folder)
-
-searchBar = SearchBar("inbox-q", "Search subject…", $query, "/")
-
-threadRows = @Each(visibleRows, "{id, from, preview, time, avatar, unread}",
-  Notification(
-    from,
-    preview,
-    time,
-    null,
-    avatar,
-    @If($$thread == id, "primary", "default"),
-    unread,
-    [Button("Open", Action([@Set($$thread, id)]), "ghost", "button", "small")]
-  )
-)
-
-emptyList = EmptyState(
-  "Nothing matches",
-  "Adjust the folder or clear the search to see more messages.",
-  "magnifying-glass",
-  Button("Clear filters",
-         Action([@Reset($query), @Set($$folder, "inbox")]),
-         "secondary")
-)
-
-threadList = @If(visibleCount == 0, emptyList, Stack(threadRows, "column", "s"))
-
-selected       = @First(@Filter($messages, "id", "==", $$thread))
-selectedExists = @Count(@Filter($messages, "id", "==", $$thread))
-
-billingBody = Stack([
-  ChatBubble("Stripe Receipts",
-             "We've charged $29.00 to Visa •• 4242 for your Pro plan. Your next invoice is in 30 days.",
-             "10:24 AM", null, "agent", "delivered"),
-  ChatBubble("Stripe Receipts",
-             "Need an invoice in your company name? Reply with the billing address and we'll regenerate it.",
-             "10:25 AM", null, "agent", "delivered"),
-  ChatBubble("You",
-             "Please add ACME Inc., 1 Market St, San Francisco to the invoice.",
-             "10:27 AM", null, "me", "read")
-], "column", "m")
-
-releaseBody = Stack([
-  ChatBubble("Naomi Rivers",
-             "Hey — pushing v2.3 to Friday so QA can clear the remaining two bugs.",
-             "9:02 AM", "https://i.pravatar.cc/64?img=47", "agent", "delivered"),
-  ChatBubble("You",
-             "Sounds good. I'll update the launch post and notify the support team.",
-             "9:05 AM", null, "me", "read"),
-  ChatBubble("Naomi Rivers",
-             "Thanks. Adding the changelog draft to the doc — feel free to edit.",
-             "9:06 AM", "https://i.pravatar.cc/64?img=47", "agent", "delivered")
-], "column", "m")
-
-githubBody = Stack([
-  ChatBubble("GitHub Digest",
-             "12 new pull requests waiting for review across 3 repos. Top reviewer this week: @grace.",
-             "Yesterday", null, "agent", "delivered"),
-  ChatBubble("GitHub Digest",
-             "streaming-ui-script #248: Patterns ready for review. streaming-ui-script #249: Tokenizer cache.",
-             "Yesterday", null, "agent", "delivered")
-], "column", "m")
-
-perfBody = Stack([
-  ChatBubble("Linus Torvalds",
-             "Tokenizer is allocating a lot in the hot path. Caching the regex matches drops parse time by ~38%.",
-             "Mon", "https://i.pravatar.cc/64?img=11", "agent", "delivered"),
-  ChatBubble("You",
-             "Huge win. Open a PR against main and I'll fast-track the review.",
-             "Mon", null, "me", "read")
-], "column", "m")
-
-adaBody = Stack([
-  ChatBubble("Ada Lovelace",
-             "Pilot signed off! Can we get 12 engineers onboarded in two weeks?",
-             "Mon", "https://i.pravatar.cc/64?img=20", "agent", "delivered")
-], "column", "m")
-
-meiBody = Stack([
-  ChatBubble("Mei Tanaka",
-             "Quick question on theming a customer-facing portal — can we set a custom accent token at runtime?",
-             "Sun", "https://i.pravatar.cc/64?img=14", "agent", "delivered")
-], "column", "m")
-
-draftBody = Stack([
-  Callout("info", "Saved as draft Sunday at 18:42. No recipient has received this yet.", null, null, true),
-  ChatBubble("You",
-             "Hi team, please update my billing address to ACME Inc., 1 Market St, SF.",
-             "Sun · draft", null, "me", "sending")
-], "column", "m")
-
-spamBody = Stack([
-  Callout("warning", "This message was flagged as spam. Only the preview is shown.", null, null, true),
-  ChatBubble("You've won!",
-             "Claim your $1,000,000 prize before midnight by replying with your bank details.",
-             "Sun", null, "agent", "delivered")
-], "column", "m")
-
-threadBody = @Switch($$thread, {
-  billing: billingBody,
-  release: releaseBody,
-  github:  githubBody,
-  perf:    perfBody,
-  ada:     adaBody,
-  mei:     meiBody,
-  draft1:  draftBody
-}, spamBody)
-
-threadHeader = Stack([
-  PersonChip(selected.from, selected.email, selected.avatar, "md", "online"),
-  Spacer(),
-  Badge(selected.tag, selected.tagTone, null, "sm")
-], "row", "m", "center")
-
-threadFooter = Stack([
-  Separator("horizontal", true),
-  TextArea("reply", "Type a reply… (markdown supported)", 3, $reply),
-  Stack([
-    Badge("Markdown ready", "info", "wand-magic-sparkles", "sm"),
-    Spacer(),
-    Buttons([
-      Button("Save draft", Action([@ToAssistant("Save the reply as a draft.")]), "secondary"),
-      Button("Send reply",
-             Action([@ToAssistant(\`Send the reply: \${$reply}\`), @Reset($reply)]),
-             "primary")
-    ])
-  ], "row", "m", "center")
-], "column", "m")
-
-leftPane = Stack([
-  searchBar,
-  folderChips,
-  threadList
-], "column", "m")
-
-emptyDetail = EmptyState(
-  "Pick a conversation",
-  "Select an item on the left to read the thread.",
-  "envelope-open-text",
-  null
-)
-
-rightPane = Card([
-  threadHeader,
-  Separator("horizontal", true),
-  threadBody,
-  threadFooter
-], "elevated")
-
-root = Stack([
-  PageHeader(
-    "Inbox",
-    \`\${unreadCount} unread · \${priorityCount} priority · \${visibleCount} shown\`,
-    null,
-    [Button("Compose",
-            Action([@ToAssistant("Compose a new message.")]),
-            "primary")],
-    Badge("Sync · just now", "success")
-  ),
-  SplitView(
-    [leftPane],
-    [@If(selectedExists == 0, emptyDetail, rightPane)],
-    "360px"
-  )
-], "column", "l")` }
-      ],
-      render: { elId: "rui-inbox", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `Every list row and header count reads from one <code>$messages</code>
-        array. Filtering by folder and search is one <code>@Filter</code>
-        chain; <code>@Each</code> turns the filtered rows into clickable
-        <code>Notification</code>s; switching threads is a single
-        <code>@Set</code> on <code>$thread</code>. No host code runs for any
-        of the interactions.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-inbox");
-    el.setResponse(document.getElementById("src-inbox").textContent);
-    }
-  },
-  "issue-tracker": {
-    slug: "issue-tracker",
-    docTitle: `Issue tracker · streaming-ui-script`,
-    eyebrow: `Live demo · issue tracker`,
-    heroTitleHtml: `A Linear-style issue tracker, one program end-to-end`,
-    heroDescriptionHtml: `Filter by status, priority, or assignee — the
-        <code>KanbanBoard</code>, summary <code>MetricGrid</code>, recent
-        <code>Timeline</code>, and detail <code>Sheet</code> all stay in
-        sync because they all read the same reactive pipeline.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · issue tracker`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Click any card to open the detail sheet. Filters and the selected
-        issue persist across reloads via <code>$$</code> state.`,
-      codeBlocks: [
-      { codeId: "src-issues", content: `$$priority = "all"
-$$assignee = "all"
-$$selected = ""
-$query     = ""
-
-issues = [
-  {id: "ENG-241", title: "Tokenizer drops emoji on long prompts",
-   body: "Reproduced on prompts >4k chars. Suspect surrogate-pair handling in the streamer.",
-   status: "in-progress", priority: "urgent", assignee: "ada",   labels: ["bug", "streaming"],     comments: 6, opened: "2d ago"},
-  {id: "ENG-238", title: "Add @Switch fall-through tests",
-   body: "Cover the case where no case matches and there's no default — should return null.",
-   status: "todo",        priority: "medium", assignee: "grace", labels: ["tests"],                comments: 1, opened: "3d ago"},
-  {id: "ENG-237", title: "Sidebar collapse animation jitters in Safari",
-   body: "Transform origin off by 1px when collapsing the sidebar in iOS Safari 18.",
-   status: "todo",        priority: "low",    assignee: "linus", labels: ["polish", "frontend"],   comments: 2, opened: "4d ago"},
-  {id: "ENG-235", title: "Auth SDK throws on expired refresh token",
-   body: "Need to clear the cookie and force re-login instead of throwing.",
-   status: "in-review",   priority: "high",   assignee: "ada",   labels: ["bug", "auth"],          comments: 9, opened: "5d ago"},
-  {id: "ENG-232", title: "Kanban drag-handle missing aria-grabbed",
-   body: "Accessibility audit flagged this. Add aria-grabbed and keyboard fallback.",
-   status: "in-progress", priority: "medium", assignee: "wren",  labels: ["a11y"],                 comments: 3, opened: "1w ago"},
-  {id: "ENG-228", title: "Pricing page hero overflows on small phones",
-   body: "Cover image needs object-fit: cover and a min-height clamp.",
-   status: "done",        priority: "low",    assignee: "grace", labels: ["frontend"],             comments: 4, opened: "1w ago"},
-  {id: "ENG-225", title: "Add OpenAPI client to docs site",
-   body: "Replace the hand-rolled fetch helper with a generated client.",
-   status: "todo",        priority: "medium", assignee: "linus", labels: ["docs", "infra"],        comments: 0, opened: "2w ago"},
-  {id: "ENG-222", title: "Streamer reorders chunks under back-pressure",
-   body: "Under 5+ concurrent streams the reorder buffer flushes in the wrong order.",
-   status: "in-progress", priority: "urgent", assignee: "ada",   labels: ["bug", "streaming"],     comments: 12, opened: "2w ago"},
-  {id: "ENG-219", title: "Add 'snooze' action to notifications",
-   body: "Pause a notification for 30m / 4h / 1d. Persist in localStorage.",
-   status: "in-review",   priority: "medium", assignee: "mei",   labels: ["frontend"],             comments: 5, opened: "2w ago"},
-  {id: "ENG-217", title: "Document responsive prop maps",
-   body: "Add a recipe for {sm, md, lg} maps in the components docs.",
-   status: "done",        priority: "low",    assignee: "grace", labels: ["docs"],                 comments: 1, opened: "3w ago"},
-  {id: "ENG-214", title: "Mobile sheet should swipe-to-dismiss",
-   body: "Native-feeling sheet UX for the detail pane on iOS Safari.",
-   status: "todo",        priority: "high",   assignee: "wren",  labels: ["mobile", "polish"],     comments: 7, opened: "3w ago"},
-  {id: "ENG-209", title: "Kanban: persist column collapse state",
-   body: "When user collapses 'Done', remember it across reloads.",
-   status: "in-progress", priority: "low",    assignee: "mei",   labels: ["frontend"],             comments: 2, opened: "1mo ago"}
-]
-
-people = [
-  {id: "ada",   name: "Ada Lovelace",  src: "https://i.pravatar.cc/64?img=47"},
-  {id: "grace", name: "Grace Hopper",  src: "https://i.pravatar.cc/64?img=32"},
-  {id: "linus", name: "Linus Torvalds",src: "https://i.pravatar.cc/64?img=12"},
-  {id: "wren",  name: "Wren Bell",     src: "https://i.pravatar.cc/64?img=20"},
-  {id: "mei",   name: "Mei Tanaka",    src: "https://i.pravatar.cc/64?img=14"}
-]
-
-priorityRows = @If($$priority == "all", issues, @Filter(issues, "priority", "==", $$priority))
-assigneeRows = @If($$assignee == "all", priorityRows, @Filter(priorityRows, "assignee", "==", $$assignee))
-visibleRows  = @If($query == "",       assigneeRows, @Filter(assigneeRows, "title", "contains", $query))
-
-priorityTone = @Switch($$priority, {urgent: "danger", high: "warning", medium: "info"}, "neutral")
-
-QuickStat(label, icon, value, hint, tone, action) = Tile(label, icon, value, hint, tone, action)
-
-kpis = Grid([
-  QuickStat("All issues",  "list",                 \`\${@Count(issues)}\`,                                       \`\${@Count(@Filter(issues, "status", "==", "done"))} closed\`,  "primary", Action([@Set($$priority, "all"), @Set($$assignee, "all")])),
-  QuickStat("Urgent",      "triangle-exclamation", \`\${@Count(@Filter(issues, "priority", "==", "urgent"))}\`,  "Needs attention now",                                        "danger",  Action([@Set($$priority, "urgent")])),
-  QuickStat("In review",   "code-pull-request",    \`\${@Count(@Filter(issues, "status",   "==", "in-review"))}\`,"Waiting on a reviewer",                                     "info",    Action([@Set($$priority, "all")])),
-  QuickStat("My queue",    "user",                 \`\${@Count(@Filter(issues, "assignee", "==", "ada"))}\`,     "Open for Ada",                                               "success", Action([@Set($$assignee, "ada")]))
-], {sm: 1, md: 2, lg: 4}, "m")
-
-priorityToggle = ToggleGroup("priority", [
-  {value: "all",    label: "All",     icon: "list"},
-  {value: "urgent", label: "Urgent",  icon: "triangle-exclamation"},
-  {value: "high",   label: "High",    icon: "arrow-up"},
-  {value: "medium", label: "Medium",  icon: "minus"},
-  {value: "low",    label: "Low",     icon: "arrow-down"}
-], $$priority)
-
-assigneeSelect = Select("assignee", [
-  SelectItem("all",   "All assignees"),
-  SelectItem("ada",   "Ada Lovelace"),
-  SelectItem("grace", "Grace Hopper"),
-  SelectItem("linus", "Linus Torvalds"),
-  SelectItem("wren",  "Wren Bell"),
-  SelectItem("mei",   "Mei Tanaka")
-], null, null, $$assignee)
-
-searchBar = SearchBar("issues-q", "Search by title…", $query, "/")
-
-filters = Card([
-  SectionHeader("Filters", "Live · updates as you type"),
-  Stack([searchBar, assigneeSelect], "row", "m", "stretch", "start", true),
-  priorityToggle
-])
-
-PriorityBadge(p) = @Switch(p, {
-  urgent: Badge("Urgent", "danger",  "triangle-exclamation", "sm"),
-  high:   Badge("High",   "warning", "arrow-up",             "sm"),
-  medium: Badge("Medium", "info",    "minus",                "sm")
-}, Badge("Low", "neutral", "arrow-down", "sm"))
-
-IssueCard(id, title, priority, assignee, comments) = KanbanCard(
-  title,
-  \`\${id} · \${comments} \${@Plural(comments, "comment", "comments")}\`,
-  [priority],
-  @Switch(assignee, {
-    ada:   "Ada Lovelace",
-    grace: "Grace Hopper",
-    linus: "Linus Torvalds",
-    wren:  "Wren Bell"
-  }, "Mei Tanaka"),
-  @Switch(priority, {urgent: "danger", high: "warning", medium: "info"}, "default"),
-  @Switch(priority, {urgent: "triangle-exclamation", high: "arrow-up", medium: "minus"}, "arrow-down"),
-  Action([@Set($$selected, id)])
-)
-
-ColForStatus(status, label, tone) = KanbanColumn(
-  label,
-  @Each(@Filter(visibleRows, "status", "==", status), "{id, title, priority, assignee, comments}",
-    IssueCard(id, title, priority, assignee, comments)),
-  tone
-)
-
-board = KanbanBoard([
-  ColForStatus("todo",        "To do",       "default"),
-  ColForStatus("in-progress", "In progress", "primary"),
-  ColForStatus("in-review",   "In review",   "warning"),
-  ColForStatus("done",        "Done",        "success")
-])
-
-emptyBoard = EmptyState(
-  "No issues match your filters",
-  "Reset filters or pick a different priority/assignee.",
-  "magnifying-glass",
-  Button("Reset filters", Action([@Set($$priority, "all"), @Set($$assignee, "all"), @Reset($query)]), "primary")
-)
-
-recentTimeline = Card([
-  SectionHeader("Recent activity", "Last 24 hours across your team"),
-  Timeline([
-    TimelineItem("Ada moved ENG-241 to In progress", "12m ago", "Tokenizer bug · urgent",       "circle-arrow-right", "primary"),
-    TimelineItem("Grace closed ENG-228",              "1h ago",  "Pricing hero overflow",        "circle-check",        "success"),
-    TimelineItem("Mei opened ENG-219",                "3h ago",  "Snooze action for notifications", "circle-plus",     "info"),
-    TimelineItem("Wren left a review on ENG-235",     "6h ago",  "Suggested clearing the cookie", "comment",            "info"),
-    TimelineItem("Ada flagged ENG-222 as urgent",     "Yesterday","Streamer reorders under load", "triangle-exclamation","warning")
-  ])
-])
-
-teamRow = Card([
-  SectionHeader("Squad", \`\${@Count(people)} engineers\`),
-  AvatarGroup(people, 5, "md")
-])
-
-selectedIssue       = @First(@Filter(issues, "id", "==", $$selected))
-selectedIssueExists = @Count(@Filter(issues, "id", "==", $$selected))
-
-statusLabel = @Switch(@If(selectedIssueExists > 0, selectedIssue.status, ""), {
-  "todo":        "To do",
-  "in-progress": "In progress",
-  "in-review":   "In review",
-  "done":        "Done"
-}, "Unknown")
-
-assigneeLabel = @Switch(@If(selectedIssueExists > 0, selectedIssue.assignee, ""), {
-  ada:   "Ada Lovelace",
-  grace: "Grace Hopper",
-  linus: "Linus Torvalds",
-  wren:  "Wren Bell"
-}, "Mei Tanaka")
-
-detailLoaded = Stack([
-  PageHeader(selectedIssue.title, selectedIssue.id, null, null, PriorityBadge(selectedIssue.priority)),
-  DescriptionList([
-    DescriptionItem("Status",   statusLabel,            "circle-half-stroke"),
-    DescriptionItem("Assignee", assigneeLabel,          "user"),
-    DescriptionItem("Opened",   selectedIssue.opened,   "clock"),
-    DescriptionItem("Comments", \`\${selectedIssue.comments}\`, "comment")
-  ]),
-  Callout("info", selectedIssue.body, null, "circle-info", true),
-  Stack(@Each(selectedIssue.labels, "l", Badge(l, "neutral", "tag", "sm")), "row", "s"),
-  Buttons([
-    Button("Move forward",   Action([@ToAssistant(\`Advance \${selectedIssue.id} to the next column\`)]), "primary"),
-    Button("Reassign",       Action([@ToAssistant(\`Reassign \${selectedIssue.id}\`)]),                    "secondary"),
-    Button("Mark as done",   Action([@ToAssistant(\`Close \${selectedIssue.id}\`)]),                       "secondary"),
-    Button("Open in GitHub", Action([@OpenUrl("https://github.com/example/repo/issues/241")]),          "ghost")
-  ])
-], "column", "m")
-
-detailEmpty = EmptyState(
-  "No issue selected",
-  "Click any card in the board to open its details here.",
-  "list-check",
-  null
-)
-
-detailSheet = Drawer(
-  "Issue detail",
-  $$selected != "",
-  [@If(selectedIssueExists == 0, detailEmpty, detailLoaded)],
-  "right",
-  [Buttons([
-    Button("Close", Action([@Set($$selected, "")]), "secondary"),
-    Button("Comment", Action([@ToAssistant(\`Add a comment on \${$$selected}\`)]), "primary")
-  ])]
-)
-
-header = PageHeader(
-  "Issue tracker",
-  \`\${@Count(visibleRows)} of \${@Count(issues)} issues · priority: \${$$priority}\`,
-  ["Engineering", "Issues"],
-  [Button("New issue", Action([@ToAssistant("Open the new-issue form")]), "primary"),
-   Button("Import",    Action([@ToAssistant("Import issues from GitHub")]),  "secondary")],
-  Badge(\`Priority: \${$$priority}\`, priorityTone, null, "sm")
-)
-
-bottomGrid = Grid([recentTimeline, teamRow], {sm: 1, md: 2}, "l")
-
-root = Stack([
-  header,
-  kpis,
-  filters,
-  @If(@Count(visibleRows) == 0, emptyBoard, board),
-  bottomGrid,
-  detailSheet
-], "column", "l")` }
-      ],
-      render: { elId: "rui-issues", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `Three filters (priority toggle, assignee select, search) pipe into
-        one <code>visibleRows</code> and the entire board, KPI strip,
-        empty state, and detail sheet recompose. The Kanban
-        <code>IssueCard</code> macro is defined once and used across all
-        four columns. Switching the selected card opens a slide-in
-        <code>Sheet</code> with reactive description list, action buttons,
-        and follow-ups.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-issues");
-    el.setResponse(document.getElementById("src-issues").textContent);
-    }
-  },
-  "javascript-stopwatch": {
-    slug: "javascript-stopwatch",
-    docTitle: `JS demo · Stopwatch · streaming-ui-script`,
-    eyebrow: `JS demo · Script() + ctx.cleanup`,
-    heroTitleHtml: `A stopwatch driven entirely by <code>Script()</code>`,
-    heroDescriptionHtml: `The same <code>&lt;streaming-ui-script&gt;</code> program drives the
-        display, the controls, and the laps list — but the actual ticking is
-        wired by a single <code>Script(...)</code>. It uses
-        <code>setInterval</code> for sub-second precision,
-        <code>ctx.cleanup</code> to dispose the timer on pause / reset, and
-        re-runs whenever <code>$running</code> flips.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · stopwatch`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Start, pause, lap, and reset all flow through plain
-        <code>Action([@Set(...)])</code> — only the timer itself lives in JS.
-        Toggle <em>Show source</em> below the demo to inspect the program.`,
-      codeBlocks: [
-      ],
-      render: { elId: "rui-stopwatch", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `UI Script source`,
-      lede: `Plain <code>streaming-ui-script</code> with two scripts:
-        <code>ticker</code> increments <code>$elapsedMs</code> every 50 ms while
-        running, and <code>laptimer</code> formats the latest split. Everything
-        else is declarative.`,
-      codeBlocks: [
-      { codeId: "src-stopwatch", content: `$elapsedMs = 0
-$running = false
-$laps = []
-$nextLapId = 1
-
-ticker = Script("ticker", "if (!ctx.state.get('running')) return; const start = performance.now() - (ctx.state.get('elapsedMs') ?? 0); let raf = 0; const loop = () => { if (ctx.signal.aborted) return; ctx.state.set('elapsedMs', Math.round(performance.now() - start)); raf = requestAnimationFrame(loop); }; raf = requestAnimationFrame(loop); ctx.cleanup(() => cancelAnimationFrame(raf));", ["running"])
-
-formatter = Script("formatter", "const ms = ctx.state.get('elapsedMs') ?? 0; const total = Math.floor(ms); const m = Math.floor(total / 60000); const s = Math.floor((total % 60000) / 1000); const cs = Math.floor((total % 1000) / 10); const pad = (n, w=2) => String(n).padStart(w, '0'); ctx.state.set('display', pad(m) + ':' + pad(s) + '.' + pad(cs));", ["elapsedMs"])
-
-$display = "00:00.00"
-
-display = Card([
-  CardHeader("Elapsed", "mm:ss.cs"),
-  TextContent($display, "large-heavy")
-], "elevated")
-
-primary = $running ? "Pause" : "Start"
-primaryVariant = $running ? "secondary" : "primary"
-
-controls = Buttons([
-  Button(primary, Action([@Set($running, !$running)]), primaryVariant),
-  Button("Lap", Action([
-    @Js("const id = ctx.state.get('nextLapId') ?? 1; const laps = ctx.state.get('laps') ?? []; const previousMs = laps.length > 0 ? laps[0].totalMs : 0; const totalMs = ctx.state.get('elapsedMs') ?? 0; const splitMs = totalMs - previousMs; const fmt = (ms) => { const m = Math.floor(ms/60000); const s = Math.floor((ms%60000)/1000); const cs = Math.floor((ms%1000)/10); const p = (n) => String(n).padStart(2,'0'); return p(m)+':'+p(s)+'.'+p(cs); }; ctx.state.set('laps', [{id: id, label: 'Lap ' + id, total: fmt(totalMs), split: fmt(splitMs), totalMs: totalMs}, ...laps]); ctx.state.set('nextLapId', id + 1);")
-  ]), "ghost"),
-  Button("Reset", Action([@Set($running, false), @Reset($elapsedMs, $laps, $nextLapId)]), "ghost")
-])
-
-lapEmpty = TextContent("No laps yet. Hit “Lap” to record splits.", "small", "muted")
-
-lapTable = Table([
-  Col("Lap", $laps.label),
-  Col("Total", $laps.total),
-  Col("Split", $laps.split)
-])
-
-lapsView = @Count($laps) > 0 ? lapTable : lapEmpty
-lapsCard = Card([CardHeader("Lap log", "Most recent first"), lapsView])
-
-root = Stack([display, controls, lapsCard, ticker, formatter])` }
-      ],
-      render: null,
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How it works`,
-      lede: ``,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: `<ul>
-        <li>
-          <code>ticker</code> watches <code>["running"]</code>. When the flag
-          flips to <code>true</code> it kicks off a <code>requestAnimationFrame</code>
-          loop and registers a cleanup. When <code>$running</code> flips back
-          to <code>false</code>, the runtime cleans up the previous instance —
-          no stale frames.
-        </li>
-        <li>
-          <code>formatter</code> watches <code>["elapsedMs"]</code> and writes
-          a pretty <code>$display</code>. Keeping formatting in a script means
-          the LLM doesn't have to ship its own format function.
-        </li>
-        <li>
-          The Lap button is a one-shot <code>@Js</code> — it reads current
-          state, computes the split, and writes back through
-          <code>ctx.state.set</code>. The lap table renders reactively.
-        </li>
-        <li>
-          Reset bundles a declarative <code>Action</code> sequence so the
-          script lifecycle and the UI stay in sync.
-        </li>
-      </ul>`,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-stopwatch");
-    el.setResponse(document.getElementById("src-stopwatch").textContent);
-    }
-  },
-  "javascript-todo-app": {
-    slug: "javascript-todo-app",
-    docTitle: `JS demo · Todo app · streaming-ui-script`,
-    eyebrow: `JS demo · Query + Mutation + Script`,
-    heroTitleHtml: `A full todo app, persisted to <code>localStorage</code>`,
-    heroDescriptionHtml: `The UI is plain Streaming UI Script — input, filter buttons, list,
-        bulk actions, footer. Reads go through a <code>Query</code> tool,
-        writes through <code>Mutation</code>s. A single <code>Script</code>
-        listens for keyboard shortcuts (⌘+Enter to add) and exposes a
-        keyboard hint badge.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · todo app`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Add a few tasks, then refresh the page — they survive. The filter
-        buttons mutate <code>$filter</code> declaratively; the list updates
-        because <code>list_todos</code> re-runs whenever its args change.`,
-      codeBlocks: [
-      ],
-      render: { elId: "rui-todo", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `UI Script source`,
-      lede: `Note how the script only takes care of the imperative pieces
-        (focus, keyboard shortcut, status pill). State and data flow stay
-        declarative.`,
-      codeBlocks: [
-      { codeId: "src-todo", content: `$$filter  = "all"
-$draft    = ""
-$ver      = 0
-$shortcut = "⌘ Enter to add"
-
-data      = Query("list_todos", {filter: $$filter, ver: $ver}, {rows: [], total: 0, active: 0, done: 0})
-add       = Mutation("add_todo",       {title: $draft})
-toggle    = Mutation("toggle_todo",    {id: $toggleId})
-remove    = Mutation("delete_todo",    {id: $deleteId})
-clearDone = Mutation("clear_completed", {})
-$toggleId = ""
-$deleteId = ""
-
-inputField = FormControl("New task", Input("draft", "What needs doing?", "text", null, $draft))
-addBtn     = Button("Add", Action([@Run(add), @Run(data), @Reset($draft)]), "primary")
-form       = Stack([inputField, addBtn], "row", "m", "end")
-
-FilterBtn(label, key, count) = Button(\`\${label} (\${count})\`, Action([@Set($$filter, key)]), @If($$filter == key, "primary", "ghost"), "normal", "small")
-
-filterButtons = Buttons([
-  FilterBtn("All",       "all",    data.total),
-  FilterBtn("Active",    "active", data.active),
-  FilterBtn("Completed", "done",   data.done)
-])
-
-statusTag = Badge($shortcut, "neutral", null, "sm")
-
-toggleBtn  = @Each(data.rows, "{id, done}",        Button(@If(done, "Done", "Open"), Action([@Set($toggleId, id), @Run(toggle), @Run(data)]), @If(done, "secondary", "ghost"), "normal", "small"))
-deleteBtn  = @Each(data.rows, "{id}",              Button("Delete", Action([@Set($deleteId, id), @Run(remove), @Run(data)]), "ghost", "normal", "small"))
-titleCell  = @Each(data.rows, "{title, done}",     TextContent(title, @If(done, "small", "body"), @If(done, "muted", null)))
-createdCell= @Each(data.rows, "{created}",         TextContent(created, "small", "muted"))
-
-tbl = Table([
-  Col("",        toggleBtn),
-  Col("Title",   titleCell),
-  Col("Added",   createdCell),
-  Col("",        deleteBtn)
-])
-
-emptyCopy = @Switch($$filter, {done: "Nothing completed yet.", active: "All clear!"}, "No tasks. Add your first one above.")
-list = @If(@Count(data.rows) > 0, tbl, EmptyState("Nothing here", emptyCopy, "list-check"))
-
-footer = Stack([
-  TextContent(\`\${data.active} active · \${data.done} done · \${@Plural(data.total, "task", "tasks")} total\`, "small", "muted"),
-  Button("Clear completed", Action([@Run(clearDone), @Run(data)]), "ghost", "normal", "small")
-], "row", "m", "center", "between")
-
-shortcutScript = Script("shortcut", "const onKey = async (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); const draft = (ctx.state.get('draft') ?? '').trim(); if (!draft) return; await ctx.tools.add_todo({ title: draft }); if (ctx.signal.aborted) return; ctx.state.set('draft', ''); ctx.state.set('ver', (ctx.state.get('ver') ?? 0) + 1); } }; window.addEventListener('keydown', onKey); ctx.cleanup(() => window.removeEventListener('keydown', onKey));")
-
-root = Stack([
-  Card([CardHeader("Things to do", "Persisted to localStorage · filter persists too")]),
-  Card([form]),
-  Card([Stack([filterButtons, statusTag], "row", "m", "center", "between")]),
-  Card([list]),
-  Card([footer]),
-  shortcutScript
-])` }
-      ],
-      render: null,
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The host wires the storage tools`,
-      lede: `Tools are plain functions — the LLM (or you, in this case) decides
-        when to call them. Add localStorage persistence in one place and
-        every <code>Query</code> / <code>Mutation</code> stays in sync.`,
-      codeBlocks: [
-      { codeId: null, content: `const STORAGE_KEY = "rui-todo-app";
-const load = () =&gt; JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-const save = (todos) =&gt; localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-
-el.setTools({
-  list_todos: ({ filter }) =&gt; {
-    const todos = load();
-    const visible = todos.filter((t) =&gt; (
-      filter === "all" || (filter === "done" ? t.done : !t.done)
-    ));
-    return {
-      rows: visible.map((t) =&gt; ({ ...t, created: relative(t.createdAt) })),
-      total: todos.length,
-      active: todos.filter((t) =&gt; !t.done).length,
-      done: todos.filter((t) =&gt; t.done).length,
-    };
-  },
-  add_todo:        ({ title }) =&gt; { ... },
-  toggle_todo:     ({ id })    =&gt; { ... },
-  delete_todo:     ({ id })    =&gt; { ... },
-  clear_completed: ()          =&gt; { ... },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const STORAGE_KEY = "rui-todo-app";
-
-    function load() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); }
-      catch { return []; }
-    }
-    function save(todos) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(todos)); }
-      catch { /* quota or disabled storage — ignore */ }
-    }
-
-    function uid() {
-      return Math.random().toString(36).slice(2, 10);
-    }
-
-    function relative(ts) {
-      const diff = Date.now() - ts;
-      if (diff < 60_000) return "just now";
-      if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-      if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-      return new Date(ts).toLocaleDateString();
-    }
-
-    if (load().length === 0) {
-      save([
-        { id: uid(), title: "Ship the JS-interactions docs",          done: true,  createdAt: Date.now() - 86_400_000 },
-        { id: uid(), title: "Wire localStorage into the todo demo",   done: false, createdAt: Date.now() - 3_600_000 },
-        { id: uid(), title: "Try ⌘+Enter to add a task quickly",       done: false, createdAt: Date.now() - 60_000 },
-      ]);
-    }
-
-    const el = document.getElementById("rui-todo");
-
-    el.setTools({
-      list_todos: ({ filter }) => {
-        const todos = load();
-        const visible = todos.filter((t) => (
-          filter === "all" || (filter === "done" ? t.done : !t.done)
-        ));
-        return {
-          rows: visible.map((t) => ({
-            id: t.id,
-            title: t.title,
-            done: t.done,
-            created: relative(t.createdAt),
-          })),
-          total: todos.length,
-          active: todos.filter((t) => !t.done).length,
-          done: todos.filter((t) => t.done).length,
-        };
-      },
-      add_todo: ({ title }) => {
-        const trimmed = (title ?? "").trim();
-        if (!trimmed) return { ok: false };
-        const todos = load();
-        todos.unshift({ id: uid(), title: trimmed, done: false, createdAt: Date.now() });
-        save(todos);
-        return { ok: true };
-      },
-      toggle_todo: ({ id }) => {
-        const todos = load();
-        const t = todos.find((x) => x.id === id);
-        if (t) { t.done = !t.done; save(todos); }
-        return { ok: true };
-      },
-      delete_todo: ({ id }) => {
-        save(load().filter((t) => t.id !== id));
-        return { ok: true };
-      },
-      clear_completed: () => {
-        save(load().filter((t) => !t.done));
-        return { ok: true };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-todo").textContent);
-    }
-  },
-  "marketing-landing": {
-    slug: "marketing-landing",
-    docTitle: `Marketing landing · streaming-ui-script`,
-    eyebrow: `Live demo · rich patterns`,
-    heroTitleHtml: `A full marketing landing page, generated from one Streaming UI Script program`,
-    heroDescriptionHtml: `No <code>Query</code>, no <code>Mutation</code> — just composable
-        patterns. Hero with CTAs and highlights, feature grid, testimonials,
-        pricing tiers, team line-up, and a closing banner. The same UI Script
-        program would scale to any LLM-authored landing page or product
-        announcement.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · marketing landing`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Every visual section below is one statement. Use the toggle group to
-        switch the pricing focus.`,
-      codeBlocks: [
-      { codeId: "src-landing", content: `$$plan = "pro"
-
-planToggle = ToggleGroup("plan", [
-  {value: "starter", label: "Starter", icon: "seedling"},
-  {value: "pro",     label: "Pro",     icon: "rocket"},
-  {value: "scale",   label: "Scale",   icon: "building-columns"}
-], $$plan)
-
-hero = Hero(
-  "Ship generative UI in a single tag",
-  "Drop in &lt;streaming-ui-script&gt;, feed it tokens from your LLM, and watch a real interactive UI appear — no framework lock-in.",
-  Button("Get started",    Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]), "primary"),
-  Button("Read the docs",  Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/")]), "ghost"),
-  "New · v2.3 just shipped",
-  ["Framework-agnostic", "Streaming-first", "Themeable"]
-)
-
-FeatureRow(f) = FeatureItem(f.title, f.desc, f.icon, f.tone)
-featureList = [
-  {title:"Framework-agnostic", desc:"Works in React, Vue, Angular, Svelte, or plain HTML.",        icon:"puzzle-piece", tone:"primary"},
-  {title:"Streaming-first",    desc:"Render tokens the moment they arrive — never wait for the full response.", icon:"bolt", tone:"info"},
-  {title:"80+ components",     desc:"Layout, forms, charts, kanban, timelines, banners — out of the box.",      icon:"gift", tone:"success"},
-  {title:"Theming",            desc:"Light, dark, neon, pastel — swap with one attribute.",                      icon:"palette", tone:"warning"},
-  {title:"Routing built-in",   desc:"Multi-page apps with hash routes — no router needed.",                      icon:"compass", tone:"primary"},
-  {title:"Tiny footprint",     desc:"Under 40 KB gzipped with zero runtime dependencies.",                       icon:"feather", tone:"info"}
-]
-features = FeatureGrid(@Each(featureList, "f", FeatureRow(f)), 3)
-
-PricingTier(p) = Card([
-  CardHeader(p.label, p.subtitle),
-  TextContent(p.price, "large-heavy"),
-  TextContent(p.priceHint, "small", "muted"),
-  Separator("horizontal", true),
-  List(@Each(p.features, "f", ListItem(f, null, "circle-check"))),
-  Buttons([Button(p.cta, Action([@ToAssistant(p.ctaMsg)]), @If($$plan == p.key, "primary", "secondary"))])
-], @If($$plan == p.key, "elevated", "outlined"))
-
-plans = [
-  {key:"starter", label:"Starter", subtitle:"For weekend hackers", price:"$0",     priceHint:"Free forever — bring your own LLM key.", features:["Up to 3 prompts per day","Community Discord access","Light & dark themes"],         cta:"Start free",     ctaMsg:"Start the free plan"},
-  {key:"pro",     label:"Pro",     subtitle:"For shipping teams",  price:"$29",    priceHint:"per editor / month — billed yearly.",     features:["Unlimited prompts","Custom themes + tokens","Routing & multi-page apps","Email support"], cta:"Start Pro trial", ctaMsg:"Start the Pro trial"},
-  {key:"scale",   label:"Scale",   subtitle:"For platforms & agents", price:"Custom", priceHint:"Per-seat or volume pricing.",         features:["Everything in Pro","SSO + audit logs","Dedicated success engineer","SLA & private build"], cta:"Talk to sales",   ctaMsg:"Schedule a call with sales"}
-]
-
-pricingGrid = Grid(@Each(plans, "p", PricingTier(p)), {sm: 1, md: 3}, "l")
-
-TestimonialRow(t) = Testimonial(t.body, t.name, t.role, null, t.stars)
-testimonials = [
-  {body:"This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.", name:"Jordan Patel", role:"Founder, Looplog",        stars:5},
-  {body:"Our weekly recap email is generated end-to-end by an LLM. The renderer made the front-end stop being a bottleneck.", name:"Mei Tanaka", role:"Eng lead, Atlasworks", stars:5},
-  {body:"Switching from a hand-rolled DSL to streaming-ui-script removed 4,000 lines of glue code from our copilot.",  name:"Sam Reyes",    role:"Staff engineer, Northwind", stars:4}
-]
-socialGrid = Grid(@Each(testimonials, "t", TestimonialRow(t)), {sm: 1, md: 2, lg: 3}, "m")
-
-TeamMember(m) = ProfileCard(m.name, m.role, null, m.bio, m.skills, null)
-team = [
-  {name:"Ada Lovelace",   role:"Founding engineer",   bio:"Designed the streaming evaluator and the action graph.", skills:["TypeScript", "Compilers"]},
-  {name:"Grace Hopper",   role:"Component lead",      bio:"Owns the rich-UI patterns and the theming system.",      skills:["Design systems", "A11y"]},
-  {name:"Linus Torvalds", role:"Infra & performance", bio:"Keeps the bundle under 40 KB and CI under 90 seconds.",  skills:["Perf", "DX"]}
-]
-teamGrid = Grid(@Each(team, "m", TeamMember(m)), {sm: 1, md: 3}, "m")
-
-faq = Accordion([
-  AccordionItem("Does it work without React?", [TextContent("Yes — it's a web component. Drop in one script tag and a streaming-ui-script tag, and you're done. React, Vue, Angular, Svelte all work because they all support custom elements.")]),
-  AccordionItem("How do I add my own components?", [TextContent("Call el.registerComponents([...]). Each spec contains a name, props, and a render function. After registering, the LLM sees them in the system prompt automatically.")]),
-  AccordionItem("Is it really only 40 KB?", [TextContent("38 KB gzipped at the time of writing — and there are no runtime dependencies. The CSS is bundled inline and injected into each instance's shadow root.")])
-])
-
-closingBanner = Banner(
-  "Ready to ship generative UI?",
-  "Read the 30-second integration guide and you'll have a streaming UI before your coffee gets cold.",
-  Button("Get started", Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]), "primary"),
-  "wand-magic-sparkles",
-  "primary"
-)
-
-root = Stack([
-  hero,
-  Section([planToggle], "Pricing"),
-  pricingGrid,
-  Section([], "Why teams pick streaming-ui-script"),
-  features,
-  Section([], "Loved by builders"),
-  socialGrid,
-  Section([], "Meet the team"),
-  teamGrid,
-  Section([faq], "FAQ"),
-  closingBanner
-], "column", "xl")` }
-      ],
-      render: { elId: "rui-landing", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `This landing page is 70 lines of Streaming UI Script. No CSS, no
-        JavaScript, no host wiring — just one <code>setResponse(…)</code>
-        call and the patterns do the rest.`,
-      codeBlocks: [
-      { codeId: null, content: `// Host code is one line:
-el.setResponse(document.getElementById("src-landing").textContent);` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-landing");
-    el.setResponse(document.getElementById("src-landing").textContent);
-    }
-  },
   "media-gallery": {
     slug: "media-gallery",
-    docTitle: `Media gallery · streaming-ui-script`,
+    docTitle: `Media gallery · Aktion`,
     eyebrow: `Live demo · media + maps`,
     heroTitleHtml: `Carousel, Gallery, Lightbox, Video, Audio &amp; Map — in one program`,
     heroDescriptionHtml: `A travel-magazine layout that puts every new media primitive to
@@ -4110,7 +432,7 @@ const el = document.getElementById("rui-landing");
         itinerary pinned. No imperative wiring — every interaction is a
         <code>$variable</code> update.`,
     brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · media gallery`,
+    brandText: `Aktion · media gallery`,
     backHref: "live-examples.html",
     backText: `← Back to live examples`,
     cards: [
@@ -4120,9 +442,9 @@ const el = document.getElementById("rui-landing");
       lede: `Tap a thumbnail to open the lightbox, drag through the carousel,
         or hit play on the trailer — every transition is reactive state.`,
       codeBlocks: [
-      { codeId: "src-media", content: `$slide        = 0
+      { codeId: "src-media", content: `$slide = 0
 $lightboxOpen = false
-$lightboxIdx  = 0
+$lightboxIdx = 0
 
 photos = [
   {src: "https://picsum.photos/seed/aurora-cliffs/1200/700",  caption: "Cliff face at dawn"},
@@ -4134,16 +456,16 @@ photos = [
 ]
 
 heroCarousel = Carousel(
-  @Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}),
+  for {src, caption} in photos { {src: src, alt: caption, caption: caption} },
   $slide,
   "16:9",
   true
 )
 
 galleryGrid = Gallery(
-  @Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}),
+  for {src, caption} in photos { {src: src, alt: caption, caption: caption} },
   3,
-  Action([@Set($lightboxIdx, 0), @Set($lightboxOpen, true)])
+  () => { $lightboxIdx = 0; $lightboxOpen = true }
 )
 
 zoomBox = Lightbox(
@@ -4208,8 +530,8 @@ hero = Hero(
   "https://picsum.photos/seed/aurora-cover/1600/600",
   "Aug — Sept 2026 · from $4,890",
   "360px",
-  [Button("Reserve a spot",   Action([@ToAssistant("Reserve a spot")]), "primary"),
-   Button("Download brief",   Action([@OpenUrl("/aurora-brief.pdf")]), "ghost")],
+  [Button("Reserve a spot",   null, "primary"),
+   Button("Download brief",   () => { js{ window.open("/aurora-brief.pdf", "_blank", "noopener,noreferrer") } }, "ghost")],
   "cover",
   "primary"
 )
@@ -4228,7 +550,7 @@ followUps = FollowUpBlock([
   FollowUpItem("Add a 2-day Reykjavík extension")
 ], "Plan your trip")
 
-root = Stack([
+_app_ = Stack([
   hero,
   kpis,
   Card([SectionHeader("Daily highlights", "Aurora · summer 2026", "PREVIEW",
@@ -4251,7 +573,7 @@ root = Stack([
         <code>$lightboxOpen</code> and lifts the same image to full size.
         <code>Map</code> pins are a plain array of
         <code>{lat, lng, label}</code> objects; swap them for a
-        <code>Query("itinerary", ...)</code> result and the route updates
+        <code>$itinerary.data</code> result from <code>http({...})</code> and the route updates
         live. <code>VideoPlayer</code> and <code>AudioPlayer</code> are
         thin wrappers around the native <code>&lt;video&gt;</code> and
         <code>&lt;audio&gt;</code> elements, so they inherit the host
@@ -4268,198 +590,16 @@ const el = document.getElementById("rui-media");
     el.setResponse(document.getElementById("src-media").textContent);
     }
   },
-  "pricing-page": {
-    slug: "pricing-page",
-    docTitle: `Pricing page · streaming-ui-script`,
-    eyebrow: `Live demo · pricing`,
-    heroTitleHtml: `A polished pricing page, generated from one program`,
-    heroDescriptionHtml: `Every section is one named pattern — <code>Cover</code> for the hero,
-        <code>Stats</code> for the trust strip, <code>PricingTable</code> for
-        tiers, <code>FeatureGrid</code> for differentiators,
-        <code>Quote</code> for proof, an <code>Accordion</code> FAQ, and a
-        closing <code>Banner</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · pricing page`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Toggle annual/monthly billing — the prices in
-        <code>PricingTable</code> recompute via a ternary on
-        <code>$cycle</code>.`,
-      codeBlocks: [
-      { codeId: "src-pricing", content: `$$cycle = "annual"
-
-cycleToggle = ToggleGroup("cycle", [
-  {value: "monthly", label: "Monthly",          icon: "calendar"},
-  {value: "annual",  label: "Annual · 20% off", icon: "party-horn"}
-], $$cycle)
-
-cover = Hero(
-  "Pricing built for shipping teams",
-  "Start free, scale when you're ready. Every plan includes streaming, theming, and JavaScript interactions.",
-  null,
-  null,
-  "Pricing · v2.3",
-  null,
-  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
-  "Cancel anytime · no credit card to start",
-  "320px",
-  [
-    Button("Start free", Action([@ToAssistant("Start the free plan")]), "primary"),
-    Button("Compare plans", Action([@ToAssistant("Show me a full feature comparison")]), "ghost")
-  ],
-  "cover",
-  "primary"
-)
-
-trustStrip = Stats([
-  {label: "Teams trust it",   value: "2.4k+",      hint: "Across 40 countries",         tone: "primary"},
-  {label: "Uptime SLA",       value: "99.99%",     hint: "Multi-region production",     tone: "success"},
-  {label: "Time to first UI", value: "&lt;90 sec", hint: "From signup to first render", tone: "info"},
-  {label: "Support reply",    value: "&lt;1 hr",   hint: "Median weekday response",     tone: "warning"}
-], "center")
-
-starterTier = PricingCard(
-  "Starter",
-  "$0",
-  "/forever",
-  "Everything you need to ship your first LLM-powered UI.",
-  ["Up to 3 prompts per day", "Light & dark themes", "Community support"],
-  Button("Start free", Action([@ToAssistant("Start the free plan")]), "secondary"),
-  null,
-  false
-)
-
-proPrice = @Switch($$cycle, {monthly: "$29"}, "$23")
-
-proTier = PricingCard(
-  "Pro",
-  proPrice,
-  "/editor/month",
-  "For teams shipping production apps with the LLM.",
-  ["Unlimited prompts",
-   "Custom themes & tokens",
-   "Routing & multi-page apps",
-   "JavaScript interactions",
-   "Email support"],
-  Button("Start Pro trial", Action([@ToAssistant("Start the Pro trial")]), "primary"),
-  "Most popular",
-  true
-)
-
-scaleTier = PricingCard(
-  "Scale",
-  "Custom",
-  null,
-  "For platforms and agent builders running at scale.",
-  ["Everything in Pro",
-   "SSO + SCIM + audit log",
-   "Dedicated success engineer",
-   "Private build & SLA"],
-  Button("Talk to sales", Action([@ToAssistant("Schedule a call with sales")]), "secondary"),
-  null,
-  false
-)
-
-pricingGrid = PricingTable([starterTier, proTier, scaleTier], {sm: 1, md: 3})
-
-differentiators = FeatureGrid([
-  FeatureItem("Streaming-first",    "Render tokens the moment they arrive.",              "bolt",         "primary"),
-  FeatureItem("Framework-agnostic", "React, Vue, Angular, Svelte, plain HTML.",           "puzzle-piece", "info"),
-  FeatureItem("Production themes",  "Light, dark, neon, pastel — all responsive.",        "palette",      "warning"),
-  FeatureItem("100+ patterns",      "Hero, Cover, MediaCard, Kanban, Timeline, more.",    "gift",         "success"),
-  FeatureItem("Routing built in",   "Multi-page apps via hash routes — no extra router.", "compass",      "primary"),
-  FeatureItem("Tiny footprint",     "Under 40 KB gzipped, zero runtime dependencies.",    "feather",      "info")
-], {sm: 1, md: 2, lg: 3})
-
-socialQuote = Quote(
-  "This is exactly the abstraction I wanted between my agent and my UI. We deleted three dashboards in a week.",
-  "Jordan Patel · Founder, Looplog",
-  "primary"
-)
-
-proofRow = Stack([
-  Rating(4.9, 5, "4.9 of 5 on review sites", 268, "md", false),
-  AvatarGroup([
-    {name: "Naomi", src: "https://i.pravatar.cc/64?img=47"},
-    {name: "Marc",  src: "https://i.pravatar.cc/64?img=11"},
-    {name: "Grace", src: "https://i.pravatar.cc/64?img=32"},
-    {name: "Linus", src: "https://i.pravatar.cc/64?img=12"},
-    {name: "Ada",   src: "https://i.pravatar.cc/64?img=20"},
-    {name: "Mei",   src: "https://i.pravatar.cc/64?img=14"}
-  ], 5, "md"),
-  TextContent("Trusted by indie devs and Fortune 500 alike.", "small", "muted")
-], "row", "l", "center")
-
-faq = Accordion([
-  AccordionItem("Can I switch plans later?",
-    [TextContent("Yes — upgrade or downgrade at any time, prorated to the day.")]),
-  AccordionItem("What counts as a prompt?",
-    [TextContent("Any LLM call that triggers a streaming-ui-script render. Tool calls and renders don't add to the count.")]),
-  AccordionItem("Do you offer education discounts?",
-    [TextContent("50% off Pro for verified students and 75% off for accredited classrooms. Email us with proof of enrollment.")]),
-  AccordionItem("Is my data used to train models?",
-    [TextContent("Never. We don't train on your prompts, your tools, or your generated UIs.")])
-])
-
-closingBanner = Banner(
-  "Ready to ship generative UI?",
-  "Read the 30-second integration guide and you'll have a streaming UI before your coffee gets cold.",
-  Button("Get started",
-         Action([@OpenUrl("https://asfand-dev.github.io/streaming-ui-script/get-started.html")]),
-         "primary"),
-  "wand-magic-sparkles",
-  "primary"
-)
-
-root = Stack([
-  cover,
-  Section([cycleToggle], "Choose a billing cycle"),
-  pricingGrid,
-  Section([], "Why teams choose streaming-ui-script"),
-  trustStrip,
-  differentiators,
-  Section([], "Loved by builders"),
-  socialQuote,
-  proofRow,
-  Section([faq], "Frequently asked"),
-  closingBanner
-], "column", "xl")` }
-      ],
-      render: { elId: "rui-pricing", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `Toggling <code>$cycle</code> recomputes only the Pro tier price.
-        Every section is one statement — no media queries, no padding math.
-        The same program would scale to any plan-comparison or pricing
-        announcement page.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-pricing");
-    el.setResponse(document.getElementById("src-pricing").textContent);
-    }
-  },
   "routing-demo": {
     slug: "routing-demo",
-    docTitle: `Live demo · Routing · streaming-ui-script`,
-    eyebrow: `Live demo · Routes + NavLink + @Navigate`,
-    heroTitleHtml: `A multi-page app, in a single Streaming UI Script program`,
-    heroDescriptionHtml: `One <code>&lt;streaming-ui-script&gt;</code> tag renders a four-page UI
+    docTitle: `Live demo · Routing · Aktion`,
+    eyebrow: `Live demo · _router_({…}) + NavLink`,
+    heroTitleHtml: `A multi-page app, in a single Aktion program`,
+    heroDescriptionHtml: `One <code>&lt;aktion-app&gt;</code> tag renders a four-page UI
         synced to the URL hash. Click the nav, use deep links, hit the browser
         back button — it all stays in sync, with zero framework lock-in.`,
     brandHref: "examples.html",
-    brandText: `streaming-ui-script · routing`,
+    brandText: `Aktion · routing`,
     backHref: "routing.html",
     backText: `← Routing docs`,
     cards: [
@@ -4479,10 +619,12 @@ const el = document.getElementById("rui-pricing");
       id: null,
       heading: `UI Script source`,
       lede: `The <code>nav</code> stays visible across every page;
-        <code>main</code> is a <code>Routes(...)</code> outlet that swaps in
-        the page that matches the current URL. Path parameters land in
-        <code>params</code>, and <code>$route</code> is reactive everywhere
-        else.`,
+        <code>main</code> is produced by
+        <code>_router_({ … })</code>, which swaps in the matching arm.
+        Path parameters land in <code>params</code> inside each arm
+        body, and the reserved <code>_route_</code> handle exposes the
+        reactive surface everywhere else (and the imperative
+        <code>_route_.navigate(path)</code> method).`,
       codeBlocks: [
       { codeId: "src-routing", content: `$users = [
   {id: "ada",   name: "Ada Lovelace", role: "Founding engineer",   joined: "2019-04-02"},
@@ -4491,16 +633,16 @@ const el = document.getElementById("rui-pricing");
   {id: "ken",   name: "Ken Thompson", role: "Platform engineer",   joined: "2018-11-04"}
 ]
 
-$$visits     = 0
-$$lastEdited = "—"
+$visits = 0
+$lastEdited = "—"
 
-root = Stack([header, nav, main])
+_app_ = Stack([header, nav, main])
 
 header = Card([
-  CardHeader("Acme console", \`Routing demo · current path: \${$route}\`),
+  CardHeader("Acme console", \`Routing demo · current path: \${_route_}\`),
   Stack([
-    Badge(\`$route = \${$route}\`,   "info",    "compass", "sm"),
-    Badge(\`visits = \${$$visits}\`, "neutral", "eye",     "sm")
+    Badge(\`_route_ = \${_route_}\`, "info",    "compass", "sm"),
+    Badge(\`visits = \${$visits}\`,  "neutral", "eye",     "sm")
   ], "row", "xs")
 ])
 
@@ -4513,23 +655,23 @@ nav = Card([
   ], "row", "s")
 ])
 
-main = Routes([
-  Route("/",           homePage),
-  Route("/dashboard",  dashboardPage),
-  Route("/users",      usersListPage),
-  Route("/users/:id",  userDetailPage),
-  Route("/settings",   settingsHomePage),
-  Route("/settings/*", settingsAreaPage),
-  Route("*",           notFoundPage)
-], "/")
+main = _router_({
+  "/":           homePage,
+  "/dashboard":  dashboardPage,
+  "/users":      usersListPage,
+  "/users/:id":  userDetailPage(id: params.id),
+  "/settings":   settingsHomePage,
+  "/settings/*": settingsAreaPage(rest: params._),
+  default:       notFoundPage
+})
 
 homePage = Card([
-  CardHeader("Welcome", "A multi-page UI in one Streaming UI Script program"),
+  CardHeader("Welcome", "A multi-page UI in one Aktion program"),
   Markdown("Pick a section above, or jump straight in:"),
   Buttons([
-    Button("Open dashboard", Action([@Navigate("/dashboard")]),  "primary"),
-    Button("Browse users",   Action([@Navigate("/users")]),      "secondary"),
-    Button("Open Ada",       Action([@Navigate("/users/ada")]),  "ghost")
+    Button("Open dashboard", () => { _route_.navigate("/dashboard") },  "primary"),
+    Button("Browse users",   () => { _route_.navigate("/users") },      "secondary"),
+    Button("Open Ada",       () => { _route_.navigate("/users/ada") },  "ghost")
   ])
 ])
 
@@ -4537,38 +679,42 @@ dashboardPage = Card([
   CardHeader("Dashboard", "Reactive across routes"),
   Stack([
     StatCard("Users",     \`\${@Count($users)}\`, "up", "+2 this month"),
-    StatCard("Visits",    \`\${$$visits}\`,        "up", "this session"),
-    StatCard("Last edit", $$lastEdited)
+    StatCard("Visits",    \`\${$visits}\`,        "up", "this session"),
+    StatCard("Last edit", $lastEdited)
   ], "row", "m", "stretch", "start", true),
   Buttons([
-    Button("Track a visit", Action([@Set($$visits, $$visits + 1)]), "primary"),
-    Button("Back to home",  Action([@Navigate("/")]),               "ghost")
+    Button("Track a visit", () => { $visits = $visits + 1 }, "primary"),
+    Button("Back to home",  () => { _route_.navigate("/") },               "ghost")
   ])
 ])
 
-UserRow(id, name, role, joined) = Card([
-  Stack([
+component UserRow(id, name, role, joined) {
+  return Card([
     Stack([
-      TextContent(name, "body-heavy"),
-      TextContent(\`\${role} · joined \${joined}\`, "small", "muted")
-    ]),
-    Buttons([Button("Open", Action([@Js("ctx.host.navigate('/users/' + ctx.args.id)", {id: id})]), "ghost")])
-  ], "row", "m", "center", "between")
-], "outlined")
+      Stack([
+        Text(name, "body-heavy"),
+        Text(\`\${role} · joined \${joined}\`, "small", "muted")
+      ]),
+      Buttons([Button("Open", () => { _route_.navigate(\`/users/\${id}\`) }, "ghost")])
+    ], "row", "m", "center", "between")
+  ], "outlined")
+}
 
 usersListPage = Card([
   CardHeader("Users", "Click a row to deep-link into the detail page"),
-  Stack(@Each($users, "{id, name, role, joined}", UserRow(id, name, role, joined)))
+  Stack(for {id, name, role, joined} in $users { UserRow(id, name, role, joined) })
 ])
 
-userDetailPage = Card([
-  CardHeader(\`User \${params.id}\`, "Deep-linkable detail page"),
-  Markdown(\`Path parameter: **\${params.id}** · open URL: \\\`#/users/\${params.id}\\\`\`),
-  Buttons([
-    Button("Back to users", Action([@Navigate("/users")]),                                          "ghost"),
-    Button("Mark edited",   Action([@Set($$lastEdited, params.id), @Navigate("/dashboard")]),       "primary")
+component userDetailPage(id) {
+  return Card([
+    CardHeader(\`User \${id}\`, "Deep-linkable detail page"),
+    Markdown(\`Path parameter: **\${id}** · open URL: \\\`#/users/\${id}\\\`\`),
+    Buttons([
+      Button("Back to users", () => { _route_.navigate("/users") },                                "ghost"),
+      Button("Mark edited",   () => { $lastEdited = id; _route_.navigate("/dashboard") },           "primary")
+    ])
   ])
-])
+}
 
 settingsHomePage = Card([
   CardHeader("Settings", "Wildcard nested route below"),
@@ -4577,17 +723,19 @@ settingsHomePage = Card([
     NavLink("Notifications", "/settings/notifications", "pill"),
     NavLink("Security",      "/settings/security",      "pill")
   ], "row", "s"),
-  TextContent("Pick a sub-section above — it's matched by /settings/*.", "small", "muted")
+  Text("Pick a sub-section above — it's matched by /settings/*.", "small", "muted")
 ])
 
-# \`params._\` holds whatever comes after \`/settings/\`.
-settingsAreaPage = Card([
-  CardHeader(\`Settings · \${params._}\`, "Sub-section captured by wildcard"),
-  TextContent(\`params._ = \${params._}\`),
-  Buttons([Button("Back to settings", Action([@Navigate("/settings")]), "ghost")])
-])
+# \`params._\` holds whatever comes after \`/settings/\` — captured into \`rest\` above.
+component settingsAreaPage(rest) {
+  return Card([
+    CardHeader(\`Settings · \${rest}\`, "Sub-section captured by wildcard"),
+    Text(\`params._ = \${rest}\`),
+    Buttons([Button("Back to settings", () => { _route_.navigate("/settings") }, "ghost")])
+  ])
+}
 
-notFoundPage = Callout("warning", "Not found", \`No page matches \${$route}. Use the nav above or go back to /.\`)` }
+notFoundPage = Callout("warning", "Not found", \`No page matches \${_route_}. Use the nav above or go back to /.\`)` }
       ],
       render: null,
       extraHtml: ``,
@@ -4602,8 +750,10 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${$route}. Use
       extraHtml: `<ul>
         <li>
           The renderer always starts the built-in router. The reactive
-          <code>$route</code> state is exposed everywhere, and the routing
-          section is part of the generated system prompt by default.
+          <code>_route_</code> handle is exposed everywhere (with
+          <code>_route_.path</code>, <code>_route_.params</code>,
+          <code>_route_.query</code>) and the routing section is part of
+          the generated system prompt by default.
         </li>
         <li>
           <code>nav</code> is rendered once at the top of <code>root</code> so
@@ -4612,9 +762,9 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${$route}. Use
           <code>exact=true</code> so it doesn't light up on every path.
         </li>
         <li>
-          <code>Routes(...)</code> picks exactly one <code>Route</code> per
-          render based on <code>window.location.hash</code>. The default
-          (<code>"/"</code>) and the catch-all <code>Route("*", …)</code>
+          <code>_router_({ … })</code> picks exactly one arm per render
+          based on <code>window.location.hash</code>. The
+          <code>"/"</code> arm and the <code>default:</code> catch-all
           guarantee something is always rendered.
         </li>
         <li>
@@ -4624,10 +774,10 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${$route}. Use
           the wildcard remainder.
         </li>
         <li>
-          <code>@Navigate("/path")</code> is the declarative way to move; the
-          imperative <code>el.navigate("/path")</code> works from JS (see the
-          <code>Open</code> button in the users list, which captures
-          <code>u.id</code> per row).
+          <code>NavLink(label, to: "/path")</code> is the declarative way
+          to move; the imperative <code>el.navigate("/path")</code> works
+          from JS (see the <code>Open</code> button in the users list,
+          which captures <code>u.id</code> per row).
         </li>
         <li>
           A persistent <code>$visits</code> counter shows that the rest of the
@@ -4646,194 +796,9 @@ const el = document.getElementById("rui-routing");
     });
     }
   },
-  "scheduler": {
-    slug: "scheduler",
-    docTitle: `Scheduler · streaming-ui-script`,
-    eyebrow: `Live demo · calendar + onboarding + inbox`,
-    heroTitleHtml: `CalendarView, OnboardingChecklist, InboxPanel, ActivityLog &amp; state cards`,
-    heroDescriptionHtml: `A planning workspace that combines a full-month
-        <code>CalendarView</code> with an
-        <code>OnboardingChecklist</code>, an unread <code>InboxPanel</code>,
-        an <code>ActivityLog</code>, and three state primitives
-        (<code>LoadingState</code> / <code>ErrorState</code> /
-        <code>SuccessState</code>). Switching the active state on the
-        toolbar swaps the right pane — no JS, just a
-        <code>@Switch</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · scheduler`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Click a day in the calendar to focus it. Toggle the right-pane
-        view via the segmented control. Mark onboarding tasks done and
-        watch the count update.`,
-      codeBlocks: [
-      { codeId: "src-scheduler", content: `$selectedDate = "2026-05-17"
-$view         = "ready"
-$$step1Done   = false
-$$step2Done   = false
-$$step3Done   = false
-$$step4Done   = false
-
-onboardingDoneCount = @If($$step1Done, 1, 0) + @If($$step2Done, 1, 0) + @If($$step3Done, 1, 0) + @If($$step4Done, 1, 0)
-
-events = [
-  {date: "2026-05-04", title: "Sprint planning", time: "09:00", tone: "primary"},
-  {date: "2026-05-07", title: "Design review",   time: "14:00", tone: "info"},
-  {date: "2026-05-12", title: "Standup",          time: "09:00", tone: "primary"},
-  {date: "2026-05-12", title: "1:1 · Ada",        time: "16:00", tone: "info"},
-  {date: "2026-05-15", title: "Release window",   time: "10:00", tone: "success"},
-  {date: "2026-05-17", title: "Demo day",          time: "14:30", tone: "success"},
-  {date: "2026-05-17", title: "All-hands",         time: "16:00", tone: "primary"},
-  {date: "2026-05-22", title: "Retro",             time: "16:00", tone: "info"},
-  {date: "2026-05-25", title: "Customer council",  time: "11:00", tone: "primary"},
-  {date: "2026-05-29", title: "Quarterly review",  time: "10:00", tone: "warning"}
-]
-
-calendarCard = Card([
-  SectionHeader("May 2026", \`\${@Count(events)} events · \${@Count(@Filter(events, "tone", "==", "success"))} releases\`,
-    "PLANNER",
-    Badge("Live", "success", "circle", "sm"),
-    [Button("Today",   Action([@Set($selectedDate, "2026-05-17")]), "ghost",   "button", "small", "calendar-day"),
-     Button("New event", Action([@ToAssistant("Create event")]),     "primary", "button", "small", "plus")]),
-  CalendarView($selectedDate, "2026-05", events, "month")
-])
-
-onboardingCard = Card([
-  SectionHeader("Onboarding checklist", "Complete to enable publishing", "SETUP",
-    Badge(\`\${onboardingDoneCount}/4\`, "primary", "circle-check", "sm")),
-  OnboardingChecklist([
-    {title: "Create workspace",     description: "Pick a name and slug.",     done: $$step1Done, action: Action([@Set($$step1Done, true)]), cta: "Start"},
-    {title: "Invite teammates",     description: "Share an invite link.",     done: $$step2Done, action: Action([@Set($$step2Done, true)]), cta: "Invite"},
-    {title: "Connect calendar",     description: "Sync with Google / iCal.",  done: $$step3Done, action: Action([@Set($$step3Done, true)]), cta: "Connect"},
-    {title: "Schedule first event", description: "Pick a slot above.",        done: $$step4Done, action: Action([@Set($$step4Done, true)]), cta: "Schedule"}
-  ], "Get ready to launch", "Most teams finish setup in under 10 minutes.")
-])
-
-inboxCard = Card([
-  SectionHeader("Notifications", "3 unread · last 24h", "INBOX"),
-  InboxPanel([
-    {title: "Ada confirmed for demo day", message: "She'll present the new DataGrid.",  time: "2m",  icon: "comment",      tone: "primary", unread: true},
-    {title: "Build #482 succeeded",        message: "Tests passed in 2m31s.",            time: "12m", icon: "circle-check", tone: "success", unread: true},
-    {title: "Calendar invite accepted",    message: "Linus → Sprint planning.",          time: "1h",  icon: "calendar",     tone: "primary", unread: true},
-    {title: "Weekly digest",                message: "This week's events.",               time: "1d",  icon: "chart-pie"},
-    {title: "Subscription renewed",         message: "Pro plan billed $29.",              time: "1w",  icon: "credit-card"}
-  ])
-])
-
-activityCard = Card([
-  SectionHeader("Activity feed", "Latest planning updates", "FEED"),
-  ActivityLog([
-    {actor: "Ada",     title: "rescheduled All-hands",  description: "Pushed by 30 minutes.", time: "5m",  icon: "calendar-plus", tone: "primary"},
-    {actor: "Linus",   title: "RSVPed to Demo day",     description: "Will present.",          time: "1h",  icon: "circle-check",  tone: "success"},
-    {actor: "Grace",   title: "added a release window", description: "May 15 · 10:00",          time: "yesterday", icon: "rocket",     tone: "info"},
-    {actor: "scanner", title: "flagged a conflict",     description: "Overlap on May 17 · 14:30 ↔ 16:00", time: "2d", icon: "triangle-exclamation", tone: "warning"}
-  ])
-])
-
-readyState   = SuccessState(
-  "All systems go",
-  "Onboarding complete and your calendar is synced. Ready to publish.",
-  [Button("Open workspace", Action([@ToAssistant("Open workspace")]),    "primary", "button", "small", "house"),
-   Button("View calendar",  Action([@Set($view, "ready")]),               "ghost",   "button", "small", "calendar-days")]
-)
-
-loadingState = LoadingState(
-  "Syncing your calendar…",
-  "Pulling events from Google · about 5 seconds."
-)
-
-errorState   = ErrorState(
-  "We couldn't reach your calendar",
-  "Your sync token expired. Reconnect to continue planning.",
-  [Button("Reconnect Google", Action([@ToAssistant("Reconnect Google calendar")]), "primary", "button", "small", "rotate-right"),
-   Button("Contact support",  Action([@ToAssistant("Contact support")]),            "ghost",   "button", "small", "life-ring")]
-)
-
-statePane = @Switch($view, {
-  "ready":   readyState,
-  "loading": loadingState,
-  "error":   errorState
-}, readyState)
-
-stateToolbar = Toolbar(
-  [Badge(\`State: \${$view}\`, "primary", "circle-info", "sm")],
-  [ToggleGroup("view",
-    [{value: "ready",   label: "Ready",   icon: "circle-check"},
-     {value: "loading", label: "Loading", icon: "spinner"},
-     {value: "error",   label: "Error",   icon: "circle-exclamation"}], $view)]
-)
-
-stateCard = Card([
-  SectionHeader("Right pane · current state", "Toggle to preview each state primitive", "STATE"),
-  stateToolbar,
-  statePane
-])
-
-kpis = Stats([
-  StatCard("Events this month", \`\${@Count(events)}\`,                                            "up",   "+2 vs April",    "calendar-days"),
-  StatCard("Releases",          \`\${@Count(@Filter(events, "tone", "==", "success"))}\`,           "flat", "1 customer",     "rocket"),
-  StatCard("Onboarding",        \`\${onboardingDoneCount}/4\`,                                     "up",   "Save & continue", "circle-check"),
-  StatCard("Unread",             "3",                                                            "down", "-2 today",        "bell")
-])
-
-pageHeader = PageHeader(
-  ["Workspace", "Calendar", "May"],
-  "Plan the week, finish onboarding, and watch the inbox fill.",
-  [Button("Help",  Action([@ToAssistant("Show me how the scheduler works")]), "ghost",   "button", "small", "circle-question"),
-   Button("Share", Action([@ToAssistant("Share this view")]),                  "primary", "button", "small", "share")]
-)
-
-contentGrid = Grid([calendarCard, Stack([onboardingCard, inboxCard], "column", "l")], {sm: 1, lg: 2}, "l")
-bottomGrid  = Grid([activityCard, stateCard], {sm: 1, md: 2}, "l")
-
-followUps = FollowUpBlock([
-  FollowUpItem("Book me 30 minutes with Ada next Tuesday"),
-  FollowUpItem("What's blocking the next release?"),
-  FollowUpItem("Reschedule overlapping events automatically")
-], "Try next")
-
-root = Stack([
-  pageHeader,
-  kpis,
-  contentGrid,
-  bottomGrid,
-  followUps
-], "column", "l")` }
-      ],
-      render: { elId: "rui-scheduler", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `<code>CalendarView</code> renders a full month grid with
-        per-day event chips, navigation arrows, and a selected-day
-        callback — perfect when <code>DatePicker</code>'s single input
-        isn't enough. <code>OnboardingChecklist</code> keeps the
-        completion count in sync with a
-        <code>$$persistent</code> array, so refreshing the page
-        preserves progress. The three state primitives
-        (<code>LoadingState</code> / <code>ErrorState</code> /
-        <code>SuccessState</code>) drop in wherever you'd previously
-        hand-roll an empty Card with grey text.`,
-      codeBlocks: [
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-scheduler");
-    el.setResponse(document.getElementById("src-scheduler").textContent);
-    }
-  },
   "settings-app": {
     slug: "settings-app",
-    docTitle: `Settings app · streaming-ui-script`,
+    docTitle: `Settings app · Aktion`,
     eyebrow: `Live demo · rich patterns + two-way binding`,
     heroTitleHtml: `A full settings & preferences screen, driven by two-way bound primitives`,
     heroDescriptionHtml: `Tabs across the top, a <code>PageHeader</code> with breadcrumbs, a
@@ -4841,9 +806,9 @@ const el = document.getElementById("rui-scheduler");
         keyboard shortcut chips, and a slide-in <code>Sheet</code> for
         confirming the dangerous "delete workspace" action. Every control
         binds straight to a <code>$variable</code> — no
-        <code>@Js</code> needed.`,
+        <code>js{}</code> block needed.`,
     brandHref: "examples.html",
-    brandText: `streaming-ui-script · settings app`,
+    brandText: `Aktion · settings app`,
     backHref: "examples.html",
     backText: `← Back to docs`,
     cards: [
@@ -4854,35 +819,45 @@ const el = document.getElementById("rui-scheduler");
         progress bar animates and a banner confirms. "Delete workspace"
         opens a confirmation sheet.`,
       codeBlocks: [
-      { codeId: "src-settings", content: `$$tab           = "general"
-$$theme         = "light"
-$$accent        = "indigo"
-$$density       = "comfortable"
-$$language      = "en"
-$notifications  = true
-$autosave       = true
-$weeklyDigest   = true
-$mentionEmails  = false
-$shareUsage     = true
-$deleting       = false
-$saveStatus     = "idle"
+      { codeId: "src-settings", content: `$tab = "general"
+$theme = "light"
+$accent = "indigo"
+$density = "comfortable"
+$language = "en"
+$notifications = true
+$autosave = true
+$weeklyDigest = true
+$mentionEmails = false
+$shareUsage = true
+$deleting = false
+$saveStatus = "idle"
 
-usage          = Query("workspace_usage", {}, {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""})
-saveMutation   = Mutation("save_settings",    {tab: $$tab, theme: $$theme, density: $$density, language: $$language})
-deleteMutation = Mutation("delete_workspace", {})
+usage          = {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""}
 
-saveBanner = @Switch($saveStatus, {
-  saving: Banner("Saving…", "Hang tight while we sync your preferences.", null, "spinner", "info"),
-  saved:  Banner("Saved",    "Your preferences are up to date.",           null, "circle-check", "success")
-})
+action saveSettings() {
+  $saveStatus = "saving"
+  $saved = http({ url: "/api/settings", method: "PUT", body: { theme: $theme, accent: $accent }, headers: { "Content-Type": "application/json" } })
+  $saveStatus = "saved"
+}
+
+action deleteWorkspace() {
+  $deleted = http({ url: "/api/workspace", method: "DELETE" })
+  $deleting = false
+  emit "assistant-message" { message: "Workspace deleted" }
+}
+
+saveBanner = match $saveStatus {
+  "saving": Banner("Saving…", "Hang tight while we sync your preferences.", null, "spinner", "info")
+  "saved": Banner("Saved",    "Your preferences are up to date.",           null, "circle-check", "success")
+}
 
 header = PageHeader(
   "Settings",
   "Personalise your workspace",
   Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Settings")]),
   [
-    Button("Cancel",       Action([@ToAssistant("Discard pending changes")]),                                "ghost"),
-    Button("Save changes", Action([@Set($saveStatus, "saving"), @Run(saveMutation), @Set($saveStatus, "saved")]), "primary")
+    Button("Cancel",       null,           "ghost"),
+    Button("Save changes", saveSettings,   "primary")
   ],
   Badge(usage.planLabel, "primary", null, "sm")
 )
@@ -4904,7 +879,7 @@ generalCard = Card([
     SelectItem("fr", "Français"),
     SelectItem("de", "Deutsch"),
     SelectItem("ja", "日本語")
-  ], null, null, $$language)),
+  ], null, null, $language)),
   Separator("horizontal", true),
   Switch("notifications", "Enable desktop notifications", $notifications, "We'll ping you when a build finishes or someone @mentions you."),
   Switch("autosave",      "Autosave every 30 seconds",     $autosave),
@@ -4916,7 +891,7 @@ notificationsCard = Card([
   Switch("weeklyDigest",  "Weekly digest email",      $weeklyDigest),
   Switch("mentionEmails", "Email me on @mentions",    $mentionEmails, "Beyond just an in-app notification."),
   Separator("horizontal", true),
-  TextContent("Keyboard shortcut to mark all as read:", "small", "muted"),
+  Text("Keyboard shortcut to mark all as read:", "small", "muted"),
   Kbd(["⌘", "Shift", "R"])
 ])
 
@@ -4927,18 +902,18 @@ appearanceCard = Card([
     {value: "dark",   label: "Dark",   icon: "moon"},
     {value: "neon",   label: "Neon",   icon: "wand-magic-sparkles"},
     {value: "pastel", label: "Pastel", icon: "ribbon"}
-  ], $$theme)),
+  ], $theme)),
   FormControl("Accent", ToggleGroup("accent", [
     {value: "indigo",  label: "Indigo"},
     {value: "emerald", label: "Emerald"},
     {value: "rose",    label: "Rose"},
     {value: "amber",   label: "Amber"}
-  ], $$accent)),
+  ], $accent)),
   FormControl("Density", ToggleGroup("density", [
     {value: "compact",     label: "Compact"},
     {value: "comfortable", label: "Comfortable"},
     {value: "spacious",    label: "Spacious"}
-  ], $$density))
+  ], $density))
 ])
 
 shortcutsCard = Card([
@@ -4954,8 +929,8 @@ shortcutsCard = Card([
 
 dangerCard = Card([
   CardHeader("Danger zone", "Permanent actions — proceed with care"),
-  TextContent("Deleting the workspace removes every project, file, member, and history record. This action cannot be undone.", "small", "muted"),
-  Buttons([Button("Delete workspace", Action([@Set($deleting, true)]), "danger")])
+  Text("Deleting the workspace removes every project, file, member, and history record. This action cannot be undone.", "small", "muted"),
+  Buttons([Button("Delete workspace", () => { $deleting = true }, "danger")])
 ], "outlined")
 
 tabs = Tabs([
@@ -4964,24 +939,24 @@ tabs = Tabs([
   TabItem("notifications", "Notifications", [notificationsCard]),
   TabItem("shortcuts",     "Shortcuts",     [shortcutsCard]),
   TabItem("danger",        "Danger zone",   [dangerCard])
-], $$tab)
+], $tab)
 
 confirmSheet = Drawer(
   "Delete workspace?",
   $deleting,
   [
     Callout("danger", "This cannot be undone", "Every project, file, and member will be lost."),
-    TextContent("Type DELETE in the box below to confirm.", "small", "muted"),
+    Text("Type DELETE in the box below to confirm.", "small", "muted"),
     FormControl("Confirmation", Input("confirm", "DELETE", "text"))
   ],
   "right",
   [
-    Button("Cancel",             Action([@Set($deleting, false)]),                                                                       "ghost"),
-    Button("Permanently delete", Action([@Run(deleteMutation), @Set($deleting, false), @ToAssistant("Workspace deleted")]),               "danger")
+    Button("Cancel",             () => { $deleting = false },                                                                       "ghost"),
+    Button("Permanently delete", deleteWorkspace,                                                                                                                              "danger")
   ]
 )
 
-root = Stack([header, saveBanner, tabs, confirmSheet], "column", "l")` }
+_app_ = Stack([header, saveBanner, tabs, confirmSheet], "column", "l")` }
       ],
       render: { elId: "rui-settings", theme: "light" },
       extraHtml: ``,
@@ -5045,1172 +1020,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     el.setResponse(document.getElementById("src-settings").textContent);
     }
   },
-  "status-page": {
-    slug: "status-page",
-    docTitle: `Status page · streaming-ui-script`,
-    eyebrow: `Live demo · monitoring &amp; incidents`,
-    heroTitleHtml: `A public status page, generated from one program`,
-    heroDescriptionHtml: `A full SRE-style status page: incident <code>Banner</code> at the top,
-        <code>PageHeader</code> with refresh, a <code>MetricGrid</code> of
-        uptime KPIs, a <code>LineChart</code> of latency, a list of services
-        with <code>StatusDot</code> pulses, a <code>Timeline</code> of recent
-        incidents, and a subscribe card with two-way bound email + channel
-        toggles. Every section binds to a single
-        <code>Query("status_summary", …)</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `streaming-ui-script · status page`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Change the range or region and the page re-renders — the chart,
-        services list, and incident timeline all stay in sync. Click an
-        incident to focus it in the right-hand panel.`,
-      codeBlocks: [
-      { codeId: "src-status", content: `$$range          = "24h"
-$$region         = "all"
-$focusedIncident = ""
-$email           = ""
-$channel         = "email"
-
-data = Query("status_summary", {range: $$range, region: $$region}, {
-  overall: "operational",
-  message: "",
-  uptime: "100%",
-  incidentCount: 0,
-  avgLatency: "0 ms",
-  servicesDown: 0,
-  servicesTotal: 0,
-  latency: {times: [], values: []},
-  services: [],
-  incidents: []
-})
-
-bannerTone  = @Switch(data.overall, {down: "danger",       degraded: "warning"},               "success")
-bannerIcon  = @Switch(data.overall, {down: "circle-xmark", degraded: "triangle-exclamation"}, "circle-check")
-bannerLabel = @Switch(data.overall, {down: "Service disruption", degraded: "Partial outage"}, "All systems operational")
-
-banner = Banner(
-  bannerLabel,
-  data.message,
-  Button("Subscribe to updates", Action([@ToAssistant("Open subscribe form")]), "secondary", "button", "small"),
-  bannerIcon,
-  bannerTone
-)
-
-header = PageHeader(
-  "System status",
-  \`\${data.servicesTotal} services monitored · \${data.servicesDown} currently affected\`,
-  Breadcrumb([BreadcrumbItem("Acme", "#"), BreadcrumbItem("Status")]),
-  [
-    Button("History", Action([@ToAssistant("Show full incident history")]),                          "ghost"),
-    Button("Refresh", Action([@Set($$range, $$range), @ToAssistant("Force refresh status data")]),    "primary")
-  ],
-  StatusDot("Live", "success", true)
-)
-
-rangeToggle = ToggleGroup("range", [
-  {value: "1h",  label: "Last hour"},
-  {value: "24h", label: "Last 24h"},
-  {value: "7d",  label: "Last 7 days"},
-  {value: "30d", label: "Last 30 days"}
-], $$range)
-
-regionToggle = ToggleGroup("region", [
-  {value: "all",      label: "All regions", icon: "globe"},
-  {value: "us-east",  label: "US East",     icon: "flag-usa"},
-  {value: "eu-west",  label: "EU West",     icon: "earth-europe"},
-  {value: "ap-south", label: "AP South",    icon: "earth-asia"}
-], $$region)
-
-filters = Toolbar([rangeToggle], [regionToggle])
-
-kpis = Stats([
-  StatCard("Uptime",       data.uptime,                                        "up",                                            "vs prev period",  "gauge-high"),
-  StatCard("Incidents",    \`\${data.incidentCount}\`,                            "flat",                                          "in window",       "siren-on"),
-  StatCard("Avg response", data.avgLatency,                                    "down",                                          "lower is better", "bolt"),
-  StatCard("Affected",     \`\${data.servicesDown} / \${data.servicesTotal}\`,     @If(data.servicesDown == 0, "up", "down"),       "right now",       "satellite-dish")
-])
-
-latencyCard = Card([
-  SectionHeader("Response latency", "p95 across all probes", null, Badge("ms", "info", null, "sm")),
-  LineChart(data.latency.times, [Series("Latency", data.latency.values)])
-])
-
-servicesRows = @Each(data.services, "{name, region, uptime, tone}",
-  Stack([
-    StatusDot(name, tone, tone == "danger"),
-    Spacer(),
-    Badge(region,            "neutral", "location-dot", "sm"),
-    Badge(\`\${uptime} uptime\`, tone,     null,           "sm"),
-    Button("Details", Action([@ToAssistant(\`Show details for \${name}\`)]), "ghost", "button", "small")
-  ], "row", "m", "center")
-)
-
-servicesEmpty = EmptyState(
-  "No services in this region",
-  "Pick another region or reset the filter to see every service.",
-  "satellite-dish",
-  Button("All regions", Action([@Set($$region, "all")]), "secondary")
-)
-
-servicesCard = Card([
-  SectionHeader("Service health", "Status by component", null, Badge("Sync · just now", "success", null, "sm")),
-  @If(@Count(data.services) == 0, servicesEmpty, Stack(servicesRows, "column", "s"))
-])
-
-incidentItems = @Each(data.incidents, "{title, time, description, icon, tone}",
-  TimelineItem(title, time, description, icon, tone)
-)
-
-incidentsEmpty = EmptyState(
-  "No incidents in this window",
-  "All systems were stable. Widen the range to see older incidents.",
-  "circle-check",
-  null
-)
-
-incidentsCard = Card([
-  SectionHeader("Recent incidents", \`Last \${$$range} · \${data.incidentCount} total\`),
-  @If(@Count(data.incidents) == 0, incidentsEmpty, Timeline(incidentItems))
-])
-
-focused       = @First(@Filter(data.incidents, "id", "==", $focusedIncident))
-focusedExists = @Count(@Filter(data.incidents, "id", "==", $focusedIncident))
-
-updateBubbles = @Each(focused.updates, "{author, body, time}", ChatBubble(author, body, time, null, "agent", "delivered"))
-
-focusedPanel = @If(focusedExists == 0,
-  EmptyState("Pick an incident", "Tap a row to drill into the incident timeline.", "circle-info", null),
-  Stack([
-    PageHeader(focused.title, focused.time, null, null, Badge(focused.status, focused.tone, null, "sm")),
-    DescriptionList([
-      DescriptionItem("Status",     focused.status,    focused.icon),
-      DescriptionItem("Severity",   focused.severity,  "triangle-exclamation"),
-      DescriptionItem("Components", focused.component, "diagram-project"),
-      DescriptionItem("Owner",      focused.owner,     "user")
-    ]),
-    Card([CardHeader("Updates"), Stack(updateBubbles, "column", "m")])
-  ], "column", "m"))
-
-incidentTabs = SplitView(
-  [Stack([incidentsCard, Card([
-    SectionHeader("Subscribe to updates", "Get notified the moment status changes"),
-    FormControl("Email", Input("email", "you@company.com", "email", null, $email)),
-    FormControl("Channel", ToggleGroup("channel", [
-      {value: "email", label: "Email", icon: "envelope"},
-      {value: "slack", label: "Slack", icon: "slack"},
-      {value: "sms",   label: "SMS",   icon: "mobile-screen-button"},
-      {value: "rss",   label: "RSS",   icon: "rss"}
-    ], $channel)),
-    Buttons([
-      Button("Subscribe",
-             Action([@ToAssistant(\`Subscribe \${$email} via \${$channel}\`), @Reset($email)]),
-             "primary"),
-      Button("Open RSS feed", Action([@OpenUrl("https://example.com/status.rss")]), "ghost")
-    ])
-  ])], "column", "l")],
-  [Card([focusedPanel])],
-  "1.6fr"
-)
-
-IncidentBtn(id, title) = Button(title, Action([@Set($focusedIncident, id)]), @If($focusedIncident == id, "primary", "ghost"), "button", "small")
-selectIncidentRow = @Each(data.incidents, "{id, title}", IncidentBtn(id, title))
-
-quickJump = Card([
-  SectionHeader("Jump to incident", "Quick filter for the right-hand panel"),
-  Stack(selectIncidentRow, "row", "s")
-])
-
-followUps = FollowUpBlock([
-  FollowUpItem("Open the 90-day uptime report"),
-  FollowUpItem("Subscribe to incident webhooks"),
-  FollowUpItem("Compare regions side by side")
-], "Try next")
-
-root = Stack([banner, header, filters, kpis, latencyCard, servicesCard, @If(@Count(data.incidents) > 0, quickJump), incidentTabs, followUps], "column", "l")` }
-      ],
-      render: { elId: "rui-status", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The single tool that drives everything`,
-      lede: `One <code>Query("status_summary", …)</code> call returns every shape
-        the page needs: overall health, KPI numbers, latency chart points,
-        per-service status, and incident updates. Filters re-trigger the
-        query automatically because <code>$range</code> and
-        <code>$region</code> are passed as bare variables.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  status_summary: async ({ range, region }) =&gt; {
-    await sleep(220);
-    return buildSummary(range, region);
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const SERVICES = [
-      { id: "auth",      name: "Auth API",          icon: "shield-halved", regions: ["us-east", "eu-west", "ap-south"] },
-      { id: "api",       name: "Public REST API",   icon: "plug",          regions: ["us-east", "eu-west", "ap-south"] },
-      { id: "dashboard", name: "Dashboard UI",      icon: "table-columns", regions: ["us-east", "eu-west"] },
-      { id: "cdn",       name: "Static CDN",        icon: "earth-asia",    regions: ["us-east", "eu-west", "ap-south"] },
-      { id: "stream",    name: "Streaming gateway", icon: "satellite-dish", regions: ["us-east", "ap-south"] },
-      { id: "billing",   name: "Billing webhooks",  icon: "credit-card",   regions: ["us-east"] },
-      { id: "search",    name: "Search index",      icon: "magnifying-glass", regions: ["us-east", "eu-west"] },
-      { id: "ai",        name: "AI inference",      icon: "robot",         regions: ["us-east", "eu-west"] },
-    ];
-
-    const INCIDENTS = [
-      {
-        id: "inc-2491",
-        title: "Increased latency on EU REST API",
-        time: "15 min ago",
-        description: "p95 latency briefly spiked to 720ms before recovering. Investigating downstream DB.",
-        status: "Monitoring",
-        tone: "warning",
-        icon: "triangle-exclamation",
-        severity: "Sev 3",
-        component: "api · eu-west",
-        owner: "Naomi Rivers",
-        regions: ["eu-west"],
-        offsetMin: 15,
-        updates: [
-          { author: "Naomi Rivers", body: "We're back to p95 under 250ms. Holding the monitoring window for another 30 min.", time: "Just now" },
-          { author: "Pager bot",    body: "Recovered: api-eu-west p95 latency below threshold.", time: "5 min ago" },
-          { author: "Naomi Rivers", body: "Mitigation applied — rerouted to secondary read replica.", time: "10 min ago" },
-        ],
-      },
-      {
-        id: "inc-2487",
-        title: "Streaming gateway dropped packets in AP South",
-        time: "2 h ago",
-        description: "Packet loss to streaming.example.com peaked at 4% for 12 minutes during routing failover.",
-        status: "Resolved",
-        tone: "success",
-        icon: "circle-check",
-        severity: "Sev 2",
-        component: "stream · ap-south",
-        owner: "Linus Torvalds",
-        regions: ["ap-south"],
-        offsetMin: 120,
-        updates: [
-          { author: "Linus Torvalds", body: "Postmortem scheduled for Thursday 11:00 UTC.",                            time: "1 h ago" },
-          { author: "Pager bot",      body: "Resolved: streaming.example.com packet loss back to 0%.",                  time: "1 h 50 min ago" },
-          { author: "Linus Torvalds", body: "Re-converged BGP routes — failover completed.",                            time: "1 h 58 min ago" },
-        ],
-      },
-      {
-        id: "inc-2482",
-        title: "Billing webhooks delayed for 9 minutes",
-        time: "Yesterday",
-        description: "Some Stripe webhooks queued for up to 9 minutes during a worker rollout.",
-        status: "Resolved",
-        tone: "success",
-        icon: "circle-check",
-        severity: "Sev 3",
-        component: "billing · us-east",
-        owner: "Mei Tanaka",
-        regions: ["us-east"],
-        offsetMin: 60 * 24,
-        updates: [
-          { author: "Mei Tanaka", body: "All webhooks drained. No customer-impacting double-charges.", time: "Yesterday · 21:42" },
-          { author: "Pager bot",  body: "Resolved: billing-webhook queue depth back to 0.",            time: "Yesterday · 21:35" },
-        ],
-      },
-      {
-        id: "inc-2475",
-        title: "Search index reindex paused dashboards",
-        time: "3 days ago",
-        description: "Dashboard reports relying on search index showed stale numbers for 1h 12m during reindex.",
-        status: "Resolved",
-        tone: "success",
-        icon: "circle-check",
-        severity: "Sev 4",
-        component: "search · us-east",
-        owner: "Ada Lovelace",
-        regions: ["us-east", "eu-west"],
-        offsetMin: 60 * 24 * 3,
-        updates: [
-          { author: "Ada Lovelace", body: "Reindex complete. Reports back to fresh data.", time: "3 days ago" },
-          { author: "Ada Lovelace", body: "Reindex started — dashboards may briefly lag.", time: "3 days ago" },
-        ],
-      },
-    ];
-
-    function rangeWindowMin(range) {
-      switch (range) {
-        case "1h":  return 60;
-        case "24h": return 60 * 24;
-        case "7d":  return 60 * 24 * 7;
-        case "30d": return 60 * 24 * 30;
-        default:    return 60 * 24;
-      }
-    }
-
-    function buildLatency(range) {
-      const map = { "1h": 12, "24h": 24, "7d": 28, "30d": 30 };
-      const points = map[range] ?? 24;
-      const times = [];
-      const values = [];
-      for (let i = 0; i < points; i++) {
-        const label = range === "1h"
-          ? `${(i * 5).toString().padStart(2, "0")}m`
-          : range === "24h"
-            ? `${i.toString().padStart(2, "0")}:00`
-            : range === "7d"
-              ? `Day ${i + 1}`
-              : `${Math.ceil((i + 1) / 4)}w`;
-        times.push(label);
-        const base = 180 + Math.round(Math.sin(i / 2.4) * 40 + Math.random() * 30);
-        const spike = (range !== "1h" && i === Math.floor(points * 0.55)) ? 240 : 0;
-        values.push(Math.max(120, base + spike));
-      }
-      return { times, values };
-    }
-
-    function buildServices(region) {
-      const all = SERVICES.map((s, idx) => {
-        const inRegion = region === "all" || s.regions.includes(region);
-        if (!inRegion) return null;
-        const offsetIdx = idx + (region === "all" ? 0 : 2);
-        const tone = offsetIdx % 7 === 1 ? "warning" : (offsetIdx % 11 === 0 ? "danger" : "success");
-        const uptimeBase = tone === "danger" ? 96.8 : tone === "warning" ? 99.21 : 99.97;
-        return {
-          id: s.id,
-          name: s.name,
-          icon: s.icon,
-          region: region === "all" ? s.regions[0].replace("-", " ").toUpperCase() : region.replace("-", " ").toUpperCase(),
-          tone,
-          uptime: uptimeBase.toFixed(2) + "%",
-        };
-      }).filter(Boolean);
-      return all;
-    }
-
-    function buildSummary(range, region) {
-      const windowMin = rangeWindowMin(range);
-      const filteredIncidents = INCIDENTS.filter((inc) => {
-        if (inc.offsetMin > windowMin) return false;
-        if (region === "all") return true;
-        return inc.regions.includes(region);
-      });
-      const services = buildServices(region);
-      const servicesDown = services.filter((s) => s.tone !== "success").length;
-      const hasOpen = filteredIncidents.some((inc) => inc.status !== "Resolved");
-      const overall = servicesDown === 0 && !hasOpen
-        ? "operational"
-        : servicesDown > 1 || filteredIncidents.some((i) => i.severity === "Sev 1")
-          ? "down"
-          : "degraded";
-      const message = overall === "operational"
-        ? "All services are operating normally across every monitored region."
-        : overall === "down"
-          ? "Multiple services are reporting failures. We're investigating with highest priority."
-          : (filteredIncidents.find((i) => i.status !== "Resolved")?.description
-              ?? "One or more services are experiencing degraded performance.");
-      const uptime = overall === "operational" ? "99.99%" : overall === "degraded" ? "99.82%" : "99.41%";
-      const avgLatency = overall === "operational" ? "182 ms" : overall === "degraded" ? "264 ms" : "418 ms";
-      return {
-        overall,
-        message,
-        uptime,
-        incidentCount: filteredIncidents.length,
-        avgLatency,
-        servicesDown,
-        servicesTotal: services.length,
-        latency: buildLatency(range),
-        services,
-        incidents: filteredIncidents,
-      };
-    }
-
-    const el = document.getElementById("rui-status");
-
-    el.setTools({
-      status_summary: async ({ range, region }) => {
-        await sleep(220);
-        return buildSummary(range || "24h", region || "all");
-      },
-    });
-
-    el.setResponse(document.getElementById("src-status").textContent);
-    }
-  },
-  "support-agent": {
-    slug: "support-agent",
-    docTitle: `Support agent · streaming-ui-script`,
-    eyebrow: `Live demo · async tools`,
-    heroTitleHtml: `An AI triage agent for a customer support inbox`,
-    heroDescriptionHtml: `A queue of incoming tickets on the left, and the same component renders the
-        triage workspace on the right whenever you select one. The
-        <code>triage_ticket</code> tool simulates an LLM round-trip (with a 600 ms
-        delay) and returns a draft reply, severity, and routing suggestion. Use the
-        action buttons to mutate the queue.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · support agent`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: "ex-inbox",
-      heading: `Triage workspace`,
-      lede: `The same <code>&lt;streaming-ui-script&gt;</code> instance drives both panes —
-        the inbox shows tickets via <code>list_tickets</code>, and selecting one
-        calls <code>get_ticket</code> + <code>triage_ticket</code> to render the
-        details. Replying or escalating fires a <code>Mutation</code> that updates
-        the in-memory store.`,
-      codeBlocks: [
-      { codeId: "src-support", content: `$$status     = "open"
-$$selectedId = "T-1042"
-$reply       = ""
-
-inbox  = Query("list_tickets",   {status: $$status},   {rows: []})
-detail = Query("get_ticket",     {id: $$selectedId},   {id: "", subject: "", from: "", channel: "", body: "", waiting: 0, plan: ""})
-triage = Query("triage_ticket",  {id: $$selectedId},   {priority: "", category: "", confidence: 0, draft: "", routing: "", tags: []})
-
-statusFilter = FormControl("Inbox", Select("status", [
-  SelectItem("open",     "Open"),
-  SelectItem("waiting",  "Waiting on customer"),
-  SelectItem("resolved", "Resolved")
-], "open", $$status))
-
-TicketRow(id, priority, priorityVariant, waiting, subject, from, channel) = Card([
-  Stack([Badge(priority, priorityVariant, null, "sm"), TextContent(\`\${waiting}h ago\`, "small", "muted")], "row", "s", "center", "between"),
-  TextContent(subject, "body-heavy"),
-  TextContent(\`\${from} · \${channel}\`, "small", "muted"),
-  Buttons([Button(@If(id == $$selectedId, "Selected", "Open"), Action([@Set($$selectedId, id)]), @If(id == $$selectedId, "primary", "secondary"), "normal", "small")])
-], "outlined")
-
-ticketRows = @Each(inbox.rows, "{id, priority, priorityVariant, waiting, subject, from, channel}",
-  TicketRow(id, priority, priorityVariant, waiting, subject, from, channel)
-)
-
-empty     = TextContent("Inbox zero. Take a coffee break.", "small", "muted")
-inboxList = @If(@Count(inbox.rows) > 0, Stack(ticketRows, "column", "s"), empty)
-
-inboxStats = Stack([
-  StatCard("Open",     \`\${@Count(inbox.rows)}\`),
-  StatCard("Avg wait", \`\${@Round(@Avg(inbox.rows.waiting))}h\`),
-  StatCard("SLA risk", \`\${@Count(inbox.rows.slaRisk)}\`)
-], "row", "m", "stretch", "start", true)
-
-leftPane = Card([
-  CardHeader("Inbox", "Filter by status, then click a card to triage"),
-  statusFilter,
-  inboxStats,
-  inboxList
-])
-
-confidenceTone = @If(triage.confidence >= 0.7, "success", @If(triage.confidence >= 0.4, "warning", "danger"))
-priorityTone   = @Switch(triage.priority, {Urgent: "danger", High: "warning"}, "info")
-planTone       = @Switch(detail.plan,     {Enterprise: "primary", Pro: "success"}, "neutral")
-
-confidenceTag = Badge(\`Confidence \${@Round(triage.confidence * 100)}%\`, confidenceTone, null, "sm")
-priorityTag   = Badge(triage.priority, priorityTone, null, "sm")
-
-triageHeader = Stack([priorityTag, Badge(triage.category, "primary", null, "sm"), confidenceTag], "row", "s", "center", "start", true)
-
-routingCallout = Callout(@If(triage.priority == "Urgent", "danger", "info"), "Routing suggestion", triage.routing)
-
-draftField = FormControl("Suggested reply", TextArea("reply", triage.draft, $reply))
-
-ticketHeader = Card([
-  Stack([Badge(detail.plan, planTone, null, "sm"), TextContent(\`Waiting \${detail.waiting}h\`, "small", "muted")], "row", "s", "center", "between"),
-  TextContent(detail.subject,                              "large-heavy"),
-  TextContent(\`\${detail.from} · \${detail.channel}\`,        "small", "muted"),
-  Separator("horizontal", true),
-  TextContent(detail.body, "body")
-], "elevated")
-
-actions = Buttons([
-  Button("Send reply",   Action([@Run(reply),       @Run(inbox)]), "primary"),
-  Button("Escalate",     Action([@Run(escalate),    @Run(inbox)]), "secondary"),
-  Button("Mark waiting", Action([@Run(markWaiting), @Run(inbox)]), "ghost"),
-  Button("Resolve",      Action([@Run(resolve),     @Run(inbox)]), "ghost")
-])
-
-reply       = Mutation("send_reply", {id: $$selectedId, body: $reply})
-escalate    = Mutation("escalate",   {id: $$selectedId})
-markWaiting = Mutation("set_status", {id: $$selectedId, status: "waiting"})
-resolve     = Mutation("set_status", {id: $$selectedId, status: "resolved"})
-
-tagsRow = BadgeList(triage.tags)
-
-rightPane = Card([
-  CardHeader(\`Triage · \${detail.id}\`, "AI suggestion based on history, plan, and content"),
-  triageHeader,
-  routingCallout,
-  ticketHeader,
-  tagsRow,
-  draftField,
-  actions
-])
-
-root = Stack([leftPane, rightPane], "row", "l", "stretch")` }
-      ],
-      render: { elId: "rui-support", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How the AI is mocked`,
-      lede: `<code>triage_ticket</code> returns a deterministic-but-realistic suggestion
-        per ticket. Swap in a real LLM call (or a queue of cached completions) and
-        the UI doesn't change. The 600 ms delay simulates network latency so you can
-        see the reactive cards re-render.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  list_tickets:  ({ status }) =&gt; ({ rows: queue.filter((t) =&gt; t.status === status) }),
-  get_ticket:    ({ id })     =&gt; queue.find((t) =&gt; t.id === id),
-  triage_ticket: async ({ id }) =&gt; {
-    await sleep(600);
-    return triageFor(id);  // returns { priority, category, confidence, draft, routing, tags }
-  },
-  send_reply:    ({ id, body }) =&gt; { archive(id); return { ok: true }; },
-  escalate:      ({ id })       =&gt; { mark(id, "escalated"); return { ok: true }; },
-  set_status:    ({ id, status }) =&gt; { mark(id, status); return { ok: true }; },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const queue = [
-      {
-        id: "T-1042",
-        subject: "Charged twice for May invoice",
-        from: "anika@northwind.io",
-        channel: "Email",
-        body: "Hi — looking at our billing dashboard we got charged €420 twice on May 3rd for the same invoice. The second one shows the same invoice number. Could you reverse the duplicate?",
-        waiting: 4,
-        slaRisk: true,
-        plan: "Enterprise",
-        status: "open",
-        triage: {
-          priority: "Urgent",
-          category: "Billing",
-          confidence: 0.92,
-          draft: "Hi Anika — confirmed both transactions on May 3rd reference invoice #INV-90213. I've initiated a refund for €420 to the same card; you'll see it land within 3 business days. Apologies for the bump.",
-          routing: "Send to Billing → Disputes. Plan: Enterprise. SLA: < 4h.",
-          tags: ["double-charge", "card-refund", "INV-90213"],
-        },
-      },
-      {
-        id: "T-1041",
-        subject: "Can't invite teammates from SSO group",
-        from: "marc@orbitcorp.com",
-        channel: "In-app",
-        body: "We added a new Okta group, but new members aren't being invited automatically. The mapping looks right on our end. Anything you can see from your side?",
-        waiting: 2,
-        slaRisk: false,
-        plan: "Pro",
-        status: "open",
-        triage: {
-          priority: "High",
-          category: "Identity / SSO",
-          confidence: 0.78,
-          draft: "Hi Marc — checked the audit log: the SCIM webhook for the new Okta group is firing but failing on a missing `email` claim. Can you re-export the group with email scope enabled? Once you do, new members will sync within 15 minutes.",
-          routing: "Send to Platform → Identity team. Plan: Pro.",
-          tags: ["sso", "scim", "okta"],
-        },
-      },
-      {
-        id: "T-1040",
-        subject: "Dark mode toggle resets after refresh",
-        from: "jules@hellopastel.studio",
-        channel: "Email",
-        body: "Small thing — every time I refresh, the dashboard goes back to light mode. Cookie issue maybe?",
-        waiting: 26,
-        slaRisk: false,
-        plan: "Starter",
-        status: "open",
-        triage: {
-          priority: "Low",
-          category: "Bug · UI",
-          confidence: 0.61,
-          draft: "Hi Jules — thanks for the report. We persist the theme via `prefers-color-scheme` and a localStorage flag. Could you confirm whether your browser blocks third-party storage on our domain? In the meantime, here's a workaround using the gear menu.",
-          routing: "Add to Frontend backlog. Low priority.",
-          tags: ["frontend", "preferences", "low-priority"],
-        },
-      },
-      {
-        id: "T-1039",
-        subject: "API rate limit too aggressive on burst writes",
-        from: "ops@cobaltlabs.dev",
-        channel: "Slack",
-        body: "We're hitting 429s after ~12 writes/sec. Our quota says 50 RPS — is the limiter sliding-window or fixed? Trying to plan a backfill.",
-        waiting: 1,
-        slaRisk: false,
-        plan: "Pro",
-        status: "open",
-        triage: {
-          priority: "High",
-          category: "Platform · API",
-          confidence: 0.85,
-          draft: "Hi team — the limiter is a 1s sliding window. The 50 RPS quota is enforced as a token bucket with burst = 25, refill = 50/s. For backfills we recommend chunking 25 every 500 ms. I can also temporarily raise the burst ceiling — want me to do that for the duration of the job?",
-          routing: "Resolve directly. Plan: Pro. Customer is technical.",
-          tags: ["rate-limit", "api", "backfill"],
-        },
-      },
-      {
-        id: "T-1038",
-        subject: "Onboarding email never arrived",
-        from: "kira@bytecanvas.app",
-        channel: "Email",
-        body: "Signed up yesterday and the welcome email never came through. Could you trigger it manually?",
-        waiting: 18,
-        slaRisk: false,
-        plan: "Starter",
-        status: "waiting",
-        triage: {
-          priority: "Medium",
-          category: "Onboarding",
-          confidence: 0.74,
-          draft: "Hi Kira — found your sign-up. The first delivery bounced (mailbox full at the time). I've re-queued the welcome email; you should see it within a minute. Let me know if it's still missing.",
-          routing: "Resolve directly. Free plan.",
-          tags: ["transactional-mail", "bounce"],
-        },
-      },
-      {
-        id: "T-1037",
-        subject: "Thanks for the quick fix on the CSV export",
-        from: "tom@flowmark.io",
-        channel: "Email",
-        body: "Appreciate the fast turnaround — exports work great now. No action needed!",
-        waiting: 47,
-        slaRisk: false,
-        plan: "Pro",
-        status: "resolved",
-        triage: {
-          priority: "Low",
-          category: "Feedback",
-          confidence: 0.97,
-          draft: "Hi Tom — really glad it's working. Closing this out; happy CSV-ing!",
-          routing: "Mark resolved. No follow-up needed.",
-          tags: ["positive-feedback", "csv-export"],
-        },
-      },
-    ];
-
-    function priorityVariant(p) {
-      if (p === "Urgent") return "danger";
-      if (p === "High") return "warning";
-      if (p === "Medium") return "info";
-      return "neutral";
-    }
-
-    const el = document.getElementById("rui-support");
-
-    el.setTools({
-      list_tickets: ({ status }) => ({
-        rows: queue
-          .filter((t) => t.status === status)
-          .map((t) => ({
-            id: t.id,
-            subject: t.subject,
-            from: t.from,
-            channel: t.channel,
-            waiting: t.waiting,
-            priority: t.triage.priority,
-            priorityVariant: priorityVariant(t.triage.priority),
-            slaRisk: t.slaRisk,
-          })),
-      }),
-      get_ticket: ({ id }) => {
-        const t = queue.find((x) => x.id === id) ?? queue[0];
-        return {
-          id: t.id,
-          subject: t.subject,
-          from: t.from,
-          channel: t.channel,
-          body: t.body,
-          waiting: t.waiting,
-          plan: t.plan,
-        };
-      },
-      triage_ticket: async ({ id }) => {
-        await sleep(600);
-        const t = queue.find((x) => x.id === id) ?? queue[0];
-        return { ...t.triage };
-      },
-      send_reply: ({ id }) => {
-        const t = queue.find((x) => x.id === id);
-        if (t) t.status = "resolved";
-        return { ok: true };
-      },
-      escalate: ({ id }) => {
-        const t = queue.find((x) => x.id === id);
-        if (t) t.triage.priority = "Urgent";
-        return { ok: true };
-      },
-      set_status: ({ id, status }) => {
-        const t = queue.find((x) => x.id === id);
-        if (t) t.status = status;
-        return { ok: true };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-support").textContent);
-    }
-  },
-  "team-directory": {
-    slug: "team-directory",
-    docTitle: `Team directory · streaming-ui-script`,
-    eyebrow: `Live demo · search + sheet + pagination`,
-    heroTitleHtml: `A searchable team directory with detail sheets and rich tooltips`,
-    heroDescriptionHtml: `Profile cards, avatar groups, a department toggle group, a paginated
-        list, an empty state, and a slide-in <code>Sheet</code> for full
-        member detail — all wired through a single search + pagination
-        <code>Query</code>. Hover an avatar in the row of "popular" members
-        to reveal a tooltip with the person's full title.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · team directory`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: null,
-      heading: `Live directory`,
-      lede: `Search by name or skill, switch departments, paginate through results,
-        and click "View profile" to open a detail sheet. Reset the search to
-        see the empty-state CTA.`,
-      codeBlocks: [
-      { codeId: "src-team", content: `$search       = ""
-$$department  = "all"
-$page         = 1
-$$selectedId  = ""
-
-data   = Query("list_members", {q: $search, department: $$department, page: $page}, {
-  rows: [], total: 0, pages: 1, popular: []
-})
-detail = Query("get_member",   {id: $$selectedId}, {
-  id: "", name: "", role: "", bio: "", tags: [], stats: [], avatar: ""
-})
-
-header = PageHeader(
-  "Team directory",
-  "Everyone at Acme Robotics, searchable in one place",
-  Breadcrumb([BreadcrumbItem("Company", "#"), BreadcrumbItem("People")]),
-  [
-    Button("Export CSV", Action([@ToAssistant("Export the directory as CSV")]),   "ghost"),
-    Button("Invite",     Action([@ToAssistant("Open the invite-by-email form")]), "primary")
-  ],
-  Badge(\`\${data.total} people\`, "primary", null, "sm")
-)
-
-searchField = FormControl(
-  "Search",
-  Input("search", "Name, role, skill…", "text", null, $search),
-  "Filters update as you type"
-)
-
-departmentToggle = FormControl("Department", ToggleGroup("department", [
-  {value: "all",   label: "All"},
-  {value: "eng",   label: "Engineering", icon: "laptop-code"},
-  {value: "ds",    label: "Design",      icon: "palette"},
-  {value: "ops",   label: "Operations",  icon: "box"},
-  {value: "sales", label: "Sales",       icon: "chart-line"}
-], $$department))
-
-controls = Stack([searchField, departmentToggle], "row", "m", "stretch", "start", true)
-
-popularRow = Card([
-  CardHeader("Most-mentioned this week", "Hover an avatar to see their role"),
-  AvatarGroup(data.popular, 6, "lg")
-])
-
-MemberTile(u) = Card([
-  ProfileCard(u.name, u.role, u.avatar, u.bio, u.tags, [
-    Button("View profile", Action([@Set($$selectedId, u.id)]),                       "secondary", "button", "small"),
-    Button("Message",      Action([@ToAssistant(\`Open a DM thread with \${u.name}\`)]), "ghost",     "button", "small")
-  ])
-])
-
-cardsGrid = Grid(@Each(data.rows, "u", MemberTile(u)), {sm: 1, md: 2, lg: 3}, "m")
-
-emptyState = EmptyState(
-  "No matches for your filters",
-  "Try a different search term or pick another department.",
-  "magnifying-glass",
-  Button("Clear filters", Action([@Reset($search), @Set($$department, "all"), @Set($page, 1)]), "primary")
-)
-
-body = @If(@Count(data.rows) > 0, cardsGrid, emptyState)
-
-pager = Pagination($page, data.pages, 1)
-
-statTiles = @Each(detail.stats, "{label, value, trend, delta, icon}", StatCard(label, value, trend, delta, icon))
-
-detailSheet = Drawer(
-  @If(detail.name == "", "Loading…", detail.name),
-  $$selectedId != "",
-  [
-    Stack([
-      Avatar(detail.name, detail.avatar, "xl"),
-      Stack([
-        TextContent(detail.role, "body-heavy"),
-        TextContent(detail.bio,  "body", "muted")
-      ], "column", "xs")
-    ], "row", "m", "start", "start"),
-    Separator("horizontal", true),
-    BadgeList(detail.tags, "primary", "sm"),
-    Separator("horizontal", true),
-    Stats(statTiles, "grid", 3)
-  ],
-  "right",
-  [
-    Button("Close",   Action([@Reset($$selectedId)]),                                                                    "ghost"),
-    Button("Message", Action([@ToAssistant(\`Open a DM thread with \${detail.name}\`), @Reset($$selectedId)]),              "primary")
-  ]
-)
-
-root = Stack([header, popularRow, controls, body, pager, detailSheet], "column", "l")` }
-      ],
-      render: { elId: "rui-team", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The two tools`,
-      lede: `<code>list_members</code> handles the paged grid and "popular"
-        avatar row. <code>get_member</code> hydrates the detail
-        <code>Sheet</code>. Both are tiny — the patterns do the visual heavy
-        lifting.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  list_members: ({ q, department, page }) =&gt; {
-    const filtered = members.filter(matches({ q, department }));
-    const pageSize = 6;
-    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    return {
-      rows: filtered.slice((page - 1) * pageSize, page * pageSize),
-      total: filtered.length,
-      pages,
-      popular: members.slice(0, 6).map(({ name }) =&gt; ({ name })),
-    };
-  },
-  get_member: ({ id }) =&gt; members.find((m) =&gt; m.id === id) ?? emptyMember,
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const PAGE_SIZE = 6;
-
-    const MEMBERS = [
-      { id: "u_ada",     name: "Ada Lovelace",       role: "Founding engineer",  department: "eng",   bio: "Designed the streaming evaluator and the action graph.",        tags: ["TypeScript", "Compilers", "DX"],          icon: "laptop-code" },
-      { id: "u_grace",   name: "Grace Hopper",       role: "Component lead",     department: "eng",   bio: "Owns the rich-UI patterns library and the design tokens.",      tags: ["Design systems", "A11y", "Patterns"],     icon: "palette" },
-      { id: "u_linus",   name: "Linus Torvalds",     role: "Infra & perf",       department: "eng",   bio: "Keeps the bundle under 40 KB and CI under 90 seconds.",         tags: ["Perf", "Infra", "DX"],                    icon: "gear" },
-      { id: "u_alan",    name: "Alan Turing",        role: "Director of research", department: "eng", bio: "Steers the long-term agent and DSL strategy.",                  tags: ["Research", "DSLs"],                       icon: "brain" },
-      { id: "u_marie",   name: "Marie Curie",        role: "Principal designer", department: "ds",    bio: "Drives the visual language and the marketing site.",            tags: ["Brand", "Illustration"],                  icon: "paintbrush" },
-      { id: "u_pablo",   name: "Pablo Picasso",      role: "Senior designer",    department: "ds",    bio: "Owns the dashboard patterns and chart styling.",                 tags: ["Data viz", "Patterns"],                   icon: "palette" },
-      { id: "u_henri",   name: "Henri Matisse",      role: "Illustrator",        department: "ds",    bio: "Hand-draws the marketing illustrations for every release.",     tags: ["Illustration", "Branding"],                icon: "pen" },
-      { id: "u_amelia",  name: "Amelia Earhart",     role: "Head of operations", department: "ops",   bio: "Runs the office, the offsite, and the on-call schedule.",       tags: ["Ops", "Logistics"],                       icon: "box" },
-      { id: "u_neil",    name: "Neil Armstrong",     role: "Customer success",   department: "sales", bio: "First responder for enterprise migrations and onboarding.",     tags: ["Onboarding", "Migrations"],               icon: "rocket" },
-      { id: "u_sally",   name: "Sally Ride",         role: "Account executive",  department: "sales", bio: "Owns the platform & agent vertical for North America.",         tags: ["Enterprise", "Discovery"],                icon: "chart-line" },
-      { id: "u_rosa",    name: "Rosa Parks",         role: "People partner",     department: "ops",   bio: "Hiring + onboarding for the engineering org.",                  tags: ["Hiring", "Onboarding"],                   icon: "handshake" },
-      { id: "u_mae",     name: "Mae Jemison",        role: "Solutions engineer", department: "sales", bio: "Embeds with launch customers to land the first integration.",   tags: ["Integrations", "DX"],                     icon: "flask" },
-    ];
-
-    function tagStatsFor(member) {
-      return [
-        { label: "PRs merged",   value: "" + (24 + member.name.length),                   trend: "up",   delta: "+8 vs prev", icon: "rocket" },
-        { label: "Reviews",      value: "" + (40 + (member.name.length % 18)),            trend: "flat", delta: "", icon: "eye" },
-        { label: "Mentions",     value: "" + (10 + (member.name.length % 9)),             trend: "up",   delta: "+3", icon: "fire" },
-      ];
-    }
-
-    function matches({ q, department }) {
-      const term = (q ?? "").toLowerCase().trim();
-      return (m) => {
-        if (department && department !== "all" && m.department !== department) return false;
-        if (!term) return true;
-        return m.name.toLowerCase().includes(term)
-          || m.role.toLowerCase().includes(term)
-          || m.tags.some((t) => t.toLowerCase().includes(term));
-      };
-    }
-
-    const el = document.getElementById("rui-team");
-
-    el.setTools({
-      list_members: async ({ q, department, page }) => {
-        await sleep(180);
-        const filtered = MEMBERS.filter(matches({ q, department }));
-        const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const safePage = Math.max(1, Math.min(pages, page ?? 1));
-        return {
-          rows: filtered
-            .slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-            .map((m) => ({
-              id: m.id,
-              name: m.name,
-              role: m.role,
-              avatar: "",
-              bio: m.bio,
-              tags: m.tags,
-            })),
-          total: filtered.length,
-          pages,
-          popular: MEMBERS.slice(0, 6).map((m) => ({ name: m.name })),
-        };
-      },
-      get_member: async ({ id }) => {
-        if (!id) {
-          return { id: "", name: "", role: "", bio: "", tags: [], stats: [], avatar: "" };
-        }
-        await sleep(120);
-        const m = MEMBERS.find((x) => x.id === id);
-        if (!m) {
-          return { id, name: "Unknown member", role: "", bio: "We couldn't find that record.", tags: [], stats: [], avatar: "" };
-        }
-        return {
-          id: m.id,
-          name: m.name,
-          role: m.role,
-          bio: m.bio,
-          tags: m.tags,
-          avatar: "",
-          stats: tagStatsFor(m),
-        };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-team").textContent);
-    }
-  },
-  "tools-example": {
-    slug: "tools-example",
-    docTitle: `Tools example · streaming-ui-script`,
-    eyebrow: `Live demo · no LLM required`,
-    heroTitleHtml: `Wire your own data with <code>setTools()</code>`,
-    heroDescriptionHtml: `<code>Query()</code> reads data and <code>Mutation()</code> writes it. Both
-        delegate to plain async functions you register on the element via
-        <code>el.setTools({ name: handler })</code>. The three demos below render the
-        very same components a real LLM would produce — but the tools are mocked in
-        this page so you can study the wiring end-to-end.`,
-    brandHref: "examples.html",
-    brandText: `streaming-ui-script · tools example`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
-    cards: [
-    {
-      id: "ex-read",
-      heading: `1. Read with <code>Query</code>`,
-      lede: `A live filter on top of an in-memory contacts list. The
-        <code>$search</code> state variable two-way-binds to the input. Whenever it
-        changes, the <code>list_contacts</code> tool runs again — same flow you'd
-        get talking to a real backend.`,
-      codeBlocks: [
-      { codeId: "src-contacts", content: `$search   = ""
-data      = Query("list_contacts", {q: $search}, {rows: []})
-searchBox = FormControl("Search", Input("search", "Filter by name, email, or role…", "text", null, $search))
-empty     = TextContent("No contacts match your filter.", "small", "muted")
-tbl       = Table([
-  Col("Name",  data.rows.name),
-  Col("Email", data.rows.email),
-  Col("Role",  data.rows.role),
-  Col("Team",  @Each(data.rows, "{team, teamColor}", Badge(team, teamColor, null, "sm")))
-])
-view = @If(@Count(data.rows) > 0, tbl, empty)
-root = Stack([Card([CardHeader("Team contacts", "Type to filter"), searchBox, view])])` }
-      ],
-      render: { elId: "rui-contacts", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: "ex-write",
-      heading: `2. Read + write with <code>Query</code> and <code>Mutation</code>`,
-      lede: `The list of todos is read by <code>list_todos</code>, while <code>add_todo</code> and
-        <code>toggle_todo</code> mutate it. Buttons run <code>@Run(...)</code> followed by
-        <code>@Run(list)</code> to refresh the view. Adding an item also resets the
-        input via <code>@Reset($newTitle)</code>.`,
-      codeBlocks: [
-      { codeId: "src-todos", content: `# @Each destructuring + @If keep the per-row toggle and status cells one-line.
-$newTitle = ""
-$toggleId = ""
-
-list   = Query("list_todos",   {},                {rows: []})
-add    = Mutation("add_todo",    {title: $newTitle})
-toggle = Mutation("toggle_todo", {id: $toggleId})
-
-addBtn = Button("Add", Action([@Run(add), @Run(list), @Reset($newTitle)]), "primary")
-input  = FormControl("New todo", Input("newTitle", "Buy milk…", "text", null, $newTitle))
-form   = Stack([input, addBtn], "row", "m", "end")
-
-rowToggle = @Each(list.rows, "{id, done}",
-  Button(@If(done, "Mark open", "Mark done"),
-         Action([@Set($toggleId, id), @Run(toggle), @Run(list)]),
-         @If(done, "secondary", "primary"), "normal", "small"))
-
-status = @Each(list.rows, "{done}",
-  Badge(@If(done, "Done", "Open"), @If(done, "success", "info"), null, "sm"))
-
-tbl = Table([
-  Col("Title",   list.rows.title),
-  Col("Status",  status),
-  Col("Actions", rowToggle)
-])
-
-empty = TextContent("Nothing on the list yet — add your first todo above.", "small", "muted")
-view  = @If(@Count(list.rows) > 0, tbl, empty)
-root  = Stack([Card([CardHeader("Todos", "Stored in memory in this page"), form, view])])` }
-      ],
-      render: { elId: "rui-todos", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: "ex-poll",
-      heading: `3. Live data with polling`,
-      lede: `Pass a <code>refreshSeconds</code> argument to <code>Query()</code> to auto-poll the
-        tool. Here a fake metrics endpoint returns a fresh data point every two seconds —
-        the chart redraws without any extra wiring.`,
-      codeBlocks: [
-      { codeId: "src-metrics", content: `data = Query("metrics", {}, {labels: [], series: []}, 2)
-chart = LineChart(data.labels, [Series("Requests/min", data.series)])
-status = TextContent("Auto-refreshing every 2s", "small", "muted")
-root = Stack([Card([CardHeader("Live metrics", "Polled tool"), chart, status])])` }
-      ],
-      render: { elId: "rui-metrics", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How <code>setTools()</code> works`,
-      lede: `Tools are plain functions. They receive the args object the language called them with,
-        and may return a value or a promise. The returned value becomes the result of the
-        corresponding <code>Query</code> / <code>Mutation</code>.`,
-      codeBlocks: [
-      { codeId: null, content: `const el = document.querySelector("streaming-ui-script");
-
-el.setTools({
-  list_contacts: ({ q }) =&gt; ({ rows: filterContacts(q) }),
-  list_todos:    ()      =&gt; ({ rows: store.todos }),
-  add_todo:      ({ title })   =&gt; { store.add(title);    return { ok: true }; },
-  toggle_todo:   ({ id })      =&gt; { store.toggle(id);    return { ok: true }; },
-  metrics:       async ()      =&gt; ({ labels, series }),
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-/* -------- Example 1: read-only contacts list -------- */
-    const CONTACTS = [
-      { name: "Alice Johnson",  email: "alice@acme.com",   role: "Engineer", team: "Platform",  teamColor: "info" },
-      { name: "Bob Martinez",   email: "bob@acme.com",     role: "Designer", team: "Design",    teamColor: "warning" },
-      { name: "Carol White",    email: "carol@acme.com",   role: "PM",       team: "Product",   teamColor: "success" },
-      { name: "David Lee",      email: "david@acme.com",   role: "Engineer", team: "Platform",  teamColor: "info" },
-      { name: "Eva Brown",      email: "eva@acme.com",     role: "Marketing",team: "Growth",    teamColor: "danger" },
-      { name: "Frank Wilson",   email: "frank@acme.com",   role: "Engineer", team: "Mobile",    teamColor: "neutral" },
-      { name: "Grace Kim",      email: "grace@acme.com",   role: "Designer", team: "Design",    teamColor: "warning" },
-      { name: "Henry Davis",    email: "henry@acme.com",   role: "Sales",    team: "Growth",    teamColor: "danger" },
-    ];
-
-    function filterContacts(query) {
-      const q = (query ?? "").toLowerCase().trim();
-      if (!q) return CONTACTS;
-      return CONTACTS.filter((c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.role.toLowerCase().includes(q),
-      );
-    }
-
-    const elContacts = document.getElementById("rui-contacts");
-    elContacts.setTools({
-      list_contacts: ({ q }) => ({ rows: filterContacts(q) }),
-    });
-    elContacts.setResponse(document.getElementById("src-contacts").textContent);
-
-    /* -------- Example 2: read + write todos -------- */
-    const todos = {
-      list: [
-        { id: "t1", title: "Write release notes", done: false },
-        { id: "t2", title: "Review PR #482",      done: true  },
-        { id: "t3", title: "Schedule demo call",  done: false },
-      ],
-      seq: 4,
-      add(title) {
-        const trimmed = (title ?? "").trim();
-        if (!trimmed) return;
-        this.list.unshift({ id: `t${this.seq++}`, title: trimmed, done: false });
-      },
-      toggle(id) {
-        const item = this.list.find((t) => t.id === id);
-        if (item) item.done = !item.done;
-      },
-    };
-
-    const elTodos = document.getElementById("rui-todos");
-    elTodos.setTools({
-      list_todos:    ()           => ({ rows: todos.list.map((t) => ({ ...t })) }),
-      add_todo:      ({ title })  => { todos.add(title);   return { ok: true }; },
-      toggle_todo:   ({ id })     => { todos.toggle(id);   return { ok: true }; },
-    });
-    elTodos.setResponse(document.getElementById("src-todos").textContent);
-
-    /* -------- Example 3: polling -------- */
-    const elMetrics = document.getElementById("rui-metrics");
-    const metrics = { labels: [], series: [] };
-    const seedSize = 8;
-    const now = new Date();
-    for (let i = seedSize; i > 0; i--) {
-      const t = new Date(now.getTime() - i * 2000);
-      metrics.labels.push(t.toLocaleTimeString([], { hour12: false, minute: "2-digit", second: "2-digit" }));
-      metrics.series.push(Math.round(60 + Math.random() * 40));
-    }
-
-    elMetrics.setTools({
-      metrics: () => {
-        const sample = new Date();
-        metrics.labels = [
-          ...metrics.labels.slice(-(seedSize - 1)),
-          sample.toLocaleTimeString([], { hour12: false, minute: "2-digit", second: "2-digit" }),
-        ];
-        metrics.series = [
-          ...metrics.series.slice(-(seedSize - 1)),
-          Math.round(60 + Math.random() * 40),
-        ];
-        return { labels: [...metrics.labels], series: [...metrics.series] };
-      },
-    });
-    elMetrics.setResponse(document.getElementById("src-metrics").textContent);
-    }
-  }
 };
 
-import "../../dist/streaming-ui-script.js";
+import "../../dist/aktion.js";
 
 const root = document.getElementById("example-root");
 const params = new URLSearchParams(window.location.search);
-const slug = params.get("example") || "tools-example";
+const slug = params.get("example") || "settings-app";
 const example = EXAMPLES[slug];
 
 if (!example) {
-  document.title = "Example not found · streaming-ui-script";
+  document.title = "Example not found · Aktion";
   root.innerHTML = renderNotFound(slug);
 } else {
   document.title = example.docTitle;
   root.innerHTML = renderShell(example);
   customElements
-    .whenDefined("streaming-ui-script")
+    .whenDefined("aktion-app")
     .then(() => {
       try {
         example.setup();
@@ -6226,7 +1052,7 @@ function renderNotFound(badSlug) {
     <header class="example-topbar">
       <a class="example-brand" href="live-examples.html">
         <span class="dot"></span>
-        streaming-ui-script · live example
+        Aktion · live example
       </a>
       <a class="example-back" href="live-examples.html">← Back to live examples</a>
     </header>
@@ -6273,7 +1099,7 @@ function renderCard(card) {
     })
     .join("");
   const output = card.render
-    ? `<div class="example-output"><streaming-ui-script id="${card.render.elId}" theme="${card.render.theme}"></streaming-ui-script></div>`
+    ? `<div class="example-output"><aktion-app id="${card.render.elId}" theme="${card.render.theme}"></aktion-app></div>`
     : "";
   const extra = card.extraHtml || "";
   return `<article class="example-card"${idAttr}>${heading}${lede}${codeBlocks}${output}${extra}</article>`;

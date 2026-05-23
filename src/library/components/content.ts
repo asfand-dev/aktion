@@ -1,6 +1,9 @@
 /**
- * Content components: TextContent, Image, Link, Badge, BadgeList, Callout,
+ * Content components: Text, Image, Link, Badge, BadgeList, Callout,
  * CodeBlock, Skeleton, Markdown, Icon, Quote, Container, Spacer, Spinner.
+ *
+ * `TextContent` is exported as a deprecated alias for `Text` so existing
+ * Aktion programs keep rendering — prefer `Text` in new code.
  */
 
 import type { ComponentSpec } from "../types.js";
@@ -64,23 +67,68 @@ const TEXT_VARIANTS = [
   "title",
 ] as const;
 
+/**
+ * Sanitise an inline CSS declaration string before it lands on a DOM
+ * element's `style` attribute. The `<span>` style attribute can't host
+ * `<style>` injection, but we still strip the legacy attack vectors
+ * (IE-only `expression()`, `javascript:` URLs, `behavior:`, `@import`)
+ * and any angle brackets defensively. Returns an empty string when the
+ * input is rejected so callers can drop the attribute entirely.
+ */
+function sanitiseInlineStyle(input: unknown): string {
+  const raw = asString(input).trim();
+  if (!raw) return "";
+  if (/[<>]/.test(raw)) return "";
+  if (/\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(raw)) {
+    return "";
+  }
+  return raw;
+}
+
+const TEXT_PROPS = [
+  { name: "value", type: "string" },
+  { name: "variant", type: "string", optional: true, enum: TEXT_VARIANTS },
+  { name: "tone", type: "string", optional: true, enum: ["default", "muted", "primary", "success", "warning", "danger"], description: "Visual accent" },
+  {
+    name: "style",
+    type: "string",
+    optional: true,
+    description: "Inline CSS declarations applied to the rendered element (e.g. \"font-size: 16px; font-weight: bold; color: #000;\").",
+  },
+] as const;
+
+const renderText: ComponentSpec["render"] = (_node, props) => {
+  const variant = asString(props.variant, "body");
+  const tone = asString(props.tone, "default");
+  const style = sanitiseInlineStyle(props.style);
+  return el("span", {
+    class: "rui-text",
+    "data-variant": variant,
+    "data-color": tone,
+    style: style || null,
+  }, [asString(props.value)]);
+};
+
+export const Text: ComponentSpec = {
+  name: "Text",
+  description:
+    "Renders plain text with a typographic variant. Optional `style` prop " +
+    "accepts a CSS declaration string (e.g. \"font-size: 16px; color: #000;\") " +
+    "applied directly to the rendered element.",
+  props: TEXT_PROPS,
+  render: renderText,
+};
+
+/**
+ * Deprecated alias for `Text`. Kept registered so existing Aktion
+ * programs that still emit `TextContent(...)` keep rendering. New code
+ * should use `Text(...)`.
+ */
 export const TextContent: ComponentSpec = {
   name: "TextContent",
-  description: "Renders plain text with a typographic variant.",
-  props: [
-    { name: "value", type: "string" },
-    { name: "variant", type: "string", optional: true, enum: TEXT_VARIANTS },
-    { name: "tone", type: "string", optional: true, enum: ["default", "muted", "primary", "success", "warning", "danger"], description: "Visual accent" },
-  ],
-  render: (_node, props) => {
-    const variant = asString(props.variant, "body");
-    const tone = asString(props.tone, "default");
-    return el("span", {
-      class: "rui-text",
-      "data-variant": variant,
-      "data-color": tone,
-    }, [asString(props.value)]);
-  },
+  description: "Deprecated alias for `Text`. Prefer `Text(...)` — both render identically.",
+  props: TEXT_PROPS,
+  render: renderText,
 };
 
 const IMAGE_FIT = ["cover", "contain", "fill", "none", "scale-down"] as const;
@@ -180,13 +228,13 @@ export const Badge: ComponentSpec = {
     "Small pill-style tag for status, counts, categories. Accepts an " +
     "optional leading `icon` and a `size`.",
   props: [
-    { name: "label", type: "string" },
-    { name: "variant", type: "string", optional: true, enum: BADGE_VARIANTS, description: "Visual tone" },
+    { name: "label", type: "string", positional: true },
+    { name: "tone", type: "string", optional: true, enum: BADGE_VARIANTS, aliases: ["variant"], description: "Visual tone" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name (e.g. \"star\")" },
     { name: "size", type: "string", optional: true, enum: SIZE_ENUM },
   ],
   render: (_node, props) => {
-    const variant = asString(props.variant, "neutral");
+    const variant = asString(props.tone, "neutral");
     const size = normaliseSize(props.size, "md");
     const root = el("span", {
       class: "rui-badge",
@@ -209,12 +257,12 @@ export const BadgeList: ComponentSpec = {
   name: "BadgeList",
   description: "Cluster of Badge pills rendered from an array of strings.",
   props: [
-    { name: "labels", type: "string[]", description: "Array of badge labels" },
-    { name: "variant", type: "string", optional: true, enum: BADGE_VARIANTS },
+    { name: "labels", type: "string[]", positional: true, description: "Array of badge labels" },
+    { name: "tone", type: "string", optional: true, enum: BADGE_VARIANTS, aliases: ["variant"] },
     { name: "size", type: "string", optional: true, enum: SIZE_ENUM },
   ],
   render: (_node, props) => {
-    const variant = asString(props.variant, "neutral");
+    const variant = asString(props.tone, "neutral");
     const size = normaliseSize(props.size, "md");
     const root = el("div", { class: "rui-badge-list" });
     for (const raw of asArray(props.labels)) {
@@ -238,16 +286,16 @@ export const Callout: ComponentSpec = {
   name: "Callout",
   description:
     "Highlighted callout banner with variant, title, description, and " +
-    "leading icon. Pass `compact=true` for a one-line inline-note rendering.",
+    "leading icon. Pass `compact: true` for a one-line inline-note rendering.",
   props: [
-    { name: "variant", type: "string", optional: true, enum: CALLOUT_VARIANTS },
-    { name: "title", type: "string" },
-    { name: "description", type: "string", optional: true, description: "Body text" },
+    { name: "tone", type: "string", optional: true, enum: CALLOUT_VARIANTS, aliases: ["variant"] },
+    { name: "title", type: "string", positional: true, required: true },
+    { name: "description", type: "string", optional: true, aliases: ["text"], description: "Body text" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
     { name: "compact", type: "boolean", optional: true, description: "Render with the dense, one-line note shape." },
   ],
   render: (_node, props) => {
-    const variant = asString(props.variant, "info");
+    const variant = asString(props.tone, "info");
     const compact = asBoolean(props.compact);
     const root = el("div", {
       class: "rui-callout",
@@ -274,20 +322,23 @@ export const CodeBlock: ComponentSpec = {
     "accepts a string like `\"3-5,8\"` to emphasise specific lines.",
   props: [
     { name: "language", type: "string", optional: true, description: "Display label (e.g. ts, bash)" },
-    { name: "codeString", type: "string", description: "Raw source text" },
+    { name: "codeString", type: "string", positional: true, required: true, aliases: ["code"], description: "Raw source text" },
     { name: "showLineNumbers", type: "boolean", optional: true, description: "Render a left-side line-number gutter" },
-    { name: "highlightLines", type: "string", optional: true, description: "Highlight ranges, e.g. \"3-5,8\"" },
+    { name: "highlightLines", type: "string", optional: true, aliases: ["highlight"], description: "Highlight ranges, e.g. \"3-5,8\"" },
+    { name: "copy", type: "boolean", optional: true, description: "Show the copy-to-clipboard button (default true)" },
   ],
   render: (_node, props) => {
     const language = asString(props.language);
     const code = asString(props.codeString);
     const showLineNumbers = asBoolean(props.showLineNumbers);
     const highlights = parseLineRanges(asString(props.highlightLines));
+    const showCopy = props.copy === undefined ? true : asBoolean(props.copy);
     const root = el("div", { class: "rui-code-block" });
 
-    if (language || true) {
+    if (language || showCopy) {
       const head = el("div", { class: "rui-code-block-head" });
       if (language) head.append(el("span", { class: "rui-code-block-language" }, [language]));
+      if (showCopy) {
       const copyBtn = el("button", {
         type: "button",
         class: "rui-code-block-copy",
@@ -316,6 +367,7 @@ export const CodeBlock: ComponentSpec = {
         }
       };
       head.append(copyBtn);
+      }
       root.append(head);
     }
 
@@ -389,7 +441,7 @@ export const Skeleton: ComponentSpec = {
     "animation that respects `prefers-reduced-motion`.",
   props: [
     { name: "variant", type: "string", optional: true, enum: SKELETON_VARIANTS },
-    { name: "lines", type: "number", optional: true, description: "Lines for the `paragraph` variant (default 3)" },
+    { name: "lines", type: "number", optional: true, aliases: ["count"], description: "Lines for the `paragraph` variant (default 3)" },
     { name: "height", type: "number | string", optional: true, description: "Line height in px (paragraph) or CSS height for custom shape" },
     { name: "shape", type: "string", optional: true, enum: SKELETON_SHAPES, description: "Force a primitive shape (rect/circle)" },
     { name: "width", type: "string", optional: true, description: "CSS width for shape-only skeletons" },
@@ -573,7 +625,7 @@ export const Quote: ComponentSpec = {
     "+ rating shape.",
   props: [
     { name: "text", type: "string" },
-    { name: "cite", type: "string", optional: true, description: "Attribution text shown below the quote" },
+    { name: "cite", type: "string", optional: true, aliases: ["attribution", "author"], description: "Attribution text shown below the quote" },
     { name: "tone", type: "string", optional: true, enum: ["default", "primary", "success", "warning", "danger", "info"] },
   ],
   render: (_node, props) => {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>streaming-ui-script · Generative UI for any framework</title>
+  <title>Aktion · Generative UI for any framework</title>
   <meta name="description" content="A single web component that renders LLM-generated UI from a compact streaming language. Drop-in install, framework-agnostic, theme-aware, batteries included." />
   <script>
     (function () {
@@ -20,92 +20,74 @@
 </head>
 <body data-page="introduction">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
-        <span class="hero-eyebrow">v0.5 · Generative UI</span>
+        <span class="hero-eyebrow">Generative UI · One web component</span>
         <h1>Render LLM-generated UI in any framework.</h1>
         <p class="lead">
-          <code>&lt;streaming-ui-script&gt;</code> is a single web component that
-          turns a compact, streaming-first language into a rich, interactive UI
-          inside its shadow DOM. Works with React, Vue, Angular, Svelte, plain
-          HTML — or no framework at all.
+          <code>&lt;aktion-app&gt;</code> is a single web component that
+          turns a compact, streaming-first DSL into a rich, interactive UI
+          inside its shadow DOM. Works in React, Vue, Angular, Svelte, plain
+          HTML &mdash; or no framework at all.
         </p>
         <div class="hero-cta">
-          <a class="btn" href="get-started.html">Get started →</a>
+          <a class="btn" href="get-started.html">Get started &rarr;</a>
           <a class="btn btn-ghost" href="live-examples.html">Browse live demos</a>
         </div>
       </header>
 
       <h2 id="install">Drop-in CDN install</h2>
-      <p>One script tag and one custom element — that's the whole integration.</p>
-<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;
-&lt;streaming-ui-script theme="light"&gt;&lt;/streaming-ui-script&gt;
+      <p>One script tag and one custom element &mdash; that&rsquo;s the whole integration.</p>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
+&lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
 &lt;script&gt;
-  const el = document.querySelector("streaming-ui-script");
-  el.setResponse(`root = Stack([greeting])
-greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
+  const el = document.querySelector("aktion-app");
+  el.setResponse(`_app_ = Stack([greeting])
+greeting = Card([CardHeader("Hello", subtitle: "Generative UI in plain HTML")])`);
 &lt;/script&gt;</code></pre>
 
-      <h2 id="features">Why streaming-ui-script?</h2>
+      <h2 id="features">Why Aktion?</h2>
       <div class="feature-grid">
         <div class="feature">
           <h3>Framework-agnostic</h3>
-          <p>Built on the standard Custom Elements API — works wherever HTML works.</p>
+          <p>Built on the standard Custom Elements API &mdash; works wherever HTML works. Shadow DOM keeps styles isolated.</p>
         </div>
         <div class="feature">
           <h3>Streaming-first language</h3>
-          <p>Parser, evaluator, reactive state, queries, mutations, and 20+ built-ins.</p>
+          <p>Parser, evaluator, reactive state, HTTP primitive, and 30+ <code>@</code> builtins ship in one bundle.</p>
         </div>
         <div class="feature">
-          <h3>Stream tokens live</h3>
-          <p>Use <code>appendChunk()</code> to feed LLM tokens as they arrive — the UI renders progressively.</p>
+          <h3>Renders progressively</h3>
+          <p>Feed LLM tokens via <code>appendChunk()</code> &mdash; the UI renders top-down as the response streams.</p>
+        </div>
+        <div class="feature">
+          <h3>130+ components</h3>
+          <p>Layout, forms, charts, data, patterns (Hero, KanbanBoard, PricingTable&hellip;), app shell, and editors.</p>
         </div>
         <div class="feature">
           <h3>Seven themes built in</h3>
-          <p>Switch via the <code>theme</code> attribute or pass a custom JSON token map.</p>
+          <p>Switch via the <code>theme</code> attribute or pass a custom JSON token map. In-script <code>Theme({...})</code> for brand overrides.</p>
         </div>
         <div class="feature">
           <h3>System prompt included</h3>
-          <p>Auto-generated <code>system_prompt.txt</code> stays in lock-step with the bundled component library.</p>
+          <p>Full <code>system_prompt.txt</code> and compact <code>system_prompt_chat.txt</code> stay in lock-step with the library.</p>
         </div>
         <div class="feature">
-          <h3>Extensible</h3>
-          <p>Register your own components via <code>registerComponents([...])</code> — they show up in the prompt automatically.</p>
+          <h3>Hash-based routing</h3>
+          <p>Multi-page UIs via <code>pages = _router_({ "/": Page() })</code> + <code>NavLink</code>. Always on, deep links and back/forward just work.</p>
         </div>
         <div class="feature">
-          <h3>JavaScript interactions</h3>
-          <p>Built-in <code>Script(...)</code> + <code>@Js(...)</code> surfaces for React-style hooks — always on, no extra flags.</p>
-        </div>
-        <div class="feature">
-          <h3>Multi-page routing</h3>
-          <p>Hash-based <code>Routes</code>, <code>NavLink</code>, and <code>@Navigate</code> ship with every renderer.</p>
+          <h3>JavaScript escape hatch</h3>
+          <p><code>js{ &hellip; }</code> blocks inside <code>effect</code> / <code>action</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
         </div>
       </div>
 
       <h2 id="live-demo">Live demo</h2>
       <p>
-        The component below was rendered from a few lines of Streaming UI Script.
-        Use the theme picker to swap palettes — the preview updates instantly.
+        The component below was rendered from a few lines of Aktion.
+        Use the theme picker to swap palettes &mdash; the preview updates instantly.
       </p>
 
       <div class="theme-picker" style="margin-bottom:14px;">
@@ -131,28 +113,48 @@ greeting = Card([CardHeader("Hello", "Generative UI in plain HTML")])`);
         </div>
         <div class="example-panel" data-key="preview" data-active="true">
           <div class="example-output">
-            <streaming-ui-script theme="light"></streaming-ui-script>
+            <aktion-app theme="light"></aktion-app>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">root = Stack([welcome, kpis, chart])
+<pre><code class="example-source">_app_ = Stack([welcome, kpis, chart])
 welcome = Card([
-  CardHeader("Hello there", "Generative UI rendered from Streaming UI Script"),
+  CardHeader("Hello there", subtitle: "Generative UI rendered from Aktion"),
   Markdown("This card was streamed in **plain text** and rendered as a real UI.")
 ])
-kpis = Stack([
-  StatCard("Active users", "12,540", "up", "+18% vs last week"),
-  StatCard("Revenue", "$48.2k", "flat", "0% vs last week"),
-  StatCard("Errors", "12", "down", "-32% vs last week")
-], "row", "m", "stretch", "start", true)
+kpis = Stats([
+  StatCard("Active users", value: "12,540", trend: "up", delta: "+18% vs last week"),
+  StatCard("Revenue", value: "$48.2k", trend: "flat", delta: "0% vs last week"),
+  StatCard("Errors", value: "12", trend: "down", delta: "-32% vs last week")
+], layout: "grid")
 chart = Card([
   CardHeader("Daily traffic"),
-  LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], [
-    Series("Visits",[120,180,160,210,250,200,230]),
-    Series("Signups",[12,18,15,22,28,21,24])
+  LineChart(labels: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], series: [
+    Series("Visits", values: [120,180,160,210,250,200,230]),
+    Series("Signups", values: [12,18,15,22,28,21,24])
   ])
 ])
 </code></pre>
+        </div>
+      </div>
+
+      <h2 id="how-it-works">How it works</h2>
+      <p>
+        Aktion is line-oriented and error-tolerant. Each statement
+        commits to the DOM as soon as it streams in. Three layers cooperate:
+      </p>
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>1. Declarative tree</h3>
+          <p>Pure-data composition of components: <code>_app_ = Stack([header, body])</code>. Re-computed on every render.</p>
+        </div>
+        <div class="feature">
+          <h3>2. Reactive state &amp; HTTP</h3>
+          <p>One sigil: <code>$name = value</code>. One network primitive: <code>http({ url, method, &hellip; })</code>. Changes schedule a re-render automatically.</p>
+        </div>
+        <div class="feature">
+          <h3>3. Actions &amp; effects</h3>
+          <p><code>action Name() { &hellip; }</code> for click-driven mutations, <code>effect [ ...deps ] { &hellip; }</code> for declarative background work.</p>
         </div>
       </div>
 
@@ -161,48 +163,62 @@ chart = Card([
         <a class="demo-card" href="get-started.html">
           <span class="demo-tag">Setup</span>
           <h3>Get started</h3>
-          <p>The 30-second integration guide — load the bundle, mount the tag, stream a response.</p>
-          <span class="demo-arrow">Read the guide →</span>
+          <p>The 30-second integration guide &mdash; load the bundle, mount the tag, stream a response.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="frameworks.html">
           <span class="demo-tag">Frameworks</span>
           <h3>Framework integration</h3>
           <p>Drop-in setup for React, Next.js, Vue, Angular, Svelte, and plain HTML.</p>
-          <span class="demo-arrow">See recipes →</span>
+          <span class="demo-arrow">See recipes &rarr;</span>
         </a>
         <a class="demo-card" href="language.html">
           <span class="demo-tag">Language</span>
           <h3>Language reference</h3>
-          <p>Full syntax for Streaming UI Script — statements, expressions, state, built-ins.</p>
-          <span class="demo-arrow">View reference →</span>
+          <p>Full syntax for Aktion &mdash; statements, expressions, state, built-ins.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
         </a>
         <a class="demo-card" href="components.html">
           <span class="demo-tag">Library</span>
           <h3>Component reference</h3>
           <p>Every built-in component, prop, and enum the LLM can reach for.</p>
-          <span class="demo-arrow">Browse library →</span>
+          <span class="demo-arrow">Browse library &rarr;</span>
+        </a>
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>Wire button clicks, form submits, and follow-ups to reactive state, HTTP, navigation, and JS.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="javascript-interactions.html">
+          <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p><code>Script(...)</code> + <code>@Js(...)</code> for effects the declarative components don't cover.</p>
-          <span class="demo-arrow">Learn more →</span>
+          <p><code>effect</code> &amp; <code>action</code> blocks with <code>js{ &hellip; }</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
+          <span class="demo-arrow">Learn more &rarr;</span>
         </a>
         <a class="demo-card" href="routing.html">
+          <span class="demo-tag">Navigation</span>
           <h3>Routing</h3>
-          <p>Hash-based multi-page UIs via <code>Routes</code>, <code>NavLink</code>, and <code>@Navigate</code>.</p>
-          <span class="demo-arrow">Read the guide →</span>
+          <p>Hash-based multi-page UIs via <code>pages = _router_({ &hellip; })</code> and <code>NavLink</code>.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="themes.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Themes</h3>
+          <p>Seven built-in themes plus a live customization studio.</p>
+          <span class="demo-arrow">Explore themes &rarr;</span>
         </a>
         <a class="demo-card" href="playground.html">
           <span class="demo-tag">Try it</span>
           <h3>Playground</h3>
-          <p>Edit Streaming UI Script live — the preview re-renders on every keystroke.</p>
-          <span class="demo-arrow">Open playground →</span>
+          <p>Edit Aktion live &mdash; the preview re-renders on every keystroke.</p>
+          <span class="demo-arrow">Open playground &rarr;</span>
         </a>
         <a class="demo-card" href="live-examples.html">
           <span class="demo-tag">Showcase</span>
           <h3>Live examples</h3>
-          <p>Chat, dashboards, commerce, routing, JavaScript apps — every demo, with source.</p>
-          <span class="demo-arrow">Browse demos →</span>
+          <p>Chat, dashboards, commerce, routing, data explorers &mdash; every demo, with source.</p>
+          <span class="demo-arrow">Browse demos &rarr;</span>
         </a>
       </div>
     </main>

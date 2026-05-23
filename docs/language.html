@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Language reference · streaming-ui-script</title>
-  <meta name="description" content="Full syntax for Streaming UI Script — statements, expressions, reactive state, queries, mutations, and built-ins." />
+  <title>Language reference · Aktion</title>
+  <meta name="description" content="Full syntax for Aktion — statements, expressions, reactive state, HTTP, actions, effects, control flow, routing, and the built-in @-functions." />
   <script>
     (function () {
       try {
@@ -20,257 +20,577 @@
 </head>
 <body data-page="language">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Reference</span>
-        <h1>Streaming UI Script language.</h1>
+        <h1>Aktion language.</h1>
         <p class="lead">
-          A compact, line-oriented language designed for LLMs. Each statement
-          is a single assignment of an identifier to an expression. The parser
-          is forgiving — invalid lines are dropped and valid lines render
-          immediately.
+          A compact, line-oriented language designed for LLMs. A program is a
+          flat list of <code>name = expression</code> statements. The parser
+          is error-tolerant &mdash; invalid lines are dropped and valid lines
+          render immediately as they stream in.
         </p>
       </header>
 
-      <h2>Statements</h2>
-      <table class="signature-table">
-        <thead><tr><th>Kind</th><th>Syntax</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td>Component assignment</td><td><code>name = Component(args...)</code></td><td><code>card = Card([header])</code></td></tr>
-          <tr><td>State variable</td><td><code>$name = defaultValue</code></td><td><code>$days = "7"</code></td></tr>
-          <tr><td>Persistent state</td><td><code>$$name = defaultValue</code></td><td><code>$$theme = "dark"</code> — survives page reloads via <code>localStorage</code>.</td></tr>
-          <tr><td>Component macro</td><td><code>Name(params) = Expression</code></td><td><code>MyUserCard(user) = Card([Avatar(user.name), TextContent(user.role)])</code> — call <code>MyUserCard(u)</code> anywhere a component fits.</td></tr>
-          <tr><td>Query / Mutation</td><td><code>name = Query(...) | Mutation(...)</code></td><td><code>data = Query("get_users", {}, {rows: []})</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Expressions</h2>
-      <table class="signature-table">
-        <thead><tr><th>Type</th><th>Syntax</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td>String (single-line)</td><td><code>"text"</code> or <code>'text'</code></td><td><code>"Hello"</code></td></tr>
-          <tr><td>String (multi-line)</td><td><code>`text`</code> (backticks)</td><td><code>`line 1<br>line 2`</code> — great for <code>Script(...)</code> bodies</td></tr>
-          <tr><td>Template literal</td><td><code>`Hello ${expression}`</code></td><td><code>`${$rows.length} rows · ${@Format(total, "currency", "USD")}`</code> — backticks with <code>${…}</code> blocks interpolate any expression.</td></tr>
-          <tr><td>Number</td><td><code>123</code>, <code>-5</code>, <code>12.5</code></td><td><code>42</code></td></tr>
-          <tr><td>Boolean</td><td><code>true</code> / <code>false</code></td><td><code>true</code></td></tr>
-          <tr><td>Null</td><td><code>null</code></td><td></td></tr>
-          <tr><td>Array</td><td><code>[a, b, c]</code></td><td><code>["Mon","Tue"]</code></td></tr>
-          <tr><td>Array spread</td><td><code>[...iterable, ...other]</code></td><td><code>[...$pinned, ...$todos, lastItem]</code></td></tr>
-          <tr><td>Object</td><td><code>{key: value, ...}</code></td><td><code>{limit: 10}</code></td></tr>
-          <tr><td>Object spread</td><td><code>{...source, key: value}</code></td><td><code>{...$current, status: "done"}</code></td></tr>
-          <tr><td>Reference</td><td><code>identifier</code></td><td><code>card</code></td></tr>
-          <tr><td>State reference</td><td><code>$name</code> or <code>$$name</code></td><td><code>$days</code>, <code>$$theme</code></td></tr>
-          <tr><td>Member access</td><td><code>obj.field</code></td><td><code>data.rows.title</code> (array pluck)</td></tr>
-          <tr><td>Optional chain</td><td><code>obj?.field</code></td><td><code>$user?.profile?.avatar</code> — short-circuits to <code>undefined</code> when the target is null.</td></tr>
-          <tr><td>Component call</td><td><code>Component(args)</code></td><td><code>PageHeader("Hi")</code></td></tr>
-          <tr><td>Builtin call</td><td><code>@Builtin(args)</code></td><td><code>@Filter(rows, "name", "contains", $q)</code></td></tr>
-          <tr><td>Ternary</td><td><code>cond ? a : b</code></td><td><code>$open ? form : null</code></td></tr>
-          <tr><td>Binary</td><td><code>a + b</code>, <code>a == b</code>, <code>a &amp;&amp; b</code></td><td><code>"" + $days + " days"</code></td></tr>
-          <tr><td>Nullish coalescing</td><td><code>a ?? b</code></td><td><code>$user.name ?? "Guest"</code> — returns <code>a</code> unless it is null/undefined (unlike <code>||</code>, which also discards 0/<code>""</code>/<code>false</code>).</td></tr>
-          <tr><td>Unary</td><td><code>!a</code>, <code>-a</code></td><td><code>!$open</code></td></tr>
-        </tbody>
-      </table>
-
-      <h2>Lazy control flow</h2>
+      <h2 id="mental-model">Mental model</h2>
       <p>
-        <code>@If</code> and <code>@Switch</code> evaluate <strong>only</strong>
-        the matching branch — useful when the unused branch would otherwise
-        read loop variables that aren't in scope, or invoke a slow builtin.
+        Aktion has a single program shape: a list of named bindings. The
+        reserved name <code>_app_</code> is the entry point &mdash; every
+        response MUST begin with <code>_app_ = ...</code> on the first line.
+        Every other binding is referenced from <code>_app_</code> directly or
+        transitively. Re-render happens automatically whenever a reactive
+        atom changes; there is no manual subscription model.
       </p>
-<pre><code>body = @If($mode == "empty", emptyState, dataView)
-panel = @Switch($tab, {
-  overview: overviewPanel,
-  billing:  billingPanel,
-  security: securityPanel
-}, overviewPanel)</code></pre>
+<pre><code>_app_ = Stack([header, dashboard])
 
-      <h2>Destructuring in <code>@Each</code></h2>
-      <p>
-        The middle argument of <code>@Each</code> can destructure each row's
-        fields directly, so the template body skips the <code>row.</code>
-        prefix:
-      </p>
-<pre><code># Bind id, name, role directly:
-list = @Each($users, "{id, name, role}", Card([TextContent(name), Badge(role)]))
+header = SectionHeader("Acme Dashboard")
 
-# Bind BOTH the row object AND individual fields:
-list = @Each($users, "u, {id, name}", Card([TextContent(name), TextContent(u.email)]))</code></pre>
-
-      <h2>Responsive prop maps</h2>
-      <p>
-        Layout components accept either a single value or a per-breakpoint
-        map: <code>{base?, sm?, md?, lg?, xl?}</code>. Mobile-first breakpoints
-        are <code>base</code> (less than 640px), <code>sm</code> (≥640), <code>md</code>
-        (greater than or equal to 768px), <code>lg</code> (greater than or equal to 1024px), <code>xl</code> (greater than or equal to 1280px). Numbers /
-        bare strings still work for simple sections.
-      </p>
-<pre><code>cards  = Grid(items, {sm: 1, md: 2, lg: 4}, "l")
-layout = Stack(children, {sm: "column", md: "row"}, "m")</code></pre>
-
-      <h2>Comments</h2>
-      <p>
-        The parser strips three comment styles silently. They never appear in
-        the rendered output and are safe to mix with real statements:
-      </p>
-      <table class="signature-table">
-        <thead><tr><th>Style</th><th>Syntax</th><th>Notes</th></tr></thead>
-        <tbody>
-          <tr><td>Line</td><td><code>// rest of line</code></td><td>Skipped to end of line. Canonical form — used by editor comment-toggle shortcuts.</td></tr>
-          <tr><td>Line (alt)</td><td><code># rest of line</code></td><td>Shell / Python-style alternative. Identical semantics to <code>//</code>; convenient for marking sections in chat-style examples.</td></tr>
-          <tr><td>Block</td><td><code>/* ... */</code></td><td>Spans multiple lines. Useful for temporarily disabling a chunk of script.</td></tr>
-        </tbody>
-      </table>
-      <p>
-        Comments inside string literals (<code>"..."</code>, <code>'...'</code>,
-        and multi-line <code>`...`</code>) are part of the string and are not
-        stripped. LLM-generated responses should still leave comments out to
-        save tokens — identifiers double as documentation.
-      </p>
-
-      <h2>Reactive state</h2>
-      <p>
-        Variables prefixed with <code>$</code> are reactive. Declare them with a
-        literal default. When a state value changes, every expression that read it
-        re-evaluates and the affected components re-render.
-      </p>
-<pre><code>$days = "7"
-$showEdit = false
-filter = Select("days", [SelectItem("7","7d"), SelectItem("30","30d")], null, null, $days)
-data = Query("usage", {days: $days}, {rows: []})</code></pre>
-      <p>
-        Passing a <code>$variable</code> as the value argument of an Input, Select,
-        or Checkbox enables two-way binding: user input updates the variable,
-        which in turn re-runs anything that depends on it.
-      </p>
-
-      <h3>Persistent state (<code>$$variable</code>)</h3>
-      <p>
-        Declare with the double-dollar sigil to make a value survive page
-        reloads. The runtime stores updates via the host's storage adapter
-        (defaults to <code>localStorage</code>), keyed by the element's id
-        + the variable name so two <code>&lt;streaming-ui-script&gt;</code>
-        instances on the same page never collide. Read / write / reset
-        surface is identical to <code>$</code> — only the sigil changes.
-      </p>
-<pre><code>$$theme        = "dark"
-$$cart         = []
-$$lastVisited  = "/dashboard"
-
-themeToggle = Switch("theme", "Dark mode", $$theme == "dark")
-addToCart   = Button("Add", Action([@Set($$cart, [...$$cart, item])]))</code></pre>
-      <p>
-        Use it for anything the user expects to find again after a refresh:
-        theme picks, sidebar collapsed state, draft form input, recently
-        viewed item, multi-step wizard cursor.
-      </p>
-
-      <h3>Custom component macros</h3>
-      <p>
-        Factor repeated component trees into reusable DSL-level components.
-        The macro's parameters are scoped to the body, just like
-        <code>@Each</code> loop variables.
-      </p>
-<pre><code>MyUserCard(user) = Card([
-  Avatar(user.name),
-  TextContent(user.role)
+dashboard = Card([
+  CardHeader("Active users", subtitle: "Last 7 days"),
+  Text(@Format($activeUsers))
 ])
-root = Grid(@Each($users, "u", MyUserCard(u)))</code></pre>
 
-      <h2>Built-in functions</h2>
+$activeUsers = 12540</code></pre>
+
+      <p>Three identifier conventions cooperate:</p>
+      <ul>
+        <li><strong>Plain bindings</strong> &mdash; <code>name = expr</code>. A non-reactive alias; reading it never subscribes.</li>
+        <li><strong>Reactive atoms</strong> &mdash; <code>$name = value</code>. A tracked cell; reading subscribes the surrounding component / effect, writing notifies subscribers.</li>
+        <li><strong>Reserved built-ins</strong> &mdash; <code>_app_</code> (UI root), <code>theme</code> (optional brand override), <code>_route_</code> (router-owned reactive surface), <code>$i18n</code> (i18n bundle).</li>
+      </ul>
+
+      <h2 id="statements">Statements</h2>
       <table class="signature-table">
-        <thead><tr><th>Group</th><th>Functions</th></tr></thead>
+        <thead><tr><th>Kind</th><th>Syntax</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Aggregation</td><td><code>@Count, @Sum, @Avg, @Min, @Max, @First, @Last</code></td></tr>
-          <tr><td>Numeric</td><td><code>@Round(n, decimals?), @Abs, @Floor, @Ceil, @Clamp(n, min, max)</code></td></tr>
-          <tr><td>Array shape</td><td><code>@Filter(arr, "field", "op", value), @Sort(arr, "field", "asc"|"desc"), @Find(arr, "field", "op", value), arr.field, @GroupBy(arr, "field"), @Slice(arr, start?, end?), @Slice(arr, 0, n), @Reverse(arr), @Unique(arr, "field"?), @Range(start, end, step?), @Repeat(value, n), @Pick(obj, ["a","b"])</code></td></tr>
-          <tr><td>Array growth</td><td><code>@Push(arr, value)</code> (returns new array with value appended), <code>[...a, ...b]</code></td></tr>
-          <tr><td>Formatting</td><td><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?), @Format(value, currency?, locale?, "currency", "USD"), @Format(value, locale?, "number"), @FormatDate(value, format?), @Plural(n, singular, plural?)</code></td></tr>
-          <tr><td>String casing</td><td><code>@Capitalize, @Lowercase, @Uppercase, @Titlecase, @Camelcase, @Snakecase, @Kebabcase, @Pascalcase</code></td></tr>
-          <tr><td>Date / time</td><td><code>@Now(), @Today(), @AddDays(date, n)</code> — feed values to <code>@FormatDate</code> for display.</td></tr>
-          <tr><td>Iteration</td><td><code>@Each(arr, "varName", template)</code> — <code>varName</code> can destructure (<code>"{id, name}"</code>) and is local to <code>template</code>.</td></tr>
-          <tr><td>Lazy control flow</td><td><code>@If(cond, trueBranch, falseBranch?), @Switch(value, {key: branch, …}, default?)</code> — only the matching branch evaluates.</td></tr>
-          <tr><td>Array shortcuts</td><td><code>$rows.length</code>, <code>$rows.first</code>, <code>$rows.last</code>, <code>$rows.field</code> (pluck)</td></tr>
-          <tr><td>Action steps</td><td><code>@Run(ref), @Set($var, value), @Reset($a, $b), @ToAssistant("msg"), @OpenUrl("url"), @Navigate("/path"), @Js(body, args?)</code> — see the dedicated <a href="actions.html">Actions guide</a>.</td></tr>
+          <tr><td>Root assignment</td><td><code>_app_ = Expr</code></td><td>Reserved entry point; required, first line.</td></tr>
+          <tr><td>Binding</td><td><code>name = Expr</code></td><td>Plain identifier &mdash; non-reactive alias, can reference other bindings (forward refs OK).</td></tr>
+          <tr><td>Reactive atom</td><td><code>$name = Expr</code></td><td>Mutable, triggers re-render on change.</td></tr>
+          <tr><td>Component decl</td><td><code>component Name(args) { &hellip; return Expr }</code></td><td>User-declared component with per-instance state. MUST end with explicit <code>return</code>.</td></tr>
+          <tr><td>Action decl</td><td><code>action Name(args) { steps }</code></td><td>Imperative block triggered by events. MAY <code>return</code>.</td></tr>
+          <tr><td>Effect decl</td><td><code>effect [ ...deps ] { steps }</code></td><td>Anonymous declarative side effect. Dependencies (<code>$atom</code>, <code>on:mount</code>, <code>on:unmount</code>, <code>on:every(N)</code>, <code>debounce(N)</code>, <code>throttle(N)</code>) live in the bracketed list. <code>effect { &hellip; }</code> is equivalent to <code>effect [on:mount] { &hellip; }</code>.</td></tr>
+          <tr><td>Emit</td><td><code>emit "name" { detail }</code></td><td>Dispatch a <code>CustomEvent</code> on the host (inside action/effect bodies).</td></tr>
+          <tr><td>Theme override</td><td><code>theme = Theme({ tokens })</code></td><td>Top-level binding named <code>theme</code> &mdash; the runtime detects it and applies the tokens as CSS custom properties.</td></tr>
+          <tr><td>i18n config</td><td><code>$i18n = i18n({ &hellip; })</code></td><td>Configures internationalization &mdash; messages, locale, fallback.</td></tr>
+          <tr><td>HTTP defaults</td><td><code>$http = Http({ &hellip; })</code></td><td>Optional response-wide defaults (base URL, headers, retry).</td></tr>
+          <tr><td>Comment</td><td><code># text</code></td><td>Whole-line comment; ignored by the parser.</td></tr>
         </tbody>
       </table>
 
-      <h2>Queries and mutations</h2>
       <p>
-        <code>Query(toolName, args, defaults, refreshSeconds?)</code> reads data
-        and runs immediately. The <code>defaults</code> argument is rendered while
-        the response is in flight, and the optional <code>refreshSeconds</code>
-        sets up auto-polling. <code>Mutation(toolName, args)</code> only runs when
-        a button or action invokes <code>@Run(ref)</code>.
-      </p>
-<pre><code>$title = ""
-create = Mutation("create_ticket", {title: $title})
-list   = Query("list_tickets", {}, {rows: []})
-btn    = Button("Create", Action([@Run(create), @Run(list), @Reset($title)]))</code></pre>
-
-      <h2>Hoisting and streaming</h2>
-      <p>
-        Forward references are allowed. The renderer puts skeletons in for missing
-        identifiers, then swaps them in as the LLM streams more lines. Always lay
-        out the structure first (<code>root = Stack([a, b, c])</code>) and define
-        the children below — the user sees the shell instantly.
+        Statements are line-oriented &mdash; <strong>newline terminates a
+        statement</strong>. Never use semicolons or statement-level commas.
+        Expressions may span multiple lines as long as they sit inside an
+        unmatched <code>[</code>, <code>(</code>, or <code>{</code>.
       </p>
 
-      <h2>JavaScript interactions</h2>
+      <h2 id="expressions">Expressions</h2>
+      <ul>
+        <li><strong>Literals</strong> &mdash; strings (<code>"hello"</code> or <code>'hello'</code>), numbers (<code>42</code>, <code>3.14</code>, <code>1_000_000</code>), booleans (<code>true</code> / <code>false</code>), <code>null</code>.</li>
+        <li><strong>Template literals</strong> &mdash; backticks with <code>${expr}</code> interpolation: <code>`Hi ${$user.name}, you have ${@Count($todos)} todos`</code>.</li>
+        <li><strong>Arrays</strong> &mdash; <code>[1, 2, 3]</code>, <code>[Card1(), Card2()]</code>, multi-line OK.</li>
+        <li><strong>Object literals</strong> &mdash; <code>{ name: "Ada", role: "Engineer" }</code>. Commas optional between rows on separate lines.</li>
+        <li><strong>References</strong> &mdash; <code>name</code>, <code>$reactive</code>, <code>_route_</code>.</li>
+        <li><strong>Member access</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>. Optional chaining: <code>$user?.profile?.name</code>.</li>
+        <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
+        <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>http({&hellip;})</code>, <code>_router_({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
+        <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / %</code>), comparison (<code>== != &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>), nullish coalescing (<code>??</code>), ternary (<code>cond ? a : b</code>).</li>
+        <li><strong>Lambdas</strong> &mdash; <code>(args) =&gt; expr</code> for one-liners, <code>(args) =&gt; { &hellip; }</code> for multi-statement bodies.</li>
+      </ul>
+
+<pre><code># Arithmetic + ternary + reactive read
+greeting = "Hi, " + ($user.name ?? "stranger") + "."
+score    = $hits * 10 + $bonus
+status   = $isActive ? "online" : "offline"
+summary  = `${@Count($orders)} ${@Plural(@Count($orders), "order", "orders")} this week`</code></pre>
+
+      <h2 id="array-shortcuts">Array shortcuts</h2>
+      <ul>
+        <li><code>$rows.length</code> / <code>"hi".length</code> &mdash; element / character count.</li>
+        <li><code>$rows.first</code> / <code>$rows.last</code> &mdash; first or last element (<code>null</code> if empty).</li>
+        <li><strong>Array pluck</strong> &mdash; <code>$rows.title</code> returns <code>[row.title for each row]</code>. Composes with tables (<code>Col("Title", $rows.title)</code>) and charts (<code>PieChart($rows.label, $rows.value)</code>).</li>
+      </ul>
+
+      <h2 id="state">Reactive state</h2>
       <p>
-        Two additional surfaces are always available:
-        <code>Script("id", "body", deps?)</code> for effect-style behaviour,
-        and <code>@Js("code")</code> as an action step. Both share a
-        <code>ctx</code> bridge that exposes reactive state, registered
-        tools, DOM refs, and lifecycle hooks. They are part of the default
-        ("full") system prompt; use <code>getSystemPrompt({ mode: "chat" })</code>
-        when you want a compact, chat-focused prompt without these surfaces.
-        See the dedicated
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        page for the full API.
+        Aktion has <strong>one</strong> reactive atom kind. There is no
+        <code>$state</code>, <code>$persist</code>, <code>$session</code>, or
+        <code>$computed</code> keyword. Every reactive cell is declared and
+        read with the same surface:
+      </p>
+<pre><code>$count = 0
+$user  = { name: "Ada", role: "Engineer" }
+$todos = []
+$theme = "dark"
+
+action increment() {
+  $count = $count + 1
+}</code></pre>
+
+      <h3>Sigil contract</h3>
+      <ul>
+        <li><code>count</code> (no sigil) is a plain binding &mdash; NOT tracked, NOT reactive.</li>
+        <li><code>$count</code> (with sigil) is a tracked atom &mdash; reading subscribes, writing notifies subscribers.</li>
+      </ul>
+
+      <h3>Assignment rules</h3>
+      <ul>
+        <li><strong>Render position</strong> (top-level bindings, component body output, prop values): assignment is forbidden. Use <code>$name = &hellip;</code> declarations to seed.</li>
+        <li><strong>Inside <code>action</code> / <code>effect</code> / lambda bodies</strong>: <code>= += -= *= /= ??= ++ --</code> are allowed against any <code>$name</code> atom.</li>
+        <li><strong>Nested writes require whole-object replacement.</strong> Direct <code>$user.name = "Alex"</code> is rejected &mdash; spread instead: <code>$user = { ...$user, name: "Alex" }</code>. Arrays follow the same rule: <code>$todos = [...$todos, item]</code>, <code>$todos = @Filter($todos, "id", "!=", id)</code>.</li>
+      </ul>
+
+      <h3>Component-scoped state</h3>
+      <p>
+        A <code>$name = value</code> declared <em>inside</em> a
+        <code>component</code> body is per-instance. Two
+        <code>UserCard</code> siblings each have their own
+        <code>$hover</code>. Top-level <code>$name</code> declarations live
+        for the lifetime of the response.
       </p>
 
-      <h2>Routing</h2>
+      <h3>Computed values</h3>
+      <p>There is no dedicated <code>$computed</code> keyword. Just compute:</p>
+<pre><code>$cart  = []
+$total = @Sum($cart.price)        # re-derives when $cart changes
+$open  = @Filter($todos, "done", "==", false)</code></pre>
+
+      <h3>Persistence</h3>
       <p>
-        Four routing primitives ship with every renderer:
-        <code>Routes(items, default?)</code>,
-        <code>Route(path, content)</code>, <code>NavLink(label, to, …)</code>,
-        and the <code>@Navigate("/path")</code> action step. The current path
-        is exposed reactively as <code>$route</code>; matched URL parameters
-        land in the <code>params</code> loop variable inside each Route's
-        content. The default ("full") prompt documents the routing surface;
-        switch to <code>getSystemPrompt({ mode: "chat" })</code> for the
-        compact chat-focused prompt that omits it. See the dedicated
-        <a href="routing.html">routing reference</a> (and
-        <a href="live-example.html?example=routing-demo">live demo</a>) for the full surface.
+        Persistence lives on the <code>storage</code> global (see
+        <a href="#globals">Built-in globals</a>). Read and write directly:
+      </p>
+<pre><code>$theme = storage.get("theme") ?? "light"
+
+action toggleTheme() {
+  $theme = $theme == "light" ? "dark" : "light"
+  storage.set("theme", $theme)
+}</code></pre>
+
+      <h2 id="http">HTTP &mdash; the network primitive</h2>
+      <p>
+        There is exactly one network primitive: <code>http({ url, method, headers, body, query, &hellip; })</code>.
+        Pass any <code>fetch</code>-compatible option plus a convenience
+        <code>query</code> object that is serialised into the URL. The result
+        is a reactive resource bag.
+      </p>
+<pre><code>$orders = http({
+  url:    "/api/users/" + $userId + "/orders",
+  method: "GET",
+  query:  { limit: 5, status: "open" },
+  headers:{ "X-Tenant": $tenant }
+})</code></pre>
+
+      <h3>Reactive resource shape</h3>
+<pre><code>$orders.data         # parsed response body (null until resolved)
+$orders.error        # null on success
+$orders.status       # HTTP status code, e.g. 200
+$orders.loading      # true while in-flight
+$orders.headers      # response headers as a plain object
+$orders.lastUpdated  # ms-epoch of last successful response
+$orders.refetch()    # re-issue the request
+$orders.cancel()     # abort in-flight request</code></pre>
+
+      <h3>Async helper</h3>
+      <p>Use the <code>Async</code> helper component to branch on a resource's state:</p>
+<pre><code>_app_ = Async($orders,
+  loading: LoadingState("Loading orders…"),
+  error:   ErrorState("Couldn't fetch orders"),
+  empty:   EmptyState("No orders yet"),
+  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, format: "currency")])
+)</code></pre>
+
+      <h3>Mutations</h3>
+      <p>Mutations look identical &mdash; fire from inside an <code>action</code> body and observe the resource:</p>
+<pre><code>action saveOrder(payload) {
+  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  emit "assistant-message" { message: "Saved." }
+}</code></pre>
+
+      <h3>Host-wide defaults</h3>
+<pre><code>$http = Http({
+  baseUrl: "https://api.example.com",
+  headers: { "Accept": "application/json" },
+  timeout: 10000,
+  retry:   { count: 2, backoff: "exponential" }
+})</code></pre>
+
+      <h2 id="components">Components and lambdas</h2>
+<pre><code>component UserCard(user, tone: "default") {
+  $hover = false
+  return Card([
+    Avatar(user.name, size: "md"),
+    Text(user.name, variant: "large-heavy"),
+    Text(user.role, tone: "muted"),
+    Badge(tone, tone: tone)
+  ])
+}
+
+_app_ = Stack([
+  UserCard($alice),                                  # positional arg
+  UserCard($bob, tone: "primary"),                   # named arg
+  UserCard(user: $carol, tone: "warning")            # both named
+])</code></pre>
+
+      <ul>
+        <li>Components <strong>must</strong> end with an explicit <code>return Expr</code>.</li>
+        <li>Defaults use <code>= expression</code> (literal or computed in the component's scope).</li>
+        <li><code>children</code> is the implicit named slot &mdash; the trailing positional argument is delivered as <code>children</code> inside the body.</li>
+      </ul>
+
+      <h3>Local helpers &mdash; lambda form</h3>
+      <p>Use a lambda binding for one-off helpers that don't need their own component:</p>
+<pre><code>priorityTone = (p) =&gt; match p { "high": "danger" "med": "warning" default: "muted" }
+rowFor       = (item) =&gt; Stack([Badge(item.label, tone: priorityTone(item.priority)), Text(item.title)])
+list         = for item in $items { rowFor(item) }</code></pre>
+
+      <h2 id="actions">Actions</h2>
+      <p>
+        Actions are imperative blocks invoked from event-bearing components
+        (<code>Button(action:)</code>, <code>Button(onClick:)</code>, form
+        submits, &hellip;). They run in order; state writes batch into a
+        single re-render.
+      </p>
+<pre><code>action addTask(title) {
+  $tasks = [...$tasks, { id: $tasks.length + 1, title: title, done: false }]
+  $newTaskTitle = ""
+}
+
+action submit() {
+  $save = http({ url: "/api/tasks", method: "POST", body: { title: $newTaskTitle } })
+}</code></pre>
+
+      <p>For the full body grammar and patterns, see the <a href="actions.html">Actions guide</a>.</p>
+
+      <h2 id="effects">Effects</h2>
+      <p>
+        Effects are <em>declarative</em>, anonymous side effects. Every
+        dependency lives in a single bracketed list right after the
+        <code>effect</code> keyword &mdash; there is no name and no
+        <code>on</code> keyword. Use them for polling, analytics,
+        hydration, and one-shot setup.
+      </p>
+<pre><code># Mount-once: run when the app first renders
+effect [on:mount] {
+  $session = http({ url: "/api/session", method: "GET" })
+}
+
+# Reactive: re-run whenever $query changes (debounced 300ms)
+effect [$query, debounce(300)] {
+  $results = http({ url: "/api/search", method: "GET", query: { q: $query } })
+}
+
+# Interval: run every 5 seconds
+effect [on:every(5000)] {
+  $now = @Now()
+}
+
+# Empty list — equivalent to `effect [on:mount] { &hellip; }`
+effect {
+  console.log("mounted")
+}</code></pre>
+
+      <p>A dependency entry is one of:</p>
+      <ul>
+        <li><code>$atom</code> &mdash; re-run when the named reactive atom changes (mixes multiple: <code>[$a, $b]</code>).</li>
+        <li><code>on:mount</code> &mdash; run once when the surrounding scope mounts.</li>
+        <li><code>on:unmount</code> &mdash; run once when it unmounts.</li>
+        <li><code>on:every(ms)</code> &mdash; re-run every <code>ms</code> milliseconds.</li>
+        <li><code>debounce(N)</code> / <code>throttle(N)</code> &mdash; wrap the body with a trailing-edge rate limit.</li>
+      </ul>
+
+      <p>The order inside the brackets does not matter. <code>effect { &hellip; }</code> with no brackets and <code>effect [on:mount] { &hellip; }</code> are equivalent.</p>
+
+      <p>Use <code>cleanup(fn)</code> inside an effect body (typically from <code>js{}</code>) to register teardown for intervals, listeners, or observers.</p>
+
+      <h2 id="control-flow">Control flow</h2>
+      <p>
+        All three control-flow keywords are <strong>expressions</strong>
+        &mdash; they yield a value (or array of nodes) that can be assigned,
+        passed as a prop, or returned from a component / action body.
       </p>
 
-      <h2>Error handling</h2>
+      <h3><code>if</code> / <code>else</code></h3>
+<pre><code>banner = if $hasError { Banner("Something went wrong", tone: "danger") } else { null }
+active = if $tab == "billing" { billingPanel } else { overviewPanel }</code></pre>
+      <p>A trailing <code>else</code> is optional &mdash; without it an unmatched <code>if</code> evaluates to <code>null</code> (renders nothing).</p>
+
+      <h3><code>match</code></h3>
+<pre><code>panel = match $stage {
+  "draft":     DraftView()
+  "review":    ReviewView()
+  "shipped":   ShippedView()
+  default:     EmptyState("Pick a stage")
+}</code></pre>
+      <ul>
+        <li>Arms use <code>: value</code> like object properties &mdash; <strong>not</strong> <code>-&gt;</code>.</li>
+        <li><code>default:</code> is the wildcard.</li>
+        <li>Arms can return arbitrary expressions, not just strings.</li>
+      </ul>
+
+      <h3><code>for</code></h3>
+<pre><code>rows = for item in $todos { TaskRow(item) }
+rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }</code></pre>
       <p>
-        The parser collects errors per line and continues past invalid input. The
-        renderer logs unknown components and shows an inline placeholder. The
-        element fires an <code>error</code> event with the parse errors so you
-        can surface them in your dev tools.
+        <code>for</code> produces an array of nodes &mdash; assign it and
+        reference the binding from a container (<code>Stack(rows)</code>,
+        <code>Table([Col("Task", rows)])</code>). The loop variable is
+        <strong>block-scoped</strong>, so a stale closure can never see the
+        wrong row.
       </p>
+
+      <h3>Statement form inside action / effect bodies</h3>
+<pre><code>action submit(payload) {
+  if !payload.email { return }
+  for tag in payload.tags { $tags = [...$tags, tag] }
+  match payload.kind {
+    "draft": { $drafts = [...$drafts, payload] }
+    default: { $records = [...$records, payload] }
+  }
+}</code></pre>
+
+      <h2 id="two-way">Two-way binding &mdash; <code>bind:</code></h2>
+      <p>
+        <code>bind:value: $name</code> desugars to
+        <code>value: $name, onValueChange: (v) =&gt; $name = v</code>. The
+        right-hand side must be a state ref (<code>$x</code>) or member
+        access (<code>$user.name</code>) &mdash; never a computed expression.
+      </p>
+<pre><code>$search = ""
+bar     = SearchBar("q", placeholder: "Search…", bind:value: $search)
+list    = for row in @Filter($rows, "title", "contains", $search) { ListItem(row.title) }
+
+$tags = []
+chips = TagInput("tags", bind:value: $tags)</code></pre>
+
+      <p>
+        <code>bind:</code> works on any form control whose spec declares a
+        primary value prop: <code>Input</code>, <code>TextArea</code>,
+        <code>Select</code>, <code>Combobox</code>, <code>MultiSelect</code>,
+        <code>Checkbox</code>, <code>CheckBoxGroup</code>,
+        <code>Switch</code>, <code>ToggleGroup</code>, <code>Slider</code>,
+        <code>NumberInput</code>, <code>DatePicker</code>,
+        <code>DateRangePicker</code>, <code>TimePicker</code>,
+        <code>DateTimePicker</code>, <code>SearchBar</code>,
+        <code>PinInput</code>, <code>PasswordInput</code>,
+        <code>TagInput</code>, <code>MentionInput</code>,
+        <code>MaskedInput</code>, <code>RichTextEditor</code>,
+        <code>CodeEditor</code>, <code>ColorPicker</code>,
+        <code>Rating</code> (when <code>interactive: true</code>), and
+        <code>Pagination</code>.
+      </p>
+
+      <h2 id="builtins">Built-in <code>@</code>-functions</h2>
+      <p>
+        Builtins are <strong>pure</strong>, prefixed with <code>@</code>, and
+        never have side effects. Use them for data shaping, formatting, and
+        inline iteration. The runtime ships 50+; the catalogue below covers
+        what's available.
+      </p>
+
+      <h3>Data &amp; aggregation</h3>
+      <ul>
+        <li><code>@Count(arr)</code>, <code>@Sum(arr)</code>, <code>@Avg(arr)</code>, <code>@Min(arr)</code>, <code>@Max(arr)</code>.</li>
+        <li><code>@First(arr)</code>, <code>@Last(arr)</code>.</li>
+        <li><code>@Filter(arr, field, op, value)</code> / <code>@FilterBy(...)</code> &mdash; <code>op</code> is one of <code>== != &gt; &lt; &gt;= &lt;=</code> or <code>contains</code>.</li>
+        <li><code>@Find(arr, field, op, value)</code>, <code>@Sort(arr, field, "asc"|"desc")</code>, <code>@GroupBy(arr, field)</code>.</li>
+        <li><code>@Slice(arr, start?, end?)</code>, <code>@Unique(arr, field?)</code>, <code>@Reverse(arr)</code>, <code>@Range(start, end, step?)</code>, <code>@Repeat(value, count)</code>.</li>
+        <li><code>@Pick(obj, ["a","b"])</code> &mdash; keep only listed keys.</li>
+      </ul>
+
+      <h3>Formatting</h3>
+      <ul>
+        <li><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?)</code> &mdash; positional args, locale-aware.</li>
+        <li><code>@FormatDate(value, format)</code> &mdash; named modes (<code>"relative"</code>, <code>"date"</code>, <code>"time"</code>, <code>"datetime"</code>, <code>"iso"</code>) or moment-like patterns (<code>"MMM D"</code>, <code>"YYYY-MM-DD"</code>).</li>
+        <li><code>@Plural(n, "order", "orders")</code> &mdash; <code>"1 order"</code> / <code>"2 orders"</code>.</li>
+        <li><code>@Capitalize(s)</code>, <code>@Lowercase(s)</code>, <code>@Uppercase(s)</code>, <code>@Titlecase(s)</code>, <code>@Case(s, "camel"|"snake"|"kebab"|"pascal")</code>.</li>
+        <li><code>@Join(arr, sep?)</code>, <code>@Split(s, sep?)</code>, <code>@Trim(s)</code>, <code>@Replace(s, search, replacement?)</code>, <code>@Substring(s, start, end?)</code>.</li>
+        <li><code>@StartsWith(s, prefix)</code>, <code>@EndsWith(s, suffix)</code>, <code>@Contains(s, needle)</code>, <code>@Match(s, pattern)</code>.</li>
+      </ul>
+
+      <h3>Date / time helpers</h3>
+      <ul>
+        <li><code>@Now()</code> &mdash; current moment as epoch ms.</li>
+        <li><code>@Today()</code> &mdash; today's date at midnight, as an ISO string.</li>
+        <li><code>@AddDays(date, n)</code>, <code>@AddHours(date, n)</code>, <code>@DiffDays(start, end)</code>.</li>
+        <li><code>@StartOfWeek(date)</code>, <code>@EndOfMonth(date)</code>.</li>
+      </ul>
+
+      <h3>Math &amp; numeric utility</h3>
+      <ul>
+        <li><code>@Round(n, decimals?)</code>, <code>@Floor(n)</code>, <code>@Ceil(n)</code>, <code>@Abs(n)</code>, <code>@Clamp(n, min, max)</code>.</li>
+        <li><code>@Pow(base, exp)</code>, <code>@Sqrt(n)</code>, <code>@Log(n)</code>, <code>@Random()</code>.</li>
+      </ul>
+
+      <h3>Iteration &amp; conditional fallbacks</h3>
+      <p>
+        The blessed surface is the expression-form
+        <code>for</code> / <code>if</code> / <code>match</code> covered
+        above. The <code>@</code>-form survives for tight inline expressions:
+      </p>
+      <ul>
+        <li><code>@Each(arr, "row", template)</code> &mdash; loop with a named variable.</li>
+        <li><code>@If(cond, trueBranch, falseBranch?)</code> &mdash; lazy branch.</li>
+        <li><code>@Switch(value, { overview: Node, billing: 'Invoice' }, default?)</code> &mdash; key-based selector.</li>
+      </ul>
+
+      <h2 id="globals">Built-in globals</h2>
+      <p>
+        Two namespace globals are always in scope &mdash; no import, no
+        declaration. Invoke them through the standard
+        <code>obj.method(args)</code> syntax. Named-arg options collapse into
+        a single trailing options object.
+      </p>
+
+      <h3><code>storage</code> &mdash; browser storage</h3>
+<pre><code>storage.set("name", "John")           # alias of storage.local.set
+$name = storage.get("name")
+storage.remove("name")
+storage.clear()
+
+storage.session.set("draft", $draft)  # per-tab sessionStorage
+$draft = storage.session.get("draft")
+
+storage.cookies.set("user", "John", expires: 7, path: "/", sameSite: "Lax")
+$user = storage.cookies.get("user")
+storage.cookies.remove("user", path: "/")</code></pre>
+      <ul>
+        <li>Values that aren't strings round-trip through JSON; missing keys return <code>null</code>.</li>
+        <li>Cookie options: <code>expires</code> (days, Date, or ISO string), <code>maxAge</code> (seconds), <code>path</code>, <code>domain</code>, <code>secure</code>, <code>sameSite</code>.</li>
+      </ul>
+
+      <h3><code>console</code> &mdash; host console forwarder</h3>
+<pre><code>console.log("Hello", $user)
+console.error("Failed", $error)
+console.warn("Deprecated path")
+console.info("Route changed", _route_.path)
+console.debug({ days: $days, count: $count })</code></pre>
+
+      <h2 id="routing">Routing &mdash; <code>_router_({ &hellip; })</code></h2>
+      <p>The router is a plain function call. It returns the matched arm's evaluated value:</p>
+<pre><code>pages = _router_({
+  "/":             Dashboard(),
+  "/orders":       OrdersPage(),
+  "/orders/:id":   OrderDetail(id: params.id),
+  "/settings/*":   SettingsArea(rest: params._),
+  default:         NotFound()
+})
+
+_app_ = AppShell(MainSidebar(), pages)</code></pre>
+      <p>See the <a href="routing.html">Routing guide</a> for path patterns, params, query strings, and <code>NavLink</code>.</p>
+
+      <h2 id="i18n">Internationalization</h2>
+<pre><code>$locale = storage.get("locale") ?? "en"
+$bundle = http({ url: "/i18n/" + $locale + ".json", method: "GET" })
+$i18n   = i18n({
+  locale:   $locale,
+  messages: $bundle.data ?? {},
+  fallback: "en"
+})
+
+Text(t("orders.title"))                          # "Orders"
+Text(t("orders.greeting", { name: $userName }))  # "Welcome back, Alex"</code></pre>
+      <ul>
+        <li><code>t(key, vars?)</code> looks up the translation by dot-pathed key with <code>${name}</code> interpolation.</li>
+        <li><code>Locale()</code> returns the active locale tag.</li>
+        <li>Formatting builtins (<code>@Format</code>, <code>@FormatDate</code>) consult <code>Locale()</code> automatically.</li>
+      </ul>
+
+      <h2 id="js-escape">JavaScript escape hatch &mdash; <code>js{ &hellip; }</code></h2>
+      <p>
+        <code>js{ /* opaque JS body */ }</code> runs raw JavaScript inside
+        an <code>effect</code>, <code>action</code>, or lambda body. Use
+        sparingly &mdash; every other surface is preferred &mdash; but it is
+        always available for browser APIs not exposed natively (clipboard,
+        keyboard listeners, IntersectionObserver, audio, custom DOM work).
+        See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.
+      </p>
+
+      <h2 id="theming">In-script theming</h2>
+      <p>
+        Assign a <code>Theme({ &hellip; })</code> call to a top-level binding
+        named <code>theme</code> &mdash; the runtime detects that exact name
+        and applies the tokens as CSS custom properties on the host:
+      </p>
+<pre><code>theme = Theme({
+  colors: {
+    primary: "#635bff",
+    bg:      "#0a0a23",
+    surface: "#10103a",
+    text:    "#ffffff"
+  },
+  radius: { button: "999px" },
+  font:   { family: "'Inter', sans-serif" }
+})
+
+_app_ = AppShell(...)</code></pre>
+      <p>The top-level keys must be one of <code>colors</code>, <code>radius</code>, <code>font</code>, <code>motion</code>, <code>elevation</code> (plus the metadata keys <code>name</code> and <code>direction</code>). See the <a href="themes.html">Themes guide</a> for the full token taxonomy.</p>
+
+      <h2 id="icons">Icons (Font Awesome)</h2>
+      <p>
+        Icon-typed props accept a Font Awesome name as a string. The host
+        element auto-loads the Font Awesome stylesheet &mdash; no setup
+        needed.
+      </p>
+      <ul>
+        <li>Format: <code>"name"</code> (defaults to the solid set), e.g. <code>"house"</code>, <code>"chart-line"</code>, <code>"star"</code>, <code>"circle-check"</code>.</li>
+        <li>Variants: prefix with <code>"regular:name"</code> (outline set) or <code>"brands:name"</code> (brand logos).</li>
+        <li><strong>Never emit emoji characters</strong> in <code>icon</code> props.</li>
+        <li>Use the <code>Icon(name, variant?, size?)</code> component to render an icon inline.</li>
+      </ul>
+
+      <h2 id="comments">Comments &amp; whitespace</h2>
+      <ul>
+        <li>Whole-line comments start with <code>#</code>.</li>
+        <li>End-of-line comments are not supported &mdash; put comments on their own line.</li>
+        <li>Indentation is decorative; braces and brackets drive parsing.</li>
+        <li>Blank lines are ignored.</li>
+      </ul>
+
+      <h2 id="streaming">Hoisting &amp; streaming</h2>
+      <p>
+        Aktion supports hoisting: a reference can be used <strong>before</strong>
+        it is defined. The renderer re-parses the program on every streamed
+        chunk and silently treats unresolved references as empty, so a
+        partially-streamed response renders progressively from the top.
+      </p>
+      <p>Required statement order for streaming-friendly output:</p>
+      <ol>
+        <li><code>_app_ = ...</code> &mdash; emit this FIRST so the UI shell appears immediately.</li>
+        <li><code>component</code> / <code>action</code> / <code>effect</code> declarations &mdash; fill in layout &amp; behaviour.</li>
+        <li>Leaf data values (strings, numbers, arrays, objects) &mdash; last.</li>
+      </ol>
+
+      <h2 id="error-tolerance">Error tolerance</h2>
+      <ul>
+        <li>Lines that fail to parse are dropped with a diagnostic.</li>
+        <li>References to missing bindings render as empty (or a small placeholder when <code>showerrors</code> is enabled).</li>
+        <li>Runtime errors inside actions and effects are caught; the rest of the program continues.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>The full body grammar: state writes, HTTP, navigation, emit, JS escape hatch.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="routing.html">
+          <span class="demo-tag">Navigation</span>
+          <h3>Routing</h3>
+          <p>Hash-based multi-page UIs via <code>_router_</code> and <code>NavLink</code>.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Library</span>
+          <h3>Component reference</h3>
+          <p>Every built-in component, prop, and enum the LLM can reach for.</p>
+          <span class="demo-arrow">Browse library &rarr;</span>
+        </a>
+      </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>

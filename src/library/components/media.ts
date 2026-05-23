@@ -9,7 +9,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength, sanitiseImageSrc,
@@ -288,7 +287,7 @@ export const Gallery: ComponentSpec = {
     { name: "items", type: "any[]" },
     { name: "columns", type: "number", optional: true, description: "Preferred column count (default auto)" },
     { name: "ratio", type: "string", optional: true, description: "Per-tile aspect ratio (default `1:1`)" },
-    { name: "onSelect", type: "Action", optional: true, description: "Action fired when a tile is clicked" },
+    { name: "onSelect", type: "callable", optional: true, description: "Callable fired when a tile is clicked" },
   ],
   render: (_node, props, helpers) => {
     const items = asArray<unknown>(props.items);
@@ -301,7 +300,7 @@ export const Gallery: ComponentSpec = {
     items.forEach((raw, i) => {
       const { src, alt, caption } = extractGalleryItem(raw);
       const safeSrc = sanitiseImageSrc(src);
-      const clickable = isActionPayload(props.onSelect);
+      const clickable = typeof props.onSelect === "function";
       const tile = el(clickable ? "button" : "figure" as "figure", {
         type: clickable ? "button" : null,
         class: "rui-gallery-tile",
@@ -318,7 +317,7 @@ export const Gallery: ComponentSpec = {
         tile.append(el("span", { class: "rui-gallery-caption" }, [caption]));
       }
       if (clickable) {
-        tile.onclick = () => helpers.runAction(props.onSelect);
+        tile.onclick = () => helpers.invoke(props.onSelect, i, raw);
       }
       root.append(tile);
     });
@@ -349,43 +348,81 @@ function extractGalleryItem(raw: unknown): { src: string; alt: string; caption: 
 export const Lightbox: ComponentSpec = {
   name: "Lightbox",
   description:
-    "Full-viewport image overlay shown when `open` is true. Bind " +
-    "`$variable` to `open` and `index` for control. Pass `items` (string " +
-    "URLs or `{src, alt, caption?}` objects) — clicking the backdrop or " +
-    "pressing × closes; prev/next arrows step through the array.",
+    "Image overlay. When you bind a `$variable` to `open` you control it " +
+    "explicitly; without one, Lightbox renders a clickable thumbnail of " +
+    "the current image that opens the overlay on click (and uses internal " +
+    "state for next/prev). Pass `items` (string URLs or " +
+    "`{src, alt, caption?}` objects). Clicking the backdrop or × closes; " +
+    "arrows step through the array.",
   props: [
     { name: "items", type: "any[]" },
-    { name: "open", type: "boolean", description: "Open/closed; typically a $variable" },
+    { name: "open", type: "boolean", optional: true, description: "Open/closed; bind a $variable to control externally" },
     { name: "index", type: "number", optional: true, description: "0-indexed current image; typically a $variable" },
   ],
   render: (node, props, helpers) => {
     const items = asArray<unknown>(props.items)
       .map((raw) => extractGalleryItem(raw))
       .filter((entry) => sanitiseImageSrc(entry.src) !== "");
-    const isOpen = asBoolean(props.open);
-    const rawIndex = Math.floor(asNumber(props.index, 0));
     const total = items.length;
     const indexStateName = node.argMeta?.[2]?.stateRef;
     const openStateName = node.argMeta?.[1]?.stateRef;
+    // Self-managed open/index when no $variable is bound — clicking the
+    // thumbnail toggles the overlay, prev/next step through `items`.
+    const internalOpen = helpers.useInstanceState<boolean>("open", false);
+    const internalIndex = helpers.useInstanceState<number>("index", 0);
+    const isOpen = openStateName
+      ? asBoolean(props.open)
+      : internalOpen.get();
+    const rawIndex = indexStateName
+      ? Math.floor(asNumber(props.index, 0))
+      : internalIndex.get();
     const idx = total === 0 ? 0 : ((rawIndex % total) + total) % total;
+
+    const setOpen = (next: boolean): void => {
+      if (openStateName) helpers.setState(openStateName, next);
+      else internalOpen.set(next);
+    };
+    const setIndex = (next: number): void => {
+      if (indexStateName) helpers.setState(indexStateName, next);
+      else internalIndex.set(next);
+    };
+    const close = () => setOpen(false);
+    const move = (delta: number) => {
+      if (total === 0) return;
+      setIndex(((idx + delta) % total + total) % total);
+    };
+
+    const root = el("div", { class: "rui-lightbox-root" });
+    // Render a clickable thumbnail when the lightbox is self-managed and
+    // no externally bound `open` state is in play. Authors who explicitly
+    // bind `open: $var` keep the legacy headless behaviour.
+    if (!openStateName && total > 0) {
+      const current = items[idx];
+      const thumb = el("button", {
+        type: "button",
+        class: "rui-lightbox-thumb",
+        "aria-label": current?.alt || "Open image",
+      });
+      if (current) {
+        const safeThumb = sanitiseImageSrc(current.src);
+        if (safeThumb) thumb.append(el("img", { src: safeThumb, alt: current.alt, loading: "lazy" }));
+      }
+      thumb.onclick = (event) => {
+        event.stopPropagation();
+        setOpen(true);
+      };
+      root.append(thumb);
+    }
+
     const overlay = el("div", {
       class: "rui-lightbox-overlay",
       "data-open": isOpen ? "true" : "false",
     });
-    if (!isOpen || total === 0) return overlay;
+    root.append(overlay);
+    if (!isOpen || total === 0) return root;
     const current = items[idx];
-    if (!current) return overlay;
+    if (!current) return root;
     const safeSrc = sanitiseImageSrc(current.src);
-    const close = () => {
-      if (openStateName) {
-        helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: openStateName, value: false }] });
-      }
-    };
-    const move = (delta: number) => {
-      if (!indexStateName) return;
-      const next = ((idx + delta) % total + total) % total;
-      helpers.runAction({ kind: "Action", steps: [{ kind: "Set", name: indexStateName, value: next }] });
-    };
     overlay.onclick = (event) => {
       if (event.target === overlay) close();
     };
@@ -430,7 +467,7 @@ export const Lightbox: ComponentSpec = {
       dialog.append(el("div", { class: "rui-lightbox-counter" }, [`${idx + 1} / ${total}`]));
     }
     overlay.append(dialog);
-    return overlay;
+    return root;
   },
 };
 

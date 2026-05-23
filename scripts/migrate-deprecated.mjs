@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-shot migration: rewrite legacy component names in Streaming UI Script
+ * One-shot migration: rewrite legacy component names in Aktion
  * sources to the canonical replacements introduced in May 2026.
  *
  *   Tag(label, icon, size, variant)   → Badge(label, variant, icon, size)

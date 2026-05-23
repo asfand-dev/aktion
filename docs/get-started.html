@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Get started · streaming-ui-script</title>
-  <meta name="description" content="Load the bundle, mount the tag, stream Streaming UI Script — your LLM is now driving a real, interactive UI." />
+  <title>Get started · Aktion</title>
+  <meta name="description" content="Load the bundle, mount the tag, stream Aktion — your LLM is now driving a real, interactive UI." />
   <script>
     (function () {
       try {
@@ -20,90 +20,73 @@
 </head>
 <body data-page="installation">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Installation</span>
         <h1>Get started in 30 seconds.</h1>
         <p class="lead">
-          Three steps: load the bundle, mount the tag, and feed it Streaming UI
-          Script text. Everything else (parsing, rendering, state, theming) is
-          handled inside the shadow DOM.
+          Three steps: load the bundle, mount the tag, and feed it Aktion
+          text. Everything else &mdash; parsing, rendering, state,
+          theming, routing, even Font Awesome &mdash; is handled inside the
+          shadow DOM.
         </p>
       </header>
 
-      <h2>1. Add the script tag</h2>
-      <p>
-        Drop a single ES module into any HTML page. The bundle is self-contained —
-        it includes the parser, the runtime, the built-in components, and the
-        styles, so no extra CSS file is required.
-      </p>
-<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.js"&gt;&lt;/script&gt;</code></pre>
+      <h2 id="step-1">1. Load the bundle</h2>
+      <p>Use the CDN build for zero setup:</p>
+<pre><code>&lt;script type="module"
+  src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;
+&lt;/script&gt;</code></pre>
 
-      <p>
-        For non-module scripts (older bundlers, Webflow, etc.) use the IIFE build:
-      </p>
-<pre><code>&lt;script src="https://asfand-dev.github.io/streaming-ui-script/dist/streaming-ui-script.iife.js" defer&gt;&lt;/script&gt;</code></pre>
+      <p>Or install from npm if you bundle your own assets:</p>
+<pre><code>npm install aktion-runtime
+&nbsp;
+// then, somewhere in your app entry:
+import "aktion-runtime";</code></pre>
 
-      <h2>2. Place the tag</h2>
-<pre><code>&lt;streaming-ui-script id="response" theme="light"&gt;&lt;/streaming-ui-script&gt;</code></pre>
-
-      <p>
-        The element renders empty by default. Set its content with one of:
-      </p>
+      <p>The bundle is a single ES module (~110 KB minified, ~30 KB gzipped). It registers exactly one custom element &mdash; <code>&lt;aktion-app&gt;</code> &mdash; and ships:</p>
       <ul>
-        <li><code>el.setResponse(text)</code> — replace the program (one-shot rendering).</li>
-        <li><code>el.appendChunk(text)</code> — append a streaming chunk and re-render.</li>
-        <li><code>el.response = "..."</code> — equivalent to <code>setResponse</code>.</li>
-        <li>Place the source text inside the tag as a fallback (used on connect).</li>
+        <li>The parser, evaluator, reactive runtime, and reconciler.</li>
+        <li>All 130+ built-in components (layout, forms, charts, data, patterns).</li>
+        <li>The hash-based router and seven built-in themes.</li>
+        <li>An <em>optional</em> Font Awesome 6.7.2 loader (only injected if your script uses icons).</li>
       </ul>
 
-      <h2>3. Wire up your LLM</h2>
-      <p>
-        Send the system prompt with every request so the model knows the language
-        and the available components. You can either fetch the static
-        <code>system_prompt.txt</code> from your CDN or generate it programmatically.
-      </p>
+      <h2 id="step-2">2. Mount the element</h2>
+      <p>Drop the tag anywhere in your HTML:</p>
+<pre><code>&lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>Optional attributes:</p>
+      <ul>
+        <li><code>theme</code> &mdash; <code>light</code> (default), <code>dark</code>, <code>neon</code>, <code>pastel</code>, <code>glass</code>, <code>brutalist</code>, <code>skyline</code>.</li>
+        <li><code>response</code> &mdash; static script text. Updates re-render immediately.</li>
+        <li><code>streaming</code> &mdash; boolean. Suppresses transient parse errors while a stream is in flight.</li>
+        <li><code>showerrors</code> &mdash; boolean. Enables the developer error banner inside the shadow DOM.</li>
+      </ul>
+      <p>You can also drop the script text directly as the element&rsquo;s text content &mdash; the runtime reads <code>textContent</code> on connect if no <code>response</code> attribute is set.</p>
 
-<pre><code>// Fetch the canned prompt
-const systemPrompt = await fetch("https://asfand-dev.github.io/streaming-ui-script/dist/system_prompt.txt").then(r =&gt; r.text());
+      <h2 id="step-3">3. Send it Aktion</h2>
+      <p>For static UI, set the <code>response</code> attribute (or the matching property):</p>
+<pre><code>&lt;aktion-app&gt;&lt;/aktion-app&gt;
+&lt;script&gt;
+  const el = document.querySelector("aktion-app");
+  el.setResponse(`
+    _app_ = Stack([greeting])
+    greeting = Card([
+      CardHeader("Hello", subtitle: "Generative UI in plain HTML"),
+      Markdown("Set this script via **setResponse()** or stream it via **appendChunk()**.")
+    ])
+  `);
+&lt;/script&gt;</code></pre>
 
-// or build a prompt from the live library (e.g. with extra rules and tool descriptions)
-const el = document.querySelector("streaming-ui-script");
-const prompt = el.getSystemPrompt({
-  preamble: "You are an analytics assistant.",
-  additionalRules: ["Always end with a FollowUpBlock of 2 prompts."],
-  tools: [{ name: "list_orders", description: "Return recent orders.", argsExample: { limit: 10 } }],
-});</code></pre>
-
-      <p>Then stream the assistant response into the element:</p>
-<pre><code>const response = await fetch("/api/chat", {
-  method: "POST",
-  body: JSON.stringify({ system: systemPrompt, messages }),
-});
+      <p>For streaming responses (e.g. SSE from an LLM), set <code>streaming = true</code> while you append chunks. The UI commits each line as soon as the parser can &mdash; setting <code>streaming</code> just tells the error banner not to flash for transient mid-line parse errors.</p>
+<pre><code>const el = document.querySelector("aktion-app");
 const reader = response.body.getReader();
 const decoder = new TextDecoder();
-el.streaming = true;
+
 el.clear();
+el.streaming = true;
 while (true) {
   const { value, done } = await reader.read();
   if (done) break;
@@ -111,54 +94,117 @@ while (true) {
 }
 el.streaming = false;</code></pre>
 
-      <h2>4. (Optional) Provide tools</h2>
+      <h2 id="public-api">Public API at a glance</h2>
+      <p>The element is the entire integration surface:</p>
+<pre><code>// Attributes (set in HTML)
+&lt;aktion-app
+  theme="dark"
+  showerrors
+  response="..."&gt;
+&lt;/aktion-app&gt;
+
+// Properties (set in JS)
+el.response   = "_app_ = ..."   // same as setResponse(text)
+el.streaming  = true            // toggle streaming mode
+el.showErrors = true            // toggle the developer error banner
+
+// Methods
+el.setResponse(text)            // replace the entire script
+el.appendChunk(chunk)           // append a streaming chunk
+el.clear()                      // wipe state and program text
+el.setTheme(theme)              // built-in name, or a Theme token map
+el.registerComponents(specs)    // extend the component library at runtime
+el.setTools({ name: fn })       // expose async tools to js{} blocks
+el.registerHttpInterceptors(...) // hook every http() call
+el.navigate(path)               // programmatic router navigation
+el.getSystemPrompt()            // build the LLM system prompt
+el.applyDelta(ops)              // Delta Protocol structural patches
+el.serializeState() / hydrateState(snap) / loadSnapshot({...}) // persistence
+
+// Events (CustomEvent on the element)
+"assistant-message"             // detail: { message }   — Button without action:
+"route-change"                  // detail: { path, previousPath, source }
+"error"                         // detail: { kind, errors }
+// + any user-emitted event from an action/effect via `emit`</code></pre>
+
+      <h2 id="hello-world">Hello, world</h2>
+      <p>Try it in a single file. Save the snippet below as <code>index.html</code> and open it &mdash; no build, no bundler.</p>
+<pre><code>&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+  &lt;body&gt;
+    &lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
+    &lt;script type="module"&gt;
+      import "https://asfand-dev.github.io/aktion/dist/aktion.js";
+
+      const el = document.querySelector("aktion-app");
+      el.setResponse(`
+        $count = 0
+        _app_ = Card([
+          CardHeader("Counter demo", subtitle: "Reactive state in 5 lines"),
+          Text("Count: " + $count),
+          Button("Increment", action: increment)
+        ])
+        action increment() { $count = $count + 1 }
+      `);
+    &lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+      <h2 id="error-panel">Developer error banner</h2>
+      <p>While iterating, enable the in-shadow error banner:</p>
+<pre><code>&lt;aktion-app showerrors&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
-        Streaming UI Script can call <code>Query("tool_name", args)</code> and
-        <code>Mutation("tool_name", args)</code>. Register tools as plain functions on
-        the element so it can fetch fresh data on demand.
+        When enabled, parse and evaluation errors render as a compact banner
+        above your UI. The banner is automatically suppressed while
+        <code>streaming = true</code> so partial mid-line content doesn&rsquo;t
+        flash transient errors. Listen for the <code>error</code> event to
+        forward diagnostics to your own logger or DevTools.
       </p>
-<pre><code>el.setTools({
-  list_orders: async ({ limit }) =&gt; {
-    const res = await fetch(`/api/orders?limit=${limit}`);
-    return res.json();
-  },
-  update_order: async ({ id, status }) =&gt; {
-    await fetch(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-    return { ok: true };
-  },
+<pre><code>el.addEventListener("error", (event) =&gt; {
+  console.warn("Aktion:", event.detail);
 });</code></pre>
 
-      <h2>5. (Optional) Listen for events</h2>
+      <h2 id="system-prompt">System prompt</h2>
       <p>
-        Buttons that call <code>@ToAssistant("...")</code> dispatch an
-        <code>assistant-message</code> event. Wire that to your chat input to keep
-        the conversation flowing.
+        To make an LLM emit valid Aktion, prepend the bundled
+        system prompt to your conversation. Two flavors ship in <code>dist/</code>:
       </p>
-<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
-  sendMessageToLLM(event.detail.message);
-});</code></pre>
+      <ul>
+        <li><code>dist/system_prompt.txt</code> &mdash; full reference (~30k tokens), best for capable models.</li>
+        <li><code>dist/system_prompt_chat.txt</code> &mdash; compact chat-mode prompt, optimized for smaller models.</li>
+      </ul>
+<pre><code>const SYSTEM_PROMPT = await fetch("/dist/system_prompt.txt").then(r =&gt; r.text());
 
-      <h2>6. (Optional) Debug parse errors</h2>
-      <p>
-        Parse errors are silenced in the rendered UI by default so users see
-        clean output even when the LLM emits a partial or invalid line. Add
-        <code>showerrors="true"</code> while iterating on prompts to display
-        them inline:
-      </p>
-<pre><code>&lt;streaming-ui-script showerrors="true" theme="light"&gt;&lt;/streaming-ui-script&gt;</code></pre>
-      <p>
-        The <code>error</code> event fires regardless of this attribute, so
-        production apps can keep the banner hidden and still log parse failures
-        programmatically.
-      </p>
+const messages = [
+  { role: "system",  content: SYSTEM_PROMPT },
+  { role: "user",    content: "Show me a pricing page for a SaaS product." },
+];
 
-      <div class="callout">
-        <h4>That's it</h4>
-        <p>
-          You now have an LLM-driven UI runtime that streams components, supports
-          two-way state binding, refreshes data on a schedule, and works in any
-          framework.
-        </p>
+// Stream the response and forward chunks to the component.
+streamLlmResponse(messages, (chunk) =&gt; el.appendChunk(chunk));</code></pre>
+
+      <p>Both files are regenerated from <code>src/prompt/generator.ts</code> at build time, so they always match the components, themes, and builtins shipped in the same release.</p>
+
+      <h2 id="next">Where to next?</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Frameworks</span>
+          <h3>Framework integration</h3>
+          <p>Drop-in setup for React, Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain HTML.</p>
+          <span class="demo-arrow">See recipes &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Language</span>
+          <h3>Language reference</h3>
+          <p>Statements, expressions, reactive state, HTTP, actions, effects, control flow.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Live editor + preview. Tweak Aktion and watch the UI re-render on every keystroke.</p>
+          <span class="demo-arrow">Open playground &rarr;</span>
+        </a>
       </div>
     </main>
   </div>

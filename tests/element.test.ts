@@ -1,10 +1,9 @@
 /**
- * Behavioural tests for <streaming-ui-script>.
+ * Behavioural tests for <aktion-app>.
  *
- * These run in happy-dom which provides Custom Elements + ShadowRoot. The most
- * important regression here: ensuring setResponse on a program that uses
- * Query() does NOT trigger an infinite render loop (the bug that froze the
- * examples page before the fix).
+ * These run in happy-dom which provides Custom Elements + ShadowRoot. Most
+ * important regression here: ensuring `setResponse` on a program with
+ * reactive state does NOT trigger an infinite render loop.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,24 +11,21 @@ import "../src/index.js";
 
 const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
-const PROGRAM_WITH_QUERY = `root = Stack([info, table])
+const PROGRAM_WITH_STATE = `$rows = [{name: "alpha", stars: 12}, {name: "beta", stars: 7}]
 info = Card([CardHeader("Repos"), Markdown("Loading...")])
-data = Query("get_repos", {limit: 5}, {rows: [
-  {name: "alpha", stars: 12},
-  {name: "beta", stars: 7}
-]})
 table = Table([
-  Col("Name", data.rows.name),
-  Col("Stars", data.rows.stars, "number")
-])`;
+  Col("Name", values: $rows.name),
+  Col("Stars", values: $rows.stars, format: "number")
+])
+_app_ = Stack([info, table])`;
 
-describe("<streaming-ui-script>", () => {
+describe("<aktion-app>", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
   const create = () => {
-    const el = document.createElement("streaming-ui-script");
+    const el = document.createElement("aktion-app");
     document.body.appendChild(el);
     return el as HTMLElement & {
       setResponse(text: string): void;
@@ -40,7 +36,7 @@ describe("<streaming-ui-script>", () => {
 
   it("renders a basic program into the shadow root", async () => {
     const el = create();
-    el.setResponse(`root = Card([CardHeader("Hello", "World")])`);
+    el.setResponse(`_app_ = Card([CardHeader("Hello", subtitle: "World")])`);
     await flush();
     await flush();
     const shadow = el.shadowRoot!;
@@ -50,19 +46,19 @@ describe("<streaming-ui-script>", () => {
 
   it("renders a rich pattern-composite layout end-to-end", async () => {
     const el = create();
-    el.setResponse(`root = Stack([header, kpis, board, follow])
-header = PageHeader("Engineering Q3", "12 active · 4 at risk", ["Workspace", "Engineering"], headerActions, status)
-headerActions = [Button("Export", null, "secondary"), Button("New project", null, "primary")]
-status = Badge("On track", "success")
-kpis = Stats([k1, k2, k3], "grid")
-k1 = StatCard("Active", "12", "flat", "0 vs last week", "chart-pie")
-k2 = StatCard("At risk", "4", "up", "+2", "triangle-exclamation")
-k3 = StatCard("Shipped", "8", "up", "+3", "rocket")
+    el.setResponse(`_app_ = Stack([header, kpis, board, follow])
+header = PageHeader("Engineering Q3", subtitle: "12 active · 4 at risk", breadcrumbs: ["Workspace", "Engineering"], actions: headerActions, status: status)
+headerActions = [Button("Export", action: null, variant: "secondary"), Button("New project", action: null, variant: "primary")]
+status = Badge("On track", variant: "success")
+kpis = Stats([k1, k2, k3], layout: "grid")
+k1 = StatCard("Active", value: "12", trend: "flat", delta: "0 vs last week", icon: "chart-pie")
+k2 = StatCard("At risk", value: "4", trend: "up", delta: "+2", icon: "triangle-exclamation")
+k3 = StatCard("Shipped", value: "8", trend: "up", delta: "+3", icon: "rocket")
 board = KanbanBoard([colTodo, colDoing])
-colTodo = KanbanColumn("To do", [cardA])
-colDoing = KanbanColumn("Doing", [cardB], "primary")
-cardA = KanbanCard("Migrate auth", "Roll out new SDK.", ["auth"], "Asha")
-cardB = KanbanCard("Streaming UI v2", "20 new components.", ["frontend"], "Alex", "primary", "sparkles")
+colTodo = KanbanColumn("To do", items: [cardA])
+colDoing = KanbanColumn("Doing", items: [cardB], tone: "primary")
+cardA = KanbanCard("Migrate auth", description: "Roll out new SDK.", tags: ["auth"], assignee: "Asha")
+cardB = KanbanCard("Streaming UI v2", description: "20 new components.", tags: ["frontend"], assignee: "Alex", tone: "primary", icon: "sparkles")
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     for (let i = 0; i < 4; i += 1) await flush();
     const shadow = el.shadowRoot!;
@@ -76,11 +72,12 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     expect(shadow.querySelector(".rui-badge[data-variant='success']")?.textContent).toBe("On track");
   });
 
-  it("does not infinite-loop when the program registers a Query", async () => {
+  it("does not infinite-loop when the program declares reactive state used by a Table", async () => {
     const el = create();
-    el.setResponse(PROGRAM_WITH_QUERY);
-    // Drain a healthy number of microtasks; if the loop was still present,
-    // the test would hang. Vitest would then exceed its default timeout.
+    el.setResponse(PROGRAM_WITH_STATE);
+    // Drain a healthy number of microtasks; if the renderer was still in a
+    // bind-and-fire loop, this test would hang and Vitest's default timeout
+    // would surface the regression.
     for (let i = 0; i < 50; i += 1) await flush();
     const shadow = el.shadowRoot!;
     expect(shadow.querySelector(".rui-table")).not.toBeNull();
@@ -89,7 +86,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
 
   it("re-renders without re-fetching when state changes", async () => {
     const el = create();
-    el.setResponse(`$count = 0\nlabel = TextContent("" + $count, "large-heavy")\nroot = Stack([label])`);
+    el.setResponse(`$count = 0\nlabel = Text("" + $count, variant: "large-heavy")\n_app_ = Stack([label])`);
     await flush();
     await flush();
     const shadow = el.shadowRoot!;
@@ -101,18 +98,18 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
   });
 
   it("accepts the response attribute declaratively", async () => {
-    document.body.innerHTML = `<streaming-ui-script response='root = Card([CardHeader(\"From attribute\")])'></streaming-ui-script>`;
+    document.body.innerHTML = `<aktion-app response='_app_ = Card([CardHeader(\"From attribute\")])'></aktion-app>`;
     await flush();
     await flush();
-    const el = document.querySelector("streaming-ui-script")!;
+    const el = document.querySelector("aktion-app")!;
     expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("From attribute");
   });
 
-  it("getSystemPrompt returns Streaming UI Script spec text", () => {
+  it("getSystemPrompt returns Aktion spec text", () => {
     const el = create();
     const prompt = el.getSystemPrompt();
-    expect(prompt).toContain("Streaming UI Script");
-    expect(prompt).toContain("root = Stack(");
+    expect(prompt).toContain("Aktion");
+    expect(prompt).toContain("_app_ = Stack(");
   });
 
   it("hides the parse-error banner while streaming and surfaces errors after", async () => {
@@ -126,7 +123,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     el.showErrors = true;
     el.streaming = true;
     // A clearly-broken in-flight chunk: the trailing line is mid-token.
-    el.setResponse(`root = Stack([body])\nbody = Card([`);
+    el.setResponse(`_app_ = Stack([body])\nbody = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(true);
@@ -139,7 +136,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Done");
 
     // A subsequent broken response with streaming off should surface errors.
-    el.setResponse(`root = Stack([\nbroken = Card([`);
+    el.setResponse(`_app_ = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     expect(banner.hidden).toBe(false);
   });
@@ -151,7 +148,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       streaming: boolean;
     };
     expect(el.showErrors).toBe(false);
-    el.setResponse(`root = Stack([\nbroken = Card([`);
+    el.setResponse(`_app_ = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(true);
@@ -162,7 +159,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       setResponse(text: string): void;
       showErrors: boolean;
     };
-    el.setResponse(`root = Stack([\nbroken = Card([`);
+    el.setResponse(`_app_ = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(true);
@@ -182,15 +179,15 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     };
     let errorCount = 0;
     el.addEventListener("error", () => { errorCount += 1; });
-    el.setResponse(`root = Stack([\nbroken = Card([`);
+    el.setResponse(`_app_ = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     expect(errorCount).toBeGreaterThan(0);
   });
 
   it("respects showerrors attribute set declaratively", async () => {
-    document.body.innerHTML = `<streaming-ui-script showerrors="true" response='root = Stack([\nbroken = Card(['></streaming-ui-script>`;
+    document.body.innerHTML = `<aktion-app showerrors="true" response='_app_ = Stack([\nbroken = Card(['></aktion-app>`;
     for (let i = 0; i < 5; i += 1) await flush();
-    const el = document.querySelector("streaming-ui-script") as HTMLElement;
+    const el = document.querySelector("aktion-app") as HTMLElement;
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(false);
   });
@@ -204,7 +201,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     el.streaming = true;
     // Stream root first — children are still undefined and silently render
     // as empty until their definitions arrive.
-    el.setResponse(`root = Stack([hero, body])`);
+    el.setResponse(`_app_ = Stack([hero, body])`);
     for (let i = 0; i < 3; i += 1) await flush();
     expect(el.shadowRoot!.querySelector(".rui-stack")).not.toBeNull();
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
@@ -232,7 +229,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       streaming: boolean;
       state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
     };
-    el.setResponse(`$title = ""\nfield = FormControl("Title", Input("title", "Type here", "text", null, $title))\nroot = Stack([field])`);
+    el.setResponse(`$title = ""\nfield = FormControl("Title", field: Input("title", placeholder: "Type here", type: "text", bind:value: $title))\n_app_ = Stack([field])`);
     for (let i = 0; i < 5; i += 1) await flush();
 
     const shadow = el.shadowRoot!;
@@ -310,7 +307,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       state: { set: (k: string, v: unknown) => void };
     };
     el.setResponse(
-      `$email = ""\nfield = FormControl("Email", Input("email", "you@example.com", "email", null, $email))\nroot = Stack([field])`,
+      `$email = ""\nfield = FormControl("Email", field: Input("email", placeholder: "you@example.com", type: "email", bind:value: $email))\n_app_ = Stack([field])`,
     );
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
@@ -344,12 +341,12 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     };
     el.setResponse(`$count = 0
 tabs = Tabs([
-  TabItem("overview", "Overview", [TextContent("Overview pane")]),
-  TabItem("details",  "Details",  [TextContent("Details pane")]),
-  TabItem("settings", "Settings", [TextContent("Settings pane")])
+  TabItem("overview", label: "Overview", children: [Text("Overview pane")]),
+  TabItem("details",  label: "Details",  children: [Text("Details pane")]),
+  TabItem("settings", label: "Settings", children: [Text("Settings pane")])
 ])
-counter = TextContent("" + $count)
-root = Stack([tabs, counter])`);
+counter = Text("" + $count)
+_app_ = Stack([tabs, counter])`);
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
     const detailsBtn = shadow.querySelector<HTMLButtonElement>(
@@ -384,10 +381,10 @@ root = Stack([tabs, counter])`);
     };
     el.setResponse(`$count = 0
 acc = Accordion([
-  AccordionItem("FAQ", [TextContent("Answer body")])
+  AccordionItem("FAQ", children: [Text("Answer body")])
 ])
-counter = TextContent("" + $count)
-root = Stack([acc, counter])`);
+counter = Text("" + $count)
+_app_ = Stack([acc, counter])`);
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
     const details = shadow.querySelector<HTMLDetailsElement>(".rui-accordion-item");
@@ -411,7 +408,7 @@ root = Stack([acc, counter])`);
       state: { set: (k: string, v: unknown) => void };
     };
     el.setResponse(
-      `$title = "Hello"\nfield = Input("title", "Title", "text", null, $title)\nroot = Stack([field])`,
+      `$title = "Hello"\nfield = Input("title", placeholder: "Title", type: "text", bind:value: $title)\n_app_ = Stack([field])`,
     );
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
@@ -435,9 +432,9 @@ root = Stack([acc, counter])`);
       state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
     };
     el.setResponse(`$title = "initial"
-field = Input("title", "Title", "text", null, $title)
-caption = TextContent("value=" + $title)
-root = Stack([field, caption])`);
+field = Input("title", placeholder: "Title", type: "text", bind:value: $title)
+caption = Text("value=" + $title)
+_app_ = Stack([field, caption])`);
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
     const input = shadow.getElementById("title") as HTMLInputElement;
@@ -464,10 +461,10 @@ root = Stack([field, caption])`);
     };
     el.setResponse(`$name = "Ada"
 $count = 0
-nameField = Input("name", "Name", "text", null, $name)
-counter = TextContent("count=" + $count)
-banner = TextContent("hi " + $name)
-root = Stack([nameField, counter, banner])`);
+nameField = Input("name", placeholder: "Name", type: "text", bind:value: $name)
+counter = Text("count=" + $count)
+banner = Text("hi " + $name)
+_app_ = Stack([nameField, counter, banner])`);
     for (let i = 0; i < 5; i += 1) await flush();
     el.state.set("count", 42);
     for (let i = 0; i < 5; i += 1) await flush();
@@ -479,34 +476,31 @@ root = Stack([nameField, counter, banner])`);
     expect(labels).toContain("hi Ada");
   });
 
-  // Regression: rendering after disconnect/reconnect used to skip scripts
-  // because `connectedCallback` short-circuited when the response attribute
-  // hadn't changed. The element now always re-renders on reconnect so any
-  // declared `Script(...)` re-registers and re-runs.
-  it("re-renders after detach + reattach so Script(...) re-runs", async () => {
-    const el = create() as HTMLElement & {
-      setResponse(text: string): void;
-      state: { get: (k: string) => unknown };
-    };
-    el.setResponse(`$ticks = 0
-boot = Script("boot", "ctx.state.set('ticks', (ctx.state.get('ticks')||0) + 1)")
-root = Stack([boot, TextContent("" + $ticks)])`);
-    for (let i = 0; i < 5; i += 1) await flush();
-    expect(el.state.get("ticks")).toBe(1);
+  // Regression: rendering after disconnect/reconnect used to short-circuit
+  // when the response attribute hadn't changed, which meant the renderer
+  // never repainted the shadow root and the user saw a blank slot. The
+  // element now always re-renders on reconnect.
+  it("re-renders after detach + reattach so the DOM is restored", async () => {
+    const el = create();
+    el.setResponse(`_app_ = Card([CardHeader("Hello")])`);
+    for (let i = 0; i < 3; i += 1) await flush();
+    expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe(
+      "Hello",
+    );
 
-    // Detach then re-attach to the document. The renderer is destroyed
-    // and rebuilt; the script must re-run.
     document.body.removeChild(el);
     for (let i = 0; i < 3; i += 1) await flush();
     document.body.appendChild(el);
     for (let i = 0; i < 5; i += 1) await flush();
-    expect(el.state.get("ticks")).toBe(2);
+    expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe(
+      "Hello",
+    );
   });
 
   // Regression: `clear()` used to leave parse errors and stale renderer
   // instance state behind. After clearing, the element should behave like
   // a fresh mount.
-  it("clear() resets state, queries, scripts, instance slots, and banner", async () => {
+  it("clear() resets state, effects, instance slots, and banner", async () => {
     const el = create() as HTMLElement & {
       setResponse(text: string): void;
       clear(): void;
@@ -514,7 +508,7 @@ root = Stack([boot, TextContent("" + $ticks)])`);
       state: { get: (k: string) => unknown };
     };
     el.showErrors = true;
-    el.setResponse(`root = Stack([\nbroken = Card([`);
+    el.setResponse(`_app_ = Stack([\nbroken = Card([`);
     for (let i = 0; i < 5; i += 1) await flush();
     const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
     expect(banner.hidden).toBe(false);
@@ -524,9 +518,27 @@ root = Stack([boot, TextContent("" + $ticks)])`);
     expect(el.shadowRoot!.querySelector(".rui-stack")).toBeNull();
 
     // After clearing, a fresh program should mount cleanly.
-    el.setResponse(`root = Card([CardHeader("Fresh")])`);
+    el.setResponse(`_app_ = Card([CardHeader("Fresh")])`);
     for (let i = 0; i < 3; i += 1) await flush();
     expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Fresh");
+  });
+
+  describe("Aktion — no capability sandbox", () => {
+    it("does not expose an `isCapabilityAllowed` method on the element", () => {
+      const el = create() as HTMLElement & Record<string, unknown>;
+      expect((el as { isCapabilityAllowed?: unknown }).isCapabilityAllowed).toBeUndefined();
+    });
+
+    it("ignores legacy `capabilities` / `capabilities-default` attributes", () => {
+      const el = create();
+      el.setAttribute("capabilities", "timer, net");
+      el.setAttribute("capabilities-default", "deny");
+      // Setting these attributes must not throw and must not block any
+      // downstream runtime behaviour — every primitive is always
+      // available in the current runtime.
+      expect(el.getAttribute("capabilities")).toBe("timer, net");
+      expect(el.getAttribute("capabilities-default")).toBe("deny");
+    });
   });
 
   // Regression: `appendChunk` used to corrupt the program buffer if called
@@ -537,11 +549,11 @@ root = Stack([boot, TextContent("" + $ticks)])`);
       appendChunk(chunk: unknown): void;
       response: string;
     };
-    el.setResponse(`root = Card([CardHeader("Initial")])`);
+    el.setResponse(`_app_ = Card([CardHeader("Initial")])`);
     for (let i = 0; i < 3; i += 1) await flush();
     el.appendChunk("");
     el.appendChunk(null as unknown as string);
     el.appendChunk(undefined as unknown as string);
-    expect(el.response).toBe(`root = Card([CardHeader("Initial")])`);
+    expect(el.response).toBe(`_app_ = Card([CardHeader("Initial")])`);
   });
 });

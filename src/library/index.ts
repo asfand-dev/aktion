@@ -1,10 +1,11 @@
 /**
- * Built-in component library for `<streaming-ui-script>`.
+ * Built-in component library for `<aktion-app>`.
  *
  * Exports a single `defaultLibrary` that ships with the package. Consumers can
- * extend it via `<streaming-ui-script>.registerComponents([...])`.
+ * extend it via `<aktion-app>.registerComponents([...])`.
  */
 
+import { assertOnePositionalMax } from "./types.js";
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
 import {
   Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
@@ -12,7 +13,7 @@ import {
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
 import {
-  TextContent, Image, Link, Badge, BadgeList,
+  Text, TextContent, Image, Link, Badge, BadgeList,
   Callout, CodeBlock, Skeleton, Markdown,
   Container, Spacer, Quote, Icon, Spinner,
 } from "./components/content.js";
@@ -70,23 +71,26 @@ import {
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
 } from "./components/advanced-patterns.js";
-import { Script } from "./components/scripts.js";
 import { Theme } from "./components/theme.js";
-import { Routes, Route, NavLink } from "./components/router.js";
+import { NavLink } from "./components/router.js";
 import {
   IconButton, CommandPalette, FilterChips, FieldRepeater,
   VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
 } from "./components/new-components.js";
+import {
+  Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
+} from "./components/helpers.js";
 
 export * from "./types.js";
 export * from "./registry.js";
+export { validateProgramSchema, validateProgram } from "./validate.js";
 
 const components: ComponentSpec[] = [
   Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea, Container, Spacer,
-  TextContent, Image, Link, Badge, BadgeList,
+  Text, TextContent, Image, Link, Badge, BadgeList,
   Callout, CodeBlock, Skeleton, Markdown, Quote, Icon, Spinner,
   Form, FormControl, Input, TextArea, Select, SelectItem, Checkbox,
   CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, SearchBar,
@@ -121,12 +125,13 @@ const components: ComponentSpec[] = [
   // Advanced patterns + state cards
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
-  Script,
   Theme,
-  Routes, Route, NavLink,
+  NavLink,
   IconButton, CommandPalette, FilterChips, FieldRepeater,
   VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
+  // Aktion 0.5 standard helpers
+  Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
 ];
 
 const componentGroups: ComponentGroup[] = [
@@ -150,20 +155,20 @@ const componentGroups: ComponentGroup[] = [
       "- Use `ResizablePanels(primary, secondary, initialPrimaryWidth?)` for user-resizable two-pane layouts (code editors, file browsers).",
       "- Use `MasonryGrid([...])` for Pinterest-style mixed-height card walls — prefer `Grid` when rows should share a height.",
       "- Use `StackItem(child, grow?, shrink?, basis?, alignSelf?)` inside `Stack(direction=\"row\", uniform=false)` for toolbars.",
-      "- Use `Grid(columns=12, [GridItem(child, span=\"1/4\"), GridItem(main, span=\"3/4\")])` for sidebar layouts; fractional spans `\"1/2\"`…`\"1/12\"` resolve on a 12-column track.",
+      "- Use `Grid(columns: 12, [GridItem(child, span: \"1/4\"), GridItem(main, span: \"3/4\")])` for sidebar layouts; fractional spans `\"1/2\"`…`\"1/12\"` resolve on a 12-column track.",
       "- Use `Box(children, padding?, margin?, border?, background?)` for spacing and surfaces without raw CSS.",
     ],
   },
   {
     name: "Content",
     components: [
-      "TextContent", "Image", "Link", "Badge", "BadgeList",
+      "Text", "Image", "Link", "Badge", "BadgeList",
       "Callout", "Quote", "CodeBlock", "Skeleton", "Spinner",
       "Markdown", "Kbd", "Icon",
     ],
     notes: [
       "- Prefer `Markdown(...)` for rich paragraph text with inline formatting — the parser supports headings, blockquotes, fenced code, numbered/bullet lists, links, images, and bare-URL auto-linking.",
-      "- Use `Callout(variant, title, description, icon?, compact?)` for highlighted notices; pass `compact=true` for a one-line inline note.",
+      "- Use `Callout(variant, title, description, icon?, compact?)` for highlighted notices; pass `compact: true` for a one-line inline note.",
       "- Use `Quote(text, cite?)` for inline pull-quotes inside articles and marketing sections (use `Testimonial` when you also have author/role/rating).",
       "- Use `CodeBlock(language, codeString, showLineNumbers?, highlightLines?)` for read-only code snippets. The header always renders a copy-to-clipboard button.",
       "- Use `Badge(label, variant?, icon?, size?)` for a single pill and `BadgeList([\"a\",\"b\",\"c\"], variant?, size?)` to render an array of strings as Badge pills.",
@@ -172,7 +177,7 @@ const componentGroups: ComponentGroup[] = [
       "- Use `Image(src, alt?, caption?, ratio?, fit?, fallback?)` — `ratio` (e.g. `\"16:9\"`) makes the image self-constrain so you do not need an outer `AspectRatio`.",
       "- Use `Kbd([\"Cmd\", \"K\"])` when referring to keyboard shortcuts.",
       "- Use `Icon(name, variant?, size?)` to render a standalone Font Awesome icon (`name` is the FA name without the `fa-` prefix, e.g. `\"house\"`, `\"chart-line\"`, `\"regular:star\"`, `\"brands:github\"`).",
-      "- For page-level titles reach for `PageHeader(...)` (top of dashboards/detail pages) or `SectionHeader(...)` (inside a Card). For tiny inline titles use `TextContent(value, variant=\"large-heavy\")`.",
+      "- For page-level titles reach for `PageHeader(...)` (top of dashboards/detail pages) or `SectionHeader(...)` (inside a Card). For tiny inline titles use `Text(value, variant=\"large-heavy\")`.",
     ],
   },
   {
@@ -199,8 +204,8 @@ const componentGroups: ComponentGroup[] = [
       "- `DateRangePicker(id, from?, to?, label?, min?, max?)` is the paired-date variant — bind both `from` and `to` to `$variable`s for a single shared range.",
       "- `Combobox(id, items, value?, placeholder?, emptyLabel?)` is the searchable single-select alternative to `Select` — type to filter long option lists (countries, currencies, users).",
       "- `MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?)` is the multi-select equivalent — bind a `$variable` array as `value` for two-way binding, the trigger renders the picks as removable chips.",
-      "- `FileUpload(id, label?, hint?, accept?, multiple?, action?)` is the styled file picker; the picked files cannot pass through a `$variable`, so use the `action` with an `@Js` step to read them.",
-      "- A submit button should run `Action([@Run(mutation), @Run(query), @Reset($var1, $var2)])`.",
+      "- `FileUpload(id, label?, hint?, accept?, multiple?, action?)` is the styled file picker; the picked files cannot pass through a `$variable`, so wire the `action` prop to an `action` block (use a `js{ … }` body if you need to read file contents directly).",
+      "- A submit button should call an `action` that awaits the relevant `$mutation` resource, optionally refetches a `$query`, and resets the form `$variable`s (e.g. `$title = \"\"`).",
       "- Button `size` accepts both `sm|md|lg` (canonical) and the legacy `small|normal|large`. Pass `icon` for an inline leading icon.",
       "- `FormSection(label, children, helper?)` is the canonical wrapper for related fields. Reach for it INSTEAD of nesting fields in Card + SectionHeader by hand.",
       "- `FieldSet(legend, children, helper?)` is the accessible `<fieldset>` for radio/checkbox groups; prefer `FormSection` for purely visual grouping.",
@@ -228,7 +233,7 @@ const componentGroups: ComponentGroup[] = [
       "- `InfiniteList(items, onLoadMore?, loading?, hasMore?)` is a scroll-to-load list; the action fires when the sentinel scrolls into view.",
       "- Use `Progress(value, max?, label?, tone?, indeterminate?, segments?, buffered?)` for linear bars — `segments` renders an N-step strip (onboarding flows), `buffered` adds a secondary buffer indicator.",
       "- `ProgressRing(value, max?, label?, tone?, size?)` is the circular variant for quotas/completion.",
-      "- `Stats([{label, value, hint?, tone?, spark?}, …], layout?)` — `layout=\"strip\"` (default) for inline KPIs; `layout=\"grid\"` for a responsive StatCard grid (replaces the old MetricGrid). Pass `spark` for an inline trend line.",
+      "- `Stats([{label, value, hint?, tone?, spark?}, …], layout?)` — `layout=\"strip\"` (default) for inline KPIs; `layout=\"grid\"` for a responsive StatCard grid. Pass `spark` for an inline trend line.",
       "- `StatCard(label, value, trend?, delta?, icon?, spark?, tone?)` gains an optional inline `Sparkline` via the `spark` prop. Use `Sparkline(values, tone?)` standalone for tiny trend chips in table cells.",
       "- `Tile(label, icon?, value?, description?, tone?, action?)` is the dense icon tile for quick-action menus and category grids; pair with `Grid` for uniform rows.",
       "- `Tree([TreeNode(label, children?, icon?, expanded?, active?, badge?, action?)])` renders a hierarchical tree (file browsers, nested navigation, category pickers); use `expanded=true` to open a branch by default.",
@@ -260,12 +265,12 @@ const componentGroups: ComponentGroup[] = [
     notes: [
       "- `Avatar(name, src?, size?, status?)` falls back to initials when the image is missing.",
       "- Use `AvatarGroup` to render contributor strips with a `+N` overflow chip.",
-      "- `PersonChip(name, role?, avatarSrc?, size?, status?, action?)` is the inline avatar + name + role pill — use everywhere a person is referenced (table cells, list rows, sidebar footers, kanban cards) instead of a raw `Avatar` next to `TextContent`.",
+      "- `PersonChip(name, role?, avatarSrc?, size?, status?, action?)` is the inline avatar + name + role pill — use everywhere a person is referenced (table cells, list rows, sidebar footers, kanban cards) instead of a raw `Avatar` next to `Text`.",
       "- Wrap any node in `Tooltip(label, trigger)` for inline hints.",
       "- Use `HoverCard(trigger, content)` when the popover needs rich content (profile preview, link target) and the trigger should open on hover.",
       "- `Popover(trigger, content, title?, side?, align?, width?)` is the click-triggered counterpart of `HoverCard` — use for filter panels, color pickers, share menus, and small settings flyouts. Always renders an × close button in the header; clicking the trigger again, clicking outside, or pressing Escape also closes it.",
       "- `Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)` renders stars for product reviews, testimonials, and ranked lists. Pass a `$variable` as `value` with `interactive=true` to let users rate; add `halfStep=true` so clicking the left half of a star sets a half-value. Set `icon=\"heart\"|\"thumb\"|\"fire\"|\"bolt\"` (or any FA name) to swap glyphs.",
-      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists via `@Set($toasts, [...$toasts, item])` and `@Filter`. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists from an `action` body: `$toasts = [...$toasts, item]` to append and `$toasts = @Filter($toasts, \"id\", \"!=\", id)` to dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
       "- `NotificationBell(count?, items?, onOpen?)` — compact inbox trigger; `CommandPalette` for Cmd-K action search.",
     ],
   },
@@ -310,14 +315,14 @@ const componentGroups: ComponentGroup[] = [
       "- `TopBar(title?, search?, actions?, sticky?)` — compact top strip for a content surface (panels, dialogs, embedded views). Use `AppShell` when you need a full sidebar; use `TopBar` for narrower headers above scrolling content.",
       "- `SectionHeader(title, subtitle?, eyebrow?, status?, actions?)` — sub-header inside a Card or panel. Use instead of bare `CardHeader` when the section also needs eyebrow / actions / status.",
       "- `Stats(items, layout?)` — KPI strip (`layout=\"strip\"`, default) or responsive grid (`layout=\"grid\"` with StatCard children). Prefer over hand-rolled StatCard rows.",
-      "- `Toolbar(left?, right?, center?, searchable?, searchPlaceholder?, searchValue?)` — filter/search/actions row above a list, table, or board. Pass `searchable=true` to auto-mount a `SearchBar` (use `searchValue` to bind it to a `$variable`).",
+      "- `Toolbar(left?, right?, center?, searchable?, searchPlaceholder?, searchValue?)` — filter/search/actions row above a list, table, or board. Pass `searchable: true` to auto-mount a `SearchBar` (use `searchValue` to bind it to a `$variable`).",
       "- `EmptyState(title, description?, icon?, illustration?, actions?, action?)` — render this when a list is empty rather than an empty Card. The icon is auto-picked from the title keywords if you omit it (inbox/messages → `inbox`, charts/analytics → `chart-pie`, files/folders → `folder-open`, etc.).",
       "- `Timeline([TimelineItem(...)])` — vertical event feed (audit log, changelog, activity).",
       "- `ActivityLog(entries, variant?)` — purpose-built feed of user actions. Pass `entries` of `{actor, title, description?, time?, icon?, tone?, meta?}`; use `variant=\"audit\"` for security/admin trails with monospace meta.",
       "- `FeatureGrid([FeatureItem(...)])` — feature highlights with iconography.",
       "- `MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?, ratio?)` — image + content card. Use for article previews, product cards, project highlights. Pair with `Grid` for uniform card rows.",
       "- `KanbanBoard([KanbanColumn(\"To do\", [KanbanCard(...), ...])])` — task boards.",
-      "- `DescriptionList([DescriptionItem(\"Status\", Badge(...)), …])` — detail-page key/value summary. Always preferable to a Stack of TextContent rows on profile, billing, or metadata panels.",
+      "- `DescriptionList([DescriptionItem(\"Status\", Badge(...)), …])` — detail-page key/value summary. Always preferable to a Stack of Text rows on profile, billing, or metadata panels.",
       "- `StatusDot(label, tone?, pulse?)` — inline status pip. Use in toolbars, list rows, table cells, sidebars.",
       "- `Notification(title, message?, time?, icon?, avatarSrc?, tone?, unread?, actions?)` — inline notification card for notification panels / inboxes (prefer `Banner` for top-of-page announcements).",
       "- `InboxPanel(items, title?, onMarkAllRead?)` — `Notification` cards grouped into Unread / Earlier sections, with a shared mark-all-read action.",
@@ -349,22 +354,16 @@ const componentGroups: ComponentGroup[] = [
     ],
   },
   {
-    name: "Scripting",
-    components: ["Script"],
-    notes: [
-      "- Use sparingly: most state can be handled with `$variables` + `Action([@Set(...), @Run(...)])`.",
-      "- The body receives a `ctx` object exposing reactive state, registered tools, DOM refs, and lifecycle hooks.",
-    ],
-  },
-  {
     name: "Theming",
     components: ["Theme"],
     notes: [
       "- `Theme({...})` applies a partial token override **on top of** the base theme set by the host (attribute / `setTheme()`). Use it to brand a single response without changing host configuration.",
       "- Assign the result to a top-level binding called `theme` so the runtime picks it up:",
-      "  `theme = Theme({colorPrimary: \"#0969da\", radiusButton: \"6px\"})`",
-      "- Common branding tokens: `colorPrimary`, `colorPrimaryHover`, `colorPrimaryText`, `colorAccent`, `colorBg`, `colorSurface`, `colorText`, `colorTextMuted`, `colorBorder`, `colorFocusRing`, `fontFamily`, `fontFamilyHeading`, `fontSizeBase`, `fontWeightHeading`, `letterSpacingHeading`, `headingTextTransform`, `radiusMd`, `radiusButton`, `radiusInput`, `borderWidth`, `shadowMd`, `buttonFontWeight`, `buttonTextTransform`, `buttonPaddingY`, `buttonPaddingX`, `transitionDuration`, `chart1`–`chart6`.",
-      "- Tokens are CSS values (`\"#0969da\"`, `\"'Inter', sans-serif\"`, `\"6px\"`, `\"600\"`). The runtime ignores unknown keys, so typos fail silent.",
+      "  `theme = Theme({ colors: { primary: \"#0969da\" }, radius: { button: \"6px\" } })`",
+      "- Tokens MUST use the structured form. Top-level groups: `colors`, `radius`, `font`, `motion`, `elevation` (plus metadata: `name`, `direction`).",
+      "- Common tokens (each lives inside its group): `colors.primary`, `colors.primaryHover`, `colors.primaryText`, `colors.accent`, `colors.bg`, `colors.surface`, `colors.text`, `colors.textMuted`, `colors.border`, `colors.focusRing`; `radius.md`, `radius.button`, `radius.input`; `font.family`, `font.familyHeading`, `font.sizeBase`, `font.weightHeading`; `motion.transitionDuration`; `elevation.md`.",
+      "- The legacy flat-shape form (`Theme({colorPrimary: ...})`) and free-form `--css-vars` are removed in Aktion 0.5 — the runtime drops them and the schema validator surfaces a migration warning.",
+      "- Tokens are CSS values (`\"#0969da\"`, `\"'Inter', sans-serif\"`, `\"6px\"`, `\"600\"`). The runtime ignores unknown keys inside a group, so typos fail silent.",
       "- Removing the `Theme(...)` line snaps the UI back to the base theme without a reload.",
     ],
   },
@@ -390,15 +389,32 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Routing",
-    components: ["Routes", "Route", "NavLink"],
+    components: ["NavLink"],
     notes: [
-      "- Wrap a list of `Route(path, content)` entries inside `Routes(...)` to declare a multi-page UI.",
-      "- Use `NavLink(label, to)` for navigation and `@Navigate(\"/path\")` action steps for programmatic moves.",
-      "- Inside a Route's content, read URL params via the `params` loop variable (e.g. `params.id` for `/users/:id`).",
-      "- The current path is also available as `$route` so any expression can react to it.",
+      "- Declare routes with the `_router_({...})` call form: `pages = _router_({ \"/\": Dashboard(), \"/orders/:id\": OrderDetail(id: params.id), default: NotFound() })`. The matched arm's `params` object is in scope on the right-hand side; nest `_router_` inside components for layout-preserving sub-routes.",
+      "- `Redirect(path)` is a router-aware component: returning it from a route's body navigates and unmounts the rest of the subtree.",
+      "- `NavLink(label, to)` is a thin link wrapper that reads `_route_.path` and dispatches `_route_.navigate(to)` — use it for sidebars, navbars and breadcrumbs.",
+      "- Read URL params via `_route_.params.<name>` (e.g. `_route_.params.id` for `/users/:id`) and the current path via `_route_.path`.",
+    ],
+  },
+  {
+    name: "Helpers",
+    components: ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary"],
+    notes: [
+      "- `Async(resource, loading:, error:, empty:, data:)` switches a `$query` / `$mutation` / `$subscription` resource on its `state` field.",
+      "- `Show(when, fallback?, children)` is sugar over `if expr { children } else { fallback }`.",
+      "- `Portal(target?, children)` renders into a different DOM subtree (defaults to `document.body`).",
+      "- `Redirect(path)` is a router-aware component — see Routing.",
+      "- `Lazy(loader, fallback?)` defers children until `loader` resolves.",
+      "- `ErrorBoundary(fallback?, onError?, children)` catches rendering errors thrown by descendants.",
     ],
   },
 ];
+
+// Aktion 0.5 §19.1 — fail-fast guard: no library spec may
+// declare more than one `positional: true` prop. Surfaces as a clear
+// SyntaxError at module load so a broken spec never ships.
+assertOnePositionalMax(components);
 
 export const defaultLibrary: ComponentLibrary = {
   root: "Stack",

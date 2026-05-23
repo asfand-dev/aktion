@@ -9,9 +9,9 @@
  *   ├── index.html, get-started.html…   (docs HTML)
  *   ├── assets/site.js, site.css…       (docs assets)
  *   └── dist/                           (CDN-shippable bundle)
- *       ├── streaming-ui-script.js
- *       ├── streaming-ui-script.iife.js
- *       ├── streaming-ui-script.umd.cjs
+ *       ├── aktion.js
+ *       ├── aktion.iife.js
+ *       ├── aktion.umd.cjs
  *       └── system_prompt.txt
  *
  * The docs HTML / JS sources use `../dist/…` paths so local development from
@@ -70,12 +70,12 @@ async function rewriteDeployPaths(siteDir) {
 
     if (ext === ".html") {
       updated = updated
-        .replaceAll("../dist/streaming-ui-script", "./dist/streaming-ui-script")
+        .replaceAll("../dist/aktion", "./dist/aktion")
         .replaceAll("../dist/system_prompt", "./dist/system_prompt");
     } else {
       updated = updated.replaceAll(
-        "../../dist/streaming-ui-script",
-        "../dist/streaming-ui-script",
+        "../../dist/aktion",
+        "../dist/aktion",
       );
     }
 

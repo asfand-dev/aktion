@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Component reference · streaming-ui-script</title>
+  <title>Component reference · Aktion</title>
   <meta name="description" content="Every built-in component with positional signatures, prop tables, and enum values." />
   <script>
     (function () {
@@ -68,6 +68,15 @@
       white-space: pre;
       margin: 0 0 14px;
       border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    /* The dark signature surface keeps the same gradient in both
+       themes, so the global selection colours (light-on-light in dark
+       mode) leave the highlighted text invisible. Pin the selection to
+       a tone-on-tone pair that survives both themes. */
+    .component-signature ::selection,
+    .component-signature::selection {
+      background: rgba(99, 102, 241, 0.45);
+      color: #f8fafc;
     }
     .prop-table {
       width: 100%;
@@ -212,8 +221,8 @@
       transform: translate(0);
       overflow: hidden;
     }
-    .component-preview-output[data-overlay="true"] { min-height: 320px; }
-    .component-preview-output streaming-ui-script { display: block; }
+    .component-preview-output[data-overlay="true"] { min-height: 520px; }
+    .component-preview-output aktion-app { display: block; }
     .component-preview-panel[data-key="source"] pre { margin: 0; }
     .component-preview-empty {
       padding: 16px;
@@ -238,25 +247,7 @@
 </head>
 <body data-page="components">
   <div class="layout">
-    <aside class="sidebar">
-      <h1>streaming-ui-script</h1>
-      <p>Web component runtime for Streaming UI Script</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="theme-customization.html">Theme customization</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html">Playground</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
-    </aside>
+    <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
@@ -312,7 +303,7 @@ el.registerComponents([ProductCard]);</code></pre>
   </div>
 
   <script type="module">
-    import { defaultLibrary } from "../dist/streaming-ui-script.js";
+    import { defaultLibrary } from "../dist/aktion.js";
 
     const root = document.getElementById("component-reference");
 
@@ -324,7 +315,7 @@ el.registerComponents([ProductCard]);</code></pre>
 
     /**
      * Per-component sample programs. Each value is a self-contained
-     * Streaming UI Script snippet that ends with a `root = ...` statement,
+     * Aktion snippet that ends with a `_app_ = ...` statement,
      * so it can be fed straight into `setResponse()` on a renderer instance.
      *
      * Sub-components (e.g. `CardHeader`, `KanbanCard`, `SidebarItem`) are
@@ -333,876 +324,918 @@ el.registerComponents([ProductCard]);</code></pre>
      */
     const SAMPLES = {
       // Layout
-      Stack: `root = Stack([
-  Badge("First",  "primary"),
-  Badge("Second", "info"),
-  Badge("Third",  "success")
-], "row", "m", "center")`,
-      Grid: `root = Grid([
+      Stack: `_app_ = Stack([
+  Badge("First",  tone: "primary"),
+  Badge("Second", tone: "info"),
+  Badge("Third",  tone: "success")
+], direction: "row", gap: "m", align: "center")`,
+      Grid: `_app_ = Grid([
   Card([CardHeader("Tile A")]),
   Card([CardHeader("Tile B")]),
   Card([CardHeader("Tile C")])
-], 3, "m")`,
-      Section: `root = Section([
-  TextContent("Section body content lives here.")
-], "Section title")`,
-      Container: `root = Container([
-  Card([CardHeader("Centred content", "Wrapped in Container size=md")])
-], "md")`,
-      Spacer: `root = Stack([
-  TextContent("Left edge"),
+], columns: 3, gap: "m")`,
+      StackItem: `_app_ = Stack([
+  StackItem(Badge("Fixed", tone: "info"), grow: 0, shrink: 0, alignSelf: "center"),
+  StackItem(Text("This section grows to fill remaining space."), grow: 1),
+  StackItem(Button("Action", variant: "primary"), grow: 0, shrink: 0, alignSelf: "center")
+], direction: "row", gap: "m", align: "stretch")`,
+      GridItem: `_app_ = Grid([
+  GridItem(Card([CardHeader("Sidebar"), Text("1/4 width.")]), span: "1/4"),
+  GridItem(Card([CardHeader("Main content"), Text("3/4 width.")]), span: "3/4")
+], columns: 12, gap: "m")`,
+      Box: `_app_ = Stack([
+  Box([Text("Padded box with primary background.")], padding: "m", background: "primary", border: "subtle"),
+  Box([Text("Muted surface with large padding.")], padding: "l", background: "muted", border: "default")
+], gap: "m")`,
+      Container: `_app_ = Container([
+  Card([CardHeader("Centred content", subtitle: "Wrapped in Container size=md")])
+], size: "md")`,
+      Spacer: `_app_ = Stack([
+  Text("Left edge"),
   Spacer(),
-  TextContent("Right edge")
-], "row", "m", "center")`,
-      Card: `root = Card([
-  CardHeader("Card title", "With a subtitle"),
-  CardBody([TextContent("Card body content.")]),
-  CardFooter([Button("Action", null, "primary", "button", "small")])
+  Text("Right edge")
+], direction: "row", gap: "m", align: "center")`,
+      Card: `_app_ = Card([
+  CardHeader("Card title", subtitle: "With a subtitle"),
+  Text("Card body content."),
+  CardFooter([Button("Action", variant: "primary", type: "button", size: "small")])
 ])`,
-      CardHeader: `root = Card([
-  CardHeader("Card title", "With a subtitle"),
-  TextContent("Body of the card.")
+      CardHeader: `_app_ = Card([
+  CardHeader("Card title", subtitle: "With a subtitle"),
+  Text("Body of the card.")
 ])`,
-      CardBody: `root = Card([
-  CardHeader("With body"),
-  CardBody([TextContent("Body wrapped in CardBody.")])
-])`,
-      CardFooter: `root = Card([
+      CardFooter: `_app_ = Card([
   CardHeader("With footer"),
-  TextContent("Card body."),
-  CardFooter([Button("Save", null, "primary", "button", "small")])
+  Text("Card body."),
+  CardFooter([Button("Save", variant: "primary", type: "button", size: "small")])
 ])`,
-      Separator: `root = Stack([
-  TextContent("Above the separator"),
-  Separator("horizontal"),
-  TextContent("Below the separator"),
-  Separator("horizontal", "OR"),
-  TextContent("After a labelled separator")
+      Separator: `_app_ = Stack([
+  Text("Above the separator"),
+  Separator(orientation: "horizontal"),
+  Text("Below the separator"),
+  Separator(orientation: "horizontal", label: "OR"),
+  Text("After a labelled separator")
 ])`,
-      Tabs: `root = Tabs([
-  TabItem("overview", "Overview", [TextContent("Overview tab content.")]),
-  TabItem("details",  "Details",  [TextContent("Details tab content.")])
+      Tabs: `_app_ = Tabs([
+  TabItem("overview", label: "Overview", children: [Text("Overview tab content.")]),
+  TabItem("details",  label: "Details",  children: [Text("Details tab content.")])
 ])`,
-      TabItem: `root = Tabs([
-  TabItem("first",  "First",  [TextContent("First tab body.")]),
-  TabItem("second", "Second", [TextContent("Second tab body.")])
+      TabItem: `_app_ = Tabs([
+  TabItem("first",  label: "First",  children: [Text("First tab body.")]),
+  TabItem("second", label: "Second", children: [Text("Second tab body.")])
 ])`,
-      Accordion: `root = Accordion([
-  AccordionItem("Open by default", [Markdown("This **AccordionItem** has open=true.")], true),
-  AccordionItem("Another question",[Markdown("Click to reveal the answer.")]),
-  AccordionItem("And one more",    [Markdown("Stacks as a sequence of disclosures.")])
+      Accordion: `_app_ = Accordion([
+  AccordionItem("Open by default", children: [Markdown("This **AccordionItem** has open=true.")], open: true),
+  AccordionItem("Another question",children: [Markdown("Click to reveal the answer.")]),
+  AccordionItem("And one more",    children: [Markdown("Stacks as a sequence of disclosures.")])
 ])`,
-      AccordionItem: `root = Accordion([
-  AccordionItem("Open by default", [Markdown("This item starts expanded.")], true),
-  AccordionItem("Closed",          [Markdown("Click to expand.")])
+      AccordionItem: `_app_ = Accordion([
+  AccordionItem("Open by default", children: [Markdown("This item starts expanded.")], open: true),
+  AccordionItem("Closed",          children: [Markdown("Click to expand.")])
 ])`,
-      Modal: `root = Modal("Modal title", true, [
-  TextContent("Modal body shown when open=true."),
+      Modal: `_app_ = Modal("Modal title", open: true, children: [
+  Text("Modal body shown when open=true."),
   Buttons([
-    Button("Cancel",  null, "ghost",   "button", "small"),
-    Button("Confirm", null, "primary", "button", "small")
+    Button("Cancel", variant: "ghost",   type: "button", size: "small"),
+    Button("Confirm", variant: "primary", type: "button", size: "small")
   ])
 ])`,
-      Sheet: `root = Drawer("Sheet title", true, [
-  TextContent("Sheet body slides in from the side when open=true."),
-  Buttons([
-    Button("Cancel", null, "ghost",   "button", "small"),
-    Button("Save",   null, "primary", "button", "small")
-  ])
-], "right")`,
-      Steps: `root = Steps([
+      Steps: `_app_ = Steps([
   { title: "Create account",   details: "Sign up with your email." },
   { title: "Invite teammates", details: "Share an invite link." },
   { title: "Connect data",     details: "Hook up your first source." }
 ])`,
-      AspectRatio: `root = AspectRatio("16:9", [
-  Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", "Demo image")
+      AspectRatio: `_app_ = AspectRatio("16:9", children: [
+  Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", alt: "Demo image")
 ])`,
-      ScrollArea: `root = ScrollArea([
-  Card([CardHeader("Block 1"), TextContent("Body for block 1.")]),
-  Card([CardHeader("Block 2"), TextContent("Body for block 2.")]),
-  Card([CardHeader("Block 3"), TextContent("Body for block 3.")]),
-  Card([CardHeader("Block 4"), TextContent("Body for block 4.")])
-], "200px")`,
+      ScrollArea: `_app_ = ScrollArea([
+  Card([CardHeader("Block 1"), Text("Body for block 1.")]),
+  Card([CardHeader("Block 2"), Text("Body for block 2.")]),
+  Card([CardHeader("Block 3"), Text("Body for block 3.")]),
+  Card([CardHeader("Block 4"), Text("Body for block 4.")])
+], height: "200px")`,
+
+      Theme: `theme = Theme({
+  colors: { primary: "#0969da", bg: "#f8fafc" },
+  font:   { family: "'Inter', system-ui, sans-serif" },
+  radius: { md: "12px" }
+})
+_app_ = Card([
+  CardHeader("Themed card", subtitle: "Custom primary and radius applied."),
+  Text("This card uses a local theme override.")
+])`,
 
       // Content
-      TextContent: `root = Stack([
-  TextContent("Small text.",        "small"),
-  TextContent("Body text.",         "body"),
-  TextContent("Large heavy text.",  "large-heavy"),
-  TextContent("Heading variant.",   "heading", "primary")
+      Text: `_app_ = Stack([
+  Text("Small text.",        variant: "small"),
+  Text("Body text.",         variant: "body"),
+  Text("Large heavy text.",  variant: "large-heavy"),
+  Text("Styled.",             style: "font-size: 18px; font-weight: 600; color: #6366f1;"),
+  Text("Heading variant.",   variant: "heading", tone: "primary")
 ])`,
-      Image: `root = Image(
+      Image: `_app_ = Image(
   "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=720&q=80",
-  "Workspace photo",
-  "Photo by Bram Naus on Unsplash"
+  alt: "Workspace photo",
+  caption: "Photo by Bram Naus on Unsplash"
 )`,
-      Icon: `root = Stack([
-  Icon("house",      "solid",   "lg"),
-  Icon("chart-line", "solid",   "lg"),
-  Icon("star",       "regular", "lg"),
-  Icon("github",     "brands",  "lg")
-], "row", "m", "center")`,
-      Link: `root = Stack([
-  Link("Internal link", "#section"),
-  Link("External link", "https://example.com", true)
-], "row", "m", "center")`,
-      Badge: `root = Stack([
+      Icon: `_app_ = Stack([
+  Icon("house",      variant: "solid",   size: "lg"),
+  Icon("chart-line", variant: "solid",   size: "lg"),
+  Icon("star",       variant: "regular", size: "lg"),
+  Icon("github",     variant: "brands",  size: "lg")
+], direction: "row", gap: "m", align: "center")`,
+      Link: `_app_ = Stack([
+  Link("Internal link", href: "#section"),
+  Link("External link", href: "https://example.com", external: true)
+], direction: "row", gap: "m", align: "center")`,
+      Badge: `_app_ = Stack([
   Badge("Default"),
-  Badge("Primary", "primary"),
-  Badge("Success", "success"),
-  Badge("Warning", "warning"),
-  Badge("Danger",  "danger"),
-  Badge("Info",    "info")
-], "row", "s", "center")`,
-      BadgeList: `root = BadgeList(["react", "typescript", "ui", "streaming"], "primary", "sm")`,
-      Callout: `root = Stack([
-  Callout("info",    "Pro tip",      "Use $variables for reactive two-way binding."),
-  Callout("success", "All caught up","Your draft was auto-saved at 10:24 AM.", "circle-check"),
-  Callout("warning", "Heads up",     "Owner: Mei · ARR $84,000 · renewal in Q3", "lightbulb", true)
-], "column", "s")`,
-      Quote: `root = Quote(
-  "Streaming-ui-script took our recap email from 4k lines of glue to 40.",
-  "Naomi · last QBR",
-  "primary"
+  Badge("Primary", tone: "primary"),
+  Badge("Success", tone: "success"),
+  Badge("Warning", tone: "warning"),
+  Badge("Danger",  tone: "danger"),
+  Badge("Info",    tone: "info")
+], direction: "row", gap: "s", align: "center")`,
+      BadgeList: `_app_ = BadgeList(["react", "typescript", "ui", "streaming"], tone: "primary", size: "sm")`,
+      Callout: `_app_ = Stack([
+  Callout("info",    title: "Pro tip",      text: "Use $variables for reactive two-way binding."),
+  Callout("success", title: "All caught up",text: "Your draft was auto-saved at 10:24 AM.", icon: "circle-check"),
+  Callout("warning", title: "Heads up",     text: "Owner: Mei · ARR $84,000 · renewal in Q3", icon: "lightbulb", ignored1: true)
+], direction: "column", gap: "s")`,
+      Quote: `_app_ = Quote(
+  "Aktion took our recap email from 4k lines of glue to 40.",
+  attribution: "Naomi · last QBR",
+  tone: "primary"
 )`,
-      CodeBlock: `root = CodeBlock("bash", "npm install streaming-ui-script")`,
-      Skeleton: `root = Skeleton(4, 14)`,
-      Markdown: `root = Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\\n\\n- First bullet\\n- Second bullet\\n- Third bullet")`,
-      Kbd: `root = Stack([
+      CodeBlock: `_app_ = CodeBlock("bash", code: "npm install aktion")`,
+      Skeleton: `_app_ = Skeleton(4, count: 14)`,
+      Markdown: `_app_ = Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\n\n- First bullet\n- Second bullet\n- Third bullet")`,
+      Kbd: `_app_ = Stack([
   Kbd(["Cmd", "K"]),
-  Kbd(["Shift", "?"], "sm")
-], "row", "m", "center")`,
+  Kbd(["Shift", "?"], size: "sm")
+], direction: "row", gap: "m", align: "center")`,
 
       // Forms
       Form: `$email = ""
 $plan = "pro"
-submit = Button("Save", Action([@ToAssistant("Save profile")]), "primary")
-root = Form("profile", submit, [
-  FormControl("Email", Input("email", "you@example.com", "email", null, $email)),
-  FormControl("Plan",  Select("plan", [
-    SelectItem("free","Free"),
-    SelectItem("pro","Pro"),
-    SelectItem("team","Team")
-  ], null, null, $plan))
+submit = Button("Save", variant: "primary", type: "submit")
+_app_ = Form("profile", buttons: submit, fields: [
+  FormControl("Email", control: Input("email", placeholder: "you@example.com", type: "email", value: $email)),
+  FormControl("Plan",  control: Select("plan", items: [
+    SelectItem("free", label: "Free"),
+    SelectItem("pro",  label: "Pro"),
+    SelectItem("team", label: "Team")
+  ], value: $plan))
 ])`,
-      FormControl: `root = FormControl(
+      FormControl: `_app_ = FormControl(
   "Email",
-  Input("email", "you@example.com", "email"),
-  "We'll never share your email."
+  control: Input("email", placeholder: "you@example.com", type: "email"),
+  hint: "We'll never share your email."
 )`,
-      Input: `root = Stack([
-  FormControl("Name",  Input("name",  "Your name", "text")),
-  FormControl("Email", Input("email", "you@example.com", "email")),
-  FormControl("Age",   Input("age",   "21", "number"))
+      Input: `$name = ""
+$email = ""
+_app_ = Stack([
+  FormControl("Name",  control: Input("name",  placeholder: "Your name", type: "text", value: $name)),
+  FormControl("Email", control: Input("email", placeholder: "you@example.com", type: "email", value: $email))
 ])`,
-      TextArea: `root = FormControl(
+      TextArea: `$notes = ""
+_app_ = FormControl(
   "Notes",
-  TextArea("notes", "Add a few sentences…", 4)
+  control: TextArea("notes", placeholder: "Add a few sentences…", rows: 4, value: $notes)
 )`,
       Select: `$plan = "pro"
-root = FormControl("Plan", Select("plan", [
-  SelectItem("free", "Free"),
-  SelectItem("pro",  "Pro"),
-  SelectItem("team", "Team")
-], null, "Pick a plan", $plan))`,
+_app_ = FormControl("Plan", control: Select("plan", items: [
+  SelectItem("free", label: "Free"),
+  SelectItem("pro",  label: "Pro"),
+  SelectItem("team", label: "Team")
+], placeholder: "Pick a plan", value: $plan))`,
       SelectItem: `$size = "m"
-root = FormControl("Size", Select("size", [
-  SelectItem("s", "Small"),
-  SelectItem("m", "Medium"),
-  SelectItem("l", "Large")
-], null, null, $size))`,
-      Checkbox: `$accepted = false
-root = Checkbox("accept", "I agree to the Terms of Service", $accepted)`,
+_app_ = FormControl("Size", control: Select("size", items: [
+  SelectItem("s", label: "Small"),
+  SelectItem("m", label: "Medium"),
+  SelectItem("l", label: "Large")
+], value: $size))`,
+      Checkbox: `$accepted = true
+_app_ = Checkbox("accept", label: "I agree to the Terms of Service", value: $accepted)`,
       CheckBoxGroup: `$alerts = {email: true, sms: false, push: true}
-root = CheckBoxGroup("alerts", [
-  CheckBoxItem("Email",        "email", "Major product updates",  true),
-  CheckBoxItem("SMS",          "sms",   "Critical alerts only",   false),
-  CheckBoxItem("Push",         "push",  "Real-time notifications",true)
-], $alerts)`,
+_app_ = CheckBoxGroup("alerts", items: [
+  CheckBoxItem("Email", name: "email", description: "Major product updates",  defaultChecked: true),
+  CheckBoxItem("SMS",   name: "sms",   description: "Critical alerts only",   defaultChecked: false),
+  CheckBoxItem("Push",  name: "push",  description: "Real-time notifications", defaultChecked: true)
+], value: $alerts)`,
       CheckBoxItem: `$alerts = {email: true, sms: false}
-root = CheckBoxGroup("alerts", [
-  CheckBoxItem("Email", "email", "Major product updates", true),
-  CheckBoxItem("SMS",   "sms",   "Critical alerts only",  false)
-], $alerts)`,
+_app_ = CheckBoxGroup("alerts", items: [
+  CheckBoxItem("Email", name: "email", description: "Major product updates", defaultChecked: true),
+  CheckBoxItem("SMS",   name: "sms",   description: "Critical alerts only",  defaultChecked: false)
+], value: $alerts)`,
       Radio: `$size = "m"
-root = Radio("size", [
-  SelectItem("s", "Small"),
-  SelectItem("m", "Medium"),
-  SelectItem("l", "Large")
-], $size)`,
+_app_ = Radio("size", items: [
+  SelectItem("s", label: "Small"),
+  SelectItem("m", label: "Medium"),
+  SelectItem("l", label: "Large")
+], value: $size)`,
       Switch: `$notify = true
-root = Switch("notify", "Email notifications", $notify, "Receive product updates")`,
-      Toggle: `$bold = true
-root = Toggle("Bold", $bold, "bold", "outline", "md")`,
+_app_ = Switch("notify", label: "Email notifications", value: $notify, description: "Receive product updates")`,
       ToggleGroup: `$view = "list"
-root = ToggleGroup("view", [
+_app_ = ToggleGroup("view", items: [
   ["list",  "List",  "list"],
   ["grid",  "Grid",  "grip"],
   ["board", "Board", "table-cells-large"]
-], $view, "outline", "md")`,
-      Button: `root = Stack([
-  Button("Primary",   null, "primary"),
-  Button("Secondary", null, "secondary"),
-  Button("Ghost",     null, "ghost"),
-  Button("Danger",    null, "danger")
-], "row", "s", "center")`,
-      Buttons: `root = Buttons([
-  Button("Save",   null, "primary"),
-  Button("Cancel", null, "ghost")
+], value: $view, variant: "outline", size: "md")`,
+      Button: `_app_ = Stack([
+  Button("Primary", variant: "primary"),
+  Button("Secondary", variant: "secondary"),
+  Button("Ghost", variant: "ghost"),
+  Button("Danger", variant: "danger")
+], direction: "row", gap: "s", align: "center")`,
+      Buttons: `_app_ = Buttons([
+  Button("Save", variant: "primary"),
+  Button("Cancel", variant: "ghost")
 ])`,
       SearchBar: `$q = ""
-root = SearchBar("q", "Search the catalog…", $q, "/")`,
+_app_ = SearchBar("q", placeholder: "Search the catalog…", value: $q)`,
       Slider: `$volume = 60
-root = Slider("vol", 0, 100, 5, $volume, "Volume", true)`,
+_app_ = Slider("vol", min: 0, max: 100, step: 5, value: $volume, label: "Volume", showValue: true)`,
       NumberInput: `$qty = 2
-root = FormControl("Quantity", NumberInput("qty", $qty, 1, 99, 1))`,
+_app_ = FormControl("Quantity", control: NumberInput("qty", value: $qty, min: 1, max: 99, step: 1))`,
       DatePicker: `$date = "2026-06-01"
-root = DatePicker("date", $date, "Pick a date", "2026-01-01", "2026-12-31")`,
-      FileUpload: `root = FileUpload(
+_app_ = DatePicker("date", value: $date, placeholder: "Pick a date", min: "2026-01-01", max: "2026-12-31")`,
+      FileUpload: `_app_ = FileUpload(
   "avatar",
-  "Click or drop a PNG / JPG",
-  "Up to 5 MB",
-  "image/*",
-  false
+  label: "Click or drop a PNG / JPG",
+  hint: "Up to 5 MB",
+  accept: "image/*",
+  multiple: false
 )`,
       Combobox: `$country = "us"
 countries = [
-  SelectItem("us", "United States"),
-  SelectItem("uk", "United Kingdom"),
-  SelectItem("ca", "Canada"),
-  SelectItem("de", "Germany"),
-  SelectItem("fr", "France"),
-  SelectItem("jp", "Japan")
+  SelectItem("us", label: "United States"),
+  SelectItem("uk", label: "United Kingdom"),
+  SelectItem("ca", label: "Canada"),
+  SelectItem("de", label: "Germany"),
+  SelectItem("fr", label: "France"),
+  SelectItem("jp", label: "Japan")
 ]
-root = Combobox("country", countries, $country, "Search countries…")`,
+_app_ = Combobox("country", items: countries, value: $country, placeholder: "Search countries…", open: true)`,
 
       // Data
-      Table: `root = Table([
-  Col("Name",  ["Ada Lovelace", "Linus Torvalds", "Grace Hopper"]),
-  Col("Stars", [1820, 2300, 940], "number"),
-  Col("Forks", [220,  412,  80],  "number")
-], "Top contributors")`,
-      Col: `root = Table([
-  Col("Name",  ["Ada", "Linus", "Grace"]),
-  Col("Stars", [1820, 2300, 940], "number")
+      Table: `_app_ = Table([
+  Col("Name",  values: ["Ada Lovelace", "Linus Torvalds", "Grace Hopper"]),
+  Col("Stars", values: [1820, 2300, 940], align: "right", format: "number"),
+  Col("Forks", values: [220,  412,  80],  align: "right", format: "number")
+], title: "Top contributors")`,
+      Col: `_app_ = Table([
+  Col("Name",  values: ["Ada", "Linus", "Grace"]),
+  Col("Stars", values: [1820, 2300, 940], align: "right", format: "number")
 ])`,
-      List: `root = List([
-  ListItem("Tasks",    "3 active",   "list-check"),
-  ListItem("Calendar", "2 events",   "calendar"),
-  ListItem("Inbox",    "5 unread",   "inbox")
+      List: `_app_ = List([
+  ListItem("Tasks",    meta: "3 active",   icon: "list-check"),
+  ListItem("Calendar", meta: "2 events",   icon: "calendar"),
+  ListItem("Inbox",    meta: "5 unread",   icon: "inbox")
 ])`,
-      ListItem: `root = List([
-  ListItem("Tasks",    "3 active", "list-check"),
-  ListItem("Calendar", "2 events", "calendar")
+      ListItem: `_app_ = List([
+  ListItem("Tasks",    meta: "3 active", icon: "list-check"),
+  ListItem("Calendar", meta: "2 events", icon: "calendar")
 ])`,
-      StatCard: `root = StatCard("Revenue", "$48,230", "up", "+12% vs Q2", "sack-dollar")`,
-      Stats: `root = Stats([
+      StatCard: `_app_ = StatCard("Revenue", value: "$48,230", trend: "up", delta: "+12% vs Q2", icon: "sack-dollar")`,
+      Stats: `_app_ = Stats([
   {label:"Teams trust it",   value:"2,400+", hint:"In 40 countries",      tone:"primary"},
   {label:"Uptime SLA",       value:"99.99%", hint:"Multi-region",         tone:"success"},
   {label:"Time to first UI", value:"<90 s",  hint:"Signup → render",      tone:"info"},
   {label:"Support reply",    value:"<1 hr",  hint:"Median weekday reply", tone:"warning"}
-], "center")`,
-      Tile: `root = Grid([
-  Tile("Total contacts",   "users",                  "2,481", "+128 this week",            "primary"),
-  Tile("Active deals",     "briefcase",              "47",    "$418k ARR pipeline",        "info"),
-  Tile("At-risk accounts", "triangle-exclamation",   "12",    "Needs follow-up this week", "warning"),
-  Tile("Champions",        "trophy",                 "63",    "NPS 9–10 in last 30d",      "success")
-], 4, "m")`,
-      Progress: `root = Stack([
-  Progress(72,   100, "Upload progress", "primary", false, true),
-  Progress(40,   100, "Quota used",      "warning", false, true),
-  Progress(null, null, "Loading…",       "info",    true)
+], align: "center")`,
+      Tile: `_app_ = Grid([
+  Tile("Total contacts",   icon: "users",                  value: "2,481", description: "+128 this week",            tone: "primary"),
+  Tile("Active deals",     icon: "briefcase",              value: "47",    description: "$418k ARR pipeline",        tone: "info"),
+  Tile("At-risk accounts", icon: "triangle-exclamation",   value: "12",    description: "Needs follow-up this week", tone: "warning"),
+  Tile("Champions",        icon: "trophy",                 value: "63",    description: "NPS 9–10 in last 30d",      tone: "success")
+], columns: 4, gap: "m")`,
+      Progress: `_app_ = Stack([
+  Progress(72,   max: 100, label: "Upload progress", tone: "primary", indeterminate: false, showValue: true),
+  Progress(40,   max: 100, label: "Quota used",      tone: "warning", indeterminate: false, showValue: true),
+  Progress(null, label: "Loading…",       tone: "info",    indeterminate: true)
 ])`,
-      ProgressRing: `root = Stack([
-  ProgressRing(72,  100, null,           "In stock", "success"),
-  ProgressRing(28,  100, null,           "Backlog",  "warning"),
-  ProgressRing(100, 100, "circle-check", "Shipped",  "primary")
-], "row", "l", "center")`,
+      ProgressRing: `_app_ = Stack([
+  ProgressRing(72,  max: 100,           description: "In stock", tone: "success"),
+  ProgressRing(28,  max: 100,           description: "Backlog",  tone: "warning"),
+  ProgressRing(100, max: 100, label: "circle-check", description: "Shipped",  tone: "primary")
+], direction: "row", gap: "l", align: "center")`,
       Pagination: `$page = 3
-root = Pagination($page, 10, 1)`,
-      Tree: `root = Tree([
-  TreeNode("src", [
-    TreeNode("library", [
-      TreeNode("components.ts", null, "file-code"),
-      TreeNode("registry.ts",   null, "file-code")
-    ], "folder-open", true, false, "2"),
-    TreeNode("index.ts", null, "file-code")
-  ], "folder-open", true),
-  TreeNode("README.md", null, "file-lines")
+_app_ = Pagination($page, pages: 10, siblings: 1)`,
+      Tree: `_app_ = Tree([
+  TreeNode("src", children: [
+    TreeNode("library", children: [
+      TreeNode("components.ts", icon: "file-code"),
+      TreeNode("registry.ts", icon: "file-code")
+    ], icon: "folder-open", expanded: true, selected: false, badge: "2"),
+    TreeNode("index.ts", icon: "file-code")
+  ], icon: "folder-open", expanded: true),
+  TreeNode("README.md", icon: "file-lines")
 ])`,
-      TreeNode: `root = Tree([
-  TreeNode("src", [
-    TreeNode("index.ts", null, "file-code"),
-    TreeNode("app.ts",   null, "file-code")
-  ], "folder-open", true),
-  TreeNode("README.md", null, "file-lines")
+      TreeNode: `_app_ = Tree([
+  TreeNode("src", children: [
+    TreeNode("index.ts", icon: "file-code"),
+    TreeNode("app.ts", icon: "file-code")
+  ], icon: "folder-open", expanded: true),
+  TreeNode("README.md", icon: "file-lines")
 ])`,
 
       // Charts
-      BarChart: `root = BarChart(
+      BarChart: `_app_ = BarChart(
   ["Q1", "Q2", "Q3", "Q4"],
-  [Series("Sales", [120, 180, 160, 210]), Series("Refunds", [12, 14, 9, 18])],
-  "Quarterly sales"
+  series: [Series("Sales", values: [120, 180, 160, 210]), Series("Refunds", values: [12, 14, 9, 18])],
+  title: "Quarterly sales"
 )`,
-      LineChart: `root = LineChart(
+      LineChart: `_app_ = LineChart(
   ["Mon", "Tue", "Wed", "Thu", "Fri"],
-  [Series("Visits", [120, 180, 160, 210, 250]), Series("Signups", [12, 18, 15, 22, 28])]
+  series: [Series("Visits", values: [120, 180, 160, 210, 250]), Series("Signups", values: [12, 18, 15, 22, 28])]
 )`,
-      PieChart: `root = PieChart(["Free", "Pro", "Team"], [240, 95, 32], "Plan mix")`,
-      Series: `root = BarChart(
+      PieChart: `_app_ = PieChart(["Free", "Pro", "Team"], values: [240, 95, 32], title: "Plan mix")`,
+      Series: `_app_ = BarChart(
   ["Mon", "Tue", "Wed", "Thu"],
-  [Series("Visits", [120, 180, 160, 210]), Series("Signups", [12, 18, 15, 22])]
+  series: [Series("Visits", values: [120, 180, 160, 210]), Series("Signups", values: [12, 18, 15, 22])]
 )`,
 
       // Feedback & Media
-      Avatar: `root = Stack([
-  Avatar("Ada Lovelace",   "https://i.pravatar.cc/64?img=47", "sm", "online"),
-  Avatar("Linus Torvalds", "https://i.pravatar.cc/64?img=11", "md", "busy"),
-  Avatar("Grace Hopper",   null,                              "lg")
-], "row", "m", "center")`,
-      AvatarGroup: `root = AvatarGroup([
+      Avatar: `_app_ = Stack([
+  Avatar("Ada Lovelace",   src: "https://i.pravatar.cc/64?img=47", size: "sm", status: "online"),
+  Avatar("Linus Torvalds", src: "https://i.pravatar.cc/64?img=11", size: "md", status: "busy"),
+  Avatar("Grace Hopper",                              size: "lg")
+], direction: "row", gap: "m", align: "center")`,
+      AvatarGroup: `_app_ = AvatarGroup([
   {name: "Ada",   src: "https://i.pravatar.cc/64?img=47"},
   {name: "Linus", src: "https://i.pravatar.cc/64?img=11"},
   {name: "Grace", src: "https://i.pravatar.cc/64?img=32"},
   {name: "Alan"},
   {name: "Mei"}
-], 3, "md")`,
-      PersonChip: `root = Stack([
-  PersonChip("Naomi Rivers", "VP Engineering",     "https://i.pravatar.cc/64?img=47", "md", "online"),
-  PersonChip("Marc Lee",     "Head of Data",       "https://i.pravatar.cc/64?img=11", "md", "busy"),
-  PersonChip("Grace Hopper", "Founder · Atlasworks",null,                             "md", "online")
+], max: 3, size: "md")`,
+      PersonChip: `_app_ = Stack([
+  PersonChip("Naomi Rivers", role: "VP Engineering",     src: "https://i.pravatar.cc/64?img=47", size: "md", status: "online"),
+  PersonChip("Marc Lee",     role: "Head of Data",       src: "https://i.pravatar.cc/64?img=11", size: "md", status: "busy"),
+  PersonChip("Grace Hopper", role: "Founder · Atlasworks",                             size: "md", status: "online")
 ])`,
-      Tooltip: `root = Stack([
-  TextContent("Hover or focus the button to reveal the tooltip.", "small", "muted"),
-  Tooltip("Tooltip on top", Button("Hover me"), "top")
+      Tooltip: `_app_ = Stack([
+  Text("Hover or focus the button to reveal the tooltip.", variant: "small", tone: "muted"),
+  Tooltip("Tooltip on top", children: Button("Hover me"), placement: "top")
 ])`,
-      HoverCard: `root = Stack([
-  TextContent("Hover or focus to reveal the rich card.", "small", "muted"),
+      HoverCard: `_app_ = Stack([
+  Text("Hover or focus to reveal the rich card.", variant: "small", tone: "muted"),
   HoverCard(
     Button("Preview Ada"),
-    [
-      Stack([Avatar("Ada Lovelace", "https://i.pravatar.cc/64?img=47", "md"),
-             Stack([TextContent("Ada Lovelace", "body-heavy"), TextContent("Mathematician · 1843", "small", "muted")])],
-            "row", "s", "center", "start"),
-      TextContent("Wrote the first algorithm intended to be processed by a machine.")
+    children: [
+      Stack([Avatar("Ada Lovelace", src: "https://i.pravatar.cc/64?img=47", size: "md"),
+             Stack([Text("Ada Lovelace", variant: "body-heavy"), Text("Mathematician · 1843", variant: "small", tone: "muted")])],
+            direction: "row", gap: "s", align: "center", justify: "start"),
+      Text("Wrote the first algorithm intended to be processed by a machine.")
     ],
-    "bottom"
+    placement: "bottom",
+    open: true
   )
 ])`,
-      Popover: `root = Stack([
-  TextContent("Click the trigger to open the popover.", "small", "muted"),
+      Popover: `_app_ = Stack([
+  Text("Click the trigger to open the popover.", variant: "small", tone: "muted"),
   Popover(
     Button("Open popover"),
-    [
-      TextContent("Rich content inside the popover."),
+    children: [
+      Text("Rich content inside the popover."),
       Buttons([
-        Button("Cancel",  null, "ghost",   "button", "small"),
-        Button("Confirm", null, "primary", "button", "small")
+        Button("Cancel", variant: "ghost",   type: "button", size: "small"),
+        Button("Confirm", variant: "primary", type: "button", size: "small")
       ])
     ],
-    "Popover title",
-    "bottom",
-    "start",
-    "280px"
+    title: "Popover title",
+    placement: "bottom",
+    align: "start",
+    width: "280px",
+    open: true
   )
 ])`,
-      Rating: `root = Stack([
-  Rating(4.5, 5, "4.5 of 5", 1284, "md"),
-  Rating(5,   5, null,       null, "sm"),
-  Rating(3,   5, "3 stars",  42,   "lg")
+      Rating: `_app_ = Stack([
+  Rating(4.5, max: 5, label: "4.5 of 5", count: 1284, size: "md"),
+  Rating(5,   max: 5, size: "sm"),
+  Rating(3,   max: 5, label: "3 stars",  count: 42,   size: "lg")
 ])`,
-      Toast: `root = Toast(
+      Toast: `_app_ = Toast(
   "Changes saved",
-  "Your draft was synced across all devices.",
-  "success",
-  "circle-check"
+  description: "Your draft was synced across all devices.",
+  tone: "success",
+  icon: "circle-check"
 )`,
-      Toasts: `root = Stack([
-  Toast("Changes saved", "Your draft was synced.",            "success", "circle-check"),
-  Toast("Heads up",      "Two reviewers were notified.",      "info",    "circle-info"),
-  Toast("Couldn't save", "Edits queued — retrying.",          "warning", "triangle-exclamation")
-], "top-right")`,
 
       // Navigation
-      Breadcrumb: `root = Breadcrumb([
-  BreadcrumbItem("Home",        "#", "house"),
-  BreadcrumbItem("Workspace",   "#"),
+      Breadcrumb: `_app_ = Breadcrumb([
+  BreadcrumbItem("Home",        href: "#", icon: "house"),
+  BreadcrumbItem("Workspace",   href: "#"),
   BreadcrumbItem("Engineering")
 ])`,
-      BreadcrumbItem: `root = Breadcrumb([
-  BreadcrumbItem("Home",      "#", "house"),
-  BreadcrumbItem("Reports",   "#"),
+      BreadcrumbItem: `_app_ = Breadcrumb([
+  BreadcrumbItem("Home",      href: "#", icon: "house"),
+  BreadcrumbItem("Reports",   href: "#"),
   BreadcrumbItem("Q3 results")
 ])`,
-      Navbar: `root = Navbar(
+      Navbar: `_app_ = Navbar(
   "Acme",
-  [
-    NavbarItem("Home",    "/",        "house", true),
-    NavbarItem("Docs",    "/docs",    "book"),
-    NavbarItem("Pricing", "/pricing", "tag")
+  items: [
+    NavbarItem("Home",    to: "/",        icon: "house", active: true),
+    NavbarItem("Docs",    to: "/docs",    icon: "book"),
+    NavbarItem("Pricing", to: "/pricing", icon: "tag")
   ],
-  [
-    Button("Sign in",     null, "ghost"),
-    Button("Get started", null, "primary")
+  actions: [
+    Button("Sign in", variant: "ghost"),
+    Button("Get started", variant: "primary")
   ],
-  false,
-  "default"
+  sticky: false,
+  variant: "default"
 )`,
-      NavbarItem: `root = Navbar(
+      NavbarItem: `_app_ = Navbar(
   "Acme",
-  [
-    NavbarItem("Home", "/",     "house", true),
-    NavbarItem("Docs", "/docs", "book"),
-    NavbarItem("Blog", "/blog", "newspaper")
+  items: [
+    NavbarItem("Home", to: "/",     icon: "house", active: true),
+    NavbarItem("Docs", to: "/docs", icon: "book"),
+    NavbarItem("Blog", to: "/blog", icon: "newspaper")
   ]
 )`,
 
       // Menus
-      DropdownMenu: `root = Stack([
-  TextContent("Click the trigger to open the menu.", "small", "muted"),
+      DropdownMenu: `_app_ = Stack([
+  Text("Click the trigger to open the menu.", variant: "small", tone: "muted"),
   DropdownMenu(
     Button("Open menu"),
-    [
+    items: [
       MenuLabel("Account"),
-      MenuItem("Profile",  Action([@ToAssistant("Open profile")]),  "user"),
-      MenuItem("Settings", Action([@ToAssistant("Open settings")]), "gear",     "⌘,"),
+      MenuItem("Profile",  icon: "user"),
+      MenuItem("Settings", icon: "gear",     shortcut: "⌘,"),
       MenuSeparator(),
       MenuLabel("Workspace"),
-      MenuItem("Invite teammates", Action([@ToAssistant("Open invite")]), "user-plus"),
+      MenuItem("Invite teammates", icon: "user-plus"),
       MenuSeparator(),
-      MenuItem("Sign out", Action([@ToAssistant("Sign out")]), "right-from-bracket", null, "danger")
+      MenuItem("Sign out", icon: "right-from-bracket", variant: "danger")
     ],
-    "bottom",
-    "start"
+    side: "bottom",
+    align: "start",
+    open: true
   )
 ])`,
-      MenuItem: `root = Stack([
-  MenuItem("Profile",   null, "user",     "⌘P"),
-  MenuItem("Settings",  null, "gear",     "⌘,"),
-  MenuItem("Sign out",  null, "right-from-bracket", null, "danger")
+      MenuItem: `_app_ = Stack([
+  MenuItem("Profile", icon: "user",     shortcut: "⌘P"),
+  MenuItem("Settings", icon: "gear",     shortcut: "⌘,"),
+  MenuItem("Sign out", icon: "right-from-bracket", variant: "danger")
 ])`,
-      MenuSeparator: `root = DropdownMenu(
+      MenuSeparator: `_app_ = DropdownMenu(
   Button("Open menu"),
-  [
-    MenuItem("Profile",   null, "user"),
-    MenuItem("Settings",  null, "gear"),
+  items: [
+    MenuItem("Profile", icon: "user"),
+    MenuItem("Settings", icon: "gear"),
     MenuSeparator(),
-    MenuItem("Sign out",  null, "right-from-bracket", null, "danger")
-  ]
+    MenuItem("Sign out", icon: "right-from-bracket", variant: "danger")
+  ],
+  open: true
 )`,
-      MenuLabel: `root = DropdownMenu(
+      MenuLabel: `_app_ = DropdownMenu(
   Button("Open menu"),
-  [
+  items: [
     MenuLabel("Account"),
-    MenuItem("Profile",  null, "user"),
-    MenuItem("Settings", null, "gear"),
+    MenuItem("Profile", icon: "user"),
+    MenuItem("Settings", icon: "gear"),
     MenuSeparator(),
     MenuLabel("Workspace"),
-    MenuItem("Invite",   null, "user-plus")
-  ]
+    MenuItem("Invite", icon: "user-plus")
+  ],
+  open: true
 )`,
 
       // Chat
-      SectionBlock: `root = SectionBlock(
+      SectionBlock: `_app_ = SectionBlock(
   "Section block",
-  [TextContent("Body content lives inside the SectionBlock.")],
-  "Optional description shown beneath the title."
+  children: [Text("Body content lives inside the SectionBlock.")],
+  description: "Optional description shown beneath the title."
 )`,
-      ListBlock: `root = ListBlock([
+      ListBlock: `_app_ = ListBlock([
   "First step",
   "Second step",
   "Third step"
 ])`,
-      FollowUpBlock: `root = FollowUpBlock([
+      FollowUpBlock: `_app_ = FollowUpBlock([
   FollowUpItem("Show me a chart"),
   FollowUpItem("Add a filter"),
   FollowUpItem("Export as CSV")
 ])`,
-      FollowUpItem: `root = FollowUpBlock([
+      FollowUpItem: `_app_ = FollowUpBlock([
   FollowUpItem("Show at-risk projects"),
   FollowUpItem("Compare to last quarter"),
   FollowUpItem("Open billing")
 ])`,
-      ActionLink: `root = Stack([
-  TextContent("Need help?", "body"),
-  ActionLink("Contact support", Action([@ToAssistant("Open support chat")]))
+      ActionLink: `_app_ = Stack([
+  Text("Need help?", variant: "body"),
+  ActionLink("Contact support", action: null)
 ])`,
-      ChatBubble: `root = Stack([
+      ChatBubble: `_app_ = Stack([
   ChatBubble("Support",
-             "Hi! Tracking shows your package landed in the local hub this morning.",
-             "9:12 AM", null, "agent", "delivered"),
+             text: "Hi! Tracking shows your package landed in the local hub this morning.",
+             time: "9:12 AM", role: "agent", status: "delivered"),
   ChatBubble("You",
-             "Perfect — I can wait. Thank you!",
-             "9:15 AM", null, "me", "read")
+             text: "Perfect — I can wait. Thank you!",
+             time: "9:15 AM", role: "me", status: "read")
 ])`,
 
       // Patterns
-      Hero: `root = Hero(
+      Hero: `_app_ = Hero(
   "Ship faster",
-  "From idea to production in minutes.",
-  Button("Get started", Action([@ToAssistant("Get started")]), "primary"),
-  Button("Live demo",   null, "ghost"),
-  "v2 launch",
-  ["No credit card", "Cancel anytime", "Free for 14 days"]
+  subtitle: "From idea to production in minutes.",
+  primary: Button("Get started", variant: "primary"),
+  secondary: Button("Live demo", variant: "ghost"),
+  eyebrow: "v2 launch",
+  highlights: ["No credit card", "Cancel anytime", "Free for 14 days"]
 )`,
-      Cover: `root = Hero(
-  "Build the future of generative UI",
-  "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1600&q=80",
-  "From a single LLM prompt to a streaming UI in 90 seconds.",
-  "Spring release",
-  "Cancel anytime · no credit card required",
-  [Button("Get started", null, "primary"), Button("Watch the demo", null, "ghost")],
-  "primary",
-  "260px"
-)`,
-      PageHeader: `root = PageHeader(
+      PageHeader: `_app_ = PageHeader(
   "Engineering Q3",
-  "12 active · 4 at risk",
-  ["Workspace", "Engineering"],
-  [Button("Export", null, "secondary"), Button("New project", null, "primary")],
-  Badge("On track", "success")
+  subtitle: "12 active · 4 at risk",
+  breadcrumbs: ["Workspace", "Engineering"],
+  actions: [Button("Export", variant: "secondary"), Button("New project", variant: "primary")],
+  badge: Badge("On track", tone: "success")
 )`,
-      SectionHeader: `root = Card([
+      SectionHeader: `_app_ = Card([
   SectionHeader(
     "Daily traffic",
-    "Visits vs signups",
-    "ANALYTICS",
-    Badge("On track", "success", null, "sm"),
-    [Button("View all", null, "ghost", "button", "small")]
+    subtitle: "Visits vs signups",
+    eyebrow: "ANALYTICS",
+    badge: Badge("On track", tone: "success", size: "sm"),
+    actions: [Button("View all", variant: "ghost", type: "button", size: "small")]
   ),
-  TextContent("Section body content lives below the header.")
-])`,
-      MetricGrid: `root = Stats([
-  StatCard("Active",  "12",   "flat"),
-  StatCard("At risk", "4",    "up",   "+2"),
-  StatCard("Shipped", "8",    "up",   "+3"),
-  StatCard("On-time", "87%",  "down", "-3%")
+  Text("Section body content lives below the header.")
 ])`,
       Toolbar: `$range = "q3"
-root = Toolbar(
-  [FormControl("Range", Select("range", [
-    SelectItem("q1","Q1"), SelectItem("q2","Q2"), SelectItem("q3","Q3")
-  ], null, null, $range))],
-  [StatusDot("Live", "success", true),
-   Button("New", null, "primary", "button", "small")]
+_app_ = Toolbar(
+  [FormControl("Range", control: Select("range", items: [
+    SelectItem("q1",label: "Q1"), SelectItem("q2",label: "Q2"), SelectItem("q3",label: "Q3")
+  ], ignored: $range))],
+  right: [StatusDot("Live", tone: "success", pulse: true),
+   Button("New", variant: "primary", type: "button", size: "small")]
 )`,
-      EmptyState: `root = EmptyState(
+      EmptyState: `_app_ = EmptyState(
   "No results found",
-  "Try a different search or clear the active filters.",
-  "magnifying-glass",
-  Button("Clear filters", null, "primary")
+  description: "Try a different search or clear the active filters.",
+  icon: "magnifying-glass",
+  action: Button("Clear filters", variant: "primary")
 )`,
-      Timeline: `root = Timeline([
-  TimelineItem("Ada merged PR #248",   "5m ago",  "Patterns ready for review",   "code-pull-request",     "primary"),
-  TimelineItem("QA caught regression", "1h ago",  "Quota dashboard double-count","triangle-exclamation",  "warning"),
-  TimelineItem("Tokenizer 2.1 shipped","Yesterday","Latency -14%",               "circle-check",          "success")
+      Timeline: `_app_ = Timeline([
+  TimelineItem("Ada merged PR #248",   time: "5m ago",  description: "Patterns ready for review",   icon: "code-pull-request",     tone: "primary"),
+  TimelineItem("QA caught regression", time: "1h ago",  description: "Quota dashboard double-count",icon: "triangle-exclamation",  tone: "warning"),
+  TimelineItem("Tokenizer 2.1 shipped",time: "Yesterday",description: "Latency -14%",               icon: "circle-check",          tone: "success")
 ])`,
-      TimelineItem: `root = Timeline([
-  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components.",          "rocket",  "success"),
-  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed dashboard wireframes.",  "palette", "primary"),
-  TimelineItem("Profile updated",      "3 days ago", "",                                "pen")
+      TimelineItem: `_app_ = Timeline([
+  TimelineItem("Shipped v2.0",         time: "2h ago",     description: "Updated 14 components.",          icon: "rocket",  tone: "success"),
+  TimelineItem("Joined Design Review", time: "Yesterday",  description: "Reviewed dashboard wireframes.",  icon: "palette", tone: "primary"),
+  TimelineItem("Profile updated",      time: "3 days ago", description: "",                                icon: "pen")
 ])`,
-      FeatureGrid: `root = FeatureGrid([
-  FeatureItem("Streaming-first", "Parse and render token-by-token.",            "bolt",         "primary"),
-  FeatureItem("Themeable",       "Seven built-in themes, custom tokens too.",   "palette",      "success"),
-  FeatureItem("Framework-free",  "One web component, any host stack.",          "puzzle-piece", "info")
+      FeatureGrid: `_app_ = FeatureGrid([
+  FeatureItem("Streaming-first", description: "Parse and render token-by-token.",            icon: "bolt",         tone: "primary"),
+  FeatureItem("Themeable",       description: "Seven built-in themes, custom tokens too.",   icon: "palette",      tone: "success"),
+  FeatureItem("Framework-free",  description: "One web component, any host stack.",          icon: "puzzle-piece", tone: "info")
 ])`,
-      FeatureItem: `root = FeatureGrid([
-  FeatureItem("Fast",    "Streams token-by-token.", "bolt",     "primary"),
-  FeatureItem("Themed",  "Seven themes, any tokens.","palette", "success"),
-  FeatureItem("Portable","One web component.",       "puzzle-piece", "info")
+      FeatureItem: `_app_ = FeatureGrid([
+  FeatureItem("Fast",    description: "Streams token-by-token.", icon: "bolt",     tone: "primary"),
+  FeatureItem("Themed",  description: "Seven themes, any tokens.",icon: "palette", tone: "success"),
+  FeatureItem("Portable",description: "One web component.",       icon: "puzzle-piece", tone: "info")
 ])`,
-      MediaCard: `root = MediaCard(
+      MediaCard: `_app_ = MediaCard(
   "Aurora Headphones",
-  "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&q=80",
-  "Studio-grade sound, 40-hour battery.",
-  ["wireless", "ANC"],
-  "$249 · 4.8 stars",
-  [Button("Add to cart", null, "primary"), Button("Details", null, "ghost")],
-  "New"
+  src: "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&q=80",
+  description: "Studio-grade sound, 40-hour battery.",
+  tags: ["wireless", "ANC"],
+  meta: "$249 · 4.8 stars",
+  actions: [Button("Add to cart", variant: "primary"), Button("Details", variant: "ghost")],
+  badge: "New"
 )`,
-      Testimonial: `root = Testimonial(
-  "Streaming UI Script saved us weeks of glue code.",
-  "Naomi Rivers",
-  "VP Engineering · Looplog",
-  "https://i.pravatar.cc/64?img=47",
-  5
+      Testimonial: `_app_ = Testimonial(
+  "Aktion saved us weeks of glue code.",
+  name: "Naomi Rivers",
+  role: "VP Engineering · Looplog",
+  src: "https://i.pravatar.cc/64?img=47",
+  rating: 5
 )`,
-      ProfileCard: `root = ProfileCard(
+      ProfileCard: `_app_ = ProfileCard(
   "Alex Rivera",
-  "Product Designer",
-  "https://i.pravatar.cc/64?img=12",
-  "Designs the future of generative UI at Acme.",
-  ["design", "ux", "typography"],
-  [Button("Follow", null, "primary", "button", "small"),
-   Button("Resume", null, "ghost",   "button", "small")]
+  role: "Product Designer",
+  src: "https://i.pravatar.cc/64?img=12",
+  bio: "Designs the future of generative UI at Acme.",
+  tags: ["design", "ux", "typography"],
+  actions: [Button("Follow", variant: "primary", type: "button", size: "small"),
+   Button("Resume", variant: "ghost",   type: "button", size: "small")]
 )`,
-      Comment: `root = Stack([
+      Comment: `_app_ = Stack([
   Comment("Ada Lovelace",
-          "Loving the new patterns API — it's much cleaner.",
-          "2h ago",
-          "https://i.pravatar.cc/64?img=47",
-          [Button("Reply", null, "ghost", "button", "small"),
-           Button("Like",  null, "ghost", "button", "small")]),
+          text: "Loving the new patterns API — it's much cleaner.",
+          time: "2h ago",
+          src: "https://i.pravatar.cc/64?img=47",
+          actions: [Button("Reply", variant: "ghost", type: "button", size: "small"),
+           Button("Like", variant: "ghost", type: "button", size: "small")]),
   Comment("Linus Torvalds",
-          "+1, especially the PageHeader composite.",
-          "1h ago",
-          "https://i.pravatar.cc/64?img=11")
+          text: "+1, especially the PageHeader composite.",
+          time: "1h ago",
+          src: "https://i.pravatar.cc/64?img=11")
 ])`,
-      Banner: `root = Banner(
+      Banner: `_app_ = Banner(
   "Spring release",
-  "Streaming UI v2.4 ships with 20 new components.",
-  Button("See what's new", null, "primary"),
-  "sparkles",
-  "primary"
+  description: "Streaming UI v2.4 ships with 20 new components.",
+  action: Button("See what's new", variant: "primary"),
+  icon: "sparkles",
+  tone: "primary"
 )`,
-      Notification: `root = Stack([
+      Notification: `_app_ = Stack([
   Notification("Stripe receipt",
-               "Receipt for Pro plan — $29.00 charged today.",
-               "10:24 AM", null,
-               "https://i.pravatar.cc/64?img=12",
-               "primary", true,
-               [Button("Open", null, "ghost", "button", "small")]),
+               description: "Receipt for Pro plan — $29.00 charged today.",
+               time: "10:24 AM",
+               src: "https://i.pravatar.cc/64?img=12",
+               tone: "primary", unread: true,
+               actions: [Button("Open", variant: "ghost", type: "button", size: "small")]),
   Notification("GitHub digest",
-               "12 new pull requests waiting for review.",
-               "Yesterday", "code-branch", null,
-               "info", false,
-               [Button("Open", null, "ghost", "button", "small")])
+               description: "12 new pull requests waiting for review.",
+               time: "Yesterday", icon: "code-branch",
+               tone: "info", unread: false,
+               actions: [Button("Open", variant: "ghost", type: "button", size: "small")])
 ])`,
-      KanbanBoard: `root = KanbanBoard([
-  KanbanColumn("To do",  [KanbanCard("Migrate auth", "Roll out the new SDK.",  ["auth"],    "Asha")]),
-  KanbanColumn("Doing",  [KanbanCard("Streaming UI v2","20 new components.",   ["frontend"],"Alex", "primary")]),
-  KanbanColumn("Review", [KanbanCard("Mobile onboarding","Awaiting design.",   ["mobile"],  "Wren", "warning")]),
-  KanbanColumn("Done",   [KanbanCard("Activity timeline","Shipped to 100%.",   ["shipped"], "Mira", "success")])
+      KanbanBoard: `_app_ = KanbanBoard([
+  KanbanColumn("To do",  cards: [KanbanCard("Migrate auth", description: "Roll out the new SDK.",  tags: ["auth"],    assignee: "Asha")]),
+  KanbanColumn("Doing",  cards: [KanbanCard("Streaming UI v2",description: "20 new components.",   tags: ["frontend"],assignee: "Alex", tone: "primary")]),
+  KanbanColumn("Review", cards: [KanbanCard("Mobile onboarding",description: "Awaiting design.",   tags: ["mobile"],  assignee: "Wren", tone: "warning")]),
+  KanbanColumn("Done",   cards: [KanbanCard("Activity timeline",description: "Shipped to 100%.",   tags: ["shipped"], assignee: "Mira", tone: "success")])
 ])`,
-      KanbanColumn: `root = KanbanBoard([
-  KanbanColumn("To do", [KanbanCard("Spec API",    "Outline endpoints.")]),
-  KanbanColumn("Doing", [KanbanCard("Build router","Routes + NavLink.", null, "Alex", "primary")]),
-  KanbanColumn("Done",  [KanbanCard("Hello world", "First render.",     null, "Ada",  "success")])
+      KanbanColumn: `_app_ = KanbanBoard([
+  KanbanColumn("To do", cards: [KanbanCard("Spec API",    description: "Outline endpoints.")]),
+  KanbanColumn("Doing", cards: [KanbanCard("Build router",description: "Routes + NavLink.", assignee: "Alex", tone: "primary")]),
+  KanbanColumn("Done",  cards: [KanbanCard("Hello world", description: "First render.", assignee: "Ada",  tone: "success")])
 ])`,
-      KanbanCard: `root = KanbanBoard([
-  KanbanColumn("Doing", [
-    KanbanCard("Migrate auth",   "Roll out the new SDK.", ["auth"],     "Asha"),
-    KanbanCard("Streaming UI v2","20 new components.",    ["frontend"], "Alex", "primary")
+      KanbanCard: `_app_ = KanbanBoard([
+  KanbanColumn("Doing", cards: [
+    KanbanCard("Migrate auth",   description: "Roll out the new SDK.", tags: ["auth"],     assignee: "Asha"),
+    KanbanCard("Streaming UI v2",description: "20 new components.",    tags: ["frontend"], assignee: "Alex", tone: "primary")
   ])
 ])`,
-      DescriptionList: `root = DescriptionList([
-  DescriptionItem("Team",     "Design Systems",       "users"),
-  DescriptionItem("Manager",  "Margaret Hamilton"),
-  DescriptionItem("Location", "Berlin, DE",           "location-dot"),
-  DescriptionItem("Joined",   "Mar 2022"),
-  DescriptionItem("Status",   Badge("Active", "success", null, "sm"))
-], 2)`,
-      DescriptionItem: `root = DescriptionList([
-  DescriptionItem("Plan",   "Pro",       "rocket"),
-  DescriptionItem("Seats",  "12 / 25"),
-  DescriptionItem("Status", Badge("Active", "success", null, "sm"))
-], 1)`,
-      StatusDot: `root = Stack([
-  StatusDot("API",       "success"),
-  StatusDot("Database",  "success"),
-  StatusDot("Webhooks",  "warning"),
-  StatusDot("Streaming", "success", true)
-], "row", "m", "center")`,
-      PricingTable: `root = PricingTable([
-  PricingCard("Starter", "$0",  "/mo", "For hobby projects.",
-    ["1 workspace", "Community support", "1 GB storage"],
-    Button("Get started", null, "secondary"),
-    null, false),
-  PricingCard("Pro", "$29", "/mo", "For teams shipping LLM features.",
-    ["Unlimited workspaces", "Priority support", "100 GB storage", "SOC2 audit logs"],
-    Button("Start trial", null, "primary"),
-    "Most popular", true),
-  PricingCard("Scale", "Talk to us", null, "Custom requirements.",
-    ["SSO + SCIM", "99.99% SLA", "On-prem available"],
-    Button("Contact sales", null, "ghost"),
-    null, false)
+      DescriptionList: `_app_ = DescriptionList([
+  DescriptionItem("Team",     value: "Design Systems",       icon: "users"),
+  DescriptionItem("Manager",  value: "Margaret Hamilton"),
+  DescriptionItem("Location", value: "Berlin, DE",           icon: "location-dot"),
+  DescriptionItem("Joined",   value: "Mar 2022"),
+  DescriptionItem("Status",   value: Badge("Active", tone: "success", size: "sm"))
+], columns: 2)`,
+      DescriptionItem: `_app_ = DescriptionList([
+  DescriptionItem("Plan",   value: "Pro",       icon: "rocket"),
+  DescriptionItem("Seats",  value: "12 / 25"),
+  DescriptionItem("Status", value: Badge("Active", tone: "success", size: "sm"))
+], columns: 1)`,
+      StatusDot: `_app_ = Stack([
+  StatusDot("API",       tone: "success"),
+  StatusDot("Database",  tone: "success"),
+  StatusDot("Webhooks",  tone: "warning"),
+  StatusDot("Streaming", tone: "success", pulse: true)
+], direction: "row", gap: "m", align: "center")`,
+      PricingTable: `_app_ = PricingTable([
+  PricingCard("Starter", price: "$0",  period: "/mo", description: "For hobby projects.",
+    features: ["1 workspace", "Community support", "1 GB storage"],
+    cta: Button("Get started", variant: "secondary"), highlighted: false),
+  PricingCard("Pro", price: "$29", period: "/mo", description: "For teams shipping LLM features.",
+    features: ["Unlimited workspaces", "Priority support", "100 GB storage", "SOC2 audit logs"],
+    cta: Button("Start trial", variant: "primary"),
+    badge: "Most popular", highlighted: true),
+  PricingCard("Scale", price: "Talk to us", description: "Custom requirements.",
+    features: ["SSO + SCIM", "99.99% SLA", "On-prem available"],
+    cta: Button("Contact sales", variant: "ghost"), highlighted: false)
 ])`,
-      PricingCard: `root = PricingCard(
-  "Pro", "$29", "/mo",
-  "For teams shipping LLM features in production.",
-  ["Unlimited workspaces", "Priority support", "100 GB storage"],
-  Button("Start free trial", null, "primary"),
-  "Most popular",
-  true
+      PricingCard: `_app_ = PricingCard(
+  "Pro", price: "$29", period: "/mo",
+  description: "For teams shipping LLM features in production.",
+  features: ["Unlimited workspaces", "Priority support", "100 GB storage"],
+  cta: Button("Start free trial", variant: "primary"),
+  badge: "Most popular",
+  highlighted: true
 )`,
 
       // App shell
       AppShell: `nav = Sidebar([
-  SidebarSection("Workspace", [
-    SidebarItem("Overview", "house",    true),
-    SidebarItem("Projects", "folder",   false, "12"),
-    SidebarItem("Calendar", "calendar")
+  SidebarSection("Workspace", items: [
+    SidebarItem("Overview", icon: "house",    active: true),
+    SidebarItem("Projects", icon: "folder",   active: false, badge: "12"),
+    SidebarItem("Calendar", icon: "calendar")
   ])
-], "Acme HQ", "Production · v2.3")
-topbar = [StatusDot("Live", "success", true)]
+], brand: "Acme HQ", footer: "Production · v2.3")
+topbar = [StatusDot("Live", tone: "success", pulse: true)]
 content = [
-  PageHeader("Overview", "Everything happening across your workspace",
-    null,
-    [Button("New project", null, "primary")]),
+  PageHeader("Overview", subtitle: "Everything happening across your workspace",
+    actions: [Button("New project", variant: "primary")]),
   Stats([
-    StatCard("MRR",      "$48.2k", "up", "+12%"),
-    StatCard("Users",    "2,184",  "up", "+184"),
-    StatCard("Tickets",  "23",     "down","-9")
+    StatCard("MRR",      value: "$48.2k", trend: "up", delta: "+12%"),
+    StatCard("Users",    value: "2,184",  trend: "up", delta: "+184"),
+    StatCard("Tickets",  value: "23",     trend: "down",delta: "-9")
   ])
 ]
-root = AppShell(nav, content, topbar)`,
-      Sidebar: `root = Sidebar([
-  SidebarSection("Workspace", [
-    SidebarItem("Overview", "house",    true),
-    SidebarItem("Projects", "folder",   false, "12"),
-    SidebarItem("Calendar", "calendar"),
-    SidebarItem("Messages", "comments", false, "3")
+_app_ = AppShell(nav, content: content, topbar: topbar)`,
+      Sidebar: `_app_ = Sidebar([
+  SidebarSection("Workspace", items: [
+    SidebarItem("Overview", icon: "house",    active: true),
+    SidebarItem("Projects", icon: "folder",   active: false, badge: "12"),
+    SidebarItem("Calendar", icon: "calendar"),
+    SidebarItem("Messages", icon: "comments", active: false, badge: "3")
   ]),
-  SidebarSection("Insights", [
-    SidebarItem("Analytics","chart-pie"),
-    SidebarItem("Reports",  "chart-line"),
-    SidebarItem("Billing",  "credit-card")
+  SidebarSection("Insights", items: [
+    SidebarItem("Analytics",icon: "chart-pie"),
+    SidebarItem("Reports",  icon: "chart-line"),
+    SidebarItem("Billing",  icon: "credit-card")
   ])
-], "Acme HQ", "Production · v2.3")`,
-      SidebarSection: `root = Sidebar([
-  SidebarSection("Workspace", [
-    SidebarItem("Overview", "house",  true),
-    SidebarItem("Projects", "folder", false, "12")
+], brand: "Acme HQ", footer: "Production · v2.3")`,
+      SidebarSection: `_app_ = Sidebar([
+  SidebarSection("Workspace", items: [
+    SidebarItem("Overview", icon: "house",  active: true),
+    SidebarItem("Projects", icon: "folder", active: false, badge: "12")
   ]),
-  SidebarSection("Insights", [
-    SidebarItem("Analytics","chart-pie"),
-    SidebarItem("Reports",  "chart-line")
+  SidebarSection("Insights", items: [
+    SidebarItem("Analytics",icon: "chart-pie"),
+    SidebarItem("Reports",  icon: "chart-line")
   ])
 ])`,
-      SidebarItem: `root = Sidebar([
-  SidebarItem("Overview", "house",  true),
-  SidebarItem("Projects", "folder", false, "12"),
-  SidebarItem("Calendar", "calendar")
+      SidebarItem: `_app_ = Sidebar([
+  SidebarItem("Overview", icon: "house",  active: true),
+  SidebarItem("Projects", icon: "folder", active: false, badge: "12"),
+  SidebarItem("Calendar", icon: "calendar")
 ])`,
       SplitView: `primary = Card([
-  CardHeader("Inbox", "3 messages"),
+  CardHeader("Inbox", subtitle: "3 messages"),
   List([
-    ListItem("Ada Lovelace",   "Welcome to the team",   "envelope"),
-    ListItem("Linus Torvalds", "Re: perf review",       "envelope"),
-    ListItem("Grace Hopper",   "Q3 planning thoughts",  "envelope")
+    ListItem("Ada Lovelace",   meta: "Welcome to the team",   icon: "envelope"),
+    ListItem("Linus Torvalds", meta: "Re: perf review",       icon: "envelope"),
+    ListItem("Grace Hopper",   meta: "Q3 planning thoughts",  icon: "envelope")
   ])
 ])
 detail = Card([
-  CardHeader("Welcome to the team", "From Ada Lovelace · 10:24 AM"),
-  TextContent("Hi! Glad you joined. Here's the onboarding checklist and a few quick wins to get you up to speed.")
+  CardHeader("Welcome to the team", subtitle: "From Ada Lovelace · 10:24 AM"),
+  Text("Hi! Glad you joined. Here's the onboarding checklist and a few quick wins to get you up to speed.")
 ])
-root = SplitView([primary], [detail], "280px")`,
-
-      // Scripting
-      Script: `root = Stack([
-  TextContent("Script() is a behaviour-only node — it renders nothing visible.", "small", "muted"),
-  TextContent("Open the browser console to see the log.", "small", "muted"),
-  Script("demo", "console.log('Streaming UI Script — Script() ran on mount');", [])
-])`,
+_app_ = SplitView([primary], secondary: [detail], splitAt: "280px")`,
 
       // Routing
-      Routes: `homePage  = Card([CardHeader("Home"),  TextContent("Default route content.")])
-aboutPage = Card([CardHeader("About"), TextContent("About-page content.")])
-notFound  = Card([CardHeader("Not found"), TextContent("No matching route.")])
+      Routes: `homePage  = Card([CardHeader("Home"),  Text("Default route content.")])
+aboutPage = Card([CardHeader("About"), Text("About-page content.")])
+notFound  = Card([CardHeader("Not found"), Text("No matching route.")])
 nav = Stack([
-  NavLink("Home",  "/",     "ghost", true),
-  NavLink("About", "/about","ghost"),
-  NavLink("404",   "/oops", "ghost")
-], "row", "s")
-main = Routes([
-  Route("/",      homePage),
-  Route("/about", aboutPage),
-  Route("*",      notFound)
-], "/")
-root = Stack([nav, main])`,
+  NavLink("Home",  to: "/",      variant: "ghost", exact: true),
+  NavLink("About", to: "/about", variant: "ghost"),
+  NavLink("404",   to: "/oops",  variant: "ghost")
+], direction: "row", gap: "s")
+pages = _router_({
+  "/":      homePage,
+  "/about": aboutPage,
+  default:  notFound
+})
+_app_ = Stack([nav, pages])`,
       Route: `homePage = Card([CardHeader("Home page")])
 docsPage = Card([CardHeader("Docs page")])
-root = Routes([
-  Route("/",     homePage),
-  Route("/docs", docsPage)
-], "/")`,
-      NavLink: `root = Stack([
-  NavLink("Home",    "/",        "ghost",   true,  "house"),
-  NavLink("Docs",    "/docs",    "ghost",   false, "book"),
-  NavLink("Pricing", "/pricing", "primary", false, "tag")
-], "row", "s", "center")`,
+pages = _router_({
+  "/":     homePage,
+  "/docs": docsPage
+})
+_app_ = pages`,
+      NavLink: `_app_ = Stack([
+  NavLink("Home",    to: "/",        variant: "ghost",   exact: true,  icon: "house"),
+  NavLink("Docs",    to: "/docs",    variant: "ghost",   exact: false, icon: "book"),
+  NavLink("Pricing", to: "/pricing", variant: "primary", exact: false, icon: "tag")
+], direction: "row", gap: "s", align: "center")`,
 
       // New components & refined widgets (May 2026 rollout)
-      Spinner: `root = Stack([
+      IconButton: `_app_ = Stack([
+  IconButton("pencil", label: "Edit", variant: "primary", size: "md"),
+  IconButton("trash", label: "Delete", variant: "danger", size: "md"),
+  IconButton("ellipsis-vertical", label: "More", variant: "ghost", size: "md")
+], direction: "row", gap: "s", align: "center")`,
+      CommandPalette: `$open = false
+_app_ = Stack([btn, commandPalette])
+btn = Button("Open Command Palette", action: () => { $open = true });
+
+commandPalette = CommandPalette([
+  {label: "New project", value: "new", group: "Actions", shortcut: "Cmd+N"},
+  {label: "Open file", value: "open", group: "Actions", shortcut: "Cmd+O"},
+  {label: "Search docs", value: "search", group: "Navigation", shortcut: "/"},
+  {label: "Toggle theme", value: "theme", group: "Settings"},
+  {label: "Sign out", value: "signout", group: "Account"}
+], open: $open, placeholder: "Type a command…", shortcut: "Cmd+K")`,
+      FilterChips: `_app_ = FilterChips(
+  ["status:active", "team:eng", "priority:high", "region:us"],
+  onRemove: null
+)`,
+      VirtualList: `rows = @Range(1, 200)
+_app_ = VirtualList(rows, itemHeight: 36)`,
+      QueryBuilder: `$rules = [
+  {field: "name", op: "contains", value: "Ada"},
+  {field: "score", op: "gt", value: "90"}
+]
+_app_ = QueryBuilder(
+  [{name: "name", label: "Name"}, {name: "score", label: "Score", type: "number"}, {name: "team", label: "Team"}],
+  value: $rules
+)`,
+      FieldRepeater: `_app_ = FieldRepeater(
+  [{name: "Ada Lovelace", role: "Compilers", score: 98}, {name: "Linus Torvalds", role: "Kernel", score: 96}],
+  fields: [{name: "name", label: "Name"}, {name: "role", label: "Role"}, {name: "score", label: "Score", type: "number"}],
+  addLabel: "Add contributor"
+)`,
+      DiffViewer: `_app_ = DiffViewer(
+  "function greet(name) {\\n  return 'Hello ' + name\\n}",
+  right: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}",
+  mode: "unified"
+)`,
+      JsonTree: `_app_ = JsonTree({
+  name: "aktion",
+  version: "0.5.0",
+  features: ["streaming", "theming", "routing"],
+  config: {theme: "system", locale: "en"}
+}, expanded: true)`,
+      Gantt: `_app_ = Gantt([
+  {id: "design", label: "Design phase", start: "2026-05-01", end: "2026-05-02", progress: 100},
+  {id: "build", label: "Build sprint", start: "2026-05-02", end: "2026-05-04", progress: 60},
+  {id: "ship", label: "Ship release", start: "2026-05-03", end: "2026-05-05", progress: 0}
+], startDate: "2026-05-01", endDate: "2026-05-05")`,
+      Truncate: `_app_ = Truncate(
+  "Aktion is a compact, declarative DSL designed for LLM-generated rich UI responses. It ships with 130+ components, seven built-in themes, hash-based routing, and real-time streaming. The language is parsed token-by-token so partial responses render progressively without waiting for the full payload.",
+  maxLines: 2, expandLabel: "Read more"
+)`,
+      InlineEdit: `$value = "Click to edit this text"
+_app_ = InlineEdit($value, label: "Title")`,
+      NotificationBell: `_app_ = Grid([
+  GridItem([], 11),
+  NotificationBell(count: 3, items: [
+    {title: "New comment on PR #142", message: "Ada: looks great!", time: "2m ago"},
+    {title: "Build succeeded", message: "Tests passed.", time: "10m ago"},
+    {title: "Weekly digest ready", time: "1h ago"}
+  ])
+], 12)`,
+      Spinner: `_app_ = Stack([
   Spinner("sm"),
-  Spinner("md", "Loading"),
-  Spinner("lg", "Importing rows", "success")
-], "row", "m", "center")`,
-      Sparkline: `root = Stack([
-  TextContent("Weekly visits", "small"),
-  Sparkline([10, 14, 9, 22, 18, 28, 31], "primary")
+  Spinner("md", label: "Loading"),
+  Spinner("lg", label: "Importing rows", tone: "success")
+], direction: "row", gap: "m", align: "center")`,
+      Sparkline: `_app_ = Stack([
+  Text("Weekly visits", variant: "small"),
+  Sparkline([10, 14, 9, 22, 18, 28, 31], tone: "primary")
 ])`,
-      BadgeList: `root = BadgeList(["React", "Vue", "Svelte", "Solid"], "primary", "sm")`,
+      BadgeList: `_app_ = BadgeList(["React", "Vue", "Svelte", "Solid"], tone: "primary", size: "sm")`,
       MultiSelect: `$picks = ["ts"]
-root = Stack([
-  TextContent("Pick languages", "small"),
+_app_ = Stack([
+  Text("Pick languages", variant: "small"),
   MultiSelect("langs",
-    [SelectItem("ts","TypeScript"), SelectItem("js","JavaScript"),
-     SelectItem("py","Python"),      SelectItem("rs","Rust")],
-    $picks, "Pick languages")
+    items: [SelectItem("ts",label: "TypeScript"), SelectItem("js",label: "JavaScript"),
+     SelectItem("py",label: "Python"),      SelectItem("rs",label: "Rust")],
+    value: $picks, placeholder: "Pick languages", open: true)
 ])`,
       DateRangePicker: `$from = "2026-05-01"
 $to   = "2026-05-15"
-root = DateRangePicker("range", $from, $to, "Reporting window")`,
-      SegmentedControl: `$view = "grid"
-root = ToggleGroup("view",
-  [{value: "grid", label: "Grid", icon: "grip"},
-   {value: "list", label: "List", icon: "list"},
-   {value: "kanban", label: "Board", icon: "table-columns"}],
-  $view)`,
-      Callout: `root = Stack([
-  Callout("success", "Saved", "Your settings were saved."),
-  Callout("warning", "Heads up", "Compact note style", null, null, true)
+_app_ = DateRangePicker("range", from: $from, to: $to, label: "Reporting window")`,
+      Callout: `_app_ = Stack([
+  Callout("success", title: "Saved", text: "Your settings were saved."),
+  Callout("warning", title: "Heads up", text: "Compact note style", compact: true)
 ])`,
-      Markdown: `root = Markdown("# Streaming UI Script\n\nA **compact**, *declarative* DSL.\n\n- Headings\n- Fenced code\n- Auto-linked URLs: https://example.com\n\n\`\`\`ts\nconst x: number = 1\n\`\`\`")`,
-      CodeBlock: `root = CodeBlock("ts",
-"function greet(name: string) {\n  return \\\`Hello, \\\${name}!\\\`\n}",
-true, "1-2")`,
-      Image: `root = Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
-"Hero photo", "Self-constrained 16:9 image", "16:9", "cover")`,
-      Skeleton: `root = Stack([
+      Markdown: `_app_ = Markdown("# Aktion\\n\\nA **compact**, *declarative* DSL.\\n\\n- Headings\\n- Fenced code\\n- Auto-linked URLs: https://example.com")`,
+      CodeBlock: `_app_ = CodeBlock("typescript", code: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", copy: true, highlight: "1-3")`,
+      Image: `_app_ = Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
+alt: "Hero photo", caption: "Self-constrained 16:9 image", ratio: "16:9", fit: "cover")`,
+      Skeleton: `_app_ = Stack([
   Skeleton("card"),
-  Stack([Skeleton("avatar"), Skeleton("paragraph", 2)], "row", "m", "center")
+  Stack([Skeleton("avatar"), Skeleton("paragraph", count: 2)], direction: "row", gap: "m", align: "center")
 ])`,
-      Modal: `root = Modal("Modal title", true, [
-  TextContent("Modal body shown when open=true.")
-], "md", [
-  Button("Cancel", null, "ghost",   "button", "sm"),
-  Button("Save",   null, "primary", "button", "sm")
+      Modal: `_app_ = Modal("Modal title", open: true, children: [
+  Text("Modal body shown when open=true.")
+], size: "md", footer: [
+  Button("Cancel", variant: "ghost",   type: "button", size: "sm"),
+  Button("Save", variant: "primary", type: "button", size: "sm")
 ])`,
-      Toolbar: `root = Toolbar(
-  [SearchBar("q", "Search…")],
-  [Button("New", null, "primary", "button", "sm", "plus")],
-  [ToggleGroup("v", [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], "grid")])`,
+      Toolbar: `_app_ = Toolbar(
+  [SearchBar("q", placeholder: "Search…")],
+  right: [Button("New", variant: "primary", type: "button", size: "sm", icon: "plus")],
+  center: [ToggleGroup("v", items: [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], value: "grid")])`,
       Pagination: `$page = 3
-root = Pagination($page, 10, 1, 240, 25)`,
-      Table: `root = Table([
-  Col("Name",  ["Ada", "Linus", "Grace"]),
-  Col("Score", [98, 92, 96], "number", "right")
-], "Top 3", "compact", true)`,
-      Progress: `root = Stack([
-  Progress(60, 100, "Linear", "primary", false, true),
-  Progress(60, 100, "Buffered", "info", false, true, null, 85),
-  Progress(60, 100, "Step 3 of 5", "primary", false, true, 5)
+_app_ = Pagination($page, pages: 10, siblings: 1, total: 240, perPage: 25)`,
+      Table: `_app_ = Table([
+  Col("Name",  values: ["Ada", "Linus", "Grace"]),
+  Col("Score", values: [98, 92, 96], align: "right", format: "number")
+], title: "Top 3", density: "compact", striped: true)`,
+      Progress: `_app_ = Stack([
+  Progress(60, max: 100, label: "Linear", tone: "primary", indeterminate: false, showValue: true),
+  Progress(60, max: 100, label: "Buffered", tone: "info", indeterminate: false, showValue: true, buffered: 85),
+  Progress(60, max: 100, label: "Step 3 of 5", tone: "primary", indeterminate: false, showValue: true, segments: 5)
 ])`,
       Rating: `$score = 3.5
-root = Rating($score, 5, "3.5 of 5", 128, "md", true, true, "star")`,
-      Steps: `root = Steps([
+_app_ = Rating($score, max: 5, label: "3.5 of 5", count: 128, size: "md", readonly: true, halfStep: true, icon: "star")`,
+      Steps: `_app_ = Steps([
   {title: "Sign up", details: "Free", active: false},
   {title: "Verify",  details: "Email link", active: true},
   {title: "Invite"}
 ])`,
-      Stats: `root = Stats([
+      Stats: `_app_ = Stats([
   {label: "MRR",   value: "$84.2k", hint: "+12%", tone: "success", spark: [12, 14, 18, 22, 28, 31]},
   {label: "Churn", value: "1.8%",   hint: "-0.4%", tone: "danger",  spark: [2.3, 2.2, 2.0, 1.9, 1.8]}
 ])`,
-      StatCard: `root = StatCard("Active users", "12,481", "up", "+8.2%", "users", [42, 50, 55, 60, 71, 80])`,
-      EmptyState: `root = EmptyState(
-  "No projects yet", "Create a project to start tracking work.", "folder", null, null,
-  [Button("Create project", null, "primary", "button", "sm", "plus"),
-   Button("Read the guide",  null, "ghost",   "button", "sm")])`,
+      StatCard: `_app_ = StatCard("Active users", value: "12,481", trend: "up", delta: "+8.2%", icon: "users", spark: [42, 50, 55, 60, 71, 80])`,
+      EmptyState: `_app_ = EmptyState(
+  "No projects yet", description: "Create a project to start tracking work.", icon: "folder",
+  actions: [Button("Create project", variant: "primary", type: "button", size: "sm", icon: "plus"),
+   Button("Read the guide", variant: "ghost",   type: "button", size: "sm")])`,
 
       // -------------------------------------------------------------------
       // Advanced data
@@ -1210,130 +1243,130 @@ root = Rating($score, 5, "3.5 of 5", 128, "md", true, true, "star")`,
       DataGrid: `$page = 1
 $sort = {column: "score", direction: "desc"}
 $selectedIds = []
-root = DataGrid(
+_app_ = DataGrid(
   [
-    Col("Id",    [1, 2, 3, 4]),
-    Col("Name",  ["Ada Lovelace", "Linus Torvalds", "Grace Hopper", "Margaret Hamilton"], "text", null, true, true),
-    Col("Score", [98, 92, 96, 94], "number", "right", true),
-    Col("Team",  ["Compilers", "Kernel", "Compilers", "Apollo"], "text", null, true, true)
+    Col("Id",    values: [1, 2, 3, 4]),
+    Col("Name",  values: ["Ada Lovelace", "Linus Torvalds", "Grace Hopper", "Margaret Hamilton"], align: "left", sortable: true, filterable: true),
+    Col("Score", values: [98, 92, 96, 94], align: "right", format: "number", sortable: true),
+    Col("Team",  values: ["Compilers", "Kernel", "Compilers", "Apollo"], align: "left", sortable: true, filterable: true)
   ],
-  [1, 2, 3, 4],
-  "Top contributors",
-  $sort,
-  $selectedIds,
-  true,
-  $page,
-  3,
-  "No matching rows"
+  rowIds: [1, 2, 3, 4],
+  caption: "Top contributors",
+  sort: $sort,
+  selectedIds: $selectedIds,
+  selectable: true,
+  page: $page,
+  perPage: 3,
+  emptyLabel: "No matching rows"
 )`,
       CalendarView: `$selected = "2026-05-17"
-root = CalendarView(
+_app_ = CalendarView(
   $selected,
-  "2026-05",
-  [
+  month: "2026-05",
+  events: [
     {date: "2026-05-12", title: "Standup",    time: "09:00", tone: "primary"},
     {date: "2026-05-17", title: "Demo day",   time: "14:30", tone: "success"},
     {date: "2026-05-22", title: "Retro",      time: "16:00", tone: "info"}
   ],
-  "month"
+  view: "month"
 )`,
-      ActivityLog: `root = ActivityLog([
+      ActivityLog: `_app_ = ActivityLog([
   {actor: "Ada",   title: "merged PR #142",        description: "Streaming UI v2 components.", time: "2m",  icon: "code-merge", tone: "success"},
   {actor: "Linus", title: "opened ticket #2049",   description: "Kernel scheduler regression.", time: "1h",  icon: "circle-exclamation", tone: "warning"},
   {actor: "Grace", title: "deployed compiler 4.2", time: "yesterday", icon: "rocket",          tone: "primary"}
-], "Recent activity")`,
-      AuditTrail: `root = ActivityLog([
-  {actor: "system",  title: "Rotated signing key",          time: "08:14",      icon: "key",     tone: "primary", meta: "kid=abc123 ip=10.0.0.4"},
-  {actor: "admin",   title: "Granted Owner role to Ada",    time: "yesterday", icon: "user-shield", tone: "success", meta: "actor=u_8132 ip=82.32.1.7"},
-  {actor: "scanner", title: "Blocked suspicious sign-in",    time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless ip=tor"}
-], "Audit trail")`,
-      ComparisonTable: `root = ComparisonTable(
+])`,
+      ComparisonTable: `_app_ = ComparisonTable(
   ["Free", "Pro", "Enterprise"],
-  [
+  rows: [
     {label: "Projects",   values: ["3", "Unlimited", "Unlimited"]},
     {label: "Collaborators", values: ["1", "10", "Unlimited"]},
     {label: "SSO",        values: [false, false, true]},
     {label: "Audit log",  values: [false, true,  true]},
     {label: "Priority support", values: [false, true, true]}
   ],
-  1
+  highlightColumn: 1
 )`,
       InfiniteList: `$pages = 2
-root = InfiniteList(
+action loadMore() { $pages = $pages + 1 }
+_app_ = InfiniteList(
   [
-    ListItem("Build component library", "Add 30+ new primitives.", "code"),
-    ListItem("Ship docs site",          "Update components.html.", "book"),
-    ListItem("Write tests",             "Smoke + integration coverage.", "vial"),
-    ListItem("Cut release",             "Tag + publish.", "tag")
+    ListItem("Build component library", meta: "Add 30+ new primitives.", icon: "code"),
+    ListItem("Ship docs site",          meta: "Update components.html.", icon: "book"),
+    ListItem("Write tests",             meta: "Smoke + integration coverage.", icon: "vial"),
+    ListItem("Cut release",             meta: "Tag + publish.", icon: "tag")
   ],
-  Action([@Set($pages = $pages + 1)]),
-  false,
-  true
+  onLoadMore: loadMore,
+  loading: false,
+  hasMore: true
 )`,
 
       // -------------------------------------------------------------------
       // Media
       // -------------------------------------------------------------------
-      VideoPlayer: `root = VideoPlayer(
+      VideoPlayer: `_app_ = VideoPlayer(
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
-  null, true, false, false, false,
-  "Big Buck Bunny — sample clip",
-  "16:9"
+  poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+  controls: true,
+  autoplay: false,
+  loop: false,
+  muted: false,
+  caption: "Big Buck Bunny — sample clip",
+  ratio: "16:9"
 )`,
-      AudioPlayer: `root = AudioPlayer(
+      AudioPlayer: `_app_ = AudioPlayer(
   "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
-  null,
-  "Cello Suite No. 1",
-  "J. S. Bach",
-  true
+  title: "Cello Suite No. 1",
+  artist: "J. S. Bach",
+  controls: true
 )`,
-      Carousel: `root = Carousel([
+      Carousel: `_app_ = Carousel([
   {src: "https://picsum.photos/seed/streaming1/640/360", alt: "Slide 1", caption: "Launch your product"},
   {src: "https://picsum.photos/seed/streaming2/640/360", alt: "Slide 2", caption: "Onboard customers"},
   {src: "https://picsum.photos/seed/streaming3/640/360", alt: "Slide 3", caption: "Grow your team"}
-], 0, "16:9", true)`,
-      Gallery: `root = Gallery([
+], activeIndex: 0, ratio: "16:9", showDots: true)`,
+      Gallery: `_app_ = Gallery([
   {src: "https://picsum.photos/seed/gallery1/320/320", alt: "City",  caption: "City"},
   {src: "https://picsum.photos/seed/gallery2/320/320", alt: "Beach", caption: "Beach"},
   {src: "https://picsum.photos/seed/gallery3/320/320", alt: "Forest",caption: "Forest"},
   {src: "https://picsum.photos/seed/gallery4/320/320", alt: "Hills", caption: "Hills"}
-], 4)`,
+], columns: 4)`,
       Lightbox: `$open = false
 $index = 0
-root = Stack([
+_app_ = Stack([
   Gallery([
     {src: "https://picsum.photos/seed/lb1/640/400", caption: "Photo 1"},
     {src: "https://picsum.photos/seed/lb2/640/400", caption: "Photo 2"},
     {src: "https://picsum.photos/seed/lb3/640/400", caption: "Photo 3"}
   ]),
-  Lightbox($open, $index, [
+  Lightbox([
     {src: "https://picsum.photos/seed/lb1/1200/800", caption: "Photo 1"},
     {src: "https://picsum.photos/seed/lb2/1200/800", caption: "Photo 2"},
     {src: "https://picsum.photos/seed/lb3/1200/800", caption: "Photo 3"}
-  ])
+  ], open: $open, index: $index)
 ])`,
-      Map: `root = Map(
-  48.8566, 2.3522, 12,
-  [
+      Map: `_app_ = Map(
+  48.8566,
+  lng: 2.3522,
+  zoom: 12,
+  markers: [
     {lat: 48.8584, lng: 2.2945, label: "Eiffel Tower"},
     {lat: 48.8606, lng: 2.3376, label: "Louvre"},
     {lat: 48.8530, lng: 2.3499, label: "Notre-Dame"}
   ],
-  "320px",
-  "Three Paris landmarks"
+  height: "320px",
+  caption: "Three Paris landmarks"
 )`,
 
       // -------------------------------------------------------------------
       // Editors & overlays
       // -------------------------------------------------------------------
       RichTextEditor: `$body = "<h2>Email draft</h2><p>Hi <b>Ada</b>, just confirming our <i>demo</i> on Friday.</p>"
-root = RichTextEditor("draft", $body, "Start composing…", "200px")`,
-      CodeEditor: `$code = "function greet(name) {\\n  return \`Hello, \${name}!\`\\n}\\n"
-root = CodeEditor("snippet", $code, "javascript", "// type your code…", "200px")`,
-      ContextMenu: `root = ContextMenu(
-  Card([CardHeader("Right-click anywhere on this card", "ContextMenu attaches here")]),
-  [
+_app_ = RichTextEditor("draft", value: $body, placeholder: "Start composing…", minHeight: "200px")`,
+      CodeEditor: `$code = "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n"
+_app_ = CodeEditor("snippet", value: $code, language: "javascript", placeholder: "// type your code…", minHeight: "200px")`,
+      ContextMenu: `_app_ = ContextMenu(
+  Card([CardHeader("Right-click anywhere on this card", subtitle: "ContextMenu attaches here")]),
+  items: [
     {label: "Open",       icon: "arrow-up-right-from-square"},
     {label: "Duplicate",  icon: "copy"},
     MenuSeparator(),
@@ -1341,196 +1374,232 @@ root = CodeEditor("snippet", $code, "javascript", "// type your code…", "200px
   ]
 )`,
       ColorPicker: `$brand = "#6366f1"
-root = ColorPicker("brand", $brand, "Brand colour",
-  ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6"])`,
+_app_ = ColorPicker("brand", value: $brand, label: "Brand colour",
+  swatches: ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6"])`,
 
       // -------------------------------------------------------------------
       // Advanced charts
       // -------------------------------------------------------------------
-      AreaChart: `root = LineChart(
-  ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-  [Series("Revenue", [12, 18, 22, 28, 32, 41]),
-   Series("Expenses", [8, 12, 14, 18, 20, 24])],
-  "First half"
-)`,
-      Gauge: `root = Gauge(78, 0, 100, "Uptime", "success", "md")`,
-      Heatmap: `root = Heatmap(
+      Gauge: `_app_ = Gauge(78, min: 0, max: 100, label: "Uptime", tone: "success", size: "md")`,
+      Heatmap: `_app_ = Heatmap(
   ["Mon", "Tue", "Wed", "Thu", "Fri"],
-  ["9am", "12pm", "3pm", "6pm"],
-  [
+  yLabels: ["9am", "12pm", "3pm", "6pm"],
+  values: [
     [3, 8, 12, 6],
     [4, 9, 14, 7],
     [5, 11, 16, 9],
     [3, 7, 13, 10],
     [2, 5, 10, 12]
   ],
-  "Office capacity"
+  title: "Office capacity"
 )`,
-      RadarChart: `root = RadarChart(
+      RadarChart: `_app_ = RadarChart(
   ["Speed", "Quality", "Cost", "Coverage", "Trust"],
-  [Series("Plan A", [80, 70, 60, 75, 85]),
-   Series("Plan B", [60, 85, 70, 65, 80])],
-  "Vendor comparison"
+  series: [Series("Plan A", values: [80, 70, 60, 75, 85]),
+   Series("Plan B", values: [60, 85, 70, 65, 80])],
+  title: "Vendor comparison"
 )`,
-      ScatterChart: `root = ScatterChart(
-  [Series("Cohort A", [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}]),
-   Series("Cohort B", [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}])],
-  "Sessions",
-  "Conversions",
-  "Cohort behaviour"
+      ScatterChart: `_app_ = ScatterChart(
+  [Series("Cohort A", values: [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}]),
+   Series("Cohort B", values: [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}])],
+  xLabel: "Sessions",
+  yLabel: "Conversions",
+  title: "Cohort behaviour"
 )`,
-      Histogram: `root = Histogram(
-  [1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 8, 9],
-  null, 6,
-  "Response time (s)"
+      Histogram: `_app_ = Histogram(
+  [1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 8, 9], binCount: 6,
+  title: "Response time (s)"
 )`,
 
       // -------------------------------------------------------------------
       // Advanced forms
       // -------------------------------------------------------------------
       PinInput: `$pin = ""
-root = PinInput("pin", 4, $pin, "numeric")`,
-      OtpInput: `$otp = ""
-root = PinInput("otp", $otp)`,
+_app_ = PinInput("pin", length: 4, value: $pin, type: "numeric")`,
       PasswordInput: `$pw = "Hunter2!"
-root = PasswordInput("pw", $pw, "Choose a strong password", "Password", true)`,
+_app_ = PasswordInput("pw", value: $pw, placeholder: "Choose a strong password", label: "Password", showStrength: true)`,
       TagInput: `$tags = ["streaming", "ui", "library"]
-root = TagInput("tags", $tags, "Add a tag and press Enter", "Tags", 8)`,
+_app_ = TagInput("tags", value: $tags, placeholder: "Add a tag and press Enter", label: "Tags", max: 8)`,
       MentionInput: `$note = "Heads up @"
-root = MentionInput("note",
-  [
+_app_ = MentionInput("note",
+  people: [
     {name: "Ada Lovelace",   handle: "ada",   role: "Engineering"},
     {name: "Linus Torvalds", handle: "linus", role: "Kernel"},
     {name: "Grace Hopper",   handle: "grace", role: "Compilers"}
   ],
-  $note, "Type @ to mention someone…")`,
+  value: $note, placeholder: "Type @ to mention someone…")`,
       TimePicker: `$time = "09:30"
-root = TimePicker("time", $time, "Meeting time")`,
+_app_ = TimePicker("time", value: $time, label: "Meeting time")`,
       DateTimePicker: `$when = "2026-05-17T14:30"
-root = DateTimePicker("when", $when, "Launch window")`,
+_app_ = DateTimePicker("when", value: $when, label: "Launch window")`,
       MaskedInput: `$phone = ""
-root = MaskedInput("phone", "(999) 999-9999", $phone, "(415) 555-0114", "Phone number")`,
-      FormSection: `root = FormSection("Account",
-  [
-    FormControl("Email",    Input("email", "you@example.com", "email")),
-    FormControl("Username", Input("user",  "ada-lovelace"))
+_app_ = MaskedInput("phone", mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114", label: "Phone number")`,
+      FormSection: `_app_ = FormSection("Account",
+  fields: [
+    FormControl("Email",    control: Input("email", placeholder: "you@example.com", type: "email")),
+    FormControl("Username", control: Input("user",  placeholder: "ada-lovelace"))
   ],
-  "Used to sign in and send notifications.")`,
-      FieldSet: `root = FieldSet("Notifications",
-  [
-    Checkbox("email-news",  "Product updates",  true),
-    Checkbox("email-promo", "Offers & promos", false),
-    Checkbox("email-tips",  "Tips & guides",    true)
+  description: "Used to sign in and send notifications.")`,
+      FieldSet: `_app_ = FieldSet("Notifications",
+  fields: [
+    Checkbox("email-news",  label: "Product updates",  checked: true),
+    Checkbox("email-promo", label: "Offers & promos", checked: false),
+    Checkbox("email-tips",  label: "Tips & guides",    checked: true)
   ],
-  "We never share your email address.")`,
-      ValidationSummary: `root = ValidationSummary(
+  hint: "We never share your email address.")`,
+      ValidationSummary: `_app_ = ValidationSummary(
   [
     {label: "email",    message: "Email is required."},
     {label: "password", message: "Password must be at least 8 characters."}
   ],
-  "Please fix the following before continuing"
+  title: "Please fix the following before continuing"
 )`,
       MultiStepForm: `$step = 0
-root = MultiStepForm([
+_app_ = MultiStepForm([
   {title: "Account", details: "Email & password",
-    content: [FormControl("Email", Input("email", "you@example.com", "email"))]},
+    content: [FormControl("Email", control: Input("email", placeholder: "you@example.com", type: "email"))]},
   {title: "Profile", details: "Tell us about you",
-    content: [FormControl("Name", Input("name", "Your name"))]},
+    content: [FormControl("Name", control: Input("name", placeholder: "Your name"))]},
   {title: "Done",    details: "Review",
-    content: [Banner("Almost there", "Click Submit to finish.", null, "circle-info", "success")]}
-], $step, Action([@ToAssistant("Wizard submitted")]))`,
+    content: [Banner("Almost there", description: "Click Submit to finish.", icon: "circle-info", tone: "success")]}
+], current: $step)`,
 
       // -------------------------------------------------------------------
       // Advanced patterns
       // -------------------------------------------------------------------
-      InboxPanel: `root = InboxPanel([
+      InboxPanel: `_app_ = InboxPanel([
   {title: "New comment on PR #142",    message: "Ada: looks great, two nits inline.", time: "2m",  icon: "comment",  unread: true},
   {title: "Build #482 succeeded",       message: "Tests passed in 2m31s.",            time: "12m", icon: "circle-check", tone: "success", unread: true},
   {title: "Weekly report",              message: "This week's metrics digest.",       time: "1d",  icon: "chart-pie"},
   {title: "Subscription renewed",       message: "Pro plan billed $29.",              time: "1w",  icon: "credit-card"}
-], "Notifications")`,
-      OnboardingChecklist: `root = OnboardingChecklist([
+], emptyLabel: "Notifications")`,
+      OnboardingChecklist: `_app_ = OnboardingChecklist([
   {title: "Create your workspace", description: "Pick a name and slug.",         done: true},
   {title: "Invite teammates",      description: "Share an invite link.",         done: true},
-  {title: "Connect a data source", description: "Hook up GitHub / Postgres / S3.", done: false, action: Action([@ToAssistant("Connect source")]), cta: "Connect"},
+  {title: "Connect a data source", description: "Hook up GitHub / Postgres / S3.", done: false, action: null, cta: "Connect"},
   {title: "Ship your first board", description: "Publish a dashboard.",          done: false}
-], "Get started", "Most teams finish setup in under 10 minutes.")`,
-      LoadingState: `root = LoadingState("Loading projects…", "Hang tight, fetching your workspaces.")`,
-      ErrorState: `root = ErrorState(
+], title: "Get started", subtitle: "Most teams finish setup in under 10 minutes.")`,
+      LoadingState: `_app_ = LoadingState("Loading projects…", description: "Hang tight, fetching your workspaces.")`,
+      ErrorState: `_app_ = ErrorState(
   "We couldn't load that project",
-  "There was a problem reaching the server. Try again in a moment.",
-  [Button("Retry", null, "primary", "button", "sm", "rotate-right"),
-   Button("Contact support", null, "ghost", "button", "sm", "life-ring")]
+  description: "There was a problem reaching the server. Try again in a moment.",
+  actions: [Button("Retry", variant: "primary", type: "button", size: "sm", icon: "rotate-right"),
+   Button("Contact support", variant: "ghost", type: "button", size: "sm", icon: "life-ring")]
 )`,
-      SuccessState: `root = SuccessState(
+      SuccessState: `_app_ = SuccessState(
   "Order placed!",
-  "Your invoice will arrive by email shortly.",
-  [Button("View receipt", null, "primary", "button", "sm", "file-invoice"),
-   Button("Back to dashboard", null, "ghost", "button", "sm")]
+  description: "Your invoice will arrive by email shortly.",
+  actions: [Button("View receipt", variant: "primary", type: "button", size: "sm", icon: "file-invoice"),
+   Button("Back to dashboard", variant: "ghost", type: "button", size: "sm")]
 )`,
       Tour: `$step = 0
-root = Tour([
+_app_ = Tour([
   {title: "Welcome",   description: "Take a 30-second tour of the workspace."},
   {title: "Sidebar",   description: "Switch between projects from the left rail."},
   {title: "Inspector", description: "Inspect any record by clicking a row."}
-], $step)`,
-      Spotlight: `root = Spotlight(
+], current: $step)`,
+      Spotlight: `_app_ = Spotlight(
   "Try the new filter bar",
-  "Press F to focus the filter bar or click any column header to sort.",
-  Button("Got it", null, "primary", "button", "sm")
+  description: "Press F to focus the filter bar or click any column header to sort.",
+  action: Button("Got it", variant: "primary", type: "button", size: "sm")
 )`,
-      Sticky: `root = ScrollArea([
-  Sticky([Banner("Sticky banner", "Stays pinned while you scroll.", null, "thumbtack", "primary")], "top"),
+      Sticky: `_app_ = ScrollArea([
+  Sticky([Banner("Sticky banner", description: "Stays pinned while you scroll.", icon: "thumbtack", tone: "primary")], side: "top"),
   Stack([
-    Card([CardHeader("Block 1"), TextContent("Scroll down to see the banner stay put.")]),
-    Card([CardHeader("Block 2"), TextContent("More content.")]),
-    Card([CardHeader("Block 3"), TextContent("Keep scrolling.")]),
-    Card([CardHeader("Block 4"), TextContent("Almost done.")])
+    Card([CardHeader("Block 1"), Text("Scroll down to see the banner stay put.")]),
+    Card([CardHeader("Block 2"), Text("More content.")]),
+    Card([CardHeader("Block 3"), Text("Keep scrolling.")]),
+    Card([CardHeader("Block 4"), Text("Almost done.")])
   ])
-], "260px")`,
-      ResizablePanels: `root = ResizablePanels(
+], height: "260px")`,
+      ResizablePanels: `_app_ = ResizablePanels(
   [Card([CardHeader("Files"), List([
-    ListItem("README.md", "Edited 2m ago"),
-    ListItem("package.json", "Edited 1h ago"),
-    ListItem("src/index.ts", "Edited 3h ago")
+    ListItem("README.md", meta: "Edited 2m ago"),
+    ListItem("package.json", meta: "Edited 1h ago"),
+    ListItem("src/index.ts", meta: "Edited 3h ago")
   ])])],
-  [Card([CardHeader("Preview"), CodeBlock("typescript", "const greet = (name) => \\\`Hello, \\\${name}!\\\`\\n\\ngreet('Ada')")])],
-  "240px"
+  secondary: [Card([CardHeader("Preview"), CodeBlock("typescript", code: "const greet = (name) => 'Hello, ' + name + '!'\\n\\ngreet('Ada')")])],
+  initialPrimaryWidth: "240px"
 )`,
-      MasonryGrid: `root = MasonryGrid([
-  Card([CardHeader("Short note"), TextContent("Just a line.")]),
-  Card([CardHeader("Longer note"), TextContent("This note has a bit more content to demonstrate uneven heights.")]),
-  Card([CardHeader("Another"), TextContent("Masonry packs them efficiently.")]),
-  Card([CardHeader("Medium"), TextContent("Two sentences here. Just enough to look different.")]),
+      MasonryGrid: `_app_ = MasonryGrid([
+  Card([CardHeader("Short note"), Text("Just a line.")]),
+  Card([CardHeader("Longer note"), Text("This note has a bit more content to demonstrate uneven heights.")]),
+  Card([CardHeader("Another"), Text("Masonry packs them efficiently.")]),
+  Card([CardHeader("Medium"), Text("Two sentences here. Just enough to look different.")]),
   Card([CardHeader("Tiny")])
-], 3)`,
-      Drawer: `root = Drawer("Filter results", true, [
-  FormControl("Status", Select("status", [
-    SelectItem("all",    "All"),
-    SelectItem("open",   "Open"),
-    SelectItem("closed", "Closed")
+], columns: 3)`,
+      Drawer: `_app_ = Drawer("Filter results", open: true, children: [
+  FormControl("Status", control: Select("status", items: [
+    SelectItem("all",    label: "All"),
+    SelectItem("open",   label: "Open"),
+    SelectItem("closed", label: "Closed")
   ])),
-  FormControl("Owner", Combobox("owner", [
-    SelectItem("ada",   "Ada Lovelace"),
-    SelectItem("linus", "Linus Torvalds")
+  FormControl("Owner", control: Combobox("owner", items: [
+    SelectItem("ada",   label: "Ada Lovelace"),
+    SelectItem("linus", label: "Linus Torvalds")
   ])),
   Buttons([
-    Button("Reset", null, "ghost",   "button", "sm"),
-    Button("Apply", null, "primary", "button", "sm")
+    Button("Reset", variant: "ghost",   type: "button", size: "sm"),
+    Button("Apply", variant: "primary", type: "button", size: "sm")
   ])
-], "right")`,
-      TopBar: `root = TopBar(
+], side: "right")`,
+      TopBar: `_app_ = TopBar(
   "Project Atlas",
-  "12 active issues",
-  [Badge("v0.4", "info")],
-  [SearchBar("q", "Search Atlas…")],
-  [Button("New issue", null, "primary", "button", "sm", "plus")]
+  subtitle: "12 active issues",
+  badges: [Badge("v0.4", tone: "info")],
+  search: [SearchBar("q", placeholder: "Search Atlas…")],
+  actions: [Button("New issue", variant: "primary", type: "button", size: "sm", icon: "plus")]
 )`,
-      BreadcrumbPageHeader: `root = PageHeader(
-  ["Workspace", "Engineering", "Q3 plan"],
-  "Roadmap, OKRs, and budget for Q3",
-  [Button("Share", null, "ghost", "button", "sm", "share"),
-   Button("Export", null, "primary", "button", "sm", "file-export")]
+
+      // -------------------------------------------------------------------
+      // Lifecycle & helpers
+      // -------------------------------------------------------------------
+      Async: `_app_ = Async({state: "loading", loading: true},
+  loading: Skeleton("paragraph", count: 3),
+  error: Callout("danger", title: "Load failed", text: "Could not fetch users."),
+  data: Text("Users loaded successfully.")
+)`,
+      Show: `$isOpen = true
+_app_ = Stack([
+  Switch("toggle", label: "Show content", value: $isOpen),
+  Show($isOpen, fallback: Callout("info", title: "Hidden", text: "Toggle the switch above."), children: [
+    Callout("success", title: "Visible", text: "The content is showing.")
+  ])
+])`,
+      Portal: `_app_ = Stack([
+  Text("Portal renders children outside the normal subtree."),
+  Portal([Badge("Portalled content", tone: "primary")])
+])`,
+      Redirect: `homePage = Card([CardHeader("Home"), Text("Welcome back.")])
+loginPage = Redirect("/home")
+pages = _router_({
+  "/home":  homePage,
+  "/login": loginPage,
+  default:  homePage
+})
+_app_ = pages`,
+      Lazy: `_app_ = Lazy(null,
+  fallback: Skeleton("card"),
+  children: [Card([CardHeader("Loaded"), Text("Content arrived.")])]
+)`,
+      ErrorBoundary: `_app_ = ErrorBoundary(
+  fallback: Callout("danger", title: "Something went wrong", text: "An error occurred in this section."),
+  children: [Card([CardHeader("Safe content"), Text("This renders normally.")])]
+)`,
+      MenuSeparator: `_app_ = DropdownMenu(
+  Button("Actions"),
+  items: [
+    MenuLabel("File"),
+    MenuItem("New",  icon: "file"),
+    MenuItem("Open", icon: "folder-open"),
+    MenuSeparator(),
+    MenuLabel("Edit"),
+    MenuItem("Cut",  icon: "scissors"),
+    MenuItem("Copy", icon: "copy"),
+    MenuSeparator(),
+    MenuItem("Delete", icon: "trash", variant: "danger")
+  ],
+  open: true
 )`,
     };
 
@@ -1543,13 +1612,20 @@ root = Tour([
      */
     const OVERLAY_PREVIEW = new Set([
       "Modal",
-      "Sheet",
       "Drawer",
-      "Toasts",
       "Lightbox",
       "Tour",
       "Spotlight",
       "ContextMenu",
+      "CommandPalette",
+      "DropdownMenu",
+      "MenuLabel",
+      "MenuSeparator",
+      "Popover",
+      "MultiSelect",
+      "Combobox",
+      "HoverCard",
+      "NotificationBell",
     ]);
 
     function formatSignature(spec) {
@@ -1615,7 +1691,7 @@ root = Tour([
         output.setAttribute("data-overlay", "true");
       }
 
-      const renderer = document.createElement("streaming-ui-script");
+      const renderer = document.createElement("aktion-app");
       renderer.setAttribute("theme", window.theme);
       // Cache the source on a data attribute so we can drive `setResponse`
       // in one pass after the entire tree is appended, instead of triggering
@@ -1784,7 +1860,7 @@ root = Tour([
       // and `requestAnimationFrame` keeps the first paint snappy even on
       // pages with 100+ components.
       const renderers = root.querySelectorAll(
-        "streaming-ui-script[data-source]",
+        "aktion-app[data-source]",
       );
       const apply = () => {
         for (const node of renderers) {

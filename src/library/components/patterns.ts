@@ -12,7 +12,6 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { isActionPayload } from "../../runtime/builtins.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   sanitiseCssLength, sanitiseCssUrl, sanitiseImageSrc,
@@ -167,7 +166,7 @@ export const PageHeader: ComponentSpec = {
     { name: "subtitle", type: "string", optional: true },
     { name: "breadcrumbs", type: "string[] | Breadcrumb | false", optional: true, description: "Array of strings, a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / NavLinks shown on the right" },
-    { name: "status", type: "Badge", optional: true, description: "Optional Badge(...) rendered next to the title" },
+    { name: "status", type: "Badge", optional: true, aliases: ["badge"], description: "Optional Badge(...) rendered next to the title" },
   ],
   render: (_node, props, helpers) => {
     const root = el("header", { class: "rui-page-header" });
@@ -366,9 +365,9 @@ export const Testimonial: ComponentSpec = {
   description: "Quote card with author, role, and optional avatar.",
   props: [
     { name: "quote", type: "string" },
-    { name: "author", type: "string" },
+    { name: "author", type: "string", aliases: ["name"] },
     { name: "role", type: "string", optional: true },
-    { name: "avatarSrc", type: "string", optional: true },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"] },
     { name: "rating", type: "number", optional: true, description: "0–5 stars" },
   ],
   render: (_node, props) => {
@@ -410,7 +409,7 @@ export const ProfileCard: ComponentSpec = {
   props: [
     { name: "name", type: "string" },
     { name: "role", type: "string", optional: true },
-    { name: "avatarSrc", type: "string", optional: true, description: "Avatar image src; falls back to initials" },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"], description: "Avatar image src; falls back to initials" },
     { name: "bio", type: "string", optional: true },
     { name: "tags", type: "string[]", optional: true },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons to render at the bottom" },
@@ -457,9 +456,9 @@ export const Comment: ComponentSpec = {
     "body, and an optional row of action buttons (reply, like, …).",
   props: [
     { name: "author", type: "string" },
-    { name: "body", type: "string" },
+    { name: "body", type: "string", aliases: ["text", "message"] },
     { name: "time", type: "string", optional: true, description: "Relative or absolute timestamp" },
-    { name: "avatarSrc", type: "string", optional: true },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"] },
     { name: "actions", type: "Node[]", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -490,7 +489,7 @@ export const Banner: ComponentSpec = {
     "or Alert.",
   props: [
     { name: "title", type: "string" },
-    { name: "message", type: "string", optional: true },
+    { name: "message", type: "string", optional: true, aliases: ["description"] },
     { name: "action", type: "Button", optional: true },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name" },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
@@ -528,22 +527,22 @@ export const KanbanCard: ComponentSpec = {
     { name: "assignee", type: "string", optional: true, description: "Name shown next to avatar initials" },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name shown beside the title" },
-    { name: "action", type: "Action", optional: true, description: "Optional Action(...) fired when the card is clicked" },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Optional callable fired when the card is clicked" },
   ],
   render: (_node, props, helpers) => {
     const root = el("div", {
       class: "rui-kanban-card",
       "data-tone": asString(props.tone, "default"),
     });
-    if (isActionPayload(props.action)) {
+    if (typeof props.action === "function") {
       root.setAttribute("role", "button");
       root.setAttribute("tabindex", "0");
-      root.onclick = () => helpers.runAction(props.action);
+      root.onclick = () => helpers.invoke(props.action);
       root.onkeydown = (event) => {
         const e = event as KeyboardEvent;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          helpers.runAction(props.action);
+          helpers.invoke(props.action);
         }
       };
     }
@@ -583,7 +582,7 @@ export const KanbanColumn: ComponentSpec = {
   description: "Single column inside a KanbanBoard. Children must be KanbanCard entries.",
   props: [
     { name: "title", type: "string" },
-    { name: "items", type: "KanbanCard[]" },
+    { name: "items", type: "KanbanCard[]", aliases: ["cards"] },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES, description: "Header accent tone" },
   ],
   render: (_node, props, helpers) => {
@@ -637,9 +636,9 @@ export const SectionHeader: ComponentSpec = {
     "a section instead of a bare `CardHeader`.",
   props: [
     { name: "title", type: "string" },
-    { name: "subtitle", type: "string", optional: true },
+    { name: "subtitle", type: "string", optional: true, aliases: ["description"] },
     { name: "eyebrow", type: "string", optional: true, description: "Short uppercase label above the title" },
-    { name: "status", type: "Badge | Tag", optional: true },
+    { name: "status", type: "Badge | Tag", optional: true, aliases: ["badge"] },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / Links shown on the right" },
   ],
   render: (_node, props, helpers) => {
@@ -668,7 +667,7 @@ export const Toolbar: ComponentSpec = {
   description:
     "Horizontal toolbar for filters, search, view modes, and primary " +
     "actions. Left/center/right slots wrap onto separate rows on narrow " +
-    "viewports so the bar never overflows. Pass `searchable=true` to " +
+    "viewports so the bar never overflows. Pass `searchable: true` to " +
     "auto-mount a SearchBar in the left slot (bind `searchValue` to a " +
     "`$variable`). Use ABOVE a Table, List, Grid, or Kanban view — never " +
     "replace `PageHeader` with it.",
@@ -723,7 +722,7 @@ export const SidebarItem: ComponentSpec = {
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name rendered before the label" },
     { name: "active", type: "boolean", optional: true },
     { name: "badge", type: "string", optional: true, description: "Trailing chip (count or status)" },
-    { name: "action", type: "Action", optional: true },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
   ],
   render: (_node, props, helpers) => {
     const root = el("button", {
@@ -736,8 +735,8 @@ export const SidebarItem: ComponentSpec = {
     root.append(el("span", { class: "rui-sidebar-item-label" }, [asString(props.label)]));
     const badge = asString(props.badge);
     if (badge) root.append(el("span", { class: "rui-sidebar-item-badge" }, [badge]));
-    if (isActionPayload(props.action)) {
-      root.onclick = () => helpers.runAction(props.action);
+    if (typeof props.action === "function") {
+      root.onclick = () => helpers.invoke(props.action);
     }
     return root;
   },
@@ -868,8 +867,8 @@ export const SplitView: ComponentSpec = {
     "narrow viewports. Use for inboxes, file browsers, contact lists.",
   props: [
     { name: "primary", type: "Node[]", description: "Master pane content (list, filters)" },
-    { name: "detail", type: "Node[]", description: "Detail pane content (selected item, empty state)" },
-    { name: "primaryWidth", type: "string", optional: true, description: "CSS width for the primary pane (default 320px)" },
+    { name: "detail", type: "Node[]", aliases: ["secondary"], description: "Detail pane content (selected item, empty state)" },
+    { name: "primaryWidth", type: "string", optional: true, aliases: ["splitAt"], description: "CSS width for the primary pane (default 320px)" },
   ],
   render: (_node, props, helpers) => {
     const width = sanitiseCssLength(asString(props.primaryWidth), "320px");
@@ -914,7 +913,7 @@ export const DescriptionList: ComponentSpec = {
   name: "DescriptionList",
   description:
     "Compact key/value summary for detail pages — replaces a row of " +
-    "`TextContent`s with a properly aligned `<dl>`. Children must be " +
+    "`Text`s with a properly aligned `<dl>`. Children must be " +
     "DescriptionItem entries. Two columns by default on wide viewports.",
   props: [
     { name: "items", type: "DescriptionItem[]" },
@@ -965,9 +964,9 @@ export const PricingCard: ComponentSpec = {
     { name: "period", type: "string", optional: true, description: "Billing period (e.g. '/mo')" },
     { name: "description", type: "string", optional: true },
     { name: "features", type: "string[]", optional: true, description: "Bullet list of included features" },
-    { name: "action", type: "Button", optional: true, description: "Primary CTA — pass a Button(...)" },
+    { name: "action", type: "Button", optional: true, aliases: ["cta"], description: "Primary CTA — pass a Button(...)" },
     { name: "badge", type: "string", optional: true, description: "Eyebrow / badge above the plan name" },
-    { name: "featured", type: "boolean", optional: true },
+    { name: "featured", type: "boolean", optional: true, aliases: ["highlighted"] },
   ],
   render: (_node, props, helpers) => {
     const featured = asBoolean(props.featured);
@@ -1050,7 +1049,7 @@ export const MediaCard: ComponentSpec = {
     "side-by-side media + content on wide viewports.",
   props: [
     { name: "title", type: "string" },
-    { name: "imageSrc", type: "string", optional: true, description: "Image URL (omit to render a neutral placeholder)" },
+    { name: "imageSrc", type: "string", optional: true, aliases: ["src", "image"], description: "Image URL (omit to render a neutral placeholder)" },
     { name: "description", type: "string", optional: true },
     { name: "tags", type: "string[]", optional: true, description: "Tag pill labels" },
     { name: "meta", type: "string", optional: true, description: "Footer meta line (author · date · category)" },
@@ -1240,10 +1239,10 @@ export const Tile: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "Secondary value rendered next to/under the label" },
     { name: "description", type: "string", optional: true },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
-    { name: "action", type: "Action", optional: true },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
   ],
   render: (_node, props, helpers) => {
-    const isClickable = isActionPayload(props.action);
+    const isClickable = typeof props.action === "function";
     const tag = isClickable ? "button" : "div";
     const root = el(tag as "div", {
       type: isClickable ? "button" : null,
@@ -1260,7 +1259,7 @@ export const Tile: ComponentSpec = {
     if (description) body.append(el("div", { class: "rui-tile-description" }, [description]));
     root.append(body);
     if (isClickable) {
-      root.onclick = () => helpers.runAction(props.action);
+      root.onclick = () => helpers.invoke(props.action);
     }
     return root;
   },
@@ -1274,10 +1273,10 @@ export const Notification: ComponentSpec = {
     "or activity drawers — for top-of-page announcements prefer `Banner`.",
   props: [
     { name: "title", type: "string" },
-    { name: "message", type: "string", optional: true },
+    { name: "message", type: "string", optional: true, aliases: ["description"] },
     { name: "time", type: "string", optional: true, description: "Relative or absolute timestamp" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown in a colored disc" },
-    { name: "avatarSrc", type: "string", optional: true, description: "Avatar URL (alternative to `icon`)" },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"], description: "Avatar URL (alternative to `icon`)" },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
     { name: "unread", type: "boolean", optional: true, description: "Highlights the card with an accent" },
     { name: "actions", type: "Node[]", optional: true },
@@ -1323,13 +1322,13 @@ export const PersonChip: ComponentSpec = {
   props: [
     { name: "name", type: "string" },
     { name: "role", type: "string", optional: true, description: "Sub-line below the name (role, email, handle, …)" },
-    { name: "avatarSrc", type: "string", optional: true },
+    { name: "avatarSrc", type: "string", optional: true, aliases: ["src"] },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
     { name: "status", type: "string", optional: true, enum: ["online", "offline", "busy", "away"] },
-    { name: "action", type: "Action", optional: true },
+    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
   ],
   render: (_node, props, helpers) => {
-    const isClickable = isActionPayload(props.action);
+    const isClickable = typeof props.action === "function";
     const tag = isClickable ? "button" : "div";
     const size = asString(props.size, "md");
     const avatarSize = size === "lg" ? "lg" : size === "sm" ? "sm" : "md";
@@ -1349,7 +1348,7 @@ export const PersonChip: ComponentSpec = {
     if (role) meta.append(el("span", { class: "rui-person-chip-role" }, [role]));
     root.append(meta);
     if (isClickable) {
-      root.onclick = () => helpers.runAction(props.action);
+      root.onclick = () => helpers.invoke(props.action);
     }
     return root;
   },

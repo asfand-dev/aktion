@@ -6,7 +6,7 @@ alwaysApply: true
 # Keep README.md in sync with the codebase
 
 `README.md` is the canonical entry point for this repository. It documents the
-public API of `<streaming-ui-script>`, the bundled component library, themes,
+public API of `<aktion-app>`, the bundled component library, themes,
 docs site pages, live examples, project layout, and the build / test workflow.
 
 ## Before any code change

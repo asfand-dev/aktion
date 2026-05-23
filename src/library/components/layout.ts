@@ -574,7 +574,7 @@ const clampGridColumns = (n: number): number => Math.max(1, Math.min(GRID_COLUMN
 
 /** Resolve a grid span from a number or fraction string (e.g. `"1/3"` → 4 on a 12-col grid). */
 export function resolveSpan(span: unknown): number {
-  if (span == null || span === "") return 1;
+  if (span == null || span === "") return 12;
   const raw = String(span).trim();
   if (raw.includes("/")) {
     const [numPart, denPart] = raw.split("/");
@@ -584,7 +584,8 @@ export function resolveSpan(span: unknown): number {
       return clampGridColumns(Math.round((GRID_COLUMNS * num) / den));
     }
   }
-  return clampGridColumns(asNumber(span, 1));
+  if (raw === "auto" || raw === "fit" || raw === "auto-fit" || raw === "full" || raw === "100%") return 12;
+  return clampGridColumns(asNumber(span, 12));
 }
 
 function gridMinChildWidth(props: Record<string, unknown>): string {
@@ -606,7 +607,7 @@ export const GridItem: ComponentSpec = {
     { name: "spanAt", type: "object", optional: true, description: "Responsive span map `{sm: 12, md: 6, lg: 4}`" },
   ],
   render: (_node, props, helpers) => {
-    const baseSpan = resolveSpan(props.span ?? 1);
+    const baseSpan = resolveSpan(props.span ?? 12);
     const spanAt = readResponsiveProp<number | string>(props.spanAt);
     const offset = props.offset === undefined || props.offset === null
       ? 0
@@ -693,7 +694,7 @@ export const Grid: ComponentSpec = {
   name: "Grid",
   description:
     "Responsive CSS grid. Use for KPI strips, feature blocks, card grids, " +
-    "and asymmetric layouts with `GridItem` spans. Set `columns=12` (or " +
+    "and asymmetric layouts with `GridItem` spans. Set `columns: 12` (or " +
     "include `GridItem` children) for a 12-column track system with " +
     "fractional spans like `\"1/3\"`. `columns` and `gap` accept responsive " +
     "maps like `{sm: 1, md: 2, lg: 4}`.",
@@ -720,15 +721,25 @@ export const Grid: ComponentSpec = {
       class: "rui-grid",
     };
     const styleParts: string[] = [];
-    let twelveColMode = hasGridItems;
+    // Twelve-column mode is enabled when (a) the author explicitly asks
+    // for 12 columns or (b) GridItem children are present AND no explicit
+    // non-12 column count was supplied. When the author writes
+    // `Grid([...], 3)` they expect a 3-column grid regardless of whether
+    // the children are GridItem wrappers; forcing 12-column mode squashes
+    // each `GridItem` (default span=1) to 1/12 of the row.
+    let twelveColMode = false;
+    let explicitNonTwelve = false;
 
     if (columns.kind === "single") {
       const requested = columns.value === null ? 0 : asNumber(columns.value, 0);
       const cols = requested > 0 ? clampGridColumns(requested) : 0;
-      if (cols === GRID_COLUMNS) twelveColMode = true;
+      if (cols === GRID_COLUMNS) {
+        twelveColMode = true;
+      } else if (cols > 0) {
+        explicitNonTwelve = true;
+      }
       if (cols > 0) {
         attrs["data-columns"] = String(cols);
-        if (twelveColMode) attrs["data-grid-mode"] = "12";
         const minChild = asString(props.minChildWidth) || asString(props.minItemWidth);
         if (minChild) {
           attrs["data-min-child-width"] = "true";
@@ -743,15 +754,17 @@ export const Grid: ComponentSpec = {
         const v = columns.values[bp as Breakpoint];
         if (v === undefined) continue;
         const cols = clampGridColumns(asNumber(v, 0));
-        if (cols === GRID_COLUMNS) twelveColMode = true;
+        if (cols === GRID_COLUMNS) {
+          twelveColMode = true;
+        } else if (cols > 0) {
+          explicitNonTwelve = true;
+        }
         styleParts.push(`--rui-grid-cols-${bp}:${cols}`);
       }
-      if (twelveColMode) attrs["data-grid-mode"] = "12";
     }
 
-    if (twelveColMode && !attrs["data-grid-mode"]) {
-      attrs["data-grid-mode"] = "12";
-    }
+    if (hasGridItems && !explicitNonTwelve) twelveColMode = true;
+    if (twelveColMode) attrs["data-grid-mode"] = "12";
 
     if (gap.kind === "single") {
       attrs["data-gap"] = gap.value ? String(gap.value) : "m";
@@ -828,7 +841,7 @@ export const ScrollArea: ComponentSpec = {
     "to a fixed max height with a clean scrollbar.",
   props: [
     { name: "children", type: "Node[]" },
-    { name: "maxHeight", type: "string", optional: true, description: "CSS height (default 320px)" },
+    { name: "maxHeight", type: "string", optional: true, aliases: ["height"], description: "CSS height (default 320px)" },
     { name: "direction", type: "string", optional: true, enum: ["vertical", "horizontal", "both"] },
   ],
   render: (_node, props, helpers) => {
@@ -849,7 +862,7 @@ export const Modal: ComponentSpec = {
   description:
     "Dialog overlay shown when `open` is true. Pass a `$variable` as " +
     "`open` to control it. The header always renders a × close button " +
-    "(disable via `closable=false`); the optional `footer` slot is the " +
+    "(disable via `closable: false`); the optional `footer` slot is the " +
     "canonical place for action buttons. `closeOnBackdrop=true` opts in " +
     "to backdrop-click dismissal.",
   props: [
@@ -879,10 +892,7 @@ export const Modal: ComponentSpec = {
     const stateName = node.argMeta?.[1]?.stateRef;
     const closeModal = () => {
       if (!stateName) return;
-      helpers.runAction({
-        kind: "Action",
-        steps: [{ kind: "Set", name: stateName, value: false }],
-      });
+      helpers.setState(stateName, false);
     };
     if (closable) {
       const closeBtn = el("button", {

@@ -1,5 +1,5 @@
 /**
- * Hash-based router for `<streaming-ui-script>`.
+ * Hash-based router for `<aktion-app>`.
  *
  * The router is owned by the host element and exposed to:
  *   - The evaluator (which special-cases `Routes(...)` to pick the matching
@@ -256,7 +256,7 @@ export class Router {
         listener({ path: next, previousPath, source });
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[streaming-ui-script] router listener failed", err);
+        console.error("[aktion] router listener failed", err);
       }
     }
   }

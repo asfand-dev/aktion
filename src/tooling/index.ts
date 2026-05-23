@@ -1,0 +1,39 @@
+/**
+ * Tooling surface (§27) — host-side helpers projected from the schema.
+ *
+ * The pieces ship as a separate entry so library consumers can opt in
+ * without paying for them at runtime. Each helper is pure: feed in
+ * source / AST / library, get diagnostics, canonical source, or a
+ * structured AST view back.
+ *
+ * Surfaces
+ * --------
+ *
+ *   - `formatProgram(source)` — canonical pretty-printer.
+ *   - `applyDelta(source, ops)` — structured edit protocol (§14).
+ *   - `migrateV1(source)` — best-effort v1 → 0.5 codemod (Appendix A).
+ *   - `inspectAST(source)` — Committed + Drafting AST snapshot.
+ *   - `getDiagnostics(source, library)` — language-service diagnostics.
+ *   - `getCompletions(source, position, library)` — completions.
+ *   - `getHoverInfo(source, position, library)` — hover docs.
+ */
+
+export { formatProgram } from "./formatter.js";
+export type { FormatResult } from "./formatter.js";
+export { applyDelta } from "./delta.js";
+export type { DeltaOp, DeltaResult } from "./delta.js";
+export { migrateV1 } from "./codemod.js";
+export type { MigrateV1Result } from "./codemod.js";
+export { inspectAST, inspectProgram } from "./inspector.js";
+export type { InspectorBinding, InspectorView } from "./inspector.js";
+export {
+  getDiagnostics,
+  getCompletions,
+  getHoverInfo,
+} from "./language-service.js";
+export type {
+  Position,
+  Diagnostic,
+  CompletionItem,
+  HoverInfo,
+} from "./language-service.js";

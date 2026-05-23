@@ -1,73 +1,92 @@
 /**
- * System prompt generator.
+ * System prompt generator — Aktion.
  *
- * Produces a clear, ordered prompt that teaches the LLM:
- *   1. The Streaming UI Script syntax it must use.
- *   2. The components in the active library and their positional signatures.
- *   3. The data tools (Query/Mutation) it can call.
- *   4. Any preamble, rules, and worked examples the host app provides.
+ * Produces an ordered system prompt that teaches an LLM how to author
+ * Aktion — the compact declarative language consumed by
+ * `<aktion-app>`. Two flavours ship side-by-side:
  *
- * Two modes are supported:
- *   - `"full"` (default) — emits the entire surface area of the language:
- *     every component group, design principles, composition recipes,
- *     JavaScript interactions, hash-based routing, and so on. Use for
- *     rich generative UI surfaces.
- *   - `"chat"` — emits a compact, chat-focused prompt that mirrors the
- *     structure of OpenUI Lang's system prompt. Skips JavaScript
- *     interactions, routing, app-shell composites, and the deep design
- *     guidance. Use when the LLM only needs to author small, streaming
- *     UI replies inside a chat bubble.
+ *   - `"full"` (default): comprehensive teaching prompt that covers every
+ *     language feature — reactive state, components, actions, effects,
+ *     `http({...})`, routing, JS escape hatch, builtins, helpers,
+ *     globals, i18n, theming — plus the entire component library and a
+ *     handful of worked examples. Use this when the LLM is generating
+ *     full applications, dashboards, or websites.
  *
- * The output is plain text — no JSON wrapping — so it drops cleanly into a
- * chat completion `system` message.
+ *   - `"chat"`: compact, **read-only** prompt that teaches *just enough*
+ *     to convert an LLM's prose reply into a rich UI surface. No state,
+ *     no actions, no HTTP, no routing — only static layout + content +
+ *     data-presentation components plus a `FollowUpBlock` for canned
+ *     follow-up prompts. Use this when the LLM is answering questions
+ *     and the host wants its response rendered as cards, tables, charts,
+ *     etc. rather than plain prose.
+ *
+ * Public API (kept stable for the docs site and `<aktion-app>.getSystemPrompt`):
+ *   - `generatePrompt(library, options?)` — returns the prompt string.
+ *   - `describeComponentSpec(spec)` — formats a single component signature.
+ *   - Types: `PromptMode`, `PromptOptions`, `ToolSpec`.
  */
 
 import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
+import { findPositionalProp } from "../library/types.js";
+import { getBuiltinCatalog, type BuiltinEntry } from "../language/builtins.js";
+
+/* -------------------------------------------------------------------------- */
+/*  Public API                                                                */
+/* -------------------------------------------------------------------------- */
 
 export interface ToolSpec {
   name: string;
   description: string;
   /** Example argument shape the LLM should call with. */
   argsExample?: Record<string, unknown>;
-  /** Whether this tool is read-only (Query) or mutating (Mutation). */
+  /** Whether this endpoint is read-only or mutating. Influences method hint. */
   kind?: "Query" | "Mutation";
 }
 
 export type PromptMode = "full" | "chat";
 
 export interface PromptOptions {
-  /**
-   * Prompt flavour. `"full"` (default) covers every feature of Streaming
-   * UI Script. `"chat"` emits a compact chat-focused prompt.
-   */
   mode?: PromptMode;
-  /** Library description / role line at the top. */
+  /** Replace the default opening sentence describing the assistant's role. */
   preamble?: string;
-  /** Free-form rules added at the very end. */
+  /** Bullets appended under an `## Additional rules` section near the end. */
   additionalRules?: ReadonlyArray<string>;
-  /** Worked examples to anchor the LLM. */
+  /** Worked-example snippets shown under `## Examples`. Defaults to a curated set. */
   examples?: ReadonlyArray<string>;
-  /** Tool descriptors to expose as Query/Mutation calls. */
+  /** Host-provided endpoint catalogue. Surfaced under `## Available endpoints`. */
   tools?: ReadonlyArray<ToolSpec>;
-  /** Examples that demonstrate tool usage. */
+  /** Endpoint usage examples. Surfaced under `## Endpoint examples`. */
   toolExamples?: ReadonlyArray<string>;
-  /** Feature flags (default: tool-aware if `tools` is non-empty). */
+  /** Force-include the HTTP/tool-calling teaching sections in `full` mode. */
   toolCalls?: boolean;
+  /** Force-include the reactive-state + builtins sections in `full` mode. */
   bindings?: boolean;
+  /** Permit fenced ```aktion blocks inside markdown prose (full mode). */
   inlineMode?: boolean;
+  /** Tell the LLM to emit only changed statements (full mode). */
   editMode?: boolean;
 }
 
-export function generatePrompt(library: ComponentLibrary, options: PromptOptions = {}): string {
-  if (options.mode === "chat") return generateChatPrompt(library, options);
-  return generateFullPrompt(library, options);
+const ROOT_NAME = "_app_";
+
+export function generatePrompt(
+  library: ComponentLibrary,
+  options: PromptOptions = {},
+): string {
+  return options.mode === "chat"
+    ? buildChatPrompt(library, options)
+    : buildFullPrompt(library, options);
+}
+
+export function describeComponentSpec(spec: ComponentSpec): string {
+  return formatComponentSignature(spec);
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Full prompt                                                                */
+/*  Section assembly                                                          */
 /* -------------------------------------------------------------------------- */
 
-function generateFullPrompt(library: ComponentLibrary, options: PromptOptions): string {
+function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): string {
   const hasTools = (options.tools?.length ?? 0) > 0;
   const flags = {
     toolCalls: options.toolCalls ?? hasTools,
@@ -77,1168 +96,819 @@ function generateFullPrompt(library: ComponentLibrary, options: PromptOptions): 
   };
 
   const sections: string[] = [];
-  sections.push(headerSection(options.preamble, library.root));
-  sections.push(syntaxSection(library.root));
-  sections.push(designPrinciplesSection());
-  sections.push(componentsSection(library));
-  sections.push(iconsSection());
-  sections.push(compositionRecipesSection());
-  if (flags.bindings) sections.push(bindingsSection());
-  if (flags.toolCalls) sections.push(toolingSection());
-  if (flags.toolCalls || flags.bindings) sections.push(builtinsSection());
-  sections.push(javascriptSection());
-  sections.push(routingSection());
-  sections.push(themingSection());
-  if (flags.inlineMode) sections.push(inlineModeSection());
-  if (flags.editMode) sections.push(editModeSection());
+  sections.push(fullHeader(options.preamble));
+  sections.push(fullMentalModel());
+  sections.push(fullSyntax());
+  if (flags.bindings) sections.push(fullReactiveState());
+  sections.push(fullComponentsAndLambdas());
+  sections.push(fullActions());
+  sections.push(fullEffects());
+  if (flags.toolCalls) sections.push(fullHttp());
+  sections.push(fullControlFlow());
+  sections.push(fullRouting());
+  sections.push(fullTwoWayBinding());
+  sections.push(fullJsEscape());
+  if (flags.toolCalls || flags.bindings) sections.push(fullBuiltins());
+  sections.push(fullHelpers());
+  sections.push(fullGlobals());
+  sections.push(fullI18n());
+  sections.push(fullTheming());
+  sections.push(fullIcons());
+  sections.push(fullComponentLibrary(library));
+  if (flags.inlineMode) sections.push(fullInlineMode());
+  if (flags.editMode) sections.push(fullEditMode());
   if (options.tools && options.tools.length > 0) {
     sections.push(toolsListSection(options.tools));
   }
   if (options.toolExamples && options.toolExamples.length > 0) {
-    sections.push(examplesSection("Tool examples", options.toolExamples));
+    sections.push(examplesSection("Endpoint examples", options.toolExamples));
   }
-  const examples = options.examples ?? defaultRichExamples();
-  if (examples.length > 0) {
-    sections.push(examplesSection("Examples", examples));
-  }
+  const examples = options.examples ?? fullDefaultExamples();
+  if (examples.length > 0) sections.push(examplesSection("Examples", examples));
   if (options.additionalRules && options.additionalRules.length > 0) {
     sections.push(rulesSection(options.additionalRules));
   }
-  sections.push(streamingSection(library.root));
-  sections.push(closingSection());
-  sections.push(finalVerificationSection(library.root));
+  sections.push(fullStreaming());
+  sections.push(fullOutputRules());
+  sections.push(fullFinalVerification());
 
   return sections.join("\n\n").trim() + "\n";
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Chat prompt — compact, OpenUI-Lang-style flavour                           */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Components included in the chat-mode prompt. The aim is to cover the
- * majority of conversational UI replies (text, lists, tables, charts,
- * cards, follow-ups, inline forms) without the noise of full-page
- * dashboards, app shells, or routing.
- */
-const CHAT_PROMPT_COMPONENTS: ReadonlyArray<string> = [
-  // Layout
-  "Stack", "StackItem", "Grid", "GridItem", "Box", "Card", "CardHeader", "CardFooter",
-  "Separator", "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
-  // Content
-  "TextContent", "Image", "Link", "Badge", "BadgeList", "Callout", "Quote",
-  "CodeBlock", "Markdown", "Icon",
-  // Forms
-  "Form", "FormControl", "Input", "TextArea", "Select", "SelectItem",
-  "Checkbox", "Switch", "Button", "Buttons", "SearchBar",
-  // Data
-  "Table", "Col", "List", "ListItem", "StatCard", "Stats", "Progress",
-  // Charts
-  "BarChart", "LineChart", "PieChart", "Series",
-  // Chat
-  "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem", "ActionLink", "ChatBubble",
-  // Lightweight feedback
-  "Avatar", "Rating", "Toast",
-];
-
-function generateChatPrompt(library: ComponentLibrary, options: PromptOptions): string {
+function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): string {
   const sections: string[] = [];
-  sections.push(chatHeaderSection(options.preamble, library.root));
-  sections.push(chatSyntaxSection(library.root));
-  sections.push(chatComponentsSection(library));
-  sections.push(chatActionsSection());
-  sections.push(chatStreamingSection(library.root));
-  sections.push(chatExamplesSection(options.examples));
+  sections.push(chatHeader(options.preamble));
+  sections.push(chatSyntax());
+  sections.push(chatComponentLibrary(library));
+  sections.push(chatIcons());
+  sections.push(chatBuiltins());
+  sections.push(chatStreaming());
   if (options.tools && options.tools.length > 0) {
-    sections.push(toolsListSection(options.tools));
+    sections.push(chatToolsList(options.tools));
   }
+  const examples = options.examples ?? chatDefaultExamples();
+  if (examples.length > 0) sections.push(examplesSection("Examples", examples));
   if (options.additionalRules && options.additionalRules.length > 0) {
     sections.push(rulesSection(options.additionalRules));
   }
-  sections.push(chatRulesSection());
-  sections.push(chatFinalVerificationSection(library.root));
+  sections.push(chatImportantRules());
+  sections.push(chatFinalVerification());
 
   return sections.join("\n\n").trim() + "\n";
 }
 
-function chatHeaderSection(preamble: string | undefined, rootComponent: string): string {
-  const header = preamble?.trim() ||
-    "You are an AI assistant that responds using Streaming UI Script, a declarative UI language for chat replies. Your ENTIRE response must be valid Streaming UI Script code — no markdown, no explanations, just Streaming UI Script.";
-  return `${header}\nEvery response MUST start with \`root = ${rootComponent}([...])\` on the first line.`;
-}
-
-function chatSyntaxSection(rootComponent: string): string {
-  return `## Syntax Rules
-
-1. Each statement is on its own line: \`identifier = Expression\`.
-2. \`root\` is the entry point — every program must define \`root = ${rootComponent}(...)\`.
-3. Expressions are: strings (\`"..."\`), template literals (\`\` \`Hi \${name}\` \`\`), numbers, booleans, \`null\`, arrays (\`[...]\`), objects (\`{key: value}\`), or component calls \`TypeName(arg1, arg2, ...)\`. Write backticks literally (\`\` \` \`\`) — never as a backslash + backtick.
-4. Prefer references for readability: define \`name = ...\` on one line, then use \`name\` elsewhere.
-5. EVERY variable (except \`root\` and the optional top-level \`theme = Theme({...})\` binding) MUST be referenced somewhere. Unreachable definitions silently render nothing.
-6. Arguments are POSITIONAL (order matters, not names). Write \`Stack([children], "row", "l")\`, NOT \`Stack(children: ..., direction: "row")\`.
-7. Optional arguments can be omitted from the end.
-8. Strings use double quotes with backslash escaping. Backticks allow \`\${expr}\` interpolation: \`\` \`Found \${$rows.length} results\` \`\`.
-9. Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array. Use \`?.\` (optional chain) to short-circuit on null.
-10. Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || ??\`, unary \`! -\`. Ternary: \`cond ? a : b\`. \`??\` returns left unless null/undefined.
-11. Spread \`...\` works in arrays (\`[...$a, ...$b]\`) and objects (\`{...$cur, status: "done"}\`).
-12. Forward references are allowed — the parser resolves names after parsing the whole input, which keeps streaming smooth.`;
-}
-
-function chatComponentsSection(library: ComponentLibrary): string {
-  const byName = new Map(library.components.map((c) => [c.name, c]));
-  const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
-  const lines: string[] = ["## Component Signatures",
-    "Use only these components. The order of arguments matches the signature exactly. Optional props end with `?`."];
-  for (const group of allGroups) {
-    const filtered = group.components.filter((name) => CHAT_PROMPT_COMPONENTS.includes(name));
-    if (filtered.length === 0) continue;
-    lines.push(`\n### ${group.name}`);
-    for (const componentName of filtered) {
-      const spec = byName.get(componentName);
-      if (!spec) continue;
-      lines.push(formatComponentSignature(spec));
-    }
-  }
-  return lines.join("\n");
-}
-
-function chatActionsSection(): string {
-  return `## Actions — Button Behaviour
-
-\`Action([@steps...])\` wires button clicks to operations. Steps execute in order.
-Buttons without an explicit \`Action\` automatically send their label to the assistant (equivalent to \`Action([@ToAssistant(label)])\`).
-
-Available steps in chat mode:
-- \`@ToAssistant("message")\` — Send a message to the assistant (for conversational buttons like "Tell me more", "Explain this").
-- \`@OpenUrl("https://...")\` — Navigate to a URL.
-
-Example — simple link button:
-\`\`\`
-viewBtn = Button("View", Action([@OpenUrl("https://example.com")]))
-\`\`\`
-
-End most replies with a \`FollowUpBlock\` of 2–4 short prompts to keep the conversation moving:
-\`\`\`
-follow = FollowUpBlock(["Show me more", "Compare alternatives", "Explain this"])
-\`\`\``;
-}
-
-function chatStreamingSection(rootComponent: string): string {
-  return `## Hoisting & Streaming (CRITICAL)
-
-Streaming UI Script supports hoisting: a reference can be used BEFORE it is defined. The output is re-parsed on every streamed chunk, so undefined references render as empty until their definitions arrive. This produces a smooth top-down reveal.
-
-Recommended statement order:
-1. \`root = ${rootComponent}(...)\` — UI shell appears immediately.
-2. Component definitions — fill in as they stream.
-3. Leaf data values — strings, numbers, arrays — last.
-
-Always write the \`root = ${rootComponent}(...)\` statement on the FIRST line.`;
-}
-
-function chatExamplesSection(custom: ReadonlyArray<string> | undefined): string {
-  const examples = custom ?? defaultChatExamples();
-  return examplesSection("Examples", examples);
-}
-
-function chatRulesSection(): string {
-  return `## Important Rules
-
-- When asked about data, generate realistic / plausible data.
-- Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.).
-- For grid-like layouts, use \`Stack\` with \`direction="row"\` and \`wrap=true\`. Avoid \`justify="between"\` unless you specifically want large gutters.
-- Tables are COLUMN-oriented: \`Table([Col("Label", dataArray), Col("Count", countArray, "number")])\`.
-- Pie / Bar charts need NUMBERS, not objects. Use plucked arrays: \`PieChart(data.categories, data.values)\`.
-- Use existing components (Tabs, Accordion) before inventing ternary show/hide patterns.
-- End conversational responses with \`FollowUpBlock([...])\` to keep the conversation flowing.
-- For forms, define one \`FormControl\` reference per field so each control can stream in progressively.
-- Never nest \`Form\` inside \`Form\`.
-- **Icons.** Any \`icon\` prop expects a Font Awesome name (no \`fa-\` prefix), e.g. \`"house"\`, \`"chart-line"\`, \`"star"\`. Optional variant prefix: \`"regular:star"\`, \`"brands:github"\` (default is solid). Do NOT use emoji characters in icon props.`;
-}
-
-function chatFinalVerificationSection(rootComponent: string): string {
-  return `## Final Verification
-
-Before finishing, walk your output and verify:
-1. \`root = ${rootComponent}(...)\` is the FIRST line.
-2. Every referenced name is defined somewhere below.
-3. Every defined name (other than \`root\`) is reachable from \`root\`.
-4. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.`;
-}
-
-function defaultChatExamples(): ReadonlyArray<string> {
-  return [
-    `# Table reply with derived totals (template literal + @Sum)
-root = Stack([title, tbl, totals, follow])
-title  = TextContent("Top Languages by users", "large-heavy")
-tbl    = Table([Col("Language", langs.name), Col("Users (M)", langs.users, "number"), Col("Year", langs.year, "number")])
-totals = Callout("info", \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, null, "chart-line", true)
-langs  = [
-  {name:"Python",     users:15.7, year:1991},
-  {name:"JavaScript", users:14.2, year:1995},
-  {name:"Java",       users:12.1, year:1995},
-  {name:"TypeScript", users:8.5,  year:2012},
-  {name:"Go",         users:5.2,  year:2009}
-]
-follow = FollowUpBlock(["Sort by users", "Show this as a chart", "Tell me about TypeScript"])`,
-    `# Bar chart reply
-root = Stack([title, chart, follow])
-title  = TextContent("Q4 Revenue", "large-heavy")
-chart  = BarChart(labels, [Series("Product A", a), Series("Product B", b)])
-labels = ["Oct", "Nov", "Dec"]
-a = [120, 150, 180]
-b = [90,  110, 140]
-follow = FollowUpBlock([\`Compare to Q3 (\${@Sum(a) + @Sum(b)} total)\`, "Break down by region"])`,
-    `# Inline form with live preview (template literal + ?? for unset)
-$name    = ""
-$email   = ""
-$message = ""
-root    = Stack([title, form, preview])
-title   = TextContent("Contact us", "large-heavy")
-form    = Form("contact", btns, [
-  FormControl("Name",    Input("name",  "Your name",        "text",  null, $name)),
-  FormControl("Email",   Input("email", "you@example.com",  "email", null, $email)),
-  FormControl("Message", TextArea("message", "Tell us more...", 4, null, $message))
-])
-btns    = Buttons([Button("Submit", Action([@ToAssistant("Submit")]), "primary"), Button("Cancel", Action([@ToAssistant("Cancel")]), "ghost")])
-preview = Callout("info", "Preview", \`Hi \${$name ?? "there"}, we'll reach you at \${$email ?? "your email"}.\`, "envelope", true)`,
-    `# Lazy branching with @Switch (replaces nested ternaries)
-$tab = "overview"
-root = Stack([Tabs([
-  TabItem("overview",  "Overview",  [activePanel]),
-  TabItem("billing",   "Billing",   [activePanel]),
-  TabItem("security",  "Security",  [activePanel])
-])])
-# Branches are only evaluated when their key matches — safe with loop vars / heavy builtins.
-activePanel = @Switch($tab, {
-  "overview": Card([CardHeader("Overview"),  TextContent("Snapshot of the workspace.")]),
-  "billing":  Card([CardHeader("Billing"),   DescriptionList([DescriptionItem("Plan","Pro"), DescriptionItem("Renews","May 28")], 2)]),
-  "security": Card([CardHeader("Security"),  Callout("success","All checks passed","SOC2 audit · MFA enforced", "shield-halved")])
-}, Card([CardHeader("Overview"), TextContent("Pick a tab above.")]))`,
-  ];
-}
-
 /* -------------------------------------------------------------------------- */
-/*  Shared section builders (used by the full prompt)                          */
+/*  FULL mode — sections                                                      */
 /* -------------------------------------------------------------------------- */
 
-function headerSection(preamble: string | undefined, rootComponent: string): string {
-  const header = preamble?.trim() ||
-    "You are a UI assistant. Respond ONLY in Streaming UI Script — a compact, line-oriented language for generating user interfaces. Never write prose, JSON, markdown, or HTML. Output a flat list of `identifier = Expression` lines and nothing else.";
-  const rootRule = `Every response MUST begin with \`root = ${rootComponent}([...])\`. The renderer drops invalid lines, so prefer correctness over verbosity.`;
-  return `${header}\n${rootRule}`;
+function fullHeader(preamble: string | undefined): string {
+  const lead = preamble?.trim()
+    || "You are a full-stack UI engineer building **complete, working applications** in Aktion — a compact, declarative DSL for reactive, streaming-first user interfaces. Treat each prompt as a request to ship a real, production-quality product surface (dashboards, CRUD apps, multi-page websites, settings consoles, inboxes, admin panels, …). Never reply with a one-shot chat card; always produce a substantial, navigable app. Respond ONLY in Aktion — no prose, no JSON, no markdown, no HTML.";
+  return `${lead}\n\nEvery response MUST begin with \`${ROOT_NAME} = ...\` on the very first line. Use a top-level container (\`${ROOT_NAME} = AppShell(...)\` for full apps, \`${ROOT_NAME} = Stack(...)\` for landing pages, etc.) or a user-declared component (\`${ROOT_NAME} = App()\`). For multi-page apps wrap the main area in \`pages = _router_({ ... })\` and reference \`pages\` from \`${ROOT_NAME}\`. Seed realistic mock data inline (5–20 plausible rows per dataset) when the host has no real backend. Wire every visible button to an \`action\`. Use \`$name = value\` for reactive state, \`http({ ... })\` for any data fetch, \`effect [ ...deps ] { … }\` for lifecycle work, \`_router_({ … })\` for navigation. The renderer drops invalid lines, so prefer correctness over verbosity.`;
 }
 
-function syntaxSection(rootComponent: string): string {
+function fullMentalModel(): string {
+  return `## Mental model
+
+Aktion is a streaming-first, declarative DSL. A program is a flat
+list of \`name = expression\` statements. The renderer evaluates them lazily,
+re-parses the stream on every chunk, and silently treats undefined references
+as empty — so a partially-streamed program renders progressively from the top.
+
+Three identifier conventions cooperate:
+
+- **Plain bindings**: \`name = expression\` — a non-reactive alias. Reading
+  it never subscribes; the value is captured once when the statement runs.
+- **Reactive atoms**: \`$name = value\` — a single tracked cell. Reading
+  \`$name\` subscribes the surrounding component / effect; writing inside
+  an \`action\` / \`effect\` / lambda body notifies subscribers.
+- **Reserved built-ins**: \`${ROOT_NAME}\` (the UI root, required first
+  line), \`theme\` (optional brand override), \`_route_\` (router-owned
+  reactive surface — read \`_route_.path\` / \`_route_.params\` and call
+  \`_route_.navigate("/path")\` to navigate), \`$i18n\` (i18n bundle handle).
+
+Three declaration keywords are reserved at the top level:
+
+- \`component Name(args) { … return Expression }\` — first-class UI
+  primitive with optional defaults and per-instance state.
+- \`action Name(args) { … }\` — imperative side-effect block triggered by
+  events. MAY \`return\` a value.
+- \`effect [ ...deps ] { … }\` — declarative, anonymous background work
+  tied to a component / top-level binding. Dependencies (\`$atom\`,
+  \`on:mount\`, \`on:unmount\`, \`on:every(N)\`, \`debounce(N)\`,
+  \`throttle(N)\`) live in the bracketed list.
+
+Everything else (\`http({...})\`, \`_router_({...})\`, \`Theme({...})\`,
+\`i18n({...})\`, \`Toast(...)\`, \`Stack(...)\`) is a regular function /
+component call.`;
+}
+
+function fullSyntax(): string {
   return `## Syntax
-- One statement per line: \`identifier = Expression\`.
-- Identifiers use lower_camel or snake_case (no spaces, no quotes).
-- State variables start with \`$\`: \`$days = "7"\`.
-- **Persistent state** uses \`$$\`: \`$$theme = "dark"\` survives page reloads via the host's storage. Same read/write surface as \`$\`, just durable.
-- Component calls use positional arguments: \`Stack([...children], "row", "m")\`.
-- Strings use double quotes, numbers are bare, booleans are \`true\`/\`false\`, null is \`null\`.
-- **Template literals** use backticks with \`\${expr}\` interpolation: \`\` \`Hello \${$user.name}, you have \${$todos.length} todos\` \`\` — cleaner than \`"Hello " + $user.name + …\`. Write backticks literally — never escape them as a backslash + backtick.
-- Arrays: \`[a, b, c]\`. Objects: \`{key: value, other: 1}\` (object keys are bare identifiers).
-- **Spread** with \`...\` works in arrays and objects: \`[...$pinned, ...$todos]\`, \`{...$current, status: "done"}\`. Strings spread into characters; non-iterables are ignored.
-- Member access: \`data.rows.title\` plucks \`title\` from each row when applied to an array.
-- **Optional chaining** \`obj?.prop\` short-circuits to \`undefined\` when \`obj\` is null/undefined — no nested \`?\` ternaries needed.
-- Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || ??\`, unary \`! -\`. \`??\` returns the left operand unless it is null/undefined.
-- Ternary: \`cond ? a : b\`. For multi-branch UI prefer \`@If(...)\` / \`@Switch(...)\` (see Built-in functions).
-- **Custom component macros** let you factor repeated component trees into a reusable call: write \`MyUserCard(user) = Card([Avatar(user.name), TextContent(user.role)])\` once, then call \`MyUserCard(u)\` anywhere — even inside \`@Each\`. Parameters are scoped to the macro body, exactly like \`@Each\` loop vars.
-- Forward references are allowed — refer to a name before defining it (the parser hoists all references after parsing).
-- Comments are stripped by the parser (\`// line\`, \`# line\`, \`/* block */\`). Avoid them in responses — they waste tokens.
-- The first line MUST be \`root = ${rootComponent}([...])\` so the UI shell appears immediately during streaming.
-- Two top-level identifiers are reserved: \`root\` (the UI entry point) and \`theme\` (optional — assign a \`Theme({...})\` call to brand the response). Neither needs to be referenced from elsewhere; the runtime picks both up by name.`;
-}
 
-function designPrinciplesSection(): string {
-  return `## Design principles (READ THIS BEFORE COMPOSING)
-You are emitting UI for a real product surface — not a wireframe, not a
-component demo. **Aim for the visual polish of a shadcn/ui + Tailwind page**,
-a Linear/Vercel/Notion-quality interface, or any modern SaaS app the user
-would see in production. The generated UI should be **indistinguishable** in
-quality from a hand-crafted shadcn/ui layout.
+Source is line-oriented; **newline terminates a statement**. Never use
+semicolons or statement-level commas. \`{ … }\` braces open blocks (component
+bodies, action bodies, effect bodies, control-flow arms, object literals).
+Indentation is purely cosmetic.
 
-### What "rich UI" means here
-- **Multi-section layouts**, not single-card stacks. Most pages have 4–8
-  distinct visual sections (banner, header, KPIs, primary content area,
-  secondary panel, follow-ups).
-- **Clear visual hierarchy** through spacing, typography, and grouping.
-- **Composed patterns** (\`PageHeader\`, \`Stats\`, \`KanbanBoard\`, etc.)
-  instead of hand-rolled Cards.
-- **Status and meaning conveyed via colour** (Badge, Tag, StatusDot, Banner
-  tones, StatCard trend deltas).
-- **Density that matches the request.** Dashboards are dense (KPIs + chart +
-  table + activity). Detail pages are summary-first (PageHeader +
-  DescriptionList + tabs). Landing pages are spacious (Hero + FeatureGrid +
-  Testimonials).
+### Literals
+- Strings: \`"double"\` or \`'single'\`. Standard newline / tab / quote
+  escape sequences are supported inside string bodies.
+- Template literals: backticks with \`\${expr}\` interpolation —
+  \`\`\`Hi \${$user.name}, you have \${@Count($todos)} todos\`\`\`. Embed any
+  expression; mix freely with state refs and \`@\`-builtins.
+- Numbers: \`42\`, \`-3.14\`, \`1_000_000\` (underscores allowed).
+- Booleans: \`true\`, \`false\`. Null: \`null\`.
+- Arrays: \`[1, 2, 3]\`, \`[Card1(), Card2()]\` — heterogeneous, multi-line OK.
+- Objects: \`{ name: "Ada", role: "Engineer" }\` — keys are bare identifiers
+  or quoted strings; commas optional between rows on separate lines.
 
-### The rules
+### Operators
+- Arithmetic: \`+ - * / %\`, unary \`-\`.
+- Comparison: \`== != > < >= <=\`.
+- Logical: \`&& || !\`. Nullish coalescing: \`??\`.
+- Ternary: \`cond ? a : b\`.
+- Spread \`...\` in arrays and objects: \`[...$a, ...$b]\`,
+  \`{ ...$cur, status: "done" }\`.
+- Member access: \`obj.field\`, \`obj["field"]\` (bracket form), optional
+  \`obj?.field\` to short-circuit on null/undefined.
 
-1. **Reach for high-level patterns first.** Before composing Card+Stack by hand,
-   check whether one of these single-line composites already does the job:
-   - \`Hero(...)\` for text-first landing/intro headers
-   - \`Hero(title, imageSrc, ...)\` for image-backed hero bands (products, articles, campaign tops)
-   - \`PageHeader(...)\` for dashboard / detail page headers (with breadcrumbs + actions)
-   - \`SectionHeader(...)\` for sub-section titles inside a Card (eyebrow + title + actions)
-   - \`Stats([...])\` for KPI strips (NOT \`Stack(direction="row")\`)
-   - \`Stats([{label, value, hint?, tone?}, …])\` for compact inline stat rows inside a Card (lighter than \`Stats\`)
-   - \`Toolbar(left, right)\` for filter/search/action rows above a list, table, or board
-   - \`FeatureGrid([FeatureItem(...)])\` for product highlights
-   - \`MediaCard(title, imageSrc?, description?, tags?, meta?, actions?, badge?, orientation?)\` for article/product/preview cards (in a \`Grid\`)
-   - \`Timeline([TimelineItem(...)])\` for activity / changelog feeds
-   - \`KanbanBoard([KanbanColumn([KanbanCard(...)])])\` for task views
-   - \`EmptyState(...)\` for zero-state placeholders
-   - \`Tile(label, icon, value?, description?, tone?, action?)\` for compact icon menus / quick-action grids
-   - \`ProfileCard(...)\`, \`PersonChip(...)\`, \`Comment(...)\`, \`Testimonial(...)\` for people-shaped content
-   - \`Banner(...)\` for top-of-page announcements; \`Notification(...)\` for items inside a notification panel
-   - \`DescriptionList([DescriptionItem(...)])\` for detail-page key/value summaries
-   - \`PricingTable([PricingCard(...)])\` for pricing tiers
-   - \`StatusDot(label, tone?, pulse?)\` for inline health pips
-   - \`Rating(value, max?, label?, count?)\` for product / review stars
-   - \`ProgressRing(value, max?, label?, caption?, tone?)\` for circular KPI/quota indicators
-   - \`Quote(text, cite?)\` for inline pull-quotes (use \`Testimonial\` when you also have an avatar/role)
-   - \`Callout(variant, title, description?, icon?, compact=true)\` for compact tips/warnings inline (drop \`compact\` for a full banner)
-   - \`ChatBubble(author, body, time?, from?)\` for chat-style transcripts inside a Card
-2. **Use the App shell for full product surfaces.** When the request implies an
-   app (dashboard with nav, settings with sections, admin console, inbox),
-   wrap \`root\` in \`AppShell(sidebar, content, topbar?)\` so the response has
-   a real left-nav layout — not a single column of cards. The \`content\` slot
-   typically opens with a \`PageHeader\`.
-3. **Wide pages get a \`Container\`.** Landing pages, articles, and marketing
-   sections should wrap \`root\`'s top-level children in \`Container(children, size?)\`
-   (sm/md/lg/xl) so the content keeps a comfortable reading width on large
-   screens. Dashboards inside \`AppShell\` don't need it.
-4. **Lay out grids with \`Grid\`, not \`Stack\`.** Use \`Grid(children, columns?, gap?, minItemWidth?)\`
-   when children should size uniformly across a row (cards, tiles, KPIs). \`Stack\`
-   is for prose-style sequences and side-by-side asymmetric content.
-5. **Always wrap dashboards in a \`PageHeader\`.** Every dashboard, detail page,
-   or settings screen starts with \`PageHeader(title, subtitle, breadcrumbs, actions, status)\`.
-6. **Always pair lists with a \`Toolbar\`.** Tables, lists, kanban boards, and
-   card grids look unfinished without filter/search controls above them.
-   Use \`Toolbar([SearchBar(...), filterSelect, ...], [primaryButton, ...])\`.
-7. **Prefer \`SearchBar\` for filter inputs.** Anywhere the user filters/searches,
-   use \`SearchBar(id, placeholder?, value?, shortcut?)\` instead of a raw \`Input\` —
-   it ships with the magnifier icon, the keyboard hint chip, and form-friendly submit.
-8. **Use status badges liberally.** Pair a primary title with a \`Badge\`/\`Tag\`
-   for status, priority, owner, etc. — never leave status as plain prose.
-9. **Use icons for visual hierarchy.** \`StatCard\`, \`Tile\`, \`FeatureItem\`,
-   \`TimelineItem\`, \`Callout\`, \`Banner\`, \`Notification\`, \`KanbanCard\`, \`ListItem\`,
-   \`SidebarItem\`, \`Tag\`, \`Note\`, and \`BreadcrumbItem\` all accept an \`icon\` — set
-   it. Icons are Font Awesome **names without the \`fa-\` prefix** (e.g.
-   \`"house"\`, \`"chart-line"\`). Optional variant prefix: \`"regular:star"\`,
-   \`"brands:github"\` — default is solid. Suggested mapping:
-   - \`chart-pie\` metrics · \`chart-line\` growth · \`arrow-trend-down\` decline · \`bolt\` performance · \`bell\` alerts
-   - \`circle-check\` success · \`triangle-exclamation\` warning · \`circle-xmark\` error · \`circle-info\` info · \`lock\` security
-   - \`rocket\` launch · \`bullseye\` goal · \`lightbulb\` idea · \`gear\` settings · \`users\` team · \`house\` home
-   - \`inbox\` inbox · \`folder\` projects · \`calendar\` calendar · \`comments\` messages · \`chart-pie\` analytics · \`credit-card\` billing
-   - The \`Icon(name, variant?, size?)\` component renders one inline anywhere a Node is accepted.
-10. **Use avatars for people.** Author names, assignees, commenters always render
-    with \`Avatar(name, src?, size?)\` or — preferably — \`PersonChip(name, role?, avatarSrc?)\`
-    when a row needs both the avatar AND the name+role. Pair multiple users
-    with \`AvatarGroup\`. \`ProfileCard\` and \`Comment\` already include them.
-11. **End empty/zero states with a \`Button\` CTA.** Use \`EmptyState(title, description, icon, action)\`
-    instead of an empty Card with a sad paragraph.
-12. **Group related fields with a \`SectionHeader\` inside a Card.** Settings
-    pages should be a stack of cards, each opening with a \`SectionHeader\`
-    (or \`CardHeader\` for the simplest case) and containing a \`FormControl\`
-    per field. Pair toggles with descriptions via \`Switch(id, label, value, description?)\`.
-13. **Detail pages use \`DescriptionList\`.** Profile / billing / metadata
-    panels are a row of \`DescriptionItem(label, value)\` inside a Card with a
-    \`SectionHeader\` — never a vertical Stack of \`TextContent\` lines.
-14. **Mix tone deliberately.** Most surfaces should be \`default\`. Use \`primary\`,
-    \`success\`, \`warning\`, \`danger\`, \`info\` to highlight ONE thing per
-    page (the primary CTA, the critical alert, the active KPI delta).
+### Array shortcuts
+- \`$rows.length\` / \`"hi".length\` — element / character count.
+- \`$rows.first\` / \`$rows.last\` — first or last element (\`null\` if empty).
+- **Array pluck**: \`$rows.title\` returns \`[row.title for each row]\` —
+  the idiomatic projection. Composes with charts
+  (\`PieChart(rows.label, rows.value)\`) and tables
+  (\`Col("Title", rows.title)\`).
 
-### Density targets (CRITICAL — verify before emitting)
+### Statements
+- \`name = expression\` — plain binding (top-level or block-local).
+- \`$name = expression\` — declare or write a reactive atom.
+- \`component Name(args) { … }\` — component declaration.
+- \`action Name(args) { … }\` — action declaration.
+- \`effect [ ...deps ] { … }\` — anonymous effect declaration.
+- \`return expression\` — only valid inside \`component\` / \`action\` /
+  lambda bodies.
 
-The single most common failure is producing a UI that's too sparse. Use these
-**minimum** section counts for each request type:
+### Function calls and named arguments
+\`TypeName(arg1, prop: value, …)\` — arguments are matched against the
+spec's prop list in declaration order. Named arguments (\`prop: value\`)
+may appear at any position and override positional matching. Optional props
+can be omitted from the end.
 
-| Request type            | Minimum named sections | Required patterns                                                              |
-|-------------------------|------------------------|---------------------------------------------------------------------------------|
-| Dashboard / analytics   | **6**                  | \`PageHeader\` + \`Stats\` + chart Card + table/list + secondary Card |
-| Landing / marketing     | **5**                  | \`Hero\` + \`FeatureGrid\` + (Testimonial \\| PricingTable) + \`Banner\` CTA |
-| Detail / profile        | **5**                  | \`PageHeader\` + \`DescriptionList\` Card + secondary content Card + \`Timeline\`/\`Comment\` Card |
-| Settings                | **5**                  | \`PageHeader\` + 3+ Section Cards (with \`SectionHeader\`) + danger-zone Card |
-| List / browse           | **5**                  | \`PageHeader\` + \`Toolbar\` + \`Stats\` (optional) + \`Table\`/\`Grid\` + \`Pagination\` |
-| Full app surface        | **4** (inside shell)   | \`AppShell\` wrapping \`Sidebar\` + (PageHeader + sections) |
-| Empty / zero state      | **3**                  | \`PageHeader\` + \`EmptyState\` (with CTA) |
-| Form (compose / submit) | **4**                  | \`PageHeader\` (or \`CardHeader\`) + grouped Card sections + buttons row + status \`Callout\` |
+**One positional argument max** is the canonical 0.5 style — every
+component declares **at most one** canonical positional slot (its primary
+label / content / children). Pass that slot bare; every other argument is
+best supplied as a named argument:
 
-If your response has fewer named sections than the minimum, **add more** —
-relevant context (helpful links, related items, recent activity, follow-ups)
-is always available.
-
-### Anti-patterns to avoid
-
-- A single \`Card([CardHeader(...), TextContent(...)])\` for a dashboard request.
-- A vertical \`Stack\` of bare \`StatCard\`s instead of \`Stats([...])\`
-  (or \`Stats([...])\` for an inline strip beside a chart).
-- A vertical \`Stack\` of \`TextContent\` lines for a key/value summary —
-  use \`DescriptionList\` instead.
-- \`Stack(direction="row", wrap=true)\` for uniform tiles — use \`Grid\` (with
-  \`Tile\` for icon menus, \`MediaCard\` for article/product previews).
-- A Table or card grid with no \`Toolbar\` / \`SearchBar\` above it.
-- A form with every field stacked directly on the page — wrap groups in Cards.
-- Empty / loading states with a single line of grey text — use \`EmptyState\`
-  with an icon and a CTA, or \`Skeleton\` for loading.
-- Charts without a \`CardHeader\` describing what's plotted.
-- Plain text for status, priority, or count — use \`Badge\`, \`Tag\`, or \`StatusDot\`.
-- \`Avatar(...) + TextContent(name) + TextContent(role)\` repeated in a list —
-  use \`PersonChip(name, role, avatarSrc?)\` instead.
-- A raw \`Input\` placed in a Toolbar as the search field — use \`SearchBar\`.
-- An article preview built from \`Image\` + \`Card\` + \`TextContent\` — use
-  \`MediaCard\` (or \`Cover\` for a full-bleed hero image).
-- A "4.5/5 stars" line typed in prose — use \`Rating(value, max?, label?, count?)\`.
-- An assistant transcript built from \`Stack([Card(...)])\` per message — use
-  \`ChatBubble\` (with \`from="me"\` / \`from="agent"\`) inside a Card.`;
-}
-
-function iconsSection(): string {
-  return `## Icons (Font Awesome)
-Icon-typed props (every \`icon\` argument: \`StatCard\`, \`Tile\`, \`FeatureItem\`,
-\`Banner\`, \`Notification\`, \`SidebarItem\`, \`NavLink\`, \`ListItem\`, \`Tag\`,
-\`Note\`, \`Callout\`, \`TimelineItem\`, \`KanbanCard\`, \`DescriptionItem\`,
-\`BreadcrumbItem\`, \`Toggle\`/\`ToggleGroup\`) accept a Font Awesome name as a
-string. The element auto-loads the Font Awesome stylesheet — host pages do
-nothing.
-
-- Format: \`"name"\` (defaults to the solid set), e.g. \`"house"\`, \`"chart-line"\`, \`"star"\`, \`"bell"\`.
-- Variants: prefix with \`"regular:name"\` or \`"brands:name"\` (e.g. \`"regular:star"\`, \`"brands:github"\`).
-- DO NOT use emoji characters in \`icon\` props. Use Font Awesome names.
-- Use the \`Icon(name, variant?, size?)\` component to render an icon inline anywhere a Node is expected.
-- Reasonable picks: \`chart-pie\` analytics · \`chart-line\` trend · \`arrow-trend-down\` decline · \`bolt\` performance · \`bell\` alerts · \`circle-check\` success · \`triangle-exclamation\` warning · \`circle-xmark\` error · \`circle-info\` info · \`lock\` security · \`shield-halved\` auth · \`rocket\` launch · \`bullseye\` goal · \`lightbulb\` idea · \`gear\` settings · \`users\` team · \`house\` home · \`inbox\` inbox · \`folder\` projects · \`calendar\` calendar · \`comments\` messages · \`credit-card\` billing · \`sack-dollar\` revenue · \`cart-shopping\` orders · \`ticket\` tickets · \`palette\` design · \`pen\` edit · \`box\` package · \`location-dot\` location · \`magnifying-glass\` search.`;
-}
-
-function compositionRecipesSection(): string {
-  return `## Composition recipes
-Use these recipes as starting points. Pick the one that matches the user's
-intent and **adapt the structure** — never copy verbatim. Every recipe below
-hits the density target for its page type while keeping each statement small
-and stream-friendly.
-
-### Dashboard / analytics page (6 sections)
 \`\`\`
-root          = Stack([dashBanner, dashHeader, dashToolbar, dashKpis, dashRow, dashFollowUps], "column", "l")
-dashBanner    = Banner("Quarterly review is open", "Submit your team's update by Friday.", Button("Submit", Action([@Run(open_submit)]), "primary", "button", "small"), "bullseye", "primary")
-dashHeader    = PageHeader("Sales overview", "Last 30 days · refreshed 5m ago", ["Workspace", "Reports", "Sales"], dashActions, dashStatus)
-dashActions   = [Button("Export", Action([@Run(export_csv)]), "secondary"), Button("New report", Action([@Run(new_report)]), "primary")]
-dashStatus    = Badge("Live", "success")
-dashToolbar   = Toolbar([rangeFilter, segmentFilter], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
-rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","Last 7 days"),SelectItem("30d","Last 30 days"),SelectItem("90d","Last quarter")], null, null, $range))
-segmentFilter = FormControl("Segment", Select("segment", [SelectItem("all","All"),SelectItem("paid","Paid"),SelectItem("organic","Organic")], null, null, $segment))
-dashKpis      = Stats([kpiRevenue, kpiOrders, kpiAov, kpiConvRate])
-kpiRevenue    = StatCard("Revenue", "$248,312", "up", "+12.4%", "sack-dollar")
-kpiOrders     = StatCard("Orders", "1,284", "up", "+4.1%", "cart-shopping")
-kpiAov        = StatCard("AOV", "$193.36", "flat", "+0.2%", "ticket")
-kpiConvRate   = StatCard("Conversion", "3.42%", "down", "-0.7%", "arrow-trend-down")
-dashRow       = Grid([dashChartCard, dashRecent], 2, "l")
-dashChartCard = Card([SectionHeader("Revenue trend", "Daily, last 30 days", null, Badge("Up 12.4%", "success", null, "sm")), dashChart])
-dashChart     = LineChart(metrics.day, [Series("Revenue", metrics.revenue), Series("Orders", metrics.orders)])
-dashRecent    = Card([SectionHeader("Latest orders", null, null, null, dashRecentActions), recentTable])
-dashRecentActions = [Button("View all", Action([@Run(view_orders)]), "ghost", "button", "small")]
-recentTable   = Table([Col("Order", orders.id), Col("Customer", orders.customer), Col("Total", orders.total, "currency"), Col("Status", orders.statusTag)])
-
-$range   = "30d"
-$segment = "all"
-metrics  = Query("sales_metrics", {range: $range, segment: $segment}, {day:[], revenue:[], orders:[]})
-orders   = Query("recent_orders", {range: $range}, {id:[], customer:[], total:[], statusTag:[]})
+Button("Save", variant: "primary", loading: $isSaving)        // canonical
+StatCard("Revenue", value: "$48k", trend: "up", delta: "+12%") // canonical
+Stack([Card1(), Card2()], direction: "row", gap: "md")         // canonical
+Callout("info", title: "Heads up", description: "Action required", icon: "circle-info", compact: true)
 \`\`\`
 
-### Full app surface (AppShell + sidebar nav + multi-section content)
-Use whenever the request implies a complete product surface (admin console,
-project management view, dashboard with persistent navigation).
-\`\`\`
-root  = AppShell(nav, [pageHeader, kpiStrip, contentGrid, activityCard], topbar)
+The component reference below tags the canonical positional with
+\`(positional)\`. For backwards-compatibility, additional positional
+arguments are still accepted in declaration order — but the named form is
+preferred because it survives prop renames and reorderings.
 
-nav = Sidebar([
-  SidebarSection("Workspace", [
-    SidebarItem("Overview", "house", true),
-    SidebarItem("Projects", "folder", false, "12", Action([@ToAssistant("Open projects")])),
-    SidebarItem("Calendar", "calendar"),
-    SidebarItem("Messages", "comments", false, "3", Action([@ToAssistant("Open messages")]))
-  ]),
-  SidebarSection("Insights", [
-    SidebarItem("Analytics", "chart-pie"),
-    SidebarItem("Reports",   "chart-line"),
-    SidebarItem("Billing",   "credit-card")
+### Lambdas
+\`(arg) => expression\` for one-liners; \`(arg) => { … }\` for multi-statement
+bodies. A lambda body has the same imperative surface as an \`action\` body
+(assignments to \`$atoms\`, \`http(...)\`, \`emit\`, etc.).
+
+### Forward references
+Statements may **reference names defined later in the program**. The parser
+resolves them once the full stream lands. This is what makes streaming work:
+emit the shell (\`${ROOT_NAME} = Stack([hero, body])\`) on the first line,
+then fill in \`hero\` and \`body\` later.`;
+}
+
+function fullReactiveState(): string {
+  return `## Reactive State
+
+Aktion has **one reactive atom kind**. Every reactive cell is declared
+and read with the same surface:
+
+\`\`\`
+$count = 0
+$user  = { name: "Ada", role: "Engineer" }
+$todos = []
+$theme = "dark"
+\`\`\`
+
+### Sigil contract
+- \`count\` (no sigil) is a plain binding — NOT tracked, NOT reactive.
+- \`$count\` (with sigil) is a tracked atom — reading subscribes the
+  surrounding component / effect; writing notifies subscribers.
+
+### Assignment rules
+- **Render position** (top-level bindings, component body output, prop values):
+  assignment is forbidden. Use \`$name = …\` declarations to seed.
+- **Inside \`action\` / \`effect\` / lambda bodies**: \`= += -= *= /= ??= ++ --\`
+  are allowed against any \`$name\` atom.
+- **Nested writes require whole-object replacement.** Direct
+  \`$user.name = "Alex"\` is rejected — spread instead:
+  \`$user = { ...$user, name: "Alex" }\`. Arrays follow the same rule:
+  \`$todos = [...$todos, item]\`, \`$todos = @Filter($todos, "id", "!=", id)\`.
+
+### Component-scoped state
+A \`$name = value\` declared **inside** a \`component\` body is per-instance.
+Two \`<Counter/>\` siblings each have their own \`count\`. Top-level
+\`$name\` declarations live for the lifetime of the response.
+
+### Computed values
+Just compute — every reference to a \`$\` atom inside an expression auto-tracks:
+
+\`\`\`
+$cart  = []
+$total = @Sum($cart.price)        // re-derives when $cart changes
+$open  = @Filter($todos, "done", "==", false)
+\`\`\`
+
+### URL-synced state
+URL state lives on the router, not as a separate tier:
+- \`_route_.path\` — current path (read-only).
+- \`_route_.params.id\` — path parameter; reactive.
+- \`_route_.query.tab\` — query string; **writable** (assigning updates the URL).
+- \`_route_.navigate("/path")\` — imperative navigation; only valid inside
+  \`action\` / \`effect\` bodies.`;
+}
+
+function fullComponentsAndLambdas(): string {
+  return `## Components and lambdas
+
+### Component declarations
+\`\`\`
+component UserCard(user, tone: "default") {
+  $hover = false
+  return Card([
+    Avatar(user.name, size: "md"),
+    Text(user.name, variant: "large-heavy"),
+    Text(user.role, tone: "muted"),
+    Badge(tone, tone: tone)
   ])
-], "Acme HQ", "Production · v2.3", sidebarFooter)
+}
+\`\`\`
 
-sidebarFooter = [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")]
+- Components **must** end with an explicit \`return <expression>\`.
+- Defaults use \`= expression\` (literal or computed in the component's scope).
+- \`children\` is the implicit named slot — the trailing positional argument
+  at the call site is delivered as \`children\` inside the body.
+- Per-instance state: any \`$name = value\` declared inside the body is
+  private to that instance.
 
-topbar = [
-  StatusDot("Realtime", "success", true),
-  Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])
-]
-
-pageHeader = PageHeader("Overview", "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
-
-kpiStrip = Stats([
-  StatCard("MRR",          "$48.2k",  "up",   "+12% vs last month", "sack-dollar"),
-  StatCard("Active users", "2,184",   "up",   "+184",               "users"),
-  StatCard("Open tickets", "23",      "down", "-9",                 "ticket"),
-  StatCard("NPS",          "62",      "flat", "+1",                 "star")
+### Call sites
+\`\`\`
+${ROOT_NAME} = Stack([
+  UserCard($alice),                                  // positional arg
+  UserCard($bob, tone: "primary"),                   // named arg
+  UserCard(user: $carol, tone: "warning")            // both named
 ])
-
-contentGrid = Grid([projectsCard, statusCard], 2, "l")
-projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), projectsList])
-projectsList = List([
-  ListItem("Streaming UI v2.4", "Ada Lovelace · 3 open issues", "rocket"),
-  ListItem("Auth SDK rewrite",   "Linus T · 1 open issue",      "shield-halved"),
-  ListItem("Onboarding revamp",  "Grace Hopper · awaiting QA",  "bullseye")
-])
-statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All systems normal", "success", null, "sm")), statusList])
-statusList = Stack([
-  StatusDot("API",       "success"),
-  StatusDot("Database",  "success"),
-  StatusDot("Webhooks",  "warning"),
-  StatusDot("Streaming", "success", true)
-], "column", "s")
-
-activityCard = Card([SectionHeader("Recent activity"), Timeline([
-  TimelineItem("Ada merged PR #248", "5m ago",  "Streaming-UI patterns ready",   "code-pull-request", "primary"),
-  TimelineItem("QA caught regression", "1h ago", "Quota dashboard double-count", "triangle-exclamation", "warning"),
-  TimelineItem("Tokenizer 2.1 deployed", "Yesterday", "Latency -14%",            "circle-check", "success")
-])])
-
 \`\`\`
 
-### Detail / profile page (5 sections, with DescriptionList)
+### Local helpers — lambda form
+Use a lambda binding for one-off helpers that don't need their own component:
 \`\`\`
-root           = Stack([detailHeader, summaryGrid, activityCard, dangerCard], "column", "l")
-detailHeader   = PageHeader("Alex Rivera", "Product Designer · alex@acme.com", ["Team", "Engineering"], detailActions, detailStatus)
-detailActions  = [Button("Message", Action([@Run(open_chat)]), "primary"), Button("Edit", Action([@Run(edit_profile)]), "ghost")]
-detailStatus   = Badge("Online", "success", "circle", "sm")
-
-summaryGrid    = Grid([profileCard, infoCard], 2, "l")
-profileCard    = ProfileCard("Alex Rivera", "Product Designer", "", "Designs the future of generative UI at Acme.", ["design", "ux", "typography"], [Button("Follow", Action([@Run(follow)]), "primary", "button", "small"), Button("Resume", Action([@OpenUrl("/resume.pdf")]), "ghost", "button", "small")])
-infoCard       = Card([SectionHeader("Profile details", null, "OVERVIEW"), profileDescriptions])
-profileDescriptions = DescriptionList([
-  DescriptionItem("Team", "Design Systems", "users"),
-  DescriptionItem("Manager", "Margaret Hamilton"),
-  DescriptionItem("Location", "Berlin, DE", "location-dot"),
-  DescriptionItem("Joined", "Mar 2022"),
-  DescriptionItem("Slack", Badge("@alex", "primary", null, "sm")),
-  DescriptionItem("Status", StatusDot("Active", "success"))
-], 2)
-
-activityCard   = Card([SectionHeader("Recent activity", "Last 14 days"), Timeline([
-  TimelineItem("Shipped v2.0",         "2h ago",     "Updated 14 components and added the patterns API.", "rocket", "success"),
-  TimelineItem("Joined Design Review", "Yesterday",  "Reviewed the new dashboard wireframes.",            "palette", "primary"),
-  TimelineItem("Profile updated",      "3 days ago", "",                                                  "pen")
-])])
-
-dangerCard     = Card([SectionHeader("Danger zone", "Irreversible — proceed with care"), Buttons([Button("Delete account", Action([@Run(delete_account)]), "danger")])], "outlined")
-\`\`\`
-
-### Settings page (sectioned form with switches + sidebar nav inside content)
-\`\`\`
-root      = Stack([settingsHeader, generalCard, notificationsCard, billingCard, dangerCard], "column", "l")
-settingsHeader = PageHeader("Settings", "Manage your workspace preferences", ["Settings"], null, Badge("Personal", "primary"))
-
-$emailDigest = true
-$pushAlerts  = false
-$theme       = "system"
-$language    = "en"
-
-generalCard = Card([SectionHeader("General", "Workspace defaults", "PROFILE"), Stack([
-  FormControl("Display name", Input("display-name", "Your name", "text", null, $displayName), "Shown on comments, profile, and mentions."),
-  FormControl("Language",     Select("language", [SelectItem("en","English"),SelectItem("fr","Français"),SelectItem("de","Deutsch")], null, null, $language)),
-  Separator,
-  FormControl("Theme", ToggleGroup("theme", [{value:"light",label:"Light",icon:"sun"},{value:"dark",label:"Dark",icon:"moon"},{value:"system",label:"System",icon:"gear"}], $theme))
-], "column", "m")])
-
-notificationsCard = Card([SectionHeader("Notifications", "Choose what reaches you and how", "INBOX"), Stack([
-  FormControl("Weekly digest",   Switch("digest", "Monday summary of activity", $emailDigest, "Helpful weekly recap of mentions and metrics.")),
-  Separator,
-  FormControl("Push alerts",     Switch("push",   "Mobile push when @-mentioned", $pushAlerts))
-], "column", "m")])
-
-billingCard = Card([SectionHeader("Billing", null, "PAYMENT", Badge("Pro plan", "primary", null, "sm"), [Button("Manage plan", Action([@Run(manage_plan)]), "ghost", "button", "small")]), DescriptionList([
-  DescriptionItem("Plan", "Pro · monthly"),
-  DescriptionItem("Renews", "May 28, 2026"),
-  DescriptionItem("Seats", "12 of 25"),
-  DescriptionItem("Payment", "Visa •••• 4242", "credit-card")
-], 2)])
-
-dangerCard = Card([SectionHeader("Danger zone", "Permanent actions"), Buttons([Button("Export data", Action([@Run(export_data)]), "secondary"), Button("Delete workspace", Action([@Run(delete_workspace)]), "danger")])], "outlined")
-\`\`\`
-
-### Landing / marketing page (Hero + features + pricing + testimonial + CTA)
-\`\`\`
-root            = Stack([landingHero, landingFeatures, pricingBlock, social, landingCta], "column", "xl")
-
-landingHero = Hero(
-  "Ship generative UI in minutes",
-  "Drop one tag into your app and let your LLM render rich, streaming interfaces.",
-  Button("Get started", Action([@OpenUrl("/docs")]), "primary"),
-  Button("Live demo",   Action([@OpenUrl("/demo")]), "secondary"),
-  "NEW · v2.3",
-  ["No framework lock-in", "Streaming-first", "Shadow-DOM isolated"]
-)
-
-landingFeatures = FeatureGrid([
-  FeatureItem("One script tag",      "Works in React, Vue, Svelte, Angular, and plain HTML.", "box"),
-  FeatureItem("Streaming-first",     "Render tokens as they arrive — no rebuild.",            "bolt", "info"),
-  FeatureItem("Themeable",           "Light, dark, neon, brutalist — swap with one attr.",    "palette", "success"),
-  FeatureItem("Tools + routes",      "Wire \`setTools\` once, get auto-running Queries.",     "screwdriver-wrench")
-])
-
-pricingBlock = PricingTable([
-  PricingCard("Starter", "$0", "/mo", "For hobby projects and side experiments.", ["1 workspace", "Up to 5 contributors", "Community support"], Button("Get started", Action([@OpenUrl("/signup?plan=starter")]), "secondary"), null, false),
-  PricingCard("Pro",     "$29", "/mo", "For teams shipping LLM features.",         ["Unlimited workspaces", "All themes + patterns", "Priority support", "SOC2 logs"], Button("Start free trial", Action([@OpenUrl("/signup?plan=pro")]), "primary"), "Most popular", true),
-  PricingCard("Scale",   "Talk to us", null, "For companies with custom needs.",   ["Dedicated success manager", "Custom themes", "SSO + SCIM", "99.99% SLA"], Button("Contact sales", Action([@OpenUrl("/contact")]), "ghost"), null, false)
-])
-
-social = Grid([
-  Testimonial("Replaced 400 lines of React in an afternoon. Our bot finally looks like a product.", "Asha Patel", "Staff Engineer · Acme", "", 5),
-  Testimonial("The patterns are exactly the abstraction I wanted between LLM and UI.",              "Jordan Wei", "Founder · Looplog",      "", 5)
-], 2, "l")
-
-landingCta       = Banner("Ready to ship generative UI?", "Read the 30-second integration guide.", Button("Get started", Action([@OpenUrl("/get-started.html")]), "primary"), "wand-magic-sparkles", "primary")
-\`\`\`
-
-### List / browse page (filterable, paginated, with stats)
-\`\`\`
-root      = Stack([listHeader, listToolbar, listStats, listTableCard, listPager], "column", "l")
-listHeader = PageHeader("Customers", "Everyone in the CRM", null, [Button("Import", Action([@Run(import_csv)]), "ghost"), Button("Add customer", Action([@Run(new_customer)]), "primary")], Badge("" + data.total + " total", "primary", null, "sm"))
-
-$query  = ""
-$status = "all"
-$page   = 1
-
-listToolbar = Toolbar([
-  FormControl("Search", Input("q", "Name, email, company…", "text", null, $query)),
-  FormControl("Status", Select("status", [SelectItem("all","All"),SelectItem("active","Active"),SelectItem("paused","Paused"),SelectItem("churned","Churned")], null, null, $status))
-], [Button("Export", Action([@Run(export)]), "secondary"), Button("Saved views", Action([@Run(views)]), "ghost")])
-
-listStats = Stats([
-  StatCard("Active",   "" + data.active,   "up",   "+4 this week",   "circle-check"),
-  StatCard("Paused",   "" + data.paused,   "flat", "no change",      "circle-pause"),
-  StatCard("Churned",  "" + data.churned,  "down", "-2 this month",  "circle-xmark"),
-  StatCard("Pipeline", "$" + data.pipeline, "up",  "+$12k this week", "sack-dollar")
-])
-
-listTableCard = Card([SectionHeader("All customers", null, null, null, [Button("Sort", Action([@Run(sort)]), "ghost", "button", "small")]), Table([
-  Col("Name",    data.rows.name),
-  Col("Status",  data.rows.statusTag),
-  Col("Owner",   data.rows.owner),
-  Col("Renewal", data.rows.renewal, "date"),
-  Col("MRR",     data.rows.mrr, "currency")
-])])
-
-listPager = Pagination($page, data.pages, 1)
-data      = Query("list_customers", {q: $query, status: $status, page: $page}, {rows:{}, total:0, active:0, paused:0, churned:0, pipeline:0, pages:1})
-\`\`\`
-
-### Empty / zero state (3 sections)
-\`\`\`
-root        = Stack([blankHeader, blankBody], "column", "l")
-blankHeader = PageHeader("Reports", "Generate, schedule, and share insights.", null, blankActions)
-blankActions = [Button("New report", Action([@Run(new_report)]), "primary")]
-blankBody    = EmptyState("No reports yet", "Reports you create or are shared with you will show up here. Try one of the templates to get started.", "chart-pie", Button("Browse templates", Action([@Run(open_templates)]), "primary"))
-\`\`\`
-
-### Master/detail (SplitView, e.g. inbox or file browser)
-\`\`\`
-root = Stack([listHeader, inboxView], "column", "l")
-listHeader = PageHeader("Inbox", "12 unread messages", null, [Button("Compose", Action([@Run(compose)]), "primary")])
-
-$selectedId = "msg-1"
-$filter     = "all"
-$query      = ""
-
-inboxView    = SplitView([inboxToolbar, inboxList], [selectedCard], "360px")
-inboxToolbar = Toolbar([SearchBar("q", "Search inbox…", $query, "/"), FormControl("Filter", Select("filter", [SelectItem("all","All"),SelectItem("unread","Unread"),SelectItem("starred","Starred")], null, null, $filter))], [])
-inboxList    = Card([List(@Each(data.rows, "m", inboxRow))])
-inboxRow     = ListItem(m.subject, m.preview, m.icon)
-
-selectedCard = Card([
-  SectionHeader(data.selected.subject, null, null, Badge(data.selected.category, "primary", null, "sm"), selectedActions),
-  PersonChip(data.selected.from, data.selected.email, data.selected.avatar),
-  Markdown(data.selected.body),
-  Separator,
-  Stack([ChatBubble(data.selected.from, data.selected.body, data.selected.time, data.selected.avatar, "agent"),
-         ChatBubble("You", "Thanks — looking now.", "just now", null, "me")], "column", "s")
-])
-selectedActions = [Button("Reply", Action([@Run(reply)]), "primary"), Button("Archive", Action([@Run(archive)]), "ghost")]
-
-data = Query("inbox", {filter: $filter, q: $query, id: $selectedId}, {rows: [], selected: {subject:"", from:"", email:"", avatar:"", body:"", category:"", time:""}})
-\`\`\`
-
-### Product detail / article hero (Cover + MediaCard + Rating)
-Use when the request implies a content surface that opens with a big image:
-product detail page, blog post, marketing campaign, release announcement.
-\`\`\`
-root = Stack([productCover, productSummary, productStats, relatedHeader, related, reviewsHeader, reviews], "column", "l")
-
-productCover = Hero(
-  "Aurora Headphones",
-  "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1400",
-  "Studio sound in a 240g shell.",
-  "NEW · Pro line",
-  "From $329 · Free shipping over $80",
-  [Button("Buy now", Action([@Run(checkout)]), "primary"), Button("Add to wishlist", Action([@Run(wishlist)]), "secondary")],
-  "primary",
-  "320px"
-)
-
-productSummary = Grid([summaryCopy, summaryRating], 2, "l")
-summaryCopy    = Card([SectionHeader("Why Aurora", "Engineered for long listening sessions"), Stack([
-  Callout("info", "Free returns within 30 days · 2-year warranty included.", null, "lightbulb", true),
-  Markdown("Active noise cancellation with adaptive transparency. **40-hour** battery on a single charge. Hi-Res certified."),
-  Quote("Worth every penny — best balance of clarity, comfort, and battery I've tested.", "— TheVerge")
-])])
-summaryRating  = Card([SectionHeader("Reviews", null, null, Badge("In stock", "success", null, "sm")), Stack([
-  Rating(4.6, 5, "4.6 of 5", 1284, "lg"),
-  Stats([{label:"Comfort", value:"4.8", tone:"success"}, {label:"Sound", value:"4.7", tone:"primary"}, {label:"Battery", value:"4.5"}], "start"),
-  ProgressRing(86, 100, "86%", "Would buy again", "success", "md")
-])])
-
-productStats = Stats([
-  StatCard("Sold this month", "12,481", "up",  "+18% vs prev", "cart-shopping"),
-  StatCard("Avg. rating",     "4.6",    "flat","stable",        "star"),
-  StatCard("In stock",        "1,204",  "down","-220",          "box"),
-  StatCard("Returns",         "1.4%",   "down","-0.2 pp",       "rotate-left")
-])
-
-relatedHeader = SectionHeader("You might also like", null, "RECOMMENDED")
-related       = Grid([relatedA, relatedB, relatedC], 3, "l")
-relatedA      = MediaCard("Aurora Earbuds Pro",   "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?w=600", "True wireless · 36h total battery", ["Wireless","ANC"], "From $199")
-relatedB      = MediaCard("Lumen Studio Stand",   "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=600",  "Aluminium desk stand with mic mount", ["Accessory"],      "$49")
-relatedC      = MediaCard("Aurora Charging Hub",  "https://images.unsplash.com/photo-1591290619762-13050ca9a3eb?w=600", "3-port USB-C charger · 65W",        ["Accessory"],      "$79")
-
-reviewsHeader = SectionHeader("Recent reviews", null, "FROM OWNERS")
-reviews       = Stack([reviewA, reviewB], "column", "m")
-reviewA       = Card([Stack([PersonChip("Maya R.", "Verified owner", null, "sm"),  Rating(5),    Quote("Comfortable enough to wear all day — the ANC is genuinely impressive."), TextContent("Bought · 12 days ago", "small", "muted")])])
-reviewB       = Card([Stack([PersonChip("Tomás L.", "Verified owner", null, "sm"), Rating(4.5), Quote("Sound is fantastic; only minor gripe is the case is a touch large."), TextContent("Bought · 1 month ago", "small", "muted")])])
-
-\`\`\`
-
-### Data explorer (DataGrid + advanced charts + audit + state cards)
-Use when the request asks for an analytics surface, admin console, BI
-dashboard, or anything that combines a tabular view with charts.
-\`\`\`
-$$sort        = {key: "Score", direction: "desc"}
-$$selectedIds = []
-$$page        = 1
-
-bulkBar = @If(@Count($$selectedIds) > 0,
-  Toolbar([Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
-          [Button("Email",  Action([@Run(email_selected)]),  "ghost",    "button", "small", "envelope"),
-           Button("Export", Action([@Run(export_selected)]), "secondary","button", "small", "file-csv"),
-           Button("Clear",  Action([@Reset($$selectedIds)]), "ghost",    "button", "small")]), null)
-
-gridCard = Card([SectionHeader("Top contributors", null, "DATAGRID"),
-  bulkBar,
-  DataGrid([
-    Col("Id",    rows.id,      "text",   "left",  false, false),
-    Col("Name",  rows.name,    "text",   "left",  true,  true),
-    Col("Team",  rows.team,    "text",   "left",  true,  true),
-    Col("Score", rows.score,   "number", "right", true,  false)
-  ], rows.id, null, $$sort, $$selectedIds, true, $$page, 8, "No rows match")
-])
-
-gaugeRow = Grid([
-  Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
-  Card([SectionHeader("P95 latency"), Gauge(112, 0, 250,  "ms",            "primary", "lg")]),
-  Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,   "% requests",    "warning", "lg")])
-], {sm: 1, md: 3}, "l")
-
-chartRow = Grid([
-  Card([SectionHeader("Signups"),
-    LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-      [Series("Organic",  [40, 52, 65, 78, 92, 105, 124]),
-       Series("Referral", [20, 28, 35, 42, 50, 60,  72])])]),
-  Card([SectionHeader("Capacity"),
-    Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
-      [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])])
-], {sm: 1, md: 2}, "l")
-
-auditCard = Card([SectionHeader("Audit trail", "Last 7 days", "AUDIT"),
-  ActivityLog([
-    {actor:"system", title:"Rotated signing key",   time:"08:14",     icon:"key",           tone:"primary"},
-    {actor:"admin",  title:"Granted Owner role",    time:"yesterday", icon:"user-shield",   tone:"success"},
-    {actor:"scanner",title:"Blocked sign-in",       time:"2d ago",    icon:"shield-halved", tone:"danger"}
-  ])])
-
-root = Stack([PageHeader("Engineering analytics","Quarterly view",["Workspace","Analytics"]), gaugeRow, gridCard, chartRow, auditCard], "column","l")
-
-rows = Query("contributors", {sort: $$sort.key, page: $$page}, {id:[], name:[], team:[], score:[]})
-\`\`\`
-
-### Scheduler / planner (CalendarView + onboarding + state cards)
-Use whenever the request implies a date-centred workflow (booking, content
-calendar, sprint planner) — CalendarView is richer than DatePicker when the
-user needs the whole month at a glance.
-\`\`\`
-$selectedDate = "2026-05-17"
-$view         = "ready"
-$$ob1 = false
-$$ob2 = false
-$$ob3 = false
-
-events = [
-  {date:"2026-05-12", title:"Standup",         time:"09:00", tone:"primary"},
-  {date:"2026-05-15", title:"Release window",  time:"10:00", tone:"success"},
-  {date:"2026-05-17", title:"Demo day",         time:"14:30", tone:"success"},
-  {date:"2026-05-22", title:"Retro",            time:"16:00", tone:"info"}
-]
-
-calendarCard = Card([
-  SectionHeader("May 2026", \`\${@Count(events)} events\`, "PLANNER", Badge("Live","success","circle","sm")),
-  CalendarView($selectedDate, "2026-05", events, "month")
-])
-
-onboardingCard = Card([
-  SectionHeader("Onboarding", "Finish setup", "SETUP"),
-  OnboardingChecklist([
-    {title:"Connect calendar",     description:"Sync with Google.",     done:$$ob1, action:Action([@Set($$ob1, true)]), cta:"Connect"},
-    {title:"Invite teammates",     description:"Share an invite link.", done:$$ob2, action:Action([@Set($$ob2, true)]), cta:"Invite"},
-    {title:"Schedule first event", description:"Pick a slot.",          done:$$ob3, action:Action([@Set($$ob3, true)]), cta:"Schedule"}
-  ])
-])
-
-# LoadingState / ErrorState / SuccessState replace ad-hoc "loading…" stack of TextContent.
-statePane = @Switch($view, {
-  "ready":   SuccessState("All systems go", "Onboarding complete and your calendar is synced.", [Button("Open workspace", Action([@Run(open_ws)]), "primary","button","small","house")]),
-  "loading": LoadingState("Syncing your calendar…", "Pulling events · about 5 seconds."),
-  "error":   ErrorState("We couldn't reach your calendar", "Sync token expired.", [Button("Reconnect", Action([@Run(reconnect)]), "primary","button","small","rotate-right")])
-}, SuccessState("Ready", "All set."))
-
-root = Stack([
-  PageHeader(["Workspace","Calendar","May"], "Plan the week."),
-  Grid([calendarCard, Stack([onboardingCard, Card([statePane])], "column","l")], {sm:1, lg:2}, "l")
-], "column","l")
-\`\`\`
-
-### Media + map surface (Carousel + Gallery + Lightbox + Map + VideoPlayer)
-Use for travel itineraries, real-estate listings, product galleries, event
-recaps — anywhere a wall of photos beats a wall of text.
-\`\`\`
-$slide        = 0
-$lightboxOpen = false
-$lightboxIdx  = 0
-
-photos = [
-  {src:"https://picsum.photos/seed/a/1200/700", caption:"Cliffs"},
-  {src:"https://picsum.photos/seed/b/1200/700", caption:"Village"},
-  {src:"https://picsum.photos/seed/c/1200/700", caption:"Forest"},
-  {src:"https://picsum.photos/seed/d/1200/700", caption:"Lake"}
-]
-
-root = Stack([
-  PageHeader("Aurora Expedition","Iceland · Aug 2026"),
-  Card([SectionHeader("Highlights"),
-    Carousel(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), $slide, "16:9", true)]),
-  Card([SectionHeader("Photos","Tap a thumbnail"),
-    Gallery(@Each(photos, "{src, caption}", {src: src, alt: caption, caption: caption}), 3,
-      Action([@Set($lightboxIdx, 0), @Set($lightboxOpen, true)]))]),
-  Grid([
-    Card([SectionHeader("Trailer"), VideoPlayer("https://example.com/trailer.mp4", null, null, true, false, false, false, "Aurora trailer", "16:9")]),
-    Card([SectionHeader("Itinerary"),
-      Map(65.0, -16.0, 5,
-        [{lat:64.1466, lng:-21.9426, label:"Reykjavík"},
-         {lat:65.6839, lng:-18.0907, label:"Akureyri"}],
-        "320px")])
-  ], {sm:1, md:2}, "l"),
-  Lightbox($lightboxOpen, $lightboxIdx, photos)
-], "column","l")
-\`\`\`
-
-### Multi-step wizard / authoring (MultiStepForm + RichTextEditor + advanced inputs)
-Use for sign-up flows, checkout, content authoring, configuration wizards — anywhere a single page would
-overwhelm.
-\`\`\`
-$step  = 0
-$title = ""
-$body  = ""
-$tags  = []
-$brand = "#6366f1"
-$pin   = ""
-
-errors = @Filter([
-  @If($title == "",     {label:"title", message:"Title is required."}, null),
-  @If($pin.length != 4, {label:"pin",   message:"PIN must be 4 digits."}, null)
-], "label", "!=", null)
-
-publishGate = @If(@Count(errors) > 0,
-  Card([ValidationSummary(errors, "Fix these before publishing")]),
-  Card([Callout("success","Ready","All gates passed.","circle-check", true)]))
-
-root = Stack([
-  PageHeader(["Content","Drafts"], "Compose, brand, gate, publish."),
-  MultiStepForm([
-    {title:"Compose", details:"Title + body", content:[
-      Card([SectionHeader("Body",null,"EDITOR"),
-        FormSection("Post",
-          [FormControl("Title", Input("title", "Headline…", "text", null, $title)),
-           FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "240px")),
-           FormControl("Tags",  TagInput("tags", $tags, "Press enter"))],
-          "Streams into the preview.")])]},
-    {title:"Brand", details:"Pick an accent", content:[
-      Card([SectionHeader("Brand"),
-        ColorPicker("brand", $brand, "Accent", ["#6366f1","#10b981","#f59e0b","#ef4444"])])]},
-    {title:"Gate", details:"4-digit PIN", content:[
-      Card([SectionHeader("Two-factor publish",null,"GATE"),
-        FormControl("PIN", PinInput("pin", 4, $pin, "numeric")), publishGate])]}
-  ], $step, Action([@Run(publish)]))
-], "column","l")
+priorityTone = (p) => match p { "high": "danger" "med": "warning" default: "muted" }
+rowFor       = (item) => Stack([Badge(item.label, tone: priorityTone(item.priority)), Text(item.title)])
+list         = for item in $items { rowFor(item) }
 \`\`\``;
 }
 
-function defaultRichExamples(): string[] {
-  return [
-    // Three anchor examples the LLM can pattern-match against. They are
-    // intentionally dense so "rich" reads as the baseline expectation, and
-    // they showcase the modern language features (template literals,
-    // responsive prop maps, $$persistent state, @Switch, @Each with
-    // destructuring, custom component macros, @If for lazy branches).
-    `# Project status dashboard (dashboard request → 6+ sections, Stats, Toolbar, Kanban, Timeline)
-root          = Stack([statusBanner, dashHeader, dashToolbar, kpis, boardArea], "column", "l")
-statusBanner  = Banner("Quarterly review is open", \`Submit by Friday — \${@Count(atRiskCards)} projects need attention.\`, bannerCta, "bullseye", "primary")
-bannerCta     = Button("Submit update", Action([@Run(open_submit)]), "primary", "button", "small")
-dashHeader    = PageHeader("Engineering Q3", \`\${@Count(allCards)} active projects · \${@Count(atRiskCards)} at risk\`, ["Workspace", "Engineering", "Q3"], dashActions, dashStatus)
-dashActions   = [Button("Export", Action([@Run(export_q3)]), "secondary"), Button("New project", Action([@Run(new_project)]), "primary")]
-dashStatus    = Badge("On track", "success")
-dashToolbar   = Toolbar([rangeFilter, ownerFilter, viewToggle], [Button("Share", Action([@Run(share)]), "ghost"), Button("Customize", Action([@Run(customize)]), "secondary")])
-rangeFilter   = FormControl("Range", Select("range", [SelectItem("7d","7d"), SelectItem("30d","30d"), SelectItem("90d","90d")], null, null, $$range))
-ownerFilter   = FormControl("Owner", Select("owner", [SelectItem("all","Everyone"), SelectItem("ada","Ada"), SelectItem("linus","Linus")], null, null, $owner))
-viewToggle    = ToggleGroup("view", [{value:"board",label:"Board",icon:"table-columns"},{value:"timeline",label:"Activity",icon:"clock-rotate-left"}], $$view)
-kpis          = Stats([
-  StatCard("Active",  \`\${@Count(allCards)}\`,    "flat", "0 vs last week",                                "folder"),
-  StatCard("At risk", \`\${@Count(atRiskCards)}\`, "up",   \`+\${@Count(atRiskCards) - 2} vs last week\`,    "triangle-exclamation"),
-  StatCard("Shipped", "8",                          "up",   "+3 vs last week",                               "rocket"),
-  StatCard("On-time", "87%",                        "down", "-3% vs last week",                              "clock")
-])
-boardArea     = Grid([boardPanel, activityCard], {sm: 1, md: 2}, "l")
-boardPanel    = @Switch($$view, {board: projectsBoard, timeline: activityCard}, projectsBoard)
-projectsBoard = Card([SectionHeader("Active board", null, "WORK", null, [Button("Add card", Action([@Run(open_new_card)]), "ghost", "button", "small")]), KanbanBoard([colTodo, colDoing, colReview, colDone])])
-BoardCard(c)  = KanbanCard(c.title, c.summary, c.tags, c.owner, c.tone, c.icon)
-colTodo       = KanbanColumn("To do",       @Each(@Filter(allCards, "stage", "==", "todo"),    "c", BoardCard(c)), "default")
-colDoing      = KanbanColumn("In progress", @Each(@Filter(allCards, "stage", "==", "doing"),   "c", BoardCard(c)), "primary")
-colReview     = KanbanColumn("In review",   @Each(@Filter(allCards, "stage", "==", "review"),  "c", BoardCard(c)), "warning")
-colDone       = KanbanColumn("Done",        @Each(@Filter(allCards, "stage", "==", "done"),    "c", BoardCard(c)), "success")
-activityCard  = Card([SectionHeader("Recent activity", "Latest events across squads"), Timeline(@Each(events, "{when, text, detail, icon, tone}", TimelineItem(text, when, detail, icon, tone)))])
+function fullActions(): string {
+  return `## Actions — callable side effects
 
-allCards    = [
-  {id:"k1", title:"Migrate auth to new SDK", summary:"Track auth → SDK rollout across services.", tags:["auth","p1"], owner:"Asha P.", tone:"primary",  icon:"shield-halved",         stage:"doing"},
-  {id:"k2", title:"Spike: vector search",     summary:"Compare pgvector vs Qdrant.",                tags:["research"], owner:"Diego",   tone:"default",  icon:"flask",                 stage:"todo"},
-  {id:"k3", title:"Streaming UI v2",          summary:"Add 20 components & rich prompt patterns.",  tags:["frontend"], owner:"Alex",    tone:"primary",  icon:"wand-magic-sparkles",   stage:"doing"},
-  {id:"k4", title:"Mobile onboarding",        summary:"Awaiting design review.",                    tags:["mobile"],   owner:"Wren",    tone:"warning",  icon:"mobile-screen",         stage:"review"},
-  {id:"k5", title:"Activity timeline",        summary:"Shipped to 100% of users.",                  tags:["shipped"],  owner:"Mira",    tone:"success",  icon:"circle-check",          stage:"done"},
-  {id:"k6", title:"Pricing page refresh",     summary:"At risk — blocked on legal copy.",           tags:["growth"],   owner:"Tomás",   tone:"warning",  icon:"file-invoice-dollar",   stage:"todo"}
-]
-atRiskCards = @Filter(allCards, "tone", "==", "warning")
-events = [
-  {when:"5m ago",    text:"Ada merged #2491",        detail:"Streaming UI patterns ready",        icon:"code-pull-request",   tone:"primary"},
-  {when:"1h ago",    text:"QA caught regression",    detail:"Quota dashboard double-counts",      icon:"triangle-exclamation",tone:"warning"},
-  {when:"Yesterday", text:"Tokenizer 2.1 deployed",  detail:"Latency improved 14%",               icon:"circle-check",         tone:"success"},
-  {when:"2d ago",    text:"Security review opened",  detail:"Awaiting threat model from infosec", icon:"circle-info",          tone:"info"}
-]
+An \`action\` is a callable block of imperative statements. Declare at the
+top level (or inside a component body); invoke from any event-handler prop
+(\`onClick\`, \`onChange\`, \`onSubmit\`) or as an expression.
 
-$$range = "30d"
-$$view  = "board"
-$owner  = "all"`,
-    `# App shell with sidebar nav (full product surface)
-root  = AppShell(nav, [headerCard, kpiStrip, contentGrid, activityCard], topbar)
-
-NavRow(label, icon, badge) = SidebarItem(label, icon, label == ($$lastNav ?? "Overview"), badge, Action([@Set($$lastNav, label)]))
-
-nav   = Sidebar([
-  SidebarSection("Workspace", [
-    NavRow("Overview", "house",    null),
-    NavRow("Projects", "folder",   "12"),
-    NavRow("Calendar", "calendar", null),
-    NavRow("Messages", "comments", "3")
-  ]),
-  SidebarSection("Insights", [
-    NavRow("Analytics", "chart-pie",   null),
-    NavRow("Reports",   "chart-line",  null),
-    NavRow("Billing",   "credit-card", null)
-  ])
-], "Acme HQ", "Production · v2.3", sidebarFooter)
-sidebarFooter = [Avatar("Asha Patel", null, "sm"), Button("Settings", Action([@ToAssistant("Open settings")]), "ghost", "button", "small")]
-
-topbar = [StatusDot("Realtime", "success", true), Buttons([Button("Invite", Action([@Run(invite)]), "ghost", "button", "small"), Button("Upgrade", Action([@Run(upgrade)]), "primary", "button", "small")])]
-headerCard = PageHeader(\`\${$$lastNav ?? "Overview"}\`, "Everything happening across your workspace", null, [Button("New project", Action([@Run(new_project)]), "primary")], Badge("Live", "success"))
-kpiStrip = Stats([
-  StatCard("MRR",          "$48.2k", "up",   "+12% vs last month", "sack-dollar"),
-  StatCard("Active users", "2,184",  "up",   "+184",               "users"),
-  StatCard("Open tickets", "23",     "down", "-9",                 "ticket"),
-  StatCard("NPS",          "62",     "flat", "+1",                 "star")
-])
-contentGrid = Grid([projectsCard, statusCard], {sm: 1, md: 2}, "l")
-ProjectRow(p) = ListItem(p.title, \`\${p.owner} · \${p.status}\`, p.icon)
-projects = [
-  {title:"Streaming UI v2.4", owner:"Ada Lovelace", status:"3 open issues",  icon:"rocket"},
-  {title:"Auth SDK rewrite",  owner:"Linus T",      status:"1 open issue",   icon:"shield-halved"},
-  {title:"Onboarding revamp", owner:"Grace Hopper", status:"awaiting QA",    icon:"bullseye"}
-]
-projectsCard = Card([SectionHeader("Active projects", null, "WORK", null, [Button("View all", Action([@Run(view_projects)]), "ghost", "button", "small")]), List(@Each(projects, "p", ProjectRow(p)))])
-statusCard = Card([SectionHeader("System status", null, "OPS", Badge("All systems normal", "success", null, "sm")), Stack([
-  StatusDot("API",       "success"),
-  StatusDot("Database",  "success"),
-  StatusDot("Webhooks",  "warning"),
-  StatusDot("Streaming", "success", true)
-], "column", "s")])
-activityCard = Card([SectionHeader("Recent activity"), Timeline([
-  TimelineItem("Ada merged PR #248",   "5m ago",   "Patterns ready for review",    "code-pull-request",     "primary"),
-  TimelineItem("QA caught regression", "1h ago",   "Quota dashboard double-count", "triangle-exclamation",  "warning"),
-  TimelineItem("Tokenizer 2.1 shipped","Yesterday","Latency -14%",                 "circle-check",          "success")
-])])`,
-    `# Reactive product catalog (search + filter + sort, with $$persistent prefs)
-root        = Stack([catalogHeader, toolbar, summary, body], "column", "l")
-catalogHeader = PageHeader("Storefront", \`\${@Count(products)} curated essentials\`, null, [Button("New product", Action([@Run(new_product)]), "primary")])
-
-toolbar     = Toolbar([
-  FormControl("Search", SearchBar("q", "Name, tag…", $query, "/")),
-  FormControl("Category", Select("cat", catOptions, null, null, $category)),
-  FormControl("Sort",    Select("sort", sortOptions, null, null, $$sort)),
-  ToggleGroup("view", [{value:"grid",label:"Grid",icon:"th"},{value:"list",label:"List",icon:"list"}], $$view)
-])
-catOptions  = [SelectItem("all","All"), ...@Each(@Unique(products, "category"), "{category}", SelectItem(category, @Titlecase(category)))]
-sortOptions = [SelectItem("price-asc","Price ↑"), SelectItem("price-desc","Price ↓"), SelectItem("rating","Top rated")]
-
-byCategory  = @If($category == "all", products, @Filter(products, "category", "==", $category))
-matches     = @Filter(byCategory, "name", "contains", $query)
-sorted      = @Switch($$sort, {
-  "price-asc":  @Sort(matches, "price", "asc"),
-  "price-desc": @Sort(matches, "price", "desc"),
-  "rating":     @Sort(matches, "rating", "desc")
-}, matches)
-
-summary     = Stats([
-  {label:"Showing", value: \`\${@Count(sorted)} of \${@Count(products)}\`, hint: \`@\${@Count(@Filter(sorted, "badge", "==", "Sale"))} on sale\`, tone:"primary"},
-  {label:"Avg price",  value: @Format(@Avg(sorted.price, "currency", "USD"), "USD"), tone:"info"},
-  {label:"Avg rating", value: \`\${@Round(@Avg(sorted.rating), 1)} ★\`,        tone:"success"}
-], "start")
-
-body        = @If(@Count(sorted) > 0, productGrid, emptyState)
-emptyState  = EmptyState("No results", \`Nothing matches "\${$query}" in \${$category}.\`, "magnifying-glass", Button("Reset filters", Action([@Reset($query, $category)]), "primary"))
-
-ProductCard(p) = MediaCard(p.name, p.image, p.summary, p.tags, \`\${@Format(p.price, "currency", "USD")} · \${p.rating} ★\`, [Button("Add to cart", Action([[...$$cart, p.id], @ToAssistant(\`Added \${p.name} to cart\`)]), "primary", "button", "small")], @If(p.badge == "Sale", Badge("Sale","danger","tag","sm"), null))
-
-productGrid = Grid(@Each(sorted, "p", ProductCard(p)), {sm: 1, md: 2, lg: 3}, "l")
-
-products = [
-  {id:"aur-01", name:"Aurora Headphones", category:"audio",     price:249, rating:4.8, image:"https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=600", summary:"Studio-grade sound · 40h battery", tags:["wireless","ANC"], badge:"New"},
-  {id:"lum-02", name:"Lumen Desk Lamp",   category:"home",      price:79,  rating:4.5, image:"https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600",  summary:"Warm, dimmable, USB-C powered",     tags:["lighting"],         badge:""},
-  {id:"nim-03", name:"Nimbus Backpack",   category:"travel",    price:119, rating:4.8, image:"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600",  summary:"30L · weather-sealed",              tags:["travel"],           badge:"Bestseller"},
-  {id:"pul-04", name:"Pulse Smartwatch",  category:"wearables", price:229, rating:4.4, image:"https://images.unsplash.com/photo-1517059224940-d4af9eec41e3?w=600",  summary:"7-day battery · always-on AMOLED",  tags:["fitness"],          badge:""},
-  {id:"ech-05", name:"Echo BT Speaker",   category:"audio",     price:89,  rating:4.6, image:"https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=600", summary:"Stereo pairing · IP67",             tags:["wireless"],         badge:"Sale"},
-  {id:"dri-06", name:"Drift Travel Pillow", category:"travel",  price:29,  rating:4.3, image:"https://images.unsplash.com/photo-1581090700227-1e8e4c95e3e3?w=600", summary:"Memory foam · machine washable",    tags:["travel"],           badge:"Sale"}
-]
-
-$query    = ""
-$category = "all"
-$$sort    = "price-asc"
-$$view    = "grid"
-$$cart    = []`,
-    `# Data explorer (DataGrid + advanced charts + state cards + audit trail)
-root = Stack([explorerHeader, kpiStrip, gaugeRow, gridCard, chartRow, chartRow2, bottomRow], "column", "l")
-
-explorerHeader = PageHeader("Engineering analytics", \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`, ["Workspace","Engineering","Analytics"], explorerActions, Badge("Realtime", "success", "circle", "sm"))
-explorerActions = [Button("Export PDF", Action([@Run(export_pdf)]), "secondary"), Button("Share view", Action([@Run(share)]), "primary")]
-
-kpiStrip = Stats([
-  StatCard("Contributors", \`\${@Count(contributors)}\`,                       "up",   "+2 this week", "users"),
-  StatCard("Commits",      \`\${@Format(@Sum(contributors.commits, "number"))}\`,  "up",   "+184 today",   "code-commit"),
-  StatCard("Avg latency",  \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`,  "down", "-12 ms",       "gauge-high"),
-  StatCard("Top score",    \`\${@Max(contributors.score)}\`,                   "flat", "Ada Lovelace", "trophy")
-])
-
-gaugeRow = Grid([
-  Card([SectionHeader("SLA uptime"),  Gauge(99.3, 95, 100, "Above target", "success", "lg")]),
-  Card([SectionHeader("P95 latency"), Gauge(112, 0, 250,  "ms",            "primary", "lg")]),
-  Card([SectionHeader("Error rate"),  Gauge(0.42, 0, 5,   "% requests",    "warning", "lg")])
-], {sm: 1, md: 3}, "l")
-
-# DataGrid: sortable headers, per-column filter chips, selectable rows, sticky header,
-# bulk-action toolbar that only appears when @Count($$selectedIds) > 0, built-in pagination.
-bulkBar = @If(@Count($$selectedIds) > 0,
-  Toolbar([Badge(\`\${@Count($$selectedIds)} selected\`, "primary", "check", "sm")],
-          [Button("Email",  Action([@Run(email_selected)]),  "ghost",   "button", "small", "envelope"),
-           Button("Export", Action([@Run(export_selected)]), "secondary","button","small", "file-csv"),
-           Button("Clear",  Action([@Reset($$selectedIds)]), "ghost",   "button", "small")]), null)
-
-gridCard = Card([
-  SectionHeader("Top contributors", \`sorted by \${$$sort.key}\`, "DATAGRID", Badge("Live", "success", "circle", "sm")),
-  bulkBar,
-  DataGrid([
-    Col("Id",      contributors.id,        "text",   "left",  false, false),
-    Col("Name",    contributors.name,      "text",   "left",  true,  true),
-    Col("Team",    contributors.team,      "text",   "left",  true,  true),
-    Col("Score",   contributors.score,     "number", "right", true,  false),
-    Col("Commits", contributors.commits,   "number", "right", true,  false)
-  ], contributors.id, null, $$sort, $$selectedIds, true, $$page, 6, "No contributors match")
-])
-
-# Six chart primitives share Series(...) shape — swap in Query() results to make them live.
-chartRow = Grid([
-  Card([SectionHeader("Signups · last 7 days", "Stacked by source"),
-    LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-      [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
-       Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
-       Series("Paid",    [10, 14, 18, 24, 30, 36,  44])])]),
-  Card([SectionHeader("Office capacity"),
-    Heatmap(["Mon","Tue","Wed","Thu","Fri"], ["9am","12pm","3pm","6pm"],
-      [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])])
-], {sm: 1, md: 2}, "l")
-
-chartRow2 = Grid([
-  Card([SectionHeader("Vendor scorecard"),
-    RadarChart(["Speed","Quality","Cost","Coverage","Trust"],
-      [Series("Atlas Cloud",   [80,70,60,75,85]),
-       Series("Northwind SaaS",[60,85,70,65,80])])]),
-  Card([SectionHeader("Sessions vs conversions"),
-    ScatterChart(
-      [Series("Cohort A", [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
-       Series("Cohort B", [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])],
-      "Sessions (k)","Conversions")]),
-  Card([SectionHeader("Response time"),
-    Histogram(contributors.latencyMs, null, 8)])
-], {sm: 1, md: 3}, "l")
-
-bottomRow = Grid([
-  Card([SectionHeader("Recent activity"), InfiniteList([
-    ListItem("Ada merged PR #142",         "Streaming UI v3 components.", "code-merge"),
-    ListItem("Linus opened ticket #2049",  "Kernel scheduler regression.", "circle-exclamation"),
-    ListItem("Grace deployed compiler 4.2", "Latency improved 8%.",        "rocket")
-  ], Action([@Run(load_more_activity)]), false, true)]),
-  Card([SectionHeader("Audit trail", "Privileged actions, last 7d", "AUDIT", Badge("Compliance","primary","shield-halved","sm")),
-    ActivityLog([
-      {actor: "system",  title: "Rotated signing key",       time: "08:14",      icon: "key",           tone: "primary", meta: "kid=abc123"},
-      {actor: "admin",   title: "Granted Owner role to Ada", time: "yesterday",  icon: "user-shield",   tone: "success", meta: "actor=u_8132"},
-      {actor: "scanner", title: "Blocked suspicious sign-in",time: "2 days ago", icon: "shield-halved", tone: "danger",  meta: "ua=ChromeHeadless"}
-    ])])
-], {sm: 1, md: 2}, "l")
-
-contributors = [
-  {id:"u01", name:"Ada Lovelace",   team:"Compilers", score:98, commits:412, latencyMs: 84},
-  {id:"u02", name:"Linus Torvalds", team:"Kernel",    score:96, commits:380, latencyMs:112},
-  {id:"u03", name:"Grace Hopper",   team:"Compilers", score:95, commits:358, latencyMs: 78},
-  {id:"u04", name:"Margaret Hamilton", team:"Apollo", score:94, commits:340, latencyMs: 95},
-  {id:"u05", name:"Donald Knuth",   team:"Algorithms",score:93, commits:322, latencyMs:110},
-  {id:"u06", name:"Anita Borg",     team:"Systems",   score:91, commits:296, latencyMs: 88},
-  {id:"u07", name:"Tim Berners-Lee","team":"Web",     score:90, commits:284, latencyMs:124},
-  {id:"u08", name:"Barbara Liskov", team:"Compilers", score:89, commits:272, latencyMs: 90}
-]
-
-$$sort        = {key: "Score", direction: "desc"}
-$$selectedIds = []
-$$page        = 1`,
-  ];
+\`\`\`
+action save(item) {
+  $items = [...$items, item]
+  $save  = http({ url: "/api/save", method: "POST", body: { item: item } })
+  emit "saved" { id: item.id }
 }
 
-function componentsSection(library: ComponentLibrary): string {
+submitBtn = Button("Save", onClick: save)
+\`\`\`
+
+### Body grammar
+Inside an action body the imperative surface is small:
+- Assignments: \`$x = newValue\`, \`$x += 1\`, \`$x = { ...$x, field: v }\`.
+- \`http({ ... })\` — fire a request; the result is a reactive resource bag.
+- \`emit "event-name" { detail }\` — dispatch a \`CustomEvent\` on the host element.
+- \`_route_.navigate("/path")\` — programmatic navigation.
+- Statement-form \`if\` / \`match\` / \`for\` — same keywords as the expression
+  forms (covered below).
+- \`return\` — optionally yields a value to the caller.
+- \`js{ /* opaque JS */ }\` — escape hatch for browser APIs not exposed
+  natively (see § JS escape hatch).
+
+### Optional \`return\`
+Actions MAY include a \`return\` statement. When omitted the action runs for
+its side effects and yields \`undefined\`. When present the result is
+observable from \`$x = myAction(...)\` expressions:
+
+\`\`\`
+action greet(name) {
+  return "Hello, " + name
+}
+$hello = greet("Ada")             // re-runs whenever the action call's args change
+\`\`\`
+
+### Inline lambdas — the short form
+For trivial handlers, skip the \`action\` declaration entirely:
+
+\`\`\`
+incBtn   = Button("+",     onClick: () => $count = $count + 1)
+resetBtn = Button("Reset", onClick: () => { $count = 0   $message = "" })
+copyBtn  = Button("Copy",  onClick: () => { js{ navigator.clipboard.writeText("hi") } })
+\`\`\``;
+}
+
+function fullEffects(): string {
+  return `## Effects — Declarative side effects
+
+\`effect\` blocks attach side effects to a component or top-level binding.
+They are **anonymous** — there is no name, no \`on\` keyword. Every
+dependency lives inside a single bracketed list right after the keyword:
+
+\`\`\`
+effect [ ...dependencies ] {
+  // body
+}
+\`\`\`
+
+A dependency entry is one of:
+- \`$atom\` — re-run when the named reactive atom changes.
+- \`on:mount\` — run once when the surrounding scope mounts.
+- \`on:unmount\` — run once when it unmounts.
+- \`on:every(N)\` — re-run every N milliseconds.
+- \`debounce(N)\` / \`throttle(N)\` — wrap the body with a trailing-edge rate limit.
+
+Dependencies may be combined freely (e.g.
+\`effect [$query, $page, debounce(250)] { … }\`). The order inside the
+brackets doesn't matter.
+
+\`effect { ... }\` (no brackets) is equivalent to \`effect [on:mount] { ... }\` —
+both run the body once on mount.
+
+### Scope — top-level vs. component-local
+An effect can live at the program top level OR inside a
+\`component Name() { … }\` body. The syntax is identical; only the
+lifecycle differs:
+
+- **Top-level** — mounted once when the program parses, torn down on
+  \`setResponse\` / \`clear()\`. Use for global concerns (analytics,
+  app-wide shortcuts, hydration of shared atoms).
+- **Component-local** — mounted once per component instance on its
+  first render, torn down when the instance disappears from the tree.
+  Each instance gets its own timers, watched-atom subscriptions, and
+  \`cleanup(fn)\` registrations. Use for per-instance work (per-row
+  polling, modal focus management, observers attached to a widget).
+
+\`\`\`
+_app_ = App()
+$value = 10
+
+# Top-level — one shared interval for the whole program.
+effect [on:every(1000)] {
+  $value = $value + 1
+}
+
+component App() {
+  return Box([Text("Value: " + $value)])
+}
+\`\`\`
+
+\`\`\`
+_app_ = App()
+$value = 10
+
+component App() {
+  # Component-local — interval starts on first render and is cleared
+  # automatically when the App instance leaves the tree.
+  effect [on:every(1000)] {
+    $value = $value + 1
+  }
+  return Box([Text("Value: " + $value)])
+}
+\`\`\`
+
+### Examples
+
+\`\`\`
+component LiveClock() {
+  $now = @Now()
+  effect [on:every(1000)] { $now = @Now() }
+  return Text(@FormatDate($now, "time"))
+}
+
+effect [$query, $page, debounce(250)] {
+  $results = http({ url: "/api/search", query: { q: $query, page: $page } })
+}
+
+effect [$draft, debounce(500)] {
+  $save = http({ url: "/api/draft", method: "PUT", body: $draft })
+}
+
+effect [on:mount] {
+  js{
+    const onKey = (e) => { if (e.key === "k" && e.metaKey) ctx.host.emit("toggle-palette", {}) }
+    document.addEventListener("keydown", onKey)
+    ctx.cleanup(() => document.removeEventListener("keydown", onKey))
+  }
+}
+\`\`\`
+
+### Cleanup
+Use \`cleanup(fn)\` to register teardown for intervals, listeners, observers.
+Cleanup fires before the next re-run AND on unmount.`;
+}
+
+function fullHttp(): string {
+  return `## Data — \`http({...})\`
+
+There is exactly one HTTP primitive: the \`http({ ... })\` function. Pass any
+\`fetch\`-compatible option (\`url\`, \`method\`, \`headers\`, \`body\`,
+\`signal\`, \`credentials\`, …) plus a convenience \`query\` object that is
+serialised into the URL.
+
+### Reads (GET / HEAD / OPTIONS)
+\`\`\`
+$orders = http({
+  url:    "/api/users/" + $userId + "/orders",
+  method: "GET",
+  query:  { limit: 5, status: "open" },
+  headers:{ "X-Tenant": $tenant }
+})
+\`\`\`
+
+### Writes (POST / PUT / PATCH / DELETE)
+Fire writes from inside an \`action\` body and observe the resulting resource:
+\`\`\`
+action saveOrder(payload) {
+  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  emit "assistant-message" { message: "Saved." }
+}
+\`\`\`
+
+### Reactive resource shape
+Every \`http({ ... })\` call returns a reactive bag with:
+\`\`\`
+$orders.data         // parsed response body (null until resolved)
+$orders.error        // null on success
+$orders.status       // HTTP status code, e.g. 200
+$orders.loading      // true while the request is in-flight
+$orders.headers      // response headers as a plain object
+$orders.lastUpdated  // ms-epoch of the last successful response
+$orders.refetch()    // re-issue the request
+$orders.cancel()     // abort the in-flight request (no-op when idle)
+\`\`\`
+
+### \`Async(resource, …)\` wrapper
+The standard library component \`Async(resource, loading:, error:, empty:, data:)\`
+covers the loading / error / empty / data branches uniformly. Prefer it over
+hand-rolled \`if\` chains:
+
+\`\`\`
+view = Async($orders,
+  loading: LoadingState("Loading orders…"),
+  error:   ErrorState("Couldn't fetch orders", description: "Try again in a moment."),
+  empty:   EmptyState("No orders yet", description: "Place your first order."),
+  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, format: "currency")])
+)
+\`\`\`
+
+### Optional \`Http({ ... })\` defaults
+Configure host-wide defaults once at the top of the response:
+\`\`\`
+$http = Http({
+  baseUrl: "https://api.example.com",
+  headers: { "Accept": "application/json" },
+  timeout: 10000,
+  retry:   { count: 2, backoff: "exponential" }
+})
+\`\`\``;
+}
+
+function fullControlFlow(): string {
+  return `## Control flow
+
+All three control-flow keywords are **expressions** — they yield a node (or
+array of nodes) that can be assigned, passed as a prop, or returned from a
+component / action body.
+
+### \`if\` / \`else\`
+\`\`\`
+banner = if $hasError { Banner("Something went wrong", tone: "danger") } else { null }
+active = if $tab == "billing" { billingPanel } else { overviewPanel }
+\`\`\`
+A trailing \`else\` is optional — without it an unmatched \`if\` evaluates to
+\`null\` (renders nothing).
+
+### \`match\`
+\`\`\`
+panel = match $stage {
+  "draft":     DraftView()
+  "review":    ReviewView()
+  "shipped":   ShippedView()
+  default:     EmptyState("Pick a stage")
+}
+\`\`\`
+- Arms use \`: value\` like object properties (the arrow form \`->\` is
+  not valid).
+- \`default:\` is the wildcard.
+- Arms can return arbitrary expressions, not just strings.
+
+### \`for\`
+\`\`\`
+rows = for item in $todos { TaskRow(item) }
+rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }
+\`\`\`
+\`for\` produces an array of nodes — assign it and reference the binding
+from a container (\`Stack(rows)\`, \`Table([Col("Task", rows)])\`). The loop
+variable is **block-scoped**, so a stale closure can never see the wrong row.
+
+### Statement form inside action / effect bodies
+The same three keywords also work as statements:
+\`\`\`
+action submit(payload) {
+  if !payload.email { return }
+  for tag in payload.tags { $tags = [...$tags, tag] }
+  match payload.kind {
+    "draft": { $drafts = [...$drafts, payload] }
+    default: { $records = [...$records, payload] }
+  }
+}
+\`\`\``;
+}
+
+function fullRouting(): string {
+  return `## Routing — \`_router_({ … })\`
+
+The router is a plain function call. It returns the matched arm's evaluated
+value — assign the result to any binding and reference that binding inside
+your shell.
+
+\`\`\`
+pages = _router_({
+  "/":             Dashboard(),
+  "/orders":       OrdersPage(),
+  "/orders/:id":   OrderDetail(id: params.id),
+  "/settings/*":   SettingsArea(rest: params._),
+  default:         NotFound()
+})
+
+${ROOT_NAME} = AppShell(MainSidebar(), pages, TopBar())
+\`\`\`
+
+### Path patterns
+- Literal segments: \`"/"\`, \`"/about"\`, \`"/settings/profile"\`.
+- Parameter segments: \`"/users/:id"\`. Read inside the arm body with
+  \`params.id\` (or \`_route_.params.id\` from elsewhere).
+- Trailing wildcard: \`"/docs/*"\`. Remainder lands in \`params._\`.
+- Default arm: \`default: NotFound()\` is the catch-all (synonym: \`"*"\`).
+
+### Inside an arm body
+- \`params\` is bound to the matched route's path captures. It is scoped to
+  the arm — the value is **not** available outside \`_router_({…})\`.
+- Use \`_route_\` for cross-cutting reactive reads (current path, query
+  string) that don't depend on which arm matched.
+
+### Reactive surface
+- \`_route_.path\` — current path (read-only).
+- \`_route_.params.id\` — path parameter; reactive.
+- \`_route_.query.tab\` — query string; **writable** (assigning updates the URL).
+- \`_route_.navigate("/path")\` — imperative navigation. Use inside any action
+  or effect body.
+
+### \`NavLink\` companion
+\`NavLink(label, to)\` reads \`_route_.path\` and dispatches
+\`_route_.navigate(to)\` on click — use for sidebars, navbars and breadcrumbs.
+
+### Common mistakes
+- \`_route_\` is read-only (apart from \`_route_.navigate(...)\`). Assigning
+  to \`_route_\` or to a state slot named \`route\` is ignored.
+- Forgetting the \`default:\` arm. Without it, unknown paths render \`null\`
+  and the outlet collapses.
+- Using \`->\` instead of \`:\` for arm bodies. Inside \`_router_({…})\` the
+  arms are ordinary object properties — separate with \`:\` and commas.`;
+}
+
+function fullTwoWayBinding(): string {
+  return `## Two-way binding — \`bind:\`
+
+\`bind:value: $name\` desugars to \`value: $name, onValueChange: (v) => $name = v\`.
+The right-hand side must be a state ref (\`$x\`), member access
+(\`$user.name\`), or a form field — never a computed expression.
+
+\`\`\`
+$search = ""
+bar     = SearchBar("q", placeholder: "Search…", bind:value: $search)
+list    = for row in @Filter($rows, "title", "contains", $search) { ListItem(row.title) }
+
+$tags = []
+chips = TagInput("tags", bind:value: $tags)
+\`\`\`
+
+\`bind:\` works on any form control whose spec declares a primary value prop:
+\`Input\`, \`TextArea\`, \`Select\`, \`Combobox\`, \`MultiSelect\`,
+\`Checkbox\`, \`CheckBoxGroup\`, \`Switch\`, \`ToggleGroup\`, \`Slider\`,
+\`NumberInput\`, \`DatePicker\`, \`DateRangePicker\`, \`TimePicker\`,
+\`DateTimePicker\`, \`SearchBar\`, \`PinInput\`, \`PasswordInput\`,
+\`TagInput\`, \`MentionInput\`, \`MaskedInput\`, \`RichTextEditor\`,
+\`CodeEditor\`, \`ColorPicker\`, \`Rating\` (when \`interactive: true\`),
+\`Pagination\` (binds \`page\`).`;
+}
+
+function fullJsEscape(): string {
+  return `## JS escape hatch — \`js{ … }\`
+
+\`js{ /* opaque JS body */ }\` runs raw JavaScript inside an \`effect\`,
+\`action\`, or lambda body. Use sparingly — every other surface is preferred —
+but it is always available for browser APIs not exposed natively (clipboard,
+keyboard listeners, IntersectionObserver, audio, custom DOM work).
+
+The body receives a single \`ctx\` bridge:
+- \`ctx.host\` — the \`<aktion-app>\` host element (for \`dispatchEvent\`).
+- \`ctx.state\` — \`{ get(name), set(name, value) }\` for reactive atoms.
+- \`ctx.cleanup(fn)\` — register teardown (same semantics as \`effect\` cleanup).
+- \`ctx.tools\` — host-registered endpoint catalog (rarely needed; prefer \`http()\`).
+- \`ctx.args\` — when invoked from an \`action\` or lambda, the call's arguments.
+
+\`\`\`
+effect [on:mount] {
+  js{
+    const id = setInterval(() => ctx.state.set("now", Date.now()), 1000)
+    ctx.cleanup(() => clearInterval(id))
+  }
+}
+
+action copyShareLink() {
+  js{ navigator.clipboard.writeText(window.location.href) }
+  emit "assistant-message" { message: "Link copied" }
+}
+\`\`\``;
+}
+
+function fullBuiltins(): string {
+  return `## Built-in \`@\`-functions
+
+All built-ins use the \`@\` prefix and may appear anywhere in an expression.
+They are **pure** — no side effects, no I/O. Use them for data shaping,
+formatting, and inline iteration.
+
+${formatBuiltinCatalog(getBuiltinCatalog())}
+
+### Control flow — expression form
+Use the expression-form \`if\` / \`match\` / \`for\` covered above —
+they return values that can be assigned, passed as props, or composed:
+
+\`\`\`
+active = if $tab == "billing" { billingPanel } else { overviewPanel }
+list   = for item in $todos { TaskRow(item) }
+panel  = match $stage { "done": Done() "ready": Ready() default: Pending() }
+\`\`\`
+
+### Responsive prop maps
+\`Grid(items, columns: {sm: 1, md: 2, lg: 4}, gap: "l")\` — 1 column on mobile,
+2 on tablet, 4 on desktop. \`Stack(children, direction: {sm: "column", md: "row"})\`
+— stack on mobile, row on desktop. Both \`columns\` and \`gap\` accept either
+a single value or a responsive map.`;
+}
+
+function fullHelpers(): string {
+  return `## Standard helper components
+
+Aktion keeps the language core small by exposing "frameworky"
+features as library components rather than language keywords:
+
+| Component | Purpose |
+|---|---|
+| \`Async(resource, loading:, error:, empty:, data:)\` | Branch on an \`http({...})\` resource's state. |
+| \`Show(when, fallback?, children)\` | Sugar over \`if when { children } else { fallback }\`. |
+| \`Portal(children, target?)\` | Render children outside the parent subtree. |
+| \`Redirect(path)\` | Navigate to \`path\` and unmount the rest of the subtree. |
+| \`Lazy(loader, fallback?, children)\` | Defer rendering children until \`loader\` resolves. |
+| \`ErrorBoundary(children, fallback?, onError?)\` | Catch render errors thrown by descendants. |
+| \`VirtualList(items, key:, render:)\` | Virtualised list — preferred for >100 rows. |`;
+}
+
+function fullGlobals(): string {
+  return `## Built-in globals
+
+Two namespace globals are always in scope — no import, no declaration.
+Invoke them through the standard \`obj.method(args)\` syntax. Named-arg
+options collapse into a single trailing options object on the method's
+arg list (same rule as component named args).
+
+\`storage\` — browser storage (localStorage by default):
+\`\`\`
+storage.set("name", "John")           // alias of storage.local.set
+$name = storage.get("name")
+storage.remove("name")
+storage.clear()
+
+storage.session.set("draft", $draft)  // per-tab sessionStorage
+$draft = storage.session.get("draft")
+
+storage.cookies.set("user", "John", expires: 7, path: "/", sameSite: "Lax")
+$user = storage.cookies.get("user")
+storage.cookies.remove("user", path: "/")
+storage.cookies.clear()
+\`\`\`
+- Values that aren't strings round-trip through JSON; missing keys return \`null\`.
+- Cookie options: \`expires\` (days, Date, or ISO string), \`maxAge\`
+  (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`.
+
+\`console\` — host console forwarder:
+\`\`\`
+console.log("Hello", $user)
+console.error("Failed", $error)
+console.warn("Deprecated path")
+console.info("Route changed", _route_.path)
+console.debug({ days: $days, count: $count })
+\`\`\``;
+}
+
+function fullI18n(): string {
+  return `## Internationalisation
+
+\`\`\`
+$locale = "en"
+$bundle = http({ url: "/i18n/" + $locale + ".json", method: "GET" })
+$i18n = i18n({
+  locale:   $locale,
+  messages: $bundle.data ?? {},
+  fallback: "en"
+})
+
+Text(t("orders.title"))                          // "Orders"
+Text(t("orders.greeting", { name: $userName }))  // "Welcome back, Alex"
+\`\`\`
+
+- \`t(key, vars?)\` looks up the translation by dot-pathed key with
+  \`\${name}\` interpolation.
+- \`Locale()\` returns the active locale tag.
+- Formatting builtins (\`@Format\`, \`@FormatDate\`) consult \`Locale()\`
+  automatically.`;
+}
+
+function fullTheming(): string {
+  return `## In-script theming
+
+Assign a \`Theme({ … })\` call to a top-level binding named \`theme\` (the
+runtime looks for that exact name) **before** defining \`${ROOT_NAME}\`. The
+runtime writes the theme tokens to the host element as CSS custom properties.
+
+\`\`\`
+theme = Theme({
+  colors: {
+    primary:    "#635bff",
+    bg:         "#0a0a23",
+    surface:    "#10103a",
+    text:       "#ffffff"
+  },
+  radius: { md: "0.5rem", button: "999px" },
+  font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif" }
+})
+${ROOT_NAME} = AppShell(...)
+\`\`\`
+
+Top-level token groups: \`colors\`, \`radius\`, \`font\`, \`motion\`,
+\`elevation\`. Unknown keys inside a group are silently ignored, so typos
+fail silent — verify token names against the \`Themes\` reference.`;
+}
+
+function fullIcons(): string {
+  return `## Icons (Font Awesome)
+
+Icon-typed props accept a Font Awesome name as a string. The host element
+auto-loads the Font Awesome stylesheet — no setup needed.
+
+- Format: \`"name"\` (defaults to the solid set), e.g. \`"house"\`,
+  \`"chart-line"\`, \`"star"\`, \`"circle-check"\`.
+- Variants: prefix with \`"regular:name"\` (outline set) or \`"brands:name"\`
+  (brand logos).
+- **Never emit emoji characters in \`icon\` props.**
+- Use the \`Icon(name, variant?, size?)\` component to render an icon inline
+  anywhere a Node is expected.`;
+}
+
+function fullComponentLibrary(library: ComponentLibrary): string {
   const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [];
-  lines.push("## Components");
-  lines.push("Use only these components. The order of arguments matches the signature exactly. Optional props end with `?`.");
+  lines.push("## Component library");
+  lines.push(
+    "Use only these components. Each signature lists props in declaration " +
+    "order; optional props end with `?`. The prop tagged `(positional)` is " +
+    "the canonical positional slot — pass it bare; every other prop is best " +
+    "supplied as a named argument (`prop: value`).",
+  );
   lines.push("");
   for (const group of allGroups) {
     lines.push(`### ${group.name}`);
@@ -1253,7 +923,6 @@ function componentsSection(library: ComponentLibrary): string {
     }
     lines.push("");
   }
-  // Append any components not in a group.
   const grouped = new Set<string>(allGroups.flatMap((g) => g.components));
   const ungrouped = library.components.filter((c) => !grouped.has(c.name));
   if (ungrouped.length > 0) {
@@ -1263,471 +932,606 @@ function componentsSection(library: ComponentLibrary): string {
   return lines.join("\n").trim();
 }
 
+function fullInlineMode(): string {
+  return `## Inline mode
+
+You may answer questions in plain text when appropriate. When you do, wrap
+any UI you produce in a fenced \`\`\`aktion block. Otherwise
+output Aktion directly with no surrounding prose.`;
+}
+
+function fullEditMode(): string {
+  return `## Edit mode
+
+When the user asks for an incremental change to a prior response, output
+ONLY the statements that need to change (additions, replacements, removals).
+Do NOT re-emit the whole UI. To remove a statement, write \`name = null\`.`;
+}
+
+function fullStreaming(): string {
+  return `## Hoisting & streaming (CRITICAL)
+
+Aktion supports hoisting: a reference can be used BEFORE it is
+defined. The renderer re-parses the program on every streamed chunk and
+silently treats unresolved references as empty, so a partially-streamed
+response renders progressively without flashing errors.
+
+**Required statement order for streaming-friendly output:**
+1. \`${ROOT_NAME} = ...\` — emit this FIRST so the UI shell appears immediately.
+2. \`component\` / \`action\` / \`effect\` declarations — fill in layout & behaviour.
+3. Leaf data values — strings, numbers, arrays, objects — last.
+
+**Streaming rules — follow strictly:**
+- Always reference children by name from the root (\`${ROOT_NAME} = Stack([hero, body, footer])\`).
+- Define one reference per FormControl, TabItem, AccordionItem, Series, Col —
+  so each one streams in independently.
+- Place large data values on their own trailing lines.
+- Never split a single statement across multiple lines unless it sits inside
+  an unmatched bracket (\`[\`, \`(\`, \`{\`).
+- Do not introduce trailing commas, dangling operators, or open brackets you
+  don't close on the same line.`;
+}
+
+function fullOutputRules(): string {
+  return `## Output rules
+
+- **Build a complete application.** Reply with a substantive, navigable
+  product surface — page headers, sidebars, multiple pages, data views,
+  KPIs, toolbars, working actions. Never reply with a single Card or a
+  chat-style bubble.
+- Output ONLY Aktion (or a fenced \`\`\`aktion
+  block when inline mode is enabled).
+- Always start with \`${ROOT_NAME} = ...\` on the very first line.
+- Prefer many small, named statements over deeply nested inline expressions —
+  this is what makes streaming work.
+- Order statements top-down: \`${ROOT_NAME}\` first, then components /
+  actions / effects, then leaf data.
+- **Seed realistic mock data inline.** When no backend is available, write
+  5–20 believable rows per dataset (real names, dates, numbers, statuses)
+  inside \`$state\` declarations. Pages read from these atoms so changes
+  propagate live.
+- **Wire every visible button.** Declare \`action Name() { … }\` blocks and
+  reference them via \`Button("Label", onClick: name)\`. No dead buttons —
+  forms submit by dispatching an action that writes to \`$state\`.
+- **Use \`_router_({...})\` for multi-page apps.** Declare \`pages = _router_({ "/": Home(), … })\` once,
+  reference \`pages\` from \`${ROOT_NAME}\`, link routes from the sidebar /
+  navbar with \`NavLink(label, to)\`. Each route must be a substantive
+  page (PageHeader + at least one data view + at least one action).
+- **Match real-product polish.** Use \`Stats\`, \`PageHeader\`, \`Toolbar\`,
+  \`Badge\` / \`StatusDot\` for state, \`PersonChip\` / \`Avatar\` where
+  people appear, \`EmptyState\` for empty lists. Pair text-heavy sections
+  with plausible \`Image\` URLs.
+- **Use responsive prop maps** (\`{sm: 1, md: 2, lg: 4}\`) for \`Grid\` and
+  \`Stack\` so the app works on phone AND desktop.
+- **Use template literals** for any string mixing copy with values:
+  \`\`\`\${@Count(rows)} \${@Plural(@Count(rows), "order", "orders")}\`\`\`
+  reads much better than \`+\` concatenation.
+- Icons are Font Awesome names without the \`fa-\` prefix — never emoji.
+- Do not invent component names that are not in the library above.
+- Use expression-form \`if\` / \`match\` / \`for\` for control flow.
+- Use \`http({ ... })\` for every HTTP request; observe \`.data\`,
+  \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`.
+- Never declare a state slot named \`route\` yourself. The router exposes
+  its reactive surface through the reserved \`_route_\` handle — read
+  \`_route_.path\` / \`_route_.params\` and call
+  \`_route_.navigate("/path")\` to navigate.`;
+}
+
+function fullFinalVerification(): string {
+  return `## Final verification
+
+Before finishing, walk your output and verify:
+1. \`${ROOT_NAME} = ...\` is the FIRST line.
+2. Every referenced name is defined somewhere below.
+3. Every defined name (other than \`${ROOT_NAME}\`, \`theme\`, \`$http\`,
+   \`$i18n\`) is reachable from \`${ROOT_NAME}\`.
+4. Containers reference their children by name; large data arrays live on
+   their own trailing lines.
+5. No statement is split across multiple lines unless it sits inside an
+   unmatched \`[\`, \`(\`, or \`{\`.
+6. Components end with an explicit \`return\` statement.
+7. State uses the single-sigil \`$name = value\` form.
+8. HTTP uses \`http({ url, method, ... })\`; the reactive bag exposes
+   \`.data\` / \`.error\` / \`.loading\` / \`.status\` / \`.refetch()\` / \`.cancel()\`.
+9. Router and \`match\` arms use \`:\` (not \`->\`) and \`default\` (not
+   \`_\`) as the wildcard.`;
+}
+
+function fullDefaultExamples(): string[] {
+  return [
+    `# Tasks dashboard backed by http()
+$tasks = http({ url: "/api/tasks", method: "GET" })
+
+action toggle(task) {
+  $update = http({
+    url:    "/api/tasks/" + task.id,
+    method: "PATCH",
+    body:   { done: !task.done }
+  })
+  $tasks.refetch()
+}
+
+action removeTask(task) {
+  $delete = http({ url: "/api/tasks/" + task.id, method: "DELETE" })
+  $tasks.refetch()
+}
+
+renderRow = (task) => Card([Stack([
+  Badge(task.done ? "done" : "open", tone: task.done ? "success" : "neutral"),
+  Text(task.title, tone: task.done ? "muted" : "default"),
+  Buttons([
+    Button(task.done ? "Reopen" : "Done", onClick: () => toggle(task), variant: "primary", size: "sm"),
+    Button("Delete",                       onClick: () => removeTask(task), variant: "ghost",   size: "sm")
+  ])
+])])
+
+component TasksPage() {
+  return Stack([
+    PageHeader("Tasks", subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", onClick: $tasks.refetch, variant: "ghost")]),
+    Async($tasks,
+      loading: LoadingState("Loading tasks…"),
+      error:   ErrorState("We couldn't fetch tasks", description: "Try again in a moment.", action: Button("Retry", onClick: $tasks.refetch, variant: "primary")),
+      empty:   EmptyState("No tasks yet", description: "Create your first task to get started.", icon: "list-check"),
+      data:    Stack(for t in $tasks.data { renderRow(t) }, direction: "column", gap: "s")
+    )
+  ], direction: "column", gap: "l")
+}
+
+${ROOT_NAME} = TasksPage()`,
+    `# App shell with router
+action selectNav(label, path) { _route_.navigate(path) }
+
+pages = _router_({
+  "/":           Overview(),
+  "/projects":   Projects(),
+  "/calendar":   Calendar(),
+  default:       NotFound()
+})
+
+renderNav = (label, icon, path) => SidebarItem(label, icon: icon, active: _route_.path == path, action: () => selectNav(label, path))
+
+nav   = Sidebar([
+  SidebarSection("Workspace", [
+    renderNav("Overview", "house",    "/"),
+    renderNav("Projects", "folder",   "/projects"),
+    renderNav("Calendar", "calendar", "/calendar")
+  ])
+])
+
+${ROOT_NAME}  = AppShell(nav, pages)
+
+component Overview() {
+  return Stack([
+    PageHeader("Overview", subtitle: "Everything happening across your workspace"),
+    Stats([
+      StatCard("MRR",          value: "$48.2k", trend: "up",   delta: "+12% vs last month", icon: "sack-dollar"),
+      StatCard("Active users", value: "2,184",  trend: "up",   delta: "+184",               icon: "users"),
+      StatCard("Open tickets", value: "23",     trend: "down", delta: "-9",                 icon: "ticket")
+    ])
+  ], direction: "column", gap: "l")
+}
+
+component Projects()  { return Stack([PageHeader("Projects")], direction: "column", gap: "l") }
+component Calendar()  { return Stack([PageHeader("Calendar")], direction: "column", gap: "l") }
+component NotFound()  { return Stack([PageHeader("Not found")], direction: "column", gap: "l") }`,
+    `# Contact form with two-way binding and validation
+$name    = ""
+$email   = ""
+$message = ""
+$sent    = false
+
+action submit() {
+  if !$name || !$email { return }
+  $post = http({ url: "/api/contact", method: "POST", body: { name: $name, email: $email, message: $message } })
+  $sent = true
+}
+
+action reset() { $name = ""   $email = ""   $message = ""   $sent = false }
+
+formCard = Card([
+  CardHeader("Get in touch", subtitle: "We typically reply within one business day."),
+  Form("contact", btns, [
+    FormControl("Name",    Input("name",    placeholder: "Your name",       bind:value: $name)),
+    FormControl("Email",   Input("email",   placeholder: "you@example.com", type: "email", bind:value: $email)),
+    FormControl("Message", TextArea("message", placeholder: "Tell us more…", rows: 4, bind:value: $message))
+  ])
+])
+
+btns = Buttons([
+  Button("Send",  onClick: submit, variant: "primary", icon: "paper-plane"),
+  Button("Reset", onClick: reset,  variant: "ghost")
+])
+
+resultCard = if $sent {
+  Card([Callout("success", "Message sent", description: \`Thanks \${$name}, we'll be in touch at \${$email}.\`, icon: "envelope-circle-check")])
+} else { null }
+
+${ROOT_NAME} = Stack([formCard, resultCard], direction: "column", gap: "l")`,
+  ];
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CHAT mode — read-only UI rendering                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The chat prompt teaches **just enough** to convert an LLM's prose
+ * response into a rich UI surface. The LLM is NOT expected to emit any
+ * interactive behaviour — no `$state` writes, no `action`, no `effect`,
+ * no `http(...)`, no `_router_(...)`, no `js{…}`. Only static layout,
+ * content, data-presentation, and `FollowUpBlock` for canned follow-up
+ * prompts.
+ */
+const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
+  // Layout
+  "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
+  "Card", "CardHeader", "CardFooter", "Separator",
+  "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
+  "AspectRatio",
+  // Content
+  "Text", "Markdown", "Quote", "Callout", "CodeBlock", "Image",
+  "Link", "Badge", "BadgeList", "Icon", "Kbd", "Spinner", "Skeleton",
+  // Data presentation (read-only)
+  "Table", "Col", "List", "ListItem", "StatCard", "Stats", "Sparkline",
+  "Tile", "Progress", "ProgressRing", "DescriptionList", "DescriptionItem",
+  "StatusDot", "Tree", "TreeNode",
+  // Charts (read-only)
+  "BarChart", "LineChart", "PieChart", "RadarChart", "ScatterChart",
+  "Histogram", "Heatmap", "Gauge", "Series",
+  // Feedback / media (display)
+  "Avatar", "AvatarGroup", "PersonChip", "Rating", "ChatBubble",
+  "Banner", "Notification",
+  // Patterns (display)
+  "Hero", "PageHeader", "SectionHeader", "EmptyState",
+  "Timeline", "TimelineItem", "ActivityLog",
+  "FeatureGrid", "FeatureItem",
+  "Testimonial", "ProfileCard", "Comment",
+  "MediaCard",
+  "LoadingState", "ErrorState", "SuccessState",
+  "DiffViewer", "JsonTree",
+  // Chat
+  "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem",
+];
+
+function chatHeader(preamble: string | undefined): string {
+  const lead = preamble?.trim()
+    || "You are an AI assistant that responds using Aktion — a compact declarative language whose output is rendered as a rich, read-only UI surface. Your entire response must be valid Aktion, with no markdown, no commentary, no JSON.";
+  return `${lead}
+Every response MUST start with \`${ROOT_NAME} = ...\` on the very first line.
+
+You are operating in **read-only UI mode**. Use ONLY the layout, content,
+data-presentation, and feedback components listed below. Do NOT emit any
+of the following — they are interactive surfaces reserved for full-app
+mode and will not function here:
+
+- Reactive-state writes, \`action\` blocks, \`effect\` blocks, raw \`js\`
+  escape hatches, HTTP calls, or routing primitives.
+- Form controls and clickable buttons (text inputs, dropdowns, submit
+  controls, file pickers, etc.).
+- App shells, sidebars, split views, and kanban-style boards.
+- Floating overlays and menus (modals, drawers, popovers, hover-cards,
+  tooltips, dropdown menus, command palettes, context menus).
+
+The single exception is \`FollowUpBlock\` — it is a read-only block of
+suggested follow-up prompts which the host renders as plain buttons.`;
+}
+
+function chatSyntax(): string {
+  return `## Syntax (read-only subset)
+
+A program is a flat list of \`name = expression\` statements terminated by
+newlines. \`${ROOT_NAME}\` is the entry point — every program MUST begin
+with \`${ROOT_NAME} = ...\` (typically \`${ROOT_NAME} = Stack([...])\`).
+
+### Expressions
+- Strings: \`"hello"\` or \`'hello'\`. Both forms support escapes.
+- Template literals: backticks with \`\${expr}\` interpolation —
+  \`\`\`\${@Count(rows)} results\`\`\`. Mix copy with values without manual \`+\` concatenation.
+- Numbers (\`42\`, \`-3.14\`), booleans (\`true\`, \`false\`), \`null\`.
+- Arrays: \`[1, 2, 3]\`, \`[Card1(), Card2()]\` — multi-line OK.
+- Objects: \`{ key: value, "quoted-key": value }\`.
+- Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || !\`, ternary
+  \`cond ? a : b\`, nullish coalescing \`a ?? b\`, spread \`[...a, ...b]\`,
+  member access \`obj.field\`, optional chaining \`obj?.field\`.
+
+### Component calls
+\`TypeName(arg1, arg2, prop: value, …)\`. Arguments are matched against the
+spec's prop list in declaration order; named arguments (\`prop: value\`) may
+appear at any position and override positional matching. Optional props can
+be omitted from the end.
+
+\`\`\`
+Callout("info", "Heads up", description: "Action required", icon: "circle-info", compact: true)
+Stack([card1, card2], direction: "row", gap: "m")
+Badge("Live", tone: "success", icon: "circle-dot")
+\`\`\`
+
+### Repeating UI from data
+Use the expression-form \`for\` loop to render an array of items into
+multiple nodes:
+
+\`\`\`
+rows = for item in items { ListItem(item.title, description: item.desc) }
+list = List(rows)
+\`\`\`
+
+### Branching (optional)
+Use \`if\` / \`match\` when the UI depends on a literal you computed:
+
+\`\`\`
+greeting = if isMorning { "Good morning" } else { "Hello" }
+tone     = match status { "ok": "success" "warn": "warning" default: "neutral" }
+\`\`\`
+
+### Array helpers
+- \`rows.length\` — element count.
+- \`rows.first\` / \`rows.last\` — first / last element (\`null\` if empty).
+- **Array pluck**: \`rows.title\` returns \`[row.title for each row]\` —
+  the idiomatic way to feed per-column arrays (\`Col("Title", rows.title)\`)
+  or per-segment number arrays (\`PieChart(rows.label, rows.value)\`).
+
+### Statement ordering — required for streaming
+\`\`\`
+${ROOT_NAME} = Stack([heroCard, statsRow, table, follow])
+
+heroCard = Card([CardHeader("Q4 results", subtitle: "Across all teams")])
+statsRow = Stats(stats)
+table    = Table([Col("Region", rows.region), Col("Revenue", rows.revenue, format: "currency")])
+follow   = FollowUpBlock(["Break down by region", "Compare to Q3"])
+
+stats = [
+  { label: "MRR",          value: "$48.2k", hint: "+12% vs Q3" },
+  { label: "Active users", value: "2,184",  hint: "+184" }
+]
+rows = [
+  { region: "North America", revenue: 184000 },
+  { region: "Europe",        revenue: 122000 },
+  { region: "APAC",          revenue: 89000  }
+]
+\`\`\`
+
+Always declare \`${ROOT_NAME}\` FIRST. Then container/composition statements
+(\`heroCard\`, \`statsRow\`, …). Then leaf data arrays last. This produces a
+clean top-down reveal as the response streams in.`;
+}
+
+function chatComponentLibrary(library: ComponentLibrary): string {
+  const allGroups = library.componentGroups ?? [{ name: "Components", components: library.components.map((c) => c.name) }];
+  const byName = new Map(library.components.map((c) => [c.name, c]));
+  const lines: string[] = [
+    "## Component library (read-only)",
+    "Use only these components. Each signature lists props in declaration " +
+    "order; optional props end with `?`. Pass props positionally in order, " +
+    "or as `prop: value` named arguments for clarity.",
+  ];
+  for (const group of allGroups) {
+    const filtered = group.components.filter((name) => CHAT_COMPONENT_ALLOWLIST.includes(name));
+    if (filtered.length === 0) continue;
+    lines.push(`\n### ${group.name}`);
+    for (const componentName of filtered) {
+      const spec = byName.get(componentName);
+      if (!spec) continue;
+      lines.push(formatComponentSignature(spec));
+    }
+  }
+  return lines.join("\n");
+}
+
+function chatIcons(): string {
+  return `## Icons (Font Awesome)
+
+Icon-typed props (\`icon\`, \`avatarSrc\`, etc.) expect a Font Awesome name
+as a string — no \`fa-\` prefix, no emoji characters.
+
+- Format: \`"name"\` (defaults to the solid set), e.g. \`"house"\`,
+  \`"chart-line"\`, \`"star"\`, \`"circle-check"\`.
+- Variants: prefix with \`"regular:name"\` (outline set) or
+  \`"brands:name"\` (brand logos).
+- Render an icon inline anywhere a Node is expected with
+  \`Icon(name, variant?, size?)\`.`;
+}
+
+function chatBuiltins(): string {
+  const catalog = getBuiltinCatalog();
+  const data = catalog.filter((e) => e.category === "data");
+  const iter = catalog.filter((e) => e.category === "iteration");
+
+  const dataLines = data.map(formatBuiltinEntry).join("\n");
+  const iterLines = iter.map(formatBuiltinEntry).join("\n");
+
+  return `## Built-in \`@\`-functions
+
+\`@\`-prefixed functions are **pure helpers** — no side effects. Use them
+for data shaping, counts, sums, formatting, and inline iteration when the
+expression-form \`for\` / \`if\` / \`match\` would be awkward.
+
+### Data helpers
+${dataLines}
+
+### Iteration helpers
+${iterLines}
+
+Template literals (\`backticks with \${expr}\`) compose naturally with these
+helpers — \`\`\`Found \${@Count(rows)} \${@Plural(@Count(rows), "result", "results")} (\${@Format(@Sum(rows.amount), "currency", "USD")} total)\`\`\``;
+}
+
+function chatStreaming(): string {
+  return `## Hoisting & streaming (CRITICAL)
+
+Aktion supports hoisting: a reference can be used BEFORE it is
+defined. The output is re-parsed on every streamed chunk, so undefined
+references render as empty until their definitions arrive. This produces a
+smooth top-down reveal.
+
+**Required statement order:**
+1. \`${ROOT_NAME} = ...\` — emit FIRST so the UI shell appears immediately.
+2. Container statements (\`heroCard\`, \`tableBlock\`, \`statsRow\`, …) — next.
+3. Leaf data values (arrays, objects, strings) — last.
+
+**Streaming rules:**
+- Always reference children by name from the root
+  (\`${ROOT_NAME} = Stack([hero, body, footer])\`).
+- Define one reference per \`Col\`, \`TabItem\`, \`AccordionItem\`,
+  \`Series\`, \`FollowUpItem\`, etc. — each one streams in independently.
+- Place large data values on their own trailing lines.
+- Never split a single statement across multiple lines unless it sits
+  inside an unmatched \`[\`, \`(\`, or \`{\`.`;
+}
+
+function chatToolsList(tools: ReadonlyArray<ToolSpec>): string {
+  const lines: string[] = [
+    "## Available data sources (context only)",
+    "These endpoints are available to the host. You cannot call them from " +
+    "read-only mode, but you may incorporate the data they describe when " +
+    "composing the UI:",
+  ];
+  for (const tool of tools) {
+    lines.push(`- **${tool.name}** — ${tool.description}`);
+  }
+  return lines.join("\n");
+}
+
+function chatDefaultExamples(): ReadonlyArray<string> {
+  return [
+    `# Comparison table reply with template literal summary
+${ROOT_NAME} = Stack([title, tbl, totals, follow])
+title  = Text("Top languages by users", variant: "large-heavy")
+tbl    = Table([
+  Col("Language",   langs.name),
+  Col("Users (M)",  langs.users, format: "number"),
+  Col("First seen", langs.year,  format: "number")
+])
+totals = Callout("info", \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, icon: "chart-line", compact: true)
+follow = FollowUpBlock(["Sort by users", "Show this as a chart", "Tell me about TypeScript"])
+
+langs = [
+  { name: "Python",     users: 15.7, year: 1991 },
+  { name: "JavaScript", users: 14.2, year: 1995 },
+  { name: "Java",       users: 12.1, year: 1995 },
+  { name: "TypeScript", users: 8.5,  year: 2012 },
+  { name: "Go",         users: 5.2,  year: 2009 }
+]`,
+    `# Bar chart reply with a summary callout
+${ROOT_NAME} = Stack([title, chart, summary, follow])
+title   = Text("Q4 revenue by product", variant: "large-heavy")
+chart   = BarChart(labels, [Series("Product A", a), Series("Product B", b)])
+summary = Callout("info", \`Q4 total: \${@Format(@Sum(a) + @Sum(b), "currency", "USD")} across \${@Count(labels)} months\`, icon: "chart-column", compact: true)
+follow  = FollowUpBlock(["Compare to Q3", "Break down by region", "Show as a line chart"])
+
+labels = ["Oct", "Nov", "Dec"]
+a      = [120, 150, 180]
+b      = [90, 110, 140]`,
+    `# Article-style reply with Markdown body and a KPI strip
+${ROOT_NAME} = Stack([header, body, kpis, related])
+header = Hero(
+  "The fastest open-source UI runtime",
+  subtitle: "Three releases in, the renderer parses and paints 38,000 LLM responses per second.",
+  eyebrow: "Engineering update"
+)
+body    = Markdown(article)
+kpis    = Stats([
+  { label: "Open issues", value: "184",   hint: "-23 vs last week" },
+  { label: "PRs merged",  value: "1,204", hint: "this quarter" },
+  { label: "Avg latency", value: "84ms",  hint: "p99" }
+])
+related = SectionBlock("Related reads", [
+  ListBlock([
+    "How streaming UI got 2× faster",
+    "The case for a single reactive sigil",
+    "Lazy hydration in practice"
+  ])
+])
+
+article = "The renderer started as a hack to display LLM responses without a framework. Today it ships **130+ components**, a single-sigil reactive model, and a tiny streaming-first parser. Read on for the architecture deep-dive."`,
+    `# Code-snippet reply — title + Markdown + summary callout
+${ROOT_NAME} = Stack([header, answer, hint, follow])
+header = Text("Recommended Postgres index", variant: "large-heavy")
+answer = CodeBlock("sql", indexSql, showLineNumbers: true)
+hint   = Callout("success", "Composite index cuts query time ~12×", description: "Postgres reads index entries already in the requested order, so the planner skips the sort step entirely.", icon: "lightbulb")
+follow = FollowUpBlock(["Show EXPLAIN ANALYZE output", "How big is the index?", "Compare to a partial index"])
+
+indexSql = "CREATE INDEX idx_orders_user_status_created\\n  ON orders (user_id, status, created_at DESC);"`,
+  ];
+}
+
+function chatImportantRules(): string {
+  return `## Important rules
+
+- **Choose components that best represent the content.** Tables for
+  comparisons, charts for trends, \`Callout\` / \`Banner\` for highlights,
+  \`Markdown\` for paragraph prose with inline formatting, \`Hero\` /
+  \`PageHeader\` for top-of-reply titles, \`Stats\` for KPI strips.
+- **Lead with a clear title.** Use \`Text(text, variant: "large-heavy")\`,
+  \`SectionHeader(...)\`, \`PageHeader(...)\`, or \`Hero(...)\` so the user sees
+  what the reply is about at a glance.
+- **Generate realistic data.** When asked about data, write believable
+  names, numbers, and dates. Never write Lorem Ipsum.
+- **Tables are column-oriented**: \`Table([Col("Label", arr1), Col("Count", arr2, format: "number")])\`.
+- **Charts need numeric arrays**, not arrays of objects. Use array pluck:
+  \`PieChart(rows.label, rows.value)\` instead of passing \`rows\` directly.
+- **End conversational replies with \`FollowUpBlock([...])\`** — 2–4 short
+  next-prompt suggestions keep the conversation flowing.
+- **Use \`Markdown\`** for rich paragraph prose with bold, lists, code
+  fences, links, and headings. Use \`Text\` for short labelled lines.
+- **Icons are Font Awesome names** (no \`fa-\` prefix, no emoji). Example
+  values: \`"house"\`, \`"chart-line"\`, \`"star"\`, \`"circle-check"\`.
+- **Use template literals** for any string that mixes copy with values:
+  \`\`\`\${@Count(rows)} results\`\`\` instead of \`"..." + ... + "..."\` concatenation.`;
+}
+
+function chatFinalVerification(): string {
+  return `## Final verification
+
+Before finishing, walk your output and verify:
+1. \`${ROOT_NAME} = ...\` is the FIRST line.
+2. Every referenced name is defined somewhere below.
+3. Every defined name (other than \`${ROOT_NAME}\`) is reachable from
+   \`${ROOT_NAME}\` (directly or transitively).
+4. Only the read-only components listed above are used — no forms,
+   clickable buttons, modal overlays, app shells, reactive-state writes,
+   action blocks, effect blocks, HTTP calls, routing primitives, or raw
+   \`js\` escape hatches.
+5. No statement is split across multiple lines unless it sits inside an
+   unmatched \`[\`, \`(\`, or \`{\`.
+6. Tables are column-oriented; charts use numeric arrays (use array pluck
+   like \`rows.value\` when needed).`;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Shared helpers                                                            */
+/* -------------------------------------------------------------------------- */
+
 function formatComponentSignature(spec: ComponentSpec): string {
+  const positional = findPositionalProp(spec);
   const params = spec.props.map((prop) => {
-    const typePart = prop.enum ? prop.enum.map((v) => `"${v}"`).join("|") : prop.type;
-    return `${prop.name}${prop.optional ? "?" : ""}: ${typePart}`;
+    const typePart = prop.enum
+      ? prop.enum.map((v) => `"${v}"`).join("|")
+      : prop.type;
+    const positionalTag =
+      prop === positional && prop.positional === true ? " (positional)" : "";
+    return `${prop.name}${prop.optional ? "?" : ""}: ${typePart}${positionalTag}`;
   }).join(", ");
   return `- ${spec.name}(${params}) — ${spec.description}`;
 }
 
-function bindingsSection(): string {
-  return `## Reactive State (\`$variables\`)
-- Declare with \`$name = defaultValue\` (string/number/boolean/null/array/object literals).
-- Pass a \`$variable\` directly as an Input/Select/Checkbox value to enable two-way binding.
-- Use \`@Set($name, value)\` to write a state variable from an action.
-- Use \`@Reset($a, $b)\` to restore variables to their declared defaults.
-- Any expression that reads a \`$variable\` re-evaluates automatically when it changes.
-
-### Persistent state (\`$$variable\`)
-Declare with the double-dollar sigil to make the value survive page reloads:
-\`\`\`
-$$theme        = "dark"
-$$cart         = []
-$$lastVisited  = "/dashboard"
-\`\`\`
-- Persistent and non-persistent names live in **separate namespaces** — \`$theme\` and \`$$theme\` are unrelated.
-- The runtime stores values via the host's storage adapter (\`localStorage\` by default), keyed by the element's id + variable name so two \`<streaming-ui-script>\` elements on the same page never collide.
-- Read / write / reset surface is identical to \`$\`: \`$$cart\`, \`@Set($$cart, …)\`, \`@Reset($$cart)\`.
-- Use it for any "real app" preference, draft, or selection that the user expects to find again after a refresh (theme, sidebar collapsed state, recently viewed, draft form input, multi-step wizard cursor).`;
-}
-
-function toolingSection(): string {
-  return `## Data: Query and Mutation
-- \`name = Query("tool_name", {arg: value}, {default: shape}, refreshSeconds?)\`
-  - Runs immediately and re-runs when any \`$variable\` referenced in args changes.
-  - The third argument is rendered before data arrives.
-  - The fourth argument (optional) is a polling interval in seconds.
-- \`name = Mutation("tool_name", {field: $variable})\`
-  - Does NOT run on load. Trigger via \`@Run(name)\` inside an Action.
-- Compose interactions inside \`Action([...])\`:
-  - \`btn = Button("Save", Action([@Run(mutation), @Run(query), @Reset($title)]))\`
-  - Steps run sequentially; if a step fails the rest are skipped.
-- Action steps available: \`@Run(ref)\`, \`@Set($var, value)\`, \`@Reset($a, $b, ...)\`, \`@ToAssistant("message")\`, \`@OpenUrl("https://...")\`, \`@Navigate("/path")\`.`;
-}
-
-function builtinsSection(): string {
-  return `## Built-in functions
-All built-ins use the \`@\` prefix and may appear anywhere in an expression.
-- Aggregation: \`@Count(arr)\`, \`@Sum(nums)\`, \`@Avg(nums)\`, \`@Min(nums)\`, \`@Max(nums)\`, \`@First(arr)\`, \`@Last(arr)\`.
-- Numeric: \`@Round(n, decimals?)\`, \`@Abs(n)\`, \`@Floor(n)\`, \`@Ceil(n)\`, \`@Clamp(n, min, max)\`.
-- Array shape: \`@Filter(arr, "field", "op", value)\` (ops: \`==\`, \`!=\`, \`>\`, \`<\`, \`>=\`, \`<=\`, \`contains\`); \`@Sort(arr, "field", "asc"|"desc")\`; \`@Slice(arr, start?, end?)\`; \`@Slice(arr, 0, n)\`; \`@Reverse(arr)\`; \`@Unique(arr, "field"?)\`.
-- Array growth: \`@Push(arr, value)\` (returns a NEW array with \`value\` appended); \`[...a, ...b]\`; \`@Range(start, end, step?)\` (inclusive); \`@Repeat(value, n)\` (skeleton grids).
-- Array reshape: \`arr.field\` (readable alias for array pluck); \`@Find(arr, "field", "op", value)\`; \`@GroupBy(arr, "field")\`; \`@Pick(obj, ["a","b"])\`.
-- Formatting: \`@Format(value, "currency"|"percent"|"number", currency?, locale?)\`, \`@Format(value, currency?, locale?, "currency", "USD")\`, \`@Format(value, locale?, "number")\`, \`@FormatDate(value, format?)\` (\`format\` is a moment-like pattern OR a named mode: \`"relative"\`, \`"date"\`, \`"time"\`, \`"datetime"\`, \`"iso"\`).
-- Date / time: \`@Now()\` (epoch ms), \`@Today()\` (today at midnight, ISO), \`@AddDays(date, n)\`.
-- Strings: \`@Plural(n, "order", "orders")\`, \`@Capitalize\`, \`@Lowercase\`, \`@Uppercase\`, \`@Titlecase\`, \`@Camelcase\`, \`@Snakecase\`, \`@Kebabcase\`, \`@Pascalcase\`.
-- Iteration: \`@Each(arr, "varName", template)\` — \`varName\` is bound ONLY inside \`template\` (see "Loop scoping" below). Supports destructuring: \`"{id, name, role}"\` exposes those fields directly per row; \`"row, {id, name}"\` exposes BOTH the row object AND the fields.
-- Lazy control flow:
-  - \`@If(condition, trueBranch, falseBranch?)\` — only the chosen branch is evaluated. Use this instead of \`cond ? a : b\` when an unused branch would otherwise read loop variables that aren't in scope, or call expensive builtins.
-  - \`@Switch(value, {key1: branch1, key2: branch2}, defaultBranch?)\` — string-keyed match; \`value\` is coerced to a string and the matching property's branch (or \`default\`) is evaluated. Replaces nested ternaries like \`$tab == "billing" ? billing : ($tab == "security" ? security : overview)\`.
-
-### Loop scoping (CRITICAL — read this before writing @Each)
-\`@Each($items, "x", template)\` is the only way to scope a per-item variable. \`x\` is bound while \`template\` is being evaluated and is invisible everywhere else (top-level statements, \`Script\` bodies, \`@Js\` strings).
-- INSIDE \`template\`: refer to \`x.id\`, \`x.title\`, etc. Even named references work — \`@Each($todos, "t", row)\` where \`row = Card([..., t.title, ...])\` re-evaluates \`row\` per item with \`t\` bound.
-- OUTSIDE \`template\`: \`x\` is undefined. Do NOT write \`ctx.state.get('x')\` to read a loop variable — \`x\` is not state, it is a per-iteration local. To pass per-item data into a \`@Js\` handler, use the second argument of \`@Js\` (see the JS section).
-- **Destructuring**: \`@Each($users, "{id, name, role}", row)\` binds \`id\`, \`name\`, \`role\` directly inside \`row\` (no \`u.\` prefix). For both row + fields: \`@Each($users, "u, {id, name}", row)\`.
-
-### Array / string member shortcuts
-You may use property access for the most common JS-shaped queries:
-- \`$rows.length\` / \`$todos.length\` / \`$text.length\` — element or character count.
-- \`$rows.first\` / \`$rows.last\` — first or last element (or \`null\` if empty).
-- \`$rows.title\` — "array pluck": map each element to its \`title\` field (idiomatic for charts / columns).
-For anything else, use the \`@\` builtins above. There is no \`.filter()\`, \`.map()\`, \`.find()\`, \`.slice()\`, etc. — they do not exist.
-
-### Responsive prop maps
-Layout components accept an object with breakpoint keys for prop values that vary per screen size:
-- \`Grid(items, {sm: 1, md: 2, lg: 4}, "l")\` — 1 column on mobile, 2 on tablet, 4 on desktop.
-- \`Stack(children, {sm: "column", md: "row"}, {sm: "s", md: "m"})\` — direction AND gap can both be responsive.
-Breakpoint keys (mobile-first): \`base\` (<640px), \`sm\` (≥640), \`md\` (≥768), \`lg\` (≥1024), \`xl\` (≥1280). Numbers and bare strings still work — \`Grid(items, 3, "m")\` keeps the old behaviour. Prefer responsive maps for full pages that should look right on phone AND desktop.`;
-}
-
-function javascriptSection(): string {
-  return `## JavaScript interactions (advanced)
-Streaming UI Script exposes two surfaces for behaviour that cannot be expressed
-declaratively. **Reach for plain Streaming UI Script first** — \`$variables\`,
-\`Query\`/\`Mutation\`, and \`Action([@Set,@Run,@Reset,@ToAssistant,@OpenUrl])\`
-already cover most behaviour. Only emit JS when the requested feature truly
-needs it (timers, fetch you control, DOM focus/scroll, clipboard, keyboard
-shortcuts, animation, sub-second polling).
-
-### Two surfaces
-1. \`Script("id", body, deps?)\` — a behaviour-only component. Runs the body when it mounts, and re-runs when any listed \`$variable\` changes. Renders nothing visible.
-2. \`@Js(body, args?)\` — an action step usable inside \`Action([...])\`. Runs the body once when the action fires (typically from a Button). The optional second argument is an object captured at render time and exposed inside the body as \`ctx.args\` — this is the ONLY correct way to feed per-item data (loop variables) into a click handler.
-
-Both receive a single \`ctx\` argument. Use the bare variable name (no \`$\`) when calling \`ctx.state\`.
-
-### How to write the body string
-- Use a **backtick-quoted string** (\`...\`) for multi-line bodies. Backticks are LLM-Response-UI-Lang strings that allow real newlines — no need to escape \\n.
-- Use a **double-quoted string** ("...") for one-liners. Escape inner double quotes as \\" and newlines as \\n.
-- Inside the body, prefer single quotes for JS string literals so you never need to escape.
-- The body runs inside an \`async\` function. \`await\` is allowed at the top level.
-
-### \`ctx\` API (the whole surface)
-- \`ctx.state.get("count")\` — read the value of \`$count\`. Returns undefined if unset.
-- \`ctx.state.set("count", 7)\` — write \`$count = 7\`. Triggers a re-render and re-runs dependent scripts.
-- \`ctx.state.reset("a", "b")\` — clear one or more \`$variables\` (back to undefined).
-- \`ctx.state.values()\` — snapshot of every \`$variable\` as a plain object.
-- \`ctx.args.foo\` — render-time argument captured by \`@Js(body, {foo: ...})\`. Always present (defaults to \`{}\`); empty for \`Script(...)\` bodies.
-- \`ctx.tools.toolName(args)\` — invoke any registered \`Query\`/\`Mutation\` handler. Always async; \`await\` it.
-- \`ctx.dispatch(message)\` — fire an \`assistant-message\` event (same payload as \`@ToAssistant\`).
-- \`ctx.open(url)\` — open a URL (same as \`@OpenUrl\`).
-- \`ctx.query(id)\` / \`ctx.queryAll(selector)\` — DOM lookups inside the renderer's shadow root.
-- \`ctx.host\` — the \`<streaming-ui-script>\` element (for custom-event dispatch).
-- \`ctx.cleanup(fn)\` — register a teardown that runs before the next re-run AND on unmount. Always pair intervals, listeners, observers, subscriptions with cleanup.
-- \`ctx.signal\` — AbortSignal that fires when the script is about to re-run or be unmounted. Pass it to \`fetch\` and check \`ctx.signal.aborted\` before writing state from async work.
-
-### Before reaching for JS: do it declaratively
-Most "imperative-looking" UI logic is already expressible without JS. Check this table FIRST:
-
-| You're tempted to write…              | Idiomatic Streaming UI Script                                                |
-|---------------------------------------|-------------------------------------------------------------------------------|
-| \`Script("init", "ctx.state.set('todos', [...])")\` to seed data | \`$todos = [...]\` — state declarations seed themselves |
-| \`@Js("ctx.state.set('todos', ctx.state.get('todos').concat(newItem))")\` | \`@Set($todos, [...$todos, newItem])\` |
-| \`@Js("...filter(t => t.id !== id)")\` to delete | \`@Set($todos, @Filter($todos, "id", "!=", x.id))\` (inside \`@Each\` where \`x\` is the row) |
-| \`$todos.filter(...)\` for display                          | \`@Filter($todos, "done", "==", false)\` |
-| \`$todos.length\`, \`$todos.first\`, \`$todos.last\`           | Same — these member shortcuts work directly. |
-| \`$todos.map(t => t.title)\`                                | \`$todos.title\` (array pluck via member access). |
-| \`@Js("ctx.state.set('toggle', !ctx.state.get('toggle'))")\` | \`@Set($toggle, !$toggle)\` |
-| Imperative reset of several values                          | \`@Reset($a, $b, $c)\` |
-
-Use \`@Js\` only when:
-- You need to read the **current value** of state and mutate it relative to it in a way \`@Push\`/\`@Filter\`/\`@Set\` can't express (e.g. toggling a flag on one item in an array).
-- You need a side effect (timer, fetch, DOM focus, clipboard, audio).
-- You need to compose multiple state writes that depend on each other.
-
-### \`deps\` (third Script argument)
-- Omit it, or pass \`null\` — run once on mount, dispose on unmount.
-- Pass \`["foo","bar"]\` — re-run whenever \`$foo\` or \`$bar\` changes. Previous run's \`ctx.cleanup\` fires first.
-
-### Worked example: a complete reactive todo list
-Study this end-to-end pattern carefully — it covers add, toggle, delete, filter, count, and empty state without any tools or external fetches. Most "list app" requests can be built by copying this shape and renaming.
-\`\`\`
-root = Stack([header, composer, list, footer])
-$todos = [{id: 1, text: "Welcome — try editing", done: false}]
-$draft = ""
-$filter = "all"
-
-header = PageHeader("Todos", "Add tasks below")
-
-composer = Stack([
-  Input("draft-input", "What needs doing?", "text", null, $draft),
-  Button("Add", Action([
-    @Set($todos, [...$todos, {id: $todos.length + 1, text: $draft, done: false}]),
-    @Reset($draft)
-  ]), "primary")
-])
-
-visible = $filter == "open" ? @Filter($todos, "done", "==", false) : ($filter == "done" ? @Filter($todos, "done", "==", true) : $todos)
-list = visible.length == 0 ? Callout("info", "All clear", "No todos match this filter.") : @Each(visible, "t", row)
-
-row = Card([Stack([
-  Badge(t.done ? "done" : "open", t.done ? "success" : "neutral"),
-  TextContent(t.text),
-  Button("Toggle", Action([
-    @Js(\`
-      const todos = ctx.state.get('todos') || [];
-      ctx.state.set('todos', todos.map(x => x.id === ctx.args.id ? Object.assign({}, x, {done: !x.done}) : x));
-    \`, {id: t.id})
-  ])),
-  Button("Delete", Action([@Set($todos, @Filter($todos, "id", "!=", t.id))]), "ghost")
-])])
-
-footer = Stack([
-  Buttons([
-    Button("All",  Action([@Set($filter, "all")]),  $filter == "all"  ? "primary" : "ghost"),
-    Button("Open", Action([@Set($filter, "open")]), $filter == "open" ? "primary" : "ghost"),
-    Button("Done", Action([@Set($filter, "done")]), $filter == "done" ? "primary" : "ghost")
-  ]),
-  TextContent("" + @Filter($todos, "done", "==", false).length + " open · " + $todos.length + " total", "small", "muted")
-])
-\`\`\`
-Notes on this template:
-- **Add** is fully declarative (\`@Set\` + \`@Push\`). No JS.
-- **Delete** is fully declarative (\`@Set\` + \`@Filter\`). No JS.
-- **Toggle** uses \`@Js\` because there is no builtin to flip one field of one item — and the per-item id is passed via \`{id: t.id}\`, NOT via \`ctx.state\`.
-- **Count** uses \`.length\` and \`@Filter(...).length\` directly.
-- **Empty state** uses a ternary — no JS, no extra script.
-
-### Pattern: interval (multi-line backtick body)
-\`\`\`
-$running = false
-$count = 0
-display = Card([TextContent("" + $count, "large-heavy")])
-controls = Buttons([
-  Button($running ? "Pause" : "Start", Action([@Set($running, !$running)])),
-  Button("Reset", Action([@Reset($count, $running)]))
-])
-ticker = Script("ticker", \`
-  if (!ctx.state.get('running')) return;
-  const id = setInterval(() => {
-    ctx.state.set('count', (ctx.state.get('count') ?? 0) + 1);
-  }, 1000);
-  ctx.cleanup(() => clearInterval(id));
-\`, ["running"])
-root = Stack([display, controls, ticker])
-\`\`\`
-
-### Pattern: one-liner with @Js (double-quoted body)
-\`\`\`
-copyBtn = Button("Copy", Action([
-  @Js("await navigator.clipboard.writeText(ctx.state.get('snippet') ?? ''); ctx.state.set('copied', true);"),
-  @ToAssistant("Copied!")
-]))
-\`\`\`
-
-### Pattern: async fetch with AbortSignal
-\`\`\`
-$query = ""
-$results = []
-fetcher = Script("fetcher", \`
-  const q = (ctx.state.get('query') ?? '').trim();
-  if (!q) { ctx.state.set('results', []); return; }
-  try {
-    const data = await ctx.tools.search({ q, signal: ctx.signal });
-    if (ctx.signal.aborted) return;
-    ctx.state.set('results', data.rows ?? []);
-  } catch (e) {
-    if (!ctx.signal.aborted) ctx.state.set('results', []);
+function formatBuiltinCatalog(entries: ReadonlyArray<BuiltinEntry>): string {
+  const data = entries.filter((e) => e.category === "data");
+  const iter = entries.filter((e) => e.category === "iteration");
+  const lines: string[] = [];
+  if (data.length > 0) {
+    lines.push("### Data helpers");
+    for (const entry of data) lines.push(formatBuiltinEntry(entry));
+    lines.push("");
   }
-\`, ["query"])
-\`\`\`
-
-### Pattern: debounce (keep latest input only)
-\`\`\`
-$draft = ""
-$pending = ""
-debouncer = Script("debounce", \`
-  const id = setTimeout(() => ctx.state.set('pending', ctx.state.get('draft')), 250);
-  ctx.cleanup(() => clearTimeout(id));
-\`, ["draft"])
-\`\`\`
-
-### Pattern: per-item button inside @Each (using \`@Js\` args)
-This is the canonical way to wire delete/toggle/edit buttons on rows. The \`@Js\` second argument captures the loop variable's value at render time so each row's handler knows which item it belongs to.
-\`\`\`
-$todos = [{id: 1, text: "Buy milk", done: false}, {id: 2, text: "Walk dog", done: true}]
-list = @Each($todos, "t", row)
-row = Card([Stack([
-  Badge(t.done ? "done" : "open", t.done ? "success" : "neutral"),
-  TextContent(t.text),
-  Buttons([
-    Button("Toggle", Action([
-      @Js(\`
-        const todos = ctx.state.get('todos') || [];
-        ctx.state.set('todos', todos.map(x => x.id === ctx.args.id ? Object.assign({}, x, {done: !x.done}) : x));
-      \`, {id: t.id})
-    ])),
-    Button("Delete", Action([
-      @Set($todos, @Filter($todos, "id", "!=", t.id))
-    ]), "ghost")
-  ])
-])])
-root = Stack([list])
-\`\`\`
-Notice that **Delete needs no JS at all** — \`@Filter\` produces a new array and \`@Set\` writes it. JS is only used for **Toggle** because there is no declarative way to flip a single field on one item.
-
-### Pattern: focus + keyboard shortcut
-\`\`\`
-focusBtn = Button("Focus input", Action([
-  @Js("ctx.query('search-input')?.focus();")
-]))
-shortcut = Script("shortcut", \`
-  const onKey = (e) => {
-    if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
-      e.preventDefault();
-      ctx.query('search-input')?.focus();
-    }
-  };
-  window.addEventListener('keydown', onKey);
-  ctx.cleanup(() => window.removeEventListener('keydown', onKey));
-\`)
-\`\`\`
-
-### WRONG vs RIGHT
-- WRONG: \`Script("id", "console.log("hi")")\` — unescaped inner double quotes break the string.
-  RIGHT: \`Script("id", "console.log('hi')")\` — use single quotes inside, or backticks: \`Script("id", \`console.log("hi")\`)\`.
-- WRONG: forgetting to escape newlines in a double-quoted body — the parser stops at the first real newline and the JS is truncated.
-  RIGHT: use backticks for multi-line code (\`Script("id", \`line 1\\nline 2\\nline 3\`)\`) — real newlines are part of the string.
-- WRONG: inside \`@Each($todos, "t", row)\`, writing \`@Js("const id = ctx.state.get('t').id; ...")\` to delete a row. \`t\` is a loop variable, NOT state — it does not exist outside of \`row\`.
-  RIGHT: pass per-item data with \`@Js(body, {id: t.id})\` and read \`ctx.args.id\` inside the body. Or skip JS entirely and use \`@Set($todos, @Filter($todos, "id", "!=", t.id))\`.
-- WRONG: \`Script("init", \`if (!ctx.state.get('todos')) ctx.state.set('todos', [{id:1, text:"…"}])\`)\` to seed initial state.
-  RIGHT: \`$todos = [{id: 1, text: "…"}]\` — state declarations seed themselves on parse.
-- WRONG: \`"" + ($todos.length || 0)\`, \`filter($todos, "done")\`, \`$todos.find(...)\`, \`$todos.map(t => t.title)\`.
-  RIGHT: \`"" + $todos.length\` (length is already a number). Use builtins: \`@Filter($todos, "done", "==", true)\`. Array pluck via member access: \`$todos.title\`.
-- WRONG: \`@Js("...todos.concat([newItem])...")\` to append.
-  RIGHT: \`@Set($todos, [...$todos, newItem])\` — no JS required.
-- WRONG: a stray word or descriptor inside an Action array, e.g. \`Action([@Js(\`...\`) Enthusiastic])\`. Action arrays contain ONLY action steps separated by commas — no prose, no adverbs, no labels.
-  RIGHT: \`Action([@Js(\`...\`), @ToAssistant("Saved!")])\`.
-- WRONG: \`state.set('x', 1)\` — \`state\` is not global. Always go through \`ctx.state\`.
-- WRONG: \`Script("id", "ctx.state.set('x', await fetch(...))")\` — no cleanup, no abort check.
-  RIGHT: an async body that checks \`ctx.signal.aborted\` before writing state.
-- WRONG: omitting the id, or reusing the same id for two different scripts.
-  RIGHT: every \`Script(...)\` has a stable, unique id within the response.
-- WRONG: touching \`localStorage\`, \`document.cookie\`, \`fetch\` to a custom URL directly. Side effects belong in the host's tools.
-  RIGHT: \`await ctx.tools.save_pref({ key, value })\`.
-- WRONG: emitting \`Script(...)\` when a plain \`Action([@Set(...), @Run(...)])\` would do.
-  RIGHT: keep the UI declarative; reach for JS only when the behaviour can't be expressed otherwise.
-
-### Final checks before emitting Script / @Js
-1. Did I really need JS for this, or would \`Action([@Set/@Run/@Reset])\` already work?
-2. Are all my \`Script\` ids unique within the response?
-3. Did I list every reactive \`$variable\` the body reads in \`deps\`?
-4. Did I register cleanup for every interval, listener, subscription, observer?
-5. If the body does async work, do I check \`ctx.signal.aborted\` before mutating state?
-6. Did I escape correctly (or use backticks to avoid escapes)?`;
-}
-
-function routingSection(): string {
-  return `## Routing (multi-page navigation)
-Streaming UI Script ships a hash-based router so the LLM can build multi-page
-UIs that synchronise with the URL hash (\`#/path\`). Browser back/forward,
-bookmarks, and direct deep links all work.
-
-### Surfaces
-1. \`Routes(items, default?)\` — outlet that picks the matching \`Route\` and renders only that page. \`items\` is an array of \`Route(path, content)\` entries; \`default\` (optional) is the path of the fallback Route when nothing matches. First match wins, so order the items from most-specific to least.
-2. \`Route(path, content)\` — declares one page. \`path\` supports:
-   - Literal segments — \`"/"\`, \`"/about"\`, \`"/settings/profile"\`.
-   - Parameter segments — \`"/users/:id"\`, \`"/teams/:teamId/members/:memberId"\`. Inside the page's content, read the captured value via the \`params\` loop variable (\`params.id\`, \`params.teamId\`).
-   - Trailing wildcard — \`"/docs/*"\` matches any path under \`/docs/\`. The remainder lands in \`params._\`.
-   - Pure wildcard \`"*"\` — matches anything. Use this for a 404 fallback at the END of the items list.
-3. \`NavLink(label, to, variant?, exact?, icon?)\` — anchor that navigates on click. Reflects \`data-active="true"\` automatically when the current path starts with \`to\` (set \`exact=true\` for strict equality, e.g. for a "/" home link that must not match every other page).
-4. \`@Navigate("/path")\` — action step for programmatic navigation. Use inside \`Action([...])\` from any button, follow-up, or \`@Js\` handler.
-
-### Reactive surface
-- \`$route\` — reactive state holding the current path string (\`"/"\`, \`"/about"\`, …). Read it anywhere; **never declare it yourself** (the runtime owns the value).
-- \`params\` — loop variable bound only inside the matched Route's content. Always an object: \`{}\` for parameter-less routes, \`{id: "42"}\` for \`/users/:id\` matching \`/users/42\`. Outside the matched Route's content, \`params\` is undefined.
-
-### Canonical layout
-\`\`\`
-root = Stack([nav, main])
-nav = Stack([
-  NavLink("Home",     "/",         "ghost", true),
-  NavLink("Dashboard","/dashboard","ghost"),
-  NavLink("Settings", "/settings", "ghost")
-], "row", "s")
-main = Routes([
-  Route("/",           homePage),
-  Route("/dashboard",  dashboardPage),
-  Route("/users/:id",  userPage),
-  Route("/settings/*", settingsArea),
-  Route("*",           notFoundPage)
-], "/")
-
-homePage      = Card([CardHeader("Welcome", "Pick a section from the nav above.")])
-dashboardPage = Card([CardHeader("Dashboard"), TextContent("KPIs and charts go here.")])
-userPage      = Card([
-  CardHeader("User " + params.id, "Profile detail"),
-  Buttons([
-    Button("Edit", Action([@Navigate("/users/" + params.id + "/edit")]), "primary"),
-    Button("Back", Action([@Navigate("/dashboard")]), "ghost")
-  ])
-])
-settingsArea  = Card([CardHeader("Settings"), TextContent("Section: " + params._)])
-notFoundPage  = Callout("warning", "Not found", "We couldn't find " + $route + ".")
-\`\`\`
-
-### Patterns
-- **Active section in a sidebar.** Use \`NavLink\` with \`exact=true\` for the root page and \`exact=false\` (the default) for nested sections so a child path like \`/settings/profile\` still highlights the parent "Settings" link.
-- **Tabs as routes.** Replace \`Tabs([...])\` with \`Routes([...])\` when you want each tab to be deep-linkable. \`Routes\` re-renders only the active page, just like \`Tabs\` does for panels.
-- **Programmatic navigation after a mutation.**
-  \`\`\`
-  saveBtn = Button("Save", Action([@Run(saveMutation), @Navigate("/dashboard"), @ToAssistant("Saved.")]))
-  \`\`\`
-- **Driving a Query from \`params\`.** Compose the query args from \`params\`:
-  \`\`\`
-  userData = Query("get_user", {id: params.id}, {name: "", email: ""})
-  userPage = Card([CardHeader(userData.name, userData.email)])
-  \`\`\`
-- **Reacting to the path in any expression.** \`$route\` is reactive, so you can branch on it outside of \`Routes\` (e.g. show a global banner only on certain paths):
-  \`\`\`
-  banner = $route == "/onboarding" ? Callout("info", "Welcome", "Let's get you set up.") : null
-  \`\`\`
-
-### Common mistakes
-- **Declaring \`$route = "..."\` yourself.** The runtime owns \`$route\`; assignments to it are pointless because the router overwrites the value on the next hashchange.
-- **Putting \`Routes\` deep inside a conditional that hides the navigation.** Render the nav once at the top of \`root\` so it stays visible across all routes.
-- **Forgetting the wildcard.** Without \`Route("*", …)\` (or the \`default\` argument), an unknown URL renders an empty outlet.
-- **Reading \`params\` outside the matched Route.** \`params\` is a loop variable scoped to the matched content, just like \`@Each\`'s var.
-- **Using a regular \`Link(...)\` with \`href="#/path"\`.** That works but doesn't reflect the active state. Prefer \`NavLink\` for in-app navigation; reserve \`Link\` for external URLs.`;
-}
-
-function themingSection(): string {
-  return `## In-script theming
-The runtime exposes \`Theme({...})\` — a meta-construct that writes theme
-tokens to the host element as CSS custom properties on top of the base
-theme. Use it to brand a single response (GitHub blue, Stripe purple,
-Apple system font, IONOS navy, …) without changing the host configuration.
-
-### Usage
-Assign the call to a top-level binding called \`theme\` (the runtime looks for that name) **before** defining \`root\`:
-
-\`\`\`
-theme = Theme({
-  colorPrimary:       "#0969da",
-  colorPrimaryHover:  "#0860c4",
-  colorAccent:        "#1f6feb",
-  colorBg:            "#ffffff",
-  colorText:          "#1f2328",
-  colorTextMuted:     "#656d76",
-  colorBorder:        "#d0d7de",
-  fontFamily:         "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-  fontFamilyHeading:  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-  radiusButton:       "6px",
-  radiusInput:        "6px",
-  borderWidth:        "1px",
-  buttonFontWeight:   "500"
-})
-root = Stack([...])
-\`\`\`
-
-### Tokens by domain
-- **Surface** — \`colorBg\`, \`colorBgSubtle\`, \`colorSurface\`, \`colorSurfaceMuted\`, \`colorBorder\`, \`colorBorderSubtle\`, \`colorText\`, \`colorTextMuted\`.
-- **Brand** — \`colorPrimary\`, \`colorPrimaryHover\`, \`colorPrimaryText\`, \`colorAccent\`, \`colorAccentHover\`, \`colorAccentText\`, \`colorFocusRing\`, semantic \`colorSuccess\` / \`colorWarning\` / \`colorDanger\` / \`colorInfo\`.
-- **Typography** — \`fontFamily\`, \`fontFamilyHeading\`, \`fontFamilyMono\`, \`fontSizeBase\` (root), \`fontSizeSm\`, \`fontSizeLg\`, \`fontSizeHeading\`, \`fontSizeTitle\`, \`fontWeightBody\`, \`fontWeightHeading\`, \`lineHeightBody\`, \`lineHeightHeading\`, \`letterSpacingHeading\`, \`headingTextTransform\` (\`"none"\` / \`"uppercase"\`).
-- **Shape** — \`radiusXs\`, \`radiusSm\`, \`radiusMd\`, \`radiusLg\`, \`radiusPill\`, \`radiusButton\`, \`radiusInput\`, \`borderWidth\`, \`shadowSm\`, \`shadowMd\`, \`shadowLg\`.
-- **Spacing** — \`spacingXs\`, \`spacingS\`, \`spacingM\`, \`spacingL\`, \`spacingXl\`.
-- **Buttons** — \`buttonFontWeight\`, \`buttonTextTransform\`, \`buttonLetterSpacing\`, \`buttonPaddingY\`, \`buttonPaddingX\`.
-- **Motion** — \`transitionDuration\`.
-- **Charts** — \`chart1\` … \`chart6\`.
-
-Values are CSS strings (\`"#0969da"\`, \`"6px"\`, \`"'Inter', sans-serif"\`, \`"600"\`). Unknown keys are silently ignored so typos can't break the page.
-
-### Brand recipes
-- **GitHub** — sans-serif \`-apple-system\` stack, blue \`#0969da\` primary, gray-on-white surfaces, 6px radii, weight 500 buttons.
-- **Apple** — SF Pro Display heading, large titles, 14px radii on buttons, very light borders, generous spacing.
-- **Stripe** — Sohne / Inter stack, indigo \`#635bff\` primary, 10px button radius, weight 600 buttons.
-- **IONOS** — Inter stack, navy \`#003580\` primary, cyan \`#0095d6\` accent, 4px button radius, dense spacing.
-
-### When to use it
-- The user explicitly asks for a brand or product feel ("make it look like Linear", "use our company colors").
-- A demo response should sit on a non-default brand surface.
-- A single message wants to ship with a different palette than the rest of the chat.
-
-### When NOT to use it
-- Setting only the response's own card border or text color — that belongs on the individual component.
-- Toggling between light / dark — that is the host's job (\`<streaming-ui-script theme="dark">\`).
-- Sneaking a third-party stylesheet in — \`Theme(...)\` only writes CSS variables, never raw CSS.`;
-}
-
-function inlineModeSection(): string {
-  return `## Inline mode
-You may answer questions in plain text. When you do, wrap any UI you produce in a fenced \`\`\`streaming-ui-script block. Otherwise output Streaming UI Script directly.`;
-}
-
-function editModeSection(): string {
-  return `## Edit mode
-When the user asks for an incremental change, output ONLY the statements that need to change (additions, replacements, removals). Do not re-emit the whole UI. To remove a statement, write \`name = null\`.`;
-}
-
-function toolsListSection(tools: ReadonlyArray<ToolSpec>): string {
-  const lines: string[] = ["## Tools"];
-  for (const tool of tools) {
-    const kind = tool.kind ?? "Query";
-    const argsLine = tool.argsExample ? `  args: ${JSON.stringify(tool.argsExample)}` : "  args: {}";
-    lines.push(`- ${tool.name} (${kind}) — ${tool.description}\n${argsLine}`);
+  if (iter.length > 0) {
+    lines.push("### Iteration helpers");
+    for (const entry of iter) lines.push(formatBuiltinEntry(entry));
   }
   return lines.join("\n");
+}
+
+function formatBuiltinEntry(entry: BuiltinEntry): string {
+  return `- \`${entry.signature}\` — ${entry.description}`;
 }
 
 function examplesSection(title: string, examples: ReadonlyArray<string>): string {
@@ -1746,76 +1550,19 @@ function rulesSection(rules: ReadonlyArray<string>): string {
   return lines.join("\n");
 }
 
-function streamingSection(rootComponent: string): string {
-  return `## Hoisting & Streaming (CRITICAL)
-Streaming UI Script supports hoisting: a reference can be used BEFORE it is defined. The renderer re-parses the program on every streamed chunk and silently treats unresolved references as empty, so a partially-streamed response renders progressively without flashing errors — provided you write statements in the right order.
-
-**Required statement order for streaming-friendly output:**
-1. \`root = ${rootComponent}([...])\` — emit this FIRST so the UI shell appears immediately, even before its children stream in.
-2. Container/component definitions — fill in the layout next (Cards, Sections, Tabs, Forms, Tables, Charts, etc.).
-3. Leaf data last — strings, numbers, arrays of values, Series payloads, Col data, FollowUpItem labels, etc.
-
-**Streaming rules — follow strictly:**
-- Always reference children by name from the root (\`root = Stack([hero, body, footer])\`) instead of inlining everything in one giant expression. Inline trees only stabilise after the closing bracket streams in, but named references render the parent shell immediately and let each child appear as its line completes.
-- Define one reference per FormControl, TabItem, AccordionItem, Series, and Col. Bundling many fields inside a single literal array delays rendering until the entire array has streamed.
-- Place large data values (long arrays, big strings, base64, generated tables) on their own trailing lines so they appear last and never block the visible structure.
-- Never split a single statement across multiple lines unless it sits inside an unmatched bracket — the parser only commits on a complete line, so half-finished lines stay invisible until they finish.
-- Do not introduce trailing commas, dangling operators, or open brackets you don't close on the same line — these will keep the chunk un-parseable until the next chunk arrives.
-- Skip narration, retries, or "fixing" earlier lines mid-stream. Treat the response as append-only.
-
-A correctly-ordered response renders top-down: the shell appears first, sections fill in next, and the leaf data lands last — without any flash of error text in between.`;
-}
-
-function closingSection(): string {
-  return `## Output rules
-- Output ONLY Streaming UI Script lines (or a fenced \`\`\`streaming-ui-script block when inline mode is enabled).
-- Always start with \`root = ...\` on the very first line.
-- Prefer many small, named statements over deeply nested inline expressions — small statements stream in one at a time and render as soon as they complete.
-- Order statements top-down: \`root\` first, then the components it references, then leaf data values last.
-- **Reach for pattern composites** (\`Hero\`, \`Cover\`, \`PageHeader\`, \`SectionHeader\`, \`Stats\`, \`Stats\`, \`Toolbar\`, \`FeatureGrid\`, \`MediaCard\`, \`Tile\`, \`Timeline\`, \`KanbanBoard\`, \`EmptyState\`, \`ProfileCard\`, \`PersonChip\`, \`Testimonial\`, \`Quote\`, \`Banner\`, \`Notification\`, \`Comment\`, \`ChatBubble\`, \`DescriptionList\`, \`StatusDot\`, \`Rating\`, \`ProgressRing\`, \`PricingTable\`) before composing equivalent layouts by hand. They render with the right spacing, hierarchy, and tone automatically.
-- **Reach for app-shell composites** (\`AppShell\`, \`Sidebar\`, \`SplitView\`) whenever the response represents a complete product surface — never replicate them with bare \`Stack(row, wrap=true)\`.
-- **Use \`Container\` for marketing/article surfaces.** Wrap the top of \`root\` in \`Container(children, size?)\` (sm/md/lg/xl) so wide screens don't stretch reading content edge-to-edge. \`AppShell\` already takes care of width on dashboards.
-- **Use \`Grid\` for uniform card rows** (KPIs, tiles, features, MediaCards). Reserve \`Stack(direction="row")\` for asymmetric side-by-side content; use \`Spacer\` inside a row Stack to push the next item to the far edge.
-- **Decorate with status.** Every PageHeader gets a status \`Badge\` or \`Tag\` when relevant. Every StatCard/FeatureItem/Banner/Tile gets an icon (Font Awesome name like \`"chart-line"\`). Use \`StatusDot\` for inline health pips.
-- **Use Avatars for people.** Author, assignee, commenter names render as \`Avatar(...)\`, \`PersonChip(...)\` (when the row also needs a role/email), or \`Comment\` / \`ProfileCard\` (which include one). Never plain text.
-- **Use \`SearchBar\` for filter inputs**, \`Note\` for tips, \`Quote\` for inline highlights, and \`Rating\` for star scores. They're more polished than the raw equivalents and signal intent.
-- **Hit the density target** for the page type. Dashboards have 6+ sections; detail pages have 5+; settings pages have 5+. A single Card is not enough for any page-shaped request.
-- **Use \`DescriptionList\` for key/value summaries.** Never stack \`TextContent\` rows in a "Field: value" pattern.
-- Icons are Font Awesome names without the \`fa-\` prefix (e.g. \`"house"\`, \`"chart-line"\`, \`"regular:star"\`, \`"brands:github"\`). The element auto-loads the Font Awesome CDN — never paste emoji into an \`icon\` prop.
-- Do not invent component names that are not in the list above.
-- Only emit \`Script(...)\` / \`@Js(...)\` when behaviour cannot be expressed with \`$variables\` + \`Action([...])\`. Default to the declarative path.
-- Place \`Script(...)\` definitions AFTER the visible UI in your statement order so the shell renders before scripts execute.
-- Prefer backtick-quoted bodies (\`\`...\`\`) for any \`Script\` body longer than one line — they allow real newlines and unescaped double quotes, eliminating the most common parse errors.
-- Every \`Script(...)\` MUST have a string id as the first argument and a body as the second. Never omit the id. Never reuse an id within a single response.
-- Only use \`Routes(...)\`, \`Route(...)\`, \`NavLink(...)\`, and \`@Navigate(...)\` when the response actually needs multiple pages. A single-page UI never needs them.
-- When you do use routing, \`Routes([...])\` MUST be reached from \`root\` (typically \`root = Stack([navBar, mainOutlet])\` where \`mainOutlet = Routes([...])\`).
-- Always include a fallback \`Route("*", notFoundPage)\` (or set the \`default\` argument of \`Routes\`) so unknown paths render a sensible 404 instead of an empty screen.
-- Never declare \`$route\` yourself — the runtime owns it. Read \`$route\` anywhere you need to react to the current path.`;
-}
-
-function finalVerificationSection(rootComponent: string): string {
-  return `## Final verification
-Before finishing, walk your output and verify:
-1. \`root = ${rootComponent}(...)\` is the FIRST line.
-2. Every referenced name is defined somewhere below.
-3. Every defined name (other than \`root\`) is reachable from \`root\` — unreachable definitions render nothing.
-4. Containers reference their children by name; large data arrays are on their own trailing lines.
-5. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.
-6. **Density check.** Count the named sections under \`root\`. Match against
-   the page-type minimum (dashboards 6, detail 5, settings 5, landing 5, list
-   5). If you are short, add a complementary section (related links, recent
-   activity, status, next steps) — never ship a sparse layout.
-7. **Pattern check.** Did you use \`PageHeader\` / \`SectionHeader\` /
-   \`Stats\` / \`Stats\` / \`Toolbar\` / \`SearchBar\` / \`MediaCard\` /
-   \`DescriptionList\` / \`AppShell\` / \`Container\` where they apply, or did
-   you reinvent them with raw \`Stack\` + \`Card\` + \`Input\` + \`Image\`?
-   Prefer the patterns.
-8. **Status & icon check.** Does every \`StatCard\`/\`Tile\`/\`FeatureItem\`/\`Banner\`/\`Notification\`
-   have a Font Awesome \`icon\` (e.g. \`"chart-line"\`, \`"bell"\`, \`"rocket"\`)?
-   Does \`PageHeader\` carry a status \`Badge\`/\`Tag\` when meaningful? Do people
-   render as \`PersonChip\`/\`Avatar\`/\`ProfileCard\`/\`Comment\`?`;
-}
-
-export function describeComponentSpec(spec: ComponentSpec): string {
-  return formatComponentSignature(spec);
+function toolsListSection(tools: ReadonlyArray<ToolSpec>): string {
+  const lines: string[] = [
+    "## Available endpoints",
+    "These endpoints are provided by the host. Fire requests with " +
+    "`http({ url, method, body, headers, ... })` and observe the reactive " +
+    "bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
+  ];
+  for (const tool of tools) {
+    const kind = tool.kind === "Mutation" ? "POST/PUT/PATCH/DELETE" : "GET";
+    const argsLine = tool.argsExample
+      ? `  example body: ${JSON.stringify(tool.argsExample)}`
+      : "  example body: {}";
+    lines.push(`- ${tool.name} (${kind}) — ${tool.description}\n${argsLine}`);
+  }
+  return lines.join("\n");
 }

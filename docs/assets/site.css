@@ -1,5 +1,5 @@
 /* =============================================================================
-   streaming-ui-script docs — design system
+   Aktion docs — design system
 
    Modern documentation chrome inspired by shadcn/ui and openui.com.
 
@@ -153,7 +153,8 @@ a:hover { color: var(--doc-primary-hover); }
 
 img, svg { max-width: 100%; height: auto; display: block; }
 
-::selection { background: var(--doc-primary-soft); color: var(--doc-text); }
+:root[data-doc-theme="dark"] ::selection { background: var(--doc-primary); color: var(--doc-text-inverse); }
+:root[data-doc-theme="light"] ::selection { background: var(--doc-primary); color: var(--doc-text-inverse); }
 
 :focus-visible { outline: 2px solid var(--doc-primary); outline-offset: 2px; }
 
@@ -536,11 +537,16 @@ main pre code {
   font-weight: 400;
 }
 
-/* Copy button (injected by JS) */
+/* Copy button (injected by JS)
+   The button is attached to a non-scrolling wrapper `.code-block-wrap`
+   so it stays pinned to the right edge of the code block no matter how
+   far the contents inside `<pre>` are horizontally scrolled. */
+.code-block-wrap { position: relative; }
+.code-block-wrap > pre { margin: 14px 0 22px; }
 .code-copy {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 16px;
+  right: 16px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -556,8 +562,9 @@ main pre code {
   opacity: 0;
   transform: translateY(-2px);
   transition: opacity var(--doc-transition), background var(--doc-transition), color var(--doc-transition), transform var(--doc-transition);
+  z-index: 2;
 }
-main pre:hover .code-copy,
+.code-block-wrap:hover .code-copy,
 .code-copy:focus-visible { opacity: 1; transform: translateY(0); }
 .code-copy:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
 .code-copy[data-state="copied"] { color: #6ee7b7; background: rgba(16, 185, 129, 0.18); }
@@ -687,7 +694,7 @@ main pre:hover .code-copy,
   border: 1px solid var(--doc-border);
   transition: background 200ms ease;
 }
-.example-output streaming-ui-script { display: block; }
+.example-output aktion-app { display: block; }
 
 .example-panel[data-key="source"] pre {
   margin: 0;

@@ -1,5 +1,5 @@
 /**
- * streaming-ui-script docs runtime.
+ * Aktion docs runtime.
  *
  * Single entry point for every docs page. Handles:
  *   - Top navigation bar (logo, primary tabs, search, theme toggle, GitHub).
@@ -12,11 +12,11 @@
  *   - Existing helpers: live examples, theme picker, playground, wide tables.
  */
 
-const LIB_PATH = new URL("../../dist/streaming-ui-script.js", import.meta.url).href;
+const LIB_PATH = new URL("../../dist/aktion.js", import.meta.url).href;
 
 let importPromise = null;
 function importLibrary() {
-  if (!importPromise) importPromise = import(LIB_PATH);
+  if (!importPromise) importPromise = import(/* @vite-ignore */ LIB_PATH);
   return importPromise;
 }
 
@@ -45,14 +45,14 @@ const NAV_GROUPS = [
     items: [
       { href: "actions.html", label: "Actions" },
       { href: "javascript-interactions.html", label: "JavaScript" },
+      { href: "side-effects.html", label: "Side effects" },
       { href: "routing.html", label: "Routing" },
     ],
   },
   {
     label: "Theming",
     items: [
-      { href: "themes.html", label: "Built-in themes" },
-      { href: "theme-customization.html", label: "Customization" },
+      { href: "themes.html", label: "Themes & customization" },
     ],
   },
   {
@@ -62,7 +62,6 @@ const NAV_GROUPS = [
       { href: "live-examples.html", label: "Live demos" },
       { href: "playground.html", label: "Playground" },
       { href: "chat-bot.html", label: "Chat bot", badge: "AI" },
-      { href: "chat-bot-advanced.html", label: "Chat bot · advanced", badge: "AI" },
     ],
   },
 ];
@@ -70,13 +69,13 @@ const NAV_GROUPS = [
 const PRIMARY_TABS = [
   { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "actions.html", "javascript-interactions.html", "routing.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
-  { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-customization.html"] },
+  { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
   { href: "playground.html",  label: "Playground", matches: ["playground.html"] },
-  { href: "chat-bot.html",    label: "Chat bot",   matches: ["chat-bot.html", "chat-bot-advanced.html"] },
+  { href: "chat-bot.html",    label: "Chat bot",   matches: ["chat-bot.html"] },
 ];
 
-const REPO_URL = "https://github.com/asfand-dev/streaming-ui-script";
+const REPO_URL = "https://github.com/asfand-dev/aktion";
 
 const PAGE_TITLES = NAV_GROUPS.flatMap((g) => g.items).reduce((acc, item) => {
   acc[item.href] = item.label;
@@ -89,16 +88,14 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "language.html": "syntax expressions state queries mutations builtins",
   "components.html": "props library catalog signatures",
-  "actions.html": "action @set @reset @run @toassistant @openurl @navigate @js button click",
+  "actions.html": "action assignment http emit assistant-message navigate _route_ js button click",
   "javascript-interactions.html": "script @js useeffect hooks",
   "routing.html": "routes navlink navigate hash router",
-  "themes.html": "built-in themes light dark neon pastel glass brutalist skyline",
-  "theme-customization.html": "tokens custom theme studio",
+  "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",
   "examples.html": "recipes copy paste snippets",
   "live-examples.html": "demos catalog showcase",
   "playground.html": "editor preview live",
-  "chat-bot.html": "chat bot llm openrouter generate website builder app builder",
-  "chat-bot-advanced.html": "advanced chat bot pipeline intent theme generator brand",
+  "chat-bot.html": "chat bot llm openrouter generate website builder app builder files images upload",
 };
 
 /* ---------------------------------------------------------------------------
@@ -170,7 +167,7 @@ function applyDocTheme(theme) {
     // Pages that own their renderer theme (playground, chat bot) set
     // `data-theme-managed="true"` on each renderer so we don't clobber the
     // user's chosen theme when they toggle the docs chrome light/dark mode.
-    document.querySelectorAll('streaming-ui-script:not([data-theme-managed])').forEach((script) => {
+    document.querySelectorAll('aktion-app:not([data-theme-managed])').forEach((script) => {
       script.setAttribute("theme", theme);
     });
     document.querySelectorAll(".example-output").forEach((output) => {
@@ -240,8 +237,8 @@ function buildTopbar() {
   const brand = el(
     "a",
     { class: "topbar-brand", href: "index.html" },
-    el("span", { class: "topbar-brand-mark", "aria-hidden": "true" }, "S"),
-    el("span", {}, "streaming-ui-script"),
+    el("span", { class: "topbar-brand-mark", "aria-hidden": "true" }, "A"),
+    el("span", {}, "Aktion"),
     el("span", { class: "topbar-version" }, "v0.5"),
   );
 
@@ -467,8 +464,16 @@ function setupCopyButtons() {
   const COPY_SVG = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
   const CHECK_SVG = '<polyline points="20 6 9 17 4 12"></polyline>';
 
+  // We wrap the `pre` in a non-scrolling `.code-block-wrap` and hang the
+  // button on that wrapper. Positioning the button on the wrapper (which
+  // doesn't scroll horizontally) keeps it pinned to the right edge as
+  // the code inside the `pre` is scrolled.
   document.querySelectorAll("main pre").forEach((pre) => {
-    if (pre.querySelector(".code-copy")) return;
+    if (pre.parentElement && pre.parentElement.classList.contains("code-block-wrap")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "code-block-wrap";
+    pre.parentElement.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
     const btn = el(
       "button",
       { class: "code-copy", type: "button", "aria-label": "Copy to clipboard", title: "Copy" },
@@ -492,7 +497,7 @@ function setupCopyButtons() {
         btn.querySelector("span").textContent = "Failed";
       }
     });
-    pre.appendChild(btn);
+    wrap.appendChild(btn);
   });
 }
 
@@ -522,7 +527,7 @@ function setupThemePicker() {
   if (!select) return;
   const apply = () => {
     const value = select.value;
-    document.querySelectorAll("streaming-ui-script").forEach((el) => {
+    document.querySelectorAll("aktion-app").forEach((el) => {
       el.setAttribute("theme", value);
     });
     paintExampleOutputs(value);
@@ -543,7 +548,7 @@ function setupExamples() {
         panels.forEach((p) => p.setAttribute("data-active", p.getAttribute("data-key") === target ? "true" : "false"));
       });
     });
-    const target = example.querySelector("streaming-ui-script");
+    const target = example.querySelector("aktion-app");
     if (target && lang) {
       const text = lang.textContent.trim();
       target.setAttribute("data-source", "");
@@ -777,7 +782,7 @@ function safely(name, fn) {
 function init() {
   applyDocTheme(resolveInitialDocTheme());
 
-  if (!window.location.pathname.includes("chat-bot.html") && !window.location.pathname.includes("chat-bot-advanced.html")) {
+  if (!window.location.pathname.includes("chat-bot.html")) {
     safely("topbar", buildTopbar);
     safely("sidebar", renderSidebar);
     safely("breadcrumb", renderBreadcrumb);

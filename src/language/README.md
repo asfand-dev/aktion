@@ -1,6 +1,6 @@
 # `src/language/` — reusable language-support module
 
-Pure-data description of the Streaming UI Script language, designed so the
+Pure-data description of the Aktion language, designed so the
 same metadata can drive a CodeMirror editor, a Monaco editor, a VS Code
 TextMate / LSP extension, or a CLI linter — without re-deriving the catalog
 or duplicating the grammar.
@@ -11,7 +11,7 @@ import time. Every entry in the spec is a plain JSON-style value.
 ## What's inside
 
 ```ts
-import { getLanguageSpec } from "streaming-ui-script/language";
+import { getLanguageSpec } from "aktion/language";
 
 const spec = getLanguageSpec();
 spec.components     // every built-in component with positional params + enums
@@ -26,7 +26,7 @@ spec.iconAliases    // shortlist of Font Awesome names
 
 Pass a custom `ComponentLibrary` to `getLanguageSpec(library)` and the catalog
 will automatically include any components your host has registered via
-`<streaming-ui-script>.registerComponents([...])`.
+`<aktion-app>.registerComponents([...])`.
 
 ## CodeMirror 6
 
@@ -35,7 +35,7 @@ import { EditorView, basicSetup } from "codemirror";
 import { StreamLanguage, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { autocompletion, snippet } from "@codemirror/autocomplete";
 import { tags } from "@lezer/highlight";
-import { getLanguageSpec } from "streaming-ui-script/language";
+import { getLanguageSpec } from "aktion/language";
 
 const spec = getLanguageSpec();
 
@@ -74,7 +74,7 @@ const completions = autocompletion({
 
 ```ts
 import * as monaco from "monaco-editor";
-import { getLanguageSpec } from "streaming-ui-script/language";
+import { getLanguageSpec } from "aktion/language";
 
 const spec = getLanguageSpec();
 
@@ -112,7 +112,7 @@ monaco.languages.registerCompletionItemProvider(spec.grammar.name, {
 ## VS Code extension
 
 Render the spec to a `language-configuration.json` and a TextMate grammar at
-build time. Re-run on each release of `streaming-ui-script` to stay in sync.
+build time. Re-run on each release of `aktion` to stay in sync.
 
 ## Linting
 

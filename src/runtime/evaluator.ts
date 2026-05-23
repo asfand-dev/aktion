@@ -1,30 +1,46 @@
 /**
- * Evaluator for Streaming UI Script programs.
+ * Evaluator for Aktion programs.
  *
  * The evaluator walks expressions to produce values. Component calls
  * become `ComponentNode` objects that the renderer maps to web components.
- * Expressions that reference `$variables` or queries are wrapped in a
- * `Computation` so that their dependencies can be tracked and re-evaluated
- * when state changes.
+ * Expressions that reference `$variables` are wrapped in a `Computation`
+ * so that their dependencies can be tracked and re-evaluated when state
+ * changes.
  */
 
 import type {
   Expression,
   Program,
-  AssignmentStatement,
+  Statement,
+  ComponentDeclaration,
+  EffectDeclaration,
+  ActionDeclaration,
+  BlockExpr,
+  ObjectProperty,
 } from "../parser/types.js";
 import type { StateStore } from "./state.js";
-import type { QueryRegistry } from "./queries.js";
-import {
-  dataBuiltins,
-  isActionStep,
-  type ActionPayload,
-  type ActionStep,
-  type ThemeNode,
-} from "./builtins.js";
-import { matchRoute, type Router, type RouteParams } from "./router.js";
+import type { HttpRuntime } from "./http.js";
+import { createHttpResource } from "./http.js";
+import type { I18nRuntime } from "./i18n.js";
+import type { ActionDeclRunner } from "./effects.js";
+import { dataBuiltins, type ThemeNode } from "./builtins.js";
+import { matchRoute, type Router } from "./router.js";
 import { findComponent } from "../library/registry.js";
-import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
+import { findPositionalIndex } from "../library/types.js";
+import type { ComponentLibrary } from "../library/types.js";
+import { storage as storageGlobal } from "./storage.js";
+import { consoleNs as consoleGlobal } from "./console.js";
+
+/**
+ * Built-in namespaces injected as top-level identifiers so authors can
+ * reach for them without an explicit declaration. Each value is an
+ * ordinary object — its public methods become `MethodCall` targets
+ * (e.g. `storage.local.get("x")`, `console.warn("…")`).
+ */
+const GLOBAL_NAMESPACES: Record<string, unknown> = {
+  storage: storageGlobal,
+  console: consoleGlobal,
+};
 
 export interface ArgMeta {
   /** Name of the `$variable` if this argument is a direct state reference. */
@@ -33,12 +49,19 @@ export interface ArgMeta {
 
 export interface ComponentNode {
   __kind: "Component";
-  /** Component name as written in Streaming UI Script. */
+  /** Component name as written in Aktion. */
   name: string;
   /** Positional arguments after evaluation. */
   args: unknown[];
   /** Per-position metadata (state ref binding, etc.). */
   argMeta: ArgMeta[];
+  /**
+   * Explicit `key:` override for content-addressed identity (§13). When
+   * present, the renderer uses this value as the suffix of the instance
+   * path instead of the source location — so reordering siblings keeps
+   * per-instance state attached to the right node.
+   */
+  explicitKey?: unknown;
   /** Original AST for debugging/introspection. */
   source?: { line: number; column: number };
 }
@@ -51,123 +74,309 @@ export const isComponentNode = (value: unknown): value is ComponentNode => {
 };
 
 /**
- * Authored macro — `MyUserCard(user) = Card([...])`. Stored on the
- * evaluation context so callers can find and invoke it with positional args.
+ * Lazy node produced when a user-declared `component Foo(p) { ... }` is
+ * called. The renderer expands these per-instance: each instance gets its
+ * own state-alias scope so two `Counter()` calls hold independent `$state`
+ * atoms (§7 — per-instance reactivity).
+ *
+ * The evaluator captures the call arguments + named slots eagerly; the
+ * body itself is evaluated at render-time once the instance key is known.
  */
-export interface MacroDefinition {
-  /** Macro parameter names in declaration order. */
-  params: string[];
-  /** Macro body — evaluated with the parameters bound as loop variables. */
-  expression: Expression;
+export interface UserComponentNode {
+  __kind: "UserComponent";
+  decl: ComponentDeclaration;
+  /** Positional argument values (already evaluated). */
+  positional: unknown[];
+  /** Named argument values (already evaluated), keyed by param/slot name. */
+  named: Record<string, unknown>;
+  /** Optional `key:` override the caller passed for stable instance identity. */
+  explicitKey?: unknown;
+  source?: { line: number; column: number };
 }
+
+export const isUserComponentNode = (value: unknown): value is UserComponentNode => {
+  return Boolean(
+    value && typeof value === "object" &&
+    (value as { __kind?: unknown }).__kind === "UserComponent",
+  );
+};
 
 export interface EvaluationContext {
   state: StateStore;
-  queries: QueryRegistry;
   /** Per-program scope for non-state assignments (refs to other lines). */
   bindings: Map<string, () => unknown>;
-  /**
-   * Raw AST expressions for each top-level identifier. Used by `Routes(...)`
-   * to deferr-evaluate a matched `Route(path, content)`'s content with the
-   * extracted path params injected as a loop variable.
-   */
+  /** Raw AST expressions for each top-level identifier. */
   expressions: Map<string, Expression>;
-  /** Macro definitions — looked up before component renderers in calls. */
-  macros: Map<string, MacroDefinition>;
   /** Set of $variable names accessed during the current evaluation. */
   trackedState: Set<string>;
-  /** Set of query/mutation refs accessed during the current evaluation. */
-  trackedQueries: Set<string>;
-  /** Inline loop variables for `@Each` and `Routes` (`params`). */
+  /**
+   * Inline loop variables for expression `for` / `match`, router param
+   * bindings, lambda parameters, and component declaration parameters.
+   */
   loopVars: Map<string, unknown>;
-  /** Optional router — used to special-case `Routes(...)` and `@Navigate(...)`. */
+  /**
+   * Per-instance state alias scope (§7). When a user-declared component
+   * body declares `$state n = 0`, the renderer pushes an alias frame so
+   * that the StateRef `n` reads/writes the per-instance key (e.g.
+   * `Counter@1:5#0:n`) rather than a shared global atom. The lookup walks
+   * from the top of the stack down — outer frames are still visible when
+   * not overridden.
+   */
+  stateAliases: Array<Map<string, string>>;
+  /** Optional router — exposed to the runtime for `_route_.path` / `params`. */
   router?: Router;
-  /** Memo table for `@Const(expr)` — keyed by a stable expression fingerprint. */
-  constCache?: Map<string, unknown>;
   /** Component library used to resolve trailing named-arg object literals. */
   library?: ComponentLibrary;
+  /** Component declarations from the program (`component Foo() { ... }`). */
+  componentDecls: Map<string, ComponentDeclaration>;
+  /** Effect declarations (`effect [ ...deps ] { ... }`), keyed by auto-generated name. */
+  effectDecls: Map<string, EffectDeclaration>;
+  /**
+   * Stack of per-component-invocation effect collection frames.
+   *
+   * When this stack is non-empty, an `EffectDeclaration` encountered while
+   * walking a block body is appended to the top frame instead of being
+   * registered globally on `effectDecls`. The renderer drains the frame
+   * immediately after `evaluateUserComponent` returns so it can mount the
+   * declarations on a per-instance scope (instead of globally, once per
+   * program).
+   */
+  componentEffectStack: EffectDeclaration[][];
+  /** Action declarations (`action Foo() { ... }`). */
+  actionDecls: Map<string, ActionDeclaration>;
+  /** HTTP runtime (`http({...})` calls + interceptor configuration). */
+  http?: HttpRuntime;
+  /** Aktion 0.5 i18n runtime (`$i18n = i18n({...})` declaration + `t()` builtin). */
+  i18n?: I18nRuntime;
+  /** Aktion 0.5 action runner (`action Foo() optimistic { … }` invocations). */
+  actionRunner?: ActionDeclRunner;
+  /** Notify the host that something changed and a re-render is needed. */
+  notify?: () => void;
+  /**
+   * Optional executor for raw `js{ … }` blocks encountered inside an
+   * inline lambda. When set, evaluating a lambda whose body resolves to
+   * a `JsBlock` payload will invoke this with the captured body so
+   * `Button("Hi", action: () => { js{ alert("Hi") } })` actually runs
+   * the script instead of returning the deferred payload.
+   */
+  jsBlockExecutor?: (body: string, args?: Record<string, unknown>) => unknown;
 }
 
-/** Build a top-level evaluation context for a freshly parsed program. */
+/**
+ * Optional injectables for `createContext` — the host element passes its
+ * runtime singletons (HTTP, i18n, action runner) so endpoint use sites and
+ * action calls can resolve against them.
+ */
+export interface CreateContextOptions {
+  router?: Router;
+  library?: ComponentLibrary;
+  http?: HttpRuntime;
+  i18n?: I18nRuntime;
+  actionRunner?: ActionDeclRunner;
+  notify?: () => void;
+  jsBlockExecutor?: (body: string, args?: Record<string, unknown>) => unknown;
+}
+
+/**
+ * Build a top-level evaluation context for a freshly parsed program.
+ */
 export function createContext(
   state: StateStore,
-  queries: QueryRegistry,
-  router?: Router,
-  library?: ComponentLibrary,
+  options: CreateContextOptions = {},
 ): EvaluationContext {
   return {
     state,
-    queries,
     bindings: new Map(),
     expressions: new Map(),
-    macros: new Map(),
     trackedState: new Set(),
-    trackedQueries: new Set(),
     loopVars: new Map(),
-    router,
-    library,
+    stateAliases: [],
+    router: options.router,
+    library: options.library,
+    componentDecls: new Map(),
+    effectDecls: new Map(),
+    componentEffectStack: [],
+    actionDecls: new Map(),
+    http: options.http,
+    i18n: options.i18n,
+    actionRunner: options.actionRunner,
+    notify: options.notify,
+    jsBlockExecutor: options.jsBlockExecutor,
   };
 }
 
 /**
- * Plan a program: declare state variables, register queries/mutations, and
+ * Build the `args` map handed to a `js{ … }` body so authors can
+ * reference lambda parameters via `ctx.args.<name>`.
+ */
+function paramArgs(
+  params: ReadonlyArray<{ name: string }>,
+  callArgs: ReadonlyArray<unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (let i = 0; i < params.length; i += 1) {
+    out[params[i]!.name] = callArgs[i];
+  }
+  return out;
+}
+
+/**
+ * Resolve a `$name` reference through the active per-instance alias
+ * stack. Returns the topmost binding or `name` itself when no alias is
+ * present. Exported so the action / effect runners can resolve writes
+ * the same way the evaluator resolves reads.
+ */
+export function resolveStateAlias(ctx: EvaluationContext, name: string): string {
+  for (let i = ctx.stateAliases.length - 1; i >= 0; i -= 1) {
+    const frame = ctx.stateAliases[i]!;
+    const aliased = frame.get(name);
+    if (aliased !== undefined) return aliased;
+  }
+  return name;
+}
+
+/**
+ * Plan a program: declare state variables, register HTTP endpoints, and
  * build lazy bindings for every assignment so forward references resolve.
  */
 export function planProgram(program: Program, ctx: EvaluationContext): void {
-  const seen = new Map<string, AssignmentStatement>();
+  // First pass: declare state defaults so `$vars` resolve immediately.
+  // Every `$x = expr` declares a single-tier reactive atom; the initial
+  // value is computed via best-effort literal evaluation so partial
+  // streams don't need a full context yet.
   for (const stmt of program.statements) {
-    seen.set((stmt.isState ? "$" : "") + stmt.identifier, stmt);
-  }
-
-  // First pass: declare state defaults so $vars resolve immediately.
-  for (const stmt of program.statements) {
-    if (stmt.isState) {
+    if (stmt.kind === "Assignment" && stmt.isState) {
       const initial = evaluateLiteral(stmt.expression);
-      if (stmt.isPersistent) {
-        ctx.state.declarePersistent(stmt.identifier, initial);
-      } else {
-        ctx.state.declare(stmt.identifier, initial);
-      }
+      ctx.state.declare(stmt.identifier, initial);
     }
   }
-
-  // Second pass: register queries/mutations early so refs are valid.
+  // 1.25 pass: state declarations whose RHS is a `http({...})` call need
+  // their resource bag created eagerly so the request fires at program
+  // mount. We re-run those initializers through the full evaluator now
+  // that every state slot has at least a literal default.
   for (const stmt of program.statements) {
-    if (stmt.isState) continue;
-    if (stmt.expression.kind === "Call" && (stmt.expression.callee === "Query" || stmt.expression.callee === "Mutation")) {
-      ctx.queries.register(stmt.identifier, stmt.expression, () => ctx);
-    }
+    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
+    if (stmt.expression.kind !== "Call") continue;
+    if (stmt.expression.callee !== "http") continue;
+    const value = evaluate(stmt.expression, ctx);
+    ctx.state.set(stmt.identifier, value);
   }
 
-  // Third pass: install lazy bindings for non-state assignments. We also
-  // keep the raw AST around (in `ctx.expressions`) so `Routes(...)` can find
-  // a `Route(path, content)` referenced by name and re-evaluate its content
-  // with path params injected as a loop variable.
+  // 1.5 pass: resolve `Http({...})` / `i18n({...})` setup helpers so any
+  // subsequent http() calls observe the configured defaults.
   for (const stmt of program.statements) {
-    if (stmt.isState) continue;
-    if (stmt.params) {
-      // Macro definition — registered separately and NOT installed as a
-      // binding (calling the bare name would otherwise yield the body
-      // evaluated with the parameters unbound).
-      ctx.macros.set(stmt.identifier, {
-        params: stmt.params,
-        expression: stmt.expression,
-      });
+    if (stmt.kind !== "Assignment") continue;
+    const expr = stmt.expression;
+    if (expr.kind !== "Call") continue;
+    if ((stmt.identifier === "http" || stmt.identifier === "$http") && expr.callee === "Http") {
+      evaluate(expr, ctx);
       continue;
     }
-    ctx.expressions.set(stmt.identifier, stmt.expression);
-    if (
-      stmt.expression.kind === "Call" &&
-      (stmt.expression.callee === "Query" || stmt.expression.callee === "Mutation")
-    ) {
-      const id = stmt.identifier;
-      ctx.bindings.set(id, () => {
-        ctx.trackedQueries.add(id);
-        return ctx.queries.valueOf(id);
-      });
-    } else {
-      ctx.bindings.set(stmt.identifier, () => evaluate(stmt.expression, ctx));
+    if ((stmt.identifier === "i18n" || stmt.identifier === "$i18n") && expr.callee === "i18n") {
+      evaluate(expr, ctx);
+      continue;
     }
+  }
+
+  // Second pass: install bindings for components, helpers, and any other
+  // non-state declarations.
+  for (const stmt of program.statements) {
+    installStatementBinding(stmt, ctx);
+  }
+}
+
+function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {
+  switch (stmt.kind) {
+    case "ComponentDeclaration":
+      ctx.componentDecls.set(stmt.name, stmt);
+      return;
+    case "EffectDeclaration":
+      ctx.effectDecls.set(stmt.name, stmt);
+      return;
+    case "ActionDeclaration":
+      ctx.actionDecls.set(stmt.name, stmt);
+      return;
+    case "Emit":
+    case "Cleanup":
+    case "Await":
+    case "Return":
+    case "ExpressionStatement":
+      return;
+    case "Assignment": {
+      if (stmt.isState) return;
+      ctx.expressions.set(stmt.identifier, stmt.expression);
+      const expr = stmt.expression;
+      ctx.bindings.set(stmt.identifier, () => evaluate(expr, ctx));
+      return;
+    }
+  }
+}
+
+/**
+ * Evaluate a `_router_({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
+ * call. The argument MUST be an object literal whose keys are route patterns
+ * (string literals) or the `default` keyword (wildcard fallback). Values are
+ * arbitrary expressions, evaluated lazily — only the matching arm runs, and
+ * `params` is bound as a loop variable inside that body so authors can read
+ * captured path segments (`:id`, `*` → `params._`).
+ *
+ * The return value is the matched arm's evaluated expression, or `null` when
+ * no arm matches and no `default` is provided. The host's `Router` instance
+ * is informed via `setActiveMatch(...)` so `NavLink` can highlight the
+ * currently-active route.
+ */
+function evaluateRouterCall(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const arg = args[0];
+  if (!arg || arg.kind !== "Object") {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[aktion] _router_ expects an object literal of route arms (e.g. \`_router_({ "/": Home(), default: NotFound() })\`).`,
+      loc,
+    );
+    ctx.router?.setActiveMatch(null, {});
+    return null;
+  }
+  const path = readRoutePath(ctx);
+  let wildcardArm: ObjectProperty | null = null;
+  for (const prop of arg.properties) {
+    if (prop.spread) continue;
+    const pattern = prop.key;
+    if (pattern === "default" || pattern === "*") {
+      // Hold the wildcard until every concrete pattern has failed.
+      wildcardArm = prop;
+      continue;
+    }
+    const result = matchRoute(pattern, path);
+    if (!result.matched) continue;
+    return runRouterArm(pattern, prop.value, result.params, ctx);
+  }
+  if (wildcardArm) {
+    return runRouterArm(null, wildcardArm.value, {}, ctx);
+  }
+  ctx.router?.setActiveMatch(null, {});
+  return null;
+}
+
+function runRouterArm(
+  pattern: string | null,
+  body: Expression,
+  params: Record<string, string>,
+  ctx: EvaluationContext,
+): unknown {
+  const prev = ctx.loopVars.get("params");
+  const had = ctx.loopVars.has("params");
+  ctx.loopVars.set("params", params);
+  try {
+    const value = evaluate(body, ctx);
+    ctx.router?.setActiveMatch(pattern, params);
+    return value;
+  } finally {
+    if (had) ctx.loopVars.set("params", prev);
+    else ctx.loopVars.delete("params");
   }
 }
 
@@ -210,16 +419,38 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     case "Literal": return expr.value;
     case "Identifier": {
       if (ctx.loopVars.has(expr.name)) return ctx.loopVars.get(expr.name);
+      // `_route_` is the canonical handle for the router's reactive
+      // surface. Reading it subscribes to the internal `route` state slot
+      // so the renderer re-runs when the URL hash changes, and the
+      // returned object exposes `path`, `params`, `pattern`, `query`,
+      // plus an imperative `navigate(path)` method that delegates to the
+      // host router.
+      if (expr.name === "_route_") {
+        ctx.trackedState.add("route");
+        return ctx.router ? buildRouteState(ctx.router) : { path: "/", params: {}, pattern: null, query: {}, navigate() {}, toString() { return "/"; } };
+      }
       const binding = ctx.bindings.get(expr.name);
       if (binding) return binding();
+      // A bare `myAction` reference (e.g. `Button("Save", save)`) resolves
+      // to a callable wrapping the action runner. Without this branch the
+      // identifier returns null and the click silently no-ops.
+      const action = ctx.actionDecls.get(expr.name);
+      if (action) return makeActionCallable(action, ctx);
+      // Built-in namespace globals (`storage`, `console`). Returned as
+      // ordinary objects so member/method-call expressions resolve
+      // against them directly via the standard `memberAccess` path.
+      if (Object.prototype.hasOwnProperty.call(GLOBAL_NAMESPACES, expr.name)) {
+        return GLOBAL_NAMESPACES[expr.name];
+      }
       // Unknown identifier — render as null so the parser is forgiving.
       return null;
     }
     case "StateRef": {
-      // Track via the same name regardless of persistence — the state store
-      // owns both flavours under a single namespace.
-      ctx.trackedState.add(expr.name);
-      return ctx.state.get(expr.name);
+      // Resolve through the per-instance alias stack so `$n` inside a
+      // component body picks the right per-instance slot.
+      const resolved = resolveStateAlias(ctx, expr.name);
+      ctx.trackedState.add(resolved);
+      return ctx.state.get(resolved);
     }
     case "Array": {
       const out: unknown[] = [];
@@ -275,6 +506,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       return test ? evaluate(expr.consequent, ctx) : evaluate(expr.alternate, ctx);
     }
     case "Call": return evaluateComponentCall(expr.callee, expr.arguments, ctx, expr.loc);
+    case "MethodCall": return evaluateMethodCall(expr, ctx);
     case "BuiltinCall": return evaluateBuiltinCall(expr.name, expr.arguments, ctx);
     case "Template": return evaluateTemplate(expr.quasis, expr.expressions, ctx);
     case "Spread": {
@@ -283,8 +515,259 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // semantics, so we only reach here for malformed input.
       return evaluate(expr.argument, ctx);
     }
+    case "If": return evaluateIf(expr, ctx);
+    case "Match": return evaluateMatch(expr, ctx);
+    case "For": return evaluateFor(expr, ctx);
+    case "Block": return evaluateBlock(expr, ctx);
+    case "Lambda": {
+      // Lambdas evaluate to a callable JS function. We capture the current
+      // context AND a snapshot of the active per-instance state-alias
+      // stack so that closures created inside a `component` body still
+      // resolve `$n` to the right per-instance slot when invoked later
+      // (the render pass that built them already popped the alias frame).
+      const lambdaParams = expr.params;
+      const lambdaBody = expr.body;
+      const capturedAliases: Array<Map<string, string>> = ctx.stateAliases.map(
+        (frame) => new Map(frame),
+      );
+      // Also capture the loopVars present at lambda-creation time so a
+      // handler emitted inside `for item in items { Button(item.name, () => del(item.id)) }`
+      // can read `item` at click time even though the loop variable is
+      // long gone by then.
+      const capturedLoopVars = new Map(ctx.loopVars);
+      return (...callArgs: unknown[]) => {
+        const restoreLoopVars = new Map(ctx.loopVars);
+        const restoreAliases = ctx.stateAliases.slice();
+        // Restore the captured loop vars + alias frames for the body.
+        ctx.loopVars.clear();
+        for (const [k, v] of capturedLoopVars) ctx.loopVars.set(k, v);
+        ctx.stateAliases.length = 0;
+        for (const frame of capturedAliases) ctx.stateAliases.push(frame);
+
+        const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
+        for (let i = 0; i < lambdaParams.length; i += 1) {
+          const param = lambdaParams[i]!;
+          let value: unknown = callArgs[i];
+          if (value === undefined && param.defaultValue) {
+            value = evaluate(param.defaultValue, ctx);
+          }
+          restore.push({
+            name: param.name,
+            had: ctx.loopVars.has(param.name),
+            prev: ctx.loopVars.get(param.name),
+          });
+          ctx.loopVars.set(param.name, value);
+        }
+        try {
+          if (lambdaBody.kind === "JsBlock") {
+            const body = (lambdaBody as { body: string }).body;
+            // Execute eagerly when the host has wired a runner — this is
+            // what lets `Button("…", action: () => { js{ … } })` run the
+            // script on click. When no runner is available we keep the
+            // legacy deferred payload so the action / effect machinery
+            // can still process it later.
+            if (ctx.jsBlockExecutor) {
+              return ctx.jsBlockExecutor(body, paramArgs(lambdaParams, callArgs));
+            }
+            return { __kind: "JsBlock", body };
+          }
+          const result = evaluate(lambdaBody as Expression, ctx);
+          // The body might be a `Block` that ends in a `js{}` expression
+          // (`() => { js{ … } }`) — when that returns a deferred payload
+          // and we have an executor, run it for its side effects.
+          if (
+            ctx.jsBlockExecutor &&
+            result && typeof result === "object" &&
+            (result as { __kind?: unknown }).__kind === "JsBlock"
+          ) {
+            const body = (result as { body: string }).body;
+            return ctx.jsBlockExecutor(body, paramArgs(lambdaParams, callArgs));
+          }
+          return result;
+        } finally {
+          for (const slot of restore) {
+            if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
+            else ctx.loopVars.delete(slot.name);
+          }
+          // Fully restore the caller's scope — drop our temporary
+          // captured-frame substitution and put back whatever was there.
+          ctx.loopVars.clear();
+          for (const [k, v] of restoreLoopVars) ctx.loopVars.set(k, v);
+          ctx.stateAliases.length = 0;
+          for (const frame of restoreAliases) ctx.stateAliases.push(frame);
+        }
+      };
+    }
+    case "JsBlock": {
+      return { __kind: "JsBlock", body: expr.body };
+    }
+    case "Bind": {
+      // `bind:prop: target` desugars to a special `BindNode` that the
+      // renderer recognises and wires up two-way (read + change handler).
+      return {
+        __kind: "Bind",
+        prop: expr.prop,
+        target: evaluate(expr.target, ctx),
+        targetExpr: expr.target,
+      };
+    }
+    case "NamedArg":
+      return evaluate(expr.value, ctx);
     default: return null;
   }
+}
+
+function evaluateIf(expr: { test: Expression; consequent: BlockExpr; alternate?: Expression | BlockExpr }, ctx: EvaluationContext): unknown {
+  if (evaluate(expr.test, ctx)) {
+    return evaluateBlock(expr.consequent, ctx);
+  }
+  if (expr.alternate) {
+    if ((expr.alternate as { kind?: string }).kind === "Block") {
+      return evaluateBlock(expr.alternate as BlockExpr, ctx);
+    }
+    return evaluate(expr.alternate as Expression, ctx);
+  }
+  return null;
+}
+
+function evaluateMatch(
+  expr: { discriminant: Expression; arms: ReadonlyArray<{ pattern: Expression | "_"; body: Expression }> },
+  ctx: EvaluationContext,
+): unknown {
+  const value = evaluate(expr.discriminant, ctx);
+  for (const arm of expr.arms) {
+    if (arm.pattern === "_") {
+      return evaluate(arm.body, ctx);
+    }
+    const patternValue = evaluate(arm.pattern, ctx);
+    if (patternValue === value) {
+      return evaluate(arm.body, ctx);
+    }
+  }
+  return null;
+}
+
+function evaluateFor(
+  expr: {
+    item: string;
+    index?: string;
+    destructure?: ReadonlyArray<string>;
+    iterable: Expression;
+    body: BlockExpr;
+  },
+  ctx: EvaluationContext,
+): unknown {
+  const iterableValue = evaluate(expr.iterable, ctx);
+  if (!Array.isArray(iterableValue)) return [];
+  const out: unknown[] = [];
+  const itemHad = ctx.loopVars.has(expr.item);
+  const itemPrev = ctx.loopVars.get(expr.item);
+  const idxName = expr.index;
+  const idxHad = idxName ? ctx.loopVars.has(idxName) : false;
+  const idxPrev = idxName ? ctx.loopVars.get(idxName) : undefined;
+  const destructure = expr.destructure ?? [];
+  const destructurePrev: Array<{ name: string; had: boolean; value: unknown }> =
+    destructure.map((name) => ({
+      name,
+      had: ctx.loopVars.has(name),
+      value: ctx.loopVars.get(name),
+    }));
+  try {
+    for (let i = 0; i < iterableValue.length; i += 1) {
+      const row = iterableValue[i];
+      ctx.loopVars.set(expr.item, row);
+      if (idxName) ctx.loopVars.set(idxName, i);
+      for (const field of destructure) {
+        const value = row && typeof row === "object"
+          ? (row as Record<string, unknown>)[field]
+          : undefined;
+        ctx.loopVars.set(field, value);
+      }
+      out.push(evaluateBlock(expr.body, ctx));
+    }
+  } finally {
+    if (itemHad) ctx.loopVars.set(expr.item, itemPrev);
+    else ctx.loopVars.delete(expr.item);
+    if (idxName) {
+      if (idxHad) ctx.loopVars.set(idxName, idxPrev);
+      else ctx.loopVars.delete(idxName);
+    }
+    for (const entry of destructurePrev) {
+      if (entry.had) ctx.loopVars.set(entry.name, entry.value);
+      else ctx.loopVars.delete(entry.name);
+    }
+  }
+  return out;
+}
+
+/**
+ * Evaluate a block: run every declaration / statement sequentially and
+ * return the value of the last expression statement (last-expression-wins
+ * per §3.5 of the spec). Statements that don't produce a value (state
+ * declarations, effect declarations, helper bindings, …) are still
+ * executed for their side-effects on `ctx`.
+ */
+function evaluateBlock(block: BlockExpr, ctx: EvaluationContext): unknown {
+  let result: unknown = null;
+  // Clone-restore tracking for any block-local bindings that shadow outer
+  // names (component params, $state declarations, etc.). We only restore
+  // names introduced by THIS block.
+  const introduced: string[] = [];
+  for (const stmt of block.body) {
+    switch (stmt.kind) {
+      case "ExpressionStatement":
+        result = evaluate(stmt.expression, ctx);
+        continue;
+      case "Assignment": {
+        const value = evaluate(stmt.expression, ctx);
+        if (stmt.isState && stmt.identifier) {
+          // `$x = expr` inside a block (lambda body, if/match arm, for body)
+          // writes to the reactive state store, resolving through the
+          // per-instance alias stack so user-component scopes hit the
+          // right slot (§7). Without this branch the assignment would
+          // silently fall into `loopVars` and never trigger a re-render.
+          const target = resolveStateAlias(ctx, stmt.identifier);
+          ctx.state.set(target, value);
+        } else {
+          if (!ctx.loopVars.has(stmt.identifier)) introduced.push(stmt.identifier);
+          ctx.loopVars.set(stmt.identifier, value);
+        }
+        result = value;
+        continue;
+      }
+      case "Return":
+        result = stmt.argument ? evaluate(stmt.argument, ctx) : undefined;
+        return result;
+      case "EffectDeclaration": {
+        // Effects declared inside a `component { … }` body are scoped to
+        // the surrounding component instance — defer them to the top
+        // frame of `componentEffectStack` so the renderer can mount them
+        // against the per-instance key. At the program top level (no
+        // active frame) we still register them on `effectDecls` so the
+        // host's `syncEffects(...)` pass picks them up.
+        const frame = ctx.componentEffectStack[ctx.componentEffectStack.length - 1];
+        if (frame) frame.push(stmt);
+        else installStatementBinding(stmt, ctx);
+        continue;
+      }
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+        // Top-level constructs that may legally appear inside a block;
+        // register them on the context so they're discoverable from
+        // sibling statements without mutating outer scope.
+        installStatementBinding(stmt, ctx);
+        continue;
+      case "Emit":
+      case "Cleanup":
+      case "Await":
+        // These are deferred to the action / effect runners; in a pure
+        // expression block they are no-ops.
+        continue;
+    }
+  }
+  // Restore introduced names so block-local bindings don't leak.
+  for (const name of introduced) ctx.loopVars.delete(name);
+  return result;
 }
 
 function evaluateTemplate(
@@ -351,105 +834,617 @@ function evaluateBinary(
   }
 }
 
+/**
+ * Evaluate an `object.method(args)` invocation. Positional arguments
+ * pass through unchanged; any `NamedArg` entries in the argument list
+ * collapse into a single trailing options object so authors can write
+ * `storage.cookies.set("k", "v", expires: 1, path: "/")` instead of the
+ * more verbose `{...}` literal. Unknown methods resolve to `null`
+ * rather than throwing — keeps streaming scripts forgiving when a
+ * runtime value disappears mid-render.
+ */
+function evaluateMethodCall(
+  expr: {
+    object: Expression;
+    method: string;
+    arguments: Expression[];
+    optional?: boolean;
+  },
+  ctx: EvaluationContext,
+): unknown {
+  const target = evaluate(expr.object, ctx);
+  if (target == null) {
+    return expr.optional ? undefined : null;
+  }
+  const fn = (target as Record<string, unknown>)[expr.method];
+  if (typeof fn !== "function") return null;
+
+  const positional: unknown[] = [];
+  const named: Record<string, unknown> = {};
+  let hasNamed = false;
+  for (const arg of expr.arguments) {
+    if (arg.kind === "NamedArg") {
+      named[arg.name] = evaluate(arg.value, ctx);
+      hasNamed = true;
+      continue;
+    }
+    if (arg.kind === "Spread") {
+      const value = evaluate(arg.argument, ctx);
+      if (Array.isArray(value)) {
+        for (const item of value) positional.push(item);
+      }
+      continue;
+    }
+    positional.push(evaluate(arg, ctx));
+  }
+  const callArgs = hasNamed ? [...positional, named] : positional;
+  try {
+    return (fn as (...a: unknown[]) => unknown).apply(target, callArgs);
+  } catch (err) {
+    // Don't crash the render — surface the failure via the host console
+    // so authors can still see what went wrong.
+    // eslint-disable-next-line no-console
+    console.error(`[aktion] method "${expr.method}" threw`, err);
+    return null;
+  }
+}
+
 function evaluateComponentCall(
   callee: string,
   args: Expression[],
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
-  // Macro call — `MyUserCard(user)` defined as `MyUserCard(user) = …`.
-  // Resolved before component dispatch so authors can shadow component
-  // names with their own macros if they really want to.
-  const macro = ctx.macros.get(callee);
-  if (macro) {
-    return invokeMacro(macro, args, ctx);
+  // `_router_({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
+  // — the routing primitive. Intercept *before* arguments are evaluated so
+  // only the matching arm's body runs (and so `params` is in scope for it).
+  if (callee === "_router_") {
+    return evaluateRouterCall(args, ctx, loc);
+  }
+  // Aktion 0.5 component declarations win over the legacy macro form and the
+  // built-in library. This lets author code override built-in components
+  // by name (e.g. wrapping `Button` with telemetry).
+  const componentDecl = ctx.componentDecls.get(callee);
+  if (componentDecl) {
+    return invokeComponentDecl(componentDecl, args, ctx, loc);
+  }
+  // Aktion 0.5 action declarations: when called as `myAction(arg1, arg2)`, the
+  // call returns a function that the action runner will invoke. Returning
+  // a function (rather than running synchronously) lets `onClick: myAction`
+  // bindings work without the renderer racing the action body.
+  const actionDecl = ctx.actionDecls.get(callee);
+  if (actionDecl) {
+    if (args.length === 0) {
+      // Bare reference (`onClick: save`) — return the callable.
+      return makeActionCallable(actionDecl, ctx);
+    }
+    // Eager invocation (`save(orderId)`) — schedule the action body.
+    const evaluated = args.map((a) =>
+      a.kind === "NamedArg" ? evaluate(a.value, ctx) : evaluate(a, ctx),
+    );
+    return invokeActionDecl(actionDecl, evaluated, ctx);
+  }
+  // `http({ url, method, body, headers, ... })` builtin — returns a
+  // reactive `EndpointResource` bag with `data`, `error`, `loading`,
+  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`.
+  if (callee === "http") {
+    const optsArg = args[0];
+    const opts = optsArg
+      ? (optsArg.kind === "NamedArg" ? evaluate(optsArg.value, ctx) : evaluate(optsArg, ctx))
+      : {};
+    return createHttpResource(opts, ctx);
+  }
+  // Local lambda registered into loopVars (e.g. an in-block helper
+  // `itemRow = (item) => Card(item.title)` evaluated by `evaluateBlock`).
+  const localHelper = ctx.loopVars.get(callee);
+  if (typeof localHelper === "function") {
+    const evaluated = args.map((arg) => evaluate(arg, ctx));
+    return (localHelper as (...a: unknown[]) => unknown)(...evaluated);
+  }
+  // Top-level lambda binding: e.g. `priorityTone = (p) => match p { ... }`.
+  const binding = ctx.bindings.get(callee);
+  if (binding) {
+    const fn = binding();
+    if (typeof fn === "function") {
+      const evaluated = args.map((arg) =>
+        arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
+      );
+      return (fn as (...a: unknown[]) => unknown)(...evaluated);
+    }
   }
 
-  // Special: Query/Mutation evaluation reads the registered runtime value.
-  if (callee === "Query") {
-    return null; // handled by registry
-  }
-  if (callee === "Mutation") {
-    return null; // mutations are run via @Run inside actions
-  }
-  if (callee === "Routes") {
-    return evaluateRoutes(args, ctx, loc);
-  }
   if (callee === "Theme") {
-    // `Theme({colorPrimary: "...", ...})` — capture an arbitrary token map
-    // to be applied on top of the base theme between render cycles. We do
-    // not render anything; the element picks the value up via the `theme`
+    // `Theme({ colors: {...}, radius: {...}, font: {...}, motion: {...},
+    // elevation: {...} })` — capture the structured token map to be
+    // applied on top of the base theme between render cycles. We do not
+    // render anything; the element picks the value up via the `theme`
     // binding (or any other binding) and writes the tokens to its host.
+    //
+    // The keys inside each group are flattened into prefixed CSS tokens
+    // (`colors.primary` → `colorPrimary`, `radius.md` → `radiusMd`, …).
+    // The legacy flat-shape form is rejected — see `collectThemeTokens`.
     const tokensArg = args[0];
-    let tokens: Record<string, string> = {};
-    if (tokensArg) {
-      const evaluated = evaluate(tokensArg, ctx);
-      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
-        for (const [key, value] of Object.entries(evaluated as Record<string, unknown>)) {
-          if (value == null) continue;
-          if (typeof value === "string" && value.trim() !== "") tokens[key] = value;
-          else if (typeof value === "number") tokens[key] = String(value);
-        }
-      }
-    }
+    const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
     const node: ThemeNode = { kind: "Theme", tokens };
     return node;
   }
-  if (callee === "Action") {
-    const stepsArg = args[0];
-    let steps: ActionStep[] = [];
-    if (stepsArg && stepsArg.kind === "Array") {
-      steps = stepsArg.elements
-        .map((e) => evaluate(e, ctx))
-        .filter(isActionStep);
-    } else if (stepsArg) {
-      const value = evaluate(stepsArg, ctx);
-      if (Array.isArray(value)) steps = value.filter(isActionStep);
-      else if (isActionStep(value)) steps = [value];
+  if (callee === "Http") {
+    // `Http({ baseUrl, headers, retry, ... })` — pushes config into the
+    // host runtime and returns a marker so callers can `$http = Http({...})`
+    // without crashing the evaluator. The marker has a stable shape so
+    // host code introspecting `$http` sees the configured defaults.
+    const configArg = args[0];
+    const config = configArg ? evaluate(configArg, ctx) : null;
+    if (config && typeof config === "object" && !Array.isArray(config) && ctx.http) {
+      const cfg = config as Record<string, unknown>;
+      ctx.http.setDefaults({
+        baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl : undefined,
+        headers: cfg.headers && typeof cfg.headers === "object" && !Array.isArray(cfg.headers)
+          ? Object.fromEntries(
+              Object.entries(cfg.headers as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "")]),
+            )
+          : undefined,
+        timeoutMs: typeof cfg.timeout === "number" ? cfg.timeout : undefined,
+        retry: cfg.retry && typeof cfg.retry === "object" && !Array.isArray(cfg.retry)
+          ? {
+              count: Number((cfg.retry as Record<string, unknown>).count ?? 0) || 0,
+              backoff: (cfg.retry as Record<string, unknown>).backoff === "linear"
+                ? "linear"
+                : "exponential",
+            }
+          : undefined,
+        credentials:
+          cfg.credentials === "omit" || cfg.credentials === "same-origin" || cfg.credentials === "include"
+            ? cfg.credentials
+            : undefined,
+      });
     }
-    const payload: ActionPayload = { kind: "Action", steps };
-    return payload;
+    return { __kind: "Http", config };
   }
-
-  let evaluated: unknown[] = args.map((arg) =>
-    arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
-  );
-  evaluated = applyNamedComponentArgs(ctx, callee, args, evaluated);
-  const argMeta: ArgMeta[] = args.map((arg) => (arg.kind === "StateRef" ? { stateRef: arg.name } : {}));
+  if (callee === "i18n") {
+    // `i18n({ locale, messages, fallback })` — push into the host runtime.
+    const configArg = args[0];
+    const config = configArg ? evaluate(configArg, ctx) : null;
+    if (config && typeof config === "object" && !Array.isArray(config) && ctx.i18n) {
+      const cfg = config as Record<string, unknown>;
+      ctx.i18n.configure({
+        locale: typeof cfg.locale === "string" ? cfg.locale : "en",
+        messages:
+          cfg.messages && typeof cfg.messages === "object" && !Array.isArray(cfg.messages)
+            ? (cfg.messages as Record<string, unknown>)
+            : {},
+        fallback: typeof cfg.fallback === "string" ? cfg.fallback : "en",
+        fallbackMessages:
+          cfg.fallbackMessages && typeof cfg.fallbackMessages === "object" && !Array.isArray(cfg.fallbackMessages)
+            ? (cfg.fallbackMessages as Record<string, unknown>)
+            : undefined,
+      });
+    }
+    return { __kind: "I18n", config };
+  }
+  // Final fallthrough: treat the call as a built-in component invocation
+  // and build a `ComponentNode` the renderer will hand to the library. If
+  // the callee resolves against *neither* the library nor any user
+  // declaration we return a synthetic Skeleton node (§2 — anticipatory
+  // skeletons). This handles mid-stream forward references like
+  // `root = App()` that arrive before the `component App() { ... }`
+  // declaration has finished streaming: rather than dumping
+  // `[unknown component: App]` into the DOM, the user sees a Skeleton
+  // until the next render pass resolves the declaration.
+  if (ctx.library && !findComponent(ctx.library, callee)) {
+    if (findComponent(ctx.library, "Skeleton")) {
+      const skeleton: ComponentNode = {
+        __kind: "Component",
+        name: "Skeleton",
+        args: [],
+        argMeta: [],
+        source: loc,
+      };
+      return skeleton;
+    }
+    return null;
+  }
+  // Extract a `key:` named-arg up-front (§13 — content-addressed
+  // identity). The renderer uses it instead of the source location so
+  // reordering siblings keeps per-instance state attached to the right
+  // node. We strip it from the arg list before evaluating positional /
+  // named props so the library never sees it as a prop.
+  let explicitKey: unknown = undefined;
+  const propArgs: Expression[] = [];
+  for (const arg of args) {
+    if (arg.kind === "NamedArg" && arg.name === "key") {
+      explicitKey = evaluate(arg.value, ctx);
+      continue;
+    }
+    propArgs.push(arg);
+  }
+  const { args: evaluated, argMeta } = resolveLibraryCallArgs(ctx, callee, propArgs);
   const node: ComponentNode = {
     __kind: "Component",
     name: callee,
     args: evaluated,
     argMeta,
+    explicitKey,
     source: loc,
   };
   return node;
 }
 
-function invokeMacro(
-  macro: MacroDefinition,
+/**
+ * Aktion 0.5 §19.1 — build the slot-aligned `args` and
+ * `argMeta` arrays for a library-component call. The function handles:
+ *
+ *   - Plain positional arguments — routed to the spec's single
+ *     `positional: true` prop (or slot 0 by default). A direct
+ *     `$variable` reference also lifts to `argMeta.stateRef` so the
+ *     library renderer can wire two-way binding.
+ *   - `NamedArg`s — routed by prop name. If the named arg's value is a
+ *     bare `$variable` (`Input("title", value: $title)`), the slot's
+ *     `argMeta.stateRef` is set too.
+ *   - `Bind` expressions (`bind:value: $title`) — same as NamedArg but
+ *     also marks the slot's `argMeta.stateRef` from the bind target.
+ *   - Extra positional args (multi-positional, §19.1 violation) — fall
+ *     through to the next unnamed slot in declaration order so the
+ *     graceful runtime path keeps rendering while the schema-validator
+ *     warning surfaces the migration hint.
+ *
+ * For user-declared components (no library spec) we fall back to the
+ * simple "evaluate each argument as-is" path so per-instance state lookup
+ * sees raw `propArgs` unchanged.
+ */
+function resolveLibraryCallArgs(
+  ctx: EvaluationContext,
+  callee: string,
+  propArgs: Expression[],
+): { args: unknown[]; argMeta: ArgMeta[] } {
+  const spec = ctx.library ? findComponent(ctx.library, callee) : undefined;
+  if (!spec) {
+    const args = propArgs.map((arg) =>
+      arg.kind === "NamedArg"
+        ? evaluate(arg.value, ctx)
+        : arg.kind === "Bind"
+          ? evaluate(arg.target, ctx)
+          : evaluate(arg, ctx),
+    );
+    const argMeta = propArgs.map<ArgMeta>((arg) =>
+      arg.kind === "StateRef"
+        ? { stateRef: arg.name }
+        : arg.kind === "Bind" && arg.target.kind === "StateRef"
+          ? { stateRef: arg.target.name }
+          : arg.kind === "NamedArg" && arg.value.kind === "StateRef"
+            ? { stateRef: arg.value.name }
+            : {},
+    );
+    return { args, argMeta };
+  }
+
+  const slotByName = new Map<string, number>();
+  spec.props.forEach((p, i) => {
+    slotByName.set(p.name, i);
+    if (p.aliases) {
+      for (const alias of p.aliases) {
+        if (!slotByName.has(alias)) slotByName.set(alias, i);
+      }
+    }
+  });
+  const positionalIndex = findPositionalIndex(spec);
+  const slots: Array<{ value: unknown; meta: ArgMeta; filled: boolean }> = spec.props.map(() => ({
+    value: undefined,
+    meta: {},
+    filled: false,
+  }));
+
+  type PositionalSource = { expr: Expression; value: unknown };
+  const positionals: PositionalSource[] = [];
+
+  for (const arg of propArgs) {
+    if (arg.kind === "NamedArg") {
+      const slot = slotByName.get(arg.name);
+      if (slot === undefined) continue;
+      const value = evaluate(arg.value, ctx);
+      slots[slot]!.value = value;
+      slots[slot]!.filled = true;
+      if (arg.value.kind === "StateRef") {
+        slots[slot]!.meta = { stateRef: arg.value.name };
+      }
+      continue;
+    }
+    if (arg.kind === "Bind") {
+      const slot = slotByName.get(arg.prop);
+      if (slot === undefined) continue;
+      const value = evaluate(arg.target, ctx);
+      slots[slot]!.value = value;
+      slots[slot]!.filled = true;
+      if (arg.target.kind === "StateRef") {
+        slots[slot]!.meta = { stateRef: arg.target.name };
+      }
+      continue;
+    }
+    positionals.push({ expr: arg, value: evaluate(arg, ctx) });
+  }
+
+  // Aktion 0.5 §19.1 — exactly one positional argument max
+  // *at the language layer* (schema validator surfaces an error for any
+  // additional positional). The runtime keeps a graceful render path so
+  // direct-evaluator callers without the validator hooked up still see a
+  // populated node: the first positional lands in the spec's positional
+  // slot; any extras fall through to the next unnamed slots in spec
+  // order. This is the same "best-effort render even on schema error"
+  // contract the rest of the runtime follows.
+  if (positionals.length > 0 && positionalIndex >= 0 && !slots[positionalIndex]!.filled) {
+    const { expr, value } = positionals.shift()!;
+    slots[positionalIndex]!.value = value;
+    slots[positionalIndex]!.filled = true;
+    if (expr.kind === "StateRef") slots[positionalIndex]!.meta = { stateRef: expr.name };
+  }
+  let cursor = 0;
+  for (const { expr, value } of positionals) {
+    while (cursor < spec.props.length && slots[cursor]!.filled) cursor += 1;
+    if (cursor >= spec.props.length) break;
+    slots[cursor]!.value = value;
+    slots[cursor]!.filled = true;
+    if (expr.kind === "StateRef") slots[cursor]!.meta = { stateRef: expr.name };
+    cursor += 1;
+  }
+
+  // Trim trailing empty slots so optional tail props stay omitted from
+  // `node.args` (preserves the legacy contract every library renderer
+  // assumes — undefined-tail slots are not appended).
+  const args: unknown[] = slots.map((s) => s.value);
+  const argMeta: ArgMeta[] = slots.map((s) => s.meta);
+  while (args.length > 0 && args[args.length - 1] === undefined) {
+    args.pop();
+    argMeta.pop();
+  }
+  return { args, argMeta };
+}
+
+/**
+ * Invoke a Aktion 0.5 `component Name(p) { ... }` declaration. Parameters are
+ * bound to the supplied positional / named arguments and the block body
+ * is evaluated; the last expression's value is returned as the rendered
+ * output. State and effect declarations inside the body are *registered
+ * during the block walk*; full per-instance scoping is a follow-up — see
+ * the status file. The current behaviour: the first invocation registers
+ * any `$state`/`effect`/`action` inside as global names, which works for
+ * single-instance components but does not yet isolate multiple instances.
+ */
+function invokeComponentDecl(
+  decl: ComponentDeclaration,
   args: Expression[],
   ctx: EvaluationContext,
+  loc?: { line: number; column: number },
 ): unknown {
-  // Snapshot every existing binding for the macro's parameter names so we
-  // can restore them after evaluation. This mirrors the `@Each` loop-var
-  // scoping rules — the parameters are visible inside the body only.
-  const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
-  for (let i = 0; i < macro.params.length; i += 1) {
-    const name = macro.params[i]!;
-    const argExpr = args[i];
-    const value = argExpr ? evaluate(argExpr, ctx) : undefined;
-    restore.push({ name, had: ctx.loopVars.has(name), prev: ctx.loopVars.get(name) });
-    ctx.loopVars.set(name, value);
+  // Split positional vs. named so we can build the slot-aware UserComponentNode
+  // the renderer expands at render-time. Positional args bind to params in
+  // declaration order; extras become the implicit `children` slot. Named
+  // args bind by name (params first, then slots, then a special `key:`).
+  const positionalExprs: Expression[] = [];
+  const named: Record<string, Expression> = {};
+  let explicitKeyExpr: Expression | undefined;
+  for (const arg of args) {
+    if (arg.kind === "NamedArg") {
+      if (arg.name === "key") {
+        explicitKeyExpr = arg.value;
+      } else {
+        named[arg.name] = arg.value;
+      }
+    } else {
+      positionalExprs.push(arg);
+    }
   }
+
+  // Evaluate args in the caller's scope (params are not in scope yet, so
+  // arg expressions cannot reference the component's own params — which
+  // matches every other language with eager argument evaluation).
+  const positional = positionalExprs.map((expr) =>
+    expr.kind === "Spread" ? evaluate(expr.argument, ctx) : evaluate(expr, ctx),
+  );
+  // Flatten Spread results inline so `Counter(...defaults, key: "a")` works.
+  const flatPositional: unknown[] = [];
+  for (let i = 0; i < positionalExprs.length; i += 1) {
+    const expr = positionalExprs[i]!;
+    const value = positional[i];
+    if (expr.kind === "Spread" && Array.isArray(value)) {
+      for (const item of value) flatPositional.push(item);
+    } else {
+      flatPositional.push(value);
+    }
+  }
+  const evaluatedNamed: Record<string, unknown> = {};
+  for (const [name, expr] of Object.entries(named)) {
+    evaluatedNamed[name] = evaluate(expr, ctx);
+  }
+  const explicitKey = explicitKeyExpr ? evaluate(explicitKeyExpr, ctx) : undefined;
+
+  return {
+    __kind: "UserComponent",
+    decl,
+    positional: flatPositional,
+    named: evaluatedNamed,
+    explicitKey,
+    source: loc,
+  } satisfies UserComponentNode;
+}
+
+/**
+ * Result of `evaluateUserComponent`. `value` is the body's last
+ * expression value (a `ComponentNode`, another `UserComponentNode`, or a
+ * primitive) that the renderer will materialise. `effects` is the list of
+ * `effect [ ...deps ] { … }` declarations discovered inside the body —
+ * the renderer hands them to the host's `EffectRunner` so they mount on
+ * a per-instance scope and tear down when the instance unmounts.
+ */
+export interface EvaluatedUserComponent {
+  value: unknown;
+  effects: ReadonlyArray<EffectDeclaration>;
+}
+
+/**
+ * Evaluate a user-declared component body in a fresh per-instance scope.
+ * Called by the renderer once the stable instance key is known so
+ * `$state` declarations inside the body land in instance-private slots.
+ *
+ * `instanceKey` should be a deterministic string derived from the
+ * render-tree path (and/or the `key:` override) — it becomes the prefix
+ * for every per-instance state atom and effect / action declaration.
+ *
+ * Returns the body's last-expression value (typically a `ComponentNode`
+ * the renderer can hand to the library, or another `UserComponentNode`
+ * to expand recursively) plus any `effect [ ...deps ] { … }` declarations
+ * discovered inside the body that the renderer must mount per-instance.
+ */
+export function evaluateUserComponent(
+  node: UserComponentNode,
+  ctx: EvaluationContext,
+  instanceKey: string,
+): EvaluatedUserComponent {
+  const { decl, positional, named } = node;
+  const restoreLoopVars: Array<{ name: string; had: boolean; prev: unknown }> = [];
+  // Bind component params in declaration order, with defaults for absent
+  // values. Trailing positional becomes `children`.
+  for (let i = 0; i < decl.params.length; i += 1) {
+    const param = decl.params[i]!;
+    let value: unknown;
+    if (named[param.name] !== undefined) {
+      value = named[param.name];
+    } else if (positional[i] !== undefined) {
+      value = positional[i];
+    } else if (param.defaultValue) {
+      // Defaults are evaluated in the component's own scope so they may
+      // reference earlier params (`tone: "info", icon: iconFor(tone)`).
+      value = evaluate(param.defaultValue, ctx);
+    } else {
+      value = undefined;
+    }
+    restoreLoopVars.push({
+      name: param.name,
+      had: ctx.loopVars.has(param.name),
+      prev: ctx.loopVars.get(param.name),
+    });
+    ctx.loopVars.set(param.name, value);
+  }
+  // `children` slot from any extra trailing positional arguments.
+  if (positional.length > decl.params.length) {
+    const extras = positional.slice(decl.params.length);
+    const childrenValue = extras.length === 1 ? extras[0] : extras;
+    restoreLoopVars.push({
+      name: "children",
+      had: ctx.loopVars.has("children"),
+      prev: ctx.loopVars.get("children"),
+    });
+    ctx.loopVars.set("children", childrenValue);
+  }
+  // Named slots: declared as `slots: { name? }` on the component.
+  if (decl.slots.length > 0) {
+    const slotsValue: Record<string, unknown> = {};
+    for (const slotName of decl.slots) {
+      if (named[slotName] !== undefined) {
+        slotsValue[slotName] = named[slotName];
+      }
+    }
+    restoreLoopVars.push({
+      name: "slots",
+      had: ctx.loopVars.has("slots"),
+      prev: ctx.loopVars.get("slots"),
+    });
+    ctx.loopVars.set("slots", slotsValue);
+  }
+
+  // Walk the body once to discover `$x = expr` state assignments and
+  // pre-allocate per-instance aliases for them. We do this *before*
+  // evaluating the body so that forward references inside the body
+  // resolve to the aliased name.
+  const aliasFrame = new Map<string, string>();
+  for (const stmt of decl.body.body) {
+    if (stmt.kind === "Assignment" && stmt.isState) {
+      const instanceName = `${instanceKey}:${stmt.identifier}`;
+      aliasFrame.set(stmt.identifier, instanceName);
+      ctx.state.declare(instanceName, evaluateLiteral(stmt.expression));
+    }
+  }
+  ctx.stateAliases.push(aliasFrame);
+  // Push a frame so `effect [ ...deps ] { … }` declarations encountered
+  // inside this body collect into a per-instance bucket instead of
+  // mutating the global `effectDecls` map.
+  const effectsFrame: EffectDeclaration[] = [];
+  ctx.componentEffectStack.push(effectsFrame);
   try {
-    return evaluate(macro.expression, ctx);
+    const value = evaluateBlock(decl.body, ctx);
+    return { value, effects: effectsFrame };
   } finally {
-    for (const slot of restore) {
+    ctx.componentEffectStack.pop();
+    ctx.stateAliases.pop();
+    for (const slot of restoreLoopVars) {
       if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
       else ctx.loopVars.delete(slot.name);
     }
   }
+}
+
+/**
+ * Build a callable that runs the action body when invoked. The returned
+ * function signature matches a JS event handler (`(event) => Promise<unknown>`)
+ * so `onClick: actionName` bindings dispatch correctly without extra
+ * adapter logic.
+ */
+function makeActionCallable(decl: ActionDeclaration, ctx: EvaluationContext) {
+  // Snapshot the alias frames *at callable-creation time* so per-instance
+  // `$state` slots declared in the surrounding `component` body resolve
+  // correctly when the action fires later (e.g. on click). Without this,
+  // the action would inherit the alias stack as it exists at *call time* —
+  // which is usually empty because component rendering already returned.
+  // The lambda path (§9 `Lambda` in `evaluate`) does the same.
+  const capturedAliases: Array<Map<string, string>> = ctx.stateAliases.map(
+    (frame) => new Map(frame),
+  );
+  return async (...args: unknown[]) => {
+    const restoreAliases = ctx.stateAliases.slice();
+    ctx.stateAliases.length = 0;
+    for (const frame of capturedAliases) ctx.stateAliases.push(frame);
+    try {
+      return await invokeActionDecl(decl, args, ctx);
+    } finally {
+      ctx.stateAliases.length = 0;
+      for (const frame of restoreAliases) ctx.stateAliases.push(frame);
+    }
+  };
+}
+
+/**
+ * Run an action declaration eagerly with `args` already evaluated. The
+ * call returns a Promise so authors can `await save(order.id)` and have
+ * the optimistic-rollback semantics described in §10.
+ */
+function invokeActionDecl(
+  decl: ActionDeclaration,
+  args: unknown[],
+  ctx: EvaluationContext,
+): Promise<unknown> | unknown {
+  if (!ctx.actionRunner) {
+    // No host runtime — fall back to a synchronous best-effort eval that
+    // still binds parameters and runs the body but ignores `await` /
+    // `optimistic`. Better than silently dropping the call.
+    const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
+    for (let i = 0; i < decl.params.length; i += 1) {
+      const param = decl.params[i]!;
+      restore.push({
+        name: param.name,
+        had: ctx.loopVars.has(param.name),
+        prev: ctx.loopVars.get(param.name),
+      });
+      ctx.loopVars.set(param.name, args[i]);
+    }
+    try {
+      return evaluateBlock(decl.body, ctx);
+    } finally {
+      for (const slot of restore) {
+        if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
+        else ctx.loopVars.delete(slot.name);
+      }
+    }
+  }
+  return ctx.actionRunner.run(decl, args, ctx);
 }
 
 function evaluateBuiltinCall(
@@ -457,58 +1452,20 @@ function evaluateBuiltinCall(
   args: Expression[],
   ctx: EvaluationContext,
 ): unknown {
-  // Action step builtins.
-  if (name === "Run") {
-    const ref = args[0];
-    const refName = ref && ref.kind === "Identifier" ? ref.name : "";
-    if (refName) ctx.trackedQueries.add(refName);
-    return { kind: "Run", ref: refName } satisfies ActionStep;
+  // Synthetic assignment-as-expression emitted by the parser for the
+  // single-statement lambda form `() => $x = expr` (and `+=`, `-=`,
+  // `*=`, `/=`, `??=`). Without this handler the assignment would be
+  // silently dropped because no real `@__rui_assign__` builtin exists.
+  if (name === "__rui_assign__") {
+    return evaluateSyntheticAssign(args, ctx);
   }
-  if (name === "Set") {
-    const target = args[0];
-    const valueExpr = args[1];
-    const stateName = target && target.kind === "StateRef" ? target.name : "";
-    const value = valueExpr ? evaluate(valueExpr, ctx) : undefined;
-    return { kind: "Set", name: stateName, value } satisfies ActionStep;
+  if (name === "__rui_postfix__") {
+    return evaluateSyntheticPostfix(args, ctx);
   }
-  if (name === "Reset") {
-    const names = args
-      .map((a) => (a.kind === "StateRef" ? a.name : ""))
-      .filter(Boolean);
-    return { kind: "Reset", names } satisfies ActionStep;
-  }
-  if (name === "ToAssistant") {
-    const message = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
-    return { kind: "ToAssistant", message } satisfies ActionStep;
-  }
-  if (name === "OpenUrl") {
-    const url = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
-    return { kind: "OpenUrl", url } satisfies ActionStep;
-  }
-  if (name === "Navigate") {
-    const path = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
-    return { kind: "Navigate", path } satisfies ActionStep;
-  }
-  if (name === "Js") {
-    // @Js(body, args?) — `body` is a JS string. The optional `args` is an
-    // object evaluated at render time and exposed to the body as `ctx.args`.
-    // Use it to capture per-item values inside @Each loops without resorting
-    // to string concatenation:
-    //   @Each($todos, "t", Button("X", Action([
-    //     @Js("ctx.state.set('todos', (ctx.state.get('todos')||[]).filter(x => x.id !== ctx.args.id))", {id: t.id})
-    //   ])))
-    const code = args[0] ? String(evaluate(args[0], ctx) ?? "") : "";
-    let capturedArgs: Record<string, unknown> = {};
-    if (args[1]) {
-      const evaluated = evaluate(args[1], ctx);
-      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
-        capturedArgs = evaluated as Record<string, unknown>;
-      }
-    }
-    return { kind: "Js", code, args: capturedArgs } satisfies ActionStep;
-  }
-
-  // Iteration builtin uses unevaluated AST.
+  // Fallback iteration builtin (the blessed surface is the expression-form
+  // `for x in xs { ... }`). Kept available because some templates pre-date
+  // the `for` expression and the spec (§28) explicitly preserves these
+  // builtins as fallbacks for one positional-only iteration.
   if (name === "Each") {
     const sourceArg = args[0];
     const varNameArg = args[1];
@@ -569,20 +1526,6 @@ function evaluateBuiltinCall(
     return elseArg ? evaluate(elseArg, ctx) : null;
   }
 
-  // Lazy switch: `@Switch(value, { key1: branch1, key2: branch2 }, default?)`.
-  // The map's branches are evaluated lazily — only the matching branch
-  // (or the default) is computed.
-  if (name === "Const") {
-    const exprArg = args[0];
-    if (!exprArg) return null;
-    const key = expressionKey(exprArg);
-    if (!ctx.constCache) ctx.constCache = new Map();
-    if (ctx.constCache.has(key)) return ctx.constCache.get(key);
-    const value = evaluate(exprArg, ctx);
-    ctx.constCache.set(key, value);
-    return value;
-  }
-
   if (name === "Switch") {
     const valueArg = args[0];
     const casesArg = args[1];
@@ -599,10 +1542,116 @@ function evaluateBuiltinCall(
     return defaultArg ? evaluate(defaultArg, ctx) : null;
   }
 
+  // Aktion 0.5 i18n: `t(key, vars?)` — global translation builtin.
+  if (name === "T" || name === "t") {
+    const keyArg = args[0];
+    const varsArg = args[1];
+    const key = keyArg ? String(evaluate(keyArg, ctx) ?? "") : "";
+    if (!ctx.i18n) return key;
+    let vars: Record<string, unknown> | undefined;
+    if (varsArg) {
+      const evaluated = evaluate(varsArg, ctx);
+      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
+        vars = evaluated as Record<string, unknown>;
+      }
+    }
+    return ctx.i18n.t(key, vars);
+  }
+
+  // Aktion 0.5 i18n: `Locale()` — return the active locale tag. Cheap escape
+  // hatch so authors can pass it to `Format`/`FormatDate` without wiring
+  // a `$session.locale` atom themselves.
+  if (name === "Locale") {
+    return ctx.i18n?.getLocale() ?? "";
+  }
+
   const fn = dataBuiltins[name];
   if (!fn) return null;
   const evaluated = args.map((a) => evaluate(a, ctx));
   return fn(evaluated);
+}
+
+/**
+ * Apply a compound-assignment operator. Used by the synthetic
+ * `__rui_assign__` builtin so single-statement lambdas like
+ * `() => $count += 1` update state through the same code path the
+ * action runner uses.
+ */
+function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
+  switch (op) {
+    case "=": return next;
+    case "+=": {
+      if (typeof current === "string" || typeof next === "string") {
+        return `${current ?? ""}${next ?? ""}`;
+      }
+      return toNumber(current) + toNumber(next);
+    }
+    case "-=": return toNumber(current) - toNumber(next);
+    case "*=": return toNumber(current) * toNumber(next);
+    case "/=": {
+      const divisor = toNumber(next);
+      return divisor === 0 ? 0 : toNumber(current) / divisor;
+    }
+    case "??=": return current == null ? next : current;
+    default: return next;
+  }
+}
+
+/**
+ * Evaluate a `__rui_assign__(target, value, op)` synthetic call. The
+ * target is either a `StateRef` (write to the state store, alias-aware)
+ * or a plain `Identifier` (write to `loopVars` so block-local helpers
+ * still observe the new value).
+ */
+function evaluateSyntheticAssign(
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const [targetExpr, valueExpr, opExpr] = args;
+  if (!targetExpr || !valueExpr) return null;
+  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "=") : "=";
+  const rhs = evaluate(valueExpr, ctx);
+  if (targetExpr.kind === "StateRef") {
+    const target = resolveStateAlias(ctx, targetExpr.name);
+    const current = ctx.state.get(target);
+    const next = applyAssignOp(op, current, rhs);
+    ctx.state.set(target, next);
+    return next;
+  }
+  if (targetExpr.kind === "Identifier") {
+    const current = ctx.loopVars.get(targetExpr.name);
+    const next = applyAssignOp(op, current, rhs);
+    ctx.loopVars.set(targetExpr.name, next);
+    return next;
+  }
+  return rhs;
+}
+
+/**
+ * Evaluate a `__rui_postfix__(target, op)` synthetic call (`++` / `--`).
+ * Returns the value *after* the increment so the expression composes
+ * predictably inside other expressions.
+ */
+function evaluateSyntheticPostfix(
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const [targetExpr, opExpr] = args;
+  if (!targetExpr) return null;
+  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "++") : "++";
+  const delta = op === "--" ? -1 : 1;
+  if (targetExpr.kind === "StateRef") {
+    const target = resolveStateAlias(ctx, targetExpr.name);
+    const next = toNumber(ctx.state.get(target)) + delta;
+    ctx.state.set(target, next);
+    return next;
+  }
+  if (targetExpr.kind === "Identifier") {
+    const next = toNumber(ctx.loopVars.get(targetExpr.name)) + delta;
+    ctx.loopVars.set(targetExpr.name, next);
+    return next;
+  }
+  return null;
 }
 
 /**
@@ -642,137 +1691,10 @@ function parseDestructureNames(spec: string): {
 }
 
 /**
- * Special-case `Routes(items, default?)` evaluation. We inspect the items
- * array AST to find candidate `Route(path, content)` expressions, pick the
- * one whose path matches the router's current path, and re-evaluate that
- * Route's content with `params` injected as a loop variable. The resulting
- * tree is wrapped in a `Routes` component node whose first arg is the
- * matched content (the renderer just renders whatever's inside).
- *
- * Doing the match at evaluation time (rather than at render time) is what
- * lets the matched page's content read `params.id` correctly on the very
- * first frame after a route change — there's no "stale params" tick.
- */
-function evaluateRoutes(
-  args: Expression[],
-  ctx: EvaluationContext,
-  loc?: { line: number; column: number },
-): unknown {
-  const path = readRoutePath(ctx);
-  const defaultExpr = args[1];
-  const itemsExpr = args[0];
-
-  const candidates = collectRouteCandidates(itemsExpr, ctx);
-
-  let matched: { pattern: string; params: RouteParams; contentExpr: Expression | undefined } | null = null;
-
-  for (const candidate of candidates) {
-    const result = matchRoute(candidate.pattern, path);
-    if (result.matched) {
-      matched = { pattern: candidate.pattern, params: result.params, contentExpr: candidate.contentExpr };
-      break;
-    }
-  }
-
-  if (!matched && defaultExpr) {
-    const defaultPath = String(evaluate(defaultExpr, ctx) ?? "");
-    if (defaultPath) {
-      for (const candidate of candidates) {
-        if (candidate.pattern === defaultPath || matchRoute(candidate.pattern, defaultPath).matched) {
-          matched = { pattern: candidate.pattern, params: {}, contentExpr: candidate.contentExpr };
-          break;
-        }
-      }
-    }
-  }
-
-  // If still no match but we have any candidates, fall back to the first one
-  // so the LLM-generated UI is never blank. This is also the path taken when
-  // routes are disabled — `path` defaults to `/` and a `Route("/")` (if any)
-  // wins, otherwise the first declared page shows.
-  if (!matched && candidates.length > 0) {
-    matched = { pattern: candidates[0]!.pattern, params: {}, contentExpr: candidates[0]!.contentExpr };
-  }
-
-  let content: unknown = null;
-  if (matched && matched.contentExpr) {
-    const prev = ctx.loopVars.get("params");
-    const hadPrev = ctx.loopVars.has("params");
-    ctx.loopVars.set("params", matched.params);
-    try {
-      content = evaluate(matched.contentExpr, ctx);
-    } finally {
-      if (hadPrev) ctx.loopVars.set("params", prev);
-      else ctx.loopVars.delete("params");
-    }
-  }
-
-  // Record the match on the router so `NavLink(active)` can highlight the
-  // currently active anchor. Done outside the params loop so we never
-  // re-enter evaluation through the router.
-  ctx.router?.setActiveMatch(matched ? matched.pattern : null, matched ? matched.params : {});
-
-  return {
-    __kind: "Component",
-    name: "Routes",
-    args: [content, matched ? matched.pattern : ""],
-    argMeta: [{}, {}],
-    source: loc,
-  } satisfies ComponentNode;
-}
-
-/**
- * Collect every `Route(path, content)` AST expression referenced from `items`.
- * `items` can be an inline array literal of Route calls, an identifier
- * referencing an array, or even a single identifier pointing at a Route —
- * we resolve all three so the LLM is free to write Routes the most natural
- * way for the response.
- */
-function collectRouteCandidates(
-  expr: Expression | undefined,
-  ctx: EvaluationContext,
-): Array<{ pattern: string; contentExpr: Expression | undefined }> {
-  if (!expr) return [];
-
-  if (expr.kind === "Array") {
-    const out: Array<{ pattern: string; contentExpr: Expression | undefined }> = [];
-    for (const element of expr.elements) {
-      const resolved = resolveRouteExpr(element, ctx);
-      if (resolved) out.push(resolved);
-    }
-    return out;
-  }
-
-  if (expr.kind === "Identifier") {
-    const referenced = ctx.expressions.get(expr.name);
-    if (referenced) return collectRouteCandidates(referenced, ctx);
-  }
-
-  const single = resolveRouteExpr(expr, ctx);
-  return single ? [single] : [];
-}
-
-function resolveRouteExpr(
-  expr: Expression,
-  ctx: EvaluationContext,
-): { pattern: string; contentExpr: Expression | undefined } | null {
-  if (expr.kind === "Call" && expr.callee === "Route") {
-    const patternExpr = expr.arguments[0];
-    const pattern = patternExpr ? String(evaluate(patternExpr, ctx) ?? "") : "";
-    return { pattern, contentExpr: expr.arguments[1] };
-  }
-  if (expr.kind === "Identifier") {
-    const referenced = ctx.expressions.get(expr.name);
-    if (referenced) return resolveRouteExpr(referenced, ctx);
-  }
-  return null;
-}
-
-/**
  * Resolve the current route path. Prefers the router (when present), falls
- * back to `$route` state, and finally to "/". Tracking `$route` here makes
- * `Routes(...)` reactive to host pages that write the path imperatively
- * (e.g. for SSR-style hydration).
+ * back to the `route` state slot, and finally to "/". Tracking the slot
+ * here makes router bindings reactive to host pages that write the path
+ * imperatively (e.g. for SSR-style hydration).
  */
 function readRoutePath(ctx: EvaluationContext): string {
   if (ctx.router) {
@@ -782,109 +1704,57 @@ function readRoutePath(ctx: EvaluationContext): string {
     ctx.trackedState.add("route");
     const value = ctx.state.get("route");
     if (typeof value === "string" && value) return value;
+    if (value && typeof value === "object" && "path" in value) {
+      const path = (value as { path: unknown }).path;
+      if (typeof path === "string" && path) return path;
+    }
   }
   return "/";
 }
 
 /**
- * Merge inline `name=value` args and/or a trailing object literal into the
- * positional arg list using the component's prop order.
+ * Build the reactive `_route_` payload from the host's `Router`. Returns
+ * a plain object with `path`, `params`, `pattern`, `query`, a
+ * `navigate(path)` method that delegates to the router, plus a
+ * `toString()` so template literals like `${_route_}` still coerce to
+ * the path. Computed on every read so route arm matches that update
+ * params mid-render are reflected in subsequent `_route_.params` reads
+ * in the same render pass.
  */
-function applyNamedComponentArgs(
-  ctx: EvaluationContext,
-  callee: string,
-  argExprs: Expression[],
-  evaluated: unknown[],
-): unknown[] {
-  if (argExprs.length === 0 || !ctx.library) return evaluated;
-
-  const spec = findComponent(ctx.library, callee);
-  if (!spec) return evaluated;
-
-  const named: Record<string, unknown> = {};
-  const positional: unknown[] = [];
-  let hasNamed = false;
-
-  for (let i = 0; i < argExprs.length; i += 1) {
-    const expr = argExprs[i]!;
-    const value = evaluated[i];
-    if (expr.kind === "NamedArg") {
-      named[expr.name] = value;
-      hasNamed = true;
-      continue;
+function buildRouteState(router: NonNullable<EvaluationContext["router"]>): Record<string, unknown> {
+  const path = router.getPath();
+  const params: Record<string, unknown> = { ...router.getParams() };
+  const pattern = router.getActivePattern();
+  const query: Record<string, string> = {};
+  if (typeof globalThis !== "undefined" && (globalThis as { location?: { search?: string } }).location) {
+    const search = (globalThis as { location?: { search?: string } }).location?.search ?? "";
+    if (search) {
+      const usp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      for (const [k, v] of usp) query[k] = v;
     }
-    const isTrailingObject =
-      i === argExprs.length - 1 &&
-      expr.kind === "Object" &&
-      expr.properties.length > 0 &&
-      !expr.properties.every((p) => p.spread);
-    if (isTrailingObject) {
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        Object.assign(named, value as Record<string, unknown>);
-        hasNamed = true;
-      }
-      continue;
-    }
-    positional.push(value);
   }
-
-  if (!hasNamed) return evaluated;
-  return mergePositionalAndNamed(spec, positional, named);
+  return {
+    path,
+    params,
+    pattern,
+    query,
+    navigate(target: unknown): void {
+      if (typeof target !== "string" || !target) return;
+      router.navigate(target);
+    },
+    toString() {
+      return path;
+    },
+  };
 }
 
-function mergePositionalAndNamed(
-  spec: ComponentSpec,
-  positional: unknown[],
-  named: Record<string, unknown>,
-): unknown[] {
-  const merged: unknown[] = [];
-  for (let i = 0; i < spec.props.length; i += 1) {
-    const prop = spec.props[i]!;
-    if (prop.name in named) {
-      merged[i] = named[prop.name];
-    } else if (i < positional.length) {
-      merged[i] = positional[i];
-    }
-  }
-  // Trim trailing undefined slots so optional tail props stay omitted.
-  while (merged.length > 0 && merged[merged.length - 1] === undefined) {
-    merged.pop();
-  }
-  return merged;
-}
-
-function expressionKey(expr: Expression): string {
-  switch (expr.kind) {
-    case "Literal": return `lit:${JSON.stringify(expr.value)}`;
-    case "Identifier": return `id:${expr.name}`;
-    case "StateRef": return `st:${expr.persistent ? "$$" : "$"}${expr.name}`;
-    case "Unary": return `un:${expr.operator}:${expressionKey(expr.argument)}`;
-    case "Binary": return `bin:${expr.operator}:${expressionKey(expr.left)}:${expressionKey(expr.right)}`;
-    case "Ternary":
-      return `ter:${expressionKey(expr.test)}:${expressionKey(expr.consequent)}:${expressionKey(expr.alternate)}`;
-    case "Member": {
-      const obj = expressionKey(expr.object);
-      if (expr.computed) return `mem:${expr.optional ? "?" : ""}${obj}[${expressionKey(expr.computed)}]`;
-      return `mem:${expr.optional ? "?" : ""}${obj}.${expr.property ?? ""}`;
-    }
-    case "Call": return `call:${expr.callee}(${expr.arguments.map(expressionKey).join(",")})`;
-    case "BuiltinCall": return `builtin:${expr.name}(${expr.arguments.map(expressionKey).join(",")})`;
-    case "Array": return `arr:[${expr.elements.map(expressionKey).join(",")}]`;
-    case "Object": {
-      const parts = expr.properties.map((p) =>
-        p.spread ? `...${expressionKey(p.value)}` : `${p.key}=${expressionKey(p.value)}`,
-      );
-      return `obj:{${parts.join(",")}}`;
-    }
-    case "Template": {
-      const parts = expr.expressions.map(expressionKey);
-      return `tpl:${expr.quasis.join("\0")}|${parts.join(",")}`;
-    }
-    case "Spread": return `spread:${expressionKey(expr.argument)}`;
-    case "NamedArg": return `named:${expr.name}=${expressionKey(expr.value)}`;
-    default: return "unknown";
-  }
-}
+/**
+ * Aktion 0.5 §19.1 — see `resolveLibraryCallArgs`. The
+ * legacy "trailing object literal expands to named args" hack was
+ * removed in 0.5 — object literals are treated as opaque values like
+ * any other argument, so `Stack({ gap: "md" })` no longer aliases
+ * `Stack(gap: "md")`.
+ */
 
 function computedMemberAccess(target: unknown, key: unknown): unknown {
   if (target == null) return undefined;
@@ -966,10 +1836,93 @@ function toNumber(v: unknown): number {
   return 0;
 }
 
+/**
+ * Flatten a Aktion 0.5 theme config into the flat
+ * `{tokenKey: string}` shape the host element applies as CSS variables.
+ *
+ * Only the structured form is accepted:
+ *
+ *   `Theme({ name, colors: {...}, radius: {...}, font: {...},
+ *            motion: {...}, elevation: {...}, direction })`
+ *
+ * Groups flatten with a stable naming convention:
+ *   `colors.primary`     → `colorPrimary`
+ *   `radius.md`          → `radiusMd`
+ *   `font.heading`       → `fontHeading`
+ *   `motion.default`     → `motionDefault`
+ *   `elevation.2`        → `elevation2`
+ *
+ * Top-level metadata keys (`name`, `direction`) are accepted but never
+ * emitted as CSS variables. The legacy flat-shape form
+ * (`Theme({colorPrimary: "...", ...})`) and free-form CSS variable
+ * keys (`Theme({"--color-x": "..."})`) were removed in SUIS/2: the
+ * runtime ignores unknown top-level keys silently to keep streaming
+ * partial themes safe, but the schema validator surfaces them as
+ * advisory warnings (§15) so authors can migrate.
+ */
+const STRUCTURED_THEME_GROUPS = new Set([
+  "colors",
+  "radius",
+  "font",
+  "motion",
+  "elevation",
+]);
+const THEME_METADATA_KEYS = new Set(["name", "direction"]);
+
+function collectThemeTokens(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  const map = value as Record<string, unknown>;
+  for (const [key, raw] of Object.entries(map)) {
+    if (raw == null) continue;
+    if (THEME_METADATA_KEYS.has(key)) continue;
+    if (!STRUCTURED_THEME_GROUPS.has(key)) {
+      // Legacy flat-shape token (e.g. `colorPrimary`, `radiusMd`) or
+      // free-form CSS variable key (`--color-x`). Silently drop —
+      // schema validation surfaces it as a warning at parse time so
+      // the author sees the migration hint without crashing the
+      // render.
+      continue;
+    }
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const prefix = key === "colors" ? "color" : key;
+      for (const [innerKey, innerValue] of Object.entries(raw as Record<string, unknown>)) {
+        if (innerValue == null) continue;
+        const flatKey = prefix + capitalise(innerKey);
+        out[flatKey] = stringifyTokenValue(innerValue);
+      }
+    }
+  }
+  return out;
+}
+
+function capitalise(value: string): string {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function stringifyTokenValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
 function stringify(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
+  // Objects with a custom `toString()` (notably the reactive `_route_`
+  // payload whose `toString()` returns `path`) get their string form so
+  // template literals like `${_route_}` keep coercing to the path.
+  if (typeof v === "object" && v !== null) {
+    const proto = Object.getPrototypeOf(v);
+    const ownToString = (v as { toString?: () => string }).toString;
+    if (typeof ownToString === "function" && ownToString !== Object.prototype.toString) {
+      const str = ownToString.call(v);
+      if (typeof str === "string") return str;
+    }
+    void proto;
+  }
   try {
     return JSON.stringify(v);
   } catch {

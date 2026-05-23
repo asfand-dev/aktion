@@ -1,35 +1,44 @@
-import { describe, expect, it } from "vitest";
+/**
+ * Aktion — core runtime regression tests.
+ *
+ * Exercises the evaluator, data builtins, state store, named-arg merging,
+ * `@Each` loop scoping, and HTTP-native `http({...})` resources.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "../src/parser/index.js";
 import {
   StateStore,
-  QueryRegistry,
+  HttpRuntime,
   createContext,
   planProgram,
   evaluate,
 } from "../src/runtime/index.js";
 import { dataBuiltins } from "../src/runtime/builtins.js";
-import { ActionRunner } from "../src/runtime/actions.js";
-import type { ActionPayload } from "../src/runtime/builtins.js";
 import { defaultLibrary } from "../src/library/index.js";
 
-function buildContext(source: string) {
+function buildContext(source: string, opts: { http?: HttpRuntime } = {}) {
   const program = parse(source);
   const state = new StateStore();
-  const queries = new QueryRegistry();
-  const ctx = createContext(state, queries, undefined, defaultLibrary);
+  const http = opts.http;
+  const ctx = createContext(state, {
+    library: defaultLibrary,
+    http,
+    notify: () => {},
+  });
   planProgram(program, ctx);
-  return { program, ctx, state, queries };
+  return { program, ctx, state, http };
 }
 
 describe("evaluator", () => {
   it("evaluates a simple component reference graph", () => {
     const { ctx, program } = buildContext(`
-root = Stack([card])
+_app_ = Stack([card])
 card = Card([CardHeader("Hi", "There")])
 `);
     expect(program.errors).toEqual([]);
-    const root = ctx.bindings.get("root")?.();
-    expect(root).toMatchObject({ name: "Stack" });
+    const app = ctx.bindings.get("_app_")?.();
+    expect(app).toMatchObject({ name: "Stack" });
   });
 
   it("evaluates state defaults", () => {
@@ -85,21 +94,26 @@ describe("array member shortcuts", () => {
     const { ctx } = buildContext(`$todos = [{id:1}, {id:2}, {id:3}]\nn = $todos.length`);
     const program = parse(`n = $todos.length`);
     const stmt = program.statements[0]!;
+    if (stmt.kind !== "Assignment") throw new Error("expected assignment");
     expect(evaluate(stmt.expression, ctx)).toBe(3);
   });
 
   it("$arr.first / $arr.last return the boundary elements", () => {
     const { ctx } = buildContext(`$rows = [{x:1}, {x:2}, {x:3}]\nfirst = $rows.first\nlast = $rows.last`);
-    const first = parse(`first = $rows.first`).statements[0]!.expression;
-    const last = parse(`last = $rows.last`).statements[0]!.expression;
-    expect(evaluate(first, ctx)).toEqual({ x: 1 });
-    expect(evaluate(last, ctx)).toEqual({ x: 3 });
+    const firstStmt = parse(`first = $rows.first`).statements[0]!;
+    const lastStmt = parse(`last = $rows.last`).statements[0]!;
+    if (firstStmt.kind !== "Assignment" || lastStmt.kind !== "Assignment") {
+      throw new Error("expected assignments");
+    }
+    expect(evaluate(firstStmt.expression, ctx)).toEqual({ x: 1 });
+    expect(evaluate(lastStmt.expression, ctx)).toEqual({ x: 3 });
   });
 
   it("array pluck still works for non-shortcut fields", () => {
     const { ctx } = buildContext(`$rows = [{title:"a"}, {title:"b"}]\ntitles = $rows.title`);
     const program = parse(`titles = $rows.title`);
     const stmt = program.statements[0]!;
+    if (stmt.kind !== "Assignment") throw new Error("expected assignment");
     expect(evaluate(stmt.expression, ctx)).toEqual(["a", "b"]);
   });
 
@@ -107,15 +121,19 @@ describe("array member shortcuts", () => {
     const { ctx } = buildContext(`$msg = "hello"\nn = $msg.length`);
     const program = parse(`n = $msg.length`);
     const stmt = program.statements[0]!;
+    if (stmt.kind !== "Assignment") throw new Error("expected assignment");
     expect(evaluate(stmt.expression, ctx)).toBe(5);
   });
 
   it("empty array .first and .last are null", () => {
     const { ctx } = buildContext(`$rows = []\nfirst = $rows.first\nlast = $rows.last`);
-    const first = parse(`first = $rows.first`).statements[0]!.expression;
-    const last = parse(`last = $rows.last`).statements[0]!.expression;
-    expect(evaluate(first, ctx)).toBeNull();
-    expect(evaluate(last, ctx)).toBeNull();
+    const firstStmt = parse(`first = $rows.first`).statements[0]!;
+    const lastStmt = parse(`last = $rows.last`).statements[0]!;
+    if (firstStmt.kind !== "Assignment" || lastStmt.kind !== "Assignment") {
+      throw new Error("expected assignments");
+    }
+    expect(evaluate(firstStmt.expression, ctx)).toBeNull();
+    expect(evaluate(lastStmt.expression, ctx)).toBeNull();
   });
 });
 
@@ -124,6 +142,7 @@ describe("expression evaluation", () => {
     const { ctx } = buildContext(`$days = 7\nlabel = "" + $days + " days"`);
     const program = parse(`label = "" + $days + " days"`);
     const stmt = program.statements[0]!;
+    if (stmt.kind !== "Assignment") throw new Error("expected assignment");
     const value = evaluate(stmt.expression, ctx);
     expect(value).toBe("7 days");
   });
@@ -161,9 +180,19 @@ describe("bracket member access", () => {
 });
 
 describe("named component arguments", () => {
-  it("merges a trailing object literal into positional props", () => {
+  it("treats a trailing object literal as an opaque positional arg (no implicit named-arg expansion)", () => {
     const { ctx } = buildContext(
       'btn = Button("Hi", {variant: "primary", size: "small"})',
+    );
+    const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
+    expect(node.name).toBe("Button");
+    expect(node.args[0]).toBe("Hi");
+    expect(node.args[1]).toEqual({ variant: "primary", size: "small" });
+  });
+
+  it("merges inline `name: value` args into the component's prop order", () => {
+    const { ctx } = buildContext(
+      'btn = Button("Hi", variant: "primary", size: "small")',
     );
     const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Button");
@@ -172,19 +201,19 @@ describe("named component arguments", () => {
     expect(node.args[4]).toBe("small");
   });
 
-  it("merges inline name=value args with positional props", () => {
+  it("merges inline `name: value` args with positional props", () => {
     const { ctx } = buildContext(
-      'cell = GridItem(TextContent("Side"), span="1/4")',
+      'cell = GridItem(Text("Side"), span: "1/4")',
     );
     const node = ctx.bindings.get("cell")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("GridItem");
-    expect((node.args[0] as { name: string }).name).toBe("TextContent");
+    expect((node.args[0] as { name: string }).name).toBe("Text");
     expect(node.args[1]).toBe("1/4");
   });
 
   it("merges named args before a trailing children array", () => {
     const { ctx } = buildContext(
-      'layout = Grid(columns=12, gap="l", [GridItem(TextContent("A"), span="1/4")])',
+      'layout = Grid(columns: 12, gap: "l", [GridItem(Text("A"), span: "1/4")])',
     );
     const node = ctx.bindings.get("layout")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Grid");
@@ -196,76 +225,111 @@ describe("named component arguments", () => {
 
 describe("@Each loop variable scoping", () => {
   it("restores the outer loop binding even when the inner item is undefined", () => {
-    // Regression: the evaluator used to delete the outer binding whenever
-    // the previous value happened to be `undefined`. With an inner @Each
-    // operating on `[undefined, 1]`, that produced the wrong second iteration.
     const { ctx } = buildContext(
       `$items = [10, 20]\n` +
       `$sub = [null, "x"]\n` +
       `row = @Each($items, "i", @Each($sub, "i", i))`,
     );
     const out = ctx.bindings.get("row")?.();
-    // The inner loop binds `i` to each of $sub's items, and on exit the
-    // outer `i` must be restored so the next outer iteration sees `i = 20`.
     expect(Array.isArray(out)).toBe(true);
-    // Two outer iterations, each producing two inner values.
     const flat = (out as unknown[]).flat();
     expect(flat).toEqual([null, "x", null, "x"]);
   });
 
   it("does not crash when the items source is not an array", () => {
-    // Defensive: passing a non-array (e.g. null while a Query is loading)
-    // should produce an empty iteration rather than throwing.
     const { ctx } = buildContext(`$items = null\nrow = @Each($items, "i", i)`);
     const out = ctx.bindings.get("row")?.();
     expect(out).toEqual([]);
   });
 });
 
-describe("queries", () => {
-  it("evaluates non-trivial expressions in Query args (Binary, Member, Builtin)", async () => {
-    // Regression: the previous lightweight evaluator only handled
-    // Literal/StateRef/Array/Object — anything else collapsed to null
-    // silently, so `{ id: $id + 1 }` would arrive as `{ id: null }`.
-    const calls: Array<Record<string, unknown>> = [];
-    const { queries } = buildContext(`
-$id = 5
-$prefix = "user"
-data = Query("getUser", { id: $id + 1, slug: $prefix + "-x", first: $rows.first }, null)
-$rows = [{name:"a"},{name:"b"}]
-`);
-    queries.setTools({
-      getUser: async (args) => {
-        calls.push(args);
-        return { ok: true };
-      },
-    });
-    // Wait two microtasks: one for the initial `bootstrapQuery` call, one
-    // for the `setTools` retry that fires when the tool only appeared
-    // after `register`.
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(calls.length).toBeGreaterThan(0);
-    const last = calls[calls.length - 1]!;
-    expect(last.id).toBe(6);
-    expect(last.slug).toBe("user-x");
-    expect(last.first).toEqual({ name: "a" });
+describe("http({...}) reactive resource", () => {
+  let originalFetch: typeof fetch | undefined;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    (globalThis as { fetch?: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
   });
 
-  it("re-fires queries when setTools registers a previously-missing tool", async () => {
-    const calls: number[] = [];
-    const { queries } = buildContext(`data = Query("late", {}, null)`);
-    // No tools yet — the bootstrap run is a no-op.
+  afterEach(() => {
+    if (originalFetch) {
+      (globalThis as { fetch?: typeof fetch }).fetch = originalFetch;
+    }
+  });
+
+  it("issues a fetch with the configured url, method, headers and body", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `
+$id = 5
+$response = http({
+  url: "/api/items",
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: { id: $id }
+})
+_app_ = Stack()
+      `,
+      { http },
+    );
     await Promise.resolve();
-    expect(calls.length).toBe(0);
-    queries.setTools({
-      late: async () => {
-        calls.push(1);
-        return { ok: true };
-      },
-    });
     await Promise.resolve();
-    expect(calls.length).toBe(1);
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/items");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(init.body).toBe(JSON.stringify({ id: 5 }));
+  });
+
+  it("exposes the reactive resource bag with data / status / refetch / cancel", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `
+$response = http({ url: "/api/items", method: "GET" })
+_app_ = Stack()
+      `,
+      { http },
+    );
+    // Flush enough microtasks for: void run() → fetch → response.json() → resource bag mutation.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    const response = ctx.state.get("response") as {
+      data: unknown;
+      loading: boolean;
+      status?: number;
+      refetch: () => Promise<void>;
+      cancel: () => void;
+      lastUpdated?: number;
+      headers?: Record<string, string>;
+    };
+    expect(response).toBeDefined();
+    expect(response.data).toEqual({ ok: true });
+    expect(response.status).toBe(200);
+    expect(typeof response.refetch).toBe("function");
+    expect(typeof response.cancel).toBe("function");
+  });
+
+  it("encodes a `query` shorthand as querystring params", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `
+$response = http({ url: "/api/users", method: "GET", query: { limit: 5, slug: "abc" } })
+_app_ = Stack()
+      `,
+      { http },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("limit=5");
+    expect(url).toContain("slug=abc");
   });
 });
 
@@ -284,7 +348,6 @@ describe("StateStore behaviour", () => {
     let notifications = 0;
     state.subscribe(() => { notifications += 1; });
     state.reset("undeclared");
-    // Wait two microtasks: any spurious flush would land here.
     await Promise.resolve();
     await Promise.resolve();
     expect(notifications).toBe(0);
@@ -308,87 +371,27 @@ describe("StateStore behaviour", () => {
     const { state } = buildContext(`$count = 0`);
     let notifications = 0;
     state.subscribe(() => { notifications += 1; });
-    // Queue a change that hasn't flushed yet.
     state.set("count", 5);
-    // Swap to a different program before the microtask flushes.
     state.rebind([["other", "hello"]]);
     await Promise.resolve();
-    // Pending names from the previous program must not reach subscribers.
     expect(notifications).toBe(0);
     expect(state.get("other")).toBe("hello");
     expect(state.has("count")).toBe(false);
   });
 
   it("non-literal state defaults resolve to null (not undefined)", () => {
-    // `$total = @Count($rows)` is a non-literal default. Previously the
-    // declared value was `undefined`, which silently rendered as
-    // "undefined" inside `"" + $total` style expressions.
     const { state } = buildContext(`$total = @Count($rows)\n$rows = [1, 2]`);
     expect(state.get("total")).toBeNull();
   });
 });
 
-describe("ActionRunner OpenUrl sanitisation", () => {
-  /**
-   * The action runner is the chokepoint for any `@OpenUrl(...)` step. A
-   * hostile LLM/tool response could emit `@OpenUrl("javascript:alert(1)")`
-   * which would otherwise execute on the page; the runner must rewrite the
-   * URL to a safe placeholder before invoking `window.open` or any consumer
-   * `onOpenUrl` override.
-   */
-  const buildPayload = (url: string): ActionPayload => ({
-    kind: "Action",
-    steps: [{ kind: "OpenUrl", url }],
-  });
-
-  it("rewrites `javascript:` URLs to a safe placeholder", async () => {
-    const calls: string[] = [];
-    const { ctx } = buildContext("");
-    const runner = new ActionRunner({
-      getContext: () => ctx,
-      onOpenUrl: (u) => { calls.push(u); },
-    });
-    // eslint-disable-next-line no-script-url
-    await runner.run(buildPayload("javascript:alert(1)"));
-    expect(calls).toEqual(["#"]);
-  });
-
-  it("passes safe `https:` URLs through unchanged", async () => {
-    const calls: string[] = [];
-    const { ctx } = buildContext("");
-    const runner = new ActionRunner({
-      getContext: () => ctx,
-      onOpenUrl: (u) => { calls.push(u); },
-    });
-    await runner.run(buildPayload("https://example.com/x"));
-    expect(calls).toEqual(["https://example.com/x"]);
-  });
-
-  it("skips window.open entirely when no consumer override is wired", async () => {
-    const { ctx } = buildContext("");
-    const opens: Array<{ url: string; features?: string }> = [];
-    const originalOpen = globalThis.window?.open;
-    if (globalThis.window) {
-      globalThis.window.open = ((url: string, _t?: string, features?: string) => {
-        opens.push({ url, features });
-        return null;
-      }) as typeof window.open;
-    }
-    try {
-      const runner = new ActionRunner({ getContext: () => ctx });
-      // eslint-disable-next-line no-script-url
-      await runner.run(buildPayload("javascript:alert(1)"));
-      expect(opens).toEqual([]);
-      await runner.run(buildPayload("https://example.com"));
-      expect(opens).toHaveLength(1);
-      expect(opens[0]!.url).toBe("https://example.com");
-      // Ensure noreferrer is part of the window features for defence in depth.
-      expect(opens[0]!.features ?? "").toContain("noreferrer");
-    } finally {
-      if (globalThis.window && originalOpen) {
-        globalThis.window.open = originalOpen;
-      }
-    }
+describe("lambda expressions", () => {
+  it("`name = (args) => expr` declares a callable helper", () => {
+    const { ctx } = buildContext(`
+      double = (n) => n * 2
+      result = double(7)
+    `);
+    expect(ctx.bindings.get("result")?.()).toBe(14);
   });
 });
 
@@ -396,14 +399,17 @@ describe("parser source locations", () => {
   it("attaches loc to Call expressions for stable component identity", () => {
     const program = parse(`a = Card([])\nb = Card([])`);
     expect(program.errors).toEqual([]);
-    const first = program.statements[0]?.expression;
-    const second = program.statements[1]?.expression;
+    const first = program.statements[0]?.kind === "Assignment"
+      ? program.statements[0].expression
+      : undefined;
+    const second = program.statements[1]?.kind === "Assignment"
+      ? program.statements[1].expression
+      : undefined;
     expect(first?.kind).toBe("Call");
     expect(second?.kind).toBe("Call");
     if (first?.kind !== "Call" || second?.kind !== "Call") return;
     expect(first.loc).toBeDefined();
     expect(second.loc).toBeDefined();
-    // Different lines -> different source locations.
     expect(first.loc?.line).not.toBe(second.loc?.line);
   });
 });

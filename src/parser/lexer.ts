@@ -1,5 +1,5 @@
 /**
- * Tokenizer for Streaming UI Script.
+ * Tokenizer for Aktion.
  *
  * The language is line-oriented. We tokenize into a flat stream of tokens
  * including NEWLINE markers so that the parser can recover at line boundaries.
@@ -7,9 +7,8 @@
 
 export type TokenType =
   | "Identifier"
+  | "Keyword"
   | "StateIdentifier"
-  /** `$$name` — persistent state reference. */
-  | "PersistentStateIdentifier"
   | "BuiltinIdentifier"
   | "Number"
   | "String"
@@ -20,12 +19,44 @@ export type TokenType =
    * `{kind:"expr", source}` and `{kind:"str", text}`.
    */
   | "TemplateString"
+  /**
+   * `js{ … }` opaque block. The body is captured verbatim (with balanced
+   * brace tracking) so it can be passed through to the runtime without
+   * re-parsing.
+   */
+  | "JsBlock"
   | "Boolean"
   | "Null"
   | "Punctuation"
   | "Operator"
   | "Newline"
   | "EOF";
+
+/**
+ * Keywords reserved by Aktion. The lexer recognises them so the
+ * parser can dispatch on `Keyword` tokens directly instead of second-guessing
+ * every identifier. `$name` is lexed as a `StateIdentifier` token whose
+ * `value` is the bare name; there is only one reactive atom kind so no
+ * additional disambiguation is needed.
+ */
+export const KEYWORDS_AKTION = new Set([
+  "component",
+  "effect",
+  "action",
+  "if",
+  "else",
+  "match",
+  "for",
+  "in",
+  "await",
+  "return",
+  "cleanup",
+  "optimistic",
+  "on",
+  "emit",
+  "bind",
+  "default",
+]);
 
 export type TemplatePart =
   | { kind: "str"; text: string }
@@ -89,11 +120,17 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Line comments: //... and #...
-    // Both run to the end of the line and are stripped silently. `#` is a
-    // shell/python-style alternative that lets hand-edited scripts use a
-    // single character — useful in chat-style examples and READMEs.
-    if ((ch === "/" && peek(1) === "/") || ch === "#") {
+    // Line comments: //...
+    if (ch === "/" && peek(1) === "/") {
+      while (i < source.length && peek() !== "\n") advance();
+      continue;
+    }
+
+    // `#`-style comment. The Aktion 0.5 surface does not have
+    // pragmas — every `#…` line is a comment. This keeps the language
+    // simple and avoids a "version negotiation" the LLM would otherwise
+    // have to remember.
+    if (ch === "#") {
       while (i < source.length && peek() !== "\n") advance();
       continue;
     }
@@ -317,18 +354,28 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // State identifier: $name (one $) or $$name (persistent).
+    // State identifier: $name. Reactive atoms are declared with `$name = value`
+    // and referenced as `$name`. The legacy `$$name` persistent sigil was
+    // removed — throw a clear migration error so any surviving `$$x` doesn't
+    // silently lex to two separate tokens.
     if (ch === "$") {
       const startLine = line;
       const startCol = column;
       advance();
-      const persistent = peek() === "$";
-      if (persistent) advance();
+      if (peek() === "$") {
+        const err = new Error(
+          'Legacy "$$x" persistent reference is removed. ' +
+            'Reactive state is declared with "$x = value" and referenced as "$x".',
+        ) as Error & { line?: number; column?: number };
+        err.line = startLine;
+        err.column = startCol;
+        throw err;
+      }
       let name = "";
       while (i < source.length && isIdentifierChar(peek() ?? "")) {
         name += advance();
       }
-      push(persistent ? "PersistentStateIdentifier" : "StateIdentifier", name, startLine, startCol);
+      push("StateIdentifier", name, startLine, startCol);
       continue;
     }
 
@@ -340,11 +387,96 @@ export function tokenize(source: string): Token[] {
       while (i < source.length && isIdentifierChar(peek() ?? "")) {
         name += advance();
       }
+
+      // `js{ … }` opaque blocks (also accepts `js { … }` with whitespace
+      // between the keyword and the brace — easier on hand-written code).
+      // The body is captured verbatim with balanced-brace tracking so the
+      // runtime can pass it through to the `js` capability without
+      // re-parsing.
+      if (name === "js") {
+        // Skip horizontal whitespace (but NOT newlines) between `js` and
+        // `{`. Newlines terminate the keyword early — `js\n{ ... }` is
+        // not a JsBlock, just an identifier reference followed by an
+        // unrelated block.
+        let lookahead = 0;
+        while (
+          peek(lookahead) === " " || peek(lookahead) === "\t"
+        ) lookahead += 1;
+        if (peek(lookahead) === "{") {
+          // Consume the gap, then fall into the JsBlock body capture.
+          for (let s = 0; s < lookahead; s += 1) advance();
+        }
+      }
+      if (name === "js" && peek() === "{") {
+        advance(); // consume `{`
+        let body = "";
+        let depth = 1;
+        while (i < source.length && depth > 0) {
+          const next = peek();
+          if (next === undefined) break;
+          if (next === "\\" && peek(1) !== undefined) {
+            body += advance();
+            body += advance();
+            continue;
+          }
+          // Skip past quoted strings without counting their internal braces.
+          if (next === '"' || next === "'") {
+            const q = next;
+            body += advance();
+            while (i < source.length && peek() !== q) {
+              if (peek() === "\\" && peek(1) !== undefined) {
+                body += advance();
+                body += advance();
+                continue;
+              }
+              if (peek() === "\n") break;
+              body += advance();
+            }
+            if (peek() === q) body += advance();
+            continue;
+          }
+          // Skip past template literals as opaque text.
+          if (next === "`") {
+            body += advance();
+            while (i < source.length && peek() !== "`") {
+              if (peek() === "\\" && peek(1) !== undefined) {
+                body += advance();
+                body += advance();
+                continue;
+              }
+              body += advance();
+            }
+            if (peek() === "`") body += advance();
+            continue;
+          }
+          // Track nested {} so `function foo(){...}` works.
+          if (next === "{") {
+            depth += 1;
+            body += advance();
+            continue;
+          }
+          if (next === "}") {
+            depth -= 1;
+            if (depth === 0) {
+              advance();
+              break;
+            }
+            body += advance();
+            continue;
+          }
+          body += advance();
+        }
+        push("JsBlock", body, startLine, startCol);
+        continue;
+      }
+
       const keyword = KEYWORDS[name];
       if (keyword === "Boolean") {
         push("Boolean", name, startLine, startCol);
       } else if (keyword === "Null") {
         push("Null", name, startLine, startCol);
+      } else if (KEYWORDS_AKTION.has(name)) {
+        push("Keyword", name, startLine, startCol);
       } else {
         push("Identifier", name, startLine, startCol);
       }
@@ -362,11 +494,23 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Multi-character operators: ==, !=, >=, <=, &&, ||, ??, ?.
+    // Multi-character operators: ==, !=, >=, <=, &&, ||, ??, ?., ->, =>,
+    // +=, -=, *=, /=, ??=, ++, --.
     const two = ch + (peek(1) ?? "");
+    const three = two + (peek(2) ?? "");
+    if (three === "??=") {
+      const startLine = line;
+      const startCol = column;
+      advance(); advance(); advance();
+      push("Operator", "??=", startLine, startCol);
+      continue;
+    }
     if (
       two === "==" || two === "!=" || two === ">=" || two === "<=" ||
-      two === "&&" || two === "||" || two === "??" || two === "?."
+      two === "&&" || two === "||" || two === "??" || two === "?." ||
+      two === "->" || two === "=>" ||
+      two === "+=" || two === "-=" || two === "*=" || two === "/=" ||
+      two === "++" || two === "--"
     ) {
       const startLine = line;
       const startCol = column;
