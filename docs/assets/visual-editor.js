@@ -70,14 +70,27 @@ const state = {
   prelude: "",            // raw text of statements that come before _app_
   rootId: "_app_",
   selectedId: null,
+  hoveredId: null,        // id of node currently hovered in the canvas
   draggingId: null,       // id of node being dragged inside the canvas
   paletteSearch: "",
   paletteOpenGroups: new Set(GROUP_ORDER),
-  bottomTab: "preview",
-  bottomOpen: true,
   paletteOpen: true,
   inspectorOpen: true,
   theme: "light",
+  device: "desktop",      // "desktop" | "tablet" | "mobile"
+  zoom: 1,                // 0.5 .. 1.5
+  mode: "edit",           // "edit" | "preview"
+  drop: null,             // { parentId, slotName, index } during drag
+  // Maps populated by decorateRenderedDOM after every render.
+  rectsById: new Map(),
+  rectsBySlot: new Map(), // key: parentId+":"+slotName -> array of child rects
+};
+
+// Undo / redo history. Each entry is a snapshot of { tree, prelude, rootId }.
+const history = {
+  past: [],
+  future: [],
+  max: 80,
 };
 
 // ---------------------------------------------------------------------------
@@ -415,6 +428,60 @@ function createDefaultTree() {
   card.slots.children = [header];
   stack.slots.children = [card];
   return stack;
+}
+
+// ---------------------------------------------------------------------------
+// History (undo / redo)
+//
+// Each call to `commit()` snapshots the current tree before the next mutation
+// runs. `undo()` / `redo()` swap snapshots in/out and trigger a re-render.
+
+function snapshotTree() {
+  return {
+    tree: state.tree ? JSON.parse(JSON.stringify(state.tree)) : null,
+    prelude: state.prelude,
+    rootId: state.rootId,
+  };
+}
+
+function commit() {
+  history.past.push(snapshotTree());
+  if (history.past.length > history.max) history.past.shift();
+  history.future.length = 0;
+  updateUndoRedoButtons();
+}
+
+function undo() {
+  if (history.past.length === 0) return;
+  history.future.push(snapshotTree());
+  const prev = history.past.pop();
+  state.tree = prev.tree;
+  state.prelude = prev.prelude;
+  state.rootId = prev.rootId;
+  state.selectedId = null;
+  saveState();
+  updateUndoRedoButtons();
+  scheduleRender();
+}
+
+function redo() {
+  if (history.future.length === 0) return;
+  history.past.push(snapshotTree());
+  const next = history.future.pop();
+  state.tree = next.tree;
+  state.prelude = next.prelude;
+  state.rootId = next.rootId;
+  state.selectedId = null;
+  saveState();
+  updateUndoRedoButtons();
+  scheduleRender();
+}
+
+function updateUndoRedoButtons() {
+  const u = $("ve-undo");
+  const r = $("ve-redo");
+  if (u) u.disabled = history.past.length === 0;
+  if (r) r.disabled = history.future.length === 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1081,6 +1148,18 @@ const DRAG_TYPE = "application/x-aktion-payload";
 
 let currentDragPayload = null;
 
+/**
+ * Mark the stage as actively dragging. CSS observes this to enlarge drop
+ * zones, brighten slot fills, and make container outlines fully opaque so
+ * the user has unambiguous, generous targets to aim for.
+ */
+function markStageDragging(active) {
+  const stage = $("ve-stage");
+  if (!stage) return;
+  if (active) stage.dataset.dragging = "true";
+  else delete stage.dataset.dragging;
+}
+
 function startPaletteDrag(name, e) {
   currentDragPayload = { kind: "new", name };
   if (e.dataTransfer) {
@@ -1089,6 +1168,10 @@ function startPaletteDrag(name, e) {
     catch (_) { /* some browsers reject custom types */ }
     try { e.dataTransfer.setData("text/plain", name); } catch (_) {}
   }
+  markStageDragging(true);
+  // Render immediately (not via requestAnimationFrame) so drop zones appear
+  // before the user has even moved the mouse.
+  renderOverlay();
 }
 
 function startNodeDrag(id, e) {
@@ -1099,15 +1182,19 @@ function startNodeDrag(id, e) {
     try { e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(currentDragPayload)); }
     catch (_) {}
   }
-  // Re-render so the source node fades.
-  scheduleRender();
+  markStageDragging(true);
+  renderOverlay();
 }
 
-function endNodeDrag() {
+function endDrag() {
   currentDragPayload = null;
   state.draggingId = null;
-  scheduleRender();
+  markStageDragging(false);
+  renderOverlay();
 }
+
+// Backwards-compat alias kept because other modules may still call it.
+const endNodeDrag = endDrag;
 
 function payloadFromEvent(e) {
   if (currentDragPayload) return currentDragPayload;
@@ -1120,11 +1207,15 @@ function payloadFromEvent(e) {
 
 function attachDropTarget(el, accept, onDrop) {
   let depth = 0;
+  const setActive = (on) => {
+    if (on) el.dataset.active = "true";
+    else delete el.dataset.active;
+  };
   el.addEventListener("dragenter", (e) => {
-    e.preventDefault();
     if (!accept(payloadFromEvent(e))) return;
+    e.preventDefault();
     depth++;
-    el.classList.add("is-drag-over");
+    setActive(true);
   });
   el.addEventListener("dragover", (e) => {
     if (!accept(payloadFromEvent(e))) return;
@@ -1133,7 +1224,7 @@ function attachDropTarget(el, accept, onDrop) {
   });
   el.addEventListener("dragleave", () => {
     depth--;
-    if (depth <= 0) { depth = 0; el.classList.remove("is-drag-over"); }
+    if (depth <= 0) { depth = 0; setActive(false); }
   });
   el.addEventListener("drop", (e) => {
     const payload = payloadFromEvent(e);
@@ -1141,8 +1232,9 @@ function attachDropTarget(el, accept, onDrop) {
     e.preventDefault();
     e.stopPropagation();
     depth = 0;
-    el.classList.remove("is-drag-over");
+    setActive(false);
     onDrop(payload);
+    endDrag();
   });
 }
 
@@ -1188,6 +1280,10 @@ function isAncestor(ancestorId, descendantId) {
 
 // ---------------------------------------------------------------------------
 // Rendering — palette
+//
+// The palette renders a 2-up grid of preview cards. Each card has a stylized
+// SVG schematic (computed from the component's category + name) so the user
+// can recognise the shape at a glance and drag it onto the canvas.
 
 function renderPalette() {
   const root = $("ve-palette");
@@ -1230,59 +1326,456 @@ function renderPalette() {
         renderPalette();
       },
     }, [
-      el("span", null, groupName + " (" + list.length + ")"),
+      el("span", null, groupName + " · " + list.length),
       el("i", { class: "fa-solid fa-chevron-right", "aria-hidden": "true" }),
     ]);
     wrap.append(head);
 
-    const items = el("div", { class: "ve-palette-items" });
+    const grid = el("div", { class: "ve-palette-grid" });
     for (const c of list) {
-      const item = el("div", {
-        class: "ve-palette-item",
-        draggable: "true",
-        title: c.description,
-        onDragstart: (e) => startPaletteDrag(c.name, e),
-        onClick: () => addComponentSmart(c.name),
-      }, [
-        el("div", { class: "ve-pal-icon" }, paletteIconFor(c)),
-        el("div", { class: "ve-pal-meta" }, [
-          el("div", { class: "ve-pal-name" }, c.name),
-          el("div", { class: "ve-pal-sig" }, c.signature),
-        ]),
-      ]);
-      items.append(item);
+      grid.append(renderPaletteCard(c));
     }
-    wrap.append(items);
+    wrap.append(grid);
     root.append(wrap);
   }
   if (total === 0) {
-    root.append(el("div", { style: "padding:18px; color: var(--doc-text-muted); text-align:center; font-size: 13px;" },
+    root.append(el("div", { class: "ve-palette-empty" },
       "No components match \"" + search + "\""));
   }
 }
 
-function paletteIconFor(entry) {
-  // Pick a tiny visual cue per group so the palette isn't a wall of text.
-  const map = {
-    "Layout": "fa-table-cells-large",
-    "Content": "fa-paragraph",
-    "Forms": "fa-pen-to-square",
-    "Data": "fa-table",
-    "Charts": "fa-chart-line",
-    "Patterns": "fa-shapes",
-    "App shell": "fa-window-maximize",
-    "Navigation": "fa-compass",
-    "Feedback & Media": "fa-bell",
-    "Editors & overlays": "fa-pen",
-    "Chat": "fa-comments",
-    "Advanced UI": "fa-wand-magic-sparkles",
-    "Helpers": "fa-puzzle-piece",
-    "Theming": "fa-palette",
-    "Routing": "fa-route",
-    "Escape hatches": "fa-code",
-  };
-  const cls = map[entry.group] || "fa-cube";
-  return el("i", { class: "fa-solid " + cls, "aria-hidden": "true" });
+function renderPaletteCard(entry) {
+  const card = el("button", {
+    class: "ve-palette-card",
+    type: "button",
+    title: entry.name + " — " + (entry.description || ""),
+    draggable: "true",
+    onDragstart: (e) => { startPaletteDrag(entry.name, e); card.dataset.dragging = "true"; },
+    onDragend: () => { card.dataset.dragging = "false"; },
+    onClick: () => addComponentSmart(entry.name),
+  });
+  const thumb = el("div", { class: "ve-pal-thumb" });
+  thumb.append(componentSchematic(entry));
+  card.append(thumb);
+  card.append(el("div", { class: "ve-pal-name" }, entry.name));
+  const positional = entry.params.find((p) => !p.required && p.name !== "children");
+  const tag = positional ? positional.name : (entry.params[0] && entry.params[0].name) || "";
+  card.append(el("div", { class: "ve-pal-tags" }, tag));
+  return card;
+}
+
+/**
+ * Click-to-add fallback for users without drag input. Tries to place the
+ * new component into the currently selected node's first children slot;
+ * falls back to the root tree's children slot.
+ */
+// stub — moved below schematic helpers
+const _addComponentSmartStub = null; void _addComponentSmartStub;
+
+// ---------------------------------------------------------------------------
+// Component schematics
+//
+// Lightweight SVG sketches that hint at the component's shape on the palette
+// card. Curated for the most common components; falls back to a category
+// pattern + monogram for the long tail. The intent is recognisability at a
+// glance, not literal previews.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      node.setAttribute(k, String(v));
+    }
+  }
+  return node;
+}
+
+function makeSvg(content) {
+  const root = svgEl("svg", {
+    viewBox: "0 0 96 54",
+    xmlns: SVG_NS,
+    "aria-hidden": "true",
+    preserveAspectRatio: "xMidYMid meet",
+  });
+  root.innerHTML = content;
+  return root;
+}
+
+const COLOR = {
+  bg: "var(--doc-bg-soft)",
+  line: "var(--doc-border-strong)",
+  fill: "var(--doc-primary-soft)",
+  primary: "var(--doc-primary)",
+  text: "var(--doc-text-subtle)",
+};
+
+// Specific schematics for high-profile components. Coordinates use a
+// 96×54 viewbox so cards stay crisp at any size. Use stroke="currentColor"
+// where we want theme-adaptive lines via CSS variables in fill/stroke.
+const SCHEMATICS = {
+  // ---- Layout ----
+  Stack: `
+    <rect x="6" y="9"  width="84" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="20" width="84" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="31" width="84" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="42" width="84" height="6" rx="2" fill="${COLOR.fill}"/>`,
+  Grid: `
+    <rect x="6"  y="6"  width="40" height="18" rx="3" fill="${COLOR.fill}"/>
+    <rect x="50" y="6"  width="40" height="18" rx="3" fill="${COLOR.fill}"/>
+    <rect x="6"  y="28" width="40" height="18" rx="3" fill="${COLOR.fill}"/>
+    <rect x="50" y="28" width="40" height="18" rx="3" fill="${COLOR.fill}"/>`,
+  Card: `
+    <rect x="8" y="8" width="80" height="38" rx="4" fill="none" stroke="${COLOR.line}" stroke-width="1.5"/>
+    <rect x="14" y="14" width="48" height="4" rx="1.5" fill="${COLOR.primary}"/>
+    <rect x="14" y="22" width="68" height="2" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="28" width="40" height="2" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="36" width="22" height="6" rx="2" fill="${COLOR.fill}"/>`,
+  CardHeader: `
+    <rect x="8" y="14" width="48" height="6" rx="2" fill="${COLOR.primary}"/>
+    <rect x="8" y="24" width="68" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="30" width="44" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Section: `
+    <rect x="6" y="8" width="84" height="38" rx="4" fill="${COLOR.bg}" stroke="${COLOR.line}" stroke-width="1"/>
+    <rect x="14" y="14" width="40" height="4" rx="1.5" fill="${COLOR.primary}"/>
+    <rect x="14" y="24" width="68" height="2" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="30" width="60" height="2" rx="1" fill="${COLOR.line}"/>`,
+  StackItem: `
+    <rect x="6"  y="20" width="20" height="14" rx="2" fill="${COLOR.fill}"/>
+    <rect x="30" y="20" width="60" height="14" rx="2" fill="${COLOR.primary}" opacity=".25"/>`,
+  Spacer: `
+    <line x1="20" y1="27" x2="76" y2="27" stroke="${COLOR.line}" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <path d="M16 27 L22 23 L22 31 Z" fill="${COLOR.line}"/>
+    <path d="M80 27 L74 23 L74 31 Z" fill="${COLOR.line}"/>`,
+  Divider: `
+    <line x1="8" y1="27" x2="88" y2="27" stroke="${COLOR.line}" stroke-width="1.5"/>`,
+  Container: `
+    <rect x="14" y="6" width="68" height="42" rx="3" fill="none" stroke="${COLOR.line}" stroke-width="1.5" stroke-dasharray="3 2"/>
+    <rect x="20" y="14" width="56" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="20" y="24" width="40" height="3" rx="1" fill="${COLOR.line}"/>`,
+
+  // ---- Content ----
+  Heading: `
+    <rect x="8" y="14" width="60" height="10" rx="2" fill="${COLOR.primary}"/>
+    <rect x="8" y="32" width="40" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Text: `
+    <rect x="8" y="14" width="80" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="22" width="64" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="30" width="74" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="38" width="32" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Quote: `
+    <rect x="14" y="12" width="74" height="30" rx="2" fill="${COLOR.bg}"/>
+    <rect x="8"  y="12" width="3"  height="30" fill="${COLOR.primary}"/>
+    <rect x="20" y="18" width="60" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="20" y="26" width="50" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Code: `
+    <rect x="6" y="6" width="84" height="42" rx="3" fill="${COLOR.bg}"/>
+    <rect x="14" y="14" width="48" height="3" rx="1" fill="${COLOR.primary}"/>
+    <rect x="20" y="22" width="60" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="20" y="30" width="40" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="20" y="38" width="50" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Markdown: `
+    <rect x="8" y="10" width="34" height="5" rx="1.5" fill="${COLOR.primary}"/>
+    <rect x="8" y="20" width="80" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="28" width="62" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="8" y="38" width="22" height="5" rx="1.5" fill="${COLOR.primary}"/>`,
+
+  // ---- Forms ----
+  Button: `
+    <rect x="20" y="20" width="56" height="14" rx="3" fill="${COLOR.primary}"/>
+    <rect x="34" y="25" width="28" height="4" rx="1.5" fill="white" opacity=".95"/>`,
+  Input: `
+    <rect x="8" y="20" width="80" height="16" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}" stroke-width="1"/>
+    <rect x="14" y="26" width="32" height="4" rx="1" fill="${COLOR.line}"/>`,
+  Textarea: `
+    <rect x="8" y="10" width="80" height="34" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}" stroke-width="1"/>
+    <rect x="14" y="18" width="60" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="26" width="48" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="34" width="36" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Select: `
+    <rect x="8" y="20" width="80" height="16" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="14" y="26" width="40" height="4" rx="1" fill="${COLOR.line}"/>
+    <path d="M76 26 L80 30 L84 26" stroke="${COLOR.text}" stroke-width="1.5" fill="none"/>`,
+  Checkbox: `
+    <rect x="20" y="20" width="14" height="14" rx="2" fill="${COLOR.primary}"/>
+    <path d="M23 27 L27 31 L33 23" stroke="white" stroke-width="2" fill="none"/>
+    <rect x="40" y="24" width="38" height="6" rx="2" fill="${COLOR.line}"/>`,
+  Radio: `
+    <circle cx="27" cy="27" r="7" fill="none" stroke="${COLOR.line}" stroke-width="1.5"/>
+    <circle cx="27" cy="27" r="3.5" fill="${COLOR.primary}"/>
+    <rect x="40" y="24" width="38" height="6" rx="2" fill="${COLOR.line}"/>`,
+  Switch: `
+    <rect x="20" y="20" width="28" height="14" rx="7" fill="${COLOR.primary}"/>
+    <circle cx="42" cy="27" r="5" fill="white"/>`,
+  Slider: `
+    <rect x="10" y="26" width="76" height="2" rx="1" fill="${COLOR.line}"/>
+    <rect x="10" y="26" width="40" height="2" rx="1" fill="${COLOR.primary}"/>
+    <circle cx="50" cy="27" r="6" fill="${COLOR.primary}"/>`,
+  Form: `
+    <rect x="8" y="6" width="80" height="42" rx="3" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="14" y="12" width="68" height="6" rx="2" fill="white" stroke="${COLOR.line}"/>
+    <rect x="14" y="22" width="68" height="6" rx="2" fill="white" stroke="${COLOR.line}"/>
+    <rect x="14" y="36" width="22" height="8" rx="2" fill="${COLOR.primary}"/>`,
+  Field: `
+    <rect x="8" y="10" width="40" height="4" rx="1.5" fill="${COLOR.text}"/>
+    <rect x="8" y="20" width="80" height="14" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="14" y="40" width="50" height="3" rx="1" fill="${COLOR.line}"/>`,
+
+  // ---- Data ----
+  Table: `
+    <rect x="6" y="8" width="84" height="38" rx="2" fill="none" stroke="${COLOR.line}"/>
+    <rect x="6" y="8" width="84" height="9" fill="${COLOR.fill}"/>
+    <line x1="6"  y1="26" x2="90" y2="26" stroke="${COLOR.line}"/>
+    <line x1="6"  y1="36" x2="90" y2="36" stroke="${COLOR.line}"/>
+    <line x1="34" y1="8"  x2="34" y2="46" stroke="${COLOR.line}"/>
+    <line x1="62" y1="8"  x2="62" y2="46" stroke="${COLOR.line}"/>`,
+  Stats: `
+    <rect x="6"  y="14" width="26" height="26" rx="3" fill="${COLOR.fill}"/>
+    <rect x="36" y="14" width="26" height="26" rx="3" fill="${COLOR.fill}"/>
+    <rect x="66" y="14" width="24" height="26" rx="3" fill="${COLOR.fill}"/>`,
+  StatCard: `
+    <rect x="14" y="10" width="68" height="34" rx="3" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="20" y="16" width="24" height="3" rx="1" fill="${COLOR.text}"/>
+    <rect x="20" y="22" width="40" height="8" rx="2" fill="${COLOR.primary}"/>
+    <rect x="20" y="34" width="20" height="3" rx="1" fill="${COLOR.line}"/>`,
+  KPIList: `
+    <rect x="6" y="14" width="84" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="24" width="84" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="34" width="84" height="6" rx="2" fill="${COLOR.fill}"/>`,
+  List: `
+    <circle cx="14" cy="16" r="2" fill="${COLOR.primary}"/>
+    <rect x="22" y="14" width="60" height="3" rx="1" fill="${COLOR.line}"/>
+    <circle cx="14" cy="27" r="2" fill="${COLOR.primary}"/>
+    <rect x="22" y="25" width="50" height="3" rx="1" fill="${COLOR.line}"/>
+    <circle cx="14" cy="38" r="2" fill="${COLOR.primary}"/>
+    <rect x="22" y="36" width="55" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Badge: `
+    <rect x="28" y="22" width="40" height="14" rx="7" fill="${COLOR.primary}"/>
+    <rect x="36" y="27" width="24" height="4" rx="1.5" fill="white" opacity=".9"/>`,
+  Tag: `
+    <path d="M12 18 L40 12 L82 22 L82 32 L40 42 L12 36 Z" fill="${COLOR.fill}" stroke="${COLOR.line}"/>`,
+  Avatar: `
+    <circle cx="48" cy="27" r="14" fill="${COLOR.primary}"/>
+    <circle cx="48" cy="22" r="5" fill="white"/>
+    <path d="M37 36 Q48 28 59 36" fill="white"/>`,
+  Rating: `
+    <g fill="${COLOR.primary}">
+      <polygon points="14,28 17,22 20,28 26,28 21,32 23,38 17,34 11,38 13,32 8,28"/>
+      <polygon points="32,28 35,22 38,28 44,28 39,32 41,38 35,34 29,38 31,32 26,28"/>
+      <polygon points="50,28 53,22 56,28 62,28 57,32 59,38 53,34 47,38 49,32 44,28"/>
+    </g>
+    <g fill="${COLOR.line}">
+      <polygon points="68,28 71,22 74,28 80,28 75,32 77,38 71,34 65,38 67,32 62,28"/>
+    </g>`,
+  Progress: `
+    <rect x="8" y="24" width="80" height="6" rx="3" fill="${COLOR.bg}"/>
+    <rect x="8" y="24" width="48" height="6" rx="3" fill="${COLOR.primary}"/>`,
+
+  // ---- Charts ----
+  LineChart: `
+    <line x1="8" y1="44" x2="88" y2="44" stroke="${COLOR.line}"/>
+    <polyline points="10,38 24,28 38,32 52,18 66,22 80,12" fill="none" stroke="${COLOR.primary}" stroke-width="2"/>
+    <circle cx="52" cy="18" r="2" fill="${COLOR.primary}"/>`,
+  BarChart: `
+    <line x1="8" y1="44" x2="88" y2="44" stroke="${COLOR.line}"/>
+    <rect x="14" y="28" width="10" height="14" fill="${COLOR.primary}"/>
+    <rect x="30" y="20" width="10" height="22" fill="${COLOR.primary}"/>
+    <rect x="46" y="32" width="10" height="10" fill="${COLOR.primary}"/>
+    <rect x="62" y="14" width="10" height="28" fill="${COLOR.primary}"/>
+    <rect x="78" y="24" width="8"  height="18" fill="${COLOR.primary}"/>`,
+  AreaChart: `
+    <polygon points="8,44 20,30 36,34 52,18 68,22 88,14 88,44" fill="${COLOR.fill}"/>
+    <polyline points="8,44 20,30 36,34 52,18 68,22 88,14" fill="none" stroke="${COLOR.primary}" stroke-width="1.5"/>`,
+  PieChart: `
+    <circle cx="48" cy="27" r="18" fill="${COLOR.primary}"/>
+    <path d="M48 27 L48 9 A18 18 0 0 1 64 36 Z" fill="${COLOR.fill}"/>
+    <path d="M48 27 L64 36 A18 18 0 0 1 32 36 Z" fill="${COLOR.line}" opacity=".5"/>`,
+  DonutChart: `
+    <circle cx="48" cy="27" r="18" fill="none" stroke="${COLOR.line}" stroke-width="6"/>
+    <circle cx="48" cy="27" r="18" fill="none" stroke="${COLOR.primary}" stroke-width="6" stroke-dasharray="60 113"/>`,
+  Sparkline: `
+    <polyline points="6,32 16,28 26,30 36,22 46,26 56,18 66,24 76,14 86,18" fill="none" stroke="${COLOR.primary}" stroke-width="1.5"/>`,
+
+  // ---- Patterns ----
+  Hero: `
+    <rect x="6" y="6" width="84" height="42" rx="3" fill="${COLOR.fill}"/>
+    <rect x="14" y="14" width="50" height="6" rx="2" fill="${COLOR.primary}"/>
+    <rect x="14" y="24" width="68" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="30" width="56" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="14" y="38" width="22" height="6" rx="2" fill="${COLOR.primary}"/>`,
+  PageHeader: `
+    <rect x="6"  y="8"  width="20" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="6"  y="16" width="50" height="8" rx="2" fill="${COLOR.primary}"/>
+    <rect x="6"  y="28" width="60" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="68" y="14" width="20" height="10" rx="2" fill="${COLOR.fill}"/>
+    <rect x="68" y="28" width="20" height="10" rx="2" fill="${COLOR.primary}"/>`,
+  PricingCard: `
+    <rect x="14" y="6" width="68" height="42" rx="3" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="22" y="12" width="30" height="3" rx="1" fill="${COLOR.text}"/>
+    <rect x="22" y="20" width="30" height="8" rx="2" fill="${COLOR.primary}"/>
+    <rect x="22" y="32" width="50" height="2" rx="1" fill="${COLOR.line}"/>
+    <rect x="22" y="38" width="40" height="2" rx="1" fill="${COLOR.line}"/>`,
+  PricingTable: `
+    <rect x="6"  y="6"  width="26" height="42" rx="3" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="35" y="6"  width="26" height="42" rx="3" fill="${COLOR.fill}" stroke="${COLOR.primary}"/>
+    <rect x="64" y="6"  width="26" height="42" rx="3" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+  FeatureGrid: `
+    <rect x="6"  y="6"  width="40" height="18" rx="2" fill="${COLOR.fill}"/>
+    <rect x="50" y="6"  width="40" height="18" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6"  y="28" width="40" height="18" rx="2" fill="${COLOR.fill}"/>
+    <rect x="50" y="28" width="40" height="18" rx="2" fill="${COLOR.fill}"/>`,
+  FollowUpBlock: `
+    <rect x="6"  y="14" width="84" height="8" rx="4" fill="${COLOR.fill}"/>
+    <rect x="6"  y="26" width="84" height="8" rx="4" fill="${COLOR.fill}"/>
+    <rect x="6"  y="38" width="60" height="8" rx="4" fill="${COLOR.fill}"/>`,
+  Empty: `
+    <circle cx="48" cy="22" r="10" fill="none" stroke="${COLOR.line}" stroke-width="1.5"/>
+    <line x1="42" y1="22" x2="54" y2="22" stroke="${COLOR.line}" stroke-width="1.5"/>
+    <rect x="30" y="38" width="36" height="3" rx="1" fill="${COLOR.line}"/>`,
+
+  // ---- App shell ----
+  AppShell: `
+    <rect x="6" y="6" width="22" height="42" fill="${COLOR.fill}"/>
+    <rect x="32" y="6" width="58" height="9" fill="${COLOR.fill}"/>
+    <rect x="32" y="19" width="58" height="29" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+  Sidebar: `
+    <rect x="6" y="6" width="24" height="42" fill="${COLOR.fill}"/>
+    <rect x="10" y="14" width="16" height="3" rx="1" fill="${COLOR.primary}"/>
+    <rect x="10" y="22" width="14" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="10" y="30" width="14" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="34" y="6" width="56" height="42" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+  Topbar: `
+    <rect x="6" y="6" width="84" height="14" fill="${COLOR.fill}"/>
+    <rect x="14" y="11" width="20" height="4" rx="1" fill="${COLOR.primary}"/>
+    <rect x="60" y="10" width="22" height="6" rx="2" fill="${COLOR.primary}"/>
+    <rect x="6" y="22" width="84" height="26" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+
+  // ---- Navigation ----
+  Tabs: `
+    <rect x="6" y="14" width="20" height="8" rx="2" fill="${COLOR.primary}"/>
+    <rect x="28" y="14" width="20" height="8" rx="2" fill="${COLOR.fill}"/>
+    <rect x="50" y="14" width="20" height="8" rx="2" fill="${COLOR.fill}"/>
+    <line x1="6" y1="24" x2="90" y2="24" stroke="${COLOR.line}"/>
+    <rect x="14" y="32" width="68" height="14" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+  Breadcrumb: `
+    <rect x="6"  y="22" width="14" height="4" rx="1" fill="${COLOR.line}"/>
+    <text x="22" y="27" font-size="6" fill="${COLOR.line}">›</text>
+    <rect x="28" y="22" width="20" height="4" rx="1" fill="${COLOR.line}"/>
+    <text x="50" y="27" font-size="6" fill="${COLOR.line}">›</text>
+    <rect x="56" y="22" width="24" height="4" rx="1" fill="${COLOR.primary}"/>`,
+  NavLink: `
+    <rect x="14" y="22" width="68" height="10" rx="3" fill="${COLOR.fill}"/>
+    <rect x="20" y="26" width="40" height="3" rx="1" fill="${COLOR.primary}"/>`,
+  Pagination: `
+    <rect x="14" y="22" width="10" height="10" rx="2" fill="${COLOR.fill}"/>
+    <rect x="28" y="22" width="10" height="10" rx="2" fill="${COLOR.primary}"/>
+    <rect x="42" y="22" width="10" height="10" rx="2" fill="${COLOR.fill}"/>
+    <rect x="56" y="22" width="10" height="10" rx="2" fill="${COLOR.fill}"/>
+    <rect x="70" y="22" width="10" height="10" rx="2" fill="${COLOR.fill}"/>`,
+
+  // ---- Feedback ----
+  Alert: `
+    <rect x="6" y="14" width="84" height="26" rx="3" fill="${COLOR.fill}"/>
+    <circle cx="16" cy="27" r="4" fill="${COLOR.primary}"/>
+    <rect x="26" y="22" width="50" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="26" y="29" width="40" height="3" rx="1" fill="${COLOR.line}"/>`,
+  Toast: `
+    <rect x="14" y="16" width="68" height="22" rx="3" fill="${COLOR.text}"/>
+    <circle cx="22" cy="27" r="3" fill="${COLOR.primary}"/>
+    <rect x="30" y="22" width="40" height="3" rx="1" fill="white" opacity=".8"/>
+    <rect x="30" y="28" width="30" height="3" rx="1" fill="white" opacity=".5"/>`,
+  Spinner: `
+    <circle cx="48" cy="27" r="14" fill="none" stroke="${COLOR.line}" stroke-width="3"/>
+    <path d="M48 13 A14 14 0 0 1 62 27" fill="none" stroke="${COLOR.primary}" stroke-width="3"/>`,
+  Skeleton: `
+    <rect x="6" y="10" width="84" height="6" rx="2" fill="${COLOR.line}" opacity=".4"/>
+    <rect x="6" y="22" width="68" height="6" rx="2" fill="${COLOR.line}" opacity=".4"/>
+    <rect x="6" y="34" width="50" height="6" rx="2" fill="${COLOR.line}"  opacity=".4"/>`,
+  Image: `
+    <rect x="8" y="6" width="80" height="42" rx="3" fill="${COLOR.fill}" stroke="${COLOR.line}"/>
+    <circle cx="32" cy="22" r="4" fill="${COLOR.primary}"/>
+    <path d="M14 38 L36 24 L52 32 L74 18 L84 28 L84 42 L14 42 Z" fill="${COLOR.primary}" opacity=".4"/>`,
+  Video: `
+    <rect x="8" y="6" width="80" height="42" rx="3" fill="${COLOR.text}"/>
+    <polygon points="38,18 38,38 60,28" fill="white" opacity=".95"/>`,
+  Icon: `
+    <circle cx="48" cy="27" r="16" fill="${COLOR.primary}" opacity=".15"/>
+    <path d="M48 17 L51 25 L60 25 L53 30 L56 38 L48 33 L40 38 L43 30 L36 25 L45 25 Z" fill="${COLOR.primary}"/>`,
+
+  // ---- Chat ----
+  ChatMessage: `
+    <rect x="6" y="10" width="50" height="14" rx="6" fill="${COLOR.fill}"/>
+    <rect x="14" y="14" width="36" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="40" y="30" width="50" height="14" rx="6" fill="${COLOR.primary}"/>
+    <rect x="48" y="34" width="36" height="3" rx="1" fill="white" opacity=".9"/>`,
+  Composer: `
+    <rect x="6" y="20" width="64" height="14" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}"/>
+    <rect x="14" y="26" width="32" height="3" rx="1" fill="${COLOR.line}"/>
+    <rect x="74" y="20" width="14" height="14" rx="3" fill="${COLOR.primary}"/>`,
+  Suggestion: `
+    <rect x="6" y="22" width="22" height="10" rx="5" fill="${COLOR.fill}"/>
+    <rect x="32" y="22" width="22" height="10" rx="5" fill="${COLOR.fill}"/>
+    <rect x="58" y="22" width="22" height="10" rx="5" fill="${COLOR.fill}"/>`,
+
+  // ---- Routing & shells ----
+  Router: `
+    <rect x="6" y="14" width="20" height="6" rx="2" fill="${COLOR.primary}"/>
+    <rect x="6" y="24" width="20" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="6" y="34" width="20" height="6" rx="2" fill="${COLOR.fill}"/>
+    <rect x="32" y="10" width="56" height="34" rx="2" fill="${COLOR.bg}" stroke="${COLOR.line}"/>`,
+
+  // ---- Theming ----
+  Theme: `
+    <circle cx="32" cy="27" r="10" fill="${COLOR.primary}"/>
+    <circle cx="48" cy="27" r="10" fill="${COLOR.fill}"/>
+    <circle cx="64" cy="27" r="10" fill="${COLOR.line}" opacity=".5"/>`,
+};
+
+const CATEGORY_FALLBACK = {
+  Layout:           "Stack",
+  Content:          "Text",
+  Forms:            "Input",
+  Data:             "Table",
+  Charts:           "BarChart",
+  Patterns:         "Hero",
+  "App shell":      "AppShell",
+  Navigation:       "Tabs",
+  "Feedback & Media": "Alert",
+  "Editors & overlays": "Markdown",
+  Chat:             "ChatMessage",
+  "Advanced UI":    "Theme",
+  Helpers:          "Spacer",
+  Theming:          "Theme",
+  Routing:          "Router",
+  "Escape hatches": "Code",
+  Other:            "Card",
+};
+
+function componentSchematic(entry) {
+  const direct = SCHEMATICS[entry.name];
+  if (direct) return makeSvg(direct);
+  // Heuristic: pick a schematic from a name suffix match.
+  for (const [name, content] of Object.entries(SCHEMATICS)) {
+    if (entry.name.endsWith(name) && entry.name !== name) return makeSvg(content);
+  }
+  // Category fallback + monogram so the long tail still looks distinct.
+  const fallback = SCHEMATICS[CATEGORY_FALLBACK[entry.group] || "Card"] || SCHEMATICS.Card;
+  const initials = entry.name
+    .replace(/([A-Z])/g, " $1")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 3);
+  const monogram = `
+    <g transform="translate(0,0)" opacity=".55">${fallback}</g>
+    <rect x="60" y="34" width="30" height="14" rx="3" fill="${COLOR.primary}"/>
+    <text x="75" y="44" font-size="9" font-weight="700" font-family="ui-sans-serif, system-ui" fill="white" text-anchor="middle">${initials}</text>`;
+  return makeSvg(monogram);
 }
 
 /**
@@ -1303,6 +1796,7 @@ function addComponentSmart(name) {
         if (!Array.isArray(target.slots[childrenParam.name])) {
           target.slots[childrenParam.name] = [];
         }
+        commit();
         target.slots[childrenParam.name].push(node);
         state.selectedId = node.id;
         saveState();
@@ -1317,87 +1811,123 @@ function addComponentSmart(name) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering — canvas
+// Rendering — canvas (WYSIWYG)
+//
+// The canvas hosts a real <aktion-app> instance rendering the live program.
+// On top of it we draw a transparent overlay layer with selection, hover,
+// drop zones, action toolbars, and slot-fill CTAs.
+//
+// Pipeline per render:
+//   1. emitProgram() → push the source into <aktion-app>
+//   2. After the runtime renders its shadow DOM, decorateRenderedDOM()
+//      walks the rendered tree in parallel with our visual tree, tags
+//      each rendered element with `data-veid="<nodeId>"`, and stores
+//      bounding rects relative to the overlay's coordinate space.
+//   3. renderOverlay() reads the rect map + state and paints all overlay
+//      elements at the right positions.
+
+let lastEmittedSource = "";
 
 function renderCanvas() {
-  const canvas = $("ve-canvas");
-  if (!canvas) return;
-  canvas.innerHTML = "";
+  const preview = $("ve-preview");
+  const overlay = $("ve-overlay");
+  if (!preview || !overlay) return;
+
+  // Sync theme + device + zoom every render — cheap and avoids drift.
+  preview.setAttribute("theme", state.theme || "light");
+  const frame = $("ve-stage-frame");
+  if (frame) {
+    frame.dataset.device = state.device || "desktop";
+    frame.dataset.mode = state.mode || "edit";
+    frame.style.setProperty("--ve-zoom", String(state.zoom || 1));
+  }
+
+  // Sync edit-mode shadow DOM stylesheet + host attribute.
+  ensureShadowEditStyles(preview);
+  if (state.mode === "preview") delete preview.dataset.veditorMode;
+  else preview.dataset.veditorMode = "edit";
+
   if (!state.tree) {
-    canvas.append(el("div", { class: "ve-slot-empty" }, "Empty canvas. Drag a component from the palette."));
+    overlay.innerHTML = "";
+    if (typeof preview.setResponse === "function") preview.setResponse("");
+    paintEmptyStage();
     return;
   }
-  const wrap = el("div", { class: "ve-tree-root" });
-  wrap.append(renderTreeNode(state.tree, null, null, 0));
-  canvas.append(wrap);
-}
 
-function renderTreeNode(node, parent, slotName, depth) {
-  if (node.kind === "expr") return renderExprNode(node, parent, slotName);
-  return renderComponentNode(node, parent, slotName, depth);
-}
-
-function renderExprNode(node, parent, slotName) {
-  const wrap = el("div", {
-    class: "ve-node",
-    draggable: parent ? "true" : "false",
-    data: { kind: "expr", selected: state.selectedId === node.id, dragging: state.draggingId === node.id, expanded: "false" },
-    onClick: (e) => { e.stopPropagation(); state.selectedId = node.id; scheduleRender(); },
-    onDragstart: parent ? (e) => { e.stopPropagation(); startNodeDrag(node.id, e); } : null,
-    onDragend: parent ? () => endNodeDrag() : null,
-  }, [
-    el("div", { class: "ve-node-head" }, [
-      el("span", { class: "ve-drag" }, [el("i", { class: "fa-solid fa-grip-vertical" })]),
-      el("span", { class: "ve-name", style: "color: var(--doc-text-muted);" }, "expr"),
-      el("span", { class: "ve-summary" }, node.raw),
-      el("div", { class: "ve-actions" }, parent ? [
-        el("button", { type: "button", title: "Delete", class: "is-danger",
-          onClick: (e) => { e.stopPropagation(); deleteNode(node.id); saveState(); scheduleRender(); },
-        }, [el("i", { class: "fa-solid fa-trash" })]),
-      ] : null),
-    ]),
-  ]);
-  return wrap;
-}
-
-function renderComponentNode(node, parent, slotName, depth) {
-  const entry = getEntry(node.name);
-  const expanded = state.selectedId === node.id || hasFilledChildSlot(node) || depth < 2;
-  const wrap = el("div", {
-    class: "ve-node",
-    draggable: parent ? "true" : "false",
-    data: {
-      kind: "component",
-      selected: state.selectedId === node.id,
-      dragging: state.draggingId === node.id,
-      expanded: String(expanded),
-    },
-    onClick: (e) => { e.stopPropagation(); state.selectedId = node.id; scheduleRender(); },
-    onDragstart: parent ? (e) => { e.stopPropagation(); startNodeDrag(node.id, e); } : null,
-    onDragend: parent ? () => endNodeDrag() : null,
-  });
-  wrap.append(renderNodeHeader(node, parent));
-  if (entry) {
-    const body = el("div", { class: "ve-node-body" });
-    let hasContent = false;
-    for (const param of entry.params) {
-      const slotKind = getSlotKind(param.type);
-      if (!slotKind) continue;
-      const slot = node.slots[param.name];
-      const presentForChild = slotKind === "child" && slot;
-      const presentForChildren = slotKind === "children" && Array.isArray(slot);
-      // Always render the first Node[] slot for a parent; render others
-      // only when they exist or are required.
-      const isFirstChildrenParam = param.name === firstChildrenParamName(entry);
-      if (slotKind === "children" && !presentForChildren && !param.required && !isFirstChildrenParam) continue;
-      if (slotKind === "child" && !presentForChild && !param.required) continue;
-
-      hasContent = true;
-      body.append(renderSlot(node, param, depth));
+  const source = emitProgram();
+  if (source !== lastEmittedSource) {
+    lastEmittedSource = source;
+    if (typeof preview.setResponse === "function") {
+      preview.setResponse(source);
+    } else {
+      preview.setAttribute("response", source);
     }
-    if (hasContent) wrap.append(body);
   }
-  return wrap;
+
+  // The runtime renders synchronously after setResponse(); decorate on
+  // the next animation frame so layout is finalised. We also schedule a
+  // second pass after one more frame to catch any async re-renders the
+  // runtime may queue (effects, async actions).
+  requestAnimationFrame(() => {
+    decorateRenderedDOM();
+    renderOverlay();
+    requestAnimationFrame(() => {
+      decorateRenderedDOM();
+      renderOverlay();
+    });
+  });
+}
+
+function paintEmptyStage() {
+  // Show a friendly empty state when there's no tree at all.
+  const overlay = $("ve-overlay");
+  overlay.innerHTML = "";
+  overlay.append(el("div", { class: "ve-stage-empty" }, [
+    el("i", { class: "fa-solid fa-cubes-stacked", "aria-hidden": "true" }),
+    el("h3", null, "Drag a component to start"),
+    el("p", null, "Pick anything from the palette and drop it on the canvas."),
+  ]));
+}
+
+/**
+ * Inject a small stylesheet into aktion-app's shadow root so empty
+ * structural containers (Stack/Grid/Box/Card content/Section/Container)
+ * still have a visible footprint in edit mode. Without this, an empty
+ * Stack would collapse to 0 height and there would be nothing for the
+ * overlay's slot fill to align to.
+ *
+ * The styles are scoped via :host([data-veditor-mode="edit"]) so they
+ * only apply in edit mode — preview mode renders the live UI as-is.
+ */
+function ensureShadowEditStyles(preview) {
+  const sr = preview && preview.shadowRoot;
+  if (!sr) return;
+  if (sr.getElementById("ve-shadow-edit-styles")) return;
+  const style = document.createElement("style");
+  style.id = "ve-shadow-edit-styles";
+  style.textContent = `
+    :host([data-veditor-mode="edit"]) .rui-stack:empty,
+    :host([data-veditor-mode="edit"]) .rui-grid:empty,
+    :host([data-veditor-mode="edit"]) .rui-box:empty,
+    :host([data-veditor-mode="edit"]) .rui-card:empty,
+    :host([data-veditor-mode="edit"]) .rui-card-content:empty,
+    :host([data-veditor-mode="edit"]) .rui-section:empty,
+    :host([data-veditor-mode="edit"]) .rui-container:empty,
+    :host([data-veditor-mode="edit"]) .rui-masonry-grid:empty,
+    :host([data-veditor-mode="edit"]) .rui-stack-item:empty,
+    :host([data-veditor-mode="edit"]) .rui-grid-item:empty {
+      min-height: 72px;
+      min-width: 72px;
+      border: 2px dashed color-mix(in srgb, currentColor 25%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, currentColor 3%, transparent);
+      box-sizing: border-box;
+    }
+    :host([data-veditor-mode="edit"]) .rui-grid:empty {
+      min-height: 120px;
+    }
+  `;
+  sr.appendChild(style);
 }
 
 function firstChildrenParamName(entry) {
@@ -1413,33 +1943,6 @@ function hasFilledChildSlot(node) {
     if (slot && !Array.isArray(slot) && typeof slot === "object" && slot.kind) return true;
   }
   return false;
-}
-
-function renderNodeHeader(node, parent) {
-  const entry = getEntry(node.name);
-  const summary = nodeSummary(node);
-  const head = el("div", { class: "ve-node-head" }, [
-    el("span", { class: "ve-drag" }, [el("i", { class: "fa-solid fa-grip-vertical" })]),
-    el("span", { class: "ve-name" }, node.name),
-    el("span", { class: "ve-summary" }, summary || (entry ? entry.signature : "")),
-    el("div", { class: "ve-actions" }, parent ? [
-      el("button", { type: "button", title: "Move up",
-        onClick: (e) => { e.stopPropagation(); if (moveNode(node.id, "up")) { saveState(); scheduleRender(); } },
-      }, [el("i", { class: "fa-solid fa-arrow-up" })]),
-      el("button", { type: "button", title: "Move down",
-        onClick: (e) => { e.stopPropagation(); if (moveNode(node.id, "down")) { saveState(); scheduleRender(); } },
-      }, [el("i", { class: "fa-solid fa-arrow-down" })]),
-      el("button", { type: "button", title: "Duplicate",
-        onClick: (e) => { e.stopPropagation(); duplicateNode(node.id); saveState(); scheduleRender(); },
-      }, [el("i", { class: "fa-solid fa-clone" })]),
-      el("button", { type: "button", title: "Delete", class: "is-danger",
-        onClick: (e) => { e.stopPropagation(); deleteNode(node.id); saveState(); scheduleRender(); },
-      }, [el("i", { class: "fa-solid fa-trash" })]),
-    ] : [
-      el("span", { class: "ve-summary-chip" }, "root"),
-    ]),
-  ]);
-  return head;
 }
 
 function nodeSummary(node) {
@@ -1458,53 +1961,6 @@ function nodeSummary(node) {
   return parts.join("  ");
 }
 
-function renderSlot(node, param, depth) {
-  const slotKind = getSlotKind(param.type);
-  const slot = el("div", { class: "ve-slot" }, [
-    el("div", { class: "ve-slot-label" },
-      param.name + " · " + param.type + (param.required ? " *" : "")),
-  ]);
-  if (slotKind === "children") {
-    const arr = Array.isArray(node.slots[param.name]) ? node.slots[param.name] : [];
-    const list = el("div", { class: "ve-slot-children" });
-    if (arr.length === 0) {
-      const empty = el("div", { class: "ve-slot-empty" }, "Drop a component here");
-      attachDropTarget(empty,
-        (p) => acceptsPayload(p, param, node, 0),
-        (p) => performDrop(p, node.id, param.name, 0));
-      list.append(empty);
-    } else {
-      // First gap (index 0)
-      list.append(renderDropGap(node, param, 0));
-      arr.forEach((child, idx) => {
-        list.append(renderTreeNode(child, node, param.name, depth + 1));
-        list.append(renderDropGap(node, param, idx + 1));
-      });
-    }
-    slot.append(list);
-  } else if (slotKind === "child") {
-    const child = node.slots[param.name];
-    if (child) {
-      slot.append(renderTreeNode(child, node, param.name, depth + 1));
-    } else {
-      const empty = el("div", { class: "ve-slot-empty" }, "Drop a single component here");
-      attachDropTarget(empty,
-        (p) => acceptsPayload(p, param, node, 0),
-        (p) => performDrop(p, node.id, param.name, 0));
-      slot.append(empty);
-    }
-  }
-  return slot;
-}
-
-function renderDropGap(node, param, index) {
-  const gap = el("div", { class: "ve-drop-gap" });
-  attachDropTarget(gap,
-    (p) => acceptsPayload(p, param, node, index),
-    (p) => performDrop(p, node.id, param.name, index));
-  return gap;
-}
-
 function acceptsPayload(payload, param, node, _index) {
   if (!payload) return false;
   if (payload.kind === "new") {
@@ -1520,6 +1976,574 @@ function acceptsPayload(payload, param, node, _index) {
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// DOM-to-node decoration
+//
+// After every render of <aktion-app>, we walk the visual tree and the
+// rendered shadow DOM in parallel. For each visual component node we store
+// the rendered DOM element + its bounding rect (in stage-frame space) so the
+// overlay can position selection / hover / drop indicators precisely. We
+// also tag each tagged DOM element with `data-veid="<id>"` so click handlers
+// can resolve a click target back to a visual node via composedPath().
+
+function decorateRenderedDOM() {
+  state.rectsById.clear();
+  state.rectsBySlot.clear();
+  const preview = $("ve-preview");
+  const frame = $("ve-stage-frame");
+  if (!preview || !preview.shadowRoot || !state.tree || !frame) return;
+  const frameRect = frame.getBoundingClientRect();
+  const sr = preview.shadowRoot;
+  // Clear stale `data-veid` from previous renders. The runtime morphs DOM
+  // so attributes can survive on retained nodes that no longer correspond
+  // to our visual tree.
+  for (const stale of sr.querySelectorAll("[data-veid]")) {
+    delete stale.dataset.veid;
+  }
+  // The Aktion runtime renders into <div class="rui-root">. Fall back to
+  // the first non-style / non-link / non-error-banner element so we degrade
+  // gracefully if the class ever changes.
+  let rendered = sr.querySelector(".rui-root");
+  if (!rendered) {
+    for (const child of sr.children) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "style" || tag === "link") continue;
+      if (child.classList && child.classList.contains("rui-error-banner")) continue;
+      rendered = child;
+      break;
+    }
+  }
+  if (!rendered) return;
+  // The rui-root wraps the program tree in one element. Drill down into
+  // its single child if the visual root is a single component (the common
+  // case — `_app_ = Stack(...)`).
+  let renderedRoot = rendered;
+  if (state.tree && state.tree.kind === "component" && rendered.children.length === 1) {
+    renderedRoot = rendered.children[0];
+  }
+  walkParallel(state.tree, renderedRoot, frameRect);
+}
+
+function walkParallel(visualNode, domEl, frameRect) {
+  if (!visualNode || !domEl) return;
+  // Tag and store rect.
+  if (domEl instanceof HTMLElement) domEl.dataset.veid = visualNode.id;
+  state.rectsById.set(visualNode.id, {
+    el: domEl,
+    rect: rectIn(domEl, frameRect),
+  });
+  if (visualNode.kind !== "component") return;
+  const entry = getEntry(visualNode.name);
+  if (!entry) return;
+
+  for (const param of entry.params) {
+    const slotKind = getSlotKind(param.type);
+    if (!slotKind) continue;
+    const slot = visualNode.slots[param.name];
+    if (slotKind === "children") {
+      const arr = Array.isArray(slot) ? slot : [];
+      const container = arr.length > 0
+        ? findContainerForCount(domEl, arr.length)
+        : findEmptySlotContainer(domEl);
+      const slotKey = visualNode.id + ":" + param.name;
+      const childInfos = [];
+      for (let i = 0; i < arr.length; i++) {
+        const childEl = container && container.children[i] ? container.children[i] : null;
+        if (childEl) walkParallel(arr[i], childEl, frameRect);
+        childInfos.push(childEl ? rectIn(childEl, frameRect) : null);
+      }
+      state.rectsBySlot.set(slotKey, {
+        param,
+        container,
+        containerRect: container ? rectIn(container, frameRect) : null,
+        childRects: childInfos,
+        empty: arr.length === 0,
+        direction: container ? detectDirection(container) : "column",
+      });
+    } else if (slotKind === "child") {
+      if (slot && typeof slot === "object" && slot.kind) {
+        // Single-child slot. The visual subtree's rendered root is the
+        // first descendant element with substantive content.
+        walkParallel(slot, domEl, frameRect);
+      }
+    }
+  }
+}
+
+function rectIn(domEl, frameRect) {
+  const er = domEl.getBoundingClientRect();
+  return {
+    top: er.top - frameRect.top,
+    left: er.left - frameRect.left,
+    width: er.width,
+    height: er.height,
+  };
+}
+
+function detectDirection(container) {
+  try {
+    const cs = getComputedStyle(container);
+    if (cs.flexDirection && cs.flexDirection.includes("row")) return "row";
+    if (cs.gridTemplateColumns && cs.gridTemplateColumns !== "none") {
+      // Distinguish row-flow grids from column-flow ones via the longest axis
+      // of the resolved track list.
+      return "grid";
+    }
+  } catch (_) {}
+  return "column";
+}
+
+/**
+ * BFS for a descendant whose direct child element count matches `count`.
+ * Used to locate the rendered children container of a visual node.
+ */
+function findContainerForCount(rootEl, count) {
+  const queue = [rootEl];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (cur.children.length === count) return cur;
+    for (const c of cur.children) queue.push(c);
+  }
+  // Fallback: the root itself, even if counts don't match. Better to map
+  // partially than to return nothing.
+  return rootEl;
+}
+
+/**
+ * For empty children slots, find the first descendant that visually
+ * represents the slot region. We pick the deepest single-child chain so
+ * the slot fill bounds match the rendered placeholder — falling back to
+ * the root element if the chain ends in a leaf with text.
+ */
+function findEmptySlotContainer(rootEl) {
+  let cur = rootEl;
+  while (cur && cur.children.length === 1) cur = cur.children[0];
+  return cur || rootEl;
+}
+
+// ---------------------------------------------------------------------------
+// Overlay rendering
+//
+// The overlay is recomputed from `state.rectsById` + `state.rectsBySlot`.
+// It contains: hover outline + label, selection outline + action bar, drop
+// zones (visible while dragging), and slot-fill CTAs for empty containers.
+
+function renderOverlay() {
+  const overlay = $("ve-overlay");
+  if (!overlay) return;
+  overlay.innerHTML = "";
+
+  // Mirror current mode + drag state on the stage so CSS can react.
+  const stage = $("ve-stage");
+  const frame = $("ve-stage-frame");
+  if (stage) stage.dataset.mode = state.mode || "edit";
+  if (frame) frame.dataset.mode = state.mode || "edit";
+
+  if (!state.tree) {
+    paintEmptyStage();
+    return;
+  }
+
+  // Preview mode: render nothing — the live aktion-app is the deliverable.
+  if (state.mode === "preview") {
+    renderBreadcrumbs();
+    return;
+  }
+
+  // Edit-mode container chrome: dashed outlines + tiny type badges so the
+  // user can see the structure even when components are visually nested.
+  renderContainerChrome(overlay);
+
+  // Hover outline (skip when hovered === selected to avoid double rings).
+  if (state.hoveredId && state.hoveredId !== state.selectedId && !currentDragPayload) {
+    const hover = state.rectsById.get(state.hoveredId);
+    if (hover) {
+      overlay.append(buildOutline(hover.rect, "ve-outline--hover"));
+      const node = findNode(state.hoveredId);
+      if (node) overlay.append(buildHoverLabel(hover.rect, node));
+    }
+  }
+
+  // Slot fills: visible CTAs for every empty Node[] / Node slot.
+  renderSlotFills(overlay);
+
+  // Drop zones (visible while a drag is active).
+  if (currentDragPayload) renderDropZones(overlay);
+
+  // Selection outline + floating action bar (hide bar while dragging so it
+  // doesn't get in the way of the drop targets).
+  if (state.selectedId && !currentDragPayload) {
+    const sel = state.rectsById.get(state.selectedId);
+    if (sel) {
+      overlay.append(buildOutline(sel.rect, "ve-outline--selected"));
+      overlay.append(buildActionBar(sel.rect, state.selectedId));
+    }
+  } else if (state.selectedId && currentDragPayload) {
+    const sel = state.rectsById.get(state.selectedId);
+    if (sel) overlay.append(buildOutline(sel.rect, "ve-outline--selected"));
+  }
+
+  renderBreadcrumbs();
+}
+
+/**
+ * Edit-mode visual chrome: faint dashed outlines around every component +
+ * small named badges in the top-left corner. Helps users see the layout
+ * structure (especially Stack / Grid / Box / Container) without having to
+ * click each one. The chrome is opacity-controlled by CSS so it brightens
+ * during drag and fades during normal editing.
+ */
+function renderContainerChrome(overlay) {
+  // Decide which containers are "valid drop targets" for the current drag —
+  // we use this to brighten only the relevant outlines/badges so the canvas
+  // doesn't light up everywhere when the user starts dragging.
+  const validIds = new Set();
+  if (currentDragPayload) {
+    for (const [slotKey, info] of state.rectsBySlot) {
+      if (!info.param) continue;
+      if (getSlotKind(info.param.type) !== "children") continue;
+      const [parentId] = slotKey.split(":");
+      const parent = findNode(parentId);
+      if (!parent) continue;
+      if (acceptsPayload(currentDragPayload, info.param, parent, 0)) {
+        validIds.add(parentId);
+      }
+    }
+  }
+  for (const [, node] of allComponentNodes()) {
+    if (node.kind !== "component") continue;
+    if (node.id === state.selectedId) continue; // selection ring covers this
+    const info = state.rectsById.get(node.id);
+    if (!info || !info.rect) continue;
+    const rect = info.rect;
+    if (rect.width < 4 || rect.height < 4) continue;
+    const isValidTarget = validIds.has(node.id);
+    overlay.append(el("div", {
+      class: "ve-container-outline",
+      data: { veidOutline: node.id, validTarget: isValidTarget ? "true" : "false" },
+      style: outlineStyle(rect),
+    }));
+    // Only show the name badge during drag for valid containers, to keep the
+    // canvas calm in normal edit mode (badges otherwise appear on hover).
+    if (currentDragPayload && isValidTarget) {
+      overlay.append(el("div", {
+        class: "ve-container-badge",
+        data: { validTarget: "true" },
+        style: "top:" + rect.top + "px;left:" + rect.left + "px;",
+      }, node.name));
+    }
+  }
+}
+
+function buildOutline(rect, className) {
+  return el("div", {
+    class: "ve-outline " + className,
+    style: outlineStyle(rect),
+  });
+}
+
+function outlineStyle(rect) {
+  return "top:" + rect.top + "px;left:" + rect.left + "px;width:"
+    + rect.width + "px;height:" + rect.height + "px;";
+}
+
+function buildHoverLabel(rect, node) {
+  const left = Math.max(0, rect.left);
+  const top = Math.max(0, rect.top - 4);
+  return el("div", {
+    class: "ve-hover-label",
+    style: "top:" + top + "px;left:" + left + "px;",
+  }, node.kind === "component" ? node.name : "expr");
+}
+
+function buildActionBar(rect, nodeId) {
+  const node = findNode(nodeId);
+  if (!node) return null;
+  const info = findContainer(nodeId);
+  const isRoot = !info || !info.parent;
+  const left = Math.max(0, rect.left);
+  // Place above the selection. If the selection is near the top, flip below.
+  const aboveTop = rect.top - 6;
+  const showBelow = aboveTop < 32;
+  const styleTop = showBelow ? rect.top + rect.height + 6 : rect.top;
+  const styleTransform = showBelow ? "transform: translateY(0);" : "";
+  const bar = el("div", {
+    class: "ve-action-bar",
+    style: "top:" + styleTop + "px;left:" + left + "px;" + styleTransform,
+    onMousedown: (e) => e.stopPropagation(),
+    onClick: (e) => e.stopPropagation(),
+  });
+  // Drag handle + name (drag here to reorder).
+  bar.append(el("div", {
+    class: "ve-action-name",
+    draggable: !isRoot,
+    onDragstart: !isRoot ? (e) => startNodeDrag(node.id, e) : null,
+    onDragend: !isRoot ? () => endNodeDrag() : null,
+    title: isRoot ? "Root component" : "Drag to move",
+  }, [
+    el("i", { class: "fa-solid fa-grip-vertical", style: "margin-right: 4px; opacity: .65;" }),
+    document.createTextNode(node.kind === "expr" ? "expr" : node.name),
+  ]));
+  bar.append(el("div", { class: "ve-action-sep" }));
+  // Parent button
+  if (info && info.parent) {
+    bar.append(actionButton("fa-arrow-turn-up", "Select parent", () => {
+      state.selectedId = info.parent.id;
+      scheduleRender();
+    }));
+  }
+  if (!isRoot && info.isList) {
+    bar.append(actionButton("fa-arrow-up", "Move up", () => {
+      commit();
+      if (moveNode(nodeId, "up")) { saveState(); scheduleRender(); }
+    }));
+    bar.append(actionButton("fa-arrow-down", "Move down", () => {
+      commit();
+      if (moveNode(nodeId, "down")) { saveState(); scheduleRender(); }
+    }));
+  }
+  bar.append(actionButton("fa-clone", "Duplicate", () => {
+    commit();
+    duplicateNode(nodeId);
+    saveState();
+    scheduleRender();
+  }));
+  if (!isRoot) {
+    bar.append(actionButton("fa-trash", "Delete", () => {
+      commit();
+      deleteNode(nodeId);
+      saveState();
+      scheduleRender();
+    }, "is-danger"));
+  }
+  return bar;
+}
+
+function actionButton(icon, title, onClick, extraClass) {
+  return el("button", {
+    type: "button",
+    title,
+    class: extraClass || "",
+    onClick: (e) => { e.stopPropagation(); onClick(e); },
+  }, [el("i", { class: "fa-solid " + icon })]);
+}
+
+/**
+ * Render slot-fill CTAs: a visible placeholder over every Node[] / Node
+ * slot. In edit mode they're always shown so the user can see where things
+ * can go; during drag they brighten and become primary drop targets. They
+ * also work as click-to-add launchers (focus the palette).
+ *
+ * For empty slots we expand the drop area to a comfortable minimum so even
+ * a Stack or Grid that renders 0px tall is still targetable.
+ */
+function renderSlotFills(overlay) {
+  // Only show slot fills for empty Node[] (children) slots, and only when
+  // they have a *real* slot container distinct from the parent component.
+  // Otherwise the fill would cover rendered title/subtitle/badge content
+  // of components like PageHeader, Hero, Banner, etc. Single-Node optional
+  // slots remain editable from the inspector.
+  for (const [, node] of allComponentNodes()) {
+    const entry = getEntry(node.name);
+    if (!entry) continue;
+    const parentInfo = state.rectsById.get(node.id);
+    for (const param of entry.params) {
+      const slotKind = getSlotKind(param.type);
+      if (slotKind !== "children") continue;
+      const arr = node.slots[param.name];
+      const isEmpty = !Array.isArray(arr) || arr.length === 0;
+      if (!isEmpty) continue;
+      const slotInfo = state.rectsBySlot.get(node.id + ":" + param.name);
+      const slotContainer = slotInfo && slotInfo.container;
+      const containerRect = slotInfo && slotInfo.containerRect;
+      const parentRect = parentInfo && parentInfo.rect;
+
+      // Trustworthy slot container = a child element of the rendered
+      // component, NOT the component itself. (decorateRenderedDOM falls
+      // back to the rootEl when it can't locate a real slot container.)
+      const isRealSlotContainer = !!(slotContainer && slotInfo
+        && slotInfo.container !== parentInfo?.el);
+
+      let baseRect = null;
+      if (isRealSlotContainer && containerRect) {
+        baseRect = containerRect;
+      } else if (isStructuralContainer(node.name) && parentRect) {
+        // Pure-structural container with no extra chrome — safe to cover
+        // its full rect with a slot fill.
+        baseRect = parentRect;
+      } else {
+        // Parent has chrome (title/header/etc) we'd cover up. Skip the
+        // visual slot fill — the inspector "Add property" picker still
+        // works for these.
+        continue;
+      }
+      overlay.append(buildSlotFill(baseRect, node, param));
+    }
+  }
+}
+
+// Names of components whose entire rect is OK to cover with a slot-fill
+// placeholder when their children slot is empty (no decorative content
+// would be obscured).
+const STRUCTURAL_CONTAINER_NAMES = new Set([
+  "Stack", "Grid", "Box", "Container", "Card", "Form", "FormSection",
+  "FieldSet", "ScrollArea", "AspectRatio", "Spacer", "Sticky",
+  "ResizablePanels", "MasonryGrid", "Drawer", "Modal", "Popover",
+  "Tabs", "TabItem", "Accordion", "AccordionItem",
+  "Stats", "FeatureGrid", "BadgeList", "Buttons",
+  "Sidebar", "SidebarSection", "AppShell", "SplitView",
+  "Navbar", "Toolbar", "DropdownMenu", "Menu",
+  "FollowUpBlock", "ListBlock", "List", "ChatBubble",
+]);
+function isStructuralContainer(name) {
+  return STRUCTURAL_CONTAINER_NAMES.has(name);
+}
+
+function buildSlotFill(rect, parentNode, param) {
+  // Use the actual slot container rect when we have it. Constrain to a
+  // sensible minimum so 0×0 empty containers are still clickable but never
+  // larger than the parent itself (so we don't bleed over header/footer
+  // siblings of an "empty" children slot).
+  const minW = Math.max(Math.min(rect.width, 480), Math.min(160, rect.width || 160));
+  const minH = Math.max(Math.min(rect.height, 200), Math.min(72, rect.height || 72));
+  const valid = !currentDragPayload
+    || acceptsPayload(currentDragPayload, param, parentNode, 0);
+  const acceptedLabel = describeAcceptedTypes(param);
+  const fill = el("div", {
+    class: "ve-slot-fill",
+    data: { valid: valid ? "true" : "false", slotKind: "children" },
+    style: "top:" + rect.top + "px;left:" + rect.left + "px;width:"
+      + minW + "px;height:" + minH + "px;",
+    onClick: (e) => {
+      e.stopPropagation();
+      state.selectedId = parentNode.id;
+      const search = $("ve-palette-input");
+      if (search) search.focus();
+      scheduleRender();
+    },
+  }, [
+    el("div", { class: "ve-slot-fill-icon" }, [
+      el("i", { class: "fa-solid fa-circle-plus" }),
+    ]),
+    el("div", { class: "ve-slot-fill-cta" },
+      currentDragPayload ? "Release to drop here" : "Empty " + parentNode.name),
+    el("div", { class: "ve-slot-fill-meta" },
+      "accepts " + (acceptedLabel || "components") + " · " + param.name),
+  ]);
+  attachDropTarget(fill,
+    (p) => acceptsPayload(p, param, parentNode, 0),
+    (p) => { commit(); performDrop(p, parentNode.id, param.name, 0); });
+  return fill;
+}
+
+function describeAcceptedTypes(param) {
+  const t = (param && param.type) || "";
+  if (!t) return "";
+  if (t === "Node[]" || t === "Node") return "any component";
+  if (t.endsWith("[]")) return t.slice(0, -2);
+  return t;
+}
+
+/**
+ * While a drag is active, render generous drop-zone gaps between siblings
+ * of every Node[] slot the payload can target. The user drops between them
+ * to insert at that index.
+ *
+ * Zones are sized so they are large enough to hit easily (CSS expands them
+ * during drag via [data-dragging="true"] on the stage). They overlap a few
+ * pixels into the adjacent siblings on purpose so the entire gap is a
+ * valid target.
+ */
+function renderDropZones(overlay) {
+  for (const [slotKey, info] of state.rectsBySlot) {
+    if (!info.param || getSlotKind(info.param.type) !== "children") continue;
+    if (!info.containerRect) continue;
+    const [parentId] = slotKey.split(":");
+    const parent = findNode(parentId);
+    if (!parent) continue;
+    if (!acceptsPayload(currentDragPayload, info.param, parent, 0)) continue;
+    if (info.empty) continue; // empty handled by slot fill
+    const dir = info.direction;
+    const isRow = dir === "row";
+    for (let i = 0; i <= info.childRects.length; i++) {
+      const zone = buildDropZone(info, i, isRow);
+      if (!zone) continue;
+      attachDropTarget(zone,
+        (p) => acceptsPayload(p, info.param, parent, i),
+        (p) => { commit(); performDrop(p, parent.id, info.param.name, i); });
+      overlay.append(zone);
+    }
+  }
+}
+
+function buildDropZone(info, index, isRow) {
+  // The hit area is generous (HIT px) so users can target it easily, but the
+  // visible cue is a thin "insertion line" that sits between the two
+  // sibling rects without overlapping their content. The line grows when the
+  // zone is :active.
+  const cr = info.containerRect;
+  const HIT = 18;
+  let top, left, width, height;
+  if (isRow) {
+    if (index === 0) {
+      const c0 = info.childRects[0];
+      if (!c0) return null;
+      left = c0.left - HIT / 2;
+    } else if (index === info.childRects.length) {
+      const last = info.childRects[index - 1];
+      if (!last) return null;
+      left = last.left + last.width - HIT / 2;
+    } else {
+      const a = info.childRects[index - 1];
+      const b = info.childRects[index];
+      if (!a || !b) return null;
+      left = (a.left + a.width + b.left) / 2 - HIT / 2;
+    }
+    top = cr.top;
+    height = cr.height;
+    width = HIT;
+  } else {
+    if (index === 0) {
+      const c0 = info.childRects[0];
+      if (!c0) return null;
+      top = c0.top - HIT / 2;
+    } else if (index === info.childRects.length) {
+      const last = info.childRects[index - 1];
+      if (!last) return null;
+      top = last.top + last.height - HIT / 2;
+    } else {
+      const a = info.childRects[index - 1];
+      const b = info.childRects[index];
+      if (!a || !b) return null;
+      top = (a.top + a.height + b.top) / 2 - HIT / 2;
+    }
+    left = cr.left;
+    width = cr.width;
+    height = HIT;
+  }
+  return el("div", {
+    class: "ve-drop-zone " + (isRow ? "ve-drop-zone--col" : "ve-drop-zone--row"),
+    style: "top:" + top + "px;left:" + left + "px;width:" + width + "px;height:" + height + "px;",
+  }, [
+    el("div", { class: "ve-drop-zone-line" }),
+  ]);
+}
+
+function* allComponentNodes() {
+  if (!state.tree) return;
+  const stack = [state.tree];
+  while (stack.length > 0) {
+    const n = stack.pop();
+    if (n.kind === "component") {
+      yield [n.id, n];
+      for (const slot of Object.values(n.slots || {})) {
+        if (Array.isArray(slot)) for (const c of slot) stack.push(c);
+        else if (slot && typeof slot === "object" && slot.kind) stack.push(slot);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1803,17 +2827,9 @@ function updateRaw(node, propName, raw) {
 }
 
 function refreshSelectedSummary() {
-  // Lightweight refresh: update the canvas node's summary line and the
-  // code/preview without rebuilding the inspector DOM.
-  const sel = state.selectedId;
-  if (!sel) { renderCanvas(); return; }
-  // Find the node card in the canvas, replace its summary chip.
-  const canvas = $("ve-canvas");
-  const cards = canvas.querySelectorAll(".ve-node");
-  cards.forEach((card) => {
-    if (card.dataset.id !== sel) return;
-    // We'll just re-render the canvas — this is cheap.
-  });
+  // Push the latest tree to the live preview without rebuilding the inspector
+  // DOM (which would blow away the focused input). The canvas re-render is
+  // cheap because <aktion-app> diffs internally.
   renderCanvas();
 }
 
@@ -1907,9 +2923,9 @@ function renderPreludeBlock(root) {
 }
 
 // ---------------------------------------------------------------------------
-// Bottom panel — code preview, HTML preview, live render
+// Source drawer — fills .aktion + standalone HTML panes
 
-function updateBottomPanel() {
+function updateSourceDrawer() {
   const code = emitProgram();
   const htmlCode = buildStandaloneHtml(code, state.theme, "Aktion app");
 
@@ -1917,14 +2933,6 @@ function updateBottomPanel() {
   if (codeEl) codeEl.innerHTML = highlightAktion(code);
   const htmlEl = $("ve-html");
   if (htmlEl) htmlEl.textContent = htmlCode;
-
-  const preview = $("ve-preview");
-  if (preview) {
-    if (typeof preview.setTheme === "function") preview.setTheme(state.theme);
-    else preview.setAttribute("theme", state.theme);
-    if (typeof preview.setResponse === "function") preview.setResponse(code);
-    else preview.setAttribute("response", code);
-  }
 }
 
 function highlightAktion(source) {
@@ -2027,6 +3035,9 @@ function saveState() {
       prelude: state.prelude,
       rootId: state.rootId,
       theme: state.theme,
+      device: state.device,
+      zoom: state.zoom,
+      mode: state.mode,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(payload));
   } catch (_) { /* quota / privacy */ }
@@ -2042,6 +3053,9 @@ function loadState() {
       state.prelude = data.prelude || "";
       state.rootId = data.rootId || "_app_";
       state.theme = data.theme || "light";
+      state.device = data.device || "desktop";
+      state.zoom = typeof data.zoom === "number" ? data.zoom : 1;
+      state.mode = data.mode === "preview" ? "preview" : "edit";
       return true;
     }
   } catch (_) {}
@@ -2064,7 +3078,7 @@ function scheduleRender() {
   });
 }
 
-const queueCodeUpdate = debounce(updateBottomPanel, 80);
+const queueCodeUpdate = debounce(updateSourceDrawer, 80);
 
 // ---------------------------------------------------------------------------
 // Examples
@@ -2203,6 +3217,7 @@ function copyText(text) {
 function bindToolbar() {
   $("ve-new").addEventListener("click", () => {
     if (!confirm("Reset the canvas to a blank Stack? Your current work will be lost.")) return;
+    commit();
     state.tree = createDefaultTree();
     state.prelude = "";
     state.selectedId = null;
@@ -2218,45 +3233,74 @@ function bindToolbar() {
   $("ve-theme").addEventListener("change", (e) => {
     state.theme = e.target.value;
     saveState();
-    queueCodeUpdate();
+    scheduleRender();
   });
   $("ve-toggle-palette").addEventListener("click", (e) => {
     state.paletteOpen = !state.paletteOpen;
     $("ve-app").dataset.palette = String(state.paletteOpen);
     e.currentTarget.setAttribute("aria-pressed", String(state.paletteOpen));
+    requestAnimationFrame(() => { decorateRenderedDOM(); renderOverlay(); });
   });
   $("ve-toggle-inspector").addEventListener("click", (e) => {
     state.inspectorOpen = !state.inspectorOpen;
     $("ve-app").dataset.inspector = String(state.inspectorOpen);
     e.currentTarget.setAttribute("aria-pressed", String(state.inspectorOpen));
+    requestAnimationFrame(() => { decorateRenderedDOM(); renderOverlay(); });
   });
-  $("ve-export-aktion").addEventListener("click", () => {
-    downloadFile(emitProgram(), "aktion-" + Date.now() + ".aktion", "text/plain;charset=utf-8");
+  $("ve-undo").addEventListener("click", undo);
+  $("ve-redo").addEventListener("click", redo);
+  $("ve-source").addEventListener("click", () => {
+    updateSourceDrawer();
+    $("ve-source-backdrop").hidden = false;
   });
   $("ve-export-html").addEventListener("click", () => {
     downloadFile(buildStandaloneHtml(emitProgram(), state.theme, "Aktion app"),
       "aktion-" + Date.now() + ".html", "text/html;charset=utf-8");
   });
-}
 
-function bindBottom() {
-  document.querySelectorAll(".ve-bottom-tab").forEach((btn) => {
+  // Device width selector
+  document.querySelectorAll(".ve-canvas-tools button[data-device]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      state.bottomTab = btn.dataset.tab;
-      document.querySelectorAll(".ve-bottom-tab").forEach((b) => {
-        b.setAttribute("aria-pressed", String(b.dataset.tab === state.bottomTab));
+      state.device = btn.dataset.device;
+      document.querySelectorAll(".ve-canvas-tools button[data-device]").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.device === state.device));
       });
-      document.querySelectorAll(".ve-bottom-tab-panel").forEach((p) => {
-        p.dataset.active = String(p.dataset.tab === state.bottomTab);
-      });
+      saveState();
+      scheduleRender();
     });
   });
-  $("ve-bottom-toggle").addEventListener("click", (e) => {
-    state.bottomOpen = !state.bottomOpen;
-    $("ve-app").dataset.bottom = String(state.bottomOpen);
-    const i = e.currentTarget.querySelector("i");
-    i.classList.toggle("fa-chevron-down", state.bottomOpen);
-    i.classList.toggle("fa-chevron-up", !state.bottomOpen);
+
+  // Zoom in / out
+  document.querySelectorAll(".ve-canvas-tools button[data-zoom]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const dir = parseInt(btn.dataset.zoom, 10);
+      const steps = [0.5, 0.75, 1, 1.25, 1.5];
+      const cur = steps.indexOf(state.zoom);
+      const next = Math.max(0, Math.min(steps.length - 1, (cur === -1 ? 2 : cur) + dir));
+      state.zoom = steps[next];
+      $("ve-zoom-display").textContent = Math.round(state.zoom * 100) + "%";
+      saveState();
+      scheduleRender();
+    });
+  });
+}
+
+function bindSourceDrawer() {
+  const close = () => { $("ve-source-backdrop").hidden = true; };
+  $("ve-source-close").addEventListener("click", close);
+  $("ve-source-backdrop").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) close();
+  });
+  document.querySelectorAll(".ve-drawer-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.sourceTab;
+      document.querySelectorAll(".ve-drawer-tab").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.sourceTab === tab));
+      });
+      document.querySelectorAll(".ve-drawer-panel").forEach((p) => {
+        p.dataset.active = String(p.dataset.sourceTab === tab);
+      });
+    });
   });
   $("ve-code-copy").addEventListener("click", () => copyText(emitProgram()));
   $("ve-code-download").addEventListener("click", () => {
@@ -2267,6 +3311,150 @@ function bindBottom() {
     downloadFile(buildStandaloneHtml(emitProgram(), state.theme, "Aktion app"),
       "aktion-" + Date.now() + ".html", "text/html;charset=utf-8");
   });
+}
+
+/**
+ * WYSIWYG canvas interactions:
+ *   - Single click in the live preview selects the deepest visual node.
+ *     Clicks bubble up via `composedPath()`; we walk it in order and pick
+ *     the first element with `data-veid`.
+ *   - Hover updates `state.hoveredId` and triggers an overlay-only repaint.
+ *   - Double-click on a leaf text-bearing component opens an inline edit.
+ *   - Click handlers run in capture phase + stopImmediatePropagation so the
+ *     embedded Aktion runtime does not fire its own action handlers while
+ *     the user is editing.
+ */
+function bindCanvasInteractions() {
+  const preview = $("ve-preview");
+  const overlay = $("ve-overlay");
+  const stage = $("ve-stage");
+  if (!preview || !overlay) return;
+
+  const findHostId = (path) => {
+    for (const node of path) {
+      if (node && node.dataset && node.dataset.veid) return node.dataset.veid;
+      if (node === preview) break;
+    }
+    return null;
+  };
+
+  preview.addEventListener("click", (e) => {
+    if (state.mode === "preview") return; // pass clicks through to the live app
+    const id = findHostId(e.composedPath());
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    state.selectedId = id || null;
+    scheduleRender();
+  }, true);
+
+  // Click outside the rendered preview (on the empty stage / dot grid area)
+  // also deselects. We listen on the stage and only act when the click did
+  // NOT pass through any interactive overlay element or the preview itself —
+  // those have their own handlers.
+  if (stage) {
+    stage.addEventListener("click", (e) => {
+      if (state.mode === "preview") return;
+      const path = e.composedPath();
+      if (path.includes(preview)) return; // handled by the preview listener
+      // Ignore clicks on overlay UI (action bars, drop zones, slot fills).
+      for (const node of path) {
+        if (node === overlay) break;
+        if (node && node.classList && (
+          node.classList.contains("ve-action-bar") ||
+          node.classList.contains("ve-slot-fill") ||
+          node.classList.contains("ve-drop-zone")
+        )) return;
+      }
+      if (state.selectedId) {
+        state.selectedId = null;
+        scheduleRender();
+      }
+    });
+  }
+
+  preview.addEventListener("dblclick", (e) => {
+    if (state.mode === "preview") return;
+    const id = findHostId(e.composedPath());
+    if (!id) return;
+    const node = findNode(id);
+    if (!node || node.kind !== "component") return;
+    const target = e.composedPath()[0];
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    startInlineEdit(node, target);
+  }, true);
+
+  preview.addEventListener("mousemove", (e) => {
+    if (state.mode === "preview") return;
+    const id = findHostId(e.composedPath());
+    if (id !== state.hoveredId) {
+      state.hoveredId = id;
+      renderOverlay();
+    }
+  });
+  preview.addEventListener("mouseleave", () => {
+    state.hoveredId = null;
+    renderOverlay();
+  });
+
+  // Reposition overlays on scroll / resize so outlines stay aligned.
+  const reposition = debounce(() => {
+    decorateRenderedDOM();
+    renderOverlay();
+  }, 16);
+  window.addEventListener("resize", reposition);
+  $("ve-stage").addEventListener("scroll", reposition);
+}
+
+/**
+ * Inline text editing: when the user double-clicks a component whose
+ * "primary text" prop has a string raw value, we replace the rendered
+ * text with an absolutely positioned input bound to that prop. Pressing
+ * Enter or blurring commits the change.
+ */
+function startInlineEdit(node, targetEl) {
+  const entry = getEntry(node.name);
+  if (!entry) return;
+  // Pick the most likely text prop. Prefer `title`, then `label`, then any
+  // plain string raw that already exists, then the positional string prop.
+  const candidates = ["title", "label", "value", "subtitle", "text", "name"];
+  const positional = getPositionalPropName(node.name);
+  let propName = null;
+  for (const c of candidates) {
+    const param = entry.params.find((p) => p.name === c);
+    if (param && (param.type === "string" || param.type === "any")) { propName = c; break; }
+  }
+  if (!propName && positional) {
+    const param = entry.params.find((p) => p.name === positional);
+    if (param && (param.type === "string" || param.type === "any")) propName = positional;
+  }
+  if (!propName) return;
+
+  const overlay = $("ve-overlay");
+  const targetRect = targetEl ? rectIn(targetEl, $("ve-stage-frame").getBoundingClientRect()) : state.rectsById.get(node.id).rect;
+  const decoded = decodeRaw(node.raws[propName] || "", "string");
+  const initial = decoded && decoded.kind === "string" ? decoded.value : "";
+  const input = el("input", {
+    class: "ve-edit-input",
+    type: "text",
+    value: initial,
+    style: "top:" + (targetRect.top - 2) + "px;left:" + (targetRect.left - 4) + "px;width:"
+      + Math.max(120, targetRect.width + 8) + "px;height:" + (targetRect.height + 4) + "px;",
+  });
+  const commitEdit = () => {
+    commit();
+    node.raws[propName] = quote(input.value);
+    saveState();
+    scheduleRender();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = initial; input.blur(); }
+  });
+  input.addEventListener("blur", commitEdit);
+  overlay.append(input);
+  input.focus();
+  input.select();
 }
 
 function bindImportModal() {
@@ -2306,13 +3494,57 @@ function bindExamplesModal() {
 }
 
 function bindGlobalDragEnd() {
-  document.addEventListener("dragend", () => {
-    currentDragPayload = null;
-    state.draggingId = null;
-  });
+  // dragend always fires on the source — even when the drop was rejected or
+  // happened outside any registered target. Use it to tear down drag state.
+  document.addEventListener("dragend", () => endDrag());
+  // A successful drop on a registered target already calls endDrag() via
+  // attachDropTarget. This is the safety net for drops outside any zone.
   document.addEventListener("drop", () => {
-    currentDragPayload = null;
-    state.draggingId = null;
+    if (currentDragPayload) endDrag();
+  });
+}
+
+/**
+ * Stage-level fallback drop handler. Lets users drop a palette item
+ * anywhere on the canvas and have it appended to the root's first
+ * children slot — much friendlier than failing silently when the user
+ * misses a precise drop zone.
+ *
+ * Specific drop zones (slot fills, between-sibling gaps) call
+ * stopPropagation so they take precedence; this handler only runs when
+ * the drop event bubbles all the way up to the stage.
+ */
+function bindStageDropFallback() {
+  const stage = $("ve-stage");
+  if (!stage) return;
+  stage.addEventListener("dragenter", (e) => {
+    if (currentDragPayload) e.preventDefault();
+  });
+  stage.addEventListener("dragover", (e) => {
+    if (!currentDragPayload) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = currentDragPayload.kind === "move" ? "move" : "copy";
+  });
+  stage.addEventListener("drop", (e) => {
+    const payload = payloadFromEvent(e);
+    if (!payload) return;
+    e.preventDefault();
+    const root = state.tree;
+    if (!root || root.kind !== "component") { endDrag(); return; }
+    const entry = getEntry(root.name);
+    if (!entry) { endDrag(); return; }
+    const childrenParam = entry.params.find((p) => getSlotKind(p.type) === "children");
+    if (!childrenParam) {
+      showToast(root.name + " doesn't accept children — drop on a different container",
+        { tone: "danger", icon: "circle-exclamation" });
+      endDrag();
+      return;
+    }
+    const arr = Array.isArray(root.slots[childrenParam.name]) ? root.slots[childrenParam.name] : [];
+    if (!acceptsPayload(payload, childrenParam, root, arr.length)) { endDrag(); return; }
+    commit();
+    performDrop(payload, root.id, childrenParam.name, arr.length);
+    endDrag();
   });
 }
 
@@ -2320,24 +3552,71 @@ function bindKeyboard() {
   document.addEventListener("keydown", (e) => {
     const tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    if (e.key === "Delete" || e.key === "Backspace") {
-      if (state.selectedId) {
-        const info = findContainer(state.selectedId);
-        if (info && info.parent) {
-          deleteNode(state.selectedId);
-          saveState();
-          scheduleRender();
-        }
-      }
+
+    const cmd = e.metaKey || e.ctrlKey;
+    if (cmd && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+      return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === "d") {
-      if (state.selectedId) {
-        e.preventDefault();
-        duplicateNode(state.selectedId);
+    if (cmd && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+      e.preventDefault();
+      redo();
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && state.selectedId) {
+      const info = findContainer(state.selectedId);
+      if (info && info.parent) {
+        commit();
+        deleteNode(state.selectedId);
         saveState();
         scheduleRender();
       }
     }
+    if (cmd && e.key.toLowerCase() === "d" && state.selectedId) {
+      e.preventDefault();
+      commit();
+      duplicateNode(state.selectedId);
+      saveState();
+      scheduleRender();
+    }
+    // Mode shortcuts: E for edit, P for preview (unmodified)
+    if (!cmd && !e.shiftKey && !e.altKey) {
+      if (e.key === "e" || e.key === "E") { setMode("edit"); return; }
+      if (e.key === "p" || e.key === "P") { setMode("preview"); return; }
+    }
+    if (e.key === "Escape") {
+      if (!$("ve-source-backdrop").hidden) { $("ve-source-backdrop").hidden = true; return; }
+      if (!$("ve-import-backdrop").hidden) { $("ve-import-backdrop").hidden = true; return; }
+      if (!$("ve-example-backdrop").hidden) { $("ve-example-backdrop").hidden = true; return; }
+      if (state.selectedId) { state.selectedId = null; scheduleRender(); }
+    }
+  });
+}
+
+/**
+ * Switch between edit and preview mode. Edit shows full editing chrome
+ * (palette drag, drop zones, action bars, dashed container outlines).
+ * Preview hides everything so the user can see the final UI.
+ */
+function setMode(mode) {
+  const next = mode === "preview" ? "preview" : "edit";
+  if (state.mode === next) return;
+  state.mode = next;
+  if (next === "preview") {
+    state.selectedId = null;
+    state.hoveredId = null;
+  }
+  document.querySelectorAll(".ve-mode-btn").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.mode === next));
+  });
+  saveState();
+  scheduleRender();
+}
+
+function bindModeToggle() {
+  document.querySelectorAll(".ve-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setMode(btn.dataset.mode));
   });
 }
 
@@ -2360,23 +3639,33 @@ async function bootstrap() {
     state.tree = createDefaultTree();
   }
   $("ve-theme").value = state.theme;
-  $("ve-loading").hidden = true;
+  $("ve-zoom-display").textContent = Math.round((state.zoom || 1) * 100) + "%";
+  document.querySelectorAll(".ve-canvas-tools button[data-device]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.device === (state.device || "desktop")));
+  });
+  document.querySelectorAll(".ve-mode-btn").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.mode === (state.mode || "edit")));
+  });
 
   bindToolbar();
-  bindBottom();
+  bindModeToggle();
+  bindSourceDrawer();
   bindImportModal();
   bindExamplesModal();
   bindGlobalDragEnd();
+  bindStageDropFallback();
   bindKeyboard();
   bindPaletteSearch();
+  bindCanvasInteractions();
 
   renderPalette();
   scheduleRender();
+  updateUndoRedoButtons();
 }
 
 bootstrap().catch((err) => {
-  const loading = $("ve-loading");
-  if (loading) {
-    loading.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>&nbsp;Couldn\'t load the editor: ' + escapeHtml(err.message || String(err));
+  const stage = $("ve-stage");
+  if (stage) {
+    stage.innerHTML = '<div class="ve-stage-empty"><i class="fa-solid fa-circle-exclamation"></i><h3>Couldn\'t load the editor</h3><p>' + escapeHtml(err.message || String(err)) + "</p></div>";
   }
 });
