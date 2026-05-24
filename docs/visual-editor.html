@@ -724,6 +724,202 @@
     .ve-stage-frame[data-mode="preview"] .ve-overlay { display: none; }
     .ve-stage-frame[data-mode="preview"] { cursor: default; }
 
+    /* ----- Raw Edit canvas -----
+       In Raw Edit mode the canvas pane swaps the WYSIWYG stage for a
+       tree-of-cards view of the underlying _app_ expression. The
+       palette and inspector stay put — only the canvas changes, just
+       like switching between Edit and Preview. */
+    .ve-app:not([data-mode="raw"]) .ve-raw-canvas { display: none; }
+    .ve-app[data-mode="raw"] .ve-stage { display: none; }
+    .ve-app[data-mode="raw"] .ve-canvas-tools[data-hide-in-raw="true"] { display: none; }
+
+    .ve-raw-canvas {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px 18px 80px;
+      background:
+        radial-gradient(circle at 1px 1px, var(--doc-border-subtle) 1px, transparent 0) 0 0 / 16px 16px,
+        var(--doc-bg-soft);
+    }
+
+    /* Tree node card */
+    .ve-node {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-sm);
+      margin: 6px 0;
+      transition: box-shadow var(--doc-transition), border-color var(--doc-transition);
+    }
+    .ve-node:hover { border-color: var(--doc-border-strong); }
+    .ve-node[data-selected="true"] {
+      border-color: var(--doc-primary);
+      box-shadow: 0 0 0 2px var(--doc-primary-soft);
+    }
+    .ve-node[data-dragging="true"] { opacity: .45; }
+    .ve-node[data-kind="expr"] {
+      background: var(--doc-bg-soft);
+      border-style: dashed;
+    }
+
+    .ve-node-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ve-node-head .ve-drag {
+      cursor: grab;
+      color: var(--doc-text-subtle);
+      width: 16px;
+      text-align: center;
+    }
+    .ve-node-head .ve-drag:active { cursor: grabbing; }
+    .ve-node-head .ve-name {
+      font-family: var(--doc-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-primary);
+    }
+    .ve-node[data-kind="expr"] .ve-name { color: var(--doc-text-muted); }
+    .ve-node-head .ve-summary {
+      font-family: var(--doc-mono);
+      font-size: 11.5px;
+      color: var(--doc-text-muted);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ve-node-head .ve-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      opacity: 0;
+      transition: opacity var(--doc-transition);
+    }
+    .ve-node:hover .ve-node-head .ve-actions,
+    .ve-node[data-selected="true"] .ve-node-head .ve-actions {
+      opacity: 1;
+    }
+    .ve-node-head .ve-actions button {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: transparent;
+      color: var(--doc-text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .ve-node-head .ve-actions button:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .ve-node-head .ve-actions button.is-danger:hover { color: var(--doc-danger); }
+
+    .ve-node-body {
+      padding: 0 10px 8px;
+      display: none;
+    }
+    .ve-node[data-expanded="true"] .ve-node-body { display: block; }
+
+    /* Slot — child container in the tree view */
+    .ve-slot {
+      margin: 6px 0;
+      padding: 4px 0 4px 10px;
+      border-left: 2px dashed var(--doc-border);
+    }
+    .ve-slot-label {
+      font-size: 11px;
+      color: var(--doc-text-subtle);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-family: var(--doc-mono);
+      margin-bottom: 2px;
+    }
+    .ve-slot-children { display: flex; flex-direction: column; gap: 2px; }
+    .ve-slot-empty {
+      padding: 14px;
+      text-align: center;
+      border: 2px dashed var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      color: var(--doc-text-subtle);
+      font-size: 12px;
+      background: var(--doc-bg);
+    }
+    .ve-slot-empty[data-active="true"] {
+      border-color: var(--doc-primary);
+      background: var(--doc-primary-softer);
+      color: var(--doc-primary);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc-primary) 18%, transparent);
+    }
+    .ve-slot[data-active="true"] {
+      background: var(--doc-primary-softer);
+      border-left-color: var(--doc-primary);
+    }
+
+    /* Insertion gap between sibling cards.
+       Calm at rest, fades in as a thin line while a drag is active, then
+       expands into a clearly highlighted insertion bar when the gap is
+       the current drop target. */
+    .ve-drop-gap {
+      position: relative;
+      height: 6px;
+      transition: height 120ms ease, background 120ms ease;
+    }
+    .ve-raw-canvas[data-dragging="true"] .ve-drop-gap {
+      height: 10px;
+    }
+    .ve-raw-canvas[data-dragging="true"] .ve-drop-gap::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      right: 6px;
+      top: 50%;
+      height: 2px;
+      transform: translateY(-50%);
+      background: color-mix(in srgb, var(--doc-primary) 55%, transparent);
+      border-radius: 999px;
+      opacity: 0.55;
+      transition: opacity 120ms ease, height 120ms ease;
+    }
+    .ve-drop-gap[data-active="true"] {
+      height: 36px;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--doc-primary) 14%, transparent);
+      border: 2px dashed var(--doc-primary);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc-primary) 18%, transparent);
+    }
+    .ve-drop-gap[data-active="true"]::after {
+      opacity: 1;
+      height: 4px;
+      background: var(--doc-primary);
+    }
+
+    /* Inline summary value chips inside the canvas heading */
+    .ve-summary-chip {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-muted);
+      margin-right: 4px;
+    }
+
+    .ve-raw-empty {
+      padding: 60px 40px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 14px;
+    }
+    .ve-raw-empty i { font-size: 28px; color: var(--doc-text-subtle); margin-bottom: 12px; display: block; }
+    .ve-raw-empty h3 { margin: 0 0 6px; font-size: 16px; color: var(--doc-text); }
+
     /* Empty stage message when there's no tree yet */
     .ve-stage-empty {
       width: 100%;
@@ -1258,11 +1454,15 @@
           </button>
 
           <div class="ve-mode-toggle" role="group" aria-label="Editor mode">
-            <button type="button" class="ve-mode-btn" data-mode="edit" aria-pressed="true" title="Edit mode (E) — drop, drag, edit components">
-              <i class="fa-solid fa-pen-ruler" aria-hidden="true"></i>
-              <span class="ve-btn-text">Edit</span>
+            <button type="button" class="ve-mode-btn" data-mode="raw" aria-pressed="false" title="Raw Edit mode (R) — edit the underlying component tree directly">
+              <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+              <span class="ve-btn-text">Raw Edit</span>
             </button>
-            <button type="button" class="ve-mode-btn" data-mode="preview" aria-pressed="false" title="Preview mode (P) — see the final result without editor chrome">
+            <button type="button" class="ve-mode-btn" data-mode="edit" aria-pressed="true" title="Visual Edit mode (E) — drop, drag, and edit components on a live canvas">
+              <i class="fa-solid fa-pen-ruler" aria-hidden="true"></i>
+              <span class="ve-btn-text">Visual Edit</span>
+            </button>
+            <button type="button" class="ve-mode-btn" data-mode="preview" aria-pressed="false" title="Preview mode (P) — see the final result without any editor chrome">
               <i class="fa-solid fa-eye" aria-hidden="true"></i>
               <span class="ve-btn-text">Preview</span>
             </button>
@@ -1305,7 +1505,7 @@
                 <button type="button" class="is-current" data-root="true">_app_</button>
               </span>
               <div class="ve-spacer"></div>
-              <div class="ve-canvas-tools" role="group" aria-label="Device width">
+              <div class="ve-canvas-tools" role="group" aria-label="Device width" data-hide-in-raw="true">
                 <button type="button" data-device="desktop" aria-pressed="true" title="Desktop">
                   <i class="fa-solid fa-desktop" aria-hidden="true"></i>
                 </button>
@@ -1316,7 +1516,7 @@
                   <i class="fa-solid fa-mobile-screen" aria-hidden="true"></i>
                 </button>
               </div>
-              <div class="ve-canvas-tools" role="group" aria-label="Zoom level">
+              <div class="ve-canvas-tools" role="group" aria-label="Zoom level" data-hide-in-raw="true">
                 <button type="button" data-zoom="-1" title="Zoom out">
                   <i class="fa-solid fa-magnifying-glass-minus" aria-hidden="true"></i>
                 </button>
@@ -1326,12 +1526,15 @@
                 </button>
               </div>
             </div>
+            <!-- WYSIWYG canvas (Edit + Preview modes) -->
             <div class="ve-stage" id="ve-stage">
               <div class="ve-stage-frame" id="ve-stage-frame" data-device="desktop">
                 <aktion-app id="ve-preview" theme="light"></aktion-app>
                 <div class="ve-overlay" id="ve-overlay"></div>
               </div>
             </div>
+            <!-- Tree-of-cards canvas (Raw Edit mode) -->
+            <div class="ve-raw-canvas" id="ve-raw-canvas"></div>
           </section>
 
           <aside class="ve-pane ve-pane--inspector" aria-label="Inspector">
@@ -1429,6 +1632,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/visual-editor.js?v=2026.05.24-dropux-3"></script>
+  <script type="module" src="assets/visual-editor.js?v=2026.05.24-rawedit-4"></script>
 </body>
 </html>

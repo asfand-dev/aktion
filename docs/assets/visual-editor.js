@@ -79,7 +79,7 @@ const state = {
   theme: "light",
   device: "desktop",      // "desktop" | "tablet" | "mobile"
   zoom: 1,                // 0.5 .. 1.5
-  mode: "edit",           // "edit" | "preview"
+  mode: "edit",           // "edit" | "preview" | "raw"
   drop: null,             // { parentId, slotName, index } during drag
   // Maps populated by decorateRenderedDOM after every render.
   rectsById: new Map(),
@@ -1149,15 +1149,18 @@ const DRAG_TYPE = "application/x-aktion-payload";
 let currentDragPayload = null;
 
 /**
- * Mark the stage as actively dragging. CSS observes this to enlarge drop
- * zones, brighten slot fills, and make container outlines fully opaque so
- * the user has unambiguous, generous targets to aim for.
+ * Mark every drag-aware canvas (WYSIWYG stage + Raw Edit canvas) as
+ * actively dragging. CSS observes this flag to enlarge drop zones,
+ * brighten slot fills, fade out non-targets, and reveal the thin
+ * insertion lines between sibling cards in the raw view.
  */
 function markStageDragging(active) {
-  const stage = $("ve-stage");
-  if (!stage) return;
-  if (active) stage.dataset.dragging = "true";
-  else delete stage.dataset.dragging;
+  for (const id of ["ve-stage", "ve-raw-canvas"]) {
+    const node = $(id);
+    if (!node) continue;
+    if (active) node.dataset.dragging = "true";
+    else delete node.dataset.dragging;
+  }
 }
 
 function startPaletteDrag(name, e) {
@@ -1184,6 +1187,15 @@ function startNodeDrag(id, e) {
   }
   markStageDragging(true);
   renderOverlay();
+  // In Raw Edit, fade the source card via direct DOM tagging — we must
+  // NOT re-render the tree here, otherwise the original drag-source
+  // element is destroyed mid-dragstart and the browser cancels the drag.
+  if (state.mode === "raw") {
+    const card = e.currentTarget instanceof HTMLElement
+      ? e.currentTarget
+      : (e.target && e.target.closest ? e.target.closest(".ve-node") : null);
+    if (card) card.dataset.dragging = "true";
+  }
 }
 
 function endDrag() {
@@ -1191,6 +1203,17 @@ function endDrag() {
   state.draggingId = null;
   markStageDragging(false);
   renderOverlay();
+  // Strip any direct DOM dragging tags applied in startNodeDrag. We do
+  // not re-render here either — performDrop already schedules a render
+  // when the drop actually mutated the tree.
+  if (state.mode === "raw") {
+    const canvas = $("ve-raw-canvas");
+    if (canvas) {
+      canvas.querySelectorAll(".ve-node[data-dragging=\"true\"]").forEach((c) => {
+        delete c.dataset.dragging;
+      });
+    }
+  }
 }
 
 // Backwards-compat alias kept because other modules may still call it.
@@ -1832,6 +1855,9 @@ function renderCanvas() {
   const preview = $("ve-preview");
   const overlay = $("ve-overlay");
   if (!preview || !overlay) return;
+  // Raw Edit mode renders a tree-of-cards canvas instead (see
+  // renderRawCanvas) — skip the WYSIWYG rebuild while it's hidden.
+  if (state.mode === "raw") return;
 
   // Sync theme + device + zoom every render — cheap and avoids drift.
   preview.setAttribute("theme", state.theme || "light");
@@ -2547,6 +2573,202 @@ function* allComponentNodes() {
 }
 
 // ---------------------------------------------------------------------------
+// Rendering — Raw Edit canvas (tree of cards)
+//
+// In Raw Edit mode the canvas pane shows the underlying _app_ expression
+// as a nested tree of cards — one per VisualNode — with drag handles,
+// inline action buttons (move up/down, duplicate, delete) and per-slot
+// drop zones. It reuses the same payload model (currentDragPayload,
+// attachDropTarget, performDrop) as the WYSIWYG canvas, so dragging from
+// the palette or rearranging cards stays in sync with the live preview
+// the moment the user switches back to Edit / Preview.
+
+function renderRawCanvas() {
+  const canvas = $("ve-raw-canvas");
+  if (!canvas) return;
+  canvas.innerHTML = "";
+  if (state.mode !== "raw") return;
+  if (!state.tree) {
+    canvas.append(el("div", { class: "ve-raw-empty" }, [
+      el("i", { class: "fa-solid fa-sitemap", "aria-hidden": "true" }),
+      el("h3", null, "Empty canvas"),
+      el("p", null, "Drag a component from the palette to start the tree."),
+    ]));
+    return;
+  }
+  canvas.append(renderRawTreeNode(state.tree, null, null, 0));
+}
+
+function renderRawTreeNode(node, parent, slotName, depth) {
+  if (node.kind === "expr") return renderRawExprNode(node, parent);
+  return renderRawComponentNode(node, parent, slotName, depth);
+}
+
+function renderRawExprNode(node, parent) {
+  return el("div", {
+    class: "ve-node",
+    draggable: parent ? "true" : "false",
+    data: {
+      kind: "expr",
+      selected: state.selectedId === node.id,
+      dragging: state.draggingId === node.id,
+      expanded: "false",
+    },
+    onClick: (e) => { e.stopPropagation(); state.selectedId = node.id; scheduleRender(); },
+    onDragstart: parent ? (e) => { e.stopPropagation(); startNodeDrag(node.id, e); } : null,
+    onDragend: parent ? () => endNodeDrag() : null,
+  }, [
+    el("div", { class: "ve-node-head" }, [
+      el("span", { class: "ve-drag" }, [el("i", { class: "fa-solid fa-grip-vertical" })]),
+      el("span", { class: "ve-name", style: "color: var(--doc-text-muted);" }, "expr"),
+      el("span", { class: "ve-summary" }, node.raw || ""),
+      el("div", { class: "ve-actions" }, parent ? [
+        el("button", {
+          type: "button", title: "Delete", class: "is-danger",
+          onClick: (e) => {
+            e.stopPropagation();
+            deleteNode(node.id);
+            saveState();
+            scheduleRender();
+          },
+        }, [el("i", { class: "fa-solid fa-trash" })]),
+      ] : null),
+    ]),
+  ]);
+}
+
+function renderRawComponentNode(node, parent, slotName, depth) {
+  const entry = getEntry(node.name);
+  const expanded = state.selectedId === node.id || hasFilledChildSlot(node) || depth < 2;
+  const wrap = el("div", {
+    class: "ve-node",
+    draggable: parent ? "true" : "false",
+    data: {
+      kind: "component",
+      selected: state.selectedId === node.id,
+      dragging: state.draggingId === node.id,
+      expanded: String(expanded),
+    },
+    onClick: (e) => { e.stopPropagation(); state.selectedId = node.id; scheduleRender(); },
+    onDragstart: parent ? (e) => { e.stopPropagation(); startNodeDrag(node.id, e); } : null,
+    onDragend: parent ? () => endNodeDrag() : null,
+  });
+  wrap.append(renderRawNodeHeader(node, parent));
+  if (entry) {
+    const body = el("div", { class: "ve-node-body" });
+    let hasContent = false;
+    for (const param of entry.params) {
+      const slotKind = getSlotKind(param.type);
+      if (!slotKind) continue;
+      const slot = node.slots[param.name];
+      const presentForChild = slotKind === "child" && slot;
+      const presentForChildren = slotKind === "children" && Array.isArray(slot);
+      // Always render the first Node[] slot; render optional slots only
+      // when present or marked required.
+      const isFirstChildrenParam = param.name === firstChildrenParamName(entry);
+      if (slotKind === "children" && !presentForChildren && !param.required && !isFirstChildrenParam) continue;
+      if (slotKind === "child" && !presentForChild && !param.required) continue;
+      hasContent = true;
+      body.append(renderRawSlot(node, param, depth));
+    }
+    if (hasContent) wrap.append(body);
+  }
+  return wrap;
+}
+
+function renderRawNodeHeader(node, parent) {
+  const entry = getEntry(node.name);
+  const summary = nodeSummary(node);
+  return el("div", { class: "ve-node-head" }, [
+    el("span", { class: "ve-drag" }, [el("i", { class: "fa-solid fa-grip-vertical" })]),
+    el("span", { class: "ve-name" }, node.name),
+    el("span", { class: "ve-summary" }, summary || (entry ? entry.signature : "")),
+    el("div", { class: "ve-actions" }, parent ? [
+      el("button", {
+        type: "button", title: "Move up",
+        onClick: (e) => {
+          e.stopPropagation();
+          if (moveNode(node.id, "up")) { saveState(); scheduleRender(); }
+        },
+      }, [el("i", { class: "fa-solid fa-arrow-up" })]),
+      el("button", {
+        type: "button", title: "Move down",
+        onClick: (e) => {
+          e.stopPropagation();
+          if (moveNode(node.id, "down")) { saveState(); scheduleRender(); }
+        },
+      }, [el("i", { class: "fa-solid fa-arrow-down" })]),
+      el("button", {
+        type: "button", title: "Duplicate",
+        onClick: (e) => {
+          e.stopPropagation();
+          duplicateNode(node.id);
+          saveState();
+          scheduleRender();
+        },
+      }, [el("i", { class: "fa-solid fa-clone" })]),
+      el("button", {
+        type: "button", title: "Delete", class: "is-danger",
+        onClick: (e) => {
+          e.stopPropagation();
+          deleteNode(node.id);
+          saveState();
+          scheduleRender();
+        },
+      }, [el("i", { class: "fa-solid fa-trash" })]),
+    ] : [
+      el("span", { class: "ve-summary-chip" }, "root"),
+    ]),
+  ]);
+}
+
+function renderRawSlot(node, param, depth) {
+  const slotKind = getSlotKind(param.type);
+  const slot = el("div", { class: "ve-slot" }, [
+    el("div", { class: "ve-slot-label" },
+      param.name + " · " + param.type + (param.required ? " *" : "")),
+  ]);
+  if (slotKind === "children") {
+    const arr = Array.isArray(node.slots[param.name]) ? node.slots[param.name] : [];
+    const list = el("div", { class: "ve-slot-children" });
+    if (arr.length === 0) {
+      const empty = el("div", { class: "ve-slot-empty" }, "Drop a component here");
+      attachDropTarget(empty,
+        (p) => acceptsPayload(p, param, node, 0),
+        (p) => performDrop(p, node.id, param.name, 0));
+      list.append(empty);
+    } else {
+      list.append(renderRawDropGap(node, param, 0));
+      arr.forEach((child, idx) => {
+        list.append(renderRawTreeNode(child, node, param.name, depth + 1));
+        list.append(renderRawDropGap(node, param, idx + 1));
+      });
+    }
+    slot.append(list);
+  } else if (slotKind === "child") {
+    const child = node.slots[param.name];
+    if (child) {
+      slot.append(renderRawTreeNode(child, node, param.name, depth + 1));
+    } else {
+      const empty = el("div", { class: "ve-slot-empty" }, "Drop a single component here");
+      attachDropTarget(empty,
+        (p) => acceptsPayload(p, param, node, 0),
+        (p) => performDrop(p, node.id, param.name, 0));
+      slot.append(empty);
+    }
+  }
+  return slot;
+}
+
+function renderRawDropGap(node, param, index) {
+  const gap = el("div", { class: "ve-drop-gap" });
+  attachDropTarget(gap,
+    (p) => acceptsPayload(p, param, node, index),
+    (p) => performDrop(p, node.id, param.name, index));
+  return gap;
+}
+
+// ---------------------------------------------------------------------------
 // Rendering — breadcrumbs
 
 function renderBreadcrumbs() {
@@ -3055,7 +3277,7 @@ function loadState() {
       state.theme = data.theme || "light";
       state.device = data.device || "desktop";
       state.zoom = typeof data.zoom === "number" ? data.zoom : 1;
-      state.mode = data.mode === "preview" ? "preview" : "edit";
+      state.mode = (data.mode === "preview" || data.mode === "raw") ? data.mode : "edit";
       return true;
     }
   } catch (_) {}
@@ -3072,6 +3294,7 @@ function scheduleRender() {
   requestAnimationFrame(() => {
     renderQueued = false;
     renderCanvas();
+    renderRawCanvas();
     renderInspector();
     renderBreadcrumbs();
     queueCodeUpdate();
@@ -3580,10 +3803,11 @@ function bindKeyboard() {
       saveState();
       scheduleRender();
     }
-    // Mode shortcuts: E for edit, P for preview (unmodified)
+    // Mode shortcuts: E for edit, P for preview, R for raw (unmodified)
     if (!cmd && !e.shiftKey && !e.altKey) {
       if (e.key === "e" || e.key === "E") { setMode("edit"); return; }
       if (e.key === "p" || e.key === "P") { setMode("preview"); return; }
+      if (e.key === "r" || e.key === "R") { setMode("raw"); return; }
     }
     if (e.key === "Escape") {
       if (!$("ve-source-backdrop").hidden) { $("ve-source-backdrop").hidden = true; return; }
@@ -3595,21 +3819,33 @@ function bindKeyboard() {
 }
 
 /**
- * Switch between edit and preview mode. Edit shows full editing chrome
- * (palette drag, drop zones, action bars, dashed container outlines).
- * Preview hides everything so the user can see the final UI.
+ * Switch between edit, preview, and raw modes. All three share the
+ * palette, inspector, and toolbar — only the centre canvas changes:
+ *   - "edit"   → WYSIWYG stage with full editing chrome (overlay).
+ *   - "preview"→ WYSIWYG stage with the overlay hidden.
+ *   - "raw"   → tree-of-cards canvas (the previous editor's view).
  */
 function setMode(mode) {
-  const next = mode === "preview" ? "preview" : "edit";
-  if (state.mode === next) return;
-  state.mode = next;
-  if (next === "preview") {
+  const allowed = mode === "preview" || mode === "raw" ? mode : "edit";
+  if (state.mode === allowed) return;
+  state.mode = allowed;
+
+  if (allowed === "preview") {
     state.selectedId = null;
     state.hoveredId = null;
+  } else if (allowed === "raw") {
+    // Clear hover; selection survives across edit/raw so users can keep
+    // editing the same node in either view.
+    state.hoveredId = null;
   }
+
   document.querySelectorAll(".ve-mode-btn").forEach((b) => {
-    b.setAttribute("aria-pressed", String(b.dataset.mode === next));
+    b.setAttribute("aria-pressed", String(b.dataset.mode === allowed));
   });
+
+  const app = $("ve-app");
+  if (app) app.dataset.mode = allowed;
+
   saveState();
   scheduleRender();
 }
@@ -3646,6 +3882,9 @@ async function bootstrap() {
   document.querySelectorAll(".ve-mode-btn").forEach((b) => {
     b.setAttribute("aria-pressed", String(b.dataset.mode === (state.mode || "edit")));
   });
+
+  const app = $("ve-app");
+  if (app) app.dataset.mode = state.mode || "edit";
 
   bindToolbar();
   bindModeToggle();
