@@ -353,31 +353,99 @@ function walkNodes(root, fn, parent, slotName) {
   }
 }
 
-function findNode(id, root = state.tree) {
-  let found = null;
-  walkNodes(root, (n) => {
-    if (n.id === id) { found = n; return false; }
-    return true;
-  });
-  return found;
+/**
+ * Locate a node by id. When `root` is omitted, search every assignment
+ * entity's tree (active tree first, then the rest) so cross-entity
+ * selections from the WYSIWYG canvas resolve correctly even before the
+ * active entity has been swapped in.
+ */
+function findNode(id, root) {
+  if (!id) return null;
+  if (root !== undefined) {
+    let found = null;
+    walkNodes(root, (n) => {
+      if (n.id === id) { found = n; return false; }
+      return true;
+    });
+    return found;
+  }
+  if (state.tree) {
+    let found = null;
+    walkNodes(state.tree, (n) => {
+      if (n.id === id) { found = n; return false; }
+      return true;
+    });
+    if (found) return found;
+  }
+  for (const ent of state.entities || []) {
+    if (ent.kind !== "assignment" || !ent.tree) continue;
+    if (ent.tree === state.tree) continue;
+    let found = null;
+    walkNodes(ent.tree, (n) => {
+      if (n.id === id) { found = n; return false; }
+      return true;
+    });
+    if (found) return found;
+  }
+  return null;
 }
 
-function findContainer(id, root = state.tree) {
-  let result = null;
-  walkNodes(root, (n, parent, slotName) => {
-    if (n.id === id) {
-      if (!parent) { result = { parent: null, slotName: null, isList: false, index: -1 }; return false; }
-      const slot = parent.slots[slotName];
-      if (Array.isArray(slot)) {
-        result = { parent, slotName, isList: true, index: slot.indexOf(n) };
-      } else {
-        result = { parent, slotName, isList: false, index: -1 };
+/**
+ * Locate the parent/slot information for a node id. Like `findNode`, the
+ * search spans every assignment entity when no explicit root is provided
+ * so mutations triggered from the canvas continue working when the user
+ * hasn't focused the owning entity yet.
+ */
+function findContainer(id, root) {
+  if (!id) return null;
+  const searchIn = (tree) => {
+    let result = null;
+    walkNodes(tree, (n, parent, slotName) => {
+      if (n.id === id) {
+        if (!parent) { result = { parent: null, slotName: null, isList: false, index: -1 }; return false; }
+        const slot = parent.slots[slotName];
+        if (Array.isArray(slot)) {
+          result = { parent, slotName, isList: true, index: slot.indexOf(n) };
+        } else {
+          result = { parent, slotName, isList: false, index: -1 };
+        }
+        return false;
       }
-      return false;
-    }
-    return true;
-  });
-  return result;
+      return true;
+    });
+    return result;
+  };
+  if (root !== undefined) return searchIn(root);
+  if (state.tree) {
+    const r = searchIn(state.tree);
+    if (r) return r;
+  }
+  for (const ent of state.entities || []) {
+    if (ent.kind !== "assignment" || !ent.tree) continue;
+    if (ent.tree === state.tree) continue;
+    const r = searchIn(ent.tree);
+    if (r) return r;
+  }
+  return null;
+}
+
+/**
+ * Return the assignment entity that owns `nodeId`. Used by the canvas
+ * to switch the active entity when the user clicks a component that
+ * lives outside the currently focused binding.
+ */
+function findOwnerEntity(id) {
+  if (!id) return null;
+  for (const ent of state.entities || []) {
+    if (ent.kind !== "assignment" || !ent.tree) continue;
+    let hit = false;
+    walkNodes(ent.tree, (n) => {
+      if (n.id === id) { hit = true; return false; }
+      return true;
+    });
+    if (hit) return ent;
+  }
+  return null;
 }
 
 function detachNode(id) {
@@ -1672,6 +1740,16 @@ function performDrop(payload, parentId, slotName, index) {
     insertNode(parentId, slotName, dropIndex, node);
     state.selectedId = node.id;
   }
+  // If the dropped/moved node landed in an entity other than the active
+  // one (cross-entity drops are now possible from the WYSIWYG canvas),
+  // swap the active entity so the inspector and action bar work on the
+  // node the user just placed.
+  const owner = findOwnerEntity(state.selectedId);
+  if (owner && owner.id !== state.activeEntityId) {
+    syncActiveEntityFromTree();
+    state.activeEntityId = owner.id;
+    syncActiveTreeFromEntity();
+  }
   saveState();
   scheduleRender();
 }
@@ -2698,9 +2776,10 @@ function acceptsPayload(payload, param, node, _index) {
 function decorateRenderedDOM() {
   state.rectsById.clear();
   state.rectsBySlot.clear();
+  visitedEntitiesDuringWalk.clear();
   const preview = $("ve-preview");
   const frame = $("ve-stage-frame");
-  if (!preview || !preview.shadowRoot || !state.tree || !frame) return;
+  if (!preview || !preview.shadowRoot || !frame) return;
   const frameRect = frame.getBoundingClientRect();
   const sr = preview.shadowRoot;
   // Clear stale `data-veid` from previous renders. The runtime morphs DOM
@@ -2708,6 +2787,7 @@ function decorateRenderedDOM() {
   // to our visual tree.
   for (const stale of sr.querySelectorAll("[data-veid]")) {
     delete stale.dataset.veid;
+    delete stale.dataset.veEntity;
   }
   // The Aktion runtime renders into <div class="rui-root">. Fall back to
   // the first non-style / non-link / non-error-banner element so we degrade
@@ -2723,24 +2803,68 @@ function decorateRenderedDOM() {
     }
   }
   if (!rendered) return;
+  // Walk from `_app_` so the WYSIWYG canvas can tag (and therefore select /
+  // hover / drop on) every rendered component — even those defined in a
+  // different top-level binding (e.g. `_app_ = Stack([block])` where
+  // `block`, `card`, `followup` live in their own assignments). Falling
+  // back to the active tree keeps the old behaviour when no `_app_`
+  // entity exists yet.
+  const rootEnt = (state.entities || []).find(
+    (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME && e.tree,
+  );
+  let startTree = null;
+  let startEntityId = null;
+  if (rootEnt && rootEnt.tree) {
+    startTree = rootEnt.tree;
+    startEntityId = rootEnt.id;
+  } else if (state.tree) {
+    startTree = state.tree;
+    const ent = activeEntity();
+    startEntityId = ent ? ent.id : null;
+  }
+  if (!startTree) return;
   // The rui-root wraps the program tree in one element. Drill down into
   // its single child if the visual root is a single component (the common
   // case — `_app_ = Stack(...)`).
   let renderedRoot = rendered;
-  if (state.tree && state.tree.kind === "component" && rendered.children.length === 1) {
+  if (startTree.kind === "component" && rendered.children.length === 1) {
     renderedRoot = rendered.children[0];
   }
-  walkParallel(state.tree, renderedRoot, frameRect);
+  if (startEntityId) visitedEntitiesDuringWalk.add(startEntityId);
+  walkParallel(startTree, renderedRoot, frameRect, startEntityId);
 }
 
-function walkParallel(visualNode, domEl, frameRect) {
+// Visited entity ids during a single `decorateRenderedDOM` pass. Prevents
+// pathological cycles (`a = Stack([b])`, `b = Stack([a])`) from blowing
+// the stack. Reset at the top of every decorate.
+const visitedEntitiesDuringWalk = new Set();
+
+function walkParallel(visualNode, domEl, frameRect, ownerEntityId) {
   if (!visualNode || !domEl) return;
-  // Tag and store rect.
-  if (domEl instanceof HTMLElement) domEl.dataset.veid = visualNode.id;
+  // Tag DOM + store rect. Cross-entity walks overwrite the same `data-veid`
+  // attribute multiple times — the LAST write wins, which is exactly what
+  // we want: an `expr` placeholder that resolves to another entity should
+  // be replaced by that entity's actual root component for click/hover.
+  if (domEl instanceof HTMLElement) {
+    domEl.dataset.veid = visualNode.id;
+    if (ownerEntityId) domEl.dataset.veEntity = ownerEntityId;
+  }
   state.rectsById.set(visualNode.id, {
     el: domEl,
     rect: rectIn(domEl, frameRect),
+    entityId: ownerEntityId,
   });
+  // `expr` placeholder bound to an identifier? Follow the reference into
+  // the resolved entity so its tree is walked at this DOM position.
+  if (visualNode.kind === "expr") {
+    const ref = findEntityByIdentifier(String(visualNode.raw || "").trim());
+    if (ref && ref.kind === "assignment" && ref.tree && !visitedEntitiesDuringWalk.has(ref.id)) {
+      visitedEntitiesDuringWalk.add(ref.id);
+      walkParallel(ref.tree, domEl, frameRect, ref.id);
+      visitedEntitiesDuringWalk.delete(ref.id);
+    }
+    return;
+  }
   if (visualNode.kind !== "component") return;
   const entry = getEntry(visualNode.name);
   if (!entry) return;
@@ -2756,9 +2880,24 @@ function walkParallel(visualNode, domEl, frameRect) {
         : findEmptySlotContainer(domEl);
       const slotKey = visualNode.id + ":" + param.name;
       const childInfos = [];
+      // Children slot bound to a raw identifier (e.g. `AppShell(content: pages)`)?
+      // Walk into the referenced entity at the slot's first child element so
+      // the user can click through to e.g. an entire `pages = Tabs([...])`
+      // subtree.
+      const rawBinding = visualNode.raws ? visualNode.raws[param.name] : null;
+      if (arr.length === 0 && rawBinding != null && rawBinding !== "") {
+        const ref = findEntityByIdentifier(String(rawBinding).trim());
+        if (ref && ref.kind === "assignment" && ref.tree
+          && !visitedEntitiesDuringWalk.has(ref.id)
+          && container && container.children && container.children.length > 0) {
+          visitedEntitiesDuringWalk.add(ref.id);
+          walkParallel(ref.tree, container.children[0], frameRect, ref.id);
+          visitedEntitiesDuringWalk.delete(ref.id);
+        }
+      }
       for (let i = 0; i < arr.length; i++) {
         const childEl = container && container.children[i] ? container.children[i] : null;
-        if (childEl) walkParallel(arr[i], childEl, frameRect);
+        if (childEl) walkParallel(arr[i], childEl, frameRect, ownerEntityId);
         childInfos.push(childEl ? rectIn(childEl, frameRect) : null);
       }
       state.rectsBySlot.set(slotKey, {
@@ -2768,12 +2907,25 @@ function walkParallel(visualNode, domEl, frameRect) {
         childRects: childInfos,
         empty: arr.length === 0,
         direction: container ? detectDirection(container) : "column",
+        entityId: ownerEntityId,
       });
     } else if (slotKind === "child") {
       if (slot && typeof slot === "object" && slot.kind) {
         // Single-child slot. The visual subtree's rendered root is the
         // first descendant element with substantive content.
-        walkParallel(slot, domEl, frameRect);
+        walkParallel(slot, domEl, frameRect, ownerEntityId);
+      } else {
+        // Single-child slot bound to an identifier reference — follow it.
+        const rawBinding = visualNode.raws ? visualNode.raws[param.name] : null;
+        if (rawBinding != null && rawBinding !== "") {
+          const ref = findEntityByIdentifier(String(rawBinding).trim());
+          if (ref && ref.kind === "assignment" && ref.tree
+            && !visitedEntitiesDuringWalk.has(ref.id)) {
+            visitedEntitiesDuringWalk.add(ref.id);
+            walkParallel(ref.tree, domEl, frameRect, ref.id);
+            visitedEntitiesDuringWalk.delete(ref.id);
+          }
+        }
       }
     }
   }
@@ -3269,16 +3421,37 @@ function buildDropZone(info, index, isRow) {
   ]);
 }
 
+/**
+ * Yield every component node that has been tagged on the canvas by the
+ * most recent `decorateRenderedDOM` pass. With cross-entity walking
+ * enabled, this includes components defined in other assignment
+ * bindings (e.g. `block`, `card` referenced from `_app_`), so the
+ * overlay chrome — slot fills, drop zones, container outlines — keeps
+ * working when the user has navigated into a child binding.
+ */
 function* allComponentNodes() {
-  if (!state.tree) return;
-  const stack = [state.tree];
-  while (stack.length > 0) {
-    const n = stack.pop();
-    if (n.kind === "component") {
-      yield [n.id, n];
-      for (const slot of Object.values(n.slots || {})) {
-        if (Array.isArray(slot)) for (const c of slot) stack.push(c);
-        else if (slot && typeof slot === "object" && slot.kind) stack.push(slot);
+  const seen = new Set();
+  for (const [id] of state.rectsById) {
+    if (seen.has(id)) continue;
+    const node = findNode(id);
+    if (!node || node.kind !== "component") continue;
+    seen.add(id);
+    yield [id, node];
+  }
+  // Fallback: when the rect map is empty (e.g. an initial render before
+  // decorate has run), walk the active tree so the overlay still has
+  // something to paint.
+  if (state.rectsById.size === 0 && state.tree) {
+    const stack = [state.tree];
+    while (stack.length > 0) {
+      const n = stack.pop();
+      if (n.kind === "component" && !seen.has(n.id)) {
+        seen.add(n.id);
+        yield [n.id, n];
+        for (const slot of Object.values(n.slots || {})) {
+          if (Array.isArray(slot)) for (const c of slot) stack.push(c);
+          else if (slot && typeof slot === "object" && slot.kind) stack.push(slot);
+        }
       }
     }
   }
@@ -3326,6 +3499,12 @@ function renderRawTreeNode(node, parent, slotName, depth) {
 }
 
 function renderRawExprNode(node, parent) {
+  // When the expression is a bare identifier referencing another
+  // assignment entity (e.g. `Stack([block])`), surface a "drill into"
+  // button so the user can jump straight to that entity's tree from the
+  // raw view without first selecting the placeholder and going through
+  // the inspector.
+  const referenced = findEntityByIdentifier(String(node.raw || "").trim());
   return el("div", {
     class: "ve-node",
     draggable: parent ? "true" : "false",
@@ -3341,10 +3520,21 @@ function renderRawExprNode(node, parent) {
   }, [
     el("div", { class: "ve-node-head" }, [
       el("span", { class: "ve-drag" }, [el("i", { class: "fa-solid fa-grip-vertical" })]),
-      el("span", { class: "ve-name", style: "color: var(--doc-text-muted);" }, "expr"),
+      el("span", {
+        class: "ve-name",
+        style: "color: " + (referenced ? "var(--doc-primary)" : "var(--doc-text-muted)") + ";",
+      }, referenced ? referenced.name : "expr"),
       el("span", { class: "ve-summary" }, node.raw || ""),
-      el("div", { class: "ve-actions" }, parent ? [
-        el("button", {
+      el("div", { class: "ve-actions" }, [
+        referenced ? el("button", {
+          type: "button",
+          title: "Open " + referenced.name + " in the editor",
+          onClick: (e) => {
+            e.stopPropagation();
+            focusEntity(referenced.id);
+          },
+        }, [el("i", { class: "fa-solid fa-arrow-up-right-from-square" })]) : null,
+        parent ? el("button", {
           type: "button", title: "Delete", class: "is-danger",
           onClick: (e) => {
             e.stopPropagation();
@@ -3352,8 +3542,8 @@ function renderRawExprNode(node, parent) {
             saveState();
             scheduleRender();
           },
-        }, [el("i", { class: "fa-solid fa-trash" })]),
-      ] : null),
+        }, [el("i", { class: "fa-solid fa-trash" })]) : null,
+      ]),
     ]),
   ]);
 }
@@ -3578,10 +3768,27 @@ function renderBreadcrumbs() {
   const root = $("ve-breadcrumbs");
   if (!root) return;
   root.innerHTML = "";
-  // First crumb is always the active entity — clicking it pops a menu
-  // to switch to a different top-level binding without opening the
-  // outline tab.
+  // Quick way back to `_app_` whenever the user has drilled into another
+  // binding (either by clicking a cross-entity component on the canvas
+  // or by selecting one from the Outline tab). A single click goes home;
+  // a tooltip explains the shortcut.
   const ent = activeEntity();
+  const appEnt = (state.entities || []).find(
+    (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME,
+  );
+  if (appEnt && ent && ent.id !== appEnt.id) {
+    root.append(el("button", {
+      type: "button",
+      title: "Back to " + ROOT_ENTITY_NAME,
+      style: "padding-right: 6px;",
+      onClick: () => focusEntity(appEnt.id),
+    }, [
+      el("i", { class: "fa-solid fa-house", "aria-hidden": "true" }),
+    ]));
+    root.append(el("i", { class: "fa-solid fa-chevron-right", "aria-hidden": "true" }));
+  }
+  // First crumb is the active entity — clicking it pops a menu to switch
+  // to a different top-level binding without opening the outline tab.
   if (ent) {
     const ebtn = el("button", {
       type: "button",
@@ -3594,6 +3801,11 @@ function renderBreadcrumbs() {
     }, [
       el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true", style: "margin-right: 6px;" }),
       el("span", null, ent.name),
+      el("i", {
+        class: "fa-solid fa-caret-down",
+        style: "margin-left: 6px; font-size: 9px; opacity: .6;",
+        "aria-hidden": "true",
+      }),
     ]);
     root.append(ebtn);
   }
@@ -3860,6 +4072,25 @@ function renderComponentInspector(node, root) {
   ]));
   if (entry) {
     root.append(el("p", { class: "ve-insp-desc" }, entry.description));
+  }
+  // Cross-entity context hint: if the selected node is the root of a
+  // non-`_app_` binding, surface that so the user knows duplicating /
+  // deleting from here only affects this binding — to remove the
+  // reference from `_app_`, they need to switch back.
+  const cont = findContainer(node.id);
+  const owningEnt = findOwnerEntity(node.id);
+  if (cont && !cont.parent && owningEnt && owningEnt.name !== ROOT_ENTITY_NAME) {
+    root.append(el("div", {
+      class: "ve-insp-desc",
+      style: "background: var(--doc-bg-soft); border: 1px solid var(--doc-border-subtle); border-radius: var(--doc-radius-sm); padding: 8px 10px; margin: 0 0 14px; display: flex; gap: 8px; align-items: center;",
+    }, [
+      el("i", { class: "fa-solid fa-link", style: "color: var(--doc-primary);", "aria-hidden": "true" }),
+      el("span", { style: "flex: 1; min-width: 0;" }, [
+        document.createTextNode("Root of "),
+        el("code", { style: "font-family: var(--doc-mono);" }, owningEnt.name),
+        document.createTextNode(" — referenced from other bindings."),
+      ]),
+    ]));
   }
   const info = findContainer(node.id);
   const isRoot = !info || !info.parent;
@@ -4177,15 +4408,104 @@ function renderPreludeBlock(root) {
 
 // ---------------------------------------------------------------------------
 // Source drawer — fills .aktion + standalone HTML panes
+//
+// The .aktion panel hosts a real editable textarea so power users can hand-
+// edit the entire program and re-import it. We keep the textarea value in
+// sync with the visual tree when the user has NOT started editing locally;
+// once they start typing we leave it alone (marking it "dirty") until they
+// click Apply or Revert. This way they never lose pending edits to a
+// background re-render triggered by a canvas change.
+
+const sourceEditState = {
+  dirty: false,
+  lastEmitted: "",
+};
 
 function updateSourceDrawer() {
   const code = emitProgram();
   const htmlCode = buildStandaloneHtml(code, state.theme, "Aktion app");
 
-  const codeEl = $("ve-code");
-  if (codeEl) codeEl.innerHTML = highlightAktion(code);
+  const edit = $("ve-code-edit");
+  if (edit) {
+    if (!sourceEditState.dirty) {
+      edit.value = code;
+    }
+    sourceEditState.lastEmitted = code;
+    updateSourceHint();
+  }
   const htmlEl = $("ve-html");
   if (htmlEl) htmlEl.textContent = htmlCode;
+}
+
+function updateSourceHint(errorMessage) {
+  const hint = $("ve-source-hint");
+  if (!hint) return;
+  hint.innerHTML = "";
+  if (errorMessage) {
+    hint.dataset.state = "error";
+    const ic = document.createElement("i");
+    ic.className = "fa-solid fa-circle-exclamation";
+    hint.append(ic);
+    hint.append(document.createTextNode(" " + errorMessage));
+    return;
+  }
+  if (sourceEditState.dirty) {
+    hint.dataset.state = "dirty";
+    const ic = document.createElement("i");
+    ic.className = "fa-solid fa-pen-to-square";
+    hint.append(ic);
+    hint.append(document.createTextNode(" Local edits not yet applied — click Apply changes to re-import."));
+    return;
+  }
+  hint.dataset.state = "clean";
+  const ic = document.createElement("i");
+  ic.className = "fa-solid fa-circle-check";
+  hint.append(ic);
+  hint.append(document.createTextNode(" In sync with the visual tree."));
+}
+
+/**
+ * Re-parse the textarea contents back into the entity / tree state. The
+ * program goes through the regular import pipeline so any classifiable
+ * declaration shows up in the Outline, and parse errors surface as a
+ * red banner under the textarea (the canvas keeps showing whatever is
+ * currently rendered).
+ */
+function applySourceEdits() {
+  const edit = $("ve-code-edit");
+  if (!edit) return;
+  const src = edit.value;
+  try {
+    const result = importFromSource(src);
+    commit();
+    applyImportResult(result);
+    sourceEditState.dirty = false;
+    // Surface parse diagnostics in the hint banner so the user can see
+    // exactly what tripped — the canvas already reflects whichever
+    // entities the importer salvaged from the partial parse.
+    if (result.errors && result.errors.length > 0) {
+      const first = result.errors[0];
+      const at = first.line != null ? " (line " + (first.line + 1) + ")" : "";
+      updateSourceHint(
+        "Applied with " + result.errors.length + " parse error"
+        + (result.errors.length === 1 ? "" : "s")
+        + " — first" + at + ": " + (first.message || "syntax error"),
+      );
+    } else {
+      showToast("Applied source edits", { icon: "check", tone: "success" });
+      updateSourceHint();
+    }
+  } catch (err) {
+    updateSourceHint("Couldn't apply: " + (err && err.message ? err.message : String(err)));
+  }
+}
+
+function revertSourceEdits() {
+  const edit = $("ve-code-edit");
+  if (!edit) return;
+  edit.value = sourceEditState.lastEmitted || emitProgram();
+  sourceEditState.dirty = false;
+  updateSourceHint();
 }
 
 function highlightAktion(source) {
@@ -4586,10 +4906,46 @@ function bindSourceDrawer() {
       });
     });
   });
+  // Source editing: typing marks the textarea dirty so background
+  // re-renders won't overwrite the user's pending edits. Cmd/Ctrl+Enter
+  // applies, Esc reverts. Tab inserts two spaces so the user doesn't lose
+  // focus when indenting code.
+  const codeEdit = $("ve-code-edit");
+  if (codeEdit) {
+    codeEdit.addEventListener("input", () => {
+      sourceEditState.dirty = codeEdit.value !== sourceEditState.lastEmitted;
+      updateSourceHint();
+    });
+    codeEdit.addEventListener("keydown", (e) => {
+      if (e.key === "Tab" && !e.shiftKey) {
+        e.preventDefault();
+        const start = codeEdit.selectionStart;
+        const end = codeEdit.selectionEnd;
+        codeEdit.value = codeEdit.value.slice(0, start) + "  " + codeEdit.value.slice(end);
+        codeEdit.selectionStart = codeEdit.selectionEnd = start + 2;
+        sourceEditState.dirty = true;
+        updateSourceHint();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        applySourceEdits();
+        return;
+      }
+      if (e.key === "Escape" && sourceEditState.dirty) {
+        e.preventDefault();
+        revertSourceEdits();
+      }
+    });
+  }
   $("ve-code-copy").addEventListener("click", () => copyText(emitProgram()));
   $("ve-code-download").addEventListener("click", () => {
     downloadFile(emitProgram(), "aktion-" + Date.now() + ".aktion", "text/plain;charset=utf-8");
   });
+  const applyBtn = $("ve-code-apply");
+  if (applyBtn) applyBtn.addEventListener("click", applySourceEdits);
+  const revertBtn = $("ve-code-revert");
+  if (revertBtn) revertBtn.addEventListener("click", revertSourceEdits);
   $("ve-html-copy").addEventListener("click", () => copyText(buildStandaloneHtml(emitProgram(), state.theme, "Aktion app")));
   $("ve-html-download").addEventListener("click", () => {
     downloadFile(buildStandaloneHtml(emitProgram(), state.theme, "Aktion app"),
@@ -4622,12 +4978,49 @@ function bindCanvasInteractions() {
     return null;
   };
 
+  const findHostInfo = (path) => {
+    for (const node of path) {
+      if (node && node.dataset && node.dataset.veid) {
+        return { id: node.dataset.veid, entityId: node.dataset.veEntity || null };
+      }
+      if (node === preview) break;
+    }
+    return null;
+  };
+
+  /**
+   * Make the entity that owns `nodeId` the active one. Used when the user
+   * clicks (or drops onto) a component that lives in a different binding
+   * than the one currently focused on the canvas. Keeps the existing
+   * `state.tree`-scoped selection / inspector logic working unchanged.
+   */
+  const switchEntityIfNeeded = (entityId, nodeId) => {
+    let targetEntId = entityId || null;
+    if (!targetEntId && nodeId) {
+      const owner = findOwnerEntity(nodeId);
+      if (owner) targetEntId = owner.id;
+    }
+    if (!targetEntId) return false;
+    if (targetEntId === state.activeEntityId) return false;
+    syncActiveEntityFromTree();
+    state.activeEntityId = targetEntId;
+    syncActiveTreeFromEntity();
+    return true;
+  };
+
   preview.addEventListener("click", (e) => {
     if (state.mode === "preview") return; // pass clicks through to the live app
-    const id = findHostId(e.composedPath());
+    const hit = findHostInfo(e.composedPath());
     e.preventDefault();
     e.stopImmediatePropagation();
-    state.selectedId = id || null;
+    if (!hit) {
+      state.selectedId = null;
+      scheduleRender();
+      return;
+    }
+    switchEntityIfNeeded(hit.entityId, hit.id);
+    state.selectedId = hit.id;
+    saveState();
     scheduleRender();
   }, true);
 
@@ -4658,13 +5051,18 @@ function bindCanvasInteractions() {
 
   preview.addEventListener("dblclick", (e) => {
     if (state.mode === "preview") return;
-    const id = findHostId(e.composedPath());
-    if (!id) return;
-    const node = findNode(id);
+    const hit = findHostInfo(e.composedPath());
+    if (!hit) return;
+    const node = findNode(hit.id);
     if (!node || node.kind !== "component") return;
     const target = e.composedPath()[0];
     e.preventDefault();
     e.stopImmediatePropagation();
+    // Inline editing mutates the node's `raws` directly — make sure the
+    // node lives in the active tree first so subsequent re-renders and
+    // saves pick it up.
+    switchEntityIfNeeded(hit.entityId, hit.id);
+    state.selectedId = hit.id;
     startInlineEdit(node, target);
   }, true);
 
@@ -4977,14 +5375,25 @@ function closeCreateEntityMenu() {
 /**
  * Popover menu listing every entity in the current program. Clicking
  * one swaps it in as the active entity without having to leave the
- * canvas. Skips the "free" bucket because it's rarely useful to focus.
+ * canvas. `_app_` always floats to the top with a "home" icon so the
+ * user can find their entry point at a glance, no matter how many
+ * bindings the program has.
  */
 function openEntitySwitcher(anchor) {
   closeCreateEntityMenu();
-  const menu = el("div", { class: "ve-add-menu", id: "ve-add-menu", style: "max-height: 320px; overflow: auto;" });
-  for (const ent of state.entities) {
-    if (ent.kind === "free") continue;
+  const menu = el("div", { class: "ve-add-menu", id: "ve-add-menu", style: "max-height: 320px; min-width: 220px; overflow: auto;" });
+  const visible = (state.entities || []).filter((e) => e.kind !== "free");
+  // Sort: `_app_` first, then alphabetically by name within kind so the
+  // long-tail bindings stay scannable.
+  const sorted = visible.slice().sort((a, b) => {
+    if (a.name === ROOT_ENTITY_NAME) return -1;
+    if (b.name === ROOT_ENTITY_NAME) return 1;
+    if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+    return String(a.name).localeCompare(String(b.name));
+  });
+  for (const ent of sorted) {
     const isActive = ent.id === state.activeEntityId;
+    const isRoot = ent.name === ROOT_ENTITY_NAME && ent.kind === "assignment";
     menu.append(el("button", {
       type: "button",
       style: isActive ? "background: var(--doc-bg-soft); color: var(--doc-primary);" : "",
@@ -4993,10 +5402,15 @@ function openEntitySwitcher(anchor) {
         focusEntity(ent.id);
       },
     }, [
-      el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+      el("i", { class: "fa-solid " + (isRoot ? "fa-house" : entityIcon(ent)), "aria-hidden": "true" }),
       el("span", null, ent.name),
       el("span", { style: "margin-left: auto; font-size: 11px; color: var(--doc-text-muted); font-family: var(--doc-mono);" }, ent.kind),
     ]));
+  }
+  if (sorted.length === 0) {
+    menu.append(el("div", {
+      style: "padding: 12px; color: var(--doc-text-muted); font-size: 12px; text-align: center;",
+    }, "No bindings yet"));
   }
   document.body.append(menu);
   const rect = anchor.getBoundingClientRect();

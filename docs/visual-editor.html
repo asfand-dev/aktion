@@ -1456,10 +1456,59 @@
     }
     .ve-drawer-actions {
       display: flex;
+      align-items: center;
       gap: 6px;
       padding: 10px 14px;
       border-top: 1px solid var(--doc-border);
       background: var(--doc-surface);
+    }
+
+    /* Editable .aktion source panel — textarea fills the drawer with a
+       small hint banner that mirrors the dirty / parse-error state. */
+    .ve-source-edit-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--doc-code-bg);
+      color: var(--doc-code-fg);
+    }
+    .ve-source-edit {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 16px 18px;
+      border: 0;
+      resize: none;
+      background: transparent;
+      color: inherit;
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      tab-size: 2;
+      caret-color: var(--doc-primary);
+    }
+    .ve-source-edit:focus { outline: 0; }
+    .ve-source-hint {
+      margin: 0;
+      padding: 8px 14px;
+      font-size: 11.5px;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg-soft);
+      border-top: 1px solid var(--doc-border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ve-source-hint i { font-size: 11px; }
+    .ve-source-hint[data-state="dirty"] {
+      color: var(--doc-primary);
+      background: var(--doc-primary-soft, color-mix(in srgb, var(--doc-primary) 12%, transparent));
+    }
+    .ve-source-hint[data-state="error"] {
+      color: var(--doc-text-inverse, #fff);
+      background: var(--doc-danger);
     }
 
     /* Tiny syntax highlight for the read-only code panes */
@@ -1806,16 +1855,23 @@
           </div>
           <div class="ve-drawer-body">
             <div class="ve-drawer-panel" data-source-tab="aktion" data-active="true">
-              <pre><code id="ve-code"></code></pre>
+              <div class="ve-source-edit-wrap">
+                <textarea id="ve-code-edit" class="ve-source-edit" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                <p class="ve-source-hint" id="ve-source-hint">Edit the program directly. Click <strong>Apply changes</strong> to re-import into the visual tree.</p>
+              </div>
               <div class="ve-drawer-actions">
                 <button class="ve-btn" id="ve-code-copy"><i class="fa-solid fa-copy"></i> Copy</button>
-                <button class="ve-btn ve-btn--primary" id="ve-code-download"><i class="fa-solid fa-download"></i> Download .aktion</button>
+                <button class="ve-btn" id="ve-code-revert" title="Discard local edits and reload the latest generated source"><i class="fa-solid fa-rotate-left"></i> Revert</button>
+                <button class="ve-btn" id="ve-code-download"><i class="fa-solid fa-download"></i> Download .aktion</button>
+                <span class="ve-spacer"></span>
+                <button class="ve-btn ve-btn--primary" id="ve-code-apply" title="Re-import the edited source"><i class="fa-solid fa-check"></i> Apply changes</button>
               </div>
             </div>
             <div class="ve-drawer-panel" data-source-tab="html">
               <pre><code id="ve-html"></code></pre>
               <div class="ve-drawer-actions">
                 <button class="ve-btn" id="ve-html-copy"><i class="fa-solid fa-copy"></i> Copy</button>
+                <span class="ve-spacer"></span>
                 <button class="ve-btn ve-btn--primary" id="ve-html-download"><i class="fa-solid fa-download"></i> Download HTML</button>
               </div>
             </div>
@@ -1868,6 +1924,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/visual-editor.js?v=2026.05.25-bind-deprecated"></script>
+  <script type="module" src="assets/visual-editor.js?v=2026.05.25-cross-entity"></script>
 </body>
 </html>
