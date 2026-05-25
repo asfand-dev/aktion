@@ -6,7 +6,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asNumber } from "../utils.js";
+import { el, asArray, asString, asNumber, asBoolean } from "../utils.js";
 
 const PALETTE: readonly string[] = [
   "var(--rui-chart-1, #6366f1)",
@@ -243,25 +243,41 @@ export const LineChart: ComponentSpec = {
 
 export const PieChart: ComponentSpec = {
   name: "PieChart",
-  description: "Pie/Donut chart. Each segment maps to a label/value pair.",
+  description:
+    "Pie / Donut chart. Each segment maps to a label/value pair. Numeric " +
+    "labels are rendered on every segment by default — set " +
+    "`showValues: false` to hide them, or `valueFormat: \"percent\"` " +
+    "to show the share instead of the raw value.",
   props: [
     { name: "labels", type: "string[]" },
     { name: "values", type: "number[]" },
     { name: "title", type: "string", optional: true },
+    { name: "showValues", type: "boolean", optional: true, description: "Render numeric labels on each slice (default true)" },
+    { name: "valueFormat", type: "string", optional: true, enum: ["value", "percent", "both"], description: "How to format the on-segment label (default \"value\")" },
   ],
   render: (_node, props) => {
     const labels = asArray<unknown>(props.labels).map((l) => asString(l));
     const values = asArray<unknown>(props.values).map((v) => asNumber(v));
+    const showValues = props.showValues == null ? true : asBoolean(props.showValues);
+    const fmtToken = asString(props.valueFormat, "value").toLowerCase();
+    const valueFormat: "value" | "percent" | "both" =
+      fmtToken === "percent" ? "percent" : fmtToken === "both" ? "both" : "value";
     const root = el("div", { class: "rui-chart rui-pie-chart" });
     if (asString(props.title)) root.append(el("div", { class: "rui-chart-title" }, [asString(props.title)]));
 
-    const total = values.reduce((acc, v) => acc + v, 0) || 1;
+    const total = values.reduce((acc, v) => acc + (v > 0 ? v : 0), 0) || 1;
     const svg = createSvg(240, 240);
     const cx = 120, cy = 120, r = 90;
+    // Minimum slice (in fraction of total) for which we still render an
+    // inline label. Tiny slivers would overlap and clutter the chart, so
+    // we drop them and rely on the legend / hover title instead.
+    const MIN_LABEL_FRACTION = 0.05;
     let angle = -Math.PI / 2;
 
     values.forEach((value, i) => {
-      const slice = (value / total) * Math.PI * 2;
+      const safeValue = value > 0 ? value : 0;
+      const fraction = safeValue / total;
+      const slice = fraction * Math.PI * 2;
       const next = angle + slice;
       const large = slice > Math.PI ? 1 : 0;
       const x1 = cx + r * Math.cos(angle);
@@ -275,8 +291,35 @@ export const PieChart: ComponentSpec = {
         stroke: "var(--rui-color-bg, #fff)",
         "stroke-width": "2",
       });
-      segment.append(svgEl("title", {}, [`${labels[i] ?? ""}: ${value}`]));
+      segment.append(svgEl("title", {}, [
+        `${labels[i] ?? ""}: ${value} (${(fraction * 100).toFixed(1)}%)`,
+      ]));
       svg.append(segment);
+
+      if (showValues && safeValue > 0 && fraction >= MIN_LABEL_FRACTION) {
+        const mid = angle + slice / 2;
+        // Pull the label inward (~62% of the radius) so it sits visually
+        // centered inside the slice rather than near the rim.
+        const labelR = r * 0.62;
+        const lx = cx + labelR * Math.cos(mid);
+        const ly = cy + labelR * Math.sin(mid);
+        const display = formatSliceLabel(value, fraction, valueFormat);
+        // Soft shadow text first (paint-order: stroke fill keeps the
+        // outline behind the glyph) so labels stay legible on any color.
+        const labelText = svgEl("text", {
+          x: String(lx),
+          y: String(ly),
+          class: "rui-pie-chart-value",
+          "text-anchor": "middle",
+          "dominant-baseline": "central",
+          "paint-order": "stroke",
+          stroke: "rgba(15, 23, 42, 0.55)",
+          "stroke-width": "3",
+          "stroke-linejoin": "round",
+          fill: "#fff",
+        }, [display]);
+        svg.append(labelText);
+      }
       angle = next;
     });
 
@@ -285,6 +328,27 @@ export const PieChart: ComponentSpec = {
     return root;
   },
 };
+
+function formatSliceLabel(
+  value: number,
+  fraction: number,
+  format: "value" | "percent" | "both",
+): string {
+  const pct = `${Math.round(fraction * 100)}%`;
+  const num = formatNumeric(value);
+  if (format === "percent") return pct;
+  if (format === "both") return `${num} (${pct})`;
+  return num;
+}
+
+function formatNumeric(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(1);
+}
 
 interface LabelPlan {
   /** Render every Nth label (1 = all of them). */

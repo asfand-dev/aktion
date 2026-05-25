@@ -1456,6 +1456,10 @@ Notes:
 - Use `Grid(columns: 12, [GridItem(child, span: "1/4"), GridItem(main, span: "3/4")])`
   for sidebar layouts — fractional spans `"1/2"`…`"1/12"` resolve on
   a 12-column track.
+- `Accordion(items, showArrow?)` and `AccordionItem(title, children, open?, showArrow?)`
+  default to NO chevron indicator. Pass `showArrow: true` on the
+  `Accordion` (or on individual items) to reveal a rotating chevron — use
+  it for FAQ-style disclosures where the affordance matters.
 
 ### Content
 
@@ -1527,14 +1531,20 @@ Notes:
 - `TagInput(id, value?, placeholder?)` lets the user add comma- or
   Enter-separated chips bound to a `$variable` array.
 - `MentionInput(id, people, value?)` is a textarea with inline
-  @-mention suggestions.
-- `MaskedInput(id, mask, value?)` formats input against a mask string
-  (`9` digit, `A` letter, `*` any). For phone numbers, postal codes.
+  @-mention suggestions. People may be `{name, handle?, role?}` objects;
+  `handle` (falling back to `name`) is what gets inserted into the text.
+  Arrow keys + Enter/Tab navigate and pick from the suggestion popover.
+- `MaskedInput(id, mask, value?)` formats input progressively against a
+  mask string (`9` digit, `A` letter, `*` any, every other character is a
+  fixed delimiter). Typing `4155550114` into `mask: "(999) 999-9999"`
+  becomes `(415) 555-0114`. For phone numbers, postal codes, SSNs.
 - `ColorPicker(id, value?, label?, swatches?)` pairs a color chip with
   a hex input and preset swatches.
-- `MultiStepForm(steps, current, onSubmit?)` replaces ad-hoc
-  `Steps` + content + manual prev/next wiring. Each step is
-  `{title, details?, content}`.
+- `MultiStepForm(steps, current, onSubmit?, stepsLayout?)` replaces
+  ad-hoc `Steps` + content + manual prev/next wiring. Each step is
+  `{title, details?, content}`. `stepsLayout` is `"column"` by default
+  (steps rail on the left, content on the right) — pass `"row"` for a
+  classic horizontal stepper above the content.
 - Button `size` accepts `xs | sm | md | lg | xl` (with `small | normal | large`
   as accepted aliases). Pass `icon:` for an inline leading icon.
 
@@ -1595,6 +1605,9 @@ Notes:
 - Use `LineChart` for trends (`filled: true` for area-style charts),
   `BarChart` for comparisons, `PieChart` for proportions, `RadarChart`
   for multi-axis scorecards.
+- `PieChart(labels, values, title?, showValues?, valueFormat?)` renders
+  numeric labels on every slice by default. Pass `showValues: false` to
+  hide them, or `valueFormat: "percent" | "both"` to show shares.
 - `LineChart` accepts a row-shaped `data: [{x, …series}]` shorthand —
   labels + series are derived automatically.
 - `Heatmap(xLabels, yLabels, values)` renders a color-intensity matrix
@@ -1625,7 +1638,10 @@ Notes:
 - `PersonChip(name, role?, avatarSrc?, size?, status?, action?)` is the
   inline avatar + name + role pill — use everywhere a person is
   referenced.
-- `Tooltip(label, trigger)` for inline hints.
+- `Tooltip(label, trigger, side?)` for inline hints. `side` is one of
+  `top` (default) `| bottom | left | right`. The tooltip shows on hover
+  or keyboard focus and hides automatically on click/touch, so it never
+  stays stuck after the user interacts with the trigger.
 - `HoverCard(trigger, content)` when the popover needs rich content
   (profile preview, link target) and the trigger opens on hover.
 - `Popover(trigger, content, title?, side?, align?, width?)` is the
@@ -1715,7 +1731,10 @@ Notes:
 - `ActivityLog(entries, variant?)` — purpose-built feed of user actions.
   `variant: "audit"` for security/admin trails with monospace meta.
 - `Notification(title, message?, time?, icon?, avatarSrc?, tone?, unread?, actions?)`
-  for inbox cards (prefer `Banner` for top-of-page announcements).
+  for inbox cards (prefer `Banner` for top-of-page announcements). When
+  `unread: true` the card lifts onto a tinted surface with a coloured
+  rail, accent dot, and bolder title so the unread state reads at a
+  glance.
 - `InboxPanel(items, title?, onMarkAllRead?)` — `Notification` cards
   grouped into Unread / Earlier sections.
 - `OnboardingChecklist(items, title?, description?)` — checklist with
@@ -3220,7 +3239,7 @@ _app_ = Stack([
 | Manual `<style>` injection or `style:` props for colour                        | Use `tone:` / `variant:` props and let the theme resolve.                                                |
 | Emoji (`"❤️"`, `"⚠️"`) in `icon:` slots                                         | Use Font Awesome names (`"heart"`, `"triangle-exclamation"`).                                            |
 | `for x in $items { … }` with a stale closure over `x` in a lambda outside body | Define the lambda inline: `for x in $items { Button("X", onClick: () => remove(x.id)) }`.                |
-| `bind:value: $name` (legacy two-way binding sugar)                             | `value: $name` — direct state refs (and member chains like `$form.email`) are automatically two-way.    |
+| `bind:value: $name` (legacy two-way binding sugar)                             | `value: $name` — direct state refs (and member chains like `$form.email`) are automatically two-way. The parser still accepts `bind:value:` and silently strips the `bind:` prefix for back-compat, but new code should drop it. |
 | `Series("Name", values: numbers, stroke: "red")`                               | `Series("Name", values: numbers)` — chart colours come from theme tokens (`chart1`…`chart6`).            |
 
 ---

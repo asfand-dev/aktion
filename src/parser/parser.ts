@@ -1065,8 +1065,9 @@ function parseArgItem(ctx: ParserContext): Expression {
  * Two-way binding is implicit in Aktion 0.5: passing a `$variable` (or a
  * member chain rooted at one — `value: $form.email`) directly is enough,
  * the runtime wires the change handler automatically. The legacy
- * `bind:prop: target` sugar has been removed; the parser will surface a
- * definitive migration error if it sees it (see below).
+ * `bind:prop: target` sugar is deprecated — the parser silently strips
+ * the leading `bind:` and treats the rest as a normal named arg, so old
+ * snippets keep working while authors migrate to the canonical form.
  *
  * The legacy `name=expr` form has been removed in Aktion 0.5 —
  * the parser surfaces a definitive migration error pointing the author at
@@ -1080,30 +1081,24 @@ function parseCallArgItem(ctx: ParserContext): Expression {
     const argument = parseExpression(ctx);
     return { kind: "Spread", argument, loc: { line: tok.line, column: tok.column } };
   }
-  // Legacy `bind:prop: target` syntax. Removed — a plain `prop: $atom`
+  // Legacy `bind:prop: target` syntax. Deprecated — a plain `prop: $atom`
   // (or `prop: $atom.path`) is now an automatic two-way binding. We
   // detect the *full* triplet `bind : ident :` so a user-named arg like
   // `MyComp(bind: $atom)` still flows through the normal `name: value`
-  // path.
+  // path. When the triplet matches we silently consume the `bind` + `:`
+  // tokens and let the remaining `prop: target` be parsed as the
+  // canonical named arg below — the runtime auto-binds any `$state`
+  // (or `$state.path`) value regardless of whether the author wrote
+  // `bind:` or not, so the rewrite is semantics-preserving.
   if (
     ctx.peek().type === "Identifier" && ctx.peek().value === "bind" &&
     ctx.peek(1).type === "Punctuation" && ctx.peek(1).value === ":" &&
     (ctx.peek(2).type === "Identifier" || ctx.peek(2).type === "Keyword") &&
     ctx.peek(3).type === "Punctuation" && ctx.peek(3).value === ":"
   ) {
-    const start = ctx.peek();
-    const err: ParseError & { __definitive?: boolean } = {
-      message:
-        `\`bind:prop: target\` is removed in Aktion 0.5. Pass the ` +
-        `\`$variable\` (or \`$variable.path\`) directly as the prop — ` +
-        `e.g. \`Input("id", value: $name)\` or ` +
-        `\`Checkbox("id", value: $form.done)\` — and the runtime will ` +
-        `wire the two-way binding automatically.`,
-      line: start.line,
-      column: start.column,
-    };
-    err.__definitive = true;
-    throw err;
+    ctx.consume(); // `bind`
+    ctx.consume(); // `:`
+    // Fall through to the canonical `name: expr` branch below.
   }
   // Reject legacy `name=expr` form with a clear migration error before
   // attempting to parse it as an expression. The error is marked

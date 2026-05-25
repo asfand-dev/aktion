@@ -329,12 +329,14 @@ function readMentionItems(raw: unknown): MentionItem[] {
     if (typeof entry === "string") return { value: entry, label: entry };
     if (entry && typeof entry === "object") {
       const r = entry as Record<string, unknown>;
-      const value = asString(r.value ?? r.id ?? r.name);
-      const label = asString(r.label, value);
-      return { value, label };
+      // Accept `{name}`, `{label}`, `{value}`, or `{id}` plus a `handle`
+      // for tagging (e.g. `@ada` vs full name "Ada Lovelace").
+      const display = asString(r.label ?? r.name ?? r.value ?? r.id);
+      const handle = asString(r.handle ?? r.value ?? r.id ?? r.name ?? r.label);
+      return { value: handle, label: display };
     }
     return { value: "", label: "" };
-  }).filter((i) => i.value);
+  }).filter((i) => i.value || i.label);
 }
 
 export const MentionInput: ComponentSpec = {
@@ -367,45 +369,18 @@ export const MentionInput: ComponentSpec = {
       disabled: disabled ? "" : null,
     }) as HTMLTextAreaElement;
     textarea.value = asString(props.value);
-    const stateName = node.argMeta?.[2]?.stateRef;
-    if (stateName) {
-      helpers.bindState(textarea, stateName, {
-        event: "input",
-        getValue: (n) => (n as HTMLTextAreaElement).value,
-      });
-    }
     const suggestions = el("div", { class: "rui-mention-input-suggestions", "data-open": "false" });
-    const renderSuggestions = (query: string) => {
-      suggestions.replaceChildren();
-      const filtered = people.filter((p) => p.label.toLowerCase().includes(query.toLowerCase()));
-      const slice = filtered.slice(0, 6);
-      if (slice.length === 0) {
-        suggestions.setAttribute("data-open", "false");
-        return;
-      }
-      suggestions.setAttribute("data-open", "true");
-      for (const item of slice) {
-        const btn = el("button", {
-          type: "button",
-          class: "rui-mention-input-option",
-          "data-value": item.value,
-        }, [item.label]);
-        btn.onmousedown = (event) => event.preventDefault();
-        btn.onclick = () => {
-          insertMention(item);
-          suggestions.setAttribute("data-open", "false");
-        };
-        suggestions.append(btn);
-      }
-    };
+    let activeIndex = 0;
+    let activeMatches: MentionItem[] = [];
+
     const insertMention = (item: MentionItem) => {
       const text = textarea.value;
-      const caret = textarea.selectionStart;
+      const caret = textarea.selectionStart ?? text.length;
       const before = text.slice(0, caret);
       const triggerIdx = before.lastIndexOf("@");
       if (triggerIdx === -1) return;
       const after = text.slice(caret);
-      const insert = `@${item.label} `;
+      const insert = `@${item.value} `;
       const next = before.slice(0, triggerIdx) + insert + after;
       textarea.value = next;
       const cursor = triggerIdx + insert.length;
@@ -413,14 +388,90 @@ export const MentionInput: ComponentSpec = {
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
       textarea.focus();
     };
-    textarea.oninput = () => {
-      const caret = textarea.selectionStart;
+
+    const renderSuggestions = (query: string) => {
+      suggestions.replaceChildren();
+      const q = query.toLowerCase();
+      const filtered = people.filter((p) =>
+        p.label.toLowerCase().includes(q) || p.value.toLowerCase().includes(q),
+      );
+      const slice = filtered.slice(0, 6);
+      activeMatches = slice;
+      if (slice.length === 0) {
+        suggestions.setAttribute("data-open", "false");
+        return;
+      }
+      activeIndex = Math.min(activeIndex, slice.length - 1);
+      suggestions.setAttribute("data-open", "true");
+      slice.forEach((item, idx) => {
+        const btn = el("button", {
+          type: "button",
+          class: "rui-mention-input-option",
+          "data-value": item.value,
+          "data-active": idx === activeIndex ? "true" : "false",
+        });
+        btn.append(el("span", { class: "rui-mention-input-option-label" }, [item.label]));
+        if (item.value && item.value !== item.label) {
+          btn.append(el("span", { class: "rui-mention-input-option-handle" }, [`@${item.value}`]));
+        }
+        btn.onmousedown = (event) => event.preventDefault();
+        btn.onclick = () => {
+          insertMention(item);
+          suggestions.setAttribute("data-open", "false");
+        };
+        suggestions.append(btn);
+      });
+    };
+
+    // Update suggestions based on the current caret position. Called both
+    // by our own input listener AND by the bindState callback (which fires
+    // first because the renderer overwrites `oninput`).
+    const updateFromCaret = () => {
+      const caret = textarea.selectionStart ?? textarea.value.length;
       const before = textarea.value.slice(0, caret);
       const match = /@([\w-]*)$/.exec(before);
       if (match) renderSuggestions(match[1] ?? "");
       else suggestions.setAttribute("data-open", "false");
     };
-    textarea.onblur = () => setTimeout(() => suggestions.setAttribute("data-open", "false"), 80);
+
+    const stateName = node.argMeta?.[2]?.stateRef;
+    if (stateName) {
+      // bindState overwrites `oninput`, so we piggyback the suggestion
+      // update onto `getValue` (called by the renderer's listener).
+      helpers.bindState(textarea, stateName, {
+        event: "input",
+        getValue: (n) => {
+          updateFromCaret();
+          return (n as HTMLTextAreaElement).value;
+        },
+      });
+    } else {
+      textarea.oninput = updateFromCaret;
+    }
+    textarea.onkeydown = (event) => {
+      if (suggestions.getAttribute("data-open") !== "true" || activeMatches.length === 0) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        activeIndex = (activeIndex + 1) % activeMatches.length;
+        const items = suggestions.querySelectorAll<HTMLElement>(".rui-mention-input-option");
+        items.forEach((b, i) => b.setAttribute("data-active", i === activeIndex ? "true" : "false"));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        activeIndex = (activeIndex - 1 + activeMatches.length) % activeMatches.length;
+        const items = suggestions.querySelectorAll<HTMLElement>(".rui-mention-input-option");
+        items.forEach((b, i) => b.setAttribute("data-active", i === activeIndex ? "true" : "false"));
+      } else if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const chosen = activeMatches[activeIndex];
+        if (chosen) {
+          insertMention(chosen);
+          suggestions.setAttribute("data-open", "false");
+        }
+      } else if (event.key === "Escape") {
+        suggestions.setAttribute("data-open", "false");
+      }
+    };
+    textarea.onblur = () => setTimeout(() => suggestions.setAttribute("data-open", "false"), 120);
     root.append(textarea);
     root.append(suggestions);
     return root;
@@ -508,27 +559,41 @@ export const DateTimePicker: ComponentSpec = {
   },
 };
 
+/**
+ * Mask tokens:
+ *   - `9` matches a single digit
+ *   - `A` matches a single alpha character
+ *   - `*` matches any single character
+ *   - Any other character is a fixed delimiter inserted automatically
+ *
+ * Behavior: the raw value is stripped of all non-token-matching characters
+ * for each placeholder; fixed delimiters are inserted between tokens as the
+ * user types. This produces the expected progressive formatting (e.g. typing
+ * `4155550114` into a `(999) 999-9999` mask becomes `(415) 555-0114`).
+ */
 function applyMask(value: string, mask: string): string {
+  if (!mask) return value;
   let out = "";
-  let v = value;
+  let i = 0;
+  const v = String(value ?? "");
   for (const ch of mask) {
-    if (!v) break;
+    if (i >= v.length) break;
     if (ch === "9") {
-      const m = /\d/.exec(v);
-      if (!m) break;
-      out += m[0];
-      v = v.slice(v.indexOf(m[0]) + 1);
+      while (i < v.length && !/\d/.test(v[i] ?? "")) i += 1;
+      if (i >= v.length) break;
+      out += v[i];
+      i += 1;
     } else if (ch === "A") {
-      const m = /[a-zA-Z]/.exec(v);
-      if (!m) break;
-      out += m[0];
-      v = v.slice(v.indexOf(m[0]) + 1);
+      while (i < v.length && !/[a-zA-Z]/.test(v[i] ?? "")) i += 1;
+      if (i >= v.length) break;
+      out += v[i];
+      i += 1;
     } else if (ch === "*") {
-      out += v.charAt(0);
-      v = v.slice(1);
+      out += v[i];
+      i += 1;
     } else {
       out += ch;
-      if (v.startsWith(ch)) v = v.slice(1);
+      if (v[i] === ch) i += 1;
     }
   }
   return out;
@@ -566,15 +631,32 @@ export const MaskedInput: ComponentSpec = {
       disabled: disabled ? "" : null,
       autocomplete: "off",
     }) as HTMLInputElement;
+    input.value = initial;
     const stateName = node.argMeta?.[2]?.stateRef;
-    input.oninput = () => {
-      input.value = applyMask(input.value, mask);
+    // Apply the mask in place and keep the caret near the user's edit
+    // position. We use a property-based `oninput` so the morph reconciler
+    // can transfer it to a kept DOM node across re-renders.
+    const formatInPlace = (target: HTMLInputElement) => {
+      const before = target.value;
+      const masked = applyMask(before, mask);
+      if (masked === before) return masked;
+      const caret = target.selectionStart ?? masked.length;
+      target.value = masked;
+      const newPos = Math.min(masked.length, caret);
+      try { target.setSelectionRange(newPos, newPos); } catch { /* ignore */ }
+      return masked;
     };
     if (stateName) {
+      // bindState overwrites `oninput`, so we mask inside `getValue`
+      // (which the renderer's listener calls every time the input fires).
       helpers.bindState(input, stateName, {
         event: "input",
-        getValue: (n) => (n as HTMLInputElement).value,
+        getValue: (n) => formatInPlace(n as HTMLInputElement),
       });
+    } else {
+      input.oninput = (event) => {
+        formatInPlace((event.currentTarget ?? event.target) as HTMLInputElement);
+      };
     }
     if (labelText) {
       const wrapper = el("div", { class: "rui-masked-input-wrapper" });
@@ -728,7 +810,9 @@ export const MultiStepForm: ComponentSpec = {
     "`$variable` for the current 0-indexed step. Use INSTEAD of " +
     "hand-rolling `Steps` + content + manual prev/next wiring. The " +
     "submit button is rendered on the final step (override via " +
-    "`submitLabel`).",
+    "`submitLabel`). Step indicator direction defaults to `column` " +
+    "(stacked next to the content); set `stepsLayout: \"row\"` for a " +
+    "classic horizontal stepper.",
   props: [
     { name: "steps", type: "object[]", description: "Array of {title, details?, content} step objects" },
     { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
@@ -736,14 +820,23 @@ export const MultiStepForm: ComponentSpec = {
     { name: "prevLabel", type: "string", optional: true, description: "Default \"Back\"" },
     { name: "nextLabel", type: "string", optional: true, description: "Default \"Continue\"" },
     { name: "submitLabel", type: "string", optional: true, description: "Default \"Submit\" (final step)" },
+    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row"], aliases: ["layout", "stepsDirection"], description: "Direction of the steps indicator (default \"column\")" },
   ],
   render: (node, props, helpers) => {
     const steps = readSteps(props.steps);
     const total = steps.length;
     const current = Math.max(0, Math.min(total - 1, Math.floor(asNumber(props.current, 0))));
     const stateName = node.argMeta?.[1]?.stateRef;
-    const root = el("div", { class: "rui-multi-step-form" });
-    const stepsEl = el("ol", { class: "rui-steps rui-multi-step-form-steps" });
+    const layoutToken = asString(props.stepsLayout, "column").toLowerCase();
+    const layout = layoutToken === "row" || layoutToken === "horizontal" ? "row" : "column";
+    const root = el("div", {
+      class: "rui-multi-step-form",
+      "data-layout": layout,
+    });
+    const stepsEl = el("ol", {
+      class: "rui-steps rui-multi-step-form-steps",
+      "data-layout": layout,
+    });
     steps.forEach((step, idx) => {
       const li = el("li", {
         class: "rui-steps-item",

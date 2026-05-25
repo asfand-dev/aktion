@@ -323,25 +323,40 @@ export const Tooltip: ComponentSpec = {
   name: "Tooltip",
   description:
     "Wraps a trigger node and shows `label` text when the user hovers or " +
-    "focuses it. Pure CSS — no JS needed. Use for short hints (≤6 words); " +
-    "reach for HoverCard when you need rich content.",
+    "focuses it. Pure CSS — no JS needed. The tooltip hides on " +
+    "click/touch (so it does not stay stuck on touch devices) and " +
+    "supports `top|bottom|left|right` placement. Use for short hints " +
+    "(≤6 words); reach for HoverCard when you need rich content.",
   props: [
     { name: "label", type: "string" },
     { name: "trigger", type: "Node", aliases: ["children"] },
     { name: "side", type: "string", optional: true, enum: ["top", "bottom", "left", "right"], aliases: ["placement"] },
   ],
   render: (_node, props, helpers) => {
+    const side = asString(props.side, "top");
     const root = el("span", {
       class: "rui-tooltip",
-      "data-side": asString(props.side, "top"),
+      "data-side": side,
       tabindex: "0",
     });
     root.append(el("span", { class: "rui-tooltip-trigger" }, [
       helpers.renderNode(props.trigger),
     ]));
-    root.append(el("span", { class: "rui-tooltip-content", role: "tooltip" }, [
+    const content = el("span", { class: "rui-tooltip-content", role: "tooltip" }, [
       asString(props.label),
-    ]));
+    ]);
+    content.append(el("span", { class: "rui-tooltip-arrow", "aria-hidden": "true" }));
+    root.append(content);
+    // Native :focus-within would leave the tooltip visible after a click
+    // (because the trigger keeps focus). We blur the wrapper on
+    // mousedown so the next render hides the tooltip immediately.
+    root.addEventListener("mousedown", () => {
+      requestAnimationFrame(() => {
+        if (document.activeElement === root || root.contains(document.activeElement)) {
+          (document.activeElement as HTMLElement | null)?.blur?.();
+        }
+      });
+    });
     return root;
   },
 };

@@ -1282,21 +1282,29 @@ export const Notification: ComponentSpec = {
     { name: "actions", type: "Node[]", optional: true },
   ],
   render: (_node, props, helpers) => {
+    const isUnread = asBoolean(props.unread);
     const root = el("article", {
       class: "rui-notification",
       "data-tone": asString(props.tone, "default"),
-      "data-unread": asBoolean(props.unread) ? "true" : "false",
+      "data-unread": isUnread ? "true" : "false",
     });
     const avatarSrc = asString(props.avatarSrc);
+    const visual = el("div", { class: "rui-notification-visual" });
     if (avatarSrc) {
-      root.append(renderAvatar(avatarSrc, asString(props.title), "md"));
+      visual.append(renderAvatar(avatarSrc, asString(props.title), "md"));
     } else {
       const iconNode = renderIcon(asString(props.icon, "bell"), { className: "rui-notification-icon" });
-      if (iconNode) root.append(iconNode);
+      if (iconNode) visual.append(iconNode);
     }
+    root.append(visual);
     const body = el("div", { class: "rui-notification-body" });
     const head = el("header", { class: "rui-notification-head" });
-    head.append(el("span", { class: "rui-notification-title" }, [asString(props.title)]));
+    const titleWrap = el("span", { class: "rui-notification-title-wrap" });
+    if (isUnread) {
+      titleWrap.append(el("span", { class: "rui-notification-unread-dot", "aria-label": "Unread" }));
+    }
+    titleWrap.append(el("span", { class: "rui-notification-title" }, [asString(props.title)]));
+    head.append(titleWrap);
     const time = asString(props.time);
     if (time) head.append(el("span", { class: "rui-notification-time" }, [time]));
     body.append(head);

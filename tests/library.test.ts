@@ -2985,6 +2985,175 @@ describe("self-decorating defaults", () => {
   });
 });
 
+describe("Accordion showArrow", () => {
+  it("defaults to no chevron indicator on the wrapper", async () => {
+    const { Accordion } = await import("../src/library/components/layout.js");
+    const node = Accordion.render(
+      makeNode("Accordion", [[]]),
+      { items: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-show-arrow")).toBe("false");
+  });
+
+  it("propagates showArrow=true to the wrapper data attribute", async () => {
+    const { Accordion } = await import("../src/library/components/layout.js");
+    const node = Accordion.render(
+      makeNode("Accordion", [[], true]),
+      { items: [], showArrow: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-show-arrow")).toBe("true");
+  });
+
+  it("AccordionItem renders a chevron element so CSS can toggle visibility", async () => {
+    const { AccordionItem } = await import("../src/library/components/layout.js");
+    const node = AccordionItem.render(
+      makeNode("AccordionItem", ["FAQ", [], false, true]),
+      { title: "FAQ", children: [], open: false, showArrow: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-show-arrow")).toBe("true");
+    expect(node.querySelector(".rui-accordion-chevron")).not.toBeNull();
+  });
+});
+
+describe("MaskedInput", () => {
+  it("formats raw digits against the mask", () => {
+    const input = MaskedInput.render(
+      makeNode("MaskedInput", ["phone", "(999) 999-9999", "4155550114"]),
+      { id: "phone", mask: "(999) 999-9999", value: "4155550114" },
+      helpers,
+    ) as HTMLInputElement;
+    expect(input.value).toBe("(415) 555-0114");
+  });
+
+  it("re-masks on input when there is no state binding", () => {
+    const input = MaskedInput.render(
+      makeNode("MaskedInput", ["phone", "(999) 999-9999"]),
+      { id: "phone", mask: "(999) 999-9999" },
+      helpers,
+    ) as HTMLInputElement;
+    input.value = "41";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(input.value).toBe("(41");
+  });
+});
+
+describe("MentionInput suggestions", () => {
+  it("opens the suggestions popover when typing @", () => {
+    const node = MentionInput.render(
+      makeNode("MentionInput", ["msg", [{ name: "Ada Lovelace", handle: "ada" }, { name: "Linus Torvalds", handle: "linus" }]]),
+      {
+        id: "msg",
+        people: [
+          { name: "Ada Lovelace", handle: "ada" },
+          { name: "Linus Torvalds", handle: "linus" },
+        ],
+      },
+      helpers,
+    ) as HTMLElement;
+    const textarea = node.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "Hi @";
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    const suggestions = node.querySelector(".rui-mention-input-suggestions")!;
+    expect(suggestions.getAttribute("data-open")).toBe("true");
+    expect(suggestions.querySelectorAll(".rui-mention-input-option").length).toBe(2);
+  });
+
+  it("filters suggestions by the typed query", () => {
+    const node = MentionInput.render(
+      makeNode("MentionInput", ["msg", [{ name: "Ada" }, { name: "Linus" }]]),
+      { id: "msg", people: [{ name: "Ada" }, { name: "Linus" }] },
+      helpers,
+    ) as HTMLElement;
+    const textarea = node.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "Hi @Lin";
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    const options = node.querySelectorAll(".rui-mention-input-option");
+    expect(options.length).toBe(1);
+    expect(options[0]?.textContent).toContain("Linus");
+  });
+});
+
+describe("MultiStepForm layout", () => {
+  it("defaults to column layout for the steps indicator", () => {
+    const node = MultiStepForm.render(
+      makeNode("MultiStepForm", [[{ title: "One" }, { title: "Two" }], 0]),
+      { steps: [{ title: "One" }, { title: "Two" }], current: 0 },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-layout")).toBe("column");
+    expect(node.querySelector(".rui-multi-step-form-steps")?.getAttribute("data-layout")).toBe("column");
+  });
+
+  it("supports a horizontal row layout via stepsLayout", () => {
+    const node = MultiStepForm.render(
+      makeNode("MultiStepForm", [[{ title: "One" }, { title: "Two" }], 0, null, null, null, null, "row"]),
+      { steps: [{ title: "One" }, { title: "Two" }], current: 0, stepsLayout: "row" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-layout")).toBe("row");
+  });
+});
+
+describe("PieChart value labels", () => {
+  it("renders inline numeric labels for each non-trivial segment", async () => {
+    const { PieChart } = await import("../src/library/components/charts.js");
+    const node = PieChart.render(
+      makeNode("PieChart", [["Free", "Pro", "Team"], [240, 95, 32]]),
+      { labels: ["Free", "Pro", "Team"], values: [240, 95, 32] },
+      helpers,
+    ) as HTMLElement;
+    const labels = node.querySelectorAll(".rui-pie-chart-value");
+    expect(labels.length).toBe(3);
+  });
+
+  it("hides inline labels when showValues=false", async () => {
+    const { PieChart } = await import("../src/library/components/charts.js");
+    const node = PieChart.render(
+      makeNode("PieChart", [["A", "B"], [70, 30]]),
+      { labels: ["A", "B"], values: [70, 30], showValues: false },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelectorAll(".rui-pie-chart-value").length).toBe(0);
+  });
+
+  it("emits percent-formatted labels when valueFormat=percent", async () => {
+    const { PieChart } = await import("../src/library/components/charts.js");
+    const node = PieChart.render(
+      makeNode("PieChart", [["A", "B"], [75, 25]]),
+      { labels: ["A", "B"], values: [75, 25], valueFormat: "percent" },
+      helpers,
+    ) as HTMLElement;
+    const labels = Array.from(node.querySelectorAll(".rui-pie-chart-value"))
+      .map((l) => l.textContent);
+    expect(labels).toEqual(["75%", "25%"]);
+  });
+});
+
+describe("Notification unread visual", () => {
+  it("adds a leading unread dot when unread=true", () => {
+    const node = Notification.render(
+      makeNode("Notification", []),
+      { title: "New ping", unread: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-notification-unread-dot")).not.toBeNull();
+  });
+
+  it("omits the unread dot when unread is falsy", () => {
+    const node = Notification.render(
+      makeNode("Notification", []),
+      { title: "Old ping", unread: false },
+      helpers,
+    ) as HTMLElement;
+    expect(node.querySelector(".rui-notification-unread-dot")).toBeNull();
+  });
+});
+
 describe("LineChart row-shaped shorthand", () => {
   it("accepts data=[{x, …series}] and derives labels + series", async () => {
     const { LineChart } = await import("../src/library/components/charts.js");

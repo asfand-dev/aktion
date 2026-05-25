@@ -388,10 +388,10 @@ el.registerComponents([ProductCard]);</code></pre>
   AccordionItem("Open by default", children: [Markdown("This **AccordionItem** has open=true.")], open: true),
   AccordionItem("Another question",children: [Markdown("Click to reveal the answer.")]),
   AccordionItem("And one more",    children: [Markdown("Stacks as a sequence of disclosures.")])
-])`,
+], showArrow: true)`,
       AccordionItem: `_app_ = Accordion([
-  AccordionItem("Open by default", children: [Markdown("This item starts expanded.")], open: true),
-  AccordionItem("Closed",          children: [Markdown("Click to expand.")])
+  AccordionItem("Open by default", children: [Markdown("This item starts expanded.")], open: true, showArrow: true),
+  AccordionItem("Closed",          children: [Markdown("Click to expand.")], showArrow: true)
 ])`,
       Modal: `_app_ = Modal("Modal title", open: true, children: [
   Text("Modal body shown when open=true."),
@@ -650,7 +650,7 @@ _app_ = Pagination($page, pages: 10, siblings: 1)`,
   ["Mon", "Tue", "Wed", "Thu", "Fri"],
   series: [Series("Visits", values: [120, 180, 160, 210, 250]), Series("Signups", values: [12, 18, 15, 22, 28])]
 )`,
-      PieChart: `_app_ = PieChart(["Free", "Pro", "Team"], values: [240, 95, 32], title: "Plan mix")`,
+      PieChart: `_app_ = PieChart(["Free", "Pro", "Team"], values: [240, 95, 32], title: "Plan mix", valueFormat: "both")`,
       Series: `_app_ = BarChart(
   ["Mon", "Tue", "Wed", "Thu"],
   series: [Series("Visits", values: [120, 180, 160, 210]), Series("Signups", values: [12, 18, 15, 22])]
@@ -1461,7 +1461,7 @@ _app_ = MultiStepForm([
     content: [FormControl("Name", control: Input("name", placeholder: "Your name"))]},
   {title: "Done",    details: "Review",
     content: [Banner("Almost there", description: "Click Submit to finish.", icon: "circle-info", tone: "success")]}
-], current: $step)`,
+], current: $step, stepsLayout: "column")`,
 
       // -------------------------------------------------------------------
       // Advanced patterns

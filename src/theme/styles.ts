@@ -657,6 +657,37 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   font-weight: 600;
   list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rui-spacing-s);
+}
+.rui-accordion-trigger::-webkit-details-marker { display: none; }
+.rui-accordion-title { flex: 1; min-width: 0; }
+/* Chevron: hidden by default; revealed when wrapper or item opts in via data-show-arrow="true". */
+.rui-accordion-chevron {
+  display: none;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transform-origin: center;
+  transition: transform 180ms ease;
+  color: var(--rui-color-text-muted);
+  opacity: 0.8;
+}
+.rui-accordion[data-show-arrow="true"] .rui-accordion-item:not([data-show-arrow="false"]) .rui-accordion-chevron,
+.rui-accordion-item[data-show-arrow="true"] .rui-accordion-chevron {
+  display: inline-block;
+}
+.rui-accordion[data-show-arrow="true"] .rui-accordion-item[data-show-arrow="false"] .rui-accordion-chevron {
+  display: none;
+}
+.rui-accordion-item[open] > .rui-accordion-trigger .rui-accordion-chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+  color: var(--rui-color-primary);
 }
 .rui-accordion-body { padding: 0 var(--rui-spacing-m) var(--rui-spacing-m); }
 
@@ -725,8 +756,86 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   gap: var(--rui-spacing-s);
   cursor: pointer;
   font-size: 14px;
+  user-select: none;
+  line-height: 1.4;
 }
 .rui-radio-group { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
+
+/* Custom Checkbox & Radio control styling.
+ * Hides the native input visually but keeps it focusable; renders the
+ * checked state via a CSS-painted indicator so the appearance is
+ * consistent across themes and platforms. */
+.rui-checkbox input[type="checkbox"],
+.rui-checkbox-item input[type="checkbox"],
+.rui-radio input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  flex-shrink: 0;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background: var(--rui-color-surface);
+  border: 1.5px solid var(--rui-color-border);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.rui-checkbox input[type="checkbox"],
+.rui-checkbox-item input[type="checkbox"] {
+  border-radius: 5px;
+}
+.rui-radio input[type="radio"] {
+  border-radius: 999px;
+}
+.rui-checkbox input[type="checkbox"]:hover,
+.rui-checkbox-item input[type="checkbox"]:hover,
+.rui-radio input[type="radio"]:hover {
+  border-color: var(--rui-color-primary);
+}
+.rui-checkbox input[type="checkbox"]:focus-visible,
+.rui-checkbox-item input[type="checkbox"]:focus-visible,
+.rui-radio input[type="radio"]:focus-visible {
+  outline: none;
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 22%, transparent);
+}
+.rui-checkbox input[type="checkbox"]:checked,
+.rui-checkbox-item input[type="checkbox"]:checked,
+.rui-radio input[type="radio"]:checked {
+  background: var(--rui-color-primary);
+  border-color: var(--rui-color-primary);
+}
+.rui-checkbox input[type="checkbox"]:checked::after,
+.rui-checkbox-item input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid var(--rui-color-primary-text, #fff);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.rui-radio input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--rui-color-primary-text, #fff);
+  transform: translate(-50%, -50%);
+}
+.rui-checkbox input[type="checkbox"]:disabled,
+.rui-checkbox-item input[type="checkbox"]:disabled,
+.rui-radio input[type="radio"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rui-checkbox-label, .rui-radio-label { color: var(--rui-color-text); }
 
 .rui-button {
   border: var(--rui-border-width) solid transparent;
@@ -894,6 +1003,18 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 }
 .rui-chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .rui-chart-legend-swatch { width: 10px; height: 10px; border-radius: 999px; }
+/* Pie chart inline value labels: bold, centered, painted with a soft
+ * stroke (set inline) so they remain legible on any slice color. The
+ * specificity here is higher than the generic '.rui-chart-svg text'
+ * fill, so the white fill wins. */
+.rui-chart-svg .rui-pie-chart-value,
+.rui-pie-chart .rui-pie-chart-value {
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  fill: #ffffff;
+}
 
 /* Chat blocks */
 .rui-section-block {
@@ -1422,7 +1543,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   color: var(--rui-color-primary);
 }
 
-/* Tooltip — CSS-only hover/focus reveal. */
+/* Tooltip — CSS-only hover/focus reveal with arrow and accurate placement. */
 .rui-tooltip {
   position: relative;
   display: inline-flex;
@@ -1432,7 +1553,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-tooltip-trigger { display: contents; }
 .rui-tooltip-content {
   position: absolute;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-text);
   color: var(--rui-color-bg);
@@ -1446,21 +1567,82 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   transition: opacity 140ms ease, transform 140ms ease;
   z-index: 30;
   box-shadow: var(--rui-shadow-sm);
+  /* Default origin — overridden per side below. */
+  --rui-tooltip-x: -50%;
+  --rui-tooltip-y: 0;
+  --rui-tooltip-offset-x: 0;
+  --rui-tooltip-offset-y: 4px;
 }
-.rui-tooltip[data-side="top"] .rui-tooltip-content { bottom: calc(100% + 6px); left: 50%; transform: translate(-50%, 4px); }
-.rui-tooltip[data-side="bottom"] .rui-tooltip-content { top: calc(100% + 6px); left: 50%; transform: translate(-50%, -4px); }
-.rui-tooltip[data-side="left"] .rui-tooltip-content { right: calc(100% + 6px); top: 50%; transform: translate(4px, -50%); }
-.rui-tooltip[data-side="right"] .rui-tooltip-content { left: calc(100% + 6px); top: 50%; transform: translate(-4px, -50%); }
+/* Arrow pointing back at the trigger. */
+.rui-tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+.rui-tooltip[data-side="top"] .rui-tooltip-content {
+  bottom: calc(100% + 6px);
+  left: 50%;
+  --rui-tooltip-x: -50%;
+  --rui-tooltip-y: 0;
+  --rui-tooltip-offset-y: 4px;
+}
+.rui-tooltip[data-side="top"] .rui-tooltip-arrow {
+  bottom: -4px;
+  left: calc(50% - 4px);
+}
+.rui-tooltip[data-side="bottom"] .rui-tooltip-content {
+  top: calc(100% + 6px);
+  left: 50%;
+  --rui-tooltip-x: -50%;
+  --rui-tooltip-y: 0;
+  --rui-tooltip-offset-y: -4px;
+}
+.rui-tooltip[data-side="bottom"] .rui-tooltip-arrow {
+  top: -4px;
+  left: calc(50% - 4px);
+}
+.rui-tooltip[data-side="left"] .rui-tooltip-content {
+  right: calc(100% + 6px);
+  top: 50%;
+  --rui-tooltip-x: 0;
+  --rui-tooltip-y: -50%;
+  --rui-tooltip-offset-x: 4px;
+  --rui-tooltip-offset-y: 0;
+}
+.rui-tooltip[data-side="left"] .rui-tooltip-arrow {
+  right: -4px;
+  top: calc(50% - 4px);
+}
+.rui-tooltip[data-side="right"] .rui-tooltip-content {
+  left: calc(100% + 6px);
+  top: 50%;
+  --rui-tooltip-x: 0;
+  --rui-tooltip-y: -50%;
+  --rui-tooltip-offset-x: -4px;
+  --rui-tooltip-offset-y: 0;
+}
+.rui-tooltip[data-side="right"] .rui-tooltip-arrow {
+  left: -4px;
+  top: calc(50% - 4px);
+}
+.rui-tooltip-content {
+  transform: translate(calc(var(--rui-tooltip-x) + var(--rui-tooltip-offset-x)), calc(var(--rui-tooltip-y) + var(--rui-tooltip-offset-y)));
+}
 .rui-tooltip:hover .rui-tooltip-content,
 .rui-tooltip:focus-visible .rui-tooltip-content,
-.rui-tooltip:focus-within .rui-tooltip-content {
+.rui-tooltip:focus-within:not(:active) .rui-tooltip-content {
   opacity: 1;
-  transform: translate(0, 0);
+  transform: translate(var(--rui-tooltip-x), var(--rui-tooltip-y));
 }
-.rui-tooltip[data-side="top"]:hover .rui-tooltip-content { transform: translate(-50%, 0); }
-.rui-tooltip[data-side="bottom"]:hover .rui-tooltip-content { transform: translate(-50%, 0); }
-.rui-tooltip[data-side="left"]:hover .rui-tooltip-content { transform: translate(0, -50%); }
-.rui-tooltip[data-side="right"]:hover .rui-tooltip-content { transform: translate(0, -50%); }
+/* When the wrapper (or any descendant) is being pressed, suppress the
+ * tooltip immediately so clicking the trigger doesn't leave it visible. */
+.rui-tooltip:active .rui-tooltip-content,
+.rui-tooltip:has(:active) .rui-tooltip-content {
+  opacity: 0;
+  transition-duration: 0ms;
+}
 
 /* HoverCard */
 .rui-hover-card {
@@ -2794,21 +2976,48 @@ button.rui-tile:hover,
   border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   position: relative;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.rui-notification[data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 5%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-primary) 16%, transparent);
 }
 .rui-notification[data-unread="true"]::before {
   content: "";
   position: absolute;
-  top: var(--rui-spacing-m);
-  left: -1px;
-  width: 3px;
-  height: 24px;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
   background: var(--rui-color-primary);
-  border-radius: 999px;
+  border-radius: var(--rui-radius-md) 0 0 var(--rui-radius-md);
+}
+.rui-notification[data-tone="success"][data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-success) 6%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-color-success) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-success) 16%, transparent);
 }
 .rui-notification[data-tone="success"][data-unread="true"]::before { background: var(--rui-color-success); }
+.rui-notification[data-tone="warning"][data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-warning) 6%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-color-warning) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-warning) 16%, transparent);
+}
 .rui-notification[data-tone="warning"][data-unread="true"]::before { background: var(--rui-color-warning); }
+.rui-notification[data-tone="danger"][data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-danger) 6%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-color-danger) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-danger) 16%, transparent);
+}
 .rui-notification[data-tone="danger"][data-unread="true"]::before  { background: var(--rui-color-danger); }
+.rui-notification[data-tone="info"][data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-info) 6%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-color-info) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-info) 16%, transparent);
+}
 .rui-notification[data-tone="info"][data-unread="true"]::before    { background: var(--rui-color-info); }
+.rui-notification-visual { flex-shrink: 0; display: flex; }
 .rui-notification-icon {
   display: inline-flex !important;
   align-items: center;
@@ -2819,6 +3028,10 @@ button.rui-tile:hover,
   background: color-mix(in srgb, var(--rui-color-primary) 12%, var(--rui-color-surface-muted));
   font-size: 16px;
   flex-shrink: 0;
+}
+.rui-notification[data-unread="true"] .rui-notification-icon {
+  background: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface));
+  color: var(--rui-color-primary);
 }
 .rui-notification[data-tone="success"] .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-success) 18%, transparent); color: var(--rui-color-success); }
 .rui-notification[data-tone="warning"] .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning); }
@@ -2837,16 +3050,57 @@ button.rui-tile:hover,
   gap: var(--rui-spacing-s);
   align-items: baseline;
 }
+.rui-notification-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rui-notification-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--rui-color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 25%, transparent);
+  flex-shrink: 0;
+}
+.rui-notification[data-tone="success"] .rui-notification-unread-dot {
+  background: var(--rui-color-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-success) 25%, transparent);
+}
+.rui-notification[data-tone="warning"] .rui-notification-unread-dot {
+  background: var(--rui-color-warning);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-warning) 25%, transparent);
+}
+.rui-notification[data-tone="danger"] .rui-notification-unread-dot {
+  background: var(--rui-color-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-danger) 25%, transparent);
+}
+.rui-notification[data-tone="info"] .rui-notification-unread-dot {
+  background: var(--rui-color-info);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-info) 25%, transparent);
+}
 .rui-notification-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--rui-color-text);
+}
+.rui-notification[data-unread="true"] .rui-notification-title {
+  font-weight: 700;
 }
 .rui-notification-time {
   font-size: 12px;
   color: var(--rui-color-text-muted);
   flex-shrink: 0;
 }
+.rui-notification[data-unread="true"] .rui-notification-time {
+  color: var(--rui-color-primary);
+  font-weight: 600;
+}
+.rui-notification[data-tone="success"][data-unread="true"] .rui-notification-time { color: var(--rui-color-success); }
+.rui-notification[data-tone="warning"][data-unread="true"] .rui-notification-time { color: var(--rui-color-warning); }
+.rui-notification[data-tone="danger"][data-unread="true"] .rui-notification-time { color: var(--rui-color-danger); }
+.rui-notification[data-tone="info"][data-unread="true"] .rui-notification-time { color: var(--rui-color-info); }
 .rui-notification-message {
   margin: 0;
   font-size: 13px;
@@ -6586,8 +6840,22 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: inherit;
   font: inherit;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.rui-mention-input-option:hover { background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
+.rui-mention-input-option:hover,
+.rui-mention-input-option[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
+  color: var(--rui-color-text);
+}
+.rui-mention-input-option-label { font-weight: 500; }
+.rui-mention-input-option-handle {
+  color: var(--rui-color-text-muted);
+  font-size: 12px;
+  font-family: var(--rui-font-family-mono);
+}
 
 /* Time / DateTime / Masked input ---------------------------------- */
 .rui-time-picker,
@@ -6702,10 +6970,26 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 
 /* MultiStepForm ------------------------------------------------ */
 .rui-multi-step-form {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 16px;
 }
+.rui-multi-step-form[data-layout="row"] {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "steps"
+    "body"
+    "footer";
+}
+.rui-multi-step-form[data-layout="column"] {
+  grid-template-columns: 240px 1fr;
+  grid-template-areas:
+    "steps body"
+    "steps footer";
+  align-items: start;
+}
+.rui-multi-step-form > .rui-multi-step-form-steps { grid-area: steps; }
+.rui-multi-step-form > .rui-multi-step-form-body { grid-area: body; }
+.rui-multi-step-form > .rui-multi-step-form-footer { grid-area: footer; }
 .rui-multi-step-form-steps {
   display: flex;
   gap: 0;
@@ -6717,15 +7001,23 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
 }
+.rui-multi-step-form-steps[data-layout="row"] { flex-direction: row; }
+.rui-multi-step-form-steps[data-layout="column"] { flex-direction: column; }
 .rui-multi-step-form-steps .rui-steps-item {
   flex: 1;
   padding: 12px 16px 12px 52px;
-  border-right: 1px solid var(--rui-color-border);
   position: relative;
   color: var(--rui-color-text-muted);
   font-size: 13px;
 }
-.rui-multi-step-form-steps .rui-steps-item:last-child { border-right: none; }
+.rui-multi-step-form-steps[data-layout="row"] .rui-steps-item {
+  border-right: 1px solid var(--rui-color-border);
+}
+.rui-multi-step-form-steps[data-layout="row"] .rui-steps-item:last-child { border-right: none; }
+.rui-multi-step-form-steps[data-layout="column"] .rui-steps-item {
+  border-bottom: 1px solid var(--rui-color-border);
+}
+.rui-multi-step-form-steps[data-layout="column"] .rui-steps-item:last-child { border-bottom: none; }
 .rui-multi-step-form-steps .rui-steps-item::before {
   left: 12px;
   top: 50%;
@@ -6734,6 +7026,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   height: 28px;
   background: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
   color: var(--rui-color-text-muted);
+}
+.rui-multi-step-form-steps[data-layout="column"] .rui-steps-item::before {
+  top: 14px;
+  transform: none;
 }
 .rui-multi-step-form-steps .rui-steps-item[data-active="true"]::before {
   background: var(--rui-color-primary);
@@ -6782,6 +7078,15 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: var(--rui-color-text-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) {
+  .rui-multi-step-form[data-layout="column"] {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "steps"
+      "body"
+      "footer";
+  }
 }
 
 /* Advanced charts (Area/Gauge/Heatmap/Radar/Scatter/Histogram) -- */

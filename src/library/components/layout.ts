@@ -546,11 +546,18 @@ export const AccordionItem: ComponentSpec = {
     { name: "title", type: "string" },
     { name: "children", type: "Node[]" },
     { name: "open", type: "boolean", optional: true },
+    { name: "showArrow", type: "boolean", optional: true, description: "Show a chevron icon on the right (default false). Inherits from parent Accordion when unset." },
   ],
   render: (_node, props, helpers) => {
-    const details = el("details", { class: "rui-accordion-item" });
+    const explicit = props.showArrow !== undefined && props.showArrow !== null;
+    const details = el("details", {
+      class: "rui-accordion-item",
+      "data-show-arrow": explicit ? (asBoolean(props.showArrow) ? "true" : "false") : null,
+    });
     if (asBoolean(props.open)) details.setAttribute("open", "");
-    const summary = el("summary", { class: "rui-accordion-trigger" }, [asString(props.title)]);
+    const summary = el("summary", { class: "rui-accordion-trigger" });
+    summary.append(el("span", { class: "rui-accordion-title" }, [asString(props.title)]));
+    summary.append(el("span", { class: "rui-accordion-chevron", "aria-hidden": "true" }));
     details.append(summary);
     const body = el("div", { class: "rui-accordion-body" });
     for (const child of asArray(props.children)) body.append(helpers.renderNode(child));
@@ -561,10 +568,19 @@ export const AccordionItem: ComponentSpec = {
 
 export const Accordion: ComponentSpec = {
   name: "Accordion",
-  description: "Accordion container. Children must be AccordionItem components.",
-  props: [{ name: "items", type: "AccordionItem[]" }],
+  description:
+    "Accordion container. Children must be AccordionItem components. " +
+    "Set `showArrow: true` to add a chevron indicator to every item; " +
+    "individual `AccordionItem`s can override via their own `showArrow` prop.",
+  props: [
+    { name: "items", type: "AccordionItem[]" },
+    { name: "showArrow", type: "boolean", optional: true, description: "Show chevron icon on every item (default false)." },
+  ],
   render: (_node, props, helpers) => {
-    const root = el("div", { class: "rui-accordion" });
+    const root = el("div", {
+      class: "rui-accordion",
+      "data-show-arrow": asBoolean(props.showArrow) ? "true" : "false",
+    });
     for (const child of asArray(props.items)) root.append(helpers.renderNode(child));
     return root;
   },

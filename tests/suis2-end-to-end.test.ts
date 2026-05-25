@@ -414,15 +414,28 @@ describe("Two-way binding", () => {
     expect(program.errors).toEqual([]);
   });
 
-  it("`bind:value: $atom` is rejected with a migration error", () => {
-    // Parse directly — `harness()` throws on any parse error, which is
-    // the assertion we want to make here.
+  it("legacy `bind:value: $atom` is silently rewritten to `value: $atom`", () => {
+    // The `bind:` keyword was removed in Aktion 0.5 in favour of implicit
+    // two-way binding on any `$state` (or `$state.path`) prop value, but
+    // the parser keeps accepting the old form for back-compat so existing
+    // snippets / LLM outputs don't break.
     const program = parse(`
       $name = "Ada"
       _app_ = TextInput(bind:value: $name)
     `);
-    expect(program.errors.length).toBeGreaterThan(0);
-    expect(program.errors[0]?.message).toMatch(/`bind:.* is removed/);
+    expect(program.errors).toEqual([]);
+    // The arg should round-trip as a plain NamedArg whose value is the
+    // bare $name StateRef — i.e. identical to writing `value: $name`.
+    const app = program.statements[1] as {
+      expression: { arguments: unknown[] };
+    };
+    expect(app.expression.arguments).toEqual([
+      expect.objectContaining({
+        kind: "NamedArg",
+        name: "value",
+        value: expect.objectContaining({ kind: "StateRef", name: "name" }),
+      }),
+    ]);
   });
 
   it("nested writes through a member chain replace the root atom immutably", () => {
