@@ -158,12 +158,11 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
     ],
   },
   Format: {
-    description: "Locale-aware number formatter. Modes: 'currency', 'percent', 'number'.",
+    description: "Locale-aware number formatter. Modes: 'number' (default), 'currency', 'percent', 'compact'. Options: { currency?, locale?, decimals? }.",
     params: [
       { name: "value", type: "number", required: true },
-      { name: "mode", type: "'currency'|'percent'|'number'", required: false },
-      { name: "currencyOrLocale", type: "string", required: false },
-      { name: "locale", type: "string", required: false },
+      { name: "mode", type: "'number'|'currency'|'percent'|'compact'", required: false },
+      { name: "options", type: "{currency?: string, locale?: string, decimals?: number}", required: false },
     ],
   },
   FormatDate: {

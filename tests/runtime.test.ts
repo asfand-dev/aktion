@@ -87,6 +87,25 @@ describe("data builtins", () => {
     expect(dataBuiltins.Join!([[1, 2, 3]])).toBe("1,2,3");
     expect(dataBuiltins.Join!([["a", "b"], "-"])).toBe("a-b");
   });
+
+  it("@Format accepts an options object", () => {
+    const usd = dataBuiltins.Format!([1234.5, "currency", { currency: "USD", locale: "en-US" }]);
+    expect(String(usd)).toContain("$");
+    expect(String(usd)).toMatch(/1,234/);
+    const eur = dataBuiltins.Format!([1234.5, "currency", { currency: "EUR", locale: "en-US" }]);
+    expect(String(eur)).toContain("€");
+    const pct = dataBuiltins.Format!([0.42, "percent", { decimals: 1 }]);
+    expect(String(pct)).toBe("42.0%");
+    const compact = dataBuiltins.Format!([1_500_000, "compact", { locale: "en-US" }]);
+    expect(String(compact)).toMatch(/1\.5M/);
+  });
+
+  it("@Format keeps the legacy positional shape working", () => {
+    const legacy = dataBuiltins.Format!([1000, "currency", "EUR", "en-US"]);
+    expect(String(legacy)).toContain("€");
+    const number = dataBuiltins.Format!([1000, "number", "en-US"]);
+    expect(String(number)).toBe("1,000");
+  });
 });
 
 describe("array member shortcuts", () => {

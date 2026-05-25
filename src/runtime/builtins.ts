@@ -156,6 +156,42 @@ const formatRelative = (date: Date, now = Date.now()): string => {
   return future ? `in ${value}${unit}` : `${value}${unit} ago`;
 };
 
+/**
+ * Reconcile `@Format`'s three flavours of third/fourth-argument shapes into
+ * a single typed bag the formatter can consume.
+ *
+ *   - object literal — `{currency, locale, decimals}` — the new preferred form
+ *   - legacy strings — `(value, "currency", "USD")` or `(value, "number", "en-US")`
+ *   - legacy 4th locale arg — `(value, "currency", "USD", "en-US")`
+ */
+interface FormatOptions {
+  currency?: string;
+  locale?: string;
+  decimals?: number;
+}
+
+const normalizeFormatOptions = (
+  mode: string,
+  third: unknown,
+  fourth: unknown,
+): FormatOptions => {
+  if (isObject(third)) {
+    const out: FormatOptions = {};
+    if (typeof third.currency === "string") out.currency = third.currency;
+    if (typeof third.locale === "string") out.locale = third.locale;
+    if (typeof third.decimals === "number") out.decimals = third.decimals;
+    return out;
+  }
+  const out: FormatOptions = {};
+  if (mode === "currency") {
+    if (typeof third === "string" && third.length > 0) out.currency = third;
+    if (typeof fourth === "string" && fourth.length > 0) out.locale = fourth;
+  } else if (typeof third === "string" && third.length > 0) {
+    out.locale = third;
+  }
+  return out;
+};
+
 const recase = (input: unknown, kind: "camel" | "pascal" | "snake" | "kebab"): string => {
   const text = String(input ?? "");
   // Split on any non-alphanumeric run AND at boundaries between lowercase
@@ -303,30 +339,51 @@ export const dataBuiltins: Record<string, BuiltinFn> = {
 
   // ───────── Formatting ─────────
   /**
-   * Locale-aware number/currency formatter. Modes:
-   *   - `"currency"` (default `USD`)
-   *   - `"percent"` — multiplies by 100; pass already-fractional values
-   *   - `"number"` / omitted — plain numeric formatting
+   * Locale-aware number formatter.
+   *
+   *   @Format(value, mode?, options?)
+   *
+   * `mode` (string, default `"number"`):
+   *   - `"number"`   — plain numeric formatting (`1,234.5`)
+   *   - `"currency"` — currency formatting (default currency `USD`)
+   *   - `"percent"`  — multiplies by 100 (`0.42` → `42%`)
+   *   - `"compact"`  — short scale (`1.2K`, `3.4M`)
+   *
+   * `options` is an object literal — every key is optional:
+   *   - `currency`: ISO 4217 code for `"currency"` mode (default `"USD"`)
+   *   - `locale`:   BCP-47 tag (default: runtime locale)
+   *   - `decimals`: number — pin both min/max fraction digits
+   *
+   * Legacy positional shorthand (kept for compatibility):
+   *   `@Format(value, "currency", "USD")` — third arg as currency code
+   *   `@Format(value, "number", "en-US")` — third arg as locale
+   *   `@Format(value, "currency", "EUR", "de-DE")` — fourth arg as locale
    */
   Format: (args) => {
     const value = toNumber(args[0]);
     const mode = String(args[1] ?? "number");
-    const opt = args[2];
+    const opts = normalizeFormatOptions(mode, args[2], args[3]);
+    const fmtOptions: Intl.NumberFormatOptions = {};
     if (mode === "currency") {
-      const currency = String(opt ?? "USD") || "USD";
-      const locale = args[3] === undefined ? undefined : String(args[3] ?? "");
-      try {
-        return new Intl.NumberFormat(locale || undefined, { style: "currency", currency }).format(value);
-      } catch {
-        return value.toFixed(2);
-      }
+      fmtOptions.style = "currency";
+      fmtOptions.currency = opts.currency || "USD";
+    } else if (mode === "percent") {
+      fmtOptions.style = "percent";
+      if (opts.decimals === undefined) fmtOptions.maximumFractionDigits = 2;
+    } else if (mode === "compact") {
+      fmtOptions.notation = "compact";
+    } else {
+      fmtOptions.style = "decimal";
     }
-    if (mode === "percent") {
-      const locale = args[2] === undefined ? undefined : String(args[2] ?? "");
-      return new Intl.NumberFormat(locale || undefined, { style: "percent", maximumFractionDigits: 2 }).format(value);
+    if (opts.decimals !== undefined) {
+      fmtOptions.minimumFractionDigits = opts.decimals;
+      fmtOptions.maximumFractionDigits = opts.decimals;
     }
-    const locale = args[2] === undefined ? undefined : String(args[2] ?? "");
-    return new Intl.NumberFormat(locale || undefined).format(value);
+    try {
+      return new Intl.NumberFormat(opts.locale || undefined, fmtOptions).format(value);
+    } catch {
+      return mode === "currency" ? value.toFixed(opts.decimals ?? 2) : String(value);
+    }
   },
   /**
    * Format a date. The second argument is either a moment-like pattern

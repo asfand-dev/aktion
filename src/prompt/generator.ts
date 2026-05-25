@@ -1385,7 +1385,7 @@ ${dataLines}
 ${iterLines}
 
 Template literals (\`backticks with \${expr}\`) compose naturally with these
-helpers — \`\`\`Found \${@Count(rows)} \${@Plural(@Count(rows), "result", "results")} (\${@Format(@Sum(rows.amount), "currency", "USD")} total)\`\`\``;
+helpers — \`\`\`Found \${@Count(rows)} \${@Plural(@Count(rows), "result", "results")} (\${@Format(@Sum(rows.amount), "currency")} total)\`\`\``;
 }
 
 function chatStreaming(): string {
@@ -1448,7 +1448,7 @@ langs = [
 ${ROOT_NAME} = Stack([title, chart, summary, follow])
 title   = Text("Q4 revenue by product", variant: "large-heavy")
 chart   = BarChart(labels, [Series("Product A", a), Series("Product B", b)])
-summary = Callout("info", \`Q4 total: \${@Format(@Sum(a) + @Sum(b), "currency", "USD")} across \${@Count(labels)} months\`, icon: "chart-column", compact: true)
+summary = Callout("info", \`Q4 total: \${@Format(@Sum(a) + @Sum(b), "currency")} across \${@Count(labels)} months\`, icon: "chart-column", compact: true)
 follow  = FollowUpBlock(["Compare to Q3", "Break down by region", "Show as a line chart"])
 
 labels = ["Oct", "Nov", "Dec"]

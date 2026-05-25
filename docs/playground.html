@@ -640,6 +640,20 @@
       padding: 2px 6px;
       border-radius: 999px;
     }
+    .pg-cm-tooltip .pg-cm-enum-pick {
+      border: 1px solid color-mix(in srgb, var(--doc-primary) 35%, transparent);
+      cursor: pointer;
+      transition: transform 60ms ease, background 80ms ease, color 80ms ease;
+      pointer-events: auto;
+    }
+    .pg-cm-tooltip .pg-cm-enum-pick:hover {
+      background: var(--doc-primary);
+      color: var(--doc-on-primary, #fff);
+      transform: translateY(-1px);
+    }
+    .pg-cm-tooltip .pg-cm-enum-pick:active {
+      transform: translateY(0);
+    }
     .pg-cm-tooltip ul.pg-cm-params {
       margin: 0;
       padding-left: 16px;
@@ -909,6 +923,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.05.23-modal"></script>
+  <script type="module" src="assets/playground.js?v=2026.05.25-enum-pick"></script>
 </body>
 </html>

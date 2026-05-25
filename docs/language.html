@@ -403,7 +403,7 @@ chips = TagInput("tags", bind:value: $tags)</code></pre>
 
       <h3>Formatting</h3>
       <ul>
-        <li><code>@Format(value, "currency"|"percent"|"number", currencyOrLocale?, locale?)</code> &mdash; positional args, locale-aware.</li>
+        <li><code>@Format(value, mode?, options?)</code> &mdash; locale-aware. <code>mode</code>: <code>"number"</code> (default), <code>"currency"</code>, <code>"percent"</code>, <code>"compact"</code>. <code>options</code>: <code>{currency?, locale?, decimals?}</code>. Legacy positional shape (<code>@Format(v, "currency", "USD")</code>) still accepted.</li>
         <li><code>@FormatDate(value, format)</code> &mdash; named modes (<code>"relative"</code>, <code>"date"</code>, <code>"time"</code>, <code>"datetime"</code>, <code>"iso"</code>) or moment-like patterns (<code>"MMM D"</code>, <code>"YYYY-MM-DD"</code>).</li>
         <li><code>@Plural(n, "order", "orders")</code> &mdash; <code>"1 order"</code> / <code>"2 orders"</code>.</li>
         <li><code>@Capitalize(s)</code>, <code>@Lowercase(s)</code>, <code>@Uppercase(s)</code>, <code>@Titlecase(s)</code>, <code>@Case(s, "camel"|"snake"|"kebab"|"pascal")</code>.</li>

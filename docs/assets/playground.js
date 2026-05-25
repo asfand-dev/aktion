@@ -1701,7 +1701,9 @@ function initPlayground(cm) {
         li.append(nameEl, typeEl);
         if (p.description) li.append(document.createTextNode(` — ${p.description}`));
         if (p.enumValues && p.enumValues.length > 0) {
-          li.append(buildEnumBadges(p.enumValues));
+          li.append(buildEnumSelect(p));
+        } else if (p.type === "boolean") {
+          li.append(buildEnumSelect({ ...p, enumValues: ["true", "false"] }));
         }
         ul.append(li);
       }
@@ -1730,10 +1732,45 @@ function initPlayground(cm) {
     if (param.enumValues && param.enumValues.length > 0) {
       const label = document.createElement("span");
       label.className = "pg-cm-enum-label";
-      label.textContent = "Allowed values";
-      card.append(label, buildEnumBadges(param.enumValues));
+      label.textContent = "Allowed values · click to insert";
+      card.append(label, buildEnumSelect(param));
+    } else if (param.type === "boolean") {
+      const label = document.createElement("span");
+      label.className = "pg-cm-enum-label";
+      label.textContent = "Allowed values · click to insert";
+      const synthetic = { ...param, enumValues: ["true", "false"], type: "boolean" };
+      card.append(label, buildEnumSelect(synthetic));
     }
     return card;
+  }
+
+  /**
+   * Render a parameter's enum values as a clickable picker. Each value is a
+   * button that, when clicked, drops the literal at the editor cursor —
+   * either replacing the partial value the user is editing, inserting a
+   * properly-quoted token into a fresh slot, or wrapping a bare identifier
+   * in a `name: value` pair when the cursor is on the argument boundary.
+   *
+   * Booleans render as a two-button toggle (`true` / `false`).
+   */
+  function buildEnumSelect(param) {
+    const list = document.createElement("div");
+    list.className = "pg-cm-enum-list";
+    const isBoolean = param.type === "boolean";
+    for (const value of param.enumValues) {
+      const badge = document.createElement("button");
+      badge.type = "button";
+      badge.className = "pg-cm-enum pg-cm-enum-pick";
+      badge.textContent = value;
+      badge.title = `Insert ${value}`;
+      badge.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        insertEnumValueAtCursor(param, value, { quoted: !isBoolean });
+      });
+      list.append(badge);
+    }
+    return list;
   }
 
   function buildEnumBadges(values) {
@@ -1748,13 +1785,66 @@ function initPlayground(cm) {
     return list;
   }
 
+  /**
+   * Drop an enum literal at the current cursor position inside the active
+   * `name: …` slot. Detects whether a partial value is already there and
+   * replaces it; otherwise inserts a properly-quoted token. Falls back to
+   * pasting `name: value` when the cursor isn't yet inside a value slot.
+   */
+  function insertEnumValueAtCursor(param, value, opts) {
+    if (!editorView) return;
+    const quoted = opts && opts.quoted;
+    const text = editorView.state.doc.toString();
+    const pos = editorView.state.selection.main.head;
+    const literal = quoted ? `"${value}"` : value;
+    const call = findEnclosingCall(text, pos);
+    if (call) {
+      const { argStart, argText } = readCurrentArg(text, call, pos);
+      const valueMatch = argText.match(/^(\s*[A-Za-z_]\w*\s*:\s*)(.*)$/s);
+      if (valueMatch) {
+        const prefixLen = valueMatch[1].length;
+        const partial = valueMatch[2];
+        // Replace whatever literal/identifier the user is editing.
+        let trailing = 0;
+        while (
+          trailing < partial.length &&
+          !/[,)\n]/.test(partial[trailing])
+        ) {
+          trailing += 1;
+        }
+        const from = argStart + prefixLen;
+        const to = argStart + prefixLen + trailing;
+        editorView.dispatch({
+          changes: { from, to, insert: literal },
+          selection: { anchor: from + literal.length },
+        });
+        editorView.focus();
+        return;
+      }
+    }
+    editorView.dispatch({
+      changes: { from: pos, insert: `${param.name}: ${literal}` },
+      selection: { anchor: pos + param.name.length + 2 + literal.length },
+    });
+    editorView.focus();
+  }
+
   // ---- Linter: surface ParseError from runtime/parser ----
+  // The §19.1 "one positional argument max" advisory is informational for
+  // every component (the runtime still slots extras into the next prop),
+  // so we hide it from the playground to keep the inline diagnostic list
+  // focused on hard errors.
+  const isPositionalAdvisory = (err) =>
+    typeof err?.message === "string" &&
+    /allows at most one positional argument/i.test(err.message);
+
   const lintSource = lint.linter((view) => {
     const text = view.state.doc.toString();
     const program = parse(text);
-    parseErrors = program.errors;
+    const filtered = program.errors.filter((e) => !isPositionalAdvisory(e));
+    parseErrors = filtered;
     refreshStatusErrors();
-    return program.errors.map((err) => {
+    return filtered.map((err) => {
       const line = Math.max(1, err.line || 1);
       const lineInfo = view.state.doc.line(Math.min(line, view.state.doc.lines));
       const fromCol = Math.max(0, (err.column || 1) - 1);
@@ -2806,10 +2896,11 @@ function initPlayground(cm) {
   }
 
   // Subscribe to runtime error events as a redundant source for the linter
-  // (covers cases where the linter hasn't run yet).
+  // (covers cases where the linter hasn't run yet). The §19.1 positional
+  // advisory is filtered out so the playground stays focused on real errors.
   $("pg-target").addEventListener("error", (e) => {
     if (Array.isArray(e.detail?.errors)) {
-      parseErrors = e.detail.errors;
+      parseErrors = e.detail.errors.filter((err) => !isPositionalAdvisory(err));
       refreshStatusErrors();
     }
   });

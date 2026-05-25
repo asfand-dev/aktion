@@ -383,11 +383,11 @@ const LEGACY_V1_BUILTINS: Record<string, string> = {
     `@Map(arr, "field") is removed in 0.5. Use array pluck shorthand: \`arr.field\` (yields \`[arr[0].field, arr[1].field, …]\`).`,
   Take:
     `@Take(arr, n) is removed in 0.5. Use @Slice(arr, 0, n) or array shortcuts like \`arr.first\` / \`arr.last\`.`,
-  // Formatters (subsumed by @Format(value, "currency"/"number")).
+  // Formatters (subsumed by @Format(value, mode, {currency?, locale?, decimals?})).
   FormatCurrency:
-    `@FormatCurrency(value, opts?) is removed in 0.5. Use \`@Format(value, "currency", opts?)\`.`,
+    `@FormatCurrency(value, opts?) is removed in 0.5. Use \`@Format(value, "currency", {currency: "USD"})\`.`,
   FormatNumber:
-    `@FormatNumber(value, opts?) is removed in 0.5. Use \`@Format(value, "number", opts?)\`.`,
+    `@FormatNumber(value, opts?) is removed in 0.5. Use \`@Format(value, "number", {locale: "en-US"})\`.`,
   // Control-flow helpers (subsumed by expression-form if/match/for).
   Each:
     `@Each(items, "x", template) is removed in 0.5. Use the expression-form loop: \`for x in items { template }\` (see §8.3).`,

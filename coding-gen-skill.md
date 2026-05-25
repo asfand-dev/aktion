@@ -1342,7 +1342,7 @@ data shaping, formatting, and inline iteration.
 
 | Function                                                            | Purpose                                                                                                                            |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `@Format(value, "currency" \| "percent" \| "number", currencyOrLocale?, locale?)` | Locale-aware number / currency / percent formatter. Currency defaults to USD. Percent multiplies by 100; pass `0.42` for "42%".  |
+| `@Format(value, mode?, options?)`                                   | Locale-aware number formatter. `mode`: `"number"` (default), `"currency"`, `"percent"`, `"compact"`. `options`: `{currency?: "USD", locale?: "en-US", decimals?: 2}`. Examples: `@Format(1234)` → "1,234"; `@Format(48230, "currency")` → "$48,230.00"; `@Format(0.42, "percent")` → "42%"; `@Format(2.5, "currency", {currency: "EUR", locale: "de-DE"})` → "2,50 €". Legacy positional shape `@Format(v, "currency", "USD")` still works. |
 | `@FormatDate(value, format?)`                                       | Formats a date. Format is either a moment-like pattern (e.g. `"MMM D"`, `"YYYY-MM-DD"`) or a named mode: `"relative"`, `"date"`, `"time"`, `"datetime"`, `"iso"`. |
 | `@Plural(n, "singular", "plural"?)`                                 | Returns `"1 order"` / `"2 orders"`.                                                                                                |
 
@@ -2751,11 +2751,11 @@ orderSummary = Card([
   Stack(for it in $cart {
     Stack([
       Text(`${it.qty} × ${it.title}`),
-      Text(@Format(it.qty * it.price, "currency", "USD"))
+      Text(@Format(it.qty * it.price, "currency"))
     ], direction: "row", justify: "between")
   }, gap: "s"),
   Separator(),
-  Stack([Text("Total", variant: "large-heavy"), Text(@Format($total, "currency", "USD"), variant: "large-heavy")], direction: "row", justify: "between")
+  Stack([Text("Total", variant: "large-heavy"), Text(@Format($total, "currency"), variant: "large-heavy")], direction: "row", justify: "between")
 ])
 
 detailsForm = Card([

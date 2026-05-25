@@ -929,7 +929,7 @@ $i18n = i18n({
 
 welcome    = Text(t("greeting", { name: $user.name }))
 sectionTitle = SectionHeader(t("orders.title"))
-formatted  = Text(@Format(1234.5, "currency", "EUR", Locale()))
+formatted  = Text(@Format(1234.5, "currency", {currency: "EUR", locale: Locale()}))
 ```
 
 Keys support dot paths. Variables are interpolated using `${name}`
@@ -1025,7 +1025,7 @@ consumes from the CDN.
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
 | `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
-| `visual-editor.html`                | Drag-and-drop visual editor for the full 130+ component library: typed prop editors (text, number, boolean, enum, expression), DnD reorder, slot-aware drop zones, breadcrumbs, prelude editor for `$state` / actions / effects, live preview, and import / export `.aktion` + self-contained HTML. The canvas pane has three modes: **Raw Edit** (tree-of-cards view of the underlying `_app_` expression, useful for surgical structural edits), **Visual Edit** (WYSIWYG canvas with overlay chrome), and **Preview** (chrome-free WYSIWYG render). The palette, inspector, and toolbar stay identical across modes. |
+| `visual-editor.html`                | Drag-and-drop visual editor for the full 130+ component library: typed prop editors (text, number, boolean, enum, expression), DnD reorder, slot-aware drop zones, breadcrumbs, live preview, and import / export `.aktion` + self-contained HTML. The palette pane has two tabs — **Components** (DnD palette) and **Outline** (the program's top-level entities: assignments, `$state`, `component`/`action`/`effect` declarations). The Outline tab lets you focus the canvas on any entity, create new ones (`+` menu), and rename / delete them. The canvas pane has three modes: **Raw Edit** (tree-of-cards view of the active assignment, useful for surgical structural edits), **Visual Edit** (WYSIWYG canvas with overlay chrome), and **Preview** (chrome-free WYSIWYG render). The palette, inspector, and toolbar stay identical across modes. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
 | `live-examples.html`                | Catalog page that links every demo into the shared `live-example.html?example=<slug>` shell. |
 | `live-example.html`                 | Shared shell for the bundled live examples — picks the demo from the `?example=<slug>` query parameter. |
