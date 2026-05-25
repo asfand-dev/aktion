@@ -30,7 +30,7 @@ import {
   findPositionalIndex,
   parse,
   getLanguageSpec,
-} from "../../dist/aktion.js";
+} from "../../dist/aktion.js?v=2026.05.25-bind-deprecated";
 
 const CDN_BUNDLE = "https://asfand-dev.github.io/aktion/dist/aktion.js";
 
