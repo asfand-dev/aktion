@@ -773,8 +773,9 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   margin: 0;
   flex-shrink: 0;
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  transform: scale(0.8);
   background: var(--rui-color-surface);
   border: 1.5px solid var(--rui-color-border);
   cursor: pointer;
@@ -1367,10 +1368,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
     color-mix(in srgb, var(--rui-color-primary) 30%, var(--rui-color-surface-muted)));
   color: color-mix(in srgb, var(--rui-color-primary) 90%, var(--rui-color-text));
 }
-.rui-avatar[data-size="sm"] { width: 24px; height: 24px; font-size: 10px; }
-.rui-avatar[data-size="md"] { width: 36px; height: 36px; font-size: 13px; }
-.rui-avatar[data-size="lg"] { width: 52px; height: 52px; font-size: 18px; }
-.rui-avatar[data-size="xl"] { width: 72px; height: 72px; font-size: 22px; }
+.rui-avatar[data-size="sm"] { width: 24px; height: 24px; font-size: 10px; max-width: 24px; max-height: 24px; }
+.rui-avatar[data-size="md"] { width: 36px; height: 36px; font-size: 13px; max-width: 36px; max-height: 36px; }
+.rui-avatar[data-size="lg"] { width: 52px; height: 52px; font-size: 18px; max-width: 52px; max-height: 52px; }
+.rui-avatar[data-size="xl"] { width: 72px; height: 72px; font-size: 22px; max-width: 72px; max-height: 72px; }
 .rui-avatar-status {
   position: absolute;
   right: 2px;

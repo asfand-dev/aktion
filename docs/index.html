@@ -44,8 +44,10 @@
 &lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
 &lt;script&gt;
   const el = document.querySelector("aktion-app");
-  el.setResponse(`_app_ = Stack([greeting])
-greeting = Card([CardHeader("Hello", subtitle: "Generative UI in plain HTML")])`);
+  el.setResponse(`
+      _app_ = Stack([greeting])
+      greeting = Card([CardHeader("Hello", subtitle: "Generative UI in plain HTML")])
+  `);
 &lt;/script&gt;</code></pre>
 
       <h2 id="features">Why Aktion?</h2>

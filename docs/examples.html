@@ -308,7 +308,7 @@ nav = Sidebar([
   ])
 ], brand: "Acme HQ", footer: Stack([
   Avatar("Asha Patel", size: "sm"),
-  Button("Settings", action: openSettings, variant: "ghost", size: "small")
+  Text("Settings", variant: "body-heavy")
 ], direction: "row", gap: "s"))
 
 topbar = [
@@ -382,9 +382,9 @@ info = Card([
 activity = Card([
   SectionHeader("Recent activity"),
   ActivityLog([
-    { actor: "Asha",  verb: "renewed", target: "Team plan", time: "2h ago" },
-    { actor: "Linus", verb: "added",   target: "3 seats",   time: "yesterday" },
-    { actor: "Grace", verb: "shared",  target: "invoice #1242", time: "Mon" }
+    { actor: "Asha",  verb: "renewed", target: "Team plan", time: "2h ago", icon: "user" },
+    { actor: "Linus", verb: "added",   target: "3 seats",   time: "yesterday", icon: "user" },
+    { actor: "Grace", verb: "shared",  target: "invoice #1242", time: "Mon", icon: "user" }
   ])
 ])
 
@@ -438,8 +438,8 @@ faqs = Card([
     AccordionItem("Do you offer non-profit pricing?",
       children: Text("We offer 50% off Pro and Team plans for registered non-profits.")),
     AccordionItem("Is my data backed up?",
-      children: Text("Daily encrypted backups with point-in-time restore on Team plans."))
-  ])
+      children: Text("Daily encrypted backups with point-in-time restore on Team plans.")),
+  ], showArrow: true)
 ])
 
 _app_ = Stack([hero, plans, faqs], direction: "column", gap: "xl")</code></pre>
@@ -665,44 +665,6 @@ _app_ = Stack([bar, ring, thread], direction: "column", gap: "l")</code></pre>
       </p>
 
       <div class="example">
-        <div class="example-header"><h3>Popover filter panel</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <aktion-app theme="light"></aktion-app>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">$status = "open"
-$priority = "any"
-
-action apply() {
-  emit "assistant-message" { message: `Filter: ${$status} · ${$priority}` }
-}
-
-panel = Stack([
-  FormControl("Status", Select("status", [
-    SelectItem("open",   label: "Open"),
-    SelectItem("closed", label: "Closed"),
-    SelectItem("all",    label: "All")
-  ], value: $status)),
-  FormControl("Priority", Select("priority", [
-    SelectItem("any",    label: "Any"),
-    SelectItem("low",    label: "Low"),
-    SelectItem("high",   label: "High")
-  ], value: $priority)),
-  Button("Apply", action: apply, variant: "primary")
-], direction: "column", gap: "s")
-
-trigger = Button("Filter", icon: "filter", variant: "ghost")
-_app_ = Popover(trigger, children: panel, title: "Filter", placement: "bottom-end", width: 280)</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
         <div class="example-header"><h3>Toast stack (bottom-right)</h3></div>
         <div class="example-tabs" role="tablist">
           <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
@@ -905,30 +867,109 @@ _app_ = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">$category = "all"
+<pre><code class="example-source">_app_ = AppShell(content: [pages])
 
-products = [
-  { id: "p1", name: "Aurora Hoodie",  price: 78,  category: "apparel", img: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&amp;w=320&amp;q=70" },
-  { id: "p2", name: "Voyager Mug",    price: 24,  category: "home",    img: "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&amp;w=320&amp;q=70" },
-  { id: "p3", name: "Glide Sneakers", price: 142, category: "apparel", img: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&amp;w=320&amp;q=70" },
-  { id: "p4", name: "Halo Lamp",      price: 96,  category: "home",    img: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&amp;w=320&amp;q=70" }
-]
-$visible = if $category == "all" { products } else { @Filter(products, "category", "==", $category) }
-
-filters = Toolbar([
-  FormControl("Category", Select("category", [
-    SelectItem("all",     label: "All"),
-    SelectItem("apparel", label: "Apparel"),
-    SelectItem("home",    label: "Home")
-  ], value: $category))
-])
-cards = Grid(for p in $visible {
-  MediaCard(p.name,
-    src: p.img,
-    description: @Format(p.price, "currency", "USD"),
-    actions: Button("Add to cart", variant: "primary", size: "small"))
-}, columns: 4, gap: "m")
-_app_ = Stack([CardHeader("Catalog"), filters, cards], direction: "column", gap: "m")</code></pre>
+  # --- Logic & State ---
+  $category = "all"
+  $cart = []
+  
+  action addToCart(product) {
+    $cart = [...$cart, product]
+    Toast("Added to cart", message: `${product.name} is now in your bag.`, tone: "success", icon: "cart-plus")
+  }
+  
+  action checkout() {
+    if $cart.length == 0 { return }
+    $checkout = http({ url: "/api/checkout", method: "POST", body: { items: $cart } })
+    $cart = []
+    _route_.navigate("/success")
+  }
+  
+  # --- Components ---
+  component CatalogPage() {
+    $visible = if $category == "all" { products } else { @Filter(products, "category", "==", $category) }
+    
+    header = PageHeader("Product Catalog", 
+      subtitle: "Explore our latest arrivals and essentials",
+      actions: [
+        Popover(
+          trigger: Button(`Cart (${$cart.length})`, icon: "shopping-bag", variant: "secondary"),
+          title: "Your Shopping Bag",
+          content: [cartContent]
+        )
+      ]
+    )
+  
+    filters = Toolbar(
+      left: [
+        Select("cat-select", [
+          SelectItem("all", "All Categories"),
+          SelectItem("apparel", "Apparel"),
+          SelectItem("home", "Home Decor"),
+          SelectItem("tech", "Technology")
+        ], value: $category, label: "Filter by")
+      ],
+      right: [Text(`${$visible.length} products found`, tone: "muted")]
+    )
+  
+    cards = Grid(for p in $visible {
+      MediaCard(p.name,
+        imageSrc: p.img,
+        description: @Format(p.price, "currency", "USD"),
+        badge: Badge(p.category, tone: "info"),
+        actions: [
+          Button("Add to cart", 
+            icon: "plus", 
+            onClick: () => addToCart(p), 
+            variant: "primary", 
+            fullWidth: true
+          )
+        ],
+        ratio: "4:3"
+      )
+    }, columns: { sm: 1, md: 2, lg: 4 }, gap: "m")
+  
+    return Stack([header, filters, cards], gap: "xl")
+  }
+  
+  cartContent = Stack([
+    if $cart.length == 0 {
+      EmptyState("Your cart is empty", icon: "cart-shopping")
+    } else {
+      Stack([
+        for item in $cart {
+          PersonChip(item.name, role: @Format(item.price, "currency", "USD"), avatarSrc: item.img)
+        },
+        Separator(),
+        Stack([
+          Text("Total", variant: "body-heavy"),
+          Spacer(),
+          Text(@Format(@Sum($cart.price), "currency", "USD"), variant: "large-heavy")
+        ], direction: "row"),
+        Button("Checkout", onClick: checkout, variant: "primary", fullWidth: true)
+      ], gap: "s")
+    }
+  ], padding: "m", maxWidth: "320px")
+  
+  # --- Router & Layout ---
+  pages = _router_({
+    "/": CatalogPage(),
+    "/success": SuccessState("Order Placed!", 
+      description: "Thank you for your purchase. Your items will ship soon.",
+      actions: [Button("Back to Shop", onClick: () => _route_.navigate("/"))]
+    ),
+    default: CatalogPage()
+  })
+  
+  # --- Data ---
+  products = [
+    { id: "p1", name: "Aurora Hoodie",  price: 78,  category: "apparel", img: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&w=400" },
+    { id: "p2", name: "Voyager Mug",    price: 24,  category: "home",    img: "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&w=400" },
+    { id: "p3", name: "Glide Sneakers", price: 142, category: "apparel", img: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&w=400" },
+    { id: "p4", name: "Halo Lamp",      price: 96,  category: "home",    img: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&w=400" },
+    { id: "p5", name: "Cyber Watch",    price: 299, category: "tech",    img: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&w=400" },
+    { id: "p6", name: "Studio Pods",    price: 199, category: "tech",    img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&w=400" }
+  ]</code></pre>
         </div>
       </div>
 
