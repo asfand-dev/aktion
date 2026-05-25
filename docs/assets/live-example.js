@@ -478,7 +478,7 @@ trailerCard = Card([
   SectionHeader("Trailer · Aurora Expedition", "60-second highlight reel", "WATCH",
     Badge("HD", "primary", "video", "sm")),
   VideoPlayer(
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
     "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
     null, true, false, false, false,
     "Aurora Expedition · trailer",
@@ -490,7 +490,7 @@ soundtrackCard = Card([
   SectionHeader("Trip soundtrack", "Pre-departure playlist", "LISTEN",
     Badge("3 tracks", "info", "music", "sm")),
   AudioPlayer(
-    "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+    "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
     null, "Northern Skies", "Aurora Strings"
   )
 ])

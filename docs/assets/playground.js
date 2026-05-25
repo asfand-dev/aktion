@@ -389,7 +389,7 @@ _app_ = Stack([
     Card([
       SectionHeader("Trailer"),
       VideoPlayer(
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
         poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
         controls: true,
         caption: "Aurora Expedition trailer",
@@ -399,7 +399,7 @@ _app_ = Stack([
     Card([
       SectionHeader("Soundtrack"),
       AudioPlayer(
-        "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+        "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
         title: "Northern Skies",
         artist: "Aurora Strings"
       )

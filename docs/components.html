@@ -657,11 +657,11 @@ _app_ = Pagination($page, pages: 10, siblings: 1)`,
 )`,
 
       // Feedback & Media
-      Avatar: `_app_ = Stack([
+      Avatar: `_app_ = Box([
   Avatar("Ada Lovelace",   src: "https://i.pravatar.cc/64?img=47", size: "sm", status: "online"),
   Avatar("Linus Torvalds", src: "https://i.pravatar.cc/64?img=11", size: "md", status: "busy"),
   Avatar("Grace Hopper",                              size: "lg")
-], direction: "row", gap: "m", align: "center")`,
+])`,
       AvatarGroup: `_app_ = AvatarGroup([
   {name: "Ada",   src: "https://i.pravatar.cc/64?img=47"},
   {name: "Linus", src: "https://i.pravatar.cc/64?img=11"},
@@ -683,13 +683,13 @@ _app_ = Pagination($page, pages: 10, siblings: 1)`,
   HoverCard(
     Button("Preview Ada"),
     children: [
-      Stack([Avatar("Ada Lovelace", src: "https://i.pravatar.cc/64?img=47", size: "md"),
+      Stack([Box(Avatar("Ada Lovelace", src: "https://i.pravatar.cc/64?img=47", size: "lg")),
              Stack([Text("Ada Lovelace", variant: "body-heavy"), Text("Mathematician · 1843", variant: "small", tone: "muted")])],
-            direction: "row", gap: "s", align: "center", justify: "start"),
+            direction: "row", gap: "s"),
       Text("Wrote the first algorithm intended to be processed by a machine.")
     ],
     placement: "bottom",
-    open: true
+    open: false
   )
 ])`,
       Popover: `_app_ = Stack([
@@ -707,7 +707,7 @@ _app_ = Pagination($page, pages: 10, siblings: 1)`,
     placement: "bottom",
     align: "start",
     width: "280px",
-    open: true
+    open: false
   )
 ])`,
       Rating: `_app_ = Stack([
@@ -1304,8 +1304,7 @@ _app_ = InfiniteList(
       // Media
       // -------------------------------------------------------------------
       VideoPlayer: `_app_ = VideoPlayer(
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+  "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
   controls: true,
   autoplay: false,
   loop: false,
@@ -1314,7 +1313,7 @@ _app_ = InfiniteList(
   ratio: "16:9"
 )`,
       AudioPlayer: `_app_ = AudioPlayer(
-  "https://upload.wikimedia.org/wikipedia/commons/2/26/Cello_Suite_No._1_Prelude.ogg",
+  "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
   title: "Cello Suite No. 1",
   artist: "J. S. Bach",
   controls: true
@@ -1337,7 +1336,7 @@ _app_ = Stack([
     {src: "https://picsum.photos/seed/lb1/640/400", caption: "Photo 1"},
     {src: "https://picsum.photos/seed/lb2/640/400", caption: "Photo 2"},
     {src: "https://picsum.photos/seed/lb3/640/400", caption: "Photo 3"}
-  ]),
+  ], onSelect: (i) => { $open = true; $index = i }),
   Lightbox([
     {src: "https://picsum.photos/seed/lb1/1200/800", caption: "Photo 1"},
     {src: "https://picsum.photos/seed/lb2/1200/800", caption: "Photo 2"},
