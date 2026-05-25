@@ -70,9 +70,10 @@ Everything you need at runtime ships in a single bundle:
   and read or write it with `$name`. The runtime tracks dependencies
   automatically. Template literals, spread, bracket access, optional
   chaining, nullish coalescing, expression-form `if` / `match` / `for`,
-  lambdas (`(p) => …`), `bind:prop: $atom` two-way binding, and **30+ pure
-  `@`-functions** (`@Filter`, `@Sort`, `@Find`, `@GroupBy`, `@Format`,
-  `@FormatDate`, `@Plural`, `@Case`, `@Range`, `@Pick`, …).
+  lambdas (`(p) => …`), automatic two-way binding via direct state refs
+  (and member chains rooted at one — `value: $form.email`), and **30+
+  pure `@`-functions** (`@Filter`, `@Sort`, `@Find`, `@GroupBy`,
+  `@Format`, `@FormatDate`, `@Plural`, `@Case`, `@Range`, `@Pick`, …).
 - **One HTTP primitive.** `http({ url, method, headers, body, query, ... })`
   is the only network call. It returns a reactive resource bag exposing
   `data | error | status | loading | headers | lastUpdated`, plus the
@@ -407,7 +408,9 @@ _app_ = pages
   function-call router. The reserved `_route_` handle exposes the
   reactive surface and a `navigate("/path")` method; each arm body
   additionally receives a scoped `params` loop var with its captures.
-- `bind:value: $atom` — two-way binding sugar on inputs.
+- Two-way binding is implicit: pass a `$variable` (or a member chain
+  rooted at one — `value: $form.email`) as an input prop and the
+  runtime wires it both ways.
 - Lambdas `(args) => expr` and opaque `js{ … }` blocks placed inside
   `effect` / `action` bodies.
 - `emit "name" { detail }` — dispatch an outbound `CustomEvent` on the
@@ -990,7 +993,7 @@ import {
 
 - `formatProgram` projects the parsed AST back to canonical source —
   `prop: value` named args, double-quoted strings, two-space block
-  indentation, `bind:` preserved, template literals intact.
+  indentation, template literals intact.
 - `inspectAST(source)` returns a JSON-friendly view of the Committed +
   Drafting ASTs at the current byte position — bindings (with
   kind / line / column / summary), in-flight names, and any parse errors.

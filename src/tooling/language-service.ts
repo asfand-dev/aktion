@@ -81,7 +81,6 @@ const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
   { label: "default",      detail: "Default arm in router/match blocks" },
   { label: "optimistic",   detail: "Mark an action for snapshot-on-throw" },
   { label: "slots",        detail: "Named-slot declaration in component signature" },
-  { label: "bind",         detail: "Two-way binding sugar" },
   { label: "emit",         detail: "Dispatch a CustomEvent on the host" },
   { label: "cleanup",      detail: "Register an effect teardown callback" },
 ];

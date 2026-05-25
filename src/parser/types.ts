@@ -30,7 +30,6 @@ export type Expression =
   | ForExpr
   | LambdaExpr
   | JsBlockExpr
-  | BindExpr
   | BlockExpr;
 
 /** `if cond { ... } else { ... }` expression — see §8.1. */
@@ -87,17 +86,6 @@ export interface LambdaParam {
 export interface JsBlockExpr {
   kind: "JsBlock";
   body: string;
-  loc?: SourceLocation;
-}
-
-/**
- * `bind:prop: stateRef` argument. Desugars at runtime to
- * `prop: stateRef, on<Prop>Change: (v) => stateRef = v`.
- */
-export interface BindExpr {
-  kind: "Bind";
-  prop: string;
-  target: Expression;
   loc?: SourceLocation;
 }
 

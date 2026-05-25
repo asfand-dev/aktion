@@ -352,23 +352,29 @@ rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }</code></
   }
 }</code></pre>
 
-      <h2 id="two-way">Two-way binding &mdash; <code>bind:</code></h2>
+      <h2 id="two-way">Two-way binding</h2>
       <p>
-        <code>bind:value: $name</code> desugars to
-        <code>value: $name, onValueChange: (v) =&gt; $name = v</code>. The
-        right-hand side must be a state ref (<code>$x</code>) or member
-        access (<code>$user.name</code>) &mdash; never a computed expression.
+        Two-way binding is <strong>implicit</strong>: pass a
+        <code>$variable</code> (or a member chain rooted at one) as the
+        value of an input prop and the runtime wires the change handler
+        automatically.
       </p>
 <pre><code>$search = ""
-bar     = SearchBar("q", placeholder: "Search…", bind:value: $search)
+bar     = SearchBar("q", placeholder: "Search…", value: $search)
 list    = for row in @Filter($rows, "title", "contains", $search) { ListItem(row.title) }
 
 $tags = []
-chips = TagInput("tags", bind:value: $tags)</code></pre>
+chips = TagInput("tags", value: $tags)
+
+# Member chains rooted at a $variable bind deeply — the runtime rebuilds
+# the root object immutably so subscribers always wake up.
+$form    = { email: "", remember: false }
+emailIn  = Input("email",    value: $form.email)
+remember = Switch("remember", value: $form.remember)</code></pre>
 
       <p>
-        <code>bind:</code> works on any form control whose spec declares a
-        primary value prop: <code>Input</code>, <code>TextArea</code>,
+        Any form control whose spec declares a primary value prop
+        participates: <code>Input</code>, <code>TextArea</code>,
         <code>Select</code>, <code>Combobox</code>, <code>MultiSelect</code>,
         <code>Checkbox</code>, <code>CheckBoxGroup</code>,
         <code>Switch</code>, <code>ToggleGroup</code>, <code>Slider</code>,

@@ -177,9 +177,6 @@ function walkExpression(
         walkExpression(expr.body as Expression, library, out);
       }
       return;
-    case "Bind":
-      walkExpression(expr.target, library, out);
-      return;
     default:
       return;
   }

@@ -62,19 +62,36 @@ const GROUP_ORDER = [
 
 // ---------------------------------------------------------------------------
 // State
+//
+// The editor models the program as a list of "entities" — typed top-level
+// declarations (assignments, state, component / action / effect decls, and
+// any free-form leftover source that we can't classify safely). Each
+// entity has its own visual tree (for component-call assignments) or raw
+// text body (for actions/effects/state defaults).
+//
+// `activeEntityId` decides which entity drives the canvas. The live
+// preview always re-emits the FULL program so identifier references
+// (sidebar, pages, $todos, …) stay bound regardless of which entity the
+// user is editing.
 
 const LS_KEY = "rui:ve:state";
 
 const state = {
-  tree: null,             // root VisualNode
-  prelude: "",            // raw text of statements that come before _app_
+  // Legacy single-tree fields (kept for backwards compat with persisted
+  // state and as a fallback when no entities are loaded yet).
+  tree: null,             // root VisualNode of the active entity
+  prelude: "",            // free-form leftover that we couldn't classify
   rootId: "_app_",
+  // Entity-based model — see `parseEntities()` for the shape.
+  entities: [],           // Entity[]
+  activeEntityId: null,
   selectedId: null,
   hoveredId: null,        // id of node currently hovered in the canvas
   draggingId: null,       // id of node being dragged inside the canvas
   paletteSearch: "",
   paletteOpenGroups: new Set(GROUP_ORDER),
   paletteOpen: true,
+  paletteTab: "components", // "components" | "outline"
   inspectorOpen: true,
   theme: "light",
   device: "desktop",      // "desktop" | "tablet" | "mobile"
@@ -216,17 +233,39 @@ function getPositionalPropName(name) {
  * children/child slots so authors can visually compose Series, MenuItem,
  * KanbanColumn, etc.
  */
+/**
+ * Decide whether a prop type string accepts a visual subtree, and if so
+ * whether it's a single child or a list. Handles `Node[]`, `Node`, simple
+ * component names (`Sidebar`, `Card`, …), and union types restricted to
+ * known component names — `(SidebarItem | SidebarSection)[]` resolves to
+ * a children slot so the visual editor can drop / re-order items.
+ */
 function getSlotKind(typeStr) {
   const t = String(typeStr || "").trim();
   if (t === "Node[]") return "children";
   if (t === "Node") return "child";
   if (t.endsWith("[]")) {
-    const inner = t.slice(0, -2);
-    if (componentNames.has(inner)) return "children";
-  } else if (componentNames.has(t)) {
+    const inner = t.slice(0, -2).trim();
+    if (isComponentUnion(inner)) return "children";
+  } else if (isComponentUnion(t)) {
     return "child";
   }
   return null;
+}
+
+/**
+ * True when `inner` is either a single known component name or a union
+ * of known component names (e.g. `(A | B | C)` or `A | B`). Strips
+ * surrounding parens / spaces so it matches the spec strings used in
+ * `src/library/components/*`.
+ */
+function isComponentUnion(inner) {
+  if (!inner) return false;
+  const stripped = inner.replace(/^\(|\)$/g, "").trim();
+  if (!stripped) return false;
+  const parts = stripped.split("|").map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return false;
+  return parts.every((p) => componentNames.has(p));
 }
 
 function slotAcceptsAny(typeStr) {
@@ -236,8 +275,13 @@ function slotAcceptsAny(typeStr) {
 
 function slotElementName(typeStr) {
   const t = String(typeStr || "").trim();
-  if (t.endsWith("[]")) return t.slice(0, -2);
-  return t;
+  let inner = t;
+  if (inner.endsWith("[]")) inner = inner.slice(0, -2).trim();
+  inner = inner.replace(/^\(|\)$/g, "").trim();
+  // For union types, return the first member — the visual editor uses
+  // this primarily for drop-target hints and create-from-palette flows.
+  const first = inner.split("|").map((s) => s.trim()).find(Boolean);
+  return first || t;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +475,263 @@ function createDefaultTree() {
 }
 
 // ---------------------------------------------------------------------------
+// Entities — top-level program model
+//
+// `parseEntities(source)` slices a complete Aktion program into entries.
+// The parser walks line-by-line, classifying each top-level statement by
+// the keyword that starts it (`component`, `action`, `effect`, `$state =`,
+// `name =`). Anything we can't classify becomes a "free" entity that the
+// user can edit as raw text.
+//
+// Each entity has:
+//   - `id`: unique editor handle (not persisted to source).
+//   - `kind`: "assignment" | "state" | "component-decl" | "action-decl"
+//             | "effect-decl" | "free".
+//   - `name`: display name.
+//   - `source`: original or current source slice (always round-tripped).
+//   - `tree` / `raw`: optional structured form for visual editing.
+
+const ROOT_ENTITY_NAME = "_app_";
+
+function uuidEntity() {
+  return "e_" + Math.random().toString(36).slice(2, 10) + "_" + Date.now().toString(36);
+}
+
+/**
+ * Classify a top-level statement by its first non-whitespace token. The
+ * heuristics intentionally favour false negatives — when we can't be sure,
+ * we fall back to a "free" entity that round-trips verbatim.
+ */
+function classifyStatement(line) {
+  const trimmed = line.trim();
+  if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("//")) return null;
+  if (/^component\s+[A-Za-z_]\w*\s*\(/.test(trimmed)) return "component-decl";
+  if (/^action\s+[A-Za-z_]\w*\s*\(/.test(trimmed)) return "action-decl";
+  if (/^effect\b/.test(trimmed)) return "effect-decl";
+  if (/^\$[A-Za-z_]\w*\s*=/.test(trimmed)) return "state";
+  if (/^[A-Za-z_]\w*\s*=/.test(trimmed)) return "assignment";
+  return "free";
+}
+
+/**
+ * Same bracket-tracking logic as `scanExpressionEnd` but extended to
+ * follow `{ … }` blocks (component / action / effect bodies). Returns
+ * the position one past the statement's last character.
+ */
+function scanStatementEnd(source, start, kind) {
+  let i = start;
+  const stack = []; // "(" / "[" / "{" / "tpl-expr"
+  let str = null;
+  let comment = null;
+  let seenOpenBrace = false;
+  const wantsBlock = kind === "component-decl" || kind === "action-decl" || kind === "effect-decl";
+  while (i < source.length) {
+    const ch = source[i];
+    if (comment === "line") {
+      if (ch === "\n") {
+        comment = null;
+        if (!wantsBlock && stack.length === 0) return i;
+        if (wantsBlock && seenOpenBrace && stack.length === 0) return i;
+        i++; continue;
+      }
+      i++; continue;
+    }
+    if (comment === "block") {
+      if (ch === "*" && source[i + 1] === "/") { comment = null; i += 2; continue; }
+      i++; continue;
+    }
+    if (str === "`") {
+      if (ch === "\\") { i += 2; continue; }
+      if (ch === "`") { str = null; i++; continue; }
+      if (ch === "$" && source[i + 1] === "{") {
+        stack.push("tpl-expr");
+        str = null;
+        i += 2; continue;
+      }
+      i++; continue;
+    }
+    if (str) {
+      if (ch === "\\") { i += 2; continue; }
+      if (ch === str) { str = null; i++; continue; }
+      i++; continue;
+    }
+    if (ch === "/" && source[i + 1] === "/") { comment = "line"; i += 2; continue; }
+    if (ch === "#") { comment = "line"; i++; continue; }
+    if (ch === "/" && source[i + 1] === "*") { comment = "block"; i += 2; continue; }
+    if (ch === '"' || ch === "'") { str = ch; i++; continue; }
+    if (ch === "`") { str = "`"; i++; continue; }
+    if (ch === "(" || ch === "[") { stack.push(ch); i++; continue; }
+    if (ch === "{") {
+      stack.push("{");
+      if (wantsBlock) seenOpenBrace = true;
+      i++; continue;
+    }
+    if (ch === ")" || ch === "]") { stack.pop(); i++; continue; }
+    if (ch === "}") {
+      const top = stack[stack.length - 1];
+      stack.pop();
+      if (top === "tpl-expr") str = "`";
+      if (wantsBlock && seenOpenBrace && stack.length === 0) return i + 1;
+      i++; continue;
+    }
+    if (!wantsBlock && ch === "\n" && stack.length === 0) return i;
+    i++;
+  }
+  return i;
+}
+
+/**
+ * Slice the source into a list of entities, preserving everything between
+ * recognised statements as "free" entities so nothing is dropped.
+ */
+function parseEntities(source) {
+  const entities = [];
+  const text = String(source ?? "");
+  let i = 0;
+  let freeStart = 0;
+  const flushFree = (until) => {
+    if (until <= freeStart) return;
+    const slice = text.slice(freeStart, until).trim();
+    if (slice.length === 0) return;
+    entities.push({
+      id: uuidEntity(),
+      kind: "free",
+      name: "Misc",
+      source: slice,
+    });
+  };
+  while (i < text.length) {
+    // Skip leading whitespace; remember where the next "free" run started.
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (i >= text.length) break;
+    // Skip whole-line comments and accumulate them into the free bucket.
+    if (text[i] === "#" || (text[i] === "/" && text[i + 1] === "/")) {
+      const nl = text.indexOf("\n", i);
+      i = nl < 0 ? text.length : nl + 1;
+      continue;
+    }
+    const lineStart = i;
+    // Read up to end-of-line to peek at the statement header.
+    const nl = text.indexOf("\n", i);
+    const headerLine = text.slice(lineStart, nl < 0 ? text.length : nl);
+    const kind = classifyStatement(headerLine);
+    if (!kind || kind === "free") {
+      i = nl < 0 ? text.length : nl + 1;
+      continue;
+    }
+    const end = scanStatementEnd(text, lineStart, kind);
+    flushFree(lineStart);
+    const slice = text.slice(lineStart, end);
+    const entity = buildEntityFromSource(kind, slice);
+    if (entity) entities.push(entity);
+    i = end;
+    freeStart = i;
+  }
+  flushFree(text.length);
+  return entities;
+}
+
+/**
+ * Build a structured entity from its raw source slice. The visual tree
+ * for assignments is constructed by re-parsing `name = <expr>` so we get
+ * a clean AST; everything else keeps the raw source for round-tripping.
+ */
+function buildEntityFromSource(kind, sliceRaw) {
+  const slice = String(sliceRaw).trim();
+  const id = uuidEntity();
+  if (kind === "state" || kind === "assignment") {
+    const m = slice.match(/^(\$?[A-Za-z_]\w*)\s*=\s*([\s\S]*)$/);
+    if (!m) return { id, kind: "free", name: "Misc", source: slice };
+    const isState = m[1].startsWith("$");
+    const name = isState ? m[1].slice(1) : m[1];
+    const rhs = m[2].trim();
+    if (isState) {
+      return { id, kind: "state", name, raw: rhs, source: slice };
+    }
+    const program = parse(`${name} = ${rhs}`);
+    let tree = null;
+    let raw = rhs;
+    if (program.statements && program.statements.length > 0) {
+      const first = program.statements[0];
+      if (first.kind === "Assignment") {
+        if (first.expression.kind === "Call" && componentNames.has(first.expression.callee)) {
+          tree = buildComponentNode(first.expression, []);
+          raw = null;
+        }
+      }
+    }
+    return { id, kind: "assignment", name, tree, raw, source: slice };
+  }
+  if (kind === "component-decl") {
+    const headerMatch = slice.match(/^component\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    if (!headerMatch) return { id, kind: "free", name: "Misc", source: slice };
+    const name = headerMatch[1];
+    const params = headerMatch[2].split(",").map((s) => s.trim()).filter(Boolean);
+    return { id, kind: "component-decl", name, params, source: slice };
+  }
+  if (kind === "action-decl") {
+    const headerMatch = slice.match(/^action\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    const name = headerMatch ? headerMatch[1] : "anonymous";
+    return { id, kind: "action-decl", name, source: slice };
+  }
+  if (kind === "effect-decl") {
+    return { id, kind: "effect-decl", name: "effect", source: slice };
+  }
+  return { id, kind: "free", name: "Misc", source: slice };
+}
+
+/**
+ * Locate the active entity in the entity list, falling back to the root
+ * `_app_` entity (or the first one) so the canvas always has something
+ * to display.
+ */
+function activeEntity() {
+  if (state.entities.length === 0) return null;
+  if (state.activeEntityId) {
+    const hit = state.entities.find((e) => e.id === state.activeEntityId);
+    if (hit) return hit;
+  }
+  const root = state.entities.find(
+    (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME,
+  );
+  return root || state.entities[0];
+}
+
+/**
+ * Promote the active entity's tree into the legacy `state.tree` slot so
+ * the existing canvas / inspector code paths keep working unchanged.
+ */
+function syncActiveTreeFromEntity() {
+  const ent = activeEntity();
+  if (!ent) {
+    state.tree = null;
+    return;
+  }
+  if (ent.kind === "assignment" && ent.tree) {
+    state.tree = ent.tree;
+  } else {
+    state.tree = null;
+  }
+}
+
+/**
+ * Build the source for every entity that has been structurally edited,
+ * falling back to the stored raw `source` for entities we never opened
+ * visually.
+ */
+function emitEntitySource(ent) {
+  if (ent.kind === "assignment") {
+    if (ent.tree) return ent.name + " = " + emitNode(ent.tree, 0);
+    if (ent.raw != null) return ent.name + " = " + ent.raw;
+    return ent.source || "";
+  }
+  if (ent.kind === "state") {
+    return "$" + ent.name + " = " + (ent.raw ?? "null");
+  }
+  return ent.source || "";
+}
+
+// ---------------------------------------------------------------------------
 // History (undo / redo)
 //
 // Each call to `commit()` snapshots the current tree before the next mutation
@@ -489,13 +790,43 @@ function updateUndoRedoButtons() {
 
 const INDENT_UNIT = "  ";
 
+/**
+ * Serialise the full program. When the entity model is in play, emit
+ * each entity in order (using the structurally edited tree for the
+ * active assignment, raw source for the rest). Otherwise fall back to
+ * the single-tree path.
+ */
 function emitProgram() {
+  if (state.entities && state.entities.length > 0) {
+    syncActiveEntityFromTree();
+    const parts = [];
+    for (const ent of state.entities) {
+      const src = emitEntitySource(ent);
+      if (src && src.trim().length > 0) parts.push(src);
+    }
+    const prelude = (state.prelude || "").trim();
+    if (prelude) parts.push(prelude);
+    return parts.join("\n\n") + "\n";
+  }
   const tree = state.tree;
   const exprSrc = emitNode(tree, 0);
   const prelude = (state.prelude || "").trim();
   const head = prelude ? prelude + "\n\n" : "";
   const rootId = state.rootId || "_app_";
   return head + rootId + " = " + exprSrc + "\n";
+}
+
+/**
+ * Push edits made through `state.tree` back into the active entity so
+ * the next emit reflects the user's drag/drop work.
+ */
+function syncActiveEntityFromTree() {
+  const ent = activeEntity();
+  if (!ent || ent.kind !== "assignment") return;
+  if (state.tree) {
+    ent.tree = state.tree;
+    ent.raw = null;
+  }
 }
 
 function emitNode(node, depth) {
@@ -621,12 +952,16 @@ function renderArgValue(node, param, depth) {
 
   if (slotKind === "children") {
     const arr = node.slots[param.name];
+    const raw = node.raws[param.name];
+    const hasRaw = raw != null && raw !== "";
     if (!Array.isArray(arr)) {
-      const raw = node.raws[param.name];
-      return raw != null && raw !== "" ? raw : null;
+      return hasRaw ? raw : null;
     }
     if (arr.length === 0) {
-      // For required children prop, emit empty array. For optional, omit.
+      // Empty visual array but a raw expression is bound — emit the raw
+      // (e.g. `content: pages`) so identifier references survive the
+      // round-trip. Otherwise fall back to `[]` for required slots only.
+      if (hasRaw) return raw;
       if (!param.required) return null;
       return "[]";
     }
@@ -698,7 +1033,6 @@ function exprToSource(expr, depth = 0) {
     case "For": return forToSource(expr, depth);
     case "Lambda": return lambdaToSource(expr, depth);
     case "JsBlock": return "js{ " + expr.body + " }";
-    case "Bind": return "bind:" + expr.prop + ": " + exprToSource(expr.target, depth);
     case "Block": return blockToSource(expr, depth);
     default: return "/* unsupported: " + (expr.kind || "?") + " */";
   }
@@ -991,48 +1325,96 @@ function scanExpressionEnd(source, start) {
 function importFromSource(source) {
   const text = String(source ?? "");
   if (!text.trim()) {
-    return { tree: createDefaultTree(), prelude: "", warnings: [], errors: [] };
-  }
-  // Try the configured rootId first, fall back to `_app_`.
-  let range = findAssignmentRange(text, state.rootId);
-  let rootId = state.rootId;
-  if (!range && state.rootId !== "_app_") {
-    range = findAssignmentRange(text, "_app_");
-    if (range) rootId = "_app_";
-  }
-  if (!range) {
-    // No `_app_` assignment found. Treat the whole source as a prelude
-    // and start the visual tree from a default Stack so the user can
-    // continue authoring.
+    const def = defaultEntities();
     return {
-      tree: createDefaultTree(),
-      prelude: text.replace(/\s+$/, ""),
-      warnings: [{ message: "No `" + rootId + " =` assignment found. Source kept as prelude." }],
+      tree: def.tree,
+      prelude: "",
+      entities: def.entities,
+      activeEntityId: def.entities[0].id,
+      warnings: [],
       errors: [],
+      rootId: ROOT_ENTITY_NAME,
     };
   }
 
-  const exprSrc = text.slice(range.exprStart, range.exprEnd);
-  const before = text.slice(0, range.assignStart).replace(/\s+$/, "");
-  const after = text.slice(range.exprEnd).replace(/^\s+/, "");
-  const preludeParts = [];
-  if (before) preludeParts.push(before);
-  if (after) preludeParts.push(after);
-  const prelude = preludeParts.join("\n\n");
-
-  // Re-parse just the assignment so we get the expression AST cleanly.
-  const program = parse(rootId + " = " + exprSrc);
-  const warnings = [];
+  // Pass 1: classify every top-level statement into a typed entity.
+  const entities = parseEntities(text);
+  // Pass 2: try to validate the whole program so we can surface parse
+  // errors. The structured entities take precedence on edits; errors
+  // are advisory.
+  const program = parse(text);
   const errors = program.errors || [];
-  let tree = createDefaultTree();
-  if (program.statements && program.statements.length > 0) {
-    const first = program.statements[0];
-    if (first.kind === "Assignment") {
-      tree = buildVisualTree(first.expression, warnings);
-    }
+  const warnings = [];
+
+  if (entities.length === 0) {
+    const def = defaultEntities();
+    return {
+      tree: def.tree,
+      prelude: text.replace(/\s+$/, ""),
+      entities: def.entities,
+      activeEntityId: def.entities[0].id,
+      warnings: [{ message: "Couldn't recognise any top-level statement. Source kept as prelude." }],
+      errors,
+      rootId: ROOT_ENTITY_NAME,
+    };
   }
 
-  return { tree, prelude, warnings, errors, rootId };
+  // Ensure there's always a `_app_` entity so the canvas has a default
+  // focus. If the source had no `_app_`, synthesize a stub pointing at
+  // an empty stack so authors can continue editing visually.
+  const hasApp = entities.some(
+    (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME,
+  );
+  let activeEntityId = null;
+  if (!hasApp) {
+    const stub = {
+      id: uuidEntity(),
+      kind: "assignment",
+      name: ROOT_ENTITY_NAME,
+      tree: createDefaultTree(),
+      raw: null,
+      source: "",
+    };
+    entities.unshift(stub);
+    activeEntityId = stub.id;
+  } else {
+    const app = entities.find(
+      (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME,
+    );
+    activeEntityId = app.id;
+  }
+
+  // Use the active entity's tree (when present) as the legacy `tree`
+  // field so the existing canvas paths keep working.
+  const active = entities.find((e) => e.id === activeEntityId);
+  const tree = active && active.tree ? active.tree : createDefaultTree();
+
+  return {
+    tree,
+    prelude: "",
+    entities,
+    activeEntityId,
+    warnings,
+    errors,
+    rootId: ROOT_ENTITY_NAME,
+  };
+}
+
+/**
+ * Default entity list — a single `_app_` assignment with the default
+ * starter tree. Used when no source is provided or no statements parse.
+ */
+function defaultEntities() {
+  const tree = createDefaultTree();
+  const root = {
+    id: uuidEntity(),
+    kind: "assignment",
+    name: ROOT_ENTITY_NAME,
+    tree,
+    raw: null,
+    source: "",
+  };
+  return { tree, entities: [root] };
 }
 
 /**
@@ -1092,11 +1474,15 @@ function buildComponentNode(expr, warnings) {
 
   // Ensure required Node[] slots exist as empty arrays so the user can
   // drop into them visually even when the imported source omitted them.
+  // Skip slots already bound to a raw expression (e.g. identifier
+  // references like `pages` or `sidebar`); creating an empty array there
+  // would silently clobber the binding when the program is re-emitted.
   for (const param of entry.params) {
     const slotKind = getSlotKind(param.type);
-    if (slotKind === "children" && !(param.name in node.slots)) {
-      node.slots[param.name] = [];
-    }
+    if (slotKind !== "children") continue;
+    if (param.name in node.slots) continue;
+    if (param.name in node.raws) continue;
+    node.slots[param.name] = [];
   }
   return node;
 }
@@ -1307,6 +1693,234 @@ function isAncestor(ancestorId, descendantId) {
 // The palette renders a 2-up grid of preview cards. Each card has a stylized
 // SVG schematic (computed from the component's category + name) so the user
 // can recognise the shape at a glance and drag it onto the canvas.
+
+/**
+ * Show / hide palette-pane sections based on the current tab. Tabs are
+ * a thin presentation layer over the same pane — switching them just
+ * flips `hidden` on every element tagged `data-tab-for=...`.
+ */
+function applyPaletteTab() {
+  const pane = document.querySelector(".ve-pane--palette");
+  if (pane) pane.dataset.tab = state.paletteTab;
+  document.querySelectorAll(".ve-palette-tab").forEach((btn) => {
+    btn.setAttribute("aria-pressed", String(btn.dataset.paletteTab === state.paletteTab));
+  });
+  document.querySelectorAll("[data-tab-for]").forEach((node) => {
+    const showFor = node.dataset.tabFor;
+    node.hidden = showFor !== state.paletteTab;
+  });
+  updateOutlineBadge();
+  if (state.paletteTab === "outline") renderOutline();
+}
+
+/**
+ * Keep the small numeric badge on the Outline tab in sync with the
+ * current entity count. Cheap enough to call after every state mutation
+ * so the badge never reads as stale "0" after an import.
+ */
+function updateOutlineBadge() {
+  const badge = $("ve-outline-badge");
+  if (badge) badge.textContent = String((state.entities || []).length);
+}
+
+function setPaletteTab(tab) {
+  state.paletteTab = tab === "outline" ? "outline" : "components";
+  applyPaletteTab();
+  saveState();
+}
+
+const ENTITY_GROUPS = [
+  { key: "assignment", label: "Bindings",   icon: "fa-link",         createKind: null },
+  { key: "state",      label: "State",      icon: "fa-bolt",         createKind: "state" },
+  { key: "component-decl", label: "Components", icon: "fa-cube",     createKind: "component-decl" },
+  { key: "action-decl", label: "Actions",   icon: "fa-play",         createKind: "action-decl" },
+  { key: "effect-decl", label: "Effects",   icon: "fa-wave-square",  createKind: "effect-decl" },
+  { key: "free",        label: "Other",     icon: "fa-code",         createKind: null },
+];
+
+function entityIcon(ent) {
+  switch (ent.kind) {
+    case "assignment": return "fa-link";
+    case "state": return "fa-bolt";
+    case "component-decl": return "fa-cube";
+    case "action-decl": return "fa-play";
+    case "effect-decl": return "fa-wave-square";
+    default: return "fa-code";
+  }
+}
+
+function entitySubLabel(ent) {
+  if (ent.kind === "assignment" && ent.tree) return ent.tree.name || "expr";
+  if (ent.kind === "state") return "$" + ent.name;
+  if (ent.kind === "component-decl") return "(" + (ent.params || []).join(", ") + ")";
+  if (ent.kind === "action-decl") return "()";
+  if (ent.kind === "effect-decl") return "effect";
+  return "";
+}
+
+function renderOutline() {
+  const root = $("ve-outline");
+  if (!root) return;
+  root.innerHTML = "";
+  const badge = $("ve-outline-badge");
+  if (badge) badge.textContent = String(state.entities.length);
+
+  if (state.entities.length === 0) {
+    root.append(el("div", { class: "ve-outline-empty" }, "No top-level statements yet. Import a program or use the + button to create one."));
+    return;
+  }
+
+  const buckets = new Map();
+  for (const g of ENTITY_GROUPS) buckets.set(g.key, []);
+  for (const ent of state.entities) {
+    if (!buckets.has(ent.kind)) buckets.set(ent.kind, []);
+    buckets.get(ent.kind).push(ent);
+  }
+
+  for (const group of ENTITY_GROUPS) {
+    const list = buckets.get(group.key) || [];
+    if (list.length === 0 && !group.createKind) continue;
+    const wrap = el("div", { class: "ve-outline-group" });
+    const header = el("div", { class: "ve-outline-group-header" }, [
+      el("span", null, group.label + " · " + list.length),
+      group.createKind ? el("button", {
+        type: "button",
+        class: "ve-outline-add",
+        title: "Add " + group.label.toLowerCase(),
+        onClick: () => createEntity(group.createKind),
+      }, [el("i", { class: "fa-solid fa-plus" })]) : null,
+    ]);
+    wrap.append(header);
+    for (const ent of list) {
+      wrap.append(renderOutlineItem(ent));
+    }
+    root.append(wrap);
+  }
+}
+
+function renderOutlineItem(ent) {
+  const isActive = ent.id === state.activeEntityId;
+  const item = el("button", {
+    type: "button",
+    class: "ve-outline-item",
+    data: { active: String(isActive) },
+    onClick: () => {
+      focusEntity(ent.id);
+    },
+  }, [
+    el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+    el("span", { class: "ve-outline-item-name" }, ent.name),
+    el("span", { class: "ve-outline-item-sub" }, entitySubLabel(ent)),
+    canDeleteEntity(ent) ? el("button", {
+      type: "button",
+      class: "ve-outline-item-delete",
+      title: "Delete",
+      onClick: (e) => {
+        e.stopPropagation();
+        if (confirm("Delete " + ent.name + "?")) {
+          deleteEntity(ent.id);
+        }
+      },
+    }, [el("i", { class: "fa-solid fa-trash" })]) : null,
+  ]);
+  return item;
+}
+
+function canDeleteEntity(ent) {
+  // The root `_app_` binding is required by the runtime — keep it.
+  return !(ent.kind === "assignment" && ent.name === ROOT_ENTITY_NAME);
+}
+
+/**
+ * Make `entityId` the active entity. Pushes any in-flight tree edits
+ * back into the previously active entity first, then loads the new
+ * one's tree (when present) into `state.tree`.
+ */
+function focusEntity(entityId) {
+  syncActiveEntityFromTree();
+  state.activeEntityId = entityId;
+  state.selectedId = null;
+  syncActiveTreeFromEntity();
+  saveState();
+  scheduleRender();
+}
+
+function deleteEntity(entityId) {
+  commit();
+  state.entities = state.entities.filter((e) => e.id !== entityId);
+  if (state.activeEntityId === entityId) {
+    const fallback = state.entities[0];
+    state.activeEntityId = fallback ? fallback.id : null;
+    syncActiveTreeFromEntity();
+  }
+  updateOutlineBadge();
+  saveState();
+  scheduleRender();
+}
+
+/**
+ * Create a new entity by kind. State / actions / effects start as
+ * minimal source stubs the user can edit through the inspector;
+ * component declarations get a renderable tree wired up to a stub
+ * body so authors can drop components into them immediately.
+ */
+function createEntity(kind) {
+  commit();
+  const id = uuidEntity();
+  let entity;
+  if (kind === "state") {
+    const name = uniqueEntityName("count", "state");
+    entity = { id, kind: "state", name, raw: "0", source: "$" + name + " = 0" };
+  } else if (kind === "action-decl") {
+    const name = uniqueEntityName("doSomething", "action-decl");
+    entity = {
+      id,
+      kind: "action-decl",
+      name,
+      source: "action " + name + "() {\n  // TODO: implement\n}",
+    };
+  } else if (kind === "effect-decl") {
+    entity = {
+      id,
+      kind: "effect-decl",
+      name: "effect",
+      source: "effect [on:mount] {\n  // TODO: implement\n}",
+    };
+  } else if (kind === "component-decl") {
+    const name = uniqueEntityName("MyComponent", "component-decl");
+    entity = {
+      id,
+      kind: "component-decl",
+      name,
+      params: [],
+      source:
+        "component " + name + "() {\n" +
+        "  return Card([CardHeader(\"" + name + "\")])\n" +
+        "}",
+    };
+  } else {
+    return;
+  }
+  state.entities.push(entity);
+  state.activeEntityId = entity.id;
+  syncActiveTreeFromEntity();
+  updateOutlineBadge();
+  saveState();
+  scheduleRender();
+  showToast("Created " + entity.name, { icon: "plus" });
+}
+
+function uniqueEntityName(base, kind) {
+  const taken = new Set(
+    state.entities.filter((e) => e.kind === kind).map((e) => e.name),
+  );
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 99; i += 1) {
+    const candidate = base + i;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return base + Date.now().toString(36);
+}
 
 function renderPalette() {
   const root = $("ve-palette");
@@ -1873,6 +2487,24 @@ function renderCanvas() {
   if (state.mode === "preview") delete preview.dataset.veditorMode;
   else preview.dataset.veditorMode = "edit";
 
+  // When the active entity is a source-only declaration (state /
+  // action / effect / free / component-decl), we still want to show
+  // the live preview of the whole program — but we have no visual
+  // tree to overlay. Emit the program, paint an explainer in the
+  // overlay, and bail out before the decorate pass.
+  const ent = activeEntity();
+  if ((!state.tree || !ent || ent.kind !== "assignment") && ent) {
+    const source = emitProgram();
+    if (source !== lastEmittedSource) {
+      lastEmittedSource = source;
+      if (typeof preview.setResponse === "function") preview.setResponse(source);
+      else preview.setAttribute("response", source);
+    }
+    overlay.innerHTML = "";
+    paintNonAssignmentStage(ent);
+    return;
+  }
+
   if (!state.tree) {
     overlay.innerHTML = "";
     if (typeof preview.setResponse === "function") preview.setResponse("");
@@ -1912,6 +2544,32 @@ function paintEmptyStage() {
     el("i", { class: "fa-solid fa-cubes-stacked", "aria-hidden": "true" }),
     el("h3", null, "Drag a component to start"),
     el("p", null, "Pick anything from the palette and drop it on the canvas."),
+  ]));
+}
+
+/**
+ * Friendly explainer when the active entity has no visual tree (state /
+ * action / effect / component decl). The live program preview still
+ * renders behind the overlay banner so the user keeps a sense of how
+ * their changes affect the running app — they can flip to Preview mode
+ * to interact with it.
+ */
+function paintNonAssignmentStage(ent) {
+  const overlay = $("ve-overlay");
+  if (!overlay) return;
+  if (state.mode === "preview") return; // let the preview show as-is
+  const messages = {
+    "state": ["Editing state default", "Adjust the $" + ent.name + " default in the inspector. The live preview reflects your changes."],
+    "action-decl": ["Editing action", "Edit the `action " + ent.name + "()` body in the inspector. Component callers stay live."],
+    "effect-decl": ["Editing effect", "Edit the effect body in the inspector. Triggers and the rate-limit modifier go inside the `[...]` brackets."],
+    "component-decl": ["Editing component", "Edit the `component " + ent.name + "()` declaration in the inspector. Switch to `_app_` in the outline to compose it visually."],
+    "free": ["Editing source", "This block didn't classify as a known declaration. Edit it directly in the inspector."],
+  };
+  const [title, sub] = messages[ent.kind] || ["Editing entity", "Use the inspector to make changes."];
+  overlay.append(el("div", { class: "ve-stage-empty" }, [
+    el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+    el("h3", null, title + " · " + ent.name),
+    el("p", null, sub),
   ]));
 }
 
@@ -1968,6 +2626,17 @@ function hasFilledChildSlot(node) {
     if (Array.isArray(slot) && slot.length > 0) return true;
     if (slot && !Array.isArray(slot) && typeof slot === "object" && slot.kind) return true;
   }
+  // Raw expressions bound to slot props (e.g. `content: pages`) are
+  // semantically "filled" — the runtime resolves them — so treat the
+  // owning node as non-empty in tree views and inspectors.
+  const entry = getEntry(node.name);
+  if (entry) {
+    for (const param of entry.params) {
+      if (!getSlotKind(param.type)) continue;
+      const raw = node.raws ? node.raws[param.name] : null;
+      if (raw != null && raw !== "") return true;
+    }
+  }
   return false;
 }
 
@@ -1975,6 +2644,18 @@ function nodeSummary(node) {
   const entry = getEntry(node.name);
   if (!entry) return "";
   const parts = [];
+  // Surface raw-bound slot references first (e.g. `sidebar=sidebar`,
+  // `content=pages`) — these tell the user at a glance which entities
+  // this component pulls in, even when the slot is "empty" visually.
+  for (const param of entry.params) {
+    if (parts.length >= 2) break;
+    if (!getSlotKind(param.type)) continue;
+    const raw = node.raws ? node.raws[param.name] : null;
+    if (raw == null || raw === "") continue;
+    let display = String(raw).replace(/\s+/g, " ");
+    if (display.length > 28) display = display.slice(0, 25) + "…";
+    parts.push(param.name + "→" + display);
+  }
   for (const param of entry.params) {
     if (parts.length >= 2) break;
     if (getSlotKind(param.type)) continue;
@@ -2378,6 +3059,12 @@ function renderSlotFills(overlay) {
     for (const param of entry.params) {
       const slotKind = getSlotKind(param.type);
       if (slotKind !== "children") continue;
+      // Skip slots already bound to a raw expression — the runtime
+      // resolves them at evaluation time (e.g. `content: pages`), so the
+      // "Empty …" placeholder would be misleading and would also obscure
+      // the live preview behind it.
+      const rawBinding = node.raws ? node.raws[param.name] : null;
+      if (rawBinding != null && rawBinding !== "") continue;
       const arr = node.slots[param.name];
       const isEmpty = !Array.isArray(arr) || arr.length === 0;
       if (!isEmpty) continue;
@@ -2395,14 +3082,17 @@ function renderSlotFills(overlay) {
       let baseRect = null;
       if (isRealSlotContainer && containerRect) {
         baseRect = containerRect;
-      } else if (isStructuralContainer(node.name) && parentRect) {
-        // Pure-structural container with no extra chrome — safe to cover
-        // its full rect with a slot fill.
+      } else if (isStructuralContainer(node.name) && parentRect
+        && !nodeHasOtherPopulatedSlots(node, param, entry)) {
+        // Pure-structural container with no extra chrome and no other
+        // filled slot — safe to cover its full rect with a slot fill.
+        // For multi-slot containers like AppShell / SplitView we'd
+        // otherwise obscure the rendered content of the filled sibling.
         baseRect = parentRect;
       } else {
-        // Parent has chrome (title/header/etc) we'd cover up. Skip the
-        // visual slot fill — the inspector "Add property" picker still
-        // works for these.
+        // Parent has chrome (title/header/etc) or a sibling slot is
+        // already populated — skip the visual fill. The inspector still
+        // exposes the prop so the user can bind / edit it directly.
         continue;
       }
       overlay.append(buildSlotFill(baseRect, node, param));
@@ -2425,6 +3115,28 @@ const STRUCTURAL_CONTAINER_NAMES = new Set([
 ]);
 function isStructuralContainer(name) {
   return STRUCTURAL_CONTAINER_NAMES.has(name);
+}
+
+/**
+ * Check whether any other slot prop on the same node already has visual
+ * children or a raw expression binding. Used by `renderSlotFills` to
+ * avoid overlaying the entire structural container when only one of
+ * several slots is empty — e.g. an `AppShell` with a filled `content`
+ * but an empty `topbar` shouldn't paint the fill over the whole shell.
+ */
+function nodeHasOtherPopulatedSlots(node, skipParam, entry) {
+  if (!entry) return false;
+  for (const param of entry.params) {
+    if (param.name === skipParam.name) continue;
+    const kind = getSlotKind(param.type);
+    if (!kind) continue;
+    const slot = node.slots ? node.slots[param.name] : null;
+    if (kind === "children" && Array.isArray(slot) && slot.length > 0) return true;
+    if (kind === "child" && slot && typeof slot === "object" && slot.kind) return true;
+    const raw = node.raws ? node.raws[param.name] : null;
+    if (raw != null && raw !== "") return true;
+  }
+  return false;
 }
 
 function buildSlotFill(rect, parentNode, param) {
@@ -2454,9 +3166,9 @@ function buildSlotFill(rect, parentNode, param) {
       el("i", { class: "fa-solid fa-circle-plus" }),
     ]),
     el("div", { class: "ve-slot-fill-cta" },
-      currentDragPayload ? "Release to drop here" : "Empty " + parentNode.name),
+      currentDragPayload ? "Release to drop here" : "Drop into " + param.name),
     el("div", { class: "ve-slot-fill-meta" },
-      "accepts " + (acceptedLabel || "components") + " · " + param.name),
+      parentNode.name + " · accepts " + (acceptedLabel || "components")),
   ]);
   attachDropTarget(fill,
     (p) => acceptsPayload(p, param, parentNode, 0),
@@ -2588,6 +3300,15 @@ function renderRawCanvas() {
   if (!canvas) return;
   canvas.innerHTML = "";
   if (state.mode !== "raw") return;
+  const ent = activeEntity();
+  if (ent && (ent.kind !== "assignment" || !ent.tree)) {
+    canvas.append(el("div", { class: "ve-raw-empty" }, [
+      el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+      el("h3", null, ent.kind + " · " + ent.name),
+      el("p", null, "Source-only entity. Use the inspector to edit, or focus _app_ in the outline to keep composing visually."),
+    ]));
+    return;
+  }
   if (!state.tree) {
     canvas.append(el("div", { class: "ve-raw-empty" }, [
       el("i", { class: "fa-solid fa-sitemap", "aria-hidden": "true" }),
@@ -2663,11 +3384,16 @@ function renderRawComponentNode(node, parent, slotName, depth) {
       const slot = node.slots[param.name];
       const presentForChild = slotKind === "child" && slot;
       const presentForChildren = slotKind === "children" && Array.isArray(slot);
+      // A raw-bound slot (identifier reference, for-expr, ternary, …)
+      // counts as "present" — the inspector still needs to surface it
+      // so the user can rebind or open the referenced entity.
+      const rawBinding = node.raws ? node.raws[param.name] : null;
+      const hasRaw = rawBinding != null && rawBinding !== "";
       // Always render the first Node[] slot; render optional slots only
       // when present or marked required.
       const isFirstChildrenParam = param.name === firstChildrenParamName(entry);
-      if (slotKind === "children" && !presentForChildren && !param.required && !isFirstChildrenParam) continue;
-      if (slotKind === "child" && !presentForChild && !param.required) continue;
+      if (slotKind === "children" && !presentForChildren && !hasRaw && !param.required && !isFirstChildrenParam) continue;
+      if (slotKind === "child" && !presentForChild && !hasRaw && !param.required) continue;
       hasContent = true;
       body.append(renderRawSlot(node, param, depth));
     }
@@ -2728,6 +3454,14 @@ function renderRawSlot(node, param, depth) {
     el("div", { class: "ve-slot-label" },
       param.name + " · " + param.type + (param.required ? " *" : "")),
   ]);
+  // Slot bound to an expression (identifier / for-comprehension / ternary)?
+  // Render a binding card with the source text and, when the identifier
+  // matches another entity, a quick-jump button to focus it.
+  const raw = node.raws ? node.raws[param.name] : null;
+  if (raw != null && raw !== "") {
+    slot.append(renderRawBindingCard(node, param, raw));
+    return slot;
+  }
   if (slotKind === "children") {
     const arr = Array.isArray(node.slots[param.name]) ? node.slots[param.name] : [];
     const list = el("div", { class: "ve-slot-children" });
@@ -2760,6 +3494,75 @@ function renderRawSlot(node, param, depth) {
   return slot;
 }
 
+/**
+ * Card shown for slot props bound to an expression rather than a visual
+ * subtree (e.g. `AppShell(sidebar, pages)`). It surfaces the bound
+ * expression and, when it references another entity (`sidebar`, `pages`),
+ * offers a quick way to focus that entity in the outline.
+ */
+function renderRawBindingCard(node, param, raw) {
+  const referencedEntity = findEntityByIdentifier(String(raw).trim());
+  const card = el("div", { class: "ve-slot-binding" }, [
+    el("div", { class: "ve-slot-binding-head" }, [
+      el("i", { class: "fa-solid fa-link", "aria-hidden": "true" }),
+      el("span", { class: "ve-slot-binding-label" }, "Bound expression"),
+    ]),
+    el("code", { class: "ve-slot-binding-expr" }, String(raw)),
+    el("div", { class: "ve-slot-binding-actions" }, [
+      referencedEntity ? el("button", {
+        type: "button",
+        class: "ve-btn",
+        title: "Open " + referencedEntity.name + " in the inspector",
+        onClick: (e) => {
+          e.stopPropagation();
+          focusEntity(referencedEntity.id);
+        },
+      }, [
+        el("i", { class: "fa-solid fa-arrow-up-right-from-square" }),
+        el("span", null, "Open " + referencedEntity.name),
+      ]) : null,
+      el("button", {
+        type: "button",
+        class: "ve-btn",
+        title: "Replace this expression with an inline visual subtree",
+        onClick: (e) => {
+          e.stopPropagation();
+          delete node.raws[param.name];
+          if (getSlotKind(param.type) === "children") node.slots[param.name] = [];
+          else node.slots[param.name] = null;
+          state.selectedId = node.id;
+          saveState();
+          scheduleRender();
+        },
+      }, [
+        el("i", { class: "fa-solid fa-eraser" }),
+        el("span", null, "Clear binding"),
+      ]),
+    ]),
+  ]);
+  return card;
+}
+
+/**
+ * Look up an entity in the current entity list by its top-level name.
+ * Returns the matching entity (assignment / component-decl / state) or
+ * null when no match exists.
+ */
+function findEntityByIdentifier(name) {
+  if (!name) return null;
+  const trimmed = String(name).trim();
+  if (!trimmed) return null;
+  // Only resolve bare identifiers — anything with parens, dots, etc.
+  // is a richer expression that doesn't map cleanly to one entity.
+  if (!/^\$?[A-Za-z_]\w*$/.test(trimmed)) return null;
+  const isState = trimmed.startsWith("$");
+  const cleanName = isState ? trimmed.slice(1) : trimmed;
+  return (state.entities || []).find((e) => {
+    if (isState) return e.kind === "state" && e.name === cleanName;
+    return e.name === cleanName;
+  }) || null;
+}
+
 function renderRawDropGap(node, param, index) {
   const gap = el("div", { class: "ve-drop-gap" });
   attachDropTarget(gap,
@@ -2775,10 +3578,32 @@ function renderBreadcrumbs() {
   const root = $("ve-breadcrumbs");
   if (!root) return;
   root.innerHTML = "";
+  // First crumb is always the active entity — clicking it pops a menu
+  // to switch to a different top-level binding without opening the
+  // outline tab.
+  const ent = activeEntity();
+  if (ent) {
+    const ebtn = el("button", {
+      type: "button",
+      class: state.selectedId ? "" : "is-current",
+      title: "Switch entity",
+      onClick: (e) => {
+        e.stopPropagation();
+        openEntitySwitcher(ebtn);
+      },
+    }, [
+      el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true", style: "margin-right: 6px;" }),
+      el("span", null, ent.name),
+    ]);
+    root.append(ebtn);
+  }
   if (!state.selectedId) {
-    root.append(el("span", { style: "color: var(--doc-text-subtle); font-style: italic;" }, "Click any component to edit its props"));
+    if (!ent) {
+      root.append(el("span", { style: "color: var(--doc-text-subtle); font-style: italic;" }, "Click any component to edit its props"));
+    }
     return;
   }
+  root.append(el("i", { class: "fa-solid fa-chevron-right", "aria-hidden": "true" }));
   // Walk from root to the selected node, building the path.
   const path = [];
   let info = findContainer(state.selectedId);
@@ -2812,6 +3637,25 @@ function renderInspector() {
   if (!root) return;
   root.innerHTML = "";
 
+  // Entity-level banner so the user always knows which top-level thing is
+  // currently active in the canvas.
+  const ent = activeEntity();
+  if (ent) root.append(renderEntityBanner(ent));
+
+  // Non-tree entities (state defaults, action / effect bodies, raw
+  // declarations) get a focused inline editor instead of the component
+  // inspector — there's no visual tree to fall back to.
+  if (ent && (ent.kind === "state" || ent.kind === "action-decl" || ent.kind === "effect-decl" || ent.kind === "free")) {
+    root.append(renderEntitySourceEditor(ent));
+    renderPreludeBlock(root);
+    return;
+  }
+  if (ent && ent.kind === "component-decl") {
+    root.append(renderComponentDeclEditor(ent));
+    renderPreludeBlock(root);
+    return;
+  }
+
   if (!state.selectedId) {
     root.append(el("div", { class: "ve-inspector-empty" }, [
       el("i", { class: "fa-solid fa-mouse-pointer", "aria-hidden": "true" }),
@@ -2828,6 +3672,158 @@ function renderInspector() {
   }
   if (node.kind === "expr") return renderExprInspector(node, root);
   return renderComponentInspector(node, root);
+}
+
+function renderEntityBanner(ent) {
+  const wrap = el("div", { class: "ve-insp-title", style: "margin-bottom: 6px;" }, [
+    el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+    el("span", null, ent.name),
+    el("span", { class: "ve-insp-group-tag" }, ent.kind),
+  ]);
+  return wrap;
+}
+
+/**
+ * Inline source editor for entities that have no structural tree —
+ * state defaults, action / effect bodies, and free-form fragments. The
+ * textarea keeps the user in control of the exact source we round-trip
+ * back into the program.
+ */
+function renderEntitySourceEditor(ent) {
+  const wrap = el("div", { class: "ve-prelude" });
+  if (ent.kind === "state") {
+    wrap.append(el("h4", null, "State default — $" + ent.name));
+    wrap.append(el("p", null,
+      "Initial value for $" + ent.name + ". Use any Aktion literal — strings, numbers, arrays, objects."));
+    const nameInput = el("input", {
+      class: "ve-prop-input",
+      type: "text",
+      value: ent.name,
+      placeholder: "stateName",
+      onInput: (e) => {
+        ent.name = e.target.value.replace(/[^A-Za-z0-9_]/g, "");
+        queueCodeUpdate();
+        saveState();
+      },
+    });
+    wrap.append(el("p", { style: "margin: 8px 0 4px;" }, "Name"));
+    wrap.append(nameInput);
+    wrap.append(el("p", { style: "margin: 8px 0 4px;" }, "Default"));
+    const ta = el("textarea", {
+      class: "ve-prop-input",
+      rows: 4,
+      onInput: (e) => {
+        ent.raw = e.target.value;
+        queueCodeUpdate();
+        saveState();
+      },
+    });
+    ta.value = ent.raw || "";
+    wrap.append(ta);
+    return wrap;
+  }
+  const heading = ent.kind === "action-decl"
+    ? "Action body"
+    : ent.kind === "effect-decl"
+      ? "Effect body"
+      : "Source";
+  wrap.append(el("h4", null, heading));
+  if (ent.kind === "action-decl") {
+    wrap.append(el("p", null,
+      "Full source of the `action " + ent.name + "(...) { ... }` declaration. Edit freely — the entire block is written back verbatim."));
+  } else if (ent.kind === "effect-decl") {
+    wrap.append(el("p", null,
+      "Full source of the `effect [...] { ... }` declaration. Triggers and rate-limit modifiers go between the brackets."));
+  } else {
+    wrap.append(el("p", null,
+      "Top-level source the editor couldn't classify. Edit directly — the original text is preserved on export."));
+  }
+  const ta = el("textarea", {
+    class: "ve-prop-input",
+    rows: Math.min(20, Math.max(6, (ent.source || "").split("\n").length + 2)),
+    style: "font-family: var(--doc-mono); font-size: 12px;",
+    onInput: (e) => {
+      ent.source = e.target.value;
+      queueCodeUpdate();
+      saveState();
+    },
+  });
+  ta.value = ent.source || "";
+  wrap.append(ta);
+  return wrap;
+}
+
+/**
+ * Inspector for `component <Name>(params) { … }` declarations. Lets the
+ * user rename the component, edit its parameter list, and edit the body
+ * source. (A full visual tree round-trip for the component body is a
+ * follow-up — for now we keep the source authoritative so authors can
+ * iterate on complex bodies that the visual tree wouldn't yet model.)
+ */
+function renderComponentDeclEditor(ent) {
+  const wrap = el("div", { class: "ve-prelude" });
+  wrap.append(el("h4", null, "Component declaration"));
+  wrap.append(el("p", null,
+    "Define a reusable component you can drop into the canvas like any built-in. Components surface in the Outline tab and can be invoked from " + ROOT_ENTITY_NAME + " or any other binding."));
+
+  wrap.append(el("p", { style: "margin: 8px 0 4px;" }, "Name"));
+  const nameInput = el("input", {
+    class: "ve-prop-input",
+    type: "text",
+    value: ent.name,
+    onInput: (e) => {
+      const next = e.target.value.replace(/[^A-Za-z0-9_]/g, "");
+      // Keep the source in sync so the header still matches the new name.
+      ent.source = ent.source.replace(/^component\s+[A-Za-z_]\w*/, "component " + next);
+      ent.name = next;
+      queueCodeUpdate();
+      saveState();
+    },
+  });
+  wrap.append(nameInput);
+
+  wrap.append(el("p", { style: "margin: 8px 0 4px;" }, "Parameters (comma-separated)"));
+  const paramsInput = el("input", {
+    class: "ve-prop-input",
+    type: "text",
+    value: (ent.params || []).join(", "),
+    placeholder: "task, isDone",
+    onInput: (e) => {
+      const next = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+      ent.params = next;
+      ent.source = ent.source.replace(
+        /^(component\s+[A-Za-z_]\w*\s*\()[^)]*(\))/,
+        "$1" + next.join(", ") + "$2",
+      );
+      queueCodeUpdate();
+      saveState();
+    },
+  });
+  wrap.append(paramsInput);
+
+  wrap.append(el("p", { style: "margin: 8px 0 4px;" }, "Body source"));
+  const ta = el("textarea", {
+    class: "ve-prop-input",
+    rows: Math.min(24, Math.max(8, (ent.source || "").split("\n").length + 1)),
+    style: "font-family: var(--doc-mono); font-size: 12px;",
+    onInput: (e) => {
+      ent.source = e.target.value;
+      // Re-derive name/params from the header so the outline label stays
+      // in sync without forcing the user to keep the inputs above edited.
+      const header = e.target.value.match(/^component\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+      if (header) {
+        ent.name = header[1];
+        ent.params = header[2].split(",").map((s) => s.trim()).filter(Boolean);
+        nameInput.value = ent.name;
+        paramsInput.value = ent.params.join(", ");
+      }
+      queueCodeUpdate();
+      saveState();
+    },
+  });
+  ta.value = ent.source || "";
+  wrap.append(ta);
+  return wrap;
 }
 
 function renderExprInspector(node, root) {
@@ -2934,11 +3930,46 @@ function renderPropEditor(node, param) {
 
   if (slotKind === "children" || slotKind === "child") {
     const slot = node.slots[param.name];
-    const summary = slotKind === "children"
-      ? (Array.isArray(slot) ? slot.length + " child" + (slot.length === 1 ? "" : "ren") : "0 children")
-      : (slot ? slot.name || "expr" : "empty");
-    wrap.append(el("div", { class: "ve-prop-input", style: "color: var(--doc-text-muted); cursor: default;" },
-      "Drop components on the canvas slot — current: " + summary));
+    const hasRaw = node.raws && node.raws[param.name];
+    if (hasRaw) {
+      // The prop is bound to an identifier / expression (e.g. another
+      // entity like `sidebar` or `pages`). Show an editable text input
+      // and a "Reset to slot" button so authors can flip between an
+      // expression binding and an inline visual subtree.
+      const inp = el("input", {
+        type: "text",
+        class: "ve-prop-input",
+        value: node.raws[param.name] || "",
+        onInput: (e) => {
+          node.raws[param.name] = e.target.value;
+          queueCodeUpdate();
+          saveState();
+        },
+      });
+      wrap.append(inp);
+      wrap.append(el("div", { class: "ve-prop-desc", style: "margin-top: 4px;" },
+        "Identifier / expression reference. Clear this to drop components inline."));
+      wrap.append(el("button", {
+        class: "ve-btn",
+        style: "margin-top: 6px;",
+        onClick: () => {
+          delete node.raws[param.name];
+          if (slotKind === "children") node.slots[param.name] = [];
+          else node.slots[param.name] = null;
+          saveState();
+          scheduleRender();
+        },
+      }, [
+        el("i", { class: "fa-solid fa-eraser" }),
+        el("span", null, "Clear and drop inline"),
+      ]));
+    } else {
+      const summary = slotKind === "children"
+        ? (Array.isArray(slot) ? slot.length + " child" + (slot.length === 1 ? "" : "ren") : "0 children")
+        : (slot ? slot.name || "expr" : "empty");
+      wrap.append(el("div", { class: "ve-prop-input", style: "color: var(--doc-text-muted); cursor: default;" },
+        "Drop components on the canvas slot — current: " + summary));
+    }
   } else {
     wrap.append(renderRawValueEditor(node, param));
   }
@@ -3252,14 +4283,18 @@ function makeStream(line) {
 
 function saveState() {
   try {
+    syncActiveEntityFromTree();
     const payload = {
       tree: state.tree,
       prelude: state.prelude,
       rootId: state.rootId,
+      entities: state.entities,
+      activeEntityId: state.activeEntityId,
       theme: state.theme,
       device: state.device,
       zoom: state.zoom,
       mode: state.mode,
+      paletteTab: state.paletteTab,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(payload));
   } catch (_) { /* quota / privacy */ }
@@ -3270,14 +4305,32 @@ function loadState() {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    if (data && data.tree) {
-      state.tree = data.tree;
+    if (data && (data.tree || (Array.isArray(data.entities) && data.entities.length > 0))) {
+      state.tree = data.tree || null;
       state.prelude = data.prelude || "";
       state.rootId = data.rootId || "_app_";
+      state.entities = Array.isArray(data.entities) ? data.entities : [];
+      state.activeEntityId = data.activeEntityId || null;
       state.theme = data.theme || "light";
       state.device = data.device || "desktop";
       state.zoom = typeof data.zoom === "number" ? data.zoom : 1;
       state.mode = (data.mode === "preview" || data.mode === "raw") ? data.mode : "edit";
+      state.paletteTab = data.paletteTab === "outline" ? "outline" : "components";
+      // Backfill an entity list from a legacy tree-only snapshot so users
+      // upgrading from the previous editor don't lose their work.
+      if (state.entities.length === 0 && state.tree) {
+        const stub = {
+          id: uuidEntity(),
+          kind: "assignment",
+          name: state.rootId || ROOT_ENTITY_NAME,
+          tree: state.tree,
+          raw: null,
+          source: "",
+        };
+        state.entities = [stub];
+        state.activeEntityId = stub.id;
+      }
+      syncActiveTreeFromEntity();
       return true;
     }
   } catch (_) {}
@@ -3297,6 +4350,7 @@ function scheduleRender() {
     renderRawCanvas();
     renderInspector();
     renderBreadcrumbs();
+    if (state.paletteTab === "outline") renderOutline();
     queueCodeUpdate();
   });
 }
@@ -3399,10 +4453,14 @@ function showExamplesModal() {
 // Import / Export plumbing
 
 function applyImportResult(result) {
+  state.entities = result.entities || [];
+  state.activeEntityId = result.activeEntityId || null;
   state.tree = result.tree;
-  state.prelude = result.prelude;
+  state.prelude = result.prelude || "";
   if (result.rootId) state.rootId = result.rootId;
   state.selectedId = null;
+  syncActiveTreeFromEntity();
+  updateOutlineBadge();
   if (result.warnings && result.warnings.length > 0) {
     showToast(result.warnings[0].message, { icon: "circle-exclamation" });
   }
@@ -3441,7 +4499,10 @@ function bindToolbar() {
   $("ve-new").addEventListener("click", () => {
     if (!confirm("Reset the canvas to a blank Stack? Your current work will be lost.")) return;
     commit();
-    state.tree = createDefaultTree();
+    const def = defaultEntities();
+    state.entities = def.entities;
+    state.activeEntityId = def.entities[0].id;
+    state.tree = def.tree;
     state.prelude = "";
     state.selectedId = null;
     saveState();
@@ -3865,6 +4926,87 @@ function bindPaletteSearch() {
   });
 }
 
+function bindPaletteTabs() {
+  for (const btn of document.querySelectorAll(".ve-palette-tab")) {
+    btn.addEventListener("click", () => setPaletteTab(btn.dataset.paletteTab));
+  }
+  const addBtn = $("ve-outline-add");
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCreateEntityMenu(addBtn);
+    });
+  }
+}
+
+function openCreateEntityMenu(anchor) {
+  closeCreateEntityMenu();
+  const menu = el("div", { class: "ve-add-menu", id: "ve-add-menu" });
+  const items = [
+    { kind: "component-decl", label: "Component", icon: "fa-cube" },
+    { kind: "action-decl",    label: "Action",    icon: "fa-play" },
+    { kind: "effect-decl",    label: "Effect",    icon: "fa-wave-square" },
+    { kind: "state",          label: "State",     icon: "fa-bolt" },
+  ];
+  for (const item of items) {
+    menu.append(el("button", {
+      type: "button",
+      onClick: () => {
+        closeCreateEntityMenu();
+        createEntity(item.kind);
+      },
+    }, [
+      el("i", { class: "fa-solid " + item.icon, "aria-hidden": "true" }),
+      el("span", null, "New " + item.label),
+    ]));
+  }
+  document.body.append(menu);
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = rect.bottom + 6 + "px";
+  menu.style.left = Math.max(8, rect.right - 200) + "px";
+  setTimeout(() => {
+    document.addEventListener("click", closeCreateEntityMenu, { once: true });
+  }, 0);
+}
+
+function closeCreateEntityMenu() {
+  const m = $("ve-add-menu");
+  if (m) m.remove();
+}
+
+/**
+ * Popover menu listing every entity in the current program. Clicking
+ * one swaps it in as the active entity without having to leave the
+ * canvas. Skips the "free" bucket because it's rarely useful to focus.
+ */
+function openEntitySwitcher(anchor) {
+  closeCreateEntityMenu();
+  const menu = el("div", { class: "ve-add-menu", id: "ve-add-menu", style: "max-height: 320px; overflow: auto;" });
+  for (const ent of state.entities) {
+    if (ent.kind === "free") continue;
+    const isActive = ent.id === state.activeEntityId;
+    menu.append(el("button", {
+      type: "button",
+      style: isActive ? "background: var(--doc-bg-soft); color: var(--doc-primary);" : "",
+      onClick: () => {
+        closeCreateEntityMenu();
+        focusEntity(ent.id);
+      },
+    }, [
+      el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
+      el("span", null, ent.name),
+      el("span", { style: "margin-left: auto; font-size: 11px; color: var(--doc-text-muted); font-family: var(--doc-mono);" }, ent.kind),
+    ]));
+  }
+  document.body.append(menu);
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = rect.bottom + 6 + "px";
+  menu.style.left = rect.left + "px";
+  setTimeout(() => {
+    document.addEventListener("click", closeCreateEntityMenu, { once: true });
+  }, 0);
+}
+
 async function bootstrap() {
   // Wait for the custom element to register, otherwise the preview's
   // `setResponse(...)` call goes to a generic HTMLElement.
@@ -3872,7 +5014,10 @@ async function bootstrap() {
     try { await customElements.whenDefined("aktion-app"); } catch (_) {}
   }
   if (!loadState()) {
-    state.tree = createDefaultTree();
+    const def = defaultEntities();
+    state.entities = def.entities;
+    state.activeEntityId = def.entities[0].id;
+    state.tree = def.tree;
   }
   $("ve-theme").value = state.theme;
   $("ve-zoom-display").textContent = Math.round((state.zoom || 1) * 100) + "%";
@@ -3895,8 +5040,10 @@ async function bootstrap() {
   bindStageDropFallback();
   bindKeyboard();
   bindPaletteSearch();
+  bindPaletteTabs();
   bindCanvasInteractions();
 
+  applyPaletteTab();
   renderPalette();
   scheduleRender();
   updateUndoRedoButtons();

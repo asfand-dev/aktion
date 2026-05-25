@@ -200,6 +200,23 @@ export class Renderer {
     }
   }
 
+  /**
+   * Apply a state write addressed by either a plain atom name
+   * (`$count` → `"count"`) or a dotted path (`$form.email` →
+   * `"form.email"`). Dotted writes go through `state.setPath` so the
+   * root object is reconstructed immutably and subscribers wake up.
+   */
+  private writeState(name: string, value: unknown): void {
+    const dot = name.indexOf(".");
+    if (dot < 0) {
+      this.options.state.set(name, value);
+      return;
+    }
+    const root = name.slice(0, dot);
+    const path = name.slice(dot + 1).split(".");
+    this.options.state.setPath(root, path, value);
+  }
+
   render(value: unknown): Node {
     return this.renderAt(value, ROOT_PATH);
   }
@@ -300,7 +317,7 @@ export class Renderer {
         }
       },
       setState: (name, value) => {
-        this.options.state.set(name, value);
+        this.writeState(name, value);
       },
       resetState: (...names) => {
         this.options.state.reset(...names);
@@ -327,9 +344,13 @@ export class Renderer {
         // `element` — the fresh render's element becomes detached the
         // moment morph reuses the previous DOM node, and its `.value`
         // never sees the user's keystroke.
+        //
+        // `name` may carry a dotted state path (`form.email`) so that
+        // bindings to nested members (`value: $form.email`) write back
+        // into the right slot — see `writeState`.
         (element as unknown as Record<string, unknown>)[propKey] = (event: Event) => {
           const target = (event.currentTarget ?? event.target ?? element) as HTMLElement;
-          this.options.state.set(name, getter(target));
+          this.writeState(name, getter(target));
         };
       },
       useInstanceState: <T>(key: string, initialValue: T): InstanceStateSlot<T> => {

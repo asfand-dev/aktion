@@ -182,7 +182,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  $draft = ""\n' +
       '}\n\n' +
       'form${1} = Stack([\n' +
-      '  Input("${2:draft}", placeholder: "What needs doing?", type: "text", bind:value: $draft),\n' +
+      '  Input("${2:draft}", placeholder: "What needs doing?", type: "text", value: $draft),\n' +
       '  Button("Add", action: Add, variant: "primary")\n' +
       '])',
   },

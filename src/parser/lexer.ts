@@ -54,7 +54,6 @@ export const KEYWORDS_AKTION = new Set([
   "optimistic",
   "on",
   "emit",
-  "bind",
   "default",
 ]);
 

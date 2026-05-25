@@ -17,9 +17,10 @@
  *     positional slot, regardless of the prop's index in `props`.
  *   - Named arg values land in the right spec slot (slot order, not
  *     source order) — verifies `argMeta` alignment for state-ref binding.
- *   - `bind:value: $atom` lifts the bind target's name onto the slot's
- *     `argMeta.stateRef` so library renderers can wire two-way binding
- *     for both the legacy positional `$x` and the canonical `bind:` form.
+ *   - `value: $atom` (and member chains `value: $form.email`) lift the
+ *     target's dotted state path onto the slot's `argMeta.stateRef` so
+ *     library renderers can wire two-way binding automatically — there
+ *     is no longer a separate `bind:` keyword.
  *   - The system prompt's component signatures project the new
  *     `(positional)` tag onto the canonical primary prop.
  *   - The §19.1 rule is taught in the system prompt's syntax section.
@@ -222,10 +223,10 @@ describe("§19.1 — evaluator routes positional args to the spec slot", () => {
   });
 });
 
-describe("§19.1 — bind:value lifts target onto argMeta.stateRef", () => {
-  it("`bind:value: $title` sets argMeta on the right slot", () => {
+describe("§19.1 — value: $atom lifts target onto argMeta.stateRef", () => {
+  it("`value: $title` (named arg with state ref) sets argMeta on the right slot", () => {
     const node = evalCall(
-      `$title = "hello"\nx = Input("title", placeholder: "Title", bind:value: $title)`,
+      `$title = "hello"\nx = Input("title", placeholder: "Title", value: $title)`,
     );
     expect(node.name).toBe("Input");
     // Spec props: [id, placeholder, type, validations, value]. Slot 4 = value.
@@ -233,11 +234,19 @@ describe("§19.1 — bind:value lifts target onto argMeta.stateRef", () => {
     expect(node.argMeta[0]?.stateRef).toBeUndefined();
   });
 
-  it("`value: $title` (named arg with state ref) also sets stateRef", () => {
+  it("`value: $form.email` (member chain rooted at $state) sets dotted argMeta.stateRef", () => {
     const node = evalCall(
-      `$title = "hello"\nx = Input("title", placeholder: "Title", value: $title)`,
+      `$form = { email: "" }\nx = Input("email", placeholder: "Email", value: $form.email)`,
     );
-    expect(node.argMeta[4]?.stateRef).toBe("title");
+    expect(node.name).toBe("Input");
+    expect(node.argMeta[4]?.stateRef).toBe("form.email");
+  });
+
+  it("`value: $cart.items[0]` (bracket access on $state) sets dotted argMeta.stateRef", () => {
+    const node = evalCall(
+      `$cart = { items: ["a"] }\nx = Input("first", placeholder: "First", value: $cart.items[0])`,
+    );
+    expect(node.argMeta[4]?.stateRef).toBe("cart.items.0");
   });
 
   it("a single positional `$variable` still lifts argMeta.stateRef (default slot 0)", () => {

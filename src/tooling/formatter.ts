@@ -9,8 +9,7 @@
  *   - **Canonical.** Statements one per line; two-space indentation
  *     inside `{ … }` blocks; named args always use `prop: value` (the
  *     legacy `prop=value` form is gone); double-quoted strings unless
- *     interpolation is required (templates); `bind:prop: value`
- *     preserved.
+ *     interpolation is required (templates).
  *   - **Round-trips through the parser.** Re-parsing the formatter's
  *     output yields a structurally-equivalent AST.
  *
@@ -216,8 +215,6 @@ function printExpression(expr: Expression, indent: number): string {
       return `...${printExpression(expr.argument, indent)}`;
     case "NamedArg":
       return `${expr.name}: ${printExpression(expr.value, indent)}`;
-    case "Bind":
-      return `bind:${expr.prop}: ${printExpression(expr.target, indent)}`;
     case "If": {
       const test = printExpression(expr.test, indent);
       const cons = `{\n${printBlock(expr.consequent.body, indent + 1)}\n${INDENT.repeat(indent)}}`;

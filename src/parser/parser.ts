@@ -132,13 +132,60 @@ function couldStartAssignment(ctx: ParserContext): boolean {
 
 function parseExpressionStatement(ctx: ParserContext): Statement {
   const start = ctx.peek();
-  const expression = parseExpression(ctx);
+  let expression = parseExpression(ctx);
+  // Member-target assignments (`$obj.done = true`, `$cart.items[0] = …`)
+  // arrive here because `couldStartAssignment` only matches bare
+  // `name`/`$name`/`name(...)` headers. Rewrite the trailing `=` /
+  // compound-assign into the same synthetic builtin the single-statement
+  // lambda form uses so action/effect/lambda bodies handle deep writes
+  // through one code path (see `evaluateSyntheticAssign`).
+  const next = ctx.peek();
+  if (next.type === "Operator" && isAssignmentOperator(next.value)) {
+    if (isAssignableTarget(expression)) {
+      ctx.consume();
+      const value = parseExpression(ctx);
+      expression = {
+        kind: "BuiltinCall",
+        name: "__rui_assign__",
+        arguments: [
+          expression,
+          value,
+          { kind: "Literal", value: next.value },
+        ],
+        loc: { line: next.line, column: next.column },
+      };
+    }
+  } else if (next.type === "Operator" && (next.value === "++" || next.value === "--")) {
+    if (isAssignableTarget(expression)) {
+      ctx.consume();
+      expression = {
+        kind: "BuiltinCall",
+        name: "__rui_postfix__",
+        arguments: [expression, { kind: "Literal", value: next.value }],
+        loc: { line: next.line, column: next.column },
+      };
+    }
+  }
   if (!ctx.isEnd()) ctx.match("Newline");
   return {
     kind: "ExpressionStatement",
     expression,
     loc: { line: start.line, column: start.column },
   };
+}
+
+/** Compound + plain assignment operators accepted in member-target writes. */
+function isAssignmentOperator(value: string): boolean {
+  return value === "=" || value === "+=" || value === "-=" || value === "*="
+    || value === "/=" || value === "??=";
+}
+
+/** Restrict synthesized assignments to AST shapes that can be written to. */
+function isAssignableTarget(expr: Expression): boolean {
+  if (expr.kind === "Member") return true;
+  if (expr.kind === "StateRef") return true;
+  if (expr.kind === "Identifier") return true;
+  return false;
 }
 
 function parseComponentDecl(ctx: ParserContext): Statement {
@@ -1012,9 +1059,14 @@ function parseArgItem(ctx: ParserContext): Expression {
 }
 
 /**
- * Call-list argument: optional `name: expr` / `bind:prop: stateRef` before
- * falling back to a full expression. Named args are only allowed in `(...)`
- * lists, not `[...]`.
+ * Call-list argument: optional `name: expr` before falling back to a full
+ * expression. Named args are only allowed in `(...)` lists, not `[...]`.
+ *
+ * Two-way binding is implicit in Aktion 0.5: passing a `$variable` (or a
+ * member chain rooted at one — `value: $form.email`) directly is enough,
+ * the runtime wires the change handler automatically. The legacy
+ * `bind:prop: target` sugar has been removed; the parser will surface a
+ * definitive migration error if it sees it (see below).
  *
  * The legacy `name=expr` form has been removed in Aktion 0.5 —
  * the parser surfaces a definitive migration error pointing the author at
@@ -1028,19 +1080,30 @@ function parseCallArgItem(ctx: ParserContext): Expression {
     const argument = parseExpression(ctx);
     return { kind: "Spread", argument, loc: { line: tok.line, column: tok.column } };
   }
-  // `bind:prop: stateRef` two-way binding sugar.
-  if (ctx.peek().type === "Keyword" && ctx.peek().value === "bind") {
-    const start = ctx.consume();
-    ctx.expect("Punctuation", ":");
-    const propTok = ctx.expect("Identifier");
-    ctx.expect("Punctuation", ":");
-    const target = parseExpression(ctx);
-    return {
-      kind: "Bind",
-      prop: propTok.value,
-      target,
-      loc: { line: start.line, column: start.column },
+  // Legacy `bind:prop: target` syntax. Removed — a plain `prop: $atom`
+  // (or `prop: $atom.path`) is now an automatic two-way binding. We
+  // detect the *full* triplet `bind : ident :` so a user-named arg like
+  // `MyComp(bind: $atom)` still flows through the normal `name: value`
+  // path.
+  if (
+    ctx.peek().type === "Identifier" && ctx.peek().value === "bind" &&
+    ctx.peek(1).type === "Punctuation" && ctx.peek(1).value === ":" &&
+    (ctx.peek(2).type === "Identifier" || ctx.peek(2).type === "Keyword") &&
+    ctx.peek(3).type === "Punctuation" && ctx.peek(3).value === ":"
+  ) {
+    const start = ctx.peek();
+    const err: ParseError & { __definitive?: boolean } = {
+      message:
+        `\`bind:prop: target\` is removed in Aktion 0.5. Pass the ` +
+        `\`$variable\` (or \`$variable.path\`) directly as the prop — ` +
+        `e.g. \`Input("id", value: $name)\` or ` +
+        `\`Checkbox("id", value: $form.done)\` — and the runtime will ` +
+        `wire the two-way binding automatically.`,
+      line: start.line,
+      column: start.column,
     };
+    err.__definitive = true;
+    throw err;
   }
   // Reject legacy `name=expr` form with a clear migration error before
   // attempting to parse it as an expression. The error is marked

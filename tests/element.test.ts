@@ -229,7 +229,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       streaming: boolean;
       state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
     };
-    el.setResponse(`$title = ""\nfield = FormControl("Title", field: Input("title", placeholder: "Type here", type: "text", bind:value: $title))\n_app_ = Stack([field])`);
+    el.setResponse(`$title = ""\nfield = FormControl("Title", field: Input("title", placeholder: "Type here", type: "text", value: $title))\n_app_ = Stack([field])`);
     for (let i = 0; i < 5; i += 1) await flush();
 
     const shadow = el.shadowRoot!;
@@ -307,7 +307,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
       state: { set: (k: string, v: unknown) => void };
     };
     el.setResponse(
-      `$email = ""\nfield = FormControl("Email", field: Input("email", placeholder: "you@example.com", type: "email", bind:value: $email))\n_app_ = Stack([field])`,
+      `$email = ""\nfield = FormControl("Email", field: Input("email", placeholder: "you@example.com", type: "email", value: $email))\n_app_ = Stack([field])`,
     );
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
@@ -408,7 +408,7 @@ _app_ = Stack([acc, counter])`);
       state: { set: (k: string, v: unknown) => void };
     };
     el.setResponse(
-      `$title = "Hello"\nfield = Input("title", placeholder: "Title", type: "text", bind:value: $title)\n_app_ = Stack([field])`,
+      `$title = "Hello"\nfield = Input("title", placeholder: "Title", type: "text", value: $title)\n_app_ = Stack([field])`,
     );
     for (let i = 0; i < 5; i += 1) await flush();
     const shadow = el.shadowRoot!;
@@ -432,7 +432,7 @@ _app_ = Stack([acc, counter])`);
       state: { set: (k: string, v: unknown) => void; get: (k: string) => unknown };
     };
     el.setResponse(`$title = "initial"
-field = Input("title", placeholder: "Title", type: "text", bind:value: $title)
+field = Input("title", placeholder: "Title", type: "text", value: $title)
 caption = Text("value=" + $title)
 _app_ = Stack([field, caption])`);
     for (let i = 0; i < 5; i += 1) await flush();
@@ -461,7 +461,7 @@ _app_ = Stack([field, caption])`);
     };
     el.setResponse(`$name = "Ada"
 $count = 0
-nameField = Input("name", placeholder: "Name", type: "text", bind:value: $name)
+nameField = Input("name", placeholder: "Name", type: "text", value: $name)
 counter = Text("count=" + $count)
 banner = Text("hi " + $name)
 _app_ = Stack([nameField, counter, banner])`);
@@ -539,6 +539,68 @@ _app_ = Stack([nameField, counter, banner])`);
       expect(el.getAttribute("capabilities")).toBe("timer, net");
       expect(el.getAttribute("capabilities-default")).toBe("deny");
     });
+  });
+
+  // Regression: implicit two-way binding on a nested member path
+  // (`value: $obj.done`) must propagate user edits back to the atom
+  // *and* keep dependents like Text(`${$obj.done}`) in sync. Before
+  // the immutable-setPath rewrite the dependent text never updated.
+  it("implicit two-way binding flows through a member path", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      state: { get: (k: string) => unknown };
+    };
+    el.setResponse(`$obj = { done: true }
+checkbox = Checkbox("done", label: "Done", value: $obj.done)
+display = Text(\`Is Done: \${$obj.done ? "Yes" : "No"}\`)
+_app_ = Stack([checkbox, display])`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    const shadow = el.shadowRoot!;
+    const input = shadow.querySelector<HTMLInputElement>(
+      "input[type='checkbox']",
+    );
+    expect(input).not.toBeNull();
+    expect(input!.checked).toBe(true);
+
+    input!.checked = false;
+    input!.dispatchEvent(new Event("change", { bubbles: true }));
+    for (let i = 0; i < 5; i += 1) await flush();
+
+    expect((el.state.get("obj") as { done: boolean }).done).toBe(false);
+    const text = Array.from(shadow.querySelectorAll(".rui-text")).map(
+      (n) => n.textContent,
+    );
+    expect(text).toContain("Is Done: No");
+  });
+
+  // Regression: writing through a member chain inside a lambda
+  // (`$obj.done = true`) must trigger reactivity. Before the parser
+  // rewrote member assignments into `state.setPath`, the root atom
+  // never changed reference, so subscribers never fired.
+  it("member-chain assignment in a lambda re-renders dependents", async () => {
+    const el = create() as HTMLElement & {
+      setResponse(text: string): void;
+      state: { get: (k: string) => unknown };
+    };
+    el.setResponse(`$obj = { done: false }
+btn = Button("Change Value", () => { $obj.done = true })
+display = Text(\`Is Done: \${$obj.done ? "Yes" : "No"}\`)
+_app_ = Stack([btn, display])`);
+    for (let i = 0; i < 5; i += 1) await flush();
+    const shadow = el.shadowRoot!;
+    expect(
+      Array.from(shadow.querySelectorAll(".rui-text")).map((n) => n.textContent),
+    ).toContain("Is Done: No");
+
+    const button = shadow.querySelector<HTMLButtonElement>("button");
+    expect(button).not.toBeNull();
+    button!.click();
+    for (let i = 0; i < 5; i += 1) await flush();
+
+    expect((el.state.get("obj") as { done: boolean }).done).toBe(true);
+    expect(
+      Array.from(shadow.querySelectorAll(".rui-text")).map((n) => n.textContent),
+    ).toContain("Is Done: Yes");
   });
 
   // Regression: `appendChunk` used to corrupt the program buffer if called

@@ -43,7 +43,13 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
 };
 
 export interface ArgMeta {
-  /** Name of the `$variable` if this argument is a direct state reference. */
+  /**
+   * Name of the `$variable` (or dotted path inside one) carried by this
+   * argument. Direct refs (`value: $name`) store the bare atom name;
+   * member-access refs (`value: $form.email`, `value: $cart.items[0]`)
+   * store a dotted path (`"form.email"`, `"cart.items.0"`) so renderers
+   * can wire two-way binding into the right nested slot.
+   */
   stateRef?: string;
 }
 
@@ -255,6 +261,64 @@ export function resolveStateAlias(ctx: EvaluationContext, name: string): string 
     if (aliased !== undefined) return aliased;
   }
   return name;
+}
+
+/**
+ * Walk a chain of `Member` expressions rooted at a `StateRef` and return
+ * the alias-resolved root atom name plus the trailing dotted path. Used
+ * by two-way-binding extraction (`value: $form.email`) and by the
+ * synthetic-assign runner (`() => $form.email = …`).
+ *
+ * Returns `null` for any expression whose root is not a `$variable`
+ * (e.g. `loopVar.field`, `someBinding.x`). Bracket-access segments are
+ * supported when the key is a literal — `$cart.items[0]` resolves to
+ * path `["items", "0"]`. Optional chaining (`?.`) is treated as a
+ * regular member step for binding purposes; the renderer's getter still
+ * short-circuits at runtime if the chain is null.
+ */
+export function extractStatePath(
+  expr: Expression,
+  ctx: EvaluationContext,
+): { name: string; path: string[] } | null {
+  const segments: string[] = [];
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") {
+    if (cursor.computed) {
+      // Only literal keys are addressable for binding — dynamic ones
+      // ($obj[$key]) can't be encoded into a stable dotted path.
+      if (cursor.computed.kind !== "Literal") return null;
+      const key = cursor.computed.value;
+      if (typeof key !== "string" && typeof key !== "number") return null;
+      segments.unshift(String(key));
+    } else if (cursor.property) {
+      segments.unshift(cursor.property);
+    } else {
+      return null;
+    }
+    cursor = cursor.object;
+  }
+  if (cursor.kind !== "StateRef") return null;
+  return { name: resolveStateAlias(ctx, cursor.name), path: segments };
+}
+
+/**
+ * Build the dotted argMeta encoding (`"form.email"`) from an expression
+ * that is either a bare `StateRef` or a `Member` chain rooted at one.
+ * Returns `null` when the expression isn't a state-rooted reference.
+ */
+function stateRefForArg(
+  expr: Expression,
+  ctx: EvaluationContext,
+): string | null {
+  if (expr.kind === "StateRef") return resolveStateAlias(ctx, expr.name);
+  if (expr.kind === "Member") {
+    const extracted = extractStatePath(expr, ctx);
+    if (!extracted) return null;
+    return extracted.path.length === 0
+      ? extracted.name
+      : `${extracted.name}.${extracted.path.join(".")}`;
+  }
+  return null;
 }
 
 /**
@@ -622,16 +686,6 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     }
     case "JsBlock": {
       return { __kind: "JsBlock", body: expr.body };
-    }
-    case "Bind": {
-      // `bind:prop: target` desugars to a special `BindNode` that the
-      // renderer recognises and wires up two-way (read + change handler).
-      return {
-        __kind: "Bind",
-        prop: expr.prop,
-        target: evaluate(expr.target, ctx),
-        targetExpr: expr.target,
-      };
     }
     case "NamedArg":
       return evaluate(expr.value, ctx);
@@ -1151,13 +1205,14 @@ function evaluateComponentCall(
  *
  *   - Plain positional arguments — routed to the spec's single
  *     `positional: true` prop (or slot 0 by default). A direct
- *     `$variable` reference also lifts to `argMeta.stateRef` so the
- *     library renderer can wire two-way binding.
+ *     `$variable` reference (or member chain rooted at one, e.g.
+ *     `$user.name`) lifts to `argMeta.stateRef` so the library renderer
+ *     can wire two-way binding into the right nested slot.
  *   - `NamedArg`s — routed by prop name. If the named arg's value is a
- *     bare `$variable` (`Input("title", value: $title)`), the slot's
- *     `argMeta.stateRef` is set too.
- *   - `Bind` expressions (`bind:value: $title`) — same as NamedArg but
- *     also marks the slot's `argMeta.stateRef` from the bind target.
+ *     bare `$variable` (`Input("title", value: $title)`) or a member
+ *     chain rooted at one (`value: $form.email`), the slot's
+ *     `argMeta.stateRef` carries the dotted path so renderers can wire
+ *     a deep two-way binding.
  *   - Extra positional args (multi-positional, §19.1 violation) — fall
  *     through to the next unnamed slot in declaration order so the
  *     graceful runtime path keeps rendering while the schema-validator
@@ -1175,21 +1230,13 @@ function resolveLibraryCallArgs(
   const spec = ctx.library ? findComponent(ctx.library, callee) : undefined;
   if (!spec) {
     const args = propArgs.map((arg) =>
-      arg.kind === "NamedArg"
-        ? evaluate(arg.value, ctx)
-        : arg.kind === "Bind"
-          ? evaluate(arg.target, ctx)
-          : evaluate(arg, ctx),
+      arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
     );
-    const argMeta = propArgs.map<ArgMeta>((arg) =>
-      arg.kind === "StateRef"
-        ? { stateRef: arg.name }
-        : arg.kind === "Bind" && arg.target.kind === "StateRef"
-          ? { stateRef: arg.target.name }
-          : arg.kind === "NamedArg" && arg.value.kind === "StateRef"
-            ? { stateRef: arg.value.name }
-            : {},
-    );
+    const argMeta = propArgs.map<ArgMeta>((arg) => {
+      const source = arg.kind === "NamedArg" ? arg.value : arg;
+      const ref = stateRefForArg(source, ctx);
+      return ref !== null ? { stateRef: ref } : {};
+    });
     return { args, argMeta };
   }
 
@@ -1219,20 +1266,8 @@ function resolveLibraryCallArgs(
       const value = evaluate(arg.value, ctx);
       slots[slot]!.value = value;
       slots[slot]!.filled = true;
-      if (arg.value.kind === "StateRef") {
-        slots[slot]!.meta = { stateRef: arg.value.name };
-      }
-      continue;
-    }
-    if (arg.kind === "Bind") {
-      const slot = slotByName.get(arg.prop);
-      if (slot === undefined) continue;
-      const value = evaluate(arg.target, ctx);
-      slots[slot]!.value = value;
-      slots[slot]!.filled = true;
-      if (arg.target.kind === "StateRef") {
-        slots[slot]!.meta = { stateRef: arg.target.name };
-      }
+      const ref = stateRefForArg(arg.value, ctx);
+      if (ref !== null) slots[slot]!.meta = { stateRef: ref };
       continue;
     }
     positionals.push({ expr: arg, value: evaluate(arg, ctx) });
@@ -1250,7 +1285,8 @@ function resolveLibraryCallArgs(
     const { expr, value } = positionals.shift()!;
     slots[positionalIndex]!.value = value;
     slots[positionalIndex]!.filled = true;
-    if (expr.kind === "StateRef") slots[positionalIndex]!.meta = { stateRef: expr.name };
+    const ref = stateRefForArg(expr, ctx);
+    if (ref !== null) slots[positionalIndex]!.meta = { stateRef: ref };
   }
   let cursor = 0;
   for (const { expr, value } of positionals) {
@@ -1258,7 +1294,8 @@ function resolveLibraryCallArgs(
     if (cursor >= spec.props.length) break;
     slots[cursor]!.value = value;
     slots[cursor]!.filled = true;
-    if (expr.kind === "StateRef") slots[cursor]!.meta = { stateRef: expr.name };
+    const ref = stateRefForArg(expr, ctx);
+    if (ref !== null) slots[cursor]!.meta = { stateRef: ref };
     cursor += 1;
   }
 
@@ -1679,9 +1716,16 @@ function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
 
 /**
  * Evaluate a `__rui_assign__(target, value, op)` synthetic call. The
- * target is either a `StateRef` (write to the state store, alias-aware)
- * or a plain `Identifier` (write to `loopVars` so block-local helpers
- * still observe the new value).
+ * target may be:
+ *   - a `StateRef` (write to the state store, alias-aware)
+ *   - a `Member` chain rooted at a `StateRef` (immutable nested update
+ *     via `state.setPath`, so subscribers see a fresh top-level ref)
+ *   - a plain `Identifier` (write to `loopVars` so block-local helpers
+ *     still observe the new value).
+ *
+ * Member writes onto non-reactive targets (loop variables, locals)
+ * fall back to a direct in-place mutation so block-local helpers behave
+ * predictably.
  */
 function evaluateSyntheticAssign(
   args: Expression[],
@@ -1698,6 +1742,29 @@ function evaluateSyntheticAssign(
     ctx.state.set(target, next);
     return next;
   }
+  if (targetExpr.kind === "Member") {
+    const extracted = extractStatePath(targetExpr, ctx);
+    if (extracted) {
+      const current = readAtPath(ctx.state.get(extracted.name), extracted.path);
+      const next = applyAssignOp(op, current, rhs);
+      ctx.state.setPath(extracted.name, extracted.path, next);
+      return next;
+    }
+    // Member on a non-reactive root (loop var, local helper, …). Best
+    // effort: mutate in place so the assignment is at least observable
+    // to subsequent reads on the same value.
+    const root = evaluate(targetExpr.object, ctx);
+    const key = targetExpr.computed
+      ? (targetExpr.computed.kind === "Literal" ? targetExpr.computed.value : null)
+      : targetExpr.property;
+    if (root && typeof root === "object" && key != null) {
+      const current = (root as Record<string, unknown>)[String(key)];
+      const next = applyAssignOp(op, current, rhs);
+      (root as Record<string, unknown>)[String(key)] = next;
+      return next;
+    }
+    return rhs;
+  }
   if (targetExpr.kind === "Identifier") {
     const current = ctx.loopVars.get(targetExpr.name);
     const next = applyAssignOp(op, current, rhs);
@@ -1705,6 +1772,29 @@ function evaluateSyntheticAssign(
     return next;
   }
   return rhs;
+}
+
+/**
+ * Read the value at `path` inside `target`. Returns `undefined` when
+ * any intermediate step is null/undefined. Mirrors the read semantics
+ * the renderer's reactive trackers already use.
+ */
+function readAtPath(target: unknown, path: ReadonlyArray<string>): unknown {
+  let cursor: unknown = target;
+  for (const segment of path) {
+    if (cursor == null) return undefined;
+    if (Array.isArray(cursor)) {
+      const idx = Number(segment);
+      cursor = Number.isNaN(idx) ? undefined : cursor[idx];
+      continue;
+    }
+    if (typeof cursor === "object") {
+      cursor = (cursor as Record<string, unknown>)[segment];
+      continue;
+    }
+    return undefined;
+  }
+  return cursor;
 }
 
 /**
@@ -1725,6 +1815,15 @@ function evaluateSyntheticPostfix(
     const next = toNumber(ctx.state.get(target)) + delta;
     ctx.state.set(target, next);
     return next;
+  }
+  if (targetExpr.kind === "Member") {
+    const extracted = extractStatePath(targetExpr, ctx);
+    if (extracted) {
+      const current = readAtPath(ctx.state.get(extracted.name), extracted.path);
+      const next = toNumber(current) + delta;
+      ctx.state.setPath(extracted.name, extracted.path, next);
+      return next;
+    }
   }
   if (targetExpr.kind === "Identifier") {
     const next = toNumber(ctx.loopVars.get(targetExpr.name)) + delta;

@@ -804,7 +804,6 @@ const LANGUAGE_KEYWORDS = [
   { label: "optimistic",info: "Mark an `action` as optimistic: `action save(...) optimistic { ... }`." },
   { label: "on",        info: "Used inside `effect [...]` lifecycle deps: `on:mount`, `on:unmount`, `on:every(N)`." },
   { label: "emit",      info: "Dispatch a custom event: `emit \"name\" { detail }`." },
-  { label: "bind",      info: "Two-way binding shorthand: `Input(bind:value: $name)`." },
   { label: "default",   info: "Wildcard arm inside `_router_({...})` / `match`." },
   { label: "on:mount",  info: "Effect trigger that fires once on mount." },
   { label: "on:unmount",info: "Effect trigger that fires once on unmount." },

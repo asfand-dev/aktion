@@ -222,8 +222,10 @@ pages = _router_({
   default:       NotFound()
 })
 
-# Two-way binding sugar.
-NameField = Input(bind:value: $name)
+# Two-way binding is implicit — pass a `$variable` (or a member chain
+# rooted at one) and the runtime wires it both ways automatically.
+NameField = Input("name", value: $name)
+EmailField = Input("email", value: $form.email)   # deep nested bind
 
 # Lambdas + opaque JS escape hatch (inside action / effect / lambda bodies).
 onSearch = (q) => $query = q
@@ -715,11 +717,14 @@ $theme = "dark"
   values): assignment is forbidden. Use `$name = …` declarations to seed.
 - **Inside `action` / `effect` / lambda bodies**:
   `= += -= *= /= ??= ++ --` are all allowed against any `$name` atom.
-- **Nested writes require whole-object replacement.** Direct
-  `$user.name = "Alex"` is rejected — spread instead:
-  `$user = { ...$user, name: "Alex" }`. Arrays follow the same rule:
-  `$todos = [...$todos, item]`,
-  `$todos = @Filter($todos, "id", "!=", id)`.
+- **Nested writes are first-class.** Member-target assignments
+  (`$user.name = "Alex"`, `$cart.items[0].qty += 1`) are accepted: the
+  runtime walks the member chain back to the root `$variable` and
+  rebuilds each visited object immutably so subscribers always see a
+  fresh top-level reference. Whole-object replacement still works:
+  `$user = { ...$user, name: "Alex" }`. Arrays follow the same dual
+  rule — `$todos[0].done = true` mutates one row in place; spread
+  (`$todos = [...$todos, item]`) keeps working for inserts.
 
 ### Component-scoped state
 
@@ -1499,8 +1504,10 @@ Notes:
 
 Notes:
 
-- Pass a `$variable` as `value:` for two-way binding. The explicit form
-  is `bind:value: $name`.
+- Pass a `$variable` as `value:` for two-way binding. Member chains
+  rooted at a `$variable` also bind two-way (`value: $form.email`,
+  `value: $cart.items[0].qty`) — the runtime rebuilds the root object
+  immutably so subscribers wake up. the binding is implicit whenever the prop value is a state ref.
 - Prefer `Switch` over `Checkbox` for settings; use `ToggleGroup` for
   view-mode pickers and mutually-exclusive filters.
 - Reach for `SearchBar(id, placeholder?, value?, shortcut?)` instead
@@ -3213,7 +3220,7 @@ _app_ = Stack([
 | Manual `<style>` injection or `style:` props for colour                        | Use `tone:` / `variant:` props and let the theme resolve.                                                |
 | Emoji (`"❤️"`, `"⚠️"`) in `icon:` slots                                         | Use Font Awesome names (`"heart"`, `"triangle-exclamation"`).                                            |
 | `for x in $items { … }` with a stale closure over `x` in a lambda outside body | Define the lambda inline: `for x in $items { Button("X", onClick: () => remove(x.id)) }`.                |
-| `$user.name = "Alex"` direct mutation                                          | `$user = { ...$user, name: "Alex" }` — nested writes require whole-object replacement.                  |
+| `bind:value: $name` (legacy two-way binding sugar)                             | `value: $name` — direct state refs (and member chains like `$form.email`) are automatically two-way.    |
 | `Series("Name", values: numbers, stroke: "red")`                               | `Series("Name", values: numbers)` — chart colours come from theme tokens (`chart1`…`chart6`).            |
 
 ---

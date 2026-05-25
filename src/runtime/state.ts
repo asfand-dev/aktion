@@ -85,6 +85,28 @@ export class StateStore {
     this.scheduleFlush();
   }
 
+  /**
+   * Write `value` to a nested path inside the atom named `rootName`,
+   * producing a *new* root object so the standard identity-based change
+   * detection fires. Used by deep-binding sites such as
+   * `Checkbox(value: $form.done)` and lambda assignments like
+   * `() => $form.done = true`. Empty paths fall back to `set`.
+   *
+   * Objects along the path are reconstructed immutably (`{...prev, key: …}`)
+   * — sibling keys are preserved and downstream subscribers always see a
+   * fresh top-level reference. Numeric segments target array indices and
+   * preserve the surrounding array shape.
+   */
+  setPath(rootName: string, path: ReadonlyArray<string>, value: StateValue): void {
+    if (path.length === 0) {
+      this.set(rootName, value);
+      return;
+    }
+    const current = this.values.get(rootName);
+    const nextRoot = updateAtPath(current, path, 0, value);
+    this.set(rootName, nextRoot);
+  }
+
   /** Iterate over every (name, value) pair. Order is insertion order. */
   entries(): IterableIterator<[string, StateValue]> {
     return this.values.entries();
@@ -186,6 +208,47 @@ export class StateStore {
       subscriber(changes);
     }
   }
+}
+
+/**
+ * Immutably write `value` at `path[index..]` inside `target`. Each level
+ * is reconstructed (`{...prev, key: …}` for objects, `[…prev]` for
+ * arrays) so the returned root has a fresh identity at every visited
+ * level. Missing intermediate slots are materialised as plain objects
+ * (or arrays when the segment is numeric).
+ */
+function updateAtPath(
+  target: unknown,
+  path: ReadonlyArray<string>,
+  index: number,
+  value: unknown,
+): unknown {
+  if (index >= path.length) return value;
+  const key = path[index]!;
+  const asIndex = key !== "" && !Number.isNaN(Number(key)) ? Number(key) : null;
+  if (Array.isArray(target) && asIndex !== null) {
+    const next = target.slice();
+    next[asIndex] = updateAtPath(target[asIndex], path, index + 1, value);
+    return next;
+  }
+  if (target && typeof target === "object" && !Array.isArray(target)) {
+    const base = { ...(target as Record<string, unknown>) };
+    base[key] = updateAtPath(
+      (target as Record<string, unknown>)[key],
+      path,
+      index + 1,
+      value,
+    );
+    return base;
+  }
+  if (asIndex !== null) {
+    const next: unknown[] = [];
+    next[asIndex] = updateAtPath(undefined, path, index + 1, value);
+    return next;
+  }
+  const base: Record<string, unknown> = {};
+  base[key] = updateAtPath(undefined, path, index + 1, value);
+  return base;
 }
 
 /**

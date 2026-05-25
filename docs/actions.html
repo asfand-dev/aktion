@@ -280,9 +280,9 @@ btns = Buttons([
 ])
 
 _app_ = Form("contact", buttons: btns, fields: [
-  FormControl("Name",    control: Input("name",    placeholder: "Your name",       bind:value: $name)),
-  FormControl("Email",   control: Input("email",   placeholder: "you@example.com", type: "email", bind:value: $email)),
-  FormControl("Message", control: TextArea("message", rows: 4, bind:value: $message))
+  FormControl("Name",    control: Input("name",    placeholder: "Your name",       value: $name)),
+  FormControl("Email",   control: Input("email",   placeholder: "you@example.com", type: "email", value: $email)),
+  FormControl("Message", control: TextArea("message", rows: 4, value: $message))
 ])</code></pre>
 
       <h3>Per-row actions in a table</h3>

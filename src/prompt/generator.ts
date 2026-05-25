@@ -106,7 +106,6 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   if (flags.toolCalls) sections.push(fullHttp());
   sections.push(fullControlFlow());
   sections.push(fullRouting());
-  sections.push(fullTwoWayBinding());
   sections.push(fullJsEscape());
   if (flags.toolCalls || flags.bindings) sections.push(fullBuiltins());
   sections.push(fullHelpers());
@@ -307,11 +306,34 @@ $theme = "dark"
 - **Render position** (top-level bindings, component body output, prop values):
   assignment is forbidden. Use \`$name = …\` declarations to seed.
 - **Inside \`action\` / \`effect\` / lambda bodies**: \`= += -= *= /= ??= ++ --\`
-  are allowed against any \`$name\` atom.
-- **Nested writes require whole-object replacement.** Direct
-  \`$user.name = "Alex"\` is rejected — spread instead:
-  \`$user = { ...$user, name: "Alex" }\`. Arrays follow the same rule:
-  \`$todos = [...$todos, item]\`, \`$todos = @Filter($todos, "id", "!=", id)\`.
+  are allowed against any \`$name\` atom *or* a member chain rooted at one
+  (\`$user.name = "Alex"\`, \`$cart.items[0].qty += 1\`). The runtime
+  rebuilds the root object immutably so subscribers always see a fresh
+  reference — array spreads are still fine but no longer required.
+- Whole-object replacement still works:
+  \`$user = { ...$user, name: "Alex" }\`, \`$todos = [...$todos, item]\`.
+
+### Two-way binding
+Pass a \`$variable\` (or a member chain rooted at one) as the value of
+any input prop and the binding becomes two-way automatically.
+
+\`\`\`
+$draft = ""
+$form  = { email: "", remember: false }
+
+field    = Input("draft",    value: $draft)             // bound to $draft
+emailIn  = Input("email",    value: $form.email)        // deep bind
+remember = Switch("remember", value: $form.remember)    // deep bind
+\`\`\`
+
+Any form control that exposes a primary value prop participates:
+\`Input\`, \`TextArea\`, \`Select\`, \`Combobox\`, \`MultiSelect\`,
+\`Checkbox\`, \`CheckBoxGroup\`, \`Switch\`, \`ToggleGroup\`, \`Slider\`,
+\`NumberInput\`, \`DatePicker\`, \`DateRangePicker\`, \`TimePicker\`,
+\`DateTimePicker\`, \`SearchBar\`, \`PinInput\`, \`PasswordInput\`,
+\`TagInput\`, \`MentionInput\`, \`MaskedInput\`, \`RichTextEditor\`,
+\`CodeEditor\`, \`ColorPicker\`, \`Rating\` (when \`interactive: true\`),
+\`Pagination\` (binds \`page\`).
 
 ### Component-scoped state
 A \`$name = value\` declared **inside** a \`component\` body is per-instance.
@@ -701,31 +723,6 @@ ${ROOT_NAME} = AppShell(MainSidebar(), pages, TopBar())
   arms are ordinary object properties — separate with \`:\` and commas.`;
 }
 
-function fullTwoWayBinding(): string {
-  return `## Two-way binding — \`bind:\`
-
-\`bind:value: $name\` desugars to \`value: $name, onValueChange: (v) => $name = v\`.
-The right-hand side must be a state ref (\`$x\`), member access
-(\`$user.name\`), or a form field — never a computed expression.
-
-\`\`\`
-$search = ""
-bar     = SearchBar("q", placeholder: "Search…", bind:value: $search)
-list    = for row in @Filter($rows, "title", "contains", $search) { ListItem(row.title) }
-
-$tags = []
-chips = TagInput("tags", bind:value: $tags)
-\`\`\`
-
-\`bind:\` works on any form control whose spec declares a primary value prop:
-\`Input\`, \`TextArea\`, \`Select\`, \`Combobox\`, \`MultiSelect\`,
-\`Checkbox\`, \`CheckBoxGroup\`, \`Switch\`, \`ToggleGroup\`, \`Slider\`,
-\`NumberInput\`, \`DatePicker\`, \`DateRangePicker\`, \`TimePicker\`,
-\`DateTimePicker\`, \`SearchBar\`, \`PinInput\`, \`PasswordInput\`,
-\`TagInput\`, \`MentionInput\`, \`MaskedInput\`, \`RichTextEditor\`,
-\`CodeEditor\`, \`ColorPicker\`, \`Rating\` (when \`interactive: true\`),
-\`Pagination\` (binds \`page\`).`;
-}
 
 function fullJsEscape(): string {
   return `## JS escape hatch — \`js{ … }\`
@@ -1164,9 +1161,9 @@ action reset() { $name = ""   $email = ""   $message = ""   $sent = false }
 formCard = Card([
   CardHeader("Get in touch", subtitle: "We typically reply within one business day."),
   Form("contact", btns, [
-    FormControl("Name",    Input("name",    placeholder: "Your name",       bind:value: $name)),
-    FormControl("Email",   Input("email",   placeholder: "you@example.com", type: "email", bind:value: $email)),
-    FormControl("Message", TextArea("message", placeholder: "Tell us more…", rows: 4, bind:value: $message))
+    FormControl("Name",    Input("name",    placeholder: "Your name",       value: $name)),
+    FormControl("Email",   Input("email",   placeholder: "you@example.com", type: "email", value: $email)),
+    FormControl("Message", TextArea("message", placeholder: "Tell us more…", rows: 4, value: $message))
   ])
 ])
 
