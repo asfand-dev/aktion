@@ -1178,6 +1178,9 @@ The suite covers:
 - One-positional-max enforcement (`tests/suis2-one-positional.test.ts`).
 - Component prop aliases (`tests/suis2-prop-aliases.test.ts`).
 - Icon rendering (`tests/icons.test.ts`).
+- Language concept coverage — computed values, math, lambdas,
+  hoisting, i18n, `Theme({...})`, `for` extensions, user components,
+  reactive state edge cases (`tests/language-concepts.test.ts`).
 
 ### Build the documentation site
 

@@ -38,6 +38,7 @@ import {
   Router,
   createContext,
   createLocalStorageAdapter,
+  disposeContext,
   planProgram,
   isThemeNode,
   type RouteChangeDetail,
@@ -360,6 +361,7 @@ export class AktionElement extends HTMLElement {
 
   disconnectedCallback(): void {
     this.effectRunner.reset();
+    if (this.context) disposeContext(this.context);
     this.router.stop();
   }
 
@@ -783,6 +785,10 @@ export class AktionElement extends HTMLElement {
 
   private replan(): void {
     this.effectRunner.reset();
+    // Drop any state-store subscribers / cleanup callbacks the previous
+    // context attached (computed-state derivations, …) so they don't
+    // accumulate across replans.
+    if (this.context) disposeContext(this.context);
     this.context = createContext(this.state, {
       router: this.router,
       library: this.library,

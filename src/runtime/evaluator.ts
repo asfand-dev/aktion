@@ -188,6 +188,15 @@ export interface EvaluationContext {
    * the script instead of returning the deferred payload.
    */
   jsBlockExecutor?: (body: string, args?: Record<string, unknown>) => unknown;
+  /**
+   * Cleanup callbacks attached to this context. Populated during
+   * `planProgram` for resources that outlive a single evaluation pass —
+   * notably the state-store subscription that re-derives computed
+   * `$state = expr` atoms when their dependencies change. The host
+   * (`element.replan()`) drains this array via `disposeContext` before
+   * creating a fresh context so subscribers don't leak across replans.
+   */
+  disposers: Array<() => void>;
 }
 
 /**
@@ -230,7 +239,27 @@ export function createContext(
     actionRunner: options.actionRunner,
     notify: options.notify,
     jsBlockExecutor: options.jsBlockExecutor,
+    disposers: [],
   };
+}
+
+/**
+ * Drain every cleanup callback attached to `ctx.disposers`. Safe to call
+ * multiple times — each callback is invoked at most once even if it
+ * throws (the array is cleared up-front so a faulty disposer can't
+ * prevent siblings from running).
+ */
+export function disposeContext(ctx: EvaluationContext): void {
+  const disposers = ctx.disposers;
+  ctx.disposers = [];
+  for (const dispose of disposers) {
+    try {
+      dispose();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[aktion] context disposer threw", err);
+    }
+  }
 }
 
 /**
@@ -364,11 +393,167 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
     }
   }
 
-  // Second pass: install bindings for components, helpers, and any other
-  // non-state declarations.
+  // Second pass: install bindings for components, helpers, actions,
+  // effects, and any other non-state declarations.
+  //
+  // We do this *before* the computed-state pass so a derivation like
+  // `$hello = greet("Ada")` (where `greet` is a top-level lambda) or
+  // `$result = MyAction(…)` resolves the forward reference correctly
+  // — bindings and action declarations are registered lazily, so it's
+  // cheap to install them up-front, and doing so removes a streaming
+  // ordering hazard that would otherwise leave `$hello` stuck on `null`
+  // if `greet` happened to be declared later in source order.
   for (const stmt of program.statements) {
     installStatementBinding(stmt, ctx);
   }
+
+  // 1.75 pass: computed `$state = expr` atoms whose RHS is *not* a pure
+  // literal. The literal pass above seeded these slots with `null`
+  // because `evaluateLiteral` is intentionally conservative; without
+  // this follow-up pass the user-visible value would stay `null` for
+  // every program that uses derived state (`$total = @Sum($cart.price)`,
+  // `$subtotal = @Sum($lines)`, `$shipping = if … else …`, …) — exactly
+  // the pattern the language spec advertises as "computed values".
+  //
+  // We also wire each derivation up to the state store so the value
+  // re-derives reactively whenever any of the `$variables` it reads
+  // changes. The dependency set is recaptured on every recompute so
+  // expressions that take conditional branches (`$x = if $on { $a } else { $b }`)
+  // stay correct after the branch condition flips.
+  installComputedStateDerivations(program, ctx);
+}
+
+/**
+ * Bookkeeping for one `$state = expr` declaration whose RHS is computed
+ * (i.e. *not* a pure literal value). Each entry knows which $variables
+ * the most recent evaluation read so the re-derivation subscriber can
+ * check overlap with the changed-name set without re-walking the AST.
+ */
+interface ComputedDerivation {
+  name: string;
+  expr: Expression;
+  deps: Set<string>;
+}
+
+/** Maximum depth limit for cascade resolution within a single flush. */
+const COMPUTED_DERIVATION_MAX_DEPTH = 8;
+
+function installComputedStateDerivations(
+  program: Program,
+  ctx: EvaluationContext,
+): void {
+  const computed: ComputedDerivation[] = [];
+
+  const recompute = (entry: ComputedDerivation): void => {
+    const tracker = new Set<string>();
+    const previousTracker = ctx.trackedState;
+    ctx.trackedState = tracker;
+    try {
+      const value = evaluate(entry.expr, ctx);
+      ctx.state.set(entry.name, value);
+    } finally {
+      ctx.trackedState = previousTracker;
+    }
+    entry.deps = tracker;
+  };
+
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
+    if (isPureLiteralExpression(stmt.expression)) continue;
+    if (isHttpResourceCall(stmt.expression)) continue; // already handled in 1.25 pass
+    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // Http()/i18n()
+
+    const entry: ComputedDerivation = {
+      name: stmt.identifier,
+      expr: stmt.expression,
+      deps: new Set(),
+    };
+    computed.push(entry);
+    recompute(entry);
+  }
+
+  if (computed.length === 0) return;
+
+  // Cascade-aware re-derivation. When a dependency of any derivation
+  // changes, recompute every dependent derivation in declaration order.
+  // If a recompute itself produces a fresh value we widen the changed
+  // set and run another pass — this lets `$a → $b → $c` chains settle
+  // synchronously inside a single flush instead of leaking stale values
+  // through to the renderer for one extra frame.
+  let recomputing = false;
+  const unsubscribe = ctx.state.subscribe((changed) => {
+    if (recomputing) return;
+    recomputing = true;
+    try {
+      const propagated = new Set<string>(changed);
+      for (let depth = 0; depth < COMPUTED_DERIVATION_MAX_DEPTH; depth += 1) {
+        let progressed = false;
+        for (const entry of computed) {
+          let needs = false;
+          for (const dep of entry.deps) {
+            if (propagated.has(dep)) {
+              needs = true;
+              break;
+            }
+          }
+          if (!needs) continue;
+          const before = ctx.state.get(entry.name);
+          recompute(entry);
+          if (ctx.state.get(entry.name) !== before) {
+            propagated.add(entry.name);
+            progressed = true;
+          }
+        }
+        if (!progressed) break;
+      }
+    } finally {
+      recomputing = false;
+    }
+  });
+
+  ctx.disposers.push(unsubscribe);
+}
+
+/**
+ * `true` when `expr` evaluates to the same value regardless of context —
+ * literals, arrays of pure values, objects of pure values, and template
+ * strings without interpolation. These don't need a re-evaluation pass
+ * because the literal-default seed already produced their final value.
+ */
+function isPureLiteralExpression(expr: Expression): boolean {
+  switch (expr.kind) {
+    case "Literal":
+      return true;
+    case "Array":
+      return expr.elements.every(
+        (el) => el.kind !== "Spread" && isPureLiteralExpression(el),
+      );
+    case "Object":
+      return expr.properties.every(
+        (prop) => !prop.spread && isPureLiteralExpression(prop.value),
+      );
+    case "Template":
+      return expr.expressions.length === 0;
+    default:
+      return false;
+  }
+}
+
+/** `true` for `http({...})` resource declarations (handled in 1.25 pass). */
+function isHttpResourceCall(expr: Expression): boolean {
+  return expr.kind === "Call" && expr.callee === "http";
+}
+
+/** `true` for `$http = Http({...})` / `$i18n = i18n({...})` setups (handled in 1.5 pass). */
+function isRuntimeSetupCall(identifier: string, expr: Expression): boolean {
+  if (expr.kind !== "Call") return false;
+  if (expr.callee === "Http" && (identifier === "http" || identifier === "$http")) {
+    return true;
+  }
+  if (expr.callee === "i18n" && (identifier === "i18n" || identifier === "$i18n")) {
+    return true;
+  }
+  return false;
 }
 
 function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {

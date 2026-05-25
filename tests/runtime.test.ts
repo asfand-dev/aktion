@@ -398,9 +398,14 @@ describe("StateStore behaviour", () => {
     expect(state.has("count")).toBe(false);
   });
 
-  it("non-literal state defaults resolve to null (not undefined)", () => {
+  it("non-literal state initializers are computed against the current store", () => {
+    // Computed `$state = expr` atoms (`$total = @Count($rows)`) re-derive
+    // against the current state — see the "Computed values" section of
+    // the language skill. Forward references resolve because every
+    // `$state` slot is declared (with a literal default) before the
+    // computed-derivation pass runs.
     const { state } = buildContext(`$total = @Count($rows)\n$rows = [1, 2]`);
-    expect(state.get("total")).toBeNull();
+    expect(state.get("total")).toBe(2);
   });
 });
 
