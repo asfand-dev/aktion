@@ -42,7 +42,7 @@ HTML, or no framework at all.
 - [Themes](#themes)
 - [Icons](#icons)
 - [Routing](#routing)
-- [Built-in globals (`Storage`, `console`)](#built-in-globals)
+- [Built-in globals (`storage`, `console`)](#built-in-globals)
 - [Internationalization (`i18n`)](#internationalization)
 - [System prompt generator](#system-prompt-generator)
 - [Tooling](#tooling)
@@ -61,26 +61,35 @@ HTML, or no framework at all.
 Everything you need at runtime ships in a single bundle:
 
 - **A streaming-first parser.** Line-oriented, error-tolerant. Each
-  statement commits to the DOM as soon as it arrives. The surface syntax is
-  standard JavaScript — `function` declarations, `for...of`, `if/else`,
-  `switch/case`, template literals with `${expression}` interpolation, arrow
-  functions, and object-literal named arguments.
-- **One reactive atom kind.** Declare any reactive state with `$name = value`
-  and read or write it with `$name`. The runtime tracks dependencies
-  automatically. Template literals, spread, bracket access, optional
-  chaining, nullish coalescing, expression-form `if` / `switch` / `for`,
-  lambdas (`(p) => …`), automatic two-way binding via direct state refs
-  (and member chains rooted at one — `value: $form.email`), and **30+
-  pure `@`-functions** (`@Filter`, `@Sort`, `@Find`, `@GroupBy`,
-  `@Format`, `@FormatDate`, `@Plural`, `@Case`, `@Range`, `@Pick`, …).
+  statement commits to the DOM as soon as it arrives. The surface syntax
+  is a **strict subset of JavaScript** — `function` declarations,
+  `for...of`, `if/else`, `switch/case`, template literals with
+  `${expression}` interpolation, arrow functions, default parameters,
+  destructuring, spread, optional chaining (`a?.b`), nullish coalescing
+  (`a ?? b`), and object-literal named arguments. Every Aktion program
+  is valid JavaScript.
+- **One reactive atom kind.** Declare any reactive state with
+  `$name = value` and read or write it with `$name`. The `$` prefix is
+  the only thing that makes a binding reactive — `let` / `const` /
+  `var` keywords are optional and have no effect on reactivity. The
+  runtime tracks dependencies automatically. Automatic two-way binding
+  via direct state refs (and member chains rooted at one —
+  `value: $form.email`), and **30+ pure `@`-functions** (`@Filter`,
+  `@Sort`, `@Find`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`,
+  `@Case`, `@Range`, `@Pick`, …).
+- **One component-call shape.** Every call follows the trailing-object
+  rule — `Component(positionalArg, { prop: value, … })`. At most one
+  positional argument; every other argument goes in a trailing
+  `{ }` object literal.
 - **One HTTP primitive.** `http({ url, method, headers, body, query, ... })`
   is the only network call. It returns a reactive resource bag exposing
   `data | error | status | loading | headers | lastUpdated`, plus the
   callables `refetch()` and `cancel()`. Re-runs automatically when any
   reactive input in the options object changes.
-- **`Storage` and `console` globals.** Always in scope. `Storage.set/get`
-  (localStorage by default), `Storage.session.*`, `Storage.cookies.*` with
-  object-literal options, and `console.log/error/warn/info/debug`.
+- **`storage` and `console` globals.** Always in scope, no import,
+  lowercase. `storage.set/get` (localStorage by default),
+  `storage.session.*`, `storage.cookies.*` with object-literal options,
+  and `console.log/error/warn/info/debug`.
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -90,33 +99,41 @@ Everything you need at runtime ships in a single bundle:
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
   editors, advanced UI, and standard helpers. See [Component library](#component-library).
 - **Declarative side effects.** `effect(() => { body }, [...deps])` for
-  background work — anonymous blocks where the dependency list mixes state
-  triggers (`$atom`), lifecycle triggers (`"mount"`, `"unmount"`,
+  background work — anonymous blocks where the dependency list mixes
+  state triggers (`$atom`), lifecycle triggers (`"mount"`, `"unmount"`,
   `"every(N)"`), and rate-limit modifiers (`"debounce(N)"`,
   `"throttle(N)"`). `effect(() => { … })` with no dependency array is
-  equivalent to `effect(() => { … }, ["mount"])`. Declare an effect **at
-  the top level** for program-wide work, or **inside a component function
-  body** to scope it to a single instance — timers, watched atoms, and
-  `cleanup(fn)` registrations tear down when the component leaves the tree.
-  `function name(args) { … }` (camelCase) declares an action — click-driven
-  mutations that may optionally `return` a value.
-- **A built-in router.** `pages = Router({ "/path": Component(), "/users/:id": UserPage({ id: params.id }), default: NotFound() })` plus
-  `NavLink(label, { to })` and a reserved `route` handle that exposes
-  `route.path`, `route.params`, `route.query`, `route.pattern`,
-  and `route.navigate("/path")`. Hash-based, framework-agnostic,
-  always wired up.
+  equivalent to `effect(() => { … }, ["mount"])`. Declare an effect
+  **at the top level** for program-wide work, or **inside a component
+  function body** to scope it to a single instance — timers, watched
+  atoms, and `cleanup(fn)` registrations tear down when the component
+  leaves the tree. `function name(args) { … }` (camelCase) declares an
+  action — click-driven mutations that may optionally `return` a value.
+- **Outbound events.** `emit("name", { detail })` dispatches a
+  `CustomEvent` on the host element from inside any action / effect /
+  lambda body. The host listens with
+  `el.addEventListener("name", …)`.
+- **A built-in router.**
+  `pages = Router({ "/path": Component(), "/users/:id": UserPage({ id: params.id }), default: NotFound() })`
+  plus `NavLink(label, { to })` and a reserved `route` handle that
+  exposes `route.path`, `route.params`, `route.query`, `route.pattern`,
+  and `route.navigate("/path")`. Hash-based, framework-agnostic, always
+  wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`,
   `brutalist`, `skyline`) plus full custom-token support via CSS custom
   properties. **50+ design tokens** organised into `colors`, `radius`,
-  `font`, `motion`, and `elevation` groups. Brand the UI from inside the
-  script with `aktion.theme = Theme({...})`.
+  `font`, `motion`, and `elevation` groups. Brand the UI from inside
+  the script with `theme = Theme({...})`.
 - **`i18n` runtime.** `$i18n = i18n({ locale, messages, fallback })` plus
   a global `t("key", vars?)` builtin and a `Locale()` helper that feeds
   the active locale into `@Format` / `@FormatDate`.
 - **Font Awesome 6.7.2** auto-loaded — every `icon` prop accepts a Free
-  Font Awesome name (no `fa-` prefix). Use `Icon(name, variant?, size?)`
+  Font Awesome name (no `fa-` prefix). Use `Icon(name, { variant?, size? })`
   for standalone glyphs. Variant prefixes supported: `"regular:star"`,
   `"brands:github"`.
+- **Markup escape hatches.** `HTMLTag(tag, { attributes?, children? })`
+  and `Styles(css)` are the last-resort raw-HTML / raw-CSS injectors
+  when no standard component captures the design.
 - **A system prompt generator.** Emits a clean, ordered prompt teaching
   the LLM exactly which components, builtins, and tools are available.
   Two flavours ship: `system_prompt.txt` (full — every feature) and
@@ -398,18 +415,32 @@ aktion = pages
 
 ### Key constructs
 
-- `aktion = …` — the reserved entry point. Every program renders from it.
+- `aktion = …` — the reserved entry point. Every program renders from
+  it.
 - `$name = value` — reactive state. One kind. Read or write with the
   same sigil. Inside action / effect / lambda bodies, assignment
   operators (`= += -= *= /= ??= ++ --`) are all allowed.
   `let/const/var` are optional and do not affect reactivity — only the
   `$` prefix makes a value reactive.
+- **Component-call shape** — every call follows the trailing-object
+  rule:
+
+  ```js
+  Component(positionalArg, { prop: value, … })
+  ```
+
+  Each component accepts **at most one positional argument** (typically
+  the title, children array, or primary value); every other argument
+  goes in a trailing `{ }` object literal. This is the *only* call
+  shape — `Button("Save", "primary", true)` is a schema error; write
+  `Button("Save", { variant: "primary", loading: true })` instead.
 - `function Name(p = default) { return Expression }` — PascalCase name
   means it's a component. Parameters use standard JS defaults (`=`).
   Inside the body, `$x = expr` is a **declaration**: the initializer
   runs once when the instance first mounts, and re-renders preserve
   whatever value the user (or an action / effect) has written.
-  **Always** end with an explicit `return`.
+  **Always** end with an explicit `return`. Components do not have a
+  `props` object — every parameter is a real JS parameter.
 - `function name(args) { body }` — camelCase name means it's an action.
   Callable effects with optional `return`. Used as event handlers
   (`onClick: save`) or as expressions (`$result = greet("Ada")`).
@@ -418,31 +449,69 @@ aktion = pages
   lifecycle / interval triggers (`"mount"`, `"unmount"`, `"every(N)"`),
   and rate-limit modifiers (`"debounce(N)"`, `"throttle(N)"`).
   `effect(() => { … })` (no second argument) is equivalent to
-  `effect(() => { … }, ["mount"])`. Declare at the program top level for
-  global work, or inside a component function body to scope the effect
-  to that instance — the runtime mounts it on first render and tears
-  down its timers / subscriptions / `cleanup(fn)` handlers when the
-  instance leaves the tree.
-- Standard JS control flow: `if (cond) { … } else { … }`,
-  `switch (expr) { case "a": A(); break; default: Else() }`,
-  `for (let x of xs) { Row(x) }`.
+  `effect(() => { … }, ["mount"])`. Declare at the program top level
+  for global work, or inside a component function body to scope the
+  effect to that instance — the runtime mounts it on first render and
+  tears down its timers / subscriptions / `cleanup(fn)` handlers when
+  the instance leaves the tree.
+- `emit("name", { detail })` — dispatch an outbound `CustomEvent` on
+  the host element. Call from any action / effect / lambda body
+  whenever the surrounding host page needs to react to a user
+  interaction.
+- Standard JS control flow as **expressions** — `if`, `switch`, and
+  `for` evaluate to a value, so they can be assigned directly to a
+  binding or passed as a child:
+
+  ```js
+  banner   = if ($error) { ErrorAlert($error) } else { Notice("All good") }
+  view     = switch ($tab) {
+    case "list":  ListView($items); break
+    case "grid":  GridView($items); break
+    default:      EmptyState("Pick a view")
+  }
+  rows     = for (let item of $items) { Row(item) }
+  ```
 - `http({ url, method, headers, body, query, ... })` — the only network
   primitive. Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
   `.cancel()`.
 - `pages = Router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
-  reactive surface and a `navigate("/path")` method; each arm body
-  additionally receives a scoped `params` loop var with its captures.
+  reactive surface (`route.path`, `route.params`, `route.query`,
+  `route.pattern`) and a `route.navigate("/path")` method; each arm
+  body additionally receives a scoped `params` loop var with its
+  captures.
 - Two-way binding is implicit: pass a `$variable` (or a member chain
   rooted at one — `value: $form.email`) as an input prop and the
   runtime wires it both ways.
 - Lambdas `(args) => expr` with standard default parameters
-  (`(x = 0) => x + 1`).
-- `emit("name", { detail })` — dispatch an outbound `CustomEvent` on the
-  host element.
-- Comments: `//` line comments and `/* block */` comments — standard JS
-  style.
+  (`(x = 0) => x + 1`). Lambdas with `{ }` bodies are action-style
+  blocks and may `return`.
+- **Built-in `@`-functions** — pure, side-effect-free helpers for data
+  shaping, formatting, dates, math, and strings (`@Filter`, `@Sort`,
+  `@Map`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`, `@Range`,
+  `@AddDays`, `@Pick`, `@Count`, …). Never carry hidden state — safe
+  to call anywhere.
+- **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
+  raw HTML elements and `Styles(css)` for raw CSS injected into the
+  shadow root. Use only when the standard component library cannot
+  express the design.
+- **Hoisting & streaming** — references resolve from the entire
+  top-level scope, not source order. Always emit `aktion = …` first
+  so the reconciler has the page shell to attach streamed leaves to.
+- Comments: `//` line comments and `/* block */` comments — standard
+  JS style.
+
+#### Built-in globals at a glance
+
+| Global    | Purpose                                                              |
+| --------- | -------------------------------------------------------------------- |
+| `storage` | Browser persistence — `storage.set/get`, `storage.session.*`, `storage.cookies.*`. |
+| `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
+| `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
+
+Both `storage` and `console` are **lowercase**; the `route` handle is
+**reserved** (never declare a state slot named `route`).
 
 ### The 60-second pitch
 
@@ -712,11 +781,11 @@ el.setTheme({
 ### `Theme({...})` from inside a response
 
 A response can brand itself by assigning a `Theme({...})` call to the
-reserved `aktion.theme` binding. The tokens land on the host as CSS
+reserved top-level `theme` binding. The tokens land on the host as CSS
 variables on top of the base theme.
 
 ```js
-aktion.theme = Theme({
+theme = Theme({
   colors: {
     primary: "#0969da",
     border:  "#d0d7de",
@@ -770,8 +839,8 @@ shadow root. Host apps do **not** need to add a stylesheet.
   `"circle-check"`, `"triangle-exclamation"`, `"sack-dollar"`.
 - Optional variant prefix: `"regular:star"`, `"brands:github"`. The
   default variant is `solid`.
-- Use the dedicated `Icon(name, variant?, size?)` component to render a
-  standalone glyph (`size` ∈ `xs`, `sm`, `md`, `lg`, `xl`).
+- Use the dedicated `Icon(name, { variant?, size? })` component to render
+  a standalone glyph (`size` ∈ `xs`, `sm`, `md`, `lg`, `xl`).
 - Every component prop named `icon` — `NavLink`, `SidebarItem`, `Banner`,
   `Notification`, `FeatureItem`, `Badge`, `StatCard`, `ListItem`,
   `TimelineItem`, `DescriptionItem`, `Tile`, `EmptyState`, … — expects a
@@ -781,7 +850,7 @@ shadow root. Host apps do **not** need to add a stylesheet.
   proper icon.
 
 ```js
-brandIcon  = Icon("rocket", "solid", "lg")
+brandIcon  = Icon("rocket", { variant: "solid", size: "lg" })
 homeIcon   = Icon("house")
 profileTab = NavLink("Profile", { to: "/profile", variant: "ghost", icon: "user" })
 kpis       = Stats([
@@ -850,18 +919,18 @@ program — no import required. Both follow the standard
 `obj.method(args)` method-call syntax and accept object-literal options.
 
 ```js
-// localStorage is the default; `Storage.local` is its alias.
-Storage.set("name", "John")
-$name = Storage.get("name")
+// localStorage is the default; `storage.local` is its alias.
+storage.set("name", "John")
+$name = storage.get("name")
 
 // Per-tab sessionStorage.
-Storage.session.set("draft", $draft)
-$draft = Storage.session.get("draft")
+storage.session.set("draft", $draft)
+$draft = storage.session.get("draft")
 
 // Cookies — options as an object literal.
-Storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
-$user = Storage.cookies.get("user")
-Storage.cookies.remove("user", { path: "/" })
+storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$user = storage.cookies.get("user")
+storage.cookies.remove("user", { path: "/" })
 
 // Forwards to the host console.
 console.log("Hello", $user)
@@ -1040,7 +1109,7 @@ The full catalog with tag filters lives at
 │   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner
 │   │   ├── http.ts            #     http({...}) reactive HTTP primitive + interceptors
 │   │   ├── i18n.ts            #     $i18n runtime + t() / Locale() builtins
-│   │   ├── storage.ts         #     Storage.local / .session / .cookies bridge
+│   │   ├── storage.ts         #     storage.local / .session / .cookies bridge
 │   │   ├── console.ts         #     console.* host bridge
 │   │   └── router.ts          #     Hash-based router for Router({…}) calls and NavLink
 │   ├── library/               #   Component specs and registry

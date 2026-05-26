@@ -27,7 +27,11 @@
         <span class="hero-eyebrow">Reference</span>
         <h1>Aktion language.</h1>
         <p class="lead">
-          A compact, line-oriented language designed for LLMs. A program is a
+          A compact, line-oriented language designed for LLMs &mdash;
+          <strong>every Aktion program is valid JavaScript</strong>. The
+          surface syntax is a strict subset of JS (functions, arrows, template
+          literals, destructuring, spread, optional chaining, &hellip;), so
+          everything not modelled by the language is just JS. A program is a
           flat list of <code>name = expression</code> statements. The parser
           is error-tolerant &mdash; invalid lines are dropped and valid lines
           render immediately as they stream in.
@@ -75,7 +79,7 @@ $activeUsers = 12540</code></pre>
           <tr><td>Theme override</td><td><code>theme = Theme({ tokens })</code></td><td>Top-level binding named <code>theme</code> &mdash; the runtime detects it and applies the tokens as CSS custom properties.</td></tr>
           <tr><td>i18n config</td><td><code>$i18n = i18n({ &hellip; })</code></td><td>Configures internationalization &mdash; messages, locale, fallback.</td></tr>
           <tr><td>HTTP defaults</td><td><code>$http = Http({ &hellip; })</code></td><td>Optional response-wide defaults (base URL, headers, retry).</td></tr>
-          <tr><td>Comment</td><td><code>// text</code></td><td>Whole-line comment; ignored by the parser.</td></tr>
+          <tr><td>Comment</td><td><code>// text</code> or <code>/* &hellip; */</code></td><td>Line or block comment; ignored by the parser.</td></tr>
         </tbody>
       </table>
 
@@ -139,7 +143,7 @@ function increment() {
       <ul>
         <li><strong>Render position</strong> (top-level bindings, component body output, prop values): assignment is forbidden. Use <code>$name = &hellip;</code> declarations to seed.</li>
         <li><strong>Inside <code>function</code> / <code>effect</code> / lambda bodies</strong>: <code>= += -= *= /= ??= ++ --</code> are allowed against any <code>$name</code> atom.</li>
-        <li><strong>Nested writes require whole-object replacement.</strong> Direct <code>$user.name = "Alex"</code> is rejected &mdash; spread instead: <code>$user = { ...$user, name: "Alex" }</code>. Arrays follow the same rule: <code>$todos = [...$todos, item]</code>, <code>$todos = @Filter($todos, "id", "!=", id)</code>.</li>
+        <li><strong>Nested writes are first-class.</strong> Member-target assignment works on any atom rooted at <code>$name</code>: <code>$user.name = "Alex"</code>, <code>$cart.items[0].qty += 1</code>. The runtime rebuilds the top-level reference immutably so every subscriber wakes up. Spread-then-replace (<code>$user = { ...$user, name: "Alex" }</code>) and <code>@Filter</code>-style rewrites still work and read just as cleanly &mdash; pick whichever is shorter for the call site.</li>
       </ul>
 
       <h3>Component-scoped state</h3>
@@ -218,7 +222,7 @@ $orders.cancel()     // abort in-flight request</code></pre>
 })</code></pre>
 
       <h2 id="components">Components and lambdas</h2>
-<pre><code>function UserCard(user, tone = "default") {
+<pre><code>function UserCard(user, { tone = "default" } = {}) {
   $hover = false
   return Card([
     Avatar(user.name, { size: "md" }),
@@ -229,22 +233,82 @@ $orders.cancel()     // abort in-flight request</code></pre>
 }
 
 aktion = Stack([
-  UserCard($alice),                                  // positional arg
-  UserCard($bob, { tone: "primary" }),               // named arg
-  UserCard({ user: $carol, tone: "warning" })        // both named
+  UserCard($alice),                            // positional arg only
+  UserCard($bob,   { tone: "primary" }),       // positional + trailing options
+  UserCard($carol, { tone: "warning" })
 ])</code></pre>
 
-      <ul>
-        <li>Components <strong>must</strong> end with an explicit <code>return Expr</code>.</li>
-        <li>Defaults use <code>= expression</code> in the parameter list (literal or computed in the component's scope).</li>
-        <li><code>children</code> is the implicit named slot &mdash; the trailing positional argument is delivered as <code>children</code> inside the body.</li>
-      </ul>
+      <h3>The five component rules</h3>
+      <ol>
+        <li><strong>PascalCase name.</strong> The leading capital letter is what marks a function as a component. <code>function counter(...)</code> with a lowercase name is an action, not a component.</li>
+        <li><strong>One positional argument max.</strong> Take at most one positional parameter &mdash; typically the title, primary value, or children array. Everything else goes in the trailing options object.</li>
+        <li><strong>Trailing options object.</strong> Named props always sit in a single trailing <code>{ }</code> object literal &mdash; both at the call site (<code>Button("Save", { variant: "primary" })</code>) and in the parameter list (<code>function Card(title, { children = [], padding = "m" } = {})</code>). Use destructuring with <code>=</code> defaults for fallbacks.</li>
+        <li><strong>Explicit <code>return</code>.</strong> The last statement must be <code>return &lt;expression&gt;</code>. Without it, the component renders as nothing.</li>
+        <li><strong>Per-instance state lives in the body.</strong> Any <code>$name = value</code> declared inside the function body is private to that instance &mdash; two <code>Counter()</code> siblings each get their own atom.</li>
+      </ol>
+
+      <h3>Why the trailing-object pattern</h3>
+      <p>
+        Library components like <code>Button</code>, <code>StatCard</code>,
+        and <code>Stack</code> have many optional props (<code>variant</code>,
+        <code>tone</code>, <code>loading</code>, <code>disabled</code>,
+        <code>icon</code>, <code>size</code>, <code>onClick</code>, &hellip;).
+        Listing them all positionally would be unreadable. The trailing
+        object lets every call site read like English:
+      </p>
+<pre><code>// ✅ Self-documenting — props say what they mean.
+StatCard("Revenue", {
+  value:  "$48k",
+  trend:  "up",
+  delta:  "+12%",
+  icon:   "sack-dollar"
+})
+
+// ❌ Multi-positional — order matters, meaning is hidden, schema validator rejects.
+StatCard("Revenue", "$48k", "up", "+12%", "sack-dollar")</code></pre>
+
+      <p>
+        The runtime also accepts a <em>leading</em> props object for
+        components that take children as the trailing positional
+        (<code>Grid({ columns: 12 }, [Card1(), Card2()])</code>); both forms
+        route through the same slot mapping.
+      </p>
 
       <h3>Local helpers &mdash; lambda form</h3>
       <p>Use a lambda binding for one-off helpers that don't need their own component:</p>
-<pre><code>priorityTone = (p) =&gt; switch (p) { case "high": "danger"; break; case "med": "warning"; break; default: "muted" }
+<pre><code>priorityTone = (p) =&gt; p === "high" ? "danger" : p === "med" ? "warning" : "muted"
 rowFor       = (item) =&gt; Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
 list         = for (let item of $items) { rowFor(item) }</code></pre>
+      <p>
+        Lambdas with <code>{ }</code> bodies are action-style blocks and may
+        <code>return</code> a value (<code>(x) =&gt; { $count += 1; return x * 2 }</code>).
+        Lambdas with bare-expression bodies (<code>(x) =&gt; x * 2</code>)
+        evaluate the expression and return it directly.
+      </p>
+
+      <h2 id="emit">Outbound events &mdash; <code>emit()</code></h2>
+      <p>
+        <code>emit("name", { detail })</code> dispatches a
+        <code>CustomEvent</code> on the host <code>&lt;aktion-app&gt;</code>
+        element. Use it from any action / effect / lambda body whenever the
+        surrounding host page needs to react &mdash; analytics, opening a
+        modal in the host UI, telling the LLM the user clicked something.
+        The host listens with <code>el.addEventListener("name", e =&gt; &hellip;)</code>.
+      </p>
+<pre><code>function saveOrder(payload) {
+  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  emit("order:saved", { id: payload.id })
+}
+
+function selectRow(row) {
+  $selected = row
+  emit("row:selected", { row })
+}</code></pre>
+      <p>
+        The detail object is delivered as <code>event.detail</code> in the
+        host listener. Skip the second argument if you don't need to send
+        any payload.
+      </p>
 
       <h2 id="actions">Actions</h2>
       <p>
@@ -503,12 +567,43 @@ Text(t("orders.greeting", { name: $userName }))  // "Welcome back, Alex"</code><
 
       <h2 id="js-escape">Inline JavaScript</h2>
       <p>
-        JavaScript code runs inline inside <code>function</code>,
-        <code>effect</code>, and lambda bodies &mdash; no wrapper syntax
-        is needed. Use it sparingly for browser APIs not exposed
-        natively (clipboard, keyboard listeners, IntersectionObserver,
-        audio, custom DOM work).
-        See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.
+        Because Aktion is a strict subset of JavaScript, every browser API
+        is directly accessible inside <code>function</code>,
+        <code>effect</code>, and lambda bodies &mdash; no wrapper syntax,
+        no escape hatch, no special prefix needed. Use it for clipboard,
+        keyboard listeners, <code>IntersectionObserver</code>, audio,
+        focus management, drag-and-drop, custom DOM work, and anything
+        else the standard library doesn't model.
+      </p>
+<pre><code>function copyShareLink() {
+  navigator.clipboard.writeText(window.location.href)
+  emit("assistant-message", { message: "Link copied" })
+}
+
+effect(() =&gt; {
+  const onKey = (e) =&gt; {
+    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+      $paletteOpen = true
+      e.preventDefault()
+    }
+  }
+  document.addEventListener("keydown", onKey)
+  cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+}, ["mount"])
+
+function generateId() {
+  return crypto.randomUUID()
+}</code></pre>
+      <p>
+        Standard ES facilities &mdash; <code>Array.prototype.map/filter/reduce</code>,
+        destructuring, spread, template literals, optional chaining,
+        nullish coalescing, default parameters, rest parameters,
+        <code>JSON.parse/stringify</code>, <code>Math.*</code> &mdash; are
+        always available. Reach for the <code>@</code>-builtins or library
+        components only when they read more cleanly than the pure-JS
+        equivalent. See the
+        <a href="javascript-interactions.html">JavaScript interactions guide</a>
+        for the full <code>ctx</code> bridge surface.
       </p>
 
       <h2 id="escape-hatches">Markup escape hatches &mdash; <code>HTMLTag</code> &amp; <code>Styles</code></h2>
@@ -521,7 +616,7 @@ Text(t("orders.greeting", { name: $userName }))  // "Welcome back, Alex"</code><
       </p>
       <ul>
         <li>
-          <code>HTMLTag(tag, attributes?, children?)</code> renders an
+          <code>HTMLTag(tag, { attributes?, children? })</code> renders an
           allow-listed HTML tag with the supplied attribute object and
           child nodes. Tag names outside the allow-list collapse to
           <code>div</code>; <code>on*</code> attributes,
@@ -579,13 +674,14 @@ aktion = AppShell(...)</code></pre>
         <li>Format: <code>"name"</code> (defaults to the solid set), e.g. <code>"house"</code>, <code>"chart-line"</code>, <code>"star"</code>, <code>"circle-check"</code>.</li>
         <li>Variants: prefix with <code>"regular:name"</code> (outline set) or <code>"brands:name"</code> (brand logos).</li>
         <li><strong>Never emit emoji characters</strong> in <code>icon</code> props.</li>
-        <li>Use the <code>Icon(name, variant?, size?)</code> component to render an icon inline.</li>
+        <li>Use the <code>Icon(name, { variant?, size? })</code> component to render an icon inline.</li>
       </ul>
 
       <h2 id="comments">Comments &amp; whitespace</h2>
       <ul>
-        <li>Whole-line comments start with <code>//</code>.</li>
-        <li>End-of-line comments are not supported &mdash; put comments on their own line.</li>
+        <li>Line comments: <code>// rest of line</code>.</li>
+        <li>Block comments: <code>/* &hellip; */</code> &mdash; may span multiple lines.</li>
+        <li>End-of-line trailing comments are accepted (<code>$count = 0 // counter</code>).</li>
         <li>Indentation is decorative; braces and brackets drive parsing.</li>
         <li>Blank lines are ignored.</li>
       </ul>

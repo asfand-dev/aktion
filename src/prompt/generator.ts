@@ -99,17 +99,20 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(fullHeader(options.preamble));
   sections.push(fullMentalModel());
   sections.push(fullSyntax());
+  sections.push(fullComponentCalls());
   if (flags.bindings) sections.push(fullReactiveState());
   sections.push(fullComponentsAndLambdas());
   sections.push(fullActions());
   sections.push(fullEffects());
+  sections.push(fullEmit());
   if (flags.toolCalls) sections.push(fullHttp());
   sections.push(fullControlFlow());
   sections.push(fullRouting());
+  sections.push(fullStorage());
+  sections.push(fullConsole());
   sections.push(fullMarkupEscapeHatches());
   if (flags.toolCalls || flags.bindings) sections.push(fullBuiltins());
   sections.push(fullHelpers());
-  sections.push(fullGlobals());
   sections.push(fullI18n());
   sections.push(fullTheming());
   sections.push(fullIcons());
@@ -162,47 +165,66 @@ function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): str
 
 function fullHeader(preamble: string | undefined): string {
   const lead = preamble?.trim()
-    || "You are a full-stack UI engineer building **complete, working applications** in Aktion — a compact, JS-aligned declarative language for reactive, streaming-first user interfaces. Aktion is a strict subset of JavaScript: every program is valid JS syntax, but the runtime gives it reactive semantics. Treat each prompt as a request to ship a real, production-quality product surface (dashboards, CRUD apps, multi-page websites, settings consoles, inboxes, admin panels, …). Never reply with a one-shot chat card; always produce a substantial, navigable app. Respond ONLY in Aktion — no prose, no JSON, no markdown, no HTML.";
+    || "You are a full-stack UI engineer building **complete, working applications** in Aktion — a compact, declarative language whose surface syntax is a **strict subset of JavaScript**. Every Aktion program is valid JavaScript; the runtime layers reactive semantics on top. Treat each prompt as a request to ship a real, production-quality product surface (dashboards, CRUD apps, multi-page websites, settings consoles, inboxes, admin panels, …). Never reply with a one-shot chat card; always produce a substantial, navigable app. Respond ONLY in Aktion — no prose, no JSON, no markdown, no HTML.";
   return `${lead}\n\nEvery response MUST begin with \`${ROOT_NAME} = ...\` on the very first line. Use a top-level container (\`${ROOT_NAME} = AppShell(...)\` for full apps, \`${ROOT_NAME} = Stack(...)\` for landing pages, etc.) or a user-declared component (\`${ROOT_NAME} = App()\`). For multi-page apps wrap the main area in \`pages = Router({ ... })\` and reference \`pages\` from \`${ROOT_NAME}\`. Seed realistic mock data inline (5–20 plausible rows per dataset) when the host has no real backend. Wire every visible button to a camelCase function (action). Use \`$name = value\` for reactive state, \`http({ ... })\` for any data fetch, \`effect(() => { … }, [...deps])\` for lifecycle work, \`Router({ … })\` for navigation. The renderer drops invalid lines, so prefer correctness over verbosity.`;
 }
 
 function fullMentalModel(): string {
   return `## Mental model
 
-Aktion is a streaming-first, JS-aligned declarative language. A program is a
-flat list of \`name = expression\` statements using JavaScript syntax. The
-renderer evaluates them lazily, re-parses the stream on every chunk, and
-silently treats undefined references as empty — so a partially-streamed
-program renders progressively from the top.
+Aktion is a **streaming-first, JS-aligned declarative language**. A
+program is a flat list of \`name = expression\` statements written in
+standard JavaScript. The renderer evaluates them lazily, re-parses the
+stream on every chunk, and silently treats undefined references as
+empty — so a partially-streamed program renders progressively from the top.
 
-Three identifier conventions cooperate:
+**Everything you know about JavaScript is in scope.** Template literals,
+destructuring, spread, optional chaining (\`a?.b\`), nullish coalescing
+(\`a ?? b\`), ternaries (\`a ? b : c\`), arrow functions, default
+parameters, \`for...of\`, \`switch/case\`, \`if/else\`, \`let\` /
+\`const\` / \`var\`, \`return\`, array / string methods, object literals
+— all standard JS. The runtime adds three things on top:
 
-- **Plain bindings**: \`name = expression\` — a non-reactive alias. Reading
-  it never subscribes; the value is captured once when the statement runs.
-- **Reactive atoms**: \`$name = value\` — a single tracked cell. The \`$\`
-  prefix is what makes a binding reactive (the \`let\`/\`const\`/\`var\`
-  keyword does NOT affect reactivity — only the \`$\` prefix does). Reading
-  \`$name\` subscribes the surrounding component / effect; writing inside
-  a function body (action) or effect notifies subscribers.
+- A \`$\` sigil that marks reactive state (\`$count = 0\`).
+- A set of \`@\`-prefixed pure helpers (\`@Format\`, \`@Sum\`, …).
+- A component-call convention where the first argument is the canonical
+  positional slot and every other argument lives in a trailing
+  \`{ key: value }\` object literal.
+
+### Three identifier conventions
+
+- **Plain bindings**: \`name = expression\` — a non-reactive alias.
+  Reading never subscribes; the value is captured once when the
+  statement runs.
+- **Reactive atoms**: \`$name = value\` — a single tracked cell. The
+  \`$\` prefix is what makes a binding reactive (the
+  \`let\`/\`const\`/\`var\` keyword does NOT affect reactivity — only
+  the \`$\` prefix does). Reading \`$name\` subscribes the surrounding
+  component / effect; writing inside an action body or effect callback
+  notifies subscribers.
 - **Reserved built-ins**: \`${ROOT_NAME}\` (the UI root, required first
   line), \`theme\` (optional brand override), \`route\` (router-owned
   reactive surface — read \`route.path\` / \`route.params\` and call
-  \`route.navigate("/path")\` to navigate), \`$i18n\` (i18n bundle handle).
+  \`route.navigate("/path")\` to navigate), \`$i18n\` (i18n bundle handle),
+  \`$http\` (HTTP defaults via \`http({...})\`).
 
-Two conventions replace the old \`component\` / \`action\` keywords:
+### Two function conventions
+
+Naming alone selects between component and action:
 
 - \`function Name(args) { … return Expression }\` — **PascalCase** name
   means a first-class UI component with optional defaults and per-instance
-  state.
+  state. MUST end with an explicit \`return\`.
 - \`function name(args) { … }\` — **camelCase** name means an imperative
   action (side-effect block) triggered by events. MAY \`return\` a value.
 
-Effects use a function-call form:
+### One effect form
 
-- \`effect(() => { … }, [...deps])\` — declarative background work tied to a
-  component or top-level binding. Dependencies (\`$atom\`, \`"mount"\`,
-  \`"unmount"\`, \`"every(N)"\`, \`"debounce(N)"\`, \`"throttle(N)"\`) live
-  in the array.
+- \`effect(() => { … }, [...deps])\` — declarative background work tied
+  to a component or top-level binding. Dependencies (\`$atom\`,
+  \`"mount"\`, \`"unmount"\`, \`"every(N)"\`, \`"debounce(N)"\`,
+  \`"throttle(N)"\`) live in the array. \`effect(() => { … })\` with no
+  second argument is shorthand for \`effect(() => { … }, ["mount"])\`.
 
 Everything else (\`http({...})\`, \`Router({...})\`, \`Theme({...})\`,
 \`i18n({...})\`, \`Toast(...)\`, \`Stack(...)\`) is a regular function /
@@ -212,13 +234,14 @@ component call.`;
 function fullSyntax(): string {
   return `## Syntax
 
-Aktion is a strict subset of JavaScript. Source is line-oriented; **newline
-terminates a statement**. Semicolons are optional (ASI applies). \`{ … }\`
-braces open blocks (function bodies, control-flow arms, object literals).
-Indentation is purely cosmetic.
+Aktion is a strict subset of JavaScript. Source is line-oriented;
+**newline terminates a statement**. Semicolons are optional (ASI
+applies). \`{ … }\` braces open blocks (function bodies, control-flow
+arms, object literals). Indentation is purely cosmetic.
 
 ### Comments
-Only \`//\` single-line and \`/* */\` multi-line comments are supported.
+Only \`//\` single-line and \`/* … */\` multi-line comments are
+supported.
 
 ### Literals
 - Strings: \`"double"\` or \`'single'\`. Standard newline / tab / quote
@@ -229,8 +252,9 @@ Only \`//\` single-line and \`/* */\` multi-line comments are supported.
 - Numbers: \`42\`, \`-3.14\`, \`1_000_000\` (underscores allowed).
 - Booleans: \`true\`, \`false\`. Null: \`null\`.
 - Arrays: \`[1, 2, 3]\`, \`[Card1(), Card2()]\` — heterogeneous, multi-line OK.
-- Objects: \`{ name: "Ada", role: "Engineer" }\` — keys are bare identifiers
-  or quoted strings; commas optional between rows on separate lines.
+- Objects: \`{ name: "Ada", role: "Engineer" }\` — keys are bare
+  identifiers or quoted strings; commas optional between rows on
+  separate lines.
 
 ### Operators
 - Arithmetic: \`+ - * / %\`, unary \`-\`.
@@ -239,12 +263,14 @@ Only \`//\` single-line and \`/* */\` multi-line comments are supported.
 - Ternary: \`cond ? a : b\`.
 - Spread \`...\` in arrays and objects: \`[...$a, ...$b]\`,
   \`{ ...$cur, status: "done" }\`.
-- Member access: \`obj.field\`, \`obj["field"]\` (bracket form), optional
-  \`obj?.field\` to short-circuit on null/undefined.
+- Member access: \`obj.field\`, \`obj["field"]\` (bracket form),
+  optional \`obj?.field\` / \`obj?.[key]\` to short-circuit on
+  null/undefined.
 
 ### Array shortcuts
 - \`$rows.length\` / \`"hi".length\` — element / character count.
-- \`$rows.first\` / \`$rows.last\` — first or last element (\`null\` if empty).
+- \`$rows.first\` / \`$rows.last\` — first or last element
+  (\`null\` if empty).
 - **Array pluck**: \`$rows.title\` returns \`[row.title for each row]\` —
   the idiomatic projection. Composes with charts
   (\`PieChart(rows.label, rows.value)\`) and tables
@@ -253,22 +279,42 @@ Only \`//\` single-line and \`/* */\` multi-line comments are supported.
 ### Statements
 - \`name = expression\` — plain binding (top-level or block-local).
 - \`$name = expression\` — declare or write a reactive atom.
-- \`let\`/\`const\`/\`var\` keywords are optional. They do **not** affect
-  reactivity — only the \`$\` prefix does.
+- \`let\`/\`const\`/\`var\` keywords are optional. They do **not**
+  affect reactivity — only the \`$\` prefix does.
 - \`function Name(args) { … return expr }\` — component (PascalCase).
 - \`function name(args) { … }\` — action (camelCase).
 - \`effect(() => { … }, [...deps])\` — effect declaration.
 - \`return expression\` — only valid inside function bodies / lambdas.
+- \`emit("event-name", { detail })\` — dispatch an outbound CustomEvent.
 
-### Function calls and trailing props object
-\`TypeName(positionalArg, { prop: value, … })\` — the first argument is
-the canonical positional slot (primary label / content / children). All
-other arguments go in a trailing \`{ }\` object. Optional props can be
-omitted entirely.
+### Lambdas (arrow functions)
+\`(arg) => expression\` for one-liners; \`(arg) => { … }\` for
+multi-statement bodies. Lambda defaults use \`=\`: \`(x = 0) => x + 1\`.
+A lambda body has the same imperative surface as a camelCase function
+body (assignments to \`$atoms\`, \`http(...)\`, \`emit(...)\`, etc.).
 
-**One positional argument max** is the canonical style — every component
-declares **at most one** canonical positional slot. Pass that slot bare;
-every other argument goes in a trailing \`{ prop: value }\` object:
+### Forward references (hoisting)
+Statements may **reference names defined later in the program**. The
+parser resolves them once the full stream lands. This is what makes
+streaming work: emit the shell (\`${ROOT_NAME} = Stack([hero, body])\`)
+on the first line, then fill in \`hero\` and \`body\` later.`;
+}
+
+function fullComponentCalls(): string {
+  return `## Component calls — the trailing-object rule
+
+Every component / function call follows the same shape:
+
+\`\`\`
+ComponentName(positionalArg, { prop1: value, prop2: value, … })
+\`\`\`
+
+- **One positional argument max.** Each component declares **at most one**
+  canonical positional slot (the primary label, content, or children).
+  Pass that slot bare.
+- **All other arguments go in a trailing \`{ }\` object literal.**
+  Optional props can be omitted entirely.
+- Two-positional calls raise a schema error — write the named-prop form instead.
 
 \`\`\`
 Button("Save", { variant: "primary", loading: $isSaving })
@@ -277,27 +323,30 @@ Stack([Card1(), Card2()], { direction: "row", gap: "md" })
 Callout("info", { title: "Heads up", description: "Action required", icon: "circle-info", compact: true })
 \`\`\`
 
-The component reference below tags the canonical positional with
-\`(positional)\`. For backwards-compatibility, additional positional
-arguments are still accepted in declaration order — but the trailing-object
-form is preferred because it survives prop renames and reorderings.
+The component reference at the end of this prompt tags the canonical
+positional with \`(positional)\`. For uniform components that take
+children as their positional, a leading-options form is also accepted
+(\`Grid({ columns: 12 }, [Card1(), Card2()])\`) — both forms route
+through the same slot mapping.
 
-### Lambdas
-\`(arg) => expression\` for one-liners; \`(arg) => { … }\` for multi-statement
-bodies. Lambda defaults use \`=\`: \`(x = 0) => x + 1\`.
+### Universal \`key:\` option
 
-A lambda body has the same imperative surface as a camelCase function body
-(assignments to \`$atoms\`, \`http(...)\`, \`emit(...)\`, etc.).
+Every call site accepts a \`key:\` named argument. The renderer uses it
+as the instance suffix instead of source location, so reordering
+siblings keeps per-instance state attached to the right element:
 
-### Forward references
-Statements may **reference names defined later in the program**. The parser
-resolves them once the full stream lands. This is what makes streaming work:
-emit the shell (\`${ROOT_NAME} = Stack([hero, body])\`) on the first line,
-then fill in \`hero\` and \`body\` later.`;
+\`\`\`
+function TaskRow(task) {
+  return Stack([Text(task.title)], { key: task.id })
+}
+\`\`\``;
 }
 
 function fullReactiveState(): string {
   return `## Reactive State
+
+The \`$\` sigil is what makes a binding reactive. Everything else uses
+standard JavaScript semantics.
 
 Aktion has **one reactive atom kind**. Every reactive cell is declared
 and read with the same surface:
@@ -317,13 +366,14 @@ $theme = "dark"
   reactivity. Only the \`$\` prefix matters.
 
 ### Assignment rules
-- **Render position** (top-level bindings, component body output, prop values):
-  assignment is forbidden. Use \`$name = …\` declarations to seed.
-- **Inside function bodies (actions) / effects / lambdas**: \`= += -= *= /= ??= ++ --\`
-  are allowed against any \`$name\` atom *or* a member chain rooted at one
-  (\`$user.name = "Alex"\`, \`$cart.items[0].qty += 1\`). The runtime
-  rebuilds the root object immutably so subscribers always see a fresh
-  reference — array spreads are still fine but no longer required.
+- **Render position** (top-level bindings, component body output, prop
+  values): assignment is forbidden. Use \`$name = …\` declarations to seed.
+- **Inside action bodies / effect callbacks / lambdas**:
+  \`= += -= *= /= ??= ++ --\` are all allowed against any \`$name\`
+  atom *or* a member chain rooted at one (\`$user.name = "Alex"\`,
+  \`$cart.items[0].qty += 1\`). The runtime rebuilds the root object
+  immutably so subscribers always see a fresh reference — array
+  spreads are still fine but no longer required.
 - Whole-object replacement still works:
   \`$user = { ...$user, name: "Alex" }\`, \`$todos = [...$todos, item]\`.
 
@@ -351,11 +401,12 @@ Any form control that exposes a primary value prop participates:
 
 ### Component-scoped state
 A \`$name = value\` declared **inside** a PascalCase function body is
-per-instance. Two \`<Counter/>\` siblings each have their own \`$count\`.
+per-instance. Two \`Counter()\` siblings each have their own \`$count\`.
 Top-level \`$name\` declarations live for the lifetime of the response.
 
 ### Computed values
-Just compute — every reference to a \`$\` atom inside an expression auto-tracks:
+Just compute — every reference to a \`$\` atom inside an expression
+auto-tracks:
 
 \`\`\`
 $cart  = []
@@ -369,15 +420,18 @@ URL state lives on the router, not as a separate tier:
 - \`route.params.id\` — path parameter; reactive.
 - \`route.query.tab\` — query string; **writable** (assigning updates the URL).
 - \`route.navigate("/path")\` — imperative navigation; only valid inside
-  function bodies (actions) / effects.`;
+  action bodies or effect callbacks.`;
 }
 
 function fullComponentsAndLambdas(): string {
-  return `## Components and lambdas
+  return `## Component creation — PascalCase functions
 
-### Component declarations (PascalCase functions)
+A PascalCase \`function\` declares a reusable UI component. The runtime
+inspects the first character of the name: uppercase A–Z = component,
+otherwise = action.
+
 \`\`\`
-function UserCard(user, tone = "default") {
+function UserCard(user, { tone = "default" } = {}) {
   $hover = false
   return Card([
     Avatar(user.name, { size: "md" }),
@@ -388,30 +442,44 @@ function UserCard(user, tone = "default") {
 }
 \`\`\`
 
-- **PascalCase** function name tells the runtime this is a component.
-- Components **must** end with an explicit \`return <expression>\`.
-- Defaults use \`= expression\` (JS default parameters).
-- \`children\` is the implicit named slot — the trailing positional argument
-  at the call site is delivered as \`children\` inside the body.
-- Per-instance state: any \`$name = value\` declared inside the body is
-  private to that instance.
+### Rules
+- **PascalCase name** signals it is a component.
+- **Components MUST end with an explicit \`return <expression>\`** —
+  the parser rejects a component that doesn't return.
+- **Defaults use \`= expression\`** (standard JS default parameters).
+  Destructured options pattern is canonical:
+  \`function Card(children, { padded = true, raised = false } = {}) { … }\`.
+- **\`children\` is the implicit named slot** — when a user component
+  declares a \`children\` parameter, the call site's positional argument
+  is delivered into it.
+- **Per-instance state** — any \`$name = value\` declared inside the
+  body is private to that instance. Two siblings hold independent atoms.
+- **Per-instance effects** — \`effect(...)\` calls inside the body mount
+  and unmount with the instance lifecycle.
 
 ### Call sites
 \`\`\`
 ${ROOT_NAME} = Stack([
   UserCard($alice),
   UserCard($bob, { tone: "primary" }),
-  UserCard({ user: $carol, tone: "warning" })
+  UserCard($carol, { tone: "warning" })
 ])
 \`\`\`
 
 ### Local helpers — lambda form
-Use a lambda binding for one-off helpers that don't need their own component:
+For one-off helpers that don't need their own component, use a lambda
+binding:
+
 \`\`\`
 priorityTone = (p) => p == "high" ? "danger" : p == "med" ? "warning" : "muted"
 rowFor       = (item) => Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
 list         = for (let item of $items) { rowFor(item) }
-\`\`\``;
+\`\`\`
+
+### User-component priority
+User-declared components shadow the built-in library by name. Declare
+\`function Button(...) { return ... }\` and your version wins —
+useful for wrapping built-ins with telemetry or per-app styling.`;
 }
 
 function fullActions(): string {
@@ -419,7 +487,8 @@ function fullActions(): string {
 
 A camelCase \`function\` is a callable block of imperative statements.
 Declare at the top level (or inside a component body); invoke from any
-event-handler prop (\`onClick\`, \`onChange\`, \`onSubmit\`) or as an expression.
+event-handler prop (\`onClick\`, \`onChange\`, \`onSubmit\`) or as an
+expression.
 
 \`\`\`
 function save(item) {
@@ -432,19 +501,21 @@ submitBtn = Button("Save", { onClick: save })
 \`\`\`
 
 ### Body grammar
-Inside a function body (action) the imperative surface is small:
+Inside an action body the imperative surface is small:
 - Assignments: \`$x = newValue\`, \`$x += 1\`, \`$x = { ...$x, field: v }\`.
 - \`http({ ... })\` — fire a request; the result is a reactive resource bag.
 - \`emit("event-name", { detail })\` — dispatch a \`CustomEvent\` on the host element.
 - \`route.navigate("/path")\` — programmatic navigation.
-- Statement-form \`if\` / \`switch\` / \`for\` — same keywords as the expression
-  forms (covered below).
+- Statement-form \`if\` / \`switch\` / \`for\` — same keywords as the
+  expression forms (covered below).
 - \`return\` — optionally yields a value to the caller.
+- Standard JS — \`console.log(...)\`, \`storage.set(...)\`,
+  \`navigator.clipboard.writeText(...)\`, \`setTimeout(...)\`, etc.
 
 ### Optional \`return\`
-Actions MAY include a \`return\` statement. When omitted the action runs for
-its side effects and yields \`undefined\`. When present the result is
-observable from \`$x = myAction(...)\` expressions:
+Actions MAY include a \`return\` statement. When omitted the action runs
+for its side effects and yields \`undefined\`. When present the result
+is observable from \`$x = myAction(...)\` expressions:
 
 \`\`\`
 function greet(name) {
@@ -457,7 +528,7 @@ $hello = greet("Ada")
 For trivial handlers, skip the function declaration entirely:
 
 \`\`\`
-incBtn   = Button("+", { onClick: () => { $count = $count + 1 } })
+incBtn   = Button("+", { onClick: () => $count = $count + 1 })
 resetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })
 \`\`\``;
 }
@@ -466,8 +537,8 @@ function fullEffects(): string {
   return `## Effects — Declarative side effects
 
 \`effect\` blocks attach side effects to a component or top-level binding.
-They use a function-call syntax with a callback and an optional dependency
-array:
+They use a function-call syntax with a callback and an optional
+dependency array:
 
 \`\`\`
 effect(() => {
@@ -480,18 +551,20 @@ A dependency entry is one of:
 - \`"mount"\` — run once when the surrounding scope mounts.
 - \`"unmount"\` — run once when it unmounts.
 - \`"every(N)"\` — re-run every N milliseconds.
-- \`"debounce(N)"\` / \`"throttle(N)"\` — wrap the body with a trailing-edge rate limit.
+- \`"debounce(N)"\` / \`"throttle(N)"\` — wrap the body with a
+  trailing-edge rate limit.
 
 Dependencies may be combined freely (e.g.
-\`effect(() => { … }, [$query, $page, "debounce(250)"])\`). The order inside
-the array doesn't matter.
+\`effect(() => { … }, [$query, $page, "debounce(250)"])\`). The order
+inside the array doesn't matter.
 
 \`effect(() => { ... })\` (no second argument) is equivalent to
 \`effect(() => { ... }, ["mount"])\` — both run the body once on mount.
 
 ### Scope — top-level vs. component-local
-An effect can live at the program top level OR inside a PascalCase function
-body (component). The syntax is identical; only the lifecycle differs:
+An effect can live at the program top level OR inside a PascalCase
+function body (component). The syntax is identical; only the lifecycle
+differs:
 
 - **Top-level** — mounted once when the program parses, torn down on
   \`setResponse\` / \`clear()\`. Use for global concerns (analytics,
@@ -530,7 +603,20 @@ function App() {
 }
 \`\`\`
 
-### Examples
+### Cleanup
+Use \`cleanup(fn)\` inside an effect callback to register teardown for
+intervals, listeners, observers. Cleanup fires before the next re-run
+AND on unmount.
+
+\`\`\`
+effect(() => {
+  const onKey = (e) => { if (e.key == "/") $palette = true }
+  document.addEventListener("keydown", onKey)
+  cleanup(() => document.removeEventListener("keydown", onKey))
+}, ["mount"])
+\`\`\`
+
+### Common recipes
 
 \`\`\`
 function LiveClock() {
@@ -539,27 +625,54 @@ function LiveClock() {
   return Text(@FormatDate($now, "time"))
 }
 
+// Debounced search.
 effect(() => {
   $results = http({ url: "/api/search", query: { q: $query, page: $page } })
 }, [$query, $page, "debounce(250)"])
 
+// Autosave the draft 500ms after the user stops typing.
 effect(() => {
   $save = http({ url: "/api/draft", method: "PUT", body: $draft })
 }, [$draft, "debounce(500)"])
+\`\`\``;
+}
+
+function fullEmit(): string {
+  return `## \`emit(...)\` — outbound CustomEvents
+
+Use \`emit("name", { detail })\` inside an action body, effect callback,
+or lambda to dispatch a \`CustomEvent\` on the host \`<aktion-app>\`
+element. The host page listens with \`el.addEventListener("name", …)\`.
+
+\`\`\`
+function send(message) {
+  emit("assistant-message", { message: message })
+}
+
+function trackClick(tag) {
+  emit("analytics", { event: "click", tag: tag, path: route.path })
+}
 \`\`\`
 
-### Cleanup
-Use \`cleanup(fn)\` to register teardown for intervals, listeners, observers.
-Cleanup fires before the next re-run AND on unmount.`;
+- The event name is the first argument; the detail payload is the second.
+- Two reserved events the host element fires itself:
+  - \`assistant-message\` — \`{ message: string }\`. Treated by chat
+    integrations as a follow-up user prompt.
+  - \`error\` — \`{ errors: ParseError[] }\`. Fired after a render that
+    saw parse errors (the host is the source, not your script).
+  - \`route-change\` — \`{ path, previousPath, source }\`. Fired by the
+    router on every navigation.
+- Any other name is forwarded verbatim; pick stable names so the host
+  can subscribe ahead of time.`;
 }
 
 function fullHttp(): string {
   return `## Data — \`http({...})\`
 
-There is exactly one HTTP primitive: the \`http({ ... })\` function. Pass any
-\`fetch\`-compatible option (\`url\`, \`method\`, \`headers\`, \`body\`,
-\`signal\`, \`credentials\`, …) plus a convenience \`query\` object that is
-serialised into the URL.
+There is exactly one HTTP primitive: the \`http({ ... })\` function. Pass
+any \`fetch\`-compatible option (\`url\`, \`method\`, \`headers\`,
+\`body\`, \`signal\`, \`credentials\`, …) plus a convenience \`query\`
+object that is serialised into the URL.
 
 ### Reads (GET / HEAD / OPTIONS)
 \`\`\`
@@ -570,6 +683,9 @@ $orders = http({
   headers:{ "X-Tenant": $tenant }
 })
 \`\`\`
+
+The runtime tracks every reactive read inside the options object and
+re-issues the request whenever those inputs change.
 
 ### Writes (POST / PUT / PATCH / DELETE)
 Fire writes from inside a camelCase function (action) and observe the
@@ -596,8 +712,8 @@ $orders.cancel()     // abort the in-flight request (no-op when idle)
 
 ### \`Async(resource, …)\` wrapper
 The standard library component \`Async(resource, { loading:, error:, empty:, data: })\`
-covers the loading / error / empty / data branches uniformly. Prefer it over
-hand-rolled \`if\` chains:
+covers the loading / error / empty / data branches uniformly. Prefer it
+over hand-rolled \`if\` chains:
 
 \`\`\`
 view = Async($orders, {
@@ -623,17 +739,18 @@ $http = Http({
 function fullControlFlow(): string {
   return `## Control flow
 
-All three control-flow keywords are **expressions** — they yield a node (or
-array of nodes) that can be assigned, passed as a prop, or returned from a
-component / action body. They use standard JavaScript syntax.
+All three control-flow keywords are **expressions** — they yield a node
+(or array of nodes) that can be assigned, passed as a prop, or returned
+from a component / action body. They use standard JavaScript syntax.
 
 ### \`if\` / \`else\`
 \`\`\`
 banner = if ($hasError) { Banner("Something went wrong", { tone: "danger" }) } else { null }
 active = if ($tab == "billing") { billingPanel } else { overviewPanel }
 \`\`\`
-A trailing \`else\` is optional — without it an unmatched \`if\` evaluates to
-\`null\` (renders nothing). Conditions must be wrapped in parentheses.
+A trailing \`else\` is optional — without it an unmatched \`if\`
+evaluates to \`null\` (renders nothing). Conditions must be wrapped in
+parentheses.
 
 ### \`switch\`
 \`\`\`
@@ -644,19 +761,24 @@ panel = switch ($stage) {
   default:        EmptyState("Pick a stage")
 }
 \`\`\`
-- Each \`case\` arm uses \`case value:\` syntax followed by the expression or
-  statement block, terminated by \`break\`.
+- Each \`case\` arm uses \`case value:\` syntax followed by the
+  expression or statement block, terminated by \`break\`.
 - \`default:\` is the wildcard — its value is returned when no case matches.
 - Arms can return arbitrary expressions, not just strings.
+- Wrap a case body in \`{ … }\` to run a statement block ending in an
+  optional last-expression result.
 
 ### \`for\`
 \`\`\`
 rows = for (let item of $todos) { TaskRow(item) }
 rowsWithIndex = for (let [idx, item] of $todos.entries()) { TaskRow(item, { index: idx }) }
 \`\`\`
-\`for\` produces an array of nodes — assign it and reference the binding
-from a container (\`Stack(rows)\`, \`Table([Col("Task", rows)])\`). The loop
-variable is **block-scoped**, so a stale closure can never see the wrong row.
+- \`for\` produces an array of nodes — assign it and reference the
+  binding from a container (\`Stack(rows)\`, \`Table([Col("Task", rows)])\`).
+- The loop variable is **block-scoped**, so a stale closure can never
+  see the wrong row.
+- You can also use \`items.map(item => Row(item))\` — both produce
+  arrays of nodes.
 
 ### Statement form inside action / effect bodies
 The same three keywords also work as statements:
@@ -669,15 +791,22 @@ function submit(payload) {
     default: $records = [...$records, payload]
   }
 }
+\`\`\`
+
+### Ternaries
+For one-line branching, the JS ternary is preferred — terser than \`if\`:
+
+\`\`\`
+tone = $value > 0 ? "success" : $value < 0 ? "danger" : "muted"
 \`\`\``;
 }
 
 function fullRouting(): string {
   return `## Routing — \`Router({ … })\`
 
-The router is a plain function call. It returns the matched arm's evaluated
-value — assign the result to any binding and reference that binding inside
-your shell.
+The router is a plain function call. It returns the matched arm's
+evaluated value — assign the result to any binding and reference that
+binding inside your shell.
 
 \`\`\`
 pages = Router({
@@ -699,49 +828,118 @@ ${ROOT_NAME} = AppShell(MainSidebar(), pages, TopBar())
 - Default arm: \`default: NotFound()\` is the catch-all (synonym: \`"*"\`).
 
 ### Inside an arm body
-- \`params\` is bound to the matched route's path captures. It is scoped to
-  the arm — the value is **not** available outside \`Router({…})\`.
+- \`params\` is bound to the matched route's path captures. It is scoped
+  to the arm — the value is **not** available outside \`Router({…})\`.
 - Use \`route\` for cross-cutting reactive reads (current path, query
   string) that don't depend on which arm matched.
 
-### Reactive surface
+### Reactive surface — the \`route\` handle
 - \`route.path\` — current path (read-only).
 - \`route.params.id\` — path parameter; reactive.
 - \`route.query.tab\` — query string; **writable** (assigning updates the URL).
-- \`route.navigate("/path")\` — imperative navigation. Use inside any action
-  or effect body.
+- \`route.pattern\` — the pattern of the most-recently-matched arm.
+- \`route.navigate("/path")\` — imperative navigation. Use inside any
+  action or effect body.
 
 ### \`NavLink\` companion
 \`NavLink(label, { to: path })\` reads \`route.path\` and dispatches
 \`route.navigate(to)\` on click — use for sidebars, navbars and breadcrumbs.
 
+\`\`\`
+nav = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Home",     { icon: "house",    to: "/",         active: route.path == "/" }),
+    SidebarItem("Orders",   { icon: "cart-shopping", to: "/orders", active: route.path == "/orders" })
+  ])
+])
+\`\`\`
+
 ### Common mistakes
-- \`route\` is read-only (apart from \`route.navigate(...)\`). Assigning
-  to \`route\` or to a state slot named \`route\` is ignored.
+- \`route\` is read-only (apart from \`route.navigate(...)\` and writes
+  to \`route.query.*\`). Assigning to a state slot named \`route\` is ignored.
 - Forgetting the \`default:\` arm. Without it, unknown paths render \`null\`
   and the outlet collapses.
-- Using \`->\` instead of \`:\` for arm bodies. Inside \`Router({…})\` the
-  arms are ordinary object properties — separate with \`:\` and commas.`;
+- Using \`->\` instead of \`:\` for arm bodies. Inside \`Router({…})\`
+  the arms are ordinary object properties — separate with \`:\` and commas.`;
 }
 
+function fullStorage(): string {
+  return `## \`storage\` — browser persistence
+
+\`storage\` is a built-in global, always in scope. No import, no
+declaration. It wraps \`localStorage\` by default and exposes namespaced
+accessors for \`sessionStorage\` and cookies.
+
+\`\`\`
+// localStorage is the default; \`storage.local\` is its alias.
+storage.set("name", "John")
+$name = storage.get("name")
+storage.remove("name")
+storage.clear()
+
+// Per-tab sessionStorage.
+storage.session.set("draft", $draft)
+$draft = storage.session.get("draft")
+
+// Cookies — options as an object literal.
+storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$user = storage.cookies.get("user")
+storage.cookies.remove("user", { path: "/" })
+storage.cookies.clear()
+\`\`\`
+
+- Values that aren't strings round-trip through JSON; missing keys return \`null\`.
+- Cookie options: \`expires\` (days, Date, or ISO string), \`maxAge\`
+  (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`.
+- Failures (quota exceeded, disabled storage, malformed JSON) are
+  swallowed silently — safe to call from any context.
+
+### Persist a reactive atom
+\`\`\`
+$theme = storage.get("theme") ?? "light"
+
+effect(() => {
+  storage.set("theme", $theme)
+}, [$theme, "debounce(250)"])
+\`\`\``;
+}
+
+function fullConsole(): string {
+  return `## \`console\` — host console forwarder
+
+\`console\` is the second always-in-scope global. Calls forward to the
+host page's console with the standard methods.
+
+\`\`\`
+console.log("Hello", $user)
+console.error("Failed", $error)
+console.warn("Deprecated path")
+console.info("Route changed", route.path)
+console.debug({ days: $days, count: $count })
+\`\`\`
+
+Use sparingly — keep production responses lean. \`console\` is mostly
+for development and host-side diagnostics.`;
+}
 
 function fullMarkupEscapeHatches(): string {
   return `## Markup escape hatches — \`HTMLTag\` & \`Styles\`
 
-When the standard catalogue cannot express the markup or visual treatment
-you need, reach for two last-resort components:
+When the standard catalogue cannot express the markup or visual
+treatment you need, reach for two last-resort components:
 
-- \`HTMLTag(tag, { attributes?, children? })\` renders an allow-listed HTML
-  tag with an attribute object and child nodes. \`on*\` attributes,
-  \`javascript:\` URLs in \`href\`/\`src\`, and unsafe \`style\` patterns are
-  stripped; tag names outside the allow-list collapse to \`div\`.
+- \`HTMLTag(tag, { attributes?, children? })\` renders an allow-listed
+  HTML tag with an attribute object and child nodes. \`on*\` attributes,
+  \`javascript:\` URLs in \`href\` / \`src\`, and unsafe \`style\`
+  patterns are stripped; tag names outside the allow-list collapse to
+  \`div\`.
 - \`Styles(css)\` injects a \`<style>\` block whose CSS targets your own
   selectors. Payloads containing \`</style>\`, \`<script>\`,
-  \`expression(\`, \`javascript:\`, \`behavior:\`, or \`@import\` are dropped.
+  \`expression(\`, \`javascript:\`, \`behavior:\`, or \`@import\` are
+  dropped.
 
-Prefer the standard library for everything they can express
-(typography, layout, surfaces, controls). Use these only as a documented
-last resort.
+Prefer the standard library for everything they can express (typography,
+layout, surfaces, controls). Use these only as a documented last resort.
 
 \`\`\`
 ${ROOT_NAME} = Stack([
@@ -767,28 +965,28 @@ formatting, and inline computation.
 
 ${formatBuiltinCatalog(catalog)}
 
-### Control flow — expression form
-Use the expression-form \`if\` / \`switch\` / \`for\` covered above —
-they return values that can be assigned, passed as props, or composed:
+### Composing with expressions
+\`@\`-builtins compose freely with the rest of the JS expression surface:
 
 \`\`\`
-active = if ($tab == "billing") { billingPanel } else { overviewPanel }
-list   = for (let item of $todos) { TaskRow(item) }
-panel  = switch ($stage) { case "done": Done(); break; case "ready": Ready(); break; default: Pending() }
+totalLine  = Text(\`\${@Plural(@Count(rows), "order", "orders")}: \${@Format(@Sum(rows.amount), "currency")}\`)
+filtered   = @Filter($users, "team", "==", $team)
+sorted     = @Sort(filtered, "joinedAt", "desc")
+firstThree = @Slice(sorted, 0, 3)
 \`\`\`
 
 ### Responsive prop maps
-\`Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "l" })\` — 1 column on mobile,
-2 on tablet, 4 on desktop. \`Stack(children, { direction: {sm: "column", md: "row"} })\`
-— stack on mobile, row on desktop. Both \`columns\` and \`gap\` accept either
-a single value or a responsive map.`;
+\`Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "l" })\` — 1 column
+on mobile, 2 on tablet, 4 on desktop. \`Stack(children, { direction: {sm: "column", md: "row"} })\`
+— stack on mobile, row on desktop. Both \`columns\` and \`gap\` accept
+either a single value or a responsive map.`;
 }
 
 function fullHelpers(): string {
   return `## Standard helper components
 
-Aktion keeps the language core small by exposing "frameworky"
-features as library components rather than language keywords:
+Aktion keeps the language core small by exposing "frameworky" features
+as library components rather than language keywords:
 
 | Component | Purpose |
 |---|---|
@@ -801,45 +999,8 @@ features as library components rather than language keywords:
 | \`VirtualList(items, { key:, render: })\` | Virtualised list — preferred for >100 rows. |`;
 }
 
-function fullGlobals(): string {
-  return `## Built-in globals
-
-Two namespace globals are always in scope — no import, no declaration.
-Invoke them through the standard \`obj.method(args)\` syntax. Named-arg
-options go in a trailing \`{ }\` object on the method's arg list (same rule
-as component calls).
-
-\`Storage\` — browser storage (localStorage by default):
-\`\`\`
-Storage.set("name", "John")
-$name = Storage.get("name")
-Storage.remove("name")
-Storage.clear()
-
-Storage.session.set("draft", $draft)
-$draft = Storage.session.get("draft")
-
-Storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
-$user = Storage.cookies.get("user")
-Storage.cookies.remove("user", { path: "/" })
-Storage.cookies.clear()
-\`\`\`
-- Values that aren't strings round-trip through JSON; missing keys return \`null\`.
-- Cookie options: \`expires\` (days, Date, or ISO string), \`maxAge\`
-  (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`.
-
-\`console\` — host console forwarder:
-\`\`\`
-console.log("Hello", $user)
-console.error("Failed", $error)
-console.warn("Deprecated path")
-console.info("Route changed", route.path)
-console.debug({ days: $days, count: $count })
-\`\`\``;
-}
-
 function fullI18n(): string {
-  return `## Internationalisation
+  return `## Internationalisation — \`i18n({...})\` and \`t(key, vars?)\`
 
 \`\`\`
 $locale = "en"
@@ -854,20 +1015,36 @@ Text(t("orders.title"))
 Text(t("orders.greeting", { name: $userName }))
 \`\`\`
 
-- \`t(key, vars?)\` looks up the translation by dot-pathed key with
-  \`\${name}\` interpolation.
+- \`$i18n = i18n({ ... })\` configures the active locale, message bundle,
+  and fallback locale.
+- \`t(key, vars?)\` is a global builtin — looks up the translation by
+  dot-pathed key with \`\${name}\` interpolation. Falls back to the
+  fallback locale's bundle, then to the bare key.
 - \`Locale()\` returns the active locale tag.
 - Formatting builtins (\`@Format\`, \`@FormatDate\`) consult \`Locale()\`
-  automatically.`;
+  automatically.
+
+### Reload-friendly pattern
+\`\`\`
+$locale = storage.get("locale") ?? "en"
+
+function setLocale(next) {
+  $locale = next
+  storage.set("locale", next)
+}
+
+$i18n = i18n({ locale: $locale, messages: $bundle.data ?? {}, fallback: "en" })
+\`\`\``;
 }
 
 function fullTheming(): string {
-  return `## In-script theming
+  return `## In-script theming — \`theme = Theme({...})\`
 
-Assign a \`Theme({ … })\` call to a top-level binding named \`theme\` (the
-runtime looks for that exact name) **before** defining \`${ROOT_NAME}\`. You
-may also write \`${ROOT_NAME}.theme = Theme({…})\`. The runtime writes the
-theme tokens to the host element as CSS custom properties.
+Assign a \`Theme({ … })\` call to a top-level binding named \`theme\`
+(the runtime looks for that exact name) **before** defining
+\`${ROOT_NAME}\`. You may also write \`${ROOT_NAME}.theme = Theme({…})\`.
+The runtime writes the theme tokens to the host element as CSS custom
+properties on top of the base theme.
 
 \`\`\`
 theme = Theme({
@@ -884,23 +1061,31 @@ ${ROOT_NAME} = AppShell(...)
 \`\`\`
 
 Top-level token groups: \`colors\`, \`radius\`, \`font\`, \`motion\`,
-\`elevation\`. Unknown keys inside a group are silently ignored, so typos
-fail silent — verify token names against the \`Themes\` reference.`;
+\`elevation\` (plus metadata keys \`name\` and \`direction\`). Unknown
+keys inside a group are silently ignored, so typos fail silent — verify
+token names against the docs site's \`Themes\` reference.
+
+The host page also chooses one of seven built-in themes (\`light\`,
+\`dark\`, \`neon\`, \`pastel\`, \`glass\`, \`brutalist\`, \`skyline\`)
+via the \`theme\` attribute on \`<aktion-app>\`. Authored programs
+should be theme-neutral by default — pass \`tone:\` /
+\`variant:\` instead of hard-coded colours so the same code looks
+correct on every theme.`;
 }
 
 function fullIcons(): string {
   return `## Icons (Font Awesome)
 
-Icon-typed props accept a Font Awesome name as a string. The host element
-auto-loads the Font Awesome stylesheet — no setup needed.
+Icon-typed props accept a Font Awesome name as a string. The host
+element auto-loads the Font Awesome stylesheet — no setup needed.
 
 - Format: \`"name"\` (defaults to the solid set), e.g. \`"house"\`,
   \`"chart-line"\`, \`"star"\`, \`"circle-check"\`.
-- Variants: prefix with \`"regular:name"\` (outline set) or \`"brands:name"\`
-  (brand logos).
+- Variants: prefix with \`"regular:name"\` (outline set) or
+  \`"brands:name"\` (brand logos).
 - **Never emit emoji characters in \`icon\` props.**
-- Use the \`Icon(name, { variant?, size? })\` component to render an icon
-  inline anywhere a Node is expected.`;
+- Use the \`Icon(name, { variant?, size? })\` component to render an
+  icon inline anywhere a Node is expected.`;
 }
 
 function fullComponentLibrary(library: ComponentLibrary): string {
@@ -956,15 +1141,23 @@ Do NOT re-emit the whole UI. To remove a statement, write \`name = null\`.`;
 function fullStreaming(): string {
   return `## Hoisting & streaming (CRITICAL)
 
-Aktion supports hoisting: a reference can be used BEFORE it is
+Aktion supports **hoisting**: a reference can be used BEFORE it is
 defined. The renderer re-parses the program on every streamed chunk and
 silently treats unresolved references as empty, so a partially-streamed
 response renders progressively without flashing errors.
 
 **Required statement order for streaming-friendly output:**
 1. \`${ROOT_NAME} = ...\` — emit this FIRST so the UI shell appears immediately.
-2. \`function\` declarations (components and actions) / \`effect\` calls — fill in layout & behaviour.
+2. \`function\` declarations (components and actions) / \`effect\` calls
+   — fill in layout & behaviour.
 3. Leaf data values — strings, numbers, arrays, objects — last.
+
+**Why hoisting matters.** When the LLM emits
+\`${ROOT_NAME} = Stack([hero, body, footer])\` on line 1, the runtime
+sees three unresolved names and renders the shell with three empty
+slots. As \`hero = Hero(...)\`, \`body = Card(...)\`, and
+\`footer = Banner(...)\` each arrive, the corresponding slot fills in
+without re-rendering the whole tree.
 
 **Streaming rules — follow strictly:**
 - Always reference children by name from the root (\`${ROOT_NAME} = Stack([hero, body, footer])\`).
@@ -1021,7 +1214,9 @@ function fullOutputRules(): string {
 - Never declare a state slot named \`route\` yourself. The router exposes
   its reactive surface through the reserved \`route\` handle — read
   \`route.path\` / \`route.params\` and call
-  \`route.navigate("/path")\` to navigate.`;
+  \`route.navigate("/path")\` to navigate.
+- Use \`storage\` / \`console\` (lowercase) — they are the only built-in
+  globals.`;
 }
 
 function fullFinalVerification(): string {
@@ -1043,7 +1238,10 @@ Before finishing, walk your output and verify:
 9. Router uses \`Router({…})\` and arms use \`:\` (not \`->\`) with \`default\`
    (not \`_\`) as the wildcard.
 10. Named arguments use a trailing \`{ prop: value }\` object — not bare
-    \`prop: value\` syntax.`;
+    \`prop: value\` syntax.
+11. \`storage\` / \`console\` are lowercase (they're the only built-in globals).
+12. Effects use \`effect(() => { ... }, [deps])\` — never the legacy
+    bracket-form.`;
 }
 
 function fullDefaultExamples(): string[] {
@@ -1203,7 +1401,7 @@ const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
 
 function chatHeader(preamble: string | undefined): string {
   const lead = preamble?.trim()
-    || "You are an AI assistant that responds using Aktion — a compact, JS-aligned declarative language whose output is rendered as a rich, read-only UI surface. Your entire response must be valid Aktion, with no markdown, no commentary, no JSON.";
+    || "You are an AI assistant that responds using Aktion — a compact declarative language whose surface is a strict subset of JavaScript and whose output is rendered as a rich, read-only UI surface. Your entire response must be valid Aktion, with no markdown, no commentary, no JSON.";
   return `${lead}
 Every response MUST start with \`${ROOT_NAME} = ...\` on the very first line.
 
@@ -1228,8 +1426,9 @@ function chatSyntax(): string {
   return `## Syntax (read-only subset)
 
 A program is a flat list of \`name = expression\` statements terminated by
-newlines. \`${ROOT_NAME}\` is the entry point — every program MUST begin
-with \`${ROOT_NAME} = ...\` (typically \`${ROOT_NAME} = Stack([...])\`).
+newlines, written in standard JavaScript. \`${ROOT_NAME}\` is the entry
+point — every program MUST begin with \`${ROOT_NAME} = ...\` (typically
+\`${ROOT_NAME} = Stack([...])\`).
 
 ### Comments
 Only \`//\` single-line and \`/* */\` multi-line comments are supported.
@@ -1237,7 +1436,8 @@ Only \`//\` single-line and \`/* */\` multi-line comments are supported.
 ### Expressions
 - Strings: \`"hello"\` or \`'hello'\`. Both forms support escapes.
 - Template literals: backticks with \`\${expr}\` interpolation —
-  \`\`\`\${@Count(rows)} results\`\`\`. Mix copy with values without manual \`+\` concatenation.
+  \`\`\`\${@Count(rows)} results\`\`\`. Mix copy with values without
+  manual \`+\` concatenation.
 - Numbers (\`42\`, \`-3.14\`), booleans (\`true\`, \`false\`), \`null\`.
 - Arrays: \`[1, 2, 3]\`, \`[Card1(), Card2()]\` — multi-line OK.
 - Objects: \`{ key: value, "quoted-key": value }\`.
@@ -1245,7 +1445,7 @@ Only \`//\` single-line and \`/* */\` multi-line comments are supported.
   \`cond ? a : b\`, nullish coalescing \`a ?? b\`, spread \`[...a, ...b]\`,
   member access \`obj.field\`, optional chaining \`obj?.field\`.
 
-### Component calls
+### Component calls — trailing object rule
 \`TypeName(positionalArg, { prop: value, … })\`. The first argument is
 the canonical positional slot; all other arguments go in a trailing
 \`{ }\` object. Optional props can be omitted entirely.
@@ -1257,8 +1457,8 @@ Badge("Live", { tone: "success", icon: "circle-dot" })
 \`\`\`
 
 ### Repeating UI from data
-Use the expression-form \`for\` loop to render an array of items into
-multiple nodes:
+Use the expression-form \`for\` loop (or \`.map(...)\`) to render an
+array of items into multiple nodes:
 
 \`\`\`
 rows = for (let item of items) { ListItem(item.title, { description: item.desc }) }
@@ -1266,7 +1466,8 @@ list = List(rows)
 \`\`\`
 
 ### Branching (optional)
-Use \`if\` / \`switch\` when the UI depends on a literal you computed:
+Use \`if\` / \`switch\` / ternaries when the UI depends on a literal you
+computed:
 
 \`\`\`
 greeting = if (isMorning) { "Good morning" } else { "Hello" }

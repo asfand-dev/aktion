@@ -36,7 +36,7 @@ description: >-
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
 - [11. Routing](#11-routing)
-- [12. Globals — `Storage`, `console`](#12-globals--storage-console)
+- [12. Globals — `storage`, `console`](#12-globals--storage-console)
 - [13. Internationalization](#13-internationalization)
 - [14. Theming](#14-theming)
 - [15. Icons (Font Awesome)](#15-icons-font-awesome)
@@ -100,12 +100,13 @@ Internalize these rules and you will write correct, polished programs:
 14. **Add status colour everywhere.** `StatCard(..., { trend, delta })`,
     `Badge` variants, `TimelineItem` tone, `Banner` tone,
     `StatusDot(label, { tone })` — colour conveys meaning.
-15. **`Storage` and `console` are always-available globals.** Use
-    `Storage.set/get/remove/clear` (alias `Storage.local.*`),
-    `Storage.session.*`, and `Storage.cookies.*` (with options:
+15. **`storage` and `console` are always-available globals (lowercase).**
+    Use `storage.set/get/remove/clear` (alias `storage.local.*`),
+    `storage.session.*`, and `storage.cookies.*` (with options:
     `expires`, `maxAge`, `path`, `domain`, `secure`, `sameSite`)
     directly. `console.log/error/warn/info/debug` forwards to the host
-    console.
+    console. Both globals follow the standard `obj.method(args)`
+    method-call syntax and accept object-literal options.
 16. **`pages = Router({ … })` and `NavLink(label, { to })` are always
     available.** The reactive `route.path` / `route.params` /
     `route.query` surface stays live across the whole app; inside a
@@ -464,11 +465,28 @@ aktion = Stack([...])
 ## 1. Mental model
 
 Aktion is a **streaming-first declarative DSL** whose surface syntax is
-a strict subset of standard JavaScript. A program is a flat list of
-`name = expression` statements. The renderer evaluates them lazily,
-re-parses the stream on every chunk, and silently treats undefined
-references as empty — so a partially-streamed program renders
-progressively from the top.
+a strict subset of standard JavaScript — every Aktion program is
+valid JavaScript. A program is a flat list of `name = expression`
+statements. The renderer evaluates them lazily, re-parses the stream
+on every chunk, and silently treats undefined references as empty —
+so a partially-streamed program renders progressively from the top.
+
+**JavaScript on top.** Because Aktion is a strict subset, everything
+the language doesn't model **is just JavaScript**:
+
+- `Array.prototype.map / filter / reduce / sort / find / slice / …`,
+  destructuring (`const [a, b] = pair`), spread (`[...xs, ...ys]`),
+  template literals (`` `Hello ${name}` ``), optional chaining
+  (`obj?.deep?.field`), nullish coalescing (`a ?? b`), default
+  parameters, rest parameters, computed object keys.
+- Inside **action bodies, effect callbacks, and lambda bodies**, you
+  may also call browser APIs directly — `navigator.clipboard`,
+  `window.open`, `document.addEventListener`, `setTimeout`,
+  `JSON.parse`, `Math.random`, `fetch` (use `http({...})` instead),
+  `crypto.randomUUID`, etc.
+- The `@`-functions (§8) and library components (§9) cover the cases
+  where pure JS would be verbose — but you are never *forced* to use
+  them when a one-liner of JS will do.
 
 Three identifier conventions cooperate:
 
@@ -606,6 +624,22 @@ Names are resolved lazily — every identifier reference re-evaluates the
 binding when read. That's why `aktion = Stack([greeting])` works even
 when `greeting = Card(...)` is defined later.
 
+**Hoisting and streaming together.** Because identifiers are resolved
+lazily and the renderer commits each statement as soon as it arrives,
+declaring `aktion = ...` first lets the page shell appear instantly:
+
+1. The first chunk parses `aktion = Stack([hero, kpis, chart])` — the
+   reconciler installs an empty `Stack` and three skeleton placeholders
+   for the named children.
+2. As the rest of the program streams in, each child binding
+   (`hero = ...`, `kpis = ...`, `chart = ...`) replaces its skeleton
+   in place.
+3. Users see the layout structure first and content arrive
+   progressively — never a blank screen waiting for the closing brace.
+
+Forward references to *unknown* names render as a `Skeleton` shimmer
+instead of an error, so a half-streamed program is always renderable.
+
 ### Comments
 
 The parser strips two comment styles:
@@ -699,16 +733,16 @@ target.loadSnapshot({ programText, state: snapshot });
 ```
 
 For ad-hoc per-tab / per-browser persistence from inside the script,
-use the `Storage` global (§12):
+use the `storage` global (§12):
 
 ```javascript
 // Sync a single $variable to localStorage manually.
 effect(() => {
-  Storage.set("draft", $draft)
+  storage.set("draft", $draft)
 }, [$draft, "debounce(500)"])
 
 effect(() => {
-  $draft = Storage.get("draft") ?? ""
+  $draft = storage.get("draft") ?? ""
 }, ["mount"])
 ```
 
@@ -739,10 +773,28 @@ function UserCard(user, { tone = "default" } = {}) {
 }
 ```
 
-- Components **must** end with an explicit `return <expression>`.
-- Defaults use `= expression` in destructured options.
-- Per-instance state: any `$name = value` declared inside the body is
-  private to that instance.
+**The five component rules.** Whenever you author a component, the
+runtime enforces these:
+
+1. **PascalCase name.** The leading capital letter is what marks the
+   function as a component. `function Counter(...)` is a component;
+   `function counter(...)` is an action.
+2. **Single positional argument.** Take at most one positional
+   parameter — typically the title, primary value, or children array.
+   Every other prop goes in a destructured trailing object.
+3. **Trailing options object.** Named props always sit in a single
+   trailing `{ }` object literal — both at the call site
+   (`Button("Save", { variant: "primary" })`) and in the parameter
+   list (`function Card(title, { children = [], padding = "m" } = {})`).
+   Use destructuring with `=` defaults to assign fallbacks.
+4. **Explicit `return`.** The last statement must be
+   `return <expression>` — never let a component fall through
+   implicitly. Without `return`, the component renders as nothing.
+5. **Per-instance state lives in the body.** Any `$name = value`
+   declared inside the function body is private to that instance — two
+   `Counter()` siblings each get their own `$count`. The initializer
+   runs once on first mount; re-renders preserve whatever value the
+   user or an action has written.
 
 ### Call sites
 
@@ -756,13 +808,36 @@ aktion = Stack([
 
 **Named-props placement.** The named-props object literal is canonically
 placed *after* the positional arguments (`Button("Save", { variant: "primary" })`).
-The runtime also accepts a *leading* props object for components that take
-children as the trailing positional (`Grid({ columns: 12 }, [Card1(), Card2()])`);
-both forms route through the same slot mapping. If a user component's
-trailing object has no key matching any of the component's parameters,
-it is forwarded positionally — so an opaque "slots" or data bag can be
-passed without surprises (`function Card(title, slots) { … }` called as
+The runtime also accepts a *leading* props object for components that
+take children as the trailing positional
+(`Grid({ columns: 12 }, [Card1(), Card2()])`); both forms route through
+the same slot mapping. If a user component's trailing object has no key
+matching any of the component's parameters, it is forwarded positionally
+— so an opaque "slots" or data bag can be passed without surprises
+(`function Card(title, slots) { … }` called as
 `Card("Hello", { footer: Text("…") })`).
+
+**Why the trailing object rule.** Library components like `Button`,
+`Card`, and `Stack` have many optional props (`variant`, `tone`,
+`loading`, `disabled`, `icon`, `size`, `onClick`, …). Listing them
+all positionally would be unreadable and error-prone. The trailing
+object lets every call site read like English:
+
+```javascript
+// ✅ Self-documenting — props say what they mean.
+StatCard("Revenue", {
+  value:  "$48k",
+  trend:  "up",
+  delta:  "+12%",
+  icon:   "sack-dollar"
+})
+
+// ❌ Multi-positional — order matters, meaning is hidden.
+StatCard("Revenue", "$48k", "up", "+12%", "sack-dollar")
+```
+
+The schema validator emits a hard error for the multi-positional form
+and suggests the trailing-object rewrite.
 
 ### Local helpers — lambda form
 
@@ -818,7 +893,7 @@ Inside an action body the imperative surface is small:
 - `emit("event-name", { detail })` — dispatch a `CustomEvent` on the
   host element.
 - `route.navigate("/path")` — programmatic navigation.
-- `Storage.set(...)`, `console.log(...)` — global namespaces (§12).
+- `storage.set(...)`, `console.log(...)` — global namespaces (§12).
 - Standard JS control flow: `if`/`switch`/`for`.
 - `return` — optionally yields a value to the caller.
 
@@ -1009,7 +1084,7 @@ effect(() => {
 
 ```javascript
 effect(() => {
-  Storage.set("draft", $draft)
+  storage.set("draft", $draft)
 }, [$draft, "debounce(500)"])
 ```
 
@@ -1185,24 +1260,64 @@ expression. They are **pure** — no side effects, no I/O.
 
 ### Control-flow
 
-Control flow uses standard JavaScript syntax:
+Control flow uses standard JavaScript syntax, but the three statement
+forms — `if`/`else`, `switch`/`case`, and `for`/`of` — are also valid
+**expressions** in Aktion. They evaluate to a value, so they can be
+assigned directly to a binding or passed as a child:
 
 ```javascript
+// Ternary — best for two-way conditions.
 active = $tab == "billing" ? billingPanel : overviewPanel
-list   = $todos.map(item => TaskRow(item))
+
+// Expression `if` — handy when the condition has multiple branches.
+banner = if ($error) {
+  ErrorAlert($error.message)
+} else if ($loading) {
+  Spinner({ label: "Loading…" })
+} else {
+  Notice("Everything looks good")
+}
+
+// Expression `switch` — multi-way dispatch as a single expression.
+view = switch ($tab) {
+  case "list":  ListView($items); break
+  case "grid":  GridView($items); break
+  case "table": Table($items);    break
+  default:      EmptyState("Pick a view")
+}
+
+// Expression `for` — iterate over an array and collect the bodies.
+rows = for (let item of $items) {
+  Row(item, { key: item.id })
+}
+
+// .map() is equally idiomatic — pick whichever reads cleaner.
+list = $todos.map(item => TaskRow(item))
 ```
 
-For multi-way dispatch inside function bodies, use `switch`:
+Inside function bodies (actions/components/effects) you can also use the
+**statement forms** with `return`:
 
 ```javascript
 function getPanel(stage) {
   switch (stage) {
-    case "done": return Done()
+    case "done":  return Done()
     case "ready": return Ready()
-    default: return Pending()
+    default:      return Pending()
   }
 }
 ```
+
+**Rules of thumb:**
+
+- Reach for ternary for two-way conditions, expression-`switch` for
+  multi-way dispatch, and expression-`for` for collecting rendered
+  rows.
+- `for (let x of xs) { Row(x) }` scopes `x` strictly to the body — it
+  is **not** a reactive atom and cannot be read from outside.
+- Both expression-`if` and expression-`switch` short-circuit — only
+  the chosen branch is evaluated, so guarded `Show(...)` blocks remain
+  cheap.
 
 ### Responsive prop maps
 
@@ -1343,12 +1458,30 @@ Notes:
 
 ### Escape hatches — last-resort raw HTML / CSS
 
-`HTMLTag`, `Styles`.
+The standard catalogue covers ~99% of cases. When you genuinely need
+markup or styling that no component captures, two primitives are
+available:
+
+- **`HTMLTag(tag, { attributes?, children? })`** — render an
+  allow-listed HTML element (`div`, `span`, `section`, `article`,
+  `figure`, `figcaption`, `details`, `summary`, `mark`, `cite`, …).
+  Attributes are sanitised — `on*` handlers, `style` strings
+  containing `expression(`, and `href`/`src` values starting with
+  `javascript:` are dropped silently.
+- **`Styles(css)`** — inject a `<style>` block into the shadow root.
+  Payloads containing `</style>`, `<script>`, `expression(`,
+  `javascript:`, or `@import` are dropped silently. Scope selectors
+  to a custom class to avoid leaking into library components.
 
 ```javascript
 aktion = Stack([
   Styles(`
-    .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
+    .hero-callout {
+      background: linear-gradient(135deg, #6366f1, #10b981);
+      color: white;
+      padding: 24px;
+      border-radius: 12px;
+    }
     .hero-callout h2 { margin: 0 0 8px; font-size: 22px; }
   `),
   HTMLTag("div", { attributes: { class: "hero-callout" }, children: [
@@ -1357,6 +1490,17 @@ aktion = Stack([
   ]})
 ])
 ```
+
+**Rules of thumb:**
+
+- Always try a standard component first (`Banner`, `Hero`, `Callout`,
+  `Card`, …).
+- Use `Styles(...)` only for selectors you own (custom classes).
+  Never override library component selectors directly — themes will
+  fight you.
+- Both primitives are safe: the sanitiser strips dangerous payloads
+  rather than throwing, so a malformed escape hatch can never break
+  the page.
 
 ---
 
@@ -1521,29 +1665,41 @@ pages = Router({
 
 ---
 
-## 12. Globals — `Storage`, `console`
+## 12. Globals — `storage`, `console`
 
 Two namespace globals are always in scope — no import, no declaration.
+Both names are **lowercase** and follow standard JS `obj.method(args)`
+method-call syntax with object-literal options.
 
-### `Storage` — browser storage
+### `storage` — browser storage
 
 ```javascript
-// localStorage is the default; `Storage.local` is its alias.
-Storage.set("name", "John")
-$name = Storage.get("name")
-Storage.remove("name")
-Storage.clear()
+// localStorage is the default; `storage.local` is its alias.
+storage.set("name", "John")
+$name = storage.get("name")
+storage.remove("name")
+storage.clear()
 
 // Per-tab sessionStorage.
-Storage.session.set("draft", $draft)
-$draft = Storage.session.get("draft")
+storage.session.set("draft", $draft)
+$draft = storage.session.get("draft")
 
-// Cookies — options in second/third arg.
-Storage.cookies.set("user", "John", { expires: 7, path: "/", domain: "example.com", secure: true, sameSite: "Lax" })
-$user = Storage.cookies.get("user")
-Storage.cookies.remove("user", { path: "/" })
-Storage.cookies.clear()
+// Cookies — options as an object literal.
+storage.cookies.set("user", "John", { expires: 7, path: "/", domain: "example.com", secure: true, sameSite: "Lax" })
+$user = storage.cookies.get("user")
+storage.cookies.remove("user", { path: "/" })
+storage.cookies.clear()
 ```
+
+**Notes:**
+
+- Non-string values round-trip through `JSON.stringify` / `JSON.parse`;
+  missing keys return `null`.
+- Cookie options: `expires` (days, `Date`, or ISO string), `maxAge`
+  (seconds), `path`, `domain`, `secure`, `sameSite`.
+- Failures (quota exceeded, disabled storage, malformed JSON) are
+  swallowed silently — perfect for partial-stream renders in
+  privacy / SSR contexts.
 
 ### `console` — host console forwarder
 
@@ -1581,11 +1737,11 @@ Text(t("orders.greeting", { name: $userName }))
 Reload-friendly pattern:
 
 ```javascript
-$locale = Storage.get("locale") ?? "en"
+$locale = storage.get("locale") ?? "en"
 
 function setLocale(next) {
   $locale = next
-  Storage.set("locale", next)
+  storage.set("locale", next)
 }
 
 $i18n   = i18n({ locale: $locale, messages: messages, fallback: "en" })
@@ -2600,7 +2756,7 @@ Use only the JS-aligned surface. Common shapes to follow:
 | `switch (value) { case "a": return X; default: return Y }`                                               | Standard JS `switch`. The DSL `match` keyword is gone.                               |
 | `Router({ ... })` / `route.path`                                                                         | Capitalised helper, no-underscore route surface. Legacy underscored forms are gone.  |
 | `emit("name", { detail })`                                                                               | Function-call syntax. The old whitespace-string form is gone.                        |
-| `Storage.set("key", value)`                                                                              | Capitalised global. The lowercase legacy alias is gone.                              |
+| `storage.set("key", value)`                                                                              | Lowercase global. `storage.local.*`, `storage.session.*`, `storage.cookies.*` cover every browser-persistence target. |
 | `navigator.clipboard.writeText(...)`                                                                     | Direct JS — there is no `js`-wrapper block anymore.                                  |
 | `// comment` or `/* … */`                                                                                | Only the two JS comment forms. `#` line comments are no longer parsed.               |
 | `Button("Save", { variant: "primary" })`                                                                 | Named props always live inside a trailing `{ ... }` object literal.                  |
@@ -2637,7 +2793,7 @@ Before finishing, walk your output and verify:
 17. Comments use only `//` or `/* */`.
 18. No DSL JS-wrapper blocks — direct JS lives in function/effect bodies.
 19. `emit("name", detail)` function call syntax for events.
-20. `Storage.*` (capitalized) for browser storage access.
+20. `storage.*` / `console.*` are lowercase — the only built-in globals.
 
 ---
 
@@ -2658,7 +2814,7 @@ Before finishing, walk your output and verify:
 | Component catalog by group                                             | §9.                                    |
 | JavaScript layer — `ctx` bridge, browser APIs                          | §10.                                   |
 | Routing — `Router`, `params`, `route`                                  | §11.                                   |
-| Globals — `Storage`, `console`                                         | §12.                                   |
+| Globals — `storage`, `console`                                         | §12.                                   |
 | Internationalisation — `$i18n`, `t()`, `Locale()`                      | §13.                                   |
 | Theming — `Theme({...})`, structured tokens, brand recipes             | §14.                                   |
 | Icons (Font Awesome)                                                   | §15.                                   |
