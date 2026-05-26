@@ -72,9 +72,9 @@ import "aktion-runtime";</code></pre>
 &lt;script&gt;
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-    _app_ = Stack([greeting])
+    aktion = Stack([greeting])
     greeting = Card([
-      CardHeader("Hello", subtitle: "Generative UI in plain HTML"),
+      CardHeader("Hello", { subtitle: "Generative UI in plain HTML" }),
       Markdown("Set this script via **setResponse()** or stream it via **appendChunk()**.")
     ])
   `);
@@ -104,7 +104,7 @@ el.streaming = false;</code></pre>
 &lt;/aktion-app&gt;
 
 // Properties (set in JS)
-el.response   = "_app_ = ..."   // same as setResponse(text)
+el.response   = "aktion = ..."   // same as setResponse(text)
 el.streaming  = true            // toggle streaming mode
 el.showErrors = true            // toggle the developer error banner
 
@@ -114,7 +114,7 @@ el.appendChunk(chunk)           // append a streaming chunk
 el.clear()                      // wipe state and program text
 el.setTheme(theme)              // built-in name, or a Theme token map
 el.registerComponents(specs)    // extend the component library at runtime
-el.setTools({ name: fn })       // expose async tools to js{} blocks
+el.setTools({ name: fn })       // expose async tools to action/effect bodies
 el.registerHttpInterceptors(...) // hook every http() call
 el.navigate(path)               // programmatic router navigation
 el.getSystemPrompt()            // build the LLM system prompt
@@ -139,12 +139,12 @@ el.serializeState() / hydrateState(snap) / loadSnapshot({...}) // persistence
       const el = document.querySelector("aktion-app");
       el.setResponse(`
         $count = 0
-        _app_ = Card([
-          CardHeader("Counter demo", subtitle: "Reactive state in 5 lines"),
+        aktion = Card([
+          CardHeader("Counter demo", { subtitle: "Reactive state in 5 lines" }),
           Text("Count: " + $count),
-          Button("Increment", action: increment)
+          Button("Increment", { action: increment })
         ])
-        action increment() { $count = $count + 1 }
+        function increment() { $count = $count + 1 }
       `);
     &lt;/script&gt;
   &lt;/body&gt;

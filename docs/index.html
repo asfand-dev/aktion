@@ -45,8 +45,8 @@
 &lt;script&gt;
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-      _app_ = Stack([greeting])
-      greeting = Card([CardHeader("Hello", subtitle: "Generative UI in plain HTML")])
+      aktion = Stack([greeting])
+      greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
   `);
 &lt;/script&gt;</code></pre>
 
@@ -78,11 +78,11 @@
         </div>
         <div class="feature">
           <h3>Hash-based routing</h3>
-          <p>Multi-page UIs via <code>pages = _router_({ "/": Page() })</code> + <code>NavLink</code>. Always on, deep links and back/forward just work.</p>
+          <p>Multi-page UIs via <code>pages = Router({ "/": Page() })</code> + <code>NavLink</code>. Always on, deep links and back/forward just work.</p>
         </div>
         <div class="feature">
           <h3>JavaScript escape hatch</h3>
-          <p><code>js{ &hellip; }</code> blocks inside <code>effect</code> / <code>action</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
+          <p>Inline JavaScript in <code>effect</code> / <code>function</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
         </div>
       </div>
 
@@ -119,22 +119,22 @@
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">_app_ = Stack([welcome, kpis, chart])
+<pre><code class="example-source">aktion = Stack([welcome, kpis, chart])
 welcome = Card([
-  CardHeader("Hello there", subtitle: "Generative UI rendered from Aktion"),
+  CardHeader("Hello there", { subtitle: "Generative UI rendered from Aktion" }),
   Markdown("This card was streamed in **plain text** and rendered as a real UI.")
 ])
 kpis = Stats([
-  StatCard("Active users", value: "12,540", trend: "up", delta: "+18% vs last week"),
-  StatCard("Revenue", value: "$48.2k", trend: "flat", delta: "0% vs last week"),
-  StatCard("Errors", value: "12", trend: "down", delta: "-32% vs last week")
-], layout: "grid")
+  StatCard("Active users", { value: "12,540", trend: "up", delta: "+18% vs last week" }),
+  StatCard("Revenue", { value: "$48.2k", trend: "flat", delta: "0% vs last week" }),
+  StatCard("Errors", { value: "12", trend: "down", delta: "-32% vs last week" })
+], { layout: "grid" })
 chart = Card([
   CardHeader("Daily traffic"),
-  LineChart(labels: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], series: [
-    Series("Visits", values: [120,180,160,210,250,200,230]),
-    Series("Signups", values: [12,18,15,22,28,21,24])
-  ])
+  LineChart({ labels: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], series: [
+    Series("Visits", { values: [120,180,160,210,250,200,230] }),
+    Series("Signups", { values: [12,18,15,22,28,21,24] })
+  ] })
 ])
 </code></pre>
         </div>
@@ -148,7 +148,7 @@ chart = Card([
       <div class="feature-grid">
         <div class="feature">
           <h3>1. Declarative tree</h3>
-          <p>Pure-data composition of components: <code>_app_ = Stack([header, body])</code>. Re-computed on every render.</p>
+          <p>Pure-data composition of components: <code>aktion = Stack([header, body])</code>. Re-computed on every render.</p>
         </div>
         <div class="feature">
           <h3>2. Reactive state &amp; HTTP</h3>
@@ -156,7 +156,7 @@ chart = Card([
         </div>
         <div class="feature">
           <h3>3. Actions &amp; effects</h3>
-          <p><code>action Name() { &hellip; }</code> for click-driven mutations, <code>effect [ ...deps ] { &hellip; }</code> for declarative background work.</p>
+          <p><code>function name() { &hellip; }</code> for click-driven mutations, <code>effect(() =&gt; { &hellip; }, [...deps])</code> for declarative background work.</p>
         </div>
       </div>
 
@@ -195,13 +195,13 @@ chart = Card([
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p><code>effect</code> &amp; <code>action</code> blocks with <code>js{ &hellip; }</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
+          <p><code>effect</code> &amp; <code>function</code> blocks with inline JavaScript for the rare cases the declarative surface doesn&rsquo;t cover.</p>
           <span class="demo-arrow">Learn more &rarr;</span>
         </a>
         <a class="demo-card" href="routing.html">
           <span class="demo-tag">Navigation</span>
           <h3>Routing</h3>
-          <p>Hash-based multi-page UIs via <code>pages = _router_({ &hellip; })</code> and <code>NavLink</code>.</p>
+          <p>Hash-based multi-page UIs via <code>pages = Router({ &hellip; })</code> and <code>NavLink</code>.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="themes.html">

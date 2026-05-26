@@ -1,10 +1,10 @@
 /**
- * Acceptance tests for Aktion 0.5 §19.1 — "one positional
+ * Acceptance tests for Aktion §19.1 — "one positional
  * argument max" enforcement.
  *
  * The redesign mandates that every component call accepts at most one
  * positional argument (the canonical primary slot) and every other
- * argument MUST be passed as a named arg (`prop: value`). This file
+ * argument MUST be passed in a trailing object literal. This file
  * pins down:
  *
  *   - The `PropSpec.positional` flag + `findPositionalIndex` helper
@@ -51,7 +51,6 @@ function evalCall(src: string): ComponentNode {
   const state = new StateStore();
   const ctx = createContext(state, { library: defaultLibrary });
   planProgram(program, ctx);
-  // Grab the LAST assignment — programs may start with `$state` declarations.
   const stmt = [...program.statements].reverse().find((s) => s.kind === "Assignment");
   if (!stmt || stmt.kind !== "Assignment") throw new Error("expected an assignment");
   const value = evaluate(stmt.expression, ctx);
@@ -62,16 +61,12 @@ function evalCall(src: string): ComponentNode {
 describe("§19.1 — schema metadata", () => {
   it("`findPositionalIndex` returns the explicitly-marked prop's index", () => {
     const callout = defaultLibrary.components.find((c) => c.name === "Callout")!;
-    // `Callout` declares `variant?, title (positional), description?, ...`
-    // so the positional slot is slot 1, not slot 0.
     expect(findPositionalIndex(callout)).toBe(1);
     expect(findPositionalProp(callout)?.name).toBe("title");
   });
 
   it("`findPositionalIndex` falls back to slot 0 when no explicit marker is set", () => {
     const stack = defaultLibrary.components.find((c) => c.name === "Stack")!;
-    // Stack does not declare an explicit `positional: true` flag; the
-    // default-to-slot-0 fallback should return 0 (the `children` prop).
     expect(findPositionalIndex(stack)).toBe(0);
     expect(findPositionalProp(stack)?.name).toBe("children");
   });
@@ -87,8 +82,6 @@ describe("§19.1 — schema metadata", () => {
     const portal = defaultLibrary.components.find((c) => c.name === "Portal")!;
     const eb = defaultLibrary.components.find((c) => c.name === "ErrorBoundary")!;
     const code = defaultLibrary.components.find((c) => c.name === "CodeBlock")!;
-    // Each of these moves the positional away from slot 0 — verify the
-    // explicit marker steers `findPositionalIndex` correctly.
     expect(findPositionalProp(portal)?.name).toBe("children");
     expect(findPositionalProp(eb)?.name).toBe("children");
     expect(findPositionalProp(code)?.name).toBe("codeString");
@@ -133,8 +126,6 @@ describe("§19.1 — schema metadata", () => {
   });
 
   it("the default library passes the one-positional-max self-check at load", () => {
-    // Library import already runs the assert; calling it again confirms the
-    // invariant survives any future spec edits.
     expect(() => assertOnePositionalMax(defaultLibrary.components)).not.toThrow();
   });
 });
@@ -162,23 +153,21 @@ describe("§19.1 — validateProgramSchema warns on multi-positional", () => {
   });
 
   it("accepts a single-positional call without warnings", () => {
-    const program = parse(`btn = Button("Save", variant: "primary", loading: true)`);
+    const program = parse(`btn = Button("Save", { variant: "primary", loading: true })`);
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings).toEqual([]);
   });
 
   it("accepts a single-positional call to a non-slot-0 positional spec", () => {
-    // `Callout` keeps `variant` at slot 0 and `title` at slot 1 (positional).
-    // The one positional arg lands in `title` via named-args + bare label.
     const program = parse(
-      `note = Callout("Saved!", variant: "success", description: "Changes applied.")`,
+      `note = Callout("Saved!", { variant: "success", description: "Changes applied." })`,
     );
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings).toEqual([]);
   });
 
   it("never warns on `key:` even alongside the canonical positional", () => {
-    const program = parse(`btn = Button("Save", key: "save-btn", variant: "primary")`);
+    const program = parse(`btn = Button("Save", { key: "save-btn", variant: "primary" })`);
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings).toEqual([]);
   });
@@ -186,22 +175,15 @@ describe("§19.1 — validateProgramSchema warns on multi-positional", () => {
 
 describe("§19.1 — evaluator routes positional args to the spec slot", () => {
   it("routes a single positional to the `(positional)` slot when it is not slot 0", () => {
-    // Callout's positional is `title` (slot 1). The bare string should
-    // land in slot 1, leaving slot 0 (`variant`) empty when omitted.
-    const node = evalCall(`x = Callout("Saved!", variant: "success")`);
+    const node = evalCall(`x = Callout("Saved!", { variant: "success" })`);
     expect(node.name).toBe("Callout");
-    // args layout: [variant, title, ...]
     expect(node.args[0]).toBe("success");
     expect(node.args[1]).toBe("Saved!");
   });
 
   it("named-arg slot order matches spec slot order (not source order)", () => {
-    // The named args are written `variant: …, size: …, type: …` (source
-    // order) but spec slot order for Button is `label, action, variant,
-    // type, size, ...`. The evaluator must map each named arg into the
-    // right slot so the renderer's positional `args[N]` reads still work.
     const node = evalCall(
-      `x = Button("Save", variant: "primary", size: "lg", type: "submit")`,
+      `x = Button("Save", { variant: "primary", size: "lg", type: "submit" })`,
     );
     expect(node.args[0]).toBe("Save");     // label slot
     expect(node.args[2]).toBe("primary");  // variant slot
@@ -210,8 +192,6 @@ describe("§19.1 — evaluator routes positional args to the spec slot", () => {
   });
 
   it("multi-positional is gracefully accepted (legacy fallback)", () => {
-    // Schema-validator warns but the runtime still places extras in the
-    // next unfilled slots so legacy programs keep rendering.
     const node = evalCall(
       `x = StatCard("Revenue", "$48k", "up", "+12%", "chart-pie")`,
     );
@@ -224,19 +204,18 @@ describe("§19.1 — evaluator routes positional args to the spec slot", () => {
 });
 
 describe("§19.1 — value: $atom lifts target onto argMeta.stateRef", () => {
-  it("`value: $title` (named arg with state ref) sets argMeta on the right slot", () => {
+  it("`value: $title` (trailing object with state ref) sets argMeta on the right slot", () => {
     const node = evalCall(
-      `$title = "hello"\nx = Input("title", placeholder: "Title", value: $title)`,
+      `$title = "hello"\nx = Input("title", { placeholder: "Title", value: $title })`,
     );
     expect(node.name).toBe("Input");
-    // Spec props: [id, placeholder, type, validations, value]. Slot 4 = value.
     expect(node.argMeta[4]?.stateRef).toBe("title");
     expect(node.argMeta[0]?.stateRef).toBeUndefined();
   });
 
   it("`value: $form.email` (member chain rooted at $state) sets dotted argMeta.stateRef", () => {
     const node = evalCall(
-      `$form = { email: "" }\nx = Input("email", placeholder: "Email", value: $form.email)`,
+      `$form = { email: "" }\nx = Input("email", { placeholder: "Email", value: $form.email })`,
     );
     expect(node.name).toBe("Input");
     expect(node.argMeta[4]?.stateRef).toBe("form.email");
@@ -244,15 +223,12 @@ describe("§19.1 — value: $atom lifts target onto argMeta.stateRef", () => {
 
   it("`value: $cart.items[0]` (bracket access on $state) sets dotted argMeta.stateRef", () => {
     const node = evalCall(
-      `$cart = { items: ["a"] }\nx = Input("first", placeholder: "First", value: $cart.items[0])`,
+      `$cart = { items: ["a"] }\nx = Input("first", { placeholder: "First", value: $cart.items[0] })`,
     );
     expect(node.argMeta[4]?.stateRef).toBe("cart.items.0");
   });
 
   it("a single positional `$variable` still lifts argMeta.stateRef (default slot 0)", () => {
-    // Button has no explicit `positional: true` flag — the default-to-slot-0
-    // fallback should land the bare `$label` ref on the `label` slot (slot 0)
-    // and lift its name into argMeta so renderers can react to changes.
     const node = evalCall(`$label = "Save"\nx = Button($label)`);
     expect(node.argMeta[0]?.stateRef).toBe("label");
   });
@@ -262,18 +238,14 @@ describe("§19.1 — prompt projection", () => {
   it("teaches the one-positional rule in the Syntax section", () => {
     const prompt = generatePrompt(defaultLibrary);
     expect(prompt).toMatch(/One positional argument max/);
-    expect(prompt).toMatch(/StatCard\("Revenue", value: "\$48k"/);
+    expect(prompt).toMatch(/StatCard\("Revenue", \{ value: "\$48k"/);
   });
 
   it("marks the canonical positional prop with `(positional)` in component signatures", () => {
     const prompt = generatePrompt(defaultLibrary);
-    // Callout's positional is `title` — must be tagged.
     expect(prompt).toMatch(/Callout\([^)]*title[^)]*\(positional\)/);
-    // CodeBlock's positional is `codeString`.
     expect(prompt).toMatch(/CodeBlock\([^)]*codeString[^)]*\(positional\)/);
-    // Portal's positional is `children`.
     expect(prompt).toMatch(/Portal\([^)]*children[^)]*\(positional\)/);
-    // ErrorBoundary keeps `children` as the trailing positional.
     expect(prompt).toMatch(/ErrorBoundary\([^)]*children[^)]*\(positional\)/);
   });
 });

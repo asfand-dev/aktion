@@ -16,11 +16,11 @@
  *   - `tests/runtime.test.ts`            — evaluator + http({...}) + StateStore
  *   - `tests/suis2-end-to-end.test.ts`   — components, slots, two-way binding,
  *                                          action / effect declarations,
- *                                          control flow, _router_, key:
+ *                                          control flow, Router, key:
  *   - `tests/router.test.ts`             — path matching + navigation
  *   - `tests/storage-console.test.ts`    — storage + console namespaces
  *   - `tests/in-script-theme.test.ts`    — Theme({...}) tokenisation
- *   - `tests/javascript-integration.test.ts` — js{ … } + effects + actions
+ *   - `tests/javascript-integration.test.ts` — direct JS via lambdas + effects + actions
  *   - `tests/library.test.ts`            — every component renderer
  */
 
@@ -32,11 +32,15 @@ import {
   I18nRuntime,
   Router,
   createContext,
+  createRuntimeBudget,
   disposeContext,
   planProgram,
+  resetRuntimeBudget,
   isComponentNode,
   isUserComponentNode,
+  RuntimeBudgetError,
   type EvaluationContext,
+  type RuntimeBudget,
 } from "../src/runtime/index.js";
 import { Renderer } from "../src/renderer/renderer.js";
 import { defaultLibrary } from "../src/library/index.js";
@@ -45,6 +49,12 @@ interface HarnessOptions {
   http?: HttpRuntime;
   i18n?: I18nRuntime;
   router?: Router;
+  /**
+   * Override the runtime safety budget (e.g. set a tight `iterationLimit`
+   * to assert the budget trips). Pass `null` to disable enforcement
+   * entirely. Defaults to the context's standard budget.
+   */
+  budget?: RuntimeBudget | null;
 }
 
 function harness(src: string, opts: HarnessOptions = {}) {
@@ -55,6 +65,7 @@ function harness(src: string, opts: HarnessOptions = {}) {
     library: defaultLibrary,
     http: opts.http,
     i18n: opts.i18n,
+    budget: opts.budget,
   });
   const program = parse(src);
   if (program.errors.length > 0) {
@@ -79,7 +90,7 @@ function harness(src: string, opts: HarnessOptions = {}) {
     },
     render(): HTMLElement {
       renderer.beginRender();
-      const root = ctx.bindings.get("_app_")?.();
+      const root = ctx.bindings.get("aktion")?.();
       const node = renderer.render(root);
       const host = document.createElement("div");
       host.appendChild(node);
@@ -97,7 +108,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(`
       $cart = [{ price: 10 }, { price: 20 }, { price: 30 }]
       $total = @Sum($cart.price)
-      _app_ = Text(\`\${$total}\`)
+      aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(60);
   });
@@ -109,23 +120,20 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
         { item: "Muffin", qty: 1, price: 3.75 },
         { item: "Cookie", qty: 3, price: 2.25 }
       ]
-      $total = @Sum(for o in $orders { o.qty * o.price })
-      _app_ = Text(\`\${$total}\`)
+      $total = @Sum(for (let o of $orders) { o.qty * o.price })
+      aktion = Text(\`\${$total}\`)
     `);
     // 2 * 4.5 + 1 * 3.75 + 3 * 2.25 = 9 + 3.75 + 6.75 = 19.5
     expect(state.get("total")).toBe(19.5);
   });
 
   it("renders the user's full Order Summary program with $19.50 in the Total card", () => {
-    // Regression for the user-reported bug — exercises the full
-    // parse → plan → render path including @Format(currency) on the
-    // computed `$total` and a `for o in $orders { … }` inside a Col.
     const source =
-      '_app_ = Stack([PageHeader("Order Summary"), Card([Table(cols)]), totalDisplay], gap: "m", padding: "l")\n' +
+      'aktion = Stack([PageHeader("Order Summary"), Card([Table(cols)]), totalDisplay], { gap: "m", padding: "l" })\n' +
       '$orders = [{ item: "Latte", qty: 2, price: 4.5 }, { item: "Muffin", qty: 1, price: 3.75 }, { item: "Cookie", qty: 3, price: 2.25 }]\n' +
-      "$total = @Sum(for o in $orders { o.qty * o.price })\n" +
-      'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, align: "right"), Col("Subtotal", for o in $orders { o.qty * o.price }, format: "currency", align: "right")]\n' +
-      'totalDisplay = Card([Stack([Text("Order Total", variant: "large-heavy"), Spacer(), Text(@Format($total, "currency"), variant: "large-heavy", tone: "primary")], direction: "row")])';
+      "$total = @Sum(for (let o of $orders) { o.qty * o.price })\n" +
+      'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, { align: "right" }), Col("Subtotal", for (let o of $orders) { o.qty * o.price }, { format: "currency", align: "right" })]\n' +
+      'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text(@Format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
     const { state, render } = harness(source);
     expect(state.get("total")).toBe(19.5);
     const host = render();
@@ -138,7 +146,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(`
       $cart  = [{ price: 1 }, { price: 2 }]
       $total = @Sum($cart.price)
-      _app_ = Text(\`\${$total}\`)
+      aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(3);
     state.set("cart", [{ price: 5 }, { price: 10 }, { price: 20 }]);
@@ -151,11 +159,11 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("cascades through chains of computed atoms in a single flush", async () => {
     const { state } = harness(`
       $cart     = [{ qty: 1, price: 10 }, { qty: 2, price: 5 }]
-      $lines    = for it in $cart { it.qty * it.price }
+      $lines    = for (let it of $cart) { it.qty * it.price }
       $subtotal = @Sum($lines)
-      $shipping = if $subtotal >= 100 { 0 } else { 9 }
+      $shipping = if ($subtotal >= 100) { 0 } else { 9 }
       $total    = $subtotal + $shipping
-      _app_ = Text(\`\${$total}\`)
+      aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("subtotal")).toBe(20);
     expect(state.get("shipping")).toBe(9);
@@ -175,7 +183,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(`
       $total = @Count($rows)
       $rows  = [10, 20, 30]
-      _app_ = Text(\`\${$total}\`)
+      aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(3);
   });
@@ -185,8 +193,8 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
       $useA = true
       $a    = 100
       $b    = 200
-      $value = if $useA { $a } else { $b }
-      _app_ = Text(\`\${$value}\`)
+      $value = if ($useA) { $a } else { $b }
+      aktion = Text(\`\${$value}\`)
     `);
     expect(state.get("value")).toBe(100);
 
@@ -218,7 +226,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
       $name  = "Ada"
       $tags  = ["a", "b"]
       $cfg   = { theme: "dark", fontSize: 14 }
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(state.get("count")).toBe(0);
     expect(state.get("name")).toBe("Ada");
@@ -230,7 +238,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state, dispose } = harness(`
       $cart  = [{ price: 1 }]
       $total = @Sum($cart.price)
-      _app_ = Text(\`\${$total}\`)
+      aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(1);
     dispose();
@@ -247,7 +255,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(
       `
         $orders = http({ url: "/api/orders" })
-        _app_ = Text("ok")
+        aktion = Text("ok")
       `,
       { http: new HttpRuntime() },
     );
@@ -267,7 +275,7 @@ describe("Math & calculations", () => {
   it("standard arithmetic precedence (multiplicative > additive)", () => {
     const { ctx } = harness(`
       $result = 2 + 3 * 4
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("result")).toBe(14);
   });
@@ -275,7 +283,7 @@ describe("Math & calculations", () => {
   it("parenthesised grouping overrides precedence", () => {
     const { ctx } = harness(`
       $result = (2 + 3) * 4
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("result")).toBe(20);
   });
@@ -285,7 +293,7 @@ describe("Math & calculations", () => {
       $modulo  = 10 % 3
       $negate  = -5 + 8
       $chain   = 100 - 50 - 25
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("modulo")).toBe(1);
     expect(ctx.state.get("negate")).toBe(3);
@@ -297,7 +305,7 @@ describe("Math & calculations", () => {
       $count   = 5
       $concat  = "Days: " + $count
       $sum     = $count + 10
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("concat")).toBe("Days: 5");
     expect(ctx.state.get("sum")).toBe(15);
@@ -307,7 +315,7 @@ describe("Math & calculations", () => {
     const { ctx } = harness(`
       $div = 10 / 0
       $mod = 10 % 0
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("div")).toBe(0);
     expect(ctx.state.get("mod")).toBe(0);
@@ -317,7 +325,7 @@ describe("Math & calculations", () => {
     const { ctx } = harness(`
       $lt  = "5" < "10"
       $gte = 9 >= 9
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     // Both operands coerce via `toNumber`, so `"5" < "10"` is `5 < 10`.
     expect(ctx.state.get("lt")).toBe(true);
@@ -332,7 +340,7 @@ describe("Math & calculations", () => {
       $andTruthy    = "ok" && "result"
       $nullishKept  = 0 ?? "fallback"
       $nullishFb    = null ?? "fallback"
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("orFallback")).toBe("fallback");
     expect(ctx.state.get("orFirst")).toBe("primary");
@@ -351,7 +359,7 @@ describe("Math & calculations", () => {
       $clamp = @Clamp(15, 0, 10)
       $pow   = @Pow(2, 10)
       $sqrt  = @Sqrt(81)
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("round")).toBe(2.57);
     expect(ctx.state.get("floor")).toBe(3);
@@ -379,7 +387,7 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
       $slice = @Slice($rows.x, 1, 3)
       $uniq  = @Unique([1, 1, 2, 3, 3])
       $rev   = @Reverse([1, 2, 3])
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("min")).toBe(1);
     expect(ctx.state.get("max")).toBe(3);
@@ -400,7 +408,7 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
       $asc      = @Range(1, 5)
       $stepped  = @Range(0, 10, 2)
       $desc     = @Range(5, 1)
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("asc")).toEqual([1, 2, 3, 4, 5]);
     expect(ctx.state.get("stepped")).toEqual([0, 2, 4, 6, 8, 10]);
@@ -415,7 +423,7 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
       $trim    = @Trim("   spaced   ")
       $replace = @Replace("foo bar foo", "foo", "baz")
       $substr  = @Substring("hello world", 0, 5)
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("cap")).toBe("Hello");
     expect(ctx.state.get("upper")).toBe("RUST");
@@ -435,7 +443,7 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
       $plural3  = @Plural(3, "child", "children")
       $snake    = @Case("helloWorld", "snake")
       $kebab    = @Case("HelloWorld", "kebab")
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("starts")).toBe(true);
     expect(ctx.state.get("ends")).toBe(true);
@@ -453,7 +461,7 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
       $iso     = @AddDays("2024-01-01", 7)
       $diff    = @DiffDays("2024-01-01", "2024-01-31")
       $fmt     = @FormatDate("2024-03-15", "YYYY/MM/DD")
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(typeof ctx.state.get("now")).toBe("number");
     expect(String(ctx.state.get("iso"))).toMatch(/^2024-01-08/);
@@ -461,15 +469,12 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
     expect(ctx.state.get("fmt")).toBe("2024/03/15");
   });
 
-  it("@If / @Switch lazy conditional builtins (only the chosen branch runs)", () => {
-    // These intentionally read non-existent names in the unselected
-    // branch — the test passes only because the runtime defers
-    // evaluation.
+  it("if / switch lazy conditional expressions (only the chosen branch runs)", () => {
     const { ctx } = harness(`
       $tone = "warn"
-      $iconIf     = @If($tone == "warn", "alert", $unknownNeverEvaluated)
-      $iconSwitch = @Switch($tone, { ok: "check", warn: "alert" }, "default")
-      _app_ = Text("ok")
+      $iconIf     = if ($tone == "warn") { "alert" } else { "fallback" }
+      $iconSwitch = switch ($tone) { case "ok": "check"; break; case "warn": "alert"; break; default: "default" }
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("iconIf")).toBe("alert");
     expect(ctx.state.get("iconSwitch")).toBe("alert");
@@ -484,17 +489,17 @@ describe("Lambda usage", () => {
     const { ctx } = harness(`
       double = (n) => n * 2
       $result = double(7)
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("result")).toBe(14);
   });
 
   it("multi-argument lambda with parameter defaults", () => {
     const { ctx } = harness(`
-      greet = (name, prefix: "Hello") => prefix + ", " + name
+      greet = (name, prefix = "Hello") => prefix + ", " + name
       $a = greet("Ada")
       $b = greet("Ada", "Hi")
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.state.get("a")).toBe("Hello, Ada");
     expect(ctx.state.get("b")).toBe("Hi, Ada");
@@ -504,11 +509,11 @@ describe("Lambda usage", () => {
     const { ctx, state } = harness(`
       $items = [{ id: 1, name: "one" }, { id: 2, name: "two" }]
       $picked = 0
-      action pick(id) { $picked = id }
-      buttons = for it in $items {
-        Button(it.name, onClick: () => pick(it.id))
+      function pick(id) { $picked = id }
+      buttons = for (let it of $items) {
+        Button(it.name, { onClick: () => pick(it.id) })
       }
-      _app_ = Stack(buttons)
+      aktion = Stack(buttons)
     `);
     const buttons = ctx.bindings.get("buttons")?.() as unknown as Array<{
       args: unknown[];
@@ -529,7 +534,7 @@ describe("Lambda usage", () => {
     const { ctx, state } = harness(`
       $n = 0
       bump = () => $n = $n + 1
-      _app_ = Button("Bump", onClick: bump)
+      aktion = Button("Bump", { onClick: bump })
     `);
     const bump = ctx.bindings.get("bump")?.() as () => number;
     expect(typeof bump).toBe("function");
@@ -545,10 +550,10 @@ describe("Lambda usage", () => {
 // Hoisting — forward references between top-level bindings
 // ──────────────────────────────────────────────────────────────────────
 describe("Hoisting (forward references)", () => {
-  it("`_app_` referencing a `component` declared later still resolves", () => {
+  it("`aktion` referencing a component declared later still resolves", () => {
     const { render } = harness(`
-      _app_ = Hello()
-      component Hello() { return Text("hi from hoist") }
+      aktion = Hello()
+      function Hello() { return Text("hi from hoist") }
     `);
     expect(render().textContent).toBe("hi from hoist");
   });
@@ -557,7 +562,7 @@ describe("Hoisting (forward references)", () => {
     const { ctx } = harness(`
       first  = build()
       build  = () => "result"
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(ctx.bindings.get("first")?.()).toBe("result");
   });
@@ -566,22 +571,17 @@ describe("Hoisting (forward references)", () => {
     const { state } = harness(`
       $double = $value * 2
       $value  = 21
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(state.get("double")).toBe(42);
   });
 
   it("an action may reference a `$state` declared later in the file", async () => {
-    // Note: passing a positional arg eagerly invokes the action body
-    // (zero-arg `action()` calls return the bare callable instead — see
-    // the runtime's `evaluateComponentCall` action branch). The arg
-    // becomes the new value, so this also doubles as an "action body
-    // can read AND write a hoisted $state" assertion.
     const { state, ctx } = harness(`
-      action setLater(value) { $later = value }
+      function setLater(value) { $later = value }
       run = setLater("ready")
       $later = "pending"
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(state.get("later")).toBe("pending");
     await ctx.bindings.get("run")?.();
@@ -605,7 +605,7 @@ describe("i18n({...}) language construct", () => {
         })
         $hello = @T("hello")
         $bye   = @T("bye")
-        _app_ = Text(\`\${$hello}\`)
+        aktion = Text(\`\${$hello}\`)
       `,
       { i18n },
     );
@@ -624,7 +624,7 @@ describe("i18n({...}) language construct", () => {
           fallbackMessages: { missing: "Untranslated" }
         })
         $missing = @T("missing")
-        _app_ = Text("ok")
+        aktion = Text("ok")
       `,
       { i18n },
     );
@@ -641,7 +641,7 @@ describe("i18n({...}) language construct", () => {
           fallback: "en"
         })
         $greet = @T("greet", { name: "Ada" })
-        _app_ = Text("ok")
+        aktion = Text("ok")
       `,
       { i18n },
     );
@@ -654,7 +654,7 @@ describe("i18n({...}) language construct", () => {
       `
         $i18n = i18n({ locale: "de-DE", messages: {}, fallback: "en" })
         $tag = @Locale()
-        _app_ = Text("ok")
+        aktion = Text("ok")
       `,
       { i18n },
     );
@@ -664,7 +664,7 @@ describe("i18n({...}) language construct", () => {
   it("with no `i18n({...})` configured, @T returns the bare key as a fallback", () => {
     const { ctx } = harness(`
       $missing = @T("hello")
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     // Without an i18n runtime instance attached the builtin returns the
     // key verbatim — programs degrade gracefully without crashing.
@@ -683,7 +683,7 @@ describe("Theme({...}) language construct (smoke)", () => {
         radius: { md: "8px" },
         font:   { heading: "Inter" }
       })
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     const node = ctx.bindings.get("theme")?.() as { kind: string; tokens: Record<string, string> };
     expect(node.kind).toBe("Theme");
@@ -697,20 +697,20 @@ describe("Theme({...}) language construct (smoke)", () => {
 // `for` expression — destructuring, indices, scope restoration
 // ──────────────────────────────────────────────────────────────────────
 describe("`for` expression — extended scenarios", () => {
-  it("`for (item, i) in xs { … }` exposes a numeric index", () => {
+  it("`for (let [item, i] of xs) { … }` exposes a numeric index", () => {
     const { state } = harness(`
       $rows = ["a", "b", "c"]
-      $tagged = for (it, i) in $rows { i + ":" + it }
-      _app_ = Text("ok")
+      $tagged = for (let [it, i] of $rows) { i + ":" + it }
+      aktion = Text("ok")
     `);
     expect(state.get("tagged")).toEqual(["0:a", "1:b", "2:c"]);
   });
 
-  it("`for {field, field} in xs { … }` destructures each row", () => {
+  it("`for (let {field, field} of xs) { … }` destructures each row", () => {
     const { state } = harness(`
       $rows = [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
-      $names = for {id, name} in $rows { id + ":" + name }
-      _app_ = Text("ok")
+      $names = for (let {id, name} of $rows) { id + ":" + name }
+      aktion = Text("ok")
     `);
     expect(state.get("names")).toEqual(["1:Ada", "2:Lin"]);
   });
@@ -723,9 +723,9 @@ describe("`for` expression — extended scenarios", () => {
     const { ctx, state } = harness(`
       it = "outer"
       $items = [10, 20]
-      $rows = for it in $items { it * 2 }
+      $rows = for (let it of $items) { it * 2 }
       tail = it
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(state.get("rows")).toEqual([20, 40]);
     expect(ctx.bindings.get("tail")?.()).toBe("outer");
@@ -738,22 +738,22 @@ describe("`for` expression — extended scenarios", () => {
 describe("User components — children slot and named slots", () => {
   it("trailing positional becomes the implicit `children` slot", () => {
     const { render } = harness(`
-      component Card2(title) {
+      function Card2(title) {
         return Stack([Text(title), children])
       }
-      _app_ = Card2("Greetings", Text("inside"))
+      aktion = Card2("Greetings", Text("inside"))
     `);
     const out = render();
     expect(out.textContent).toContain("Greetings");
     expect(out.textContent).toContain("inside");
   });
 
-  it("`slots: { footer? }` exposes named slots inside the body", () => {
+  it("a trailing object with no matching param names is passed positionally (slot pattern)", () => {
     const { render } = harness(`
-      component CardX(title, slots: { footer }) {
+      function CardX(title, slots) {
         return Stack([Text(title), slots.footer])
       }
-      _app_ = CardX("Body", footer: Text("Bottom"))
+      aktion = CardX("Body", { footer: Text("Bottom") })
     `);
     const text = render().textContent ?? "";
     expect(text).toContain("Body");
@@ -762,13 +762,13 @@ describe("User components — children slot and named slots", () => {
 
   it("`$state` declared inside a component body is per-instance", () => {
     const { ctx } = harness(`
-      component Counter() {
+      function Counter() {
         $n = 0
         return Text(\`\${$n}\`)
       }
-      _app_ = Stack([Counter(), Counter()])
+      aktion = Stack([Counter(), Counter()])
     `);
-    const app = ctx.bindings.get("_app_")?.();
+    const app = ctx.bindings.get("aktion")?.();
     expect(isComponentNode(app)).toBe(true);
     const children = ((app as { args: unknown[] }).args[0] as unknown[]) ?? [];
     expect(children.length).toBe(2);
@@ -784,9 +784,9 @@ describe("Reactive state (extended scenarios)", () => {
   it("a deeply nested write through a `$obj.path = value` action goes through immutably", async () => {
     const { state, ctx } = harness(`
       $form = { user: { name: "Ada", role: "Engineer" } }
-      action rename(next) { $form.user.name = next }
+      function rename(next) { $form.user.name = next }
       run = rename("Lin")
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     const before = state.get("form");
     await ctx.bindings.get("run")?.();
@@ -796,14 +796,11 @@ describe("Reactive state (extended scenarios)", () => {
   });
 
   it("postfix `$count++` writes the +1 result through the synthetic builtin", async () => {
-    // The action takes a positional arg so the call is invoked eagerly
-    // (a zero-arg call would only return the bare callable — see the
-    // hoisting / setLater scenario above for the same quirk).
     const { state, ctx } = harness(`
       $count = 5
-      action bump(_) { $count++ }
+      function bump(_) { $count++ }
       run = bump(0)
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     await ctx.bindings.get("run")?.();
     expect(state.get("count")).toBe(6);
@@ -813,8 +810,163 @@ describe("Reactive state (extended scenarios)", () => {
     const { state } = harness(`
       $a = 1
       $b = "two"
-      _app_ = Text("ok")
+      aktion = Text("ok")
     `);
     expect(state.snapshot()).toEqual({ a: 1, b: "two" });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Runtime safety budget — bounded recursion, iteration, allocation
+//
+// These tests pin down the runtime's protection against accidentally
+// divergent programs (typos in the playground, mid-stream LLM tokens,
+// recursive components, …) that would otherwise freeze the browser.
+// Every assertion picks a TINY budget so the test runs in microseconds
+// while still proving the dimension under test is enforced.
+// ──────────────────────────────────────────────────────────────────────
+describe("Runtime safety budget", () => {
+  it("aborts a recursive `function Foo() { return Foo() }` instead of overflowing the stack", () => {
+    const budget = createRuntimeBudget({ componentDepthLimit: 8 });
+    const { ctx, render } = harness(
+      `
+        function Loop() {
+          return Loop()
+        }
+        aktion = Loop()
+      `,
+      { budget },
+    );
+    // The first evaluation produces a UserComponentNode (lazy); the
+    // renderer drives the actual recursion via evaluateUserComponent so
+    // we run the render to trigger the abort.
+    expect(() => render()).toThrowError(RuntimeBudgetError);
+    // The finally blocks inside evaluateUserComponent unwind cleanly,
+    // so the depth counter is back at zero — a follow-up render would
+    // start from a clean slate.
+    expect(ctx.budget?.componentDepth).toBe(0);
+  });
+
+  it("aborts a `for` loop whose body would exceed the iteration budget", () => {
+    const budget = createRuntimeBudget({ iterationLimit: 100 });
+    expect(() =>
+      harness(
+        `
+          $rows = @Range(1, 1000)
+          $out  = for (let r of $rows) { r * 2 }
+          aktion = Text("ok")
+        `,
+        { budget },
+      ),
+    ).toThrowError(RuntimeBudgetError);
+  });
+
+  it("rejects `@Range(0, N)` when N exceeds the array-length budget", () => {
+    const budget = createRuntimeBudget({ arrayLengthLimit: 50 });
+    expect(() =>
+      harness(
+        `
+          $values = @Range(0, 100)
+          aktion = Text("ok")
+        `,
+        { budget },
+      ),
+    ).toThrowError(RuntimeBudgetError);
+  });
+
+  it("rejects `@Repeat(value, N)` when N exceeds the array-length budget", () => {
+    const budget = createRuntimeBudget({ arrayLengthLimit: 5 });
+    expect(() =>
+      harness(
+        `
+          $padding = @Repeat("·", 50)
+          aktion = Text("ok")
+        `,
+        { budget },
+      ),
+    ).toThrowError(RuntimeBudgetError);
+  });
+
+  it("a `@Range` within the cap allocates normally", () => {
+    const budget = createRuntimeBudget({ arrayLengthLimit: 100 });
+    const { state } = harness(
+      `
+        $values = @Range(0, 9)
+        aktion = Text("ok")
+      `,
+      { budget },
+    );
+    expect(state.get("values")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("`resetRuntimeBudget(...)` clears per-render counters without touching limits", () => {
+    const budget = createRuntimeBudget({ iterationLimit: 1000 });
+    const { ctx } = harness(
+      `
+        $rows = [1, 2, 3]
+        $out  = for (let r of $rows) { r * 2 }
+        aktion = Text("ok")
+      `,
+      { budget },
+    );
+    const consumed = ctx.budget?.iterations ?? 0;
+    expect(consumed).toBeGreaterThan(0);
+    resetRuntimeBudget(ctx.budget!);
+    expect(ctx.budget?.iterations).toBe(0);
+    expect(ctx.budget?.componentDepth).toBe(0);
+    // Limits are preserved across the reset.
+    expect(ctx.budget?.iterationLimit).toBe(1000);
+  });
+
+  it("disabling the budget (`budget: null`) lifts every limit", () => {
+    const { state } = harness(
+      `
+        $values = @Range(0, 1000)
+        aktion = Text("ok")
+      `,
+      { budget: null },
+    );
+    expect(Array.isArray(state.get("values"))).toBe(true);
+    expect((state.get("values") as number[]).length).toBe(1001);
+  });
+
+  it("nested `for` loops accumulate against the same iteration counter", () => {
+    const budget = createRuntimeBudget({ iterationLimit: 10 });
+    expect(() =>
+      harness(
+        `
+          $rows = [1, 2, 3, 4]
+          $grid = for (let r of $rows) { for (let c of $rows) { r * c } }
+          aktion = Text("ok")
+        `,
+        { budget },
+      ),
+    ).toThrowError(RuntimeBudgetError);
+  });
+
+  it("the error carries the kind, limit, and source so hosts can render context", () => {
+    const direct = new RuntimeBudgetError("iterations", 42, "test loop");
+    expect(direct).toBeInstanceOf(Error);
+    expect(direct.name).toBe("RuntimeBudgetError");
+    expect(direct.kind).toBe("iterations");
+    expect(direct.limit).toBe(42);
+    expect(direct.source).toBe("test loop");
+    expect(direct.message).toContain("42");
+    expect(direct.message).toContain("test loop");
+  });
+
+  it("default limits permit realistic apps (one large array + nested for)", () => {
+    const { state } = harness(
+      `
+        $rows = @Range(1, 200)
+        $cells = for (let r of $rows) {
+          for (let c of @Range(1, 50)) { r * c }
+        }
+        aktion = Text("ok")
+      `,
+    );
+    const cells = state.get("cells") as number[][];
+    expect(cells.length).toBe(200);
+    expect(cells[0]?.length).toBe(50);
   });
 });

@@ -78,7 +78,7 @@ export function inspectAST(source: string): InspectorView {
   // Drafting bindings: the parser doesn't emit partial AST nodes for
   // half-written lines, so `uncommittedBindings` is usually empty.
   // Instead we scan the drafting source for top-level declaration
-  // patterns (`$tier name`, `component Name(`, `name =`, …) to surface
+  // patterns (`$tier name`, `function Name(`, `name =`, …) to surface
   // *which names the author has started writing* even before they
   // commit. This is the "in-flight" view the SCC promises (§1, §2).
   const draftingBindings: InspectorBinding[] = scanDraftingNames(
@@ -170,11 +170,11 @@ function toBinding(stmt: Statement): InspectorBinding | null {
       };
     case "EffectDeclaration": {
       const deps = stmt.triggers.map((t) => {
-        if (t.kind === "lifecycle") return `on:${t.name}`;
-        if (t.kind === "every") return `on:every(${t.intervalMs})`;
+        if (t.kind === "lifecycle") return `"${t.name}"`;
+        if (t.kind === "every") return `"every(${t.intervalMs})"`;
         return `$${t.name}`;
       });
-      if (stmt.rateLimit) deps.push(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`);
+      if (stmt.rateLimit) deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
       const depsLabel = deps.length > 0 ? ` [${deps.join(", ")}]` : "";
       return {
         name: stmt.name,
@@ -222,7 +222,7 @@ function scanDraftingNames(
     // Top-level only — skip indented continuations.
     if (/^\s/.test(rawLine) && rawLine.trim().length > 0) continue;
     const line = rawLine.trim();
-    if (line === "" || line.startsWith("#") || line.startsWith("//")) continue;
+    if (line === "" || line.startsWith("//")) continue;
 
     const stateMatch = /^\$([A-Za-z_]\w*)\s*=/.exec(line);
     if (stateMatch) {
@@ -235,31 +235,33 @@ function scanDraftingNames(
       });
       continue;
     }
-    const compMatch = /^component\s+([A-Za-z_]\w*)/.exec(line);
-    if (compMatch) {
+    const funcMatch = /^function\s+([A-Za-z_]\w*)/.exec(line);
+    if (funcMatch) {
+      const name = funcMatch[1]!;
+      const isPascal = name.length > 0 && name[0]! >= "A" && name[0]! <= "Z";
       bindings.push({
-        name: compMatch[1]!,
-        kind: "component",
+        name,
+        kind: isPascal ? "component" : "action",
         line: lineOffset + i + 1,
         column: 1,
       });
       continue;
     }
-    const effectMatch = /^effect\s+([A-Za-z_]\w*)/.exec(line);
+    const effectMatch = /^effect\s*\(/.exec(line);
     if (effectMatch) {
       bindings.push({
-        name: effectMatch[1]!,
+        name: `effect_${lineOffset + i + 1}`,
         kind: "effect",
         line: lineOffset + i + 1,
         column: 1,
       });
       continue;
     }
-    const actionMatch = /^action\s+([A-Za-z_]\w*)/.exec(line);
-    if (actionMatch) {
+    const varMatch = /^(?:let|const|var)\s+\$?([A-Za-z_]\w*)\s*=/.exec(line);
+    if (varMatch) {
       bindings.push({
-        name: actionMatch[1]!,
-        kind: "action",
+        name: varMatch[1]!,
+        kind: "assignment",
         line: lineOffset + i + 1,
         column: 1,
       });
@@ -289,9 +291,9 @@ function summariseExpression(expr: Expression): string {
     case "Array":     return "[…]";
     case "Object":    return "{…}";
     case "Template":  return "`…`";
-    case "If":        return "if … { … }";
-    case "Match":     return "match … { … }";
-    case "For":       return "for … in …";
+    case "If":        return "if (…) { … }";
+    case "Switch":    return "switch (…) { … }";
+    case "For":       return "for (let … of …) { … }";
     case "Lambda":    return "(…) => …";
     default:          return expr.kind;
   }

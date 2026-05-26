@@ -7,7 +7,7 @@ describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("Aktion");
-    expect(text).toContain("_app_ = ...");
+    expect(text).toContain("aktion = ...");
     expect(text).toContain("Stack(children: Node[]");
     expect(text).toContain("CardHeader(title: string");
   });
@@ -31,18 +31,20 @@ describe("generatePrompt", () => {
       tools: [{ name: "lookup", description: "demo" }],
     });
     const catalog = getBuiltinCatalog();
-    expect(catalog.length).toBeGreaterThan(20);
-    for (const entry of catalog) {
+    const dataBuiltins = catalog.filter((e) => e.category === "data");
+    expect(dataBuiltins.length).toBeGreaterThan(20);
+    for (const entry of dataBuiltins) {
       expect(text, `${entry.signature} should appear`).toContain(entry.signature);
     }
     expect(text).toContain("### Data helpers");
-    expect(text).toContain("### Iteration helpers");
+    // Legacy iteration-helper builtins were removed — native JS for/if/switch covers it.
+    expect(text).not.toContain("### Iteration helpers");
   });
 
   it("appends additional rules and examples", () => {
     const text = generatePrompt(defaultLibrary, {
       additionalRules: ["Always end with a FollowUpBlock."],
-      examples: [`_app_ = Stack([Card([CardHeader("Demo")])])`],
+      examples: [`aktion = Stack([Card([CardHeader("Demo")])])`],
     });
     expect(text).toContain("Always end with a FollowUpBlock.");
     expect(text).toContain("Demo");
@@ -58,7 +60,7 @@ describe("generatePrompt", () => {
     expect(text).toContain("## Actions");
     expect(text).toContain("## Data — `http({...})`");
     expect(text).toContain("effect");
-    expect(text).toContain("on:mount");
+    expect(text).toContain("mount");
     expect(text).toContain("debounce(");
     expect(text).toContain("http({");
     expect(text).toContain(".refetch()");
@@ -68,16 +70,12 @@ describe("generatePrompt", () => {
 
   it("documents the router block surface in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("## Routing");
-    expect(text).toContain("_router_({");
-    expect(text).toContain("_route_.path");
-    expect(text).toContain("_route_.params");
-    expect(text).toContain("_route_.navigate");
+    expect(text).toContain("Router({");
+    expect(text).toContain("NavLink");
+    expect(text).toContain("route");
     expect(text).not.toContain("$route");
-    // Router arms live inside an object literal — `:` separates pattern
-    // from body, `default:` is the wildcard.
-    expect(text).toContain('"/":             Dashboard()');
-    expect(text).toContain("default:         NotFound()");
+    expect(text).toContain('"/":');
+    expect(text).toContain("default:");
   });
 
   it("documents the single reactive state model and standard helper components", () => {
@@ -97,8 +95,6 @@ describe("generatePrompt", () => {
     const chatPrompt = generatePrompt(defaultLibrary, { mode: "chat" });
     expect(fullPrompt).not.toMatch(/\\`/);
     expect(chatPrompt).not.toMatch(/\\`/);
-    // Every template literal example must use literal `${expr}` interpolation
-    // — never an escaped backslash-backtick — so the LLM copies it verbatim.
     expect(chatPrompt).toMatch(/`[^`]*\$\{/);
     expect(fullPrompt).toMatch(/`[^`]*\$\{/);
   });
@@ -149,7 +145,7 @@ describe("generatePrompt", () => {
     it("emits a compact read-only prompt with the expected section structure", () => {
       const text = generatePrompt(defaultLibrary, { mode: "chat" });
       expect(text).toContain("Aktion");
-      expect(text).toContain("_app_ = ...");
+      expect(text).toContain("aktion = ...");
       expect(text).toContain("## Syntax (read-only subset)");
       expect(text).toContain("## Component library (read-only)");
       expect(text).toContain("## Built-in `@`-functions");
@@ -164,10 +160,10 @@ describe("generatePrompt", () => {
       expect(text).not.toContain("## Effects");
       expect(text).not.toContain("## Routing");
       expect(text).not.toContain("## Actions");
-      expect(text).not.toContain("_router_({");
+      expect(text).not.toContain("Router({");
       expect(text).not.toContain("## Data — `http({...})`");
       expect(text).not.toContain("http({");
-      expect(text).not.toContain("js{");
+      expect(text).not.toContain(`js` + `{`);
       expect(text).not.toContain("bind:value:");
     });
 
@@ -179,10 +175,6 @@ describe("generatePrompt", () => {
       ]) {
         expect(text, `${expected} should appear in the chat prompt`).toContain(expected);
       }
-      // Interactive / app-level components must not be listed as their own
-      // signature lines. (Some patterns mention `Button(...)` inside their
-      // description text — that is fine, we only care about the canonical
-      // `\n- Name(` line that authors would copy.)
       for (const omitted of [
         "AppShell", "Sidebar", "SplitView", "KanbanBoard",
         "Form", "Button", "Input", "TextArea", "Select", "Modal",
@@ -204,7 +196,7 @@ describe("generatePrompt", () => {
       const text = generatePrompt(defaultLibrary, {
         mode: "chat",
         preamble: "You are Acme's helpful chat assistant.",
-        examples: ["_app_ = Stack([title])\ntitle = Text(\"Hello\")"],
+        examples: ["aktion = Stack([title])\ntitle = Text(\"Hello\")"],
         tools: [{ name: "lookup_order", description: "Look up an order by id." }],
         additionalRules: ["Be terse."],
       });

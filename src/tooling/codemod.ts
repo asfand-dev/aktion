@@ -62,15 +62,15 @@ const RULES: Rule[] = [
     note: (_match, _indent, tier, name) =>
       `$${tier} ${name} = … → $${name} = … (single reactive atom kind).`,
   },
-  // Reserved `root` binding → `_app_`. We only touch the canonical LHS
+  // Reserved `root` binding → `aktion`. We only touch the canonical LHS
   // form so we don't accidentally rewrite identifier references named
   // `root` inside other contexts.
   {
     id: "root-binding",
     pattern: /^(\s*)root\s*=\s*/gm,
-    replace: (_match, indent) => `${indent}_app_ = `,
+    replace: (_match, indent) => `${indent}aktion = `,
     note: () =>
-      `root = … → _app_ = … (the top-level binding is now named _app_).`,
+      `root = … → aktion = … (the top-level binding is now named aktion).`,
   },
   // Router / match arms switched from `-> body` / `_ -> body` to
   // `: body` / `default: body`. We target arm-shaped fragments so plain
@@ -83,16 +83,14 @@ const RULES: Rule[] = [
     note: () =>
       `"path" -> Body / _ -> Fallback → "path": Body / default: Fallback (router & match arms).`,
   },
-  // `Name(args) = expr` macro shorthand → `component Name(args) { expr }`.
-  // The pattern is tight: identifier + parens + `=` on the same line, no
-  // method-call ambiguity (we exclude lambdas `name = (…) => …`).
+  // `Name(args) = expr` macro shorthand → `function Name(args) { return expr }`.
   {
     id: "macro-shorthand",
     pattern: /^(\s*)([A-Z][\w]*)\(([^()]*)\)\s*=\s*(.+)$/gm,
     replace: (_match, indent, name, params, body) =>
-      `${indent}component ${name}(${params.trim()}) {\n${indent}  ${body.trim()}\n${indent}}`,
+      `${indent}function ${name}(${params.trim()}) {\n${indent}  return ${body.trim()}\n${indent}}`,
     note: (_match, _indent, name) =>
-      `${name}(...) = … → component ${name}(...) { … } (macros subsumed by component blocks).`,
+      `${name}(...) = … → function ${name}(...) { return … } (macros subsumed by function declarations).`,
   },
   // `name=value` legacy named-arg form → `name: value`. Limited to inside
   // call argument lists so it doesn't accidentally rewrite assignments.
@@ -134,7 +132,7 @@ const RULES: Rule[] = [
   },
   // Old `effect Name [uses { caps }] [on triggers] [debounce(N) | throttle(N)] { body }`
   // declarations migrate to the canonical anonymous form
-  // `effect [ ...deps ] { body }`. State triggers, lifecycle triggers,
+  // `effect(() => { body }, [deps])`. State triggers, lifecycle triggers,
   // and any rate-limit modifier all collapse into a single bracketed
   // dependency list; the name is dropped.
   {
@@ -162,18 +160,16 @@ const RULES: Rule[] = [
       return `effect${depsClause} {`;
     },
     note: () =>
-      `effect Name [uses {...}] [on triggers] [debounce(N) | throttle(N)] → effect [ ...deps ] { ... } — the name is dropped, dependencies (state, on:mount/unmount/every, debounce, throttle) live in a single bracketed list.`,
+      `effect Name [uses {...}] [on triggers] [debounce(N) | throttle(N)] → effect(() => { ... }, [...deps]) — the name is dropped, dependencies (state, "mount"/"unmount"/"every(N)", "debounce(N)", "throttle(N)") live in the deps array.`,
   },
-  // `uses { caps }` clause on `action` declarations is gone too. There's
-  // no trigger to reorder around — actions are explicit-call — so a
-  // straight strip is enough.
+  // `uses { caps }` clause on `action`/`function` declarations is gone.
   {
     id: "action-uses-clause",
     pattern:
-      /\baction\s+([A-Za-z_]\w*)(\s*\([^)]*\))?\s+uses\s*\{[^}]*\}/g,
-    replace: (_match, name, params) => `action ${name}${params ?? ""}`,
+      /\b(?:action|function)\s+([A-Za-z_]\w*)(\s*\([^)]*\))?\s+uses\s*\{[^}]*\}/g,
+    replace: (_match, name, params) => `function ${name}${params ?? ""}`,
     note: () =>
-      `action uses { … } clause → (removed — capabilities are gone).`,
+      `action/function uses { … } clause → (removed — capabilities are gone).`,
   },
   // `#sus/2` (and `#sus/2 delta`) pragma → drop. The 0.5 parser treats
   // `#…` as a comment so the pragma is silently ignored; the codemod
@@ -185,16 +181,14 @@ const RULES: Rule[] = [
     note: () =>
       `#sus/2 pragma → (removed — the 0.5 parser has no version pragma).`,
   },
-  // `$route` → `_route_`. The router's reactive surface used to live on
-  // a reserved `$state` slot named `route`; in 0.5 it moved to a
-  // dedicated `_route_` handle so it can also expose imperative methods
-  // (notably `_route_.navigate(path)`).
+  // `$route` → `route`. The router's reactive surface used to live on
+  // a reserved `$state` slot named `route`; now it lives on `route`.
   {
     id: "route-handle",
     pattern: /\$route\b/g,
-    replace: () => `_route_`,
+    replace: () => `route`,
     note: () =>
-      `$route → _route_. The router's reactive surface (and its \`navigate(path)\` method) lives on the reserved \`_route_\` handle.`,
+      `$route → route. The router's reactive surface (and its \`navigate(path)\` method) lives on the reserved \`route\` handle.`,
   },
   // `TextContent(...)` → `Text(...)`. The component was renamed; the
   // legacy name is still registered as a deprecated alias so old
@@ -230,22 +224,22 @@ const MANUAL_HINTS: Array<{
   {
     pattern: /Action\(\s*\[/,
     hint: () =>
-      `Action([@Set, @Run, …]) payloads → action <Name>() { … } blocks (§10). The payload DSL has no automatic rewrite — translate the steps to imperative statements.`,
+      `Action([@Set, @Run, …]) payloads → function name() { … } blocks. The payload DSL has no automatic rewrite — translate the steps to imperative statements.`,
   },
   {
     pattern: /Script\(/,
     hint: () =>
-      `Script(id, body, deps?) → effect [ ...deps ] { js{ … } } (§9). No capability list is needed.`,
+      `Script(id, body, deps?) → effect(() => { … }, [...deps]). No capability list is needed.`,
   },
   {
     pattern: /Routes\(/,
     hint: () =>
-      `Routes(...) / Route(path, content) → pages = _router_({ "/": Component(), default: Fallback() }).`,
+      `Routes(...) / Route(path, content) → pages = Router({ "/": Component(), default: Fallback() }).`,
   },
   {
     pattern: /(^|\n)\s*\$router(?:\s+[a-zA-Z_][\w]*)?\s*=\s*router\s*\{/,
     hint: () =>
-      `$router = router { … } → pages = _router_({ "/": Home(), "/users/:id": User(params), default: NotFound() }). The router primitive is now a plain function call — assign its result to any binding (e.g. \`pages\`) and reference it inside \`_app_\`. Separate route arms with commas (object-literal form).`,
+      `$router = router { … } → pages = Router({ "/": Home(), "/users/:id": User(params), default: NotFound() }). The router primitive is now a plain function call — assign its result to any binding (e.g. \`pages\`) and reference it inside \`aktion\`. Separate route arms with commas (object-literal form).`,
   },
   {
     pattern: /\bQuery\(/,

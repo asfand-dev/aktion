@@ -1,5 +1,5 @@
 /**
- * 
+ *
  * The shell page (docs/live-example.html) loads this single module to render
  * any of the bundled live examples on demand via the `?example=<slug>` query
  * parameter. Each example's setup script keeps the original
@@ -51,21 +51,20 @@ $slot = "09:30"
 $step = 0
 $published = false
 
-topbar = TopBar(
-  "Acme CMS · Studio",
-  "Draft · autosaved 12s ago",
-  [Badge("v3 release", "primary", "tag", "sm"), StatusDot("Realtime", "success", true)],
-  [SearchBar("q", "Search posts, drafts, schedules…", null, "/")],
-  [Button("Preview", null, "ghost",   "button", "small", "eye"),
-   Button("Publish", () => { $published = true; emit "assistant-message" { message: "Publish the post" } }, "primary", "button", "small", "rocket")]
-)
+topbar = TopBar("Acme CMS · Studio", {
+  subtitle: "Draft · autosaved 12s ago",
+  left: [Badge("v3 release", { tone: "primary", icon: "tag", size: "sm" }), StatusDot("Realtime", { tone: "success", pulse: true })],
+  center: [SearchBar("q", { placeholder: "Search posts, drafts, schedules…" })],
+  right: [Button("Preview", { variant: "ghost", size: "small", icon: "eye" }),
+   Button("Publish", { action: () => { $published = true; emit("assistant-message", { message: "Publish the post" }) }, variant: "primary", size: "small", icon: "rocket" })]
+})
 
-header = PageHeader(
-  ["Workspace", "Content", "Drafts", $title],
-  "Compose, brand, schedule, and gate the release in one place.",
-  [Button("Save draft", null, "ghost",   "button", "small", "floppy-disk"),
-   Button("Discard",    () => { $title = ""; $body = ""; $tags = ""; $snippet = "" },"danger",  "button", "small", "trash")]
-)
+header = PageHeader($title, {
+  subtitle: "Compose, brand, schedule, and gate the release in one place.",
+  breadcrumbs: ["Workspace", "Content", "Drafts"],
+  actions: [Button("Save draft", { variant: "ghost", size: "small", icon: "floppy-disk" }),
+   Button("Discard", { action: () => { $title = ""; $body = ""; $tags = ""; $snippet = "" }, variant: "danger", size: "small", icon: "trash" })]
+})
 
 teammates = [
   {name: "Ada Lovelace",   handle: "ada",     role: "Engineering"},
@@ -75,55 +74,59 @@ teammates = [
 ]
 
 bodyEditor = Card([
-  SectionHeader("Body", "Rich text — drag images, paste markdown, mention people", "EDITOR"),
-  FormSection("Post copy",
-    [
-      FormControl("Title", Input("title", "Catchy headline…", "text", null, $title)),
-      FormControl("Body",  RichTextEditor("body", $body, "Start composing…", "260px")),
-      FormControl("Tags",  TagInput("tags", $tags, "Press enter to add a tag", 10)),
-      FormControl("Mention", MentionInput("mention", teammates, $mention, "Type @ to ping someone…"))
+  SectionHeader("Body", { subtitle: "Rich text — drag images, paste markdown, mention people", eyebrow: "EDITOR" }),
+  FormSection("Post copy", {
+    children: [
+      FormControl("Title", { field: Input("title", { placeholder: "Catchy headline…", value: $title }) }),
+      FormControl("Body", { field: RichTextEditor("body", { value: $body, placeholder: "Start composing…", height: "260px" }) }),
+      FormControl("Tags", { field: TagInput("tags", { value: $tags, placeholder: "Press enter to add a tag", max: 10 }) }),
+      FormControl("Mention", { field: MentionInput("mention", { suggestions: teammates, value: $mention, placeholder: "Type @ to ping someone…" }) })
     ],
-    "All fields stream into the preview pane below.")
+    description: "All fields stream into the preview pane below."
+  })
 ])
 
 snippetEditor = Card([
-  SectionHeader("Code snippet", "Embedded in the release notes", "CODE"),
-  CodeEditor("snippet", $snippet, "javascript", "// type your code…", "200px")
+  SectionHeader("Code snippet", { subtitle: "Embedded in the release notes", eyebrow: "CODE" }),
+  CodeEditor("snippet", { value: $snippet, language: "javascript", placeholder: "// type your code…", height: "200px" })
 ])
 
 brandSection = Card([
-  SectionHeader("Brand", "Choose the accent for this release", "DESIGN"),
-  FieldSet("Visual",
-    [FormControl("Accent",   ColorPicker("brand", $brand, "Pick a colour", ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])),
-     FormControl("Phone",    MaskedInput("phone", "(999) 999-9999", $phone, "(415) 555-0114")),
-     FormControl("Password", PasswordInput("pwd",  $pwd, "Choose a strong password", null, true))],
-    "Used for callouts and CTA buttons in the published post.")
+  SectionHeader("Brand", { subtitle: "Choose the accent for this release", eyebrow: "DESIGN" }),
+  FieldSet("Visual", {
+    children: [
+      FormControl("Accent", { field: ColorPicker("brand", { value: $brand, label: "Pick a colour", presets: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"] }) }),
+      FormControl("Phone", { field: MaskedInput("phone", { mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114" }) }),
+      FormControl("Password", { field: PasswordInput("pwd", { value: $pwd, placeholder: "Choose a strong password", showStrength: true }) })
+    ],
+    description: "Used for callouts and CTA buttons in the published post."
+  })
 ])
 
 scheduleSection = Card([
-  SectionHeader("Schedule", "When should this go live?", "TIMING"),
+  SectionHeader("Schedule", { subtitle: "When should this go live?", eyebrow: "TIMING" }),
   Stack([
-    FormControl("Publish at", DateTimePicker("publishAt", $publishAt, "Launch window")),
-    FormControl("Daily slot", TimePicker("slot", $slot, "Newsletter time"))
-  ], "row", "m")
+    FormControl("Publish at", { field: DateTimePicker("publishAt", { value: $publishAt, label: "Launch window" }) }),
+    FormControl("Daily slot", { field: TimePicker("slot", { value: $slot, label: "Newsletter time" }) })
+  ], { direction: "row", gap: "m" })
 ])
 
 gateSection = Card([
-  SectionHeader("Two-factor publish", "Confirm with a one-time code", "GATE",
-    Badge("Required", "warning", "shield-halved", "sm")),
+  SectionHeader("Two-factor publish", { subtitle: "Confirm with a one-time code", eyebrow: "GATE",
+    status: Badge("Required", { tone: "warning", icon: "shield-halved", size: "sm" }) }),
   Stack([
-    FormControl("4-digit PIN", PinInput("pin", 4, $pin, "numeric")),
-    FormControl("OTP from authenticator", PinInput("otp", $otp, 6))
-  ], "column", "m")
+    FormControl("4-digit PIN", { field: PinInput("pin", { length: 4, value: $pin, inputMode: "numeric" }) }),
+    FormControl("OTP from authenticator", { field: PinInput("otp", { length: 6, value: $otp }) })
+  ], { direction: "column", gap: "m" })
 ])
 
 formErrors = [
-  if $title == "" { {label: "title",   message: "Title is required."} } else { null },
-  if $pin.length != 4 { {label: "pin",     message: "PIN must be 4 digits."} } else { null },
-  if $otp.length != 6 { {label: "otp",     message: "Enter the 6-digit OTP."} } else { null }
+  if ($title == "") { {label: "title",   message: "Title is required."} } else { null },
+  if ($pin.length != 4) { {label: "pin",     message: "PIN must be 4 digits."} } else { null },
+  if ($otp.length != 6) { {label: "otp",     message: "Enter the 6-digit OTP."} } else { null }
 ]
 
-validationCard = if @Count(@Filter(formErrors, "label", "!=", null)) > 0 { Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), "Fix these before publishing")]) } else { Card([Callout("success", "Ready to publish", "All gates passed — hit Publish to go live.", "circle-check", true)]) }
+validationCard = if (@Count(@Filter(formErrors, "label", "!=", null)) > 0) { Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), { title: "Fix these before publishing" })]) } else { Card([Callout("Ready to publish", { tone: "success", description: "All gates passed — hit Publish to go live.", icon: "circle-check", compact: true })]) }
 
 wizardSteps = [
   {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
@@ -132,45 +135,45 @@ wizardSteps = [
   {title: "Confirm",  details: "PIN + OTP",          content: [gateSection, validationCard]}
 ]
 
-wizard = MultiStepForm(wizardSteps, $step, () => { $published = true; emit "assistant-message" { message: "Wizard submitted" } })
+wizard = MultiStepForm(wizardSteps, { value: $step, onComplete: () => { $published = true; emit("assistant-message", { message: "Wizard submitted" }) } })
 
-tagBadges = Stack(for t in $tags { Badge(t, "primary", "tag", "sm") }, "row", "xs")
+tagBadges = Stack(for (let t of $tags) { Badge(t, { tone: "primary", icon: "tag", size: "sm" }) }, { direction: "row", gap: "xs" })
 
 previewCard = Card([
-  SectionHeader("Live preview", $title, "OUTPUT",
-    Badge(\`Accent \${$brand}\`, "primary", "palette", "sm")),
+  SectionHeader("Live preview", { subtitle: $title, eyebrow: "OUTPUT",
+    status: Badge(\`Accent \${$brand}\`, { tone: "primary", icon: "palette", size: "sm" }) }),
   tagBadges,
   Separator("horizontal"),
-  Text($body, "body")
+  Text($body, { variant: "body" })
 ])
 
 teammateChips = Stack(
-  for {name, handle, role} in teammates { PersonChip(name, role, null, "sm") },
-  "row", "s"
+  for (let {name, handle, role} of teammates) { PersonChip(name, { role: role, size: "sm" }) },
+  { direction: "row", gap: "s" }
 )
 
 teammatesCard = Card([
-  SectionHeader("Available reviewers", "Mention them in the body", "PEOPLE"),
+  SectionHeader("Available reviewers", { subtitle: "Mention them in the body", eyebrow: "PEOPLE" }),
   teammateChips
 ])
 
-publishedBanner = if $published { Banner("Published!", \`\${$title} went live.\`, Button("View live post", () => { js{ window.open("/blog", "_blank", "noopener,noreferrer") } }, "primary", "button", "small"), "rocket", "success") } else { null }
+publishedBanner = if ($published) { Banner("Published!", { message: \`\${$title} went live.\`, action: Button("View live post", { action: () => { window.open("/blog", "_blank", "noopener,noreferrer") }, variant: "primary" }), icon: "rocket", tone: "success" }) } else { null }
 
-contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], "column", "l")], {sm: 1, lg: 2}, "l")
+contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], { direction: "column", gap: "l" })], { columns: {sm: 1, lg: 2}, gap: "l" })
 
 followUps = FollowUpBlock([
   FollowUpItem("Generate a summary for social"),
   FollowUpItem("Translate to French"),
   FollowUpItem("Add a hero image")
-], "Try next")
+], { label: "Try next" })
 
-_app_ = Stack([
+aktion = Stack([
   topbar,
   header,
   publishedBanner,
   contentGrid,
   followUps
-], "column", "l")` }
+], { direction: "column", gap: "l" })` }
       ],
       render: { elId: "rui-studio", theme: "light" },
       extraHtml: ``,
@@ -188,8 +191,7 @@ _app_ = Stack([
         page as the inputs. <code>TopBar</code> +
         <code>BreadcrumbPageHeader</code> replace the ad-hoc topbar +
         breadcrumb hand-roll seen in earlier examples.`,
-      codeBlocks: [
-      ],
+      codeBlocks: [],
       render: null,
       extraHtml: ``,
     }
@@ -246,116 +248,109 @@ contributors = [
 ]
 
 cols = [
-  Col("Id",     contributors.id,        "text",     "left",  false, false),
-  Col("Name",   contributors.name,      "text",     "left",  true,  true),
-  Col("Team",   contributors.team,      "text",     "left",  true,  true),
-  Col("Role",   contributors.role,      "text",     "left",  true,  true),
-  Col("Score",  contributors.score,     "number",   "right", true,  false),
-  Col("Commits",contributors.commits,   "number",   "right", true,  false)
+  Col("Id",      { values: contributors.id,      format: "text",   align: "left",  sortable: false, filterable: false }),
+  Col("Name",    { values: contributors.name,    format: "text",   align: "left",  sortable: true,  filterable: true }),
+  Col("Team",    { values: contributors.team,    format: "text",   align: "left",  sortable: true,  filterable: true }),
+  Col("Role",    { values: contributors.role,    format: "text",   align: "left",  sortable: true,  filterable: true }),
+  Col("Score",   { values: contributors.score,   format: "number", align: "right", sortable: true,  filterable: false }),
+  Col("Commits", { values: contributors.commits, format: "number", align: "right", sortable: true,  filterable: false })
 ]
 
-bulkToolbar = if @Count($selectedIds) > 0 { Toolbar(
-    [Badge(\`\${@Count($selectedIds)} selected\`, "primary", "check", "sm")],
-    [Button("Email selected", null, "ghost",   "button", "small", "envelope"),
-     Button("Export CSV",     null,       "secondary","button", "small", "file-csv"),
-     Button("Clear",          () => { $selectedIds = "" },                        "ghost",   "button", "small")]
-  ) } else { null }
+bulkToolbar = if (@Count($selectedIds) > 0) { Toolbar({
+    left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+    right: [Button("Email selected", { variant: "ghost", size: "small", icon: "envelope" }),
+     Button("Export CSV", { variant: "secondary", size: "small", icon: "file-csv" }),
+     Button("Clear", { action: () => { $selectedIds = "" }, variant: "ghost", size: "small" })]
+  }) } else { null }
 
 leaderboard = Card([
-  SectionHeader("Top contributors", \`\${@Count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
-    "DATAGRID",
-    Badge("Live", "success", "circle", "sm"),
-    [Button("Search",  null,  "ghost", "button", "small", "magnifying-glass"),
-     Button("Refresh", null, "ghost", "button", "small", "rotate-right")]),
+  SectionHeader("Top contributors", { subtitle: \`\${@Count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+    eyebrow: "DATAGRID",
+    status: Badge("Live", { tone: "success", icon: "circle", size: "sm" }),
+    actions: [Button("Search", { variant: "ghost", size: "small", icon: "magnifying-glass" }),
+     Button("Refresh", { variant: "ghost", size: "small", icon: "rotate-right" })]}),
   bulkToolbar,
-  DataGrid(cols, contributors.id, null, $sort, $selectedIds, true, $page, 6, "No contributors match")
+  DataGrid(cols, { rowIds: contributors.id, sort: $sort, selectedIds: $selectedIds, selectable: true, page: $page, pageSize: 6, emptyMessage: "No contributors match" })
 ])
 
 slaGauge = Card([
-  SectionHeader("SLA · uptime", "Rolling 30 days", "RELIABILITY"),
-  Gauge(99.3, 95, 100, "Above target", "success", "lg")
+  SectionHeader("SLA · uptime", { subtitle: "Rolling 30 days", eyebrow: "RELIABILITY" }),
+  Gauge(99.3, { min: 95, max: 100, caption: "Above target", tone: "success", size: "lg" })
 ])
 
 p95Gauge = Card([
-  SectionHeader("P95 response", "Lower is better", "PERFORMANCE"),
-  Gauge(112, 0, 250, "ms", "primary", "lg")
+  SectionHeader("P95 response", { subtitle: "Lower is better", eyebrow: "PERFORMANCE" }),
+  Gauge(112, { min: 0, max: 250, caption: "ms", tone: "primary", size: "lg" })
 ])
 
 errorGauge = Card([
-  SectionHeader("Error rate", "Last 24h", "QUALITY"),
-  Gauge(0.42, 0, 5, "% of requests", "warning", "lg")
+  SectionHeader("Error rate", { subtitle: "Last 24h", eyebrow: "QUALITY" }),
+  Gauge(0.42, { min: 0, max: 5, caption: "% of requests", tone: "warning", size: "lg" })
 ])
 
 areaCard = Card([
-  SectionHeader("Signups · last 7 days", "Stacked by source", "GROWTH",
-    Badge("+18% WoW", "success", "arrow-trend-up", "sm")),
-  LineChart(
-    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    [Series("Organic", [40, 52, 65, 78, 92, 105, 124]),
-     Series("Referral",[20, 28, 35, 42, 50, 60,  72]),
-     Series("Paid",    [10, 14, 18, 24, 30, 36,  44])],
-    null
-  )
+  SectionHeader("Signups · last 7 days", { subtitle: "Stacked by source", eyebrow: "GROWTH",
+    status: Badge("+18% WoW", { tone: "success", icon: "arrow-trend-up", size: "sm" }) }),
+  LineChart(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], {
+    series: [Series("Organic", { values: [40, 52, 65, 78, 92, 105, 124] }),
+     Series("Referral", { values: [20, 28, 35, 42, 50, 60, 72] }),
+     Series("Paid", { values: [10, 14, 18, 24, 30, 36, 44] })]
+  })
 ])
 
 heatmapCard = Card([
-  SectionHeader("Office capacity by hour", "Mon–Fri average", "OCCUPANCY"),
-  Heatmap(
-    ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    ["9am", "12pm", "3pm", "6pm"],
-    [[ 3,  4,  5,  3,  2],
+  SectionHeader("Office capacity by hour", { subtitle: "Mon–Fri average", eyebrow: "OCCUPANCY" }),
+  Heatmap(["Mon", "Tue", "Wed", "Thu", "Fri"], {
+    yLabels: ["9am", "12pm", "3pm", "6pm"],
+    values: [[ 3,  4,  5,  3,  2],
      [ 8,  9, 11,  7,  5],
      [12, 14, 16, 13, 10],
      [ 6,  7,  9, 10, 12]]
-  )
+  })
 ])
 
 radarCard = Card([
-  SectionHeader("Vendor scorecard", "Two finalists, five axes", "PROCUREMENT"),
-  RadarChart(
-    ["Speed", "Quality", "Cost", "Coverage", "Trust"],
-    [Series("Atlas Cloud",   [80, 70, 60, 75, 85]),
-     Series("Northwind SaaS",[60, 85, 70, 65, 80])]
-  )
+  SectionHeader("Vendor scorecard", { subtitle: "Two finalists, five axes", eyebrow: "PROCUREMENT" }),
+  RadarChart(["Speed", "Quality", "Cost", "Coverage", "Trust"], {
+    series: [Series("Atlas Cloud", { values: [80, 70, 60, 75, 85] }),
+     Series("Northwind SaaS", { values: [60, 85, 70, 65, 80] })]
+  })
 ])
 
 scatterCard = Card([
-  SectionHeader("Sessions vs conversions", "By cohort, last 4 weeks", "FUNNEL"),
-  ScatterChart(
-    [Series("Cohort A", [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}]),
-     Series("Cohort B", [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}])],
-    "Sessions (k)",
-    "Conversions"
-  )
+  SectionHeader("Sessions vs conversions", { subtitle: "By cohort, last 4 weeks", eyebrow: "FUNNEL" }),
+  ScatterChart({
+    series: [Series("Cohort A", { values: [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}] }),
+     Series("Cohort B", { values: [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}] })],
+    xLabel: "Sessions (k)",
+    yLabel: "Conversions"
+  })
 ])
 
 histogramCard = Card([
-  SectionHeader("Response time distribution", "P50–P99 envelope", "LATENCY"),
-  Histogram(
-    contributors.latencyMs,
-    null, 8
-  )
+  SectionHeader("Response time distribution", { subtitle: "P50–P99 envelope", eyebrow: "LATENCY" }),
+  Histogram({ values: contributors.latencyMs, bins: null, bucketCount: 8 })
 ])
 
-chartGrid = Grid([areaCard, heatmapCard], {sm: 1, md: 2}, "l")
-chartGrid2 = Grid([radarCard, scatterCard, histogramCard], {sm: 1, md: 3}, "l")
-gaugeGrid  = Grid([slaGauge, p95Gauge, errorGauge], {sm: 1, md: 3}, "l")
+chartGrid = Grid([areaCard, heatmapCard], { columns: {sm: 1, md: 2}, gap: "l" })
+chartGrid2 = Grid([radarCard, scatterCard, histogramCard], { columns: {sm: 1, md: 3}, gap: "l" })
+gaugeGrid  = Grid([slaGauge, p95Gauge, errorGauge], { columns: {sm: 1, md: 3}, gap: "l" })
 
 activityCard = Card([
-  SectionHeader("Recent activity", "Latest 6 events", "FEED"),
+  SectionHeader("Recent activity", { subtitle: "Latest 6 events", eyebrow: "FEED" }),
   InfiniteList([
-    ListItem("Ada Lovelace merged PR #142", "Streaming UI v2 components.", "code-merge"),
-    ListItem("Linus Torvalds opened ticket #2049", "Kernel scheduler regression.", "circle-exclamation"),
-    ListItem("Grace Hopper deployed compiler 4.2", "Latency improved 8%.", "rocket"),
-    ListItem("Margaret Hamilton reviewed PR #141", "LGTM with one nit.", "circle-check"),
-    ListItem("Donald Knuth published article", "On the art of computer programming.", "newspaper"),
-    ListItem("Edsger Dijkstra commented", "Beware of bugs in the above code.", "comment")
-  ], null, false, true)
+    ListItem("Ada Lovelace merged PR #142", { description: "Streaming UI v2 components.", icon: "code-merge" }),
+    ListItem("Linus Torvalds opened ticket #2049", { description: "Kernel scheduler regression.", icon: "circle-exclamation" }),
+    ListItem("Grace Hopper deployed compiler 4.2", { description: "Latency improved 8%.", icon: "rocket" }),
+    ListItem("Margaret Hamilton reviewed PR #141", { description: "LGTM with one nit.", icon: "circle-check" }),
+    ListItem("Donald Knuth published article", { description: "On the art of computer programming.", icon: "newspaper" }),
+    ListItem("Edsger Dijkstra commented", { description: "Beware of bugs in the above code.", icon: "comment" })
+  ], { hasMore: false, loading: true })
 ])
 
 auditCard = Card([
-  SectionHeader("Audit trail", "Privileged actions, last 7 days", "AUDIT",
-    Badge("Compliance", "primary", "shield-halved", "sm")),
+  SectionHeader("Audit trail", { subtitle: "Privileged actions, last 7 days", eyebrow: "AUDIT",
+    status: Badge("Compliance", { tone: "primary", icon: "shield-halved", size: "sm" }) }),
   ActivityLog([
     {actor: "system",  title: "Rotated signing key",          time: "08:14",      icon: "key",          tone: "primary", meta: "kid=abc123 ip=10.0.0.4"},
     {actor: "admin",   title: "Granted Owner role to Ada",    time: "yesterday",  icon: "user-shield",  tone: "success", meta: "actor=u_8132 ip=82.32.1.7"},
@@ -364,25 +359,24 @@ auditCard = Card([
   ])
 ])
 
-bottomGrid = Grid([activityCard, auditCard], {sm: 1, md: 2}, "l")
+bottomGrid = Grid([activityCard, auditCard], { columns: {sm: 1, md: 2}, gap: "l" })
 
 kpiStrip = Stats([
-  StatCard("Contributors", \`\${@Count(contributors)}\`,                      "up",   "+2 this week", "users"),
-  StatCard("Commits",      \`\${@Format(@Sum(contributors.commits, "number"))}\`, "up",   "+184 today",   "code-commit"),
-  StatCard("Avg latency",  \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`, "down", "-12 ms",       "gauge-high"),
-  StatCard("Top score",    \`\${@Max(contributors.score)}\`,                  "flat", "Ada Lovelace", "trophy")
+  StatCard("Contributors", { value: \`\${@Count(contributors)}\`,                      trend: "up",   delta: "+2 this week", icon: "users" }),
+  StatCard("Commits",      { value: \`\${@Format(@Sum(contributors.commits, "number"))}\`, trend: "up",   delta: "+184 today",   icon: "code-commit" }),
+  StatCard("Avg latency",  { value: \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`, trend: "down", delta: "-12 ms",       icon: "gauge-high" }),
+  StatCard("Top score",    { value: \`\${@Max(contributors.score)}\`,                  trend: "flat", delta: "Ada Lovelace", icon: "trophy" })
 ])
 
-pageHeader = PageHeader(
-  "Engineering analytics",
-  \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`,
-  ["Workspace", "Engineering", "Analytics"],
-  [Button("Export PDF", null, "secondary"),
-   Button("Share view", null,             "primary")],
-  Badge("Realtime", "success", "circle", "sm")
-)
+pageHeader = PageHeader("Engineering analytics", {
+  subtitle: \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`,
+  breadcrumbs: ["Workspace", "Engineering", "Analytics"],
+  actions: [Button("Export PDF", { variant: "secondary" }),
+   Button("Share view", { variant: "primary" })],
+  status: Badge("Realtime", { tone: "success", icon: "circle", size: "sm" })
+})
 
-_app_ = Stack([
+aktion = Stack([
   pageHeader,
   kpiStrip,
   gaugeGrid,
@@ -390,7 +384,7 @@ _app_ = Stack([
   chartGrid,
   chartGrid2,
   bottomGrid
-], "column", "l")` }
+], { direction: "column", gap: "l" })` }
       ],
       render: { elId: "rui-explorer", theme: "light" },
       extraHtml: ``,
@@ -408,8 +402,7 @@ _app_ = Stack([
         <code>ScatterChart</code>, <code>Histogram</code>, and
         <code>AreaChart</code> are all SVG primitives so they print
         cleanly and stay sharp on retina.`,
-      codeBlocks: [
-      ],
+      codeBlocks: [],
       render: null,
       extraHtml: ``,
     }
@@ -456,51 +449,42 @@ photos = [
 ]
 
 heroCarousel = Carousel(
-  for {src, caption} in photos { {src: src, alt: caption, caption: caption} },
-  $slide,
-  "16:9",
-  true
+  for (let {src, caption} of photos) { {src: src, alt: caption, caption: caption} },
+  { activeIndex: $slide, aspectRatio: "16:9", autoplay: true }
 )
 
 galleryGrid = Gallery(
-  for {src, caption} in photos { {src: src, alt: caption, caption: caption} },
-  3,
-  () => { $lightboxIdx = 0; $lightboxOpen = true }
+  for (let {src, caption} of photos) { {src: src, alt: caption, caption: caption} },
+  { columns: 3, onClick: () => { $lightboxIdx = 0; $lightboxOpen = true } }
 )
 
-zoomBox = Lightbox(
-  $lightboxOpen,
-  $lightboxIdx,
-  photos
-)
+zoomBox = Lightbox($lightboxOpen, { activeIndex: $lightboxIdx, items: photos })
 
 trailerCard = Card([
-  SectionHeader("Trailer · Aurora Expedition", "60-second highlight reel", "WATCH",
-    Badge("HD", "primary", "video", "sm")),
-  VideoPlayer(
-    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
-    null, true, false, false, false,
-    "Aurora Expedition · trailer",
-    "16:9"
-  )
+  SectionHeader("Trailer · Aurora Expedition", { subtitle: "60-second highlight reel", eyebrow: "WATCH",
+    status: Badge("HD", { tone: "primary", icon: "video", size: "sm" }) }),
+  VideoPlayer("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4", {
+    poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+    controls: true,
+    title: "Aurora Expedition · trailer",
+    aspectRatio: "16:9"
+  })
 ])
 
 soundtrackCard = Card([
-  SectionHeader("Trip soundtrack", "Pre-departure playlist", "LISTEN",
-    Badge("3 tracks", "info", "music", "sm")),
-  AudioPlayer(
-    "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
-    null, "Northern Skies", "Aurora Strings"
-  )
+  SectionHeader("Trip soundtrack", { subtitle: "Pre-departure playlist", eyebrow: "LISTEN",
+    status: Badge("3 tracks", { tone: "info", icon: "music", size: "sm" }) }),
+  AudioPlayer("https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg", {
+    title: "Northern Skies", artist: "Aurora Strings"
+  })
 ])
 
 mapCard = Card([
-  SectionHeader("Itinerary map", "Six stops · 8 days", "ROUTE",
-    Badge("Leaflet", "primary", "map-location-dot", "sm")),
-  Map(
-    65.0, -16.0, 5,
-    [
+  SectionHeader("Itinerary map", { subtitle: "Six stops · 8 days", eyebrow: "ROUTE",
+    status: Badge("Leaflet", { tone: "primary", icon: "map-location-dot", size: "sm" }) }),
+  Map(65.0, {
+    lng: -16.0, zoom: 5,
+    markers: [
       {lat: 64.1466, lng: -21.9426, label: "Day 1 · Reykjavík"},
       {lat: 64.2538, lng: -21.0186, label: "Day 2 · Þingvellir"},
       {lat: 64.7140, lng: -19.0608, label: "Day 3 · Highlands"},
@@ -508,59 +492,55 @@ mapCard = Card([
       {lat: 66.0410, lng: -23.1247, label: "Day 6 · Westfjords"},
       {lat: 64.9631, lng: -19.0208, label: "Day 8 · Vatnajökull"}
     ],
-    "360px",
-    "Aurora expedition itinerary"
-  )
+    height: "360px",
+    caption: "Aurora expedition itinerary"
+  })
 ])
 
 kpis = Stats([
-  StatCard("Photos",   \`\${@Count(photos)}\`, "flat", "Curated", "image"),
-  StatCard("Duration",  "8 days",            "flat", "Round-trip", "calendar-days"),
-  StatCard("Locations", "6 stops",           "up",   "+2 vs last tour", "location-dot"),
-  StatCard("Group size", "12 max",           "flat", "Small-group format", "people-group")
+  StatCard("Photos",    { value: \`\${@Count(photos)}\`, trend: "flat", delta: "Curated",           icon: "image" }),
+  StatCard("Duration",  { value: "8 days",            trend: "flat", delta: "Round-trip",         icon: "calendar-days" }),
+  StatCard("Locations", { value: "6 stops",           trend: "up",   delta: "+2 vs last tour",   icon: "location-dot" }),
+  StatCard("Group size",{ value: "12 max",            trend: "flat", delta: "Small-group format", icon: "people-group" })
 ])
 
-hero = Hero(
-  "Aurora Expedition",
-  "Eight days chasing the northern lights across Iceland's most photogenic ridgelines, fjords, and ice caves.",
-  null,
-  null,
-  "FIELD GUIDE · v3",
-  null,
-  "https://picsum.photos/seed/aurora-cover/1600/600",
-  "Aug — Sept 2026 · from $4,890",
-  "360px",
-  [Button("Reserve a spot",   null, "primary"),
-   Button("Download brief",   () => { js{ window.open("/aurora-brief.pdf", "_blank", "noopener,noreferrer") } }, "ghost")],
-  "cover",
-  "primary"
-)
+hero = Hero("Aurora Expedition", {
+  subtitle: "Eight days chasing the northern lights across Iceland's most photogenic ridgelines, fjords, and ice caves.",
+  eyebrow: "FIELD GUIDE · v3",
+  imageSrc: "https://picsum.photos/seed/aurora-cover/1600/600",
+  caption: "Aug — Sept 2026 · from $4,890",
+  height: "360px",
+  actions: [Button("Reserve a spot", { variant: "primary" }),
+   Button("Download brief", { action: () => { window.open("/aurora-brief.pdf", "_blank", "noopener,noreferrer") }, variant: "ghost" })],
+  layout: "cover",
+  tone: "primary"
+})
 
 galleryBlock = Card([
-  SectionHeader("Photo gallery", "Tap any tile to view full size", "PHOTOS",
-    Badge(\`\${@Count(photos)} photos\`, "primary", "image", "sm")),
+  SectionHeader("Photo gallery", { subtitle: "Tap any tile to view full size", eyebrow: "PHOTOS",
+    status: Badge(\`\${@Count(photos)} photos\`, { tone: "primary", icon: "image", size: "sm" }) }),
   galleryGrid
 ])
 
-mediaRow = Grid([trailerCard, soundtrackCard], {sm: 1, md: 2}, "l")
+mediaRow = Grid([trailerCard, soundtrackCard], { columns: {sm: 1, md: 2}, gap: "l" })
 
 followUps = FollowUpBlock([
   FollowUpItem("Show me the day-by-day itinerary"),
   FollowUpItem("What gear should I bring?"),
   FollowUpItem("Add a 2-day Reykjavík extension")
-], "Plan your trip")
+], { label: "Plan your trip" })
 
-_app_ = Stack([
+aktion = Stack([
   hero,
   kpis,
-  Card([SectionHeader("Daily highlights", "Aurora · summer 2026", "PREVIEW",
-    Badge("Live", "success", "circle", "sm")), heroCarousel]),
+  Card([SectionHeader("Daily highlights", { subtitle: "Aurora · summer 2026", eyebrow: "PREVIEW",
+    status: Badge("Live", { tone: "success", icon: "circle", size: "sm" }) }), heroCarousel]),
   galleryBlock,
   mediaRow,
   mapCard,
   followUps,
   zoomBox
-], "column", "l")` }
+], { direction: "column", gap: "l" })` }
       ],
       render: { elId: "rui-media", theme: "light" },
       extraHtml: ``,
@@ -579,8 +559,7 @@ _app_ = Stack([
         <code>&lt;audio&gt;</code> elements, so they inherit the host
         browser's playback UI while picking up the design system's
         chrome.`,
-      codeBlocks: [
-      ],
+      codeBlocks: [],
       render: null,
       extraHtml: ``,
     }
@@ -593,15 +572,15 @@ const el = document.getElementById("rui-media");
   "routing-demo": {
     slug: "routing-demo",
     docTitle: `Live demo · Routing · Aktion`,
-    eyebrow: `Live demo · _router_({…}) + NavLink`,
+    eyebrow: `Live demo · Router({…}) + NavLink`,
     heroTitleHtml: `A multi-page app, in a single Aktion program`,
     heroDescriptionHtml: `One <code>&lt;aktion-app&gt;</code> tag renders a four-page UI
         synced to the URL hash. Click the nav, use deep links, hit the browser
         back button — it all stays in sync, with zero framework lock-in.`,
-    brandHref: "examples.html",
+    brandHref: "live-examples.html",
     brandText: `Aktion · routing`,
-    backHref: "routing.html",
-    backText: `← Routing docs`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
     cards: [
     {
       id: null,
@@ -610,8 +589,7 @@ const el = document.getElementById("rui-media");
         <a href="#/users">#/users</a>, then drill into a user (e.g.
         <a href="#/users/ada">#/users/ada</a>). Browser back / forward and
         bookmarks all work.`,
-      codeBlocks: [
-      ],
+      codeBlocks: [],
       render: { elId: "rui-routing", theme: "light" },
       extraHtml: ``,
     },
@@ -620,11 +598,11 @@ const el = document.getElementById("rui-media");
       heading: `UI Script source`,
       lede: `The <code>nav</code> stays visible across every page;
         <code>main</code> is produced by
-        <code>_router_({ … })</code>, which swaps in the matching arm.
+        <code>Router({ … })</code>, which swaps in the matching arm.
         Path parameters land in <code>params</code> inside each arm
-        body, and the reserved <code>_route_</code> handle exposes the
+        body, and the reserved <code>route</code> handle exposes the
         reactive surface everywhere else (and the imperative
-        <code>_route_.navigate(path)</code> method).`,
+        <code>route.navigate(path)</code> method).`,
       codeBlocks: [
       { codeId: "src-routing", content: `$users = [
   {id: "ada",   name: "Ada Lovelace", role: "Founding engineer",   joined: "2019-04-02"},
@@ -636,106 +614,106 @@ const el = document.getElementById("rui-media");
 $visits = 0
 $lastEdited = "—"
 
-_app_ = Stack([header, nav, main])
+aktion = Stack([header, nav, main])
 
 header = Card([
-  CardHeader("Acme console", \`Routing demo · current path: \${_route_}\`),
+  CardHeader("Acme console", { subtitle: \`Routing demo · current path: \${route}\` }),
   Stack([
-    Badge(\`_route_ = \${_route_}\`, "info",    "compass", "sm"),
-    Badge(\`visits = \${$visits}\`,  "neutral", "eye",     "sm")
-  ], "row", "xs")
+    Badge(\`route = \${route}\`, { tone: "info", icon: "compass", size: "sm" }),
+    Badge(\`visits = \${$visits}\`, { tone: "neutral", icon: "eye", size: "sm" })
+  ], { direction: "row", gap: "xs" })
 ])
 
 nav = Card([
   Stack([
-    NavLink("Home",      "/",          "ghost", true,  "house"),
-    NavLink("Dashboard", "/dashboard", "ghost", false, "chart-pie"),
-    NavLink("Users",     "/users",     "ghost", false, "users"),
-    NavLink("Settings",  "/settings",  "ghost", false, "gear")
-  ], "row", "s")
+    NavLink("Home",      { to: "/",          variant: "ghost", exact: true,  icon: "house" }),
+    NavLink("Dashboard", { to: "/dashboard", variant: "ghost", icon: "chart-pie" }),
+    NavLink("Users",     { to: "/users",     variant: "ghost", icon: "users" }),
+    NavLink("Settings",  { to: "/settings",  variant: "ghost", icon: "gear" })
+  ], { direction: "row", gap: "s" })
 ])
 
-main = _router_({
+main = Router({
   "/":           homePage,
   "/dashboard":  dashboardPage,
   "/users":      usersListPage,
-  "/users/:id":  userDetailPage(id: params.id),
+  "/users/:id":  userDetailPage({ id: params.id }),
   "/settings":   settingsHomePage,
-  "/settings/*": settingsAreaPage(rest: params._),
+  "/settings/*": settingsAreaPage({ rest: params._ }),
   default:       notFoundPage
 })
 
 homePage = Card([
-  CardHeader("Welcome", "A multi-page UI in one Aktion program"),
+  CardHeader("Welcome", { subtitle: "A multi-page UI in one Aktion program" }),
   Markdown("Pick a section above, or jump straight in:"),
   Buttons([
-    Button("Open dashboard", () => { _route_.navigate("/dashboard") },  "primary"),
-    Button("Browse users",   () => { _route_.navigate("/users") },      "secondary"),
-    Button("Open Ada",       () => { _route_.navigate("/users/ada") },  "ghost")
+    Button("Open dashboard", { action: () => { route.navigate("/dashboard") }, variant: "primary" }),
+    Button("Browse users",   { action: () => { route.navigate("/users") },     variant: "secondary" }),
+    Button("Open Ada",       { action: () => { route.navigate("/users/ada") }, variant: "ghost" })
   ])
 ])
 
 dashboardPage = Card([
-  CardHeader("Dashboard", "Reactive across routes"),
+  CardHeader("Dashboard", { subtitle: "Reactive across routes" }),
   Stack([
-    StatCard("Users",     \`\${@Count($users)}\`, "up", "+2 this month"),
-    StatCard("Visits",    \`\${$visits}\`,        "up", "this session"),
-    StatCard("Last edit", $lastEdited)
-  ], "row", "m", "stretch", "start", true),
+    StatCard("Users",     { value: \`\${@Count($users)}\`, trend: "up", delta: "+2 this month" }),
+    StatCard("Visits",    { value: \`\${$visits}\`,        trend: "up", delta: "this session" }),
+    StatCard("Last edit", { value: $lastEdited })
+  ], { direction: "row", gap: "m", align: "stretch", justify: "start", wrap: true }),
   Buttons([
-    Button("Track a visit", () => { $visits = $visits + 1 }, "primary"),
-    Button("Back to home",  () => { _route_.navigate("/") },               "ghost")
+    Button("Track a visit", { action: () => { $visits = $visits + 1 }, variant: "primary" }),
+    Button("Back to home",  { action: () => { route.navigate("/") },   variant: "ghost" })
   ])
 ])
 
-component UserRow(id, name, role, joined) {
+function UserRow(id, name, role, joined) {
   return Card([
     Stack([
       Stack([
-        Text(name, "body-heavy"),
-        Text(\`\${role} · joined \${joined}\`, "small", "muted")
+        Text(name, { variant: "body-heavy" }),
+        Text(\`\${role} · joined \${joined}\`, { variant: "small", color: "muted" })
       ]),
-      Buttons([Button("Open", () => { _route_.navigate(\`/users/\${id}\`) }, "ghost")])
-    ], "row", "m", "center", "between")
-  ], "outlined")
+      Buttons([Button("Open", { action: () => { route.navigate(\`/users/\${id}\`) }, variant: "ghost" })])
+    ], { direction: "row", gap: "m", align: "center", justify: "between" })
+  ], { variant: "outlined" })
 }
 
 usersListPage = Card([
-  CardHeader("Users", "Click a row to deep-link into the detail page"),
-  Stack(for {id, name, role, joined} in $users { UserRow(id, name, role, joined) })
+  CardHeader("Users", { subtitle: "Click a row to deep-link into the detail page" }),
+  Stack(for (let {id, name, role, joined} of $users) { UserRow(id, name, role, joined) })
 ])
 
-component userDetailPage(id) {
+function userDetailPage(id) {
   return Card([
-    CardHeader(\`User \${id}\`, "Deep-linkable detail page"),
+    CardHeader(\`User \${id}\`, { subtitle: "Deep-linkable detail page" }),
     Markdown(\`Path parameter: **\${id}** · open URL: \\\`#/users/\${id}\\\`\`),
     Buttons([
-      Button("Back to users", () => { _route_.navigate("/users") },                                "ghost"),
-      Button("Mark edited",   () => { $lastEdited = id; _route_.navigate("/dashboard") },           "primary")
+      Button("Back to users", { action: () => { route.navigate("/users") },                          variant: "ghost" }),
+      Button("Mark edited",   { action: () => { $lastEdited = id; route.navigate("/dashboard") },    variant: "primary" })
     ])
   ])
 }
 
 settingsHomePage = Card([
-  CardHeader("Settings", "Wildcard nested route below"),
+  CardHeader("Settings", { subtitle: "Wildcard nested route below" }),
   Stack([
-    NavLink("Profile",       "/settings/profile",       "pill"),
-    NavLink("Notifications", "/settings/notifications", "pill"),
-    NavLink("Security",      "/settings/security",      "pill")
-  ], "row", "s"),
-  Text("Pick a sub-section above — it's matched by /settings/*.", "small", "muted")
+    NavLink("Profile",       { to: "/settings/profile",       variant: "pill" }),
+    NavLink("Notifications", { to: "/settings/notifications", variant: "pill" }),
+    NavLink("Security",      { to: "/settings/security",      variant: "pill" })
+  ], { direction: "row", gap: "s" }),
+  Text("Pick a sub-section above — it's matched by /settings/*.", { variant: "small", color: "muted" })
 ])
 
-# \`params._\` holds whatever comes after \`/settings/\` — captured into \`rest\` above.
-component settingsAreaPage(rest) {
+// \`params._\` holds whatever comes after \`/settings/\` — captured into \`rest\` above.
+function settingsAreaPage(rest) {
   return Card([
-    CardHeader(\`Settings · \${rest}\`, "Sub-section captured by wildcard"),
+    CardHeader(\`Settings · \${rest}\`, { subtitle: "Sub-section captured by wildcard" }),
     Text(\`params._ = \${rest}\`),
-    Buttons([Button("Back to settings", () => { _route_.navigate("/settings") }, "ghost")])
+    Buttons([Button("Back to settings", { action: () => { route.navigate("/settings") }, variant: "ghost" })])
   ])
 }
 
-notFoundPage = Callout("warning", "Not found", \`No page matches \${_route_}. Use the nav above or go back to /.\`)` }
+notFoundPage = Callout("Not found", { tone: "warning", description: \`No page matches \${route}. Use the nav above or go back to /.\` })` }
       ],
       render: null,
       extraHtml: ``,
@@ -744,15 +722,14 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${_route_}. Us
       id: null,
       heading: `How it works`,
       lede: ``,
-      codeBlocks: [
-      ],
+      codeBlocks: [],
       render: null,
       extraHtml: `<ul>
         <li>
           The renderer always starts the built-in router. The reactive
-          <code>_route_</code> handle is exposed everywhere (with
-          <code>_route_.path</code>, <code>_route_.params</code>,
-          <code>_route_.query</code>) and the routing section is part of
+          <code>route</code> handle is exposed everywhere (with
+          <code>route.path</code>, <code>route.params</code>,
+          <code>route.query</code>) and the routing section is part of
           the generated system prompt by default.
         </li>
         <li>
@@ -762,7 +739,7 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${_route_}. Us
           <code>exact=true</code> so it doesn't light up on every path.
         </li>
         <li>
-          <code>_router_({ … })</code> picks exactly one arm per render
+          <code>Router({ … })</code> picks exactly one arm per render
           based on <code>window.location.hash</code>. The
           <code>"/"</code> arm and the <code>default:</code> catch-all
           guarantee something is always rendered.
@@ -774,10 +751,9 @@ notFoundPage = Callout("warning", "Not found", \`No page matches \${_route_}. Us
           the wildcard remainder.
         </li>
         <li>
-          <code>NavLink(label, to: "/path")</code> is the declarative way
-          to move; the imperative <code>el.navigate("/path")</code> works
-          from JS (see the <code>Open</code> button in the users list,
-          which captures <code>u.id</code> per row).
+          <code>NavLink(label, { to: "/path" })</code> is the declarative way
+          to move; the imperative <code>route.navigate("/path")</code> works
+          from actions.
         </li>
         <li>
           A persistent <code>$visits</code> counter shows that the rest of the
@@ -803,21 +779,20 @@ const el = document.getElementById("rui-routing");
     heroTitleHtml: `A full settings & preferences screen, driven by two-way bound primitives`,
     heroDescriptionHtml: `Tabs across the top, a <code>PageHeader</code> with breadcrumbs, a
         usage progress bar, switches and toggle groups for preferences,
-        keyboard shortcut chips, and a slide-in <code>Sheet</code> for
+        keyboard shortcut chips, and a slide-in <code>Drawer</code> for
         confirming the dangerous "delete workspace" action. Every control
-        binds straight to a <code>$variable</code> — no
-        <code>js{}</code> block needed.`,
-    brandHref: "examples.html",
+        binds straight to a <code>$variable</code>.`,
+    brandHref: "live-examples.html",
     brandText: `Aktion · settings app`,
-    backHref: "examples.html",
-    backText: `← Back to docs`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
     cards: [
     {
       id: null,
       heading: `Live preview`,
       lede: `Flip the switches, change the theme, hit "Save changes" — the save
         progress bar animates and a banner confirms. "Delete workspace"
-        opens a confirmation sheet.`,
+        opens a confirmation drawer.`,
       codeBlocks: [
       { codeId: "src-settings", content: `$tab = "general"
 $theme = "light"
@@ -832,131 +807,142 @@ $shareUsage = true
 $deleting = false
 $saveStatus = "idle"
 
-usage          = {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""}
+usage = {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: "", renews: ""}
 
-action saveSettings() {
+function saveSettings() {
   $saveStatus = "saving"
   $saved = http({ url: "/api/settings", method: "PUT", body: { theme: $theme, accent: $accent }, headers: { "Content-Type": "application/json" } })
   $saveStatus = "saved"
 }
 
-action deleteWorkspace() {
+function deleteWorkspace() {
   $deleted = http({ url: "/api/workspace", method: "DELETE" })
   $deleting = false
-  emit "assistant-message" { message: "Workspace deleted" }
+  emit("assistant-message", { message: "Workspace deleted" })
 }
 
-saveBanner = match $saveStatus {
-  "saving": Banner("Saving…", "Hang tight while we sync your preferences.", null, "spinner", "info")
-  "saved": Banner("Saved",    "Your preferences are up to date.",           null, "circle-check", "success")
+saveBanner = switch ($saveStatus) {
+  case "saving": Banner("Saving…", { message: "Hang tight while we sync your preferences.", icon: "spinner", tone: "info" }); break
+  case "saved": Banner("Saved", { message: "Your preferences are up to date.", icon: "circle-check", tone: "success" }); break
+  default: null
 }
 
-header = PageHeader(
-  "Settings",
-  "Personalise your workspace",
-  Breadcrumb([BreadcrumbItem("Workspace", "#"), BreadcrumbItem("Settings")]),
-  [
-    Button("Cancel",       null,           "ghost"),
-    Button("Save changes", saveSettings,   "primary")
+header = PageHeader("Settings", {
+  subtitle: "Personalise your workspace",
+  breadcrumbs: Breadcrumb([BreadcrumbItem("Workspace", { href: "#" }), BreadcrumbItem("Settings")]),
+  actions: [
+    Button("Cancel", { variant: "ghost" }),
+    Button("Save changes", { action: saveSettings, variant: "primary" })
   ],
-  Badge(usage.planLabel, "primary", null, "sm")
-)
+  status: Badge(usage.planLabel, { tone: "primary", size: "sm" })
+})
 
 usageCard = Card([
-  CardHeader("Workspace usage", \`Renews \${usage.renews}\`),
+  CardHeader("Workspace usage", { subtitle: \`Renews \${usage.renews}\` }),
   Stats([
-    StatCard("Storage", \`\${usage.storageUsed} / \${usage.storageMax} GB\`, "flat", null,             "database"),
-    StatCard("Seats",   \`\${usage.seatsUsed} / \${usage.seatsMax}\`,         "up",   "+2 this month", "users"),
-    StatCard("Plan",    usage.planLabel,                                   "flat", null,             "id-card")
-  ], {sm: 1, md: 3}),
-  Progress(usage.storageUsed, usage.storageMax, "Storage used", "primary", false, true)
+    StatCard("Storage", { value: \`\${usage.storageUsed} / \${usage.storageMax} GB\`, trend: "flat", icon: "database" }),
+    StatCard("Seats",   { value: \`\${usage.seatsUsed} / \${usage.seatsMax}\`,         trend: "up", delta: "+2 this month", icon: "users" }),
+    StatCard("Plan",    { value: usage.planLabel,                                   trend: "flat", icon: "id-card" })
+  ]),
+  Progress(usage.storageUsed, { max: usage.storageMax, label: "Storage used", tone: "primary" })
 ])
 
 generalCard = Card([
   CardHeader("General"),
-  FormControl("Language", Select("language", [
-    SelectItem("en", "English"),
-    SelectItem("fr", "Français"),
-    SelectItem("de", "Deutsch"),
-    SelectItem("ja", "日本語")
-  ], null, null, $language)),
-  Separator("horizontal", true),
-  Switch("notifications", "Enable desktop notifications", $notifications, "We'll ping you when a build finishes or someone @mentions you."),
-  Switch("autosave",      "Autosave every 30 seconds",     $autosave),
-  Switch("shareUsage",    "Share anonymous usage data",    $shareUsage, "Helps us prioritise the right components and themes.")
+  FormControl("Language", { field: Select("language", {
+    items: [
+      SelectItem("en", { label: "English" }),
+      SelectItem("fr", { label: "Français" }),
+      SelectItem("de", { label: "Deutsch" }),
+      SelectItem("ja", { label: "日本語" })
+    ],
+    value: $language
+  }) }),
+  Separator("horizontal"),
+  Switch("notifications", { label: "Enable desktop notifications", value: $notifications, description: "We'll ping you when a build finishes or someone @mentions you." }),
+  Switch("autosave",      { label: "Autosave every 30 seconds",    value: $autosave }),
+  Switch("shareUsage",    { label: "Share anonymous usage data",   value: $shareUsage, description: "Helps us prioritise the right components and themes." })
 ])
 
 notificationsCard = Card([
   CardHeader("Notifications"),
-  Switch("weeklyDigest",  "Weekly digest email",      $weeklyDigest),
-  Switch("mentionEmails", "Email me on @mentions",    $mentionEmails, "Beyond just an in-app notification."),
-  Separator("horizontal", true),
-  Text("Keyboard shortcut to mark all as read:", "small", "muted"),
+  Switch("weeklyDigest",  { label: "Weekly digest email",   value: $weeklyDigest }),
+  Switch("mentionEmails", { label: "Email me on @mentions", value: $mentionEmails, description: "Beyond just an in-app notification." }),
+  Separator("horizontal"),
+  Text("Keyboard shortcut to mark all as read:", { variant: "small", color: "muted" }),
   Kbd(["⌘", "Shift", "R"])
 ])
 
 appearanceCard = Card([
   CardHeader("Appearance"),
-  FormControl("Theme", ToggleGroup("theme", [
-    {value: "light",  label: "Light",  icon: "sun"},
-    {value: "dark",   label: "Dark",   icon: "moon"},
-    {value: "neon",   label: "Neon",   icon: "wand-magic-sparkles"},
-    {value: "pastel", label: "Pastel", icon: "ribbon"}
-  ], $theme)),
-  FormControl("Accent", ToggleGroup("accent", [
-    {value: "indigo",  label: "Indigo"},
-    {value: "emerald", label: "Emerald"},
-    {value: "rose",    label: "Rose"},
-    {value: "amber",   label: "Amber"}
-  ], $accent)),
-  FormControl("Density", ToggleGroup("density", [
-    {value: "compact",     label: "Compact"},
-    {value: "comfortable", label: "Comfortable"},
-    {value: "spacious",    label: "Spacious"}
-  ], $density))
+  FormControl("Theme", { field: ToggleGroup("theme", {
+    items: [
+      {value: "light",  label: "Light",  icon: "sun"},
+      {value: "dark",   label: "Dark",   icon: "moon"},
+      {value: "neon",   label: "Neon",   icon: "wand-magic-sparkles"},
+      {value: "pastel", label: "Pastel", icon: "ribbon"}
+    ],
+    value: $theme
+  }) }),
+  FormControl("Accent", { field: ToggleGroup("accent", {
+    items: [
+      {value: "indigo",  label: "Indigo"},
+      {value: "emerald", label: "Emerald"},
+      {value: "rose",    label: "Rose"},
+      {value: "amber",   label: "Amber"}
+    ],
+    value: $accent
+  }) }),
+  FormControl("Density", { field: ToggleGroup("density", {
+    items: [
+      {value: "compact",     label: "Compact"},
+      {value: "comfortable", label: "Comfortable"},
+      {value: "spacious",    label: "Spacious"}
+    ],
+    value: $density
+  }) })
 ])
 
 shortcutsCard = Card([
   CardHeader("Keyboard shortcuts"),
   List([
-    ListItem("Open command palette",     null, "⌘ K"),
-    ListItem("Quick search",             null, "⌘ /"),
-    ListItem("Toggle theme",             null, "⌘ Shift T"),
-    ListItem("Create new doc",           null, "⌘ N"),
-    ListItem("Mark all notifs as read",  null, "⌘ Shift R")
+    ListItem("Open command palette",    { icon: "⌘ K" }),
+    ListItem("Quick search",            { icon: "⌘ /" }),
+    ListItem("Toggle theme",            { icon: "⌘ Shift T" }),
+    ListItem("Create new doc",          { icon: "⌘ N" }),
+    ListItem("Mark all notifs as read", { icon: "⌘ Shift R" })
   ])
 ])
 
 dangerCard = Card([
-  CardHeader("Danger zone", "Permanent actions — proceed with care"),
-  Text("Deleting the workspace removes every project, file, member, and history record. This action cannot be undone.", "small", "muted"),
-  Buttons([Button("Delete workspace", () => { $deleting = true }, "danger")])
-], "outlined")
+  CardHeader("Danger zone", { subtitle: "Permanent actions — proceed with care" }),
+  Text("Deleting the workspace removes every project, file, member, and history record. This action cannot be undone.", { variant: "small", color: "muted" }),
+  Buttons([Button("Delete workspace", { action: () => { $deleting = true }, variant: "danger" })])
+], { variant: "outlined" })
 
 tabs = Tabs([
-  TabItem("general",       "General",       [generalCard, usageCard]),
-  TabItem("appearance",    "Appearance",    [appearanceCard]),
-  TabItem("notifications", "Notifications", [notificationsCard]),
-  TabItem("shortcuts",     "Shortcuts",     [shortcutsCard]),
-  TabItem("danger",        "Danger zone",   [dangerCard])
-], $tab)
+  TabItem("general",       { label: "General",       children: [generalCard, usageCard] }),
+  TabItem("appearance",    { label: "Appearance",    children: [appearanceCard] }),
+  TabItem("notifications", { label: "Notifications", children: [notificationsCard] }),
+  TabItem("shortcuts",     { label: "Shortcuts",     children: [shortcutsCard] }),
+  TabItem("danger",        { label: "Danger zone",   children: [dangerCard] })
+], { defaultValue: $tab })
 
-confirmSheet = Drawer(
-  "Delete workspace?",
-  $deleting,
-  [
-    Callout("danger", "This cannot be undone", "Every project, file, and member will be lost."),
-    Text("Type DELETE in the box below to confirm.", "small", "muted"),
-    FormControl("Confirmation", Input("confirm", "DELETE", "text"))
+confirmSheet = Drawer("Delete workspace?", {
+  open: $deleting,
+  children: [
+    Callout("This cannot be undone", { tone: "danger", description: "Every project, file, and member will be lost." }),
+    Text("Type DELETE in the box below to confirm.", { variant: "small", color: "muted" }),
+    FormControl("Confirmation", { field: Input("confirm", { placeholder: "DELETE" }) })
   ],
-  "right",
-  [
-    Button("Cancel",             () => { $deleting = false },                                                                       "ghost"),
-    Button("Permanently delete", deleteWorkspace,                                                                                                                              "danger")
+  side: "right",
+  footer: [
+    Button("Cancel",             { action: () => { $deleting = false }, variant: "ghost" }),
+    Button("Permanently delete", { action: deleteWorkspace,             variant: "danger" })
   ]
-)
+})
 
-_app_ = Stack([header, saveBanner, tabs, confirmSheet], "column", "l")` }
+aktion = Stack([header, saveBanner, tabs, confirmSheet], { direction: "column", gap: "l" })` }
       ],
       render: { elId: "rui-settings", theme: "light" },
       extraHtml: ``,
@@ -1020,6 +1006,477 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     el.setResponse(document.getElementById("src-settings").textContent);
     }
   },
+  "kanban-pro": {
+    slug: "kanban-pro",
+    docTitle: `Kanban board · Aktion`,
+    eyebrow: `Live demo · drag-and-drop board + autosave`,
+    heroTitleHtml: `A Kanban board with reactive columns, autosave, and hydration`,
+    heroDescriptionHtml: `Board state in a single <code>$columns</code> reactive variable.
+        Actions move, add, and archive cards. Effects autosave to
+        <code>Storage.local</code> with debounce and hydrate on mount.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · kanban`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `Cards live in <code>$columns</code>. Actions mutate the array
+        and effects persist to localStorage. Open DevTools → Application →
+        Local Storage to see autosave fire after 500ms of inactivity.`,
+      codeBlocks: [
+      { codeId: "src-kanban", content: `$columns = [
+  {id: "todo",    title: "To do",       cards: [{id: "c1", title: "Design API schema",   priority: "high",   assignee: "Ada"},
+                                                  {id: "c2", title: "Write unit tests",    priority: "medium", assignee: "Grace"}]},
+  {id: "doing",   title: "In progress", cards: [{id: "c3", title: "Build dashboard view", priority: "high",   assignee: "Linus"}]},
+  {id: "review",  title: "Review",      cards: [{id: "c4", title: "Update docs",          priority: "low",    assignee: "Margaret"}]},
+  {id: "done",    title: "Done",        cards: []}
+]
+$newTitle = ""
+
+effect(() => {
+  $columns = Storage.local.get("kanban") ?? $columns
+}, ["mount"])
+
+effect(() => {
+  Storage.local.set("kanban", $columns)
+}, [$columns, "debounce(500)"])
+
+function addCard() {
+  $columns = $columns.map((c) => c.id == "todo" ? {...c, cards: [...c.cards, {id: \`c\${Date.now()}\`, title: $newTitle, priority: "medium", assignee: "Unassigned"}]} : c)
+  $newTitle = ""
+}
+
+function moveCard(cardId, toColumnId) {
+  card = $columns.flatMap((c) => c.cards).filter((cd) => cd.id == cardId)[0]
+  $columns = $columns.map((c) => ({...c, cards: c.cards.filter((cd) => cd.id != cardId)}))
+  $columns = $columns.map((c) => c.id == toColumnId ? {...c, cards: [...c.cards, card]} : c)
+}
+
+function archiveCard(cardId) {
+  $columns = $columns.map((c) => ({...c, cards: c.cards.filter((cd) => cd.id != cardId)}))
+}
+
+board = KanbanBoard(
+  for (let col of $columns) {
+    KanbanColumn(col.title, {
+      items: for (let card of col.cards) {
+        KanbanCard(card.title, { tags: [card.priority], assignee: card.assignee })
+      }
+    })
+  }
+)
+
+addForm = Card([
+  SectionHeader("Add card", { subtitle: "Adds to the To do column", eyebrow: "NEW" }),
+  Stack([
+    Input("newTitle", { placeholder: "Card title…", value: $newTitle }),
+    Button("Add", { action: addCard, variant: "primary", icon: "plus" })
+  ], { direction: "row", gap: "m" })
+])
+
+aktion = Stack([
+  PageHeader("Kanban board", { subtitle: "Drag cards between columns — state autosaves", breadcrumbs: ["Workspace", "Board"] }),
+  addForm,
+  board
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-kanban", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-kanban");
+    el.setResponse(document.getElementById("src-kanban").textContent);
+    }
+  },
+  "analytics-pulse": {
+    slug: "analytics-pulse",
+    docTitle: `Analytics pulse · Aktion`,
+    eyebrow: `Live demo · realtime dashboard`,
+    heroTitleHtml: `A realtime-feeling dashboard with interval effects and derived stats`,
+    heroDescriptionHtml: `A fake live feed driven by <code>effect(() => { … }, ["every(2000)"])</code>,
+        with <code>@Sum</code> aggregations, a date-range <code>Select</code>,
+        and a <code>Tabs</code> switcher.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · analytics`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `The event feed updates every 2 seconds. The KPI strip and
+        chart re-derive automatically because they read <code>$events</code>.`,
+      codeBlocks: [
+      { codeId: "src-analytics", content: `$events = [
+  {ts: "12:00", value: 42, source: "web"},
+  {ts: "12:01", value: 18, source: "api"},
+  {ts: "12:02", value: 31, source: "web"},
+  {ts: "12:03", value: 55, source: "api"}
+]
+$range = "1h"
+$tab = "overview"
+
+effect(() => {
+  $events = [...$events, {ts: \`\${new Date().getHours()}:\${String(new Date().getMinutes()).padStart(2, "0")}\`, value: Math.floor(Math.random() * 80 + 10), source: Math.random() > 0.5 ? "web" : "api"}]
+}, ["every(2000)"])
+
+totalValue = @Sum($events.value)
+webEvents = $events.filter((e) => e.source == "web")
+apiEvents = $events.filter((e) => e.source == "api")
+
+kpis = Stats([
+  StatCard("Total events", { value: \`\${$events.length}\`,        trend: "up", delta: "live",       icon: "bolt" }),
+  StatCard("Sum value",    { value: \`\${totalValue}\`,             trend: "up", delta: "+realtime",  icon: "chart-line" }),
+  StatCard("Web events",   { value: \`\${webEvents.length}\`,       trend: "flat", icon: "globe" }),
+  StatCard("API events",   { value: \`\${apiEvents.length}\`,       trend: "flat", icon: "server" })
+])
+
+chart = Card([
+  SectionHeader("Event values over time", { eyebrow: "TREND",
+    status: Badge("Live", { tone: "success", icon: "circle", size: "sm" }) }),
+  LineChart($events.ts, {
+    series: [Series("Value", { values: $events.value })]
+  })
+])
+
+rangeSelector = Select("range", {
+  items: [SelectItem("1h", { label: "Last hour" }), SelectItem("6h", { label: "Last 6 hours" }), SelectItem("24h", { label: "Last 24 hours" })],
+  value: $range
+})
+
+overviewTab = Stack([kpis, chart], { direction: "column", gap: "l" })
+
+feedTab = Card([
+  SectionHeader("Event feed", { subtitle: "Latest 10 events", eyebrow: "FEED" }),
+  InfiniteList(
+    for (let e of $events.slice(-10).reverse()) {
+      ListItem(\`\${e.ts} — \${e.source}\`, { description: \`Value: \${e.value}\`, icon: e.source == "web" ? "globe" : "server" })
+    },
+    { hasMore: false }
+  )
+])
+
+tabs = Tabs([
+  TabItem("overview", { label: "Overview", children: [overviewTab] }),
+  TabItem("feed",     { label: "Feed",     children: [feedTab] })
+], { defaultValue: $tab })
+
+aktion = Stack([
+  PageHeader("Analytics pulse", { subtitle: "Realtime event dashboard", breadcrumbs: ["Workspace", "Analytics"],
+    actions: [rangeSelector, Button("Export", { variant: "ghost", icon: "file-csv" })] }),
+  tabs
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-analytics", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-analytics");
+    el.setResponse(document.getElementById("src-analytics").textContent);
+    }
+  },
+  "recipe-explorer": {
+    slug: "recipe-explorer",
+    docTitle: `Recipe explorer · Aktion`,
+    eyebrow: `Live demo · search + filter + sort`,
+    heroTitleHtml: `A search, filter, and sort UX with derived lists`,
+    heroDescriptionHtml: `Type a query, pick a cuisine, toggle sort — the card grid
+        re-derives instantly from <code>$query</code>, <code>$cuisine</code>,
+        and <code>$sort</code>. No manual re-render wiring.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · recipes`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `Search is instant. The cuisine filter and sort toggle derive a
+        new list from the same <code>$recipes</code> array.`,
+      codeBlocks: [
+      { codeId: "src-recipes", content: `$query = ""
+$cuisine = ""
+$sort = "rating"
+
+$recipes = [
+  {title: "Pad Thai",         cuisine: "Thai",     rating: 4.8, time: "30 min", image: "https://picsum.photos/seed/padthai/400/260",   tags: ["noodles", "quick"]},
+  {title: "Margherita Pizza",  cuisine: "Italian",  rating: 4.6, time: "45 min", image: "https://picsum.photos/seed/pizza/400/260",     tags: ["classic", "vegetarian"]},
+  {title: "Chicken Tikka",     cuisine: "Indian",   rating: 4.9, time: "50 min", image: "https://picsum.photos/seed/tikka/400/260",     tags: ["spicy", "grilled"]},
+  {title: "Sushi Platter",     cuisine: "Japanese", rating: 4.7, time: "60 min", image: "https://picsum.photos/seed/sushi/400/260",     tags: ["fresh", "seafood"]},
+  {title: "Caesar Salad",      cuisine: "American", rating: 4.3, time: "15 min", image: "https://picsum.photos/seed/caesar/400/260",    tags: ["salad", "quick"]},
+  {title: "Tom Yum Soup",      cuisine: "Thai",     rating: 4.5, time: "25 min", image: "https://picsum.photos/seed/tomyum/400/260",    tags: ["soup", "spicy"]},
+  {title: "Pasta Carbonara",   cuisine: "Italian",  rating: 4.4, time: "20 min", image: "https://picsum.photos/seed/carbonara/400/260", tags: ["pasta", "quick"]},
+  {title: "Butter Chicken",    cuisine: "Indian",   rating: 4.8, time: "55 min", image: "https://picsum.photos/seed/butterchk/400/260", tags: ["curry", "creamy"]}
+]
+
+filtered = $recipes.filter((r) => r.title.toLowerCase().includes($query.toLowerCase()) && (!$cuisine || r.cuisine == $cuisine)).sort((a, b) => $sort == "rating" ? b.rating - a.rating : a.title.localeCompare(b.title))
+
+toolbar = Card([
+  Stack([
+    SearchBar("query", { placeholder: "Search recipes…", value: $query }),
+    Select("cuisine", {
+      items: [SelectItem("", { label: "All cuisines" }), SelectItem("Thai", { label: "Thai" }), SelectItem("Italian", { label: "Italian" }), SelectItem("Indian", { label: "Indian" }), SelectItem("Japanese", { label: "Japanese" }), SelectItem("American", { label: "American" })],
+      value: $cuisine
+    }),
+    ToggleGroup("sort", {
+      items: [{value: "rating", label: "Top rated"}, {value: "alpha", label: "A–Z"}],
+      value: $sort
+    })
+  ], { direction: "row", gap: "m", wrap: true })
+])
+
+recipeGrid = Grid(
+  for (let r of filtered) {
+    Card([
+      Image(r.image, { alt: r.title, aspectRatio: "16:10" }),
+      CardHeader(r.title, { subtitle: \`\${r.cuisine} · \${r.time}\` }),
+      Stack([
+        Badge(\`★ \${r.rating}\`, { tone: r.rating >= 4.7 ? "success" : "primary", size: "sm" }),
+        Stack(r.tags.map((t) => Badge(t, { tone: "neutral", size: "sm" })), { direction: "row", gap: "xs" })
+      ], { direction: "row", gap: "s" })
+    ])
+  },
+  { columns: {sm: 1, md: 2, lg: 3}, gap: "l" }
+)
+
+emptyState = if (filtered.length == 0) { EmptyState("No recipes found", { description: "Try a different search or filter.", icon: "utensils" }) } else { null }
+
+aktion = Stack([
+  PageHeader("Recipe explorer", { subtitle: \`\${filtered.length} of \${$recipes.length} recipes\`, breadcrumbs: ["Kitchen", "Browse"] }),
+  toolbar,
+  recipeGrid,
+  emptyState
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-recipes", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-recipes");
+    el.setResponse(document.getElementById("src-recipes").textContent);
+    }
+  },
+  "expense-tracker": {
+    slug: "expense-tracker",
+    docTitle: `Expense tracker · Aktion`,
+    eyebrow: `Live demo · budget + switch + storage`,
+    heroTitleHtml: `A budget tracker with tabbed views, charts, and local persistence`,
+    heroDescriptionHtml: `Three tabs — list, chart, and settings — driven by <code>switch</code>.
+        Uses <code>Storage.local</code> for persistence and <code>@Sum</code>
+        for running totals.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · expenses`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `Add an expense, switch tabs, see the chart update. All data
+        persists in localStorage.`,
+      codeBlocks: [
+      { codeId: "src-expenses", content: `$tab = "list"
+$expenses = [
+  {id: "e1", label: "Groceries",    amount: 85,  category: "food"},
+  {id: "e2", label: "Netflix",      amount: 15,  category: "entertainment"},
+  {id: "e3", label: "Gas",          amount: 52,  category: "transport"},
+  {id: "e4", label: "Coffee",       amount: 6,   category: "food"},
+  {id: "e5", label: "Gym",          amount: 40,  category: "health"}
+]
+$budget = 500
+$newLabel = ""
+$newAmount = 0
+$newCategory = "food"
+
+effect(() => {
+  $expenses = Storage.local.get("expenses") ?? $expenses
+  $budget = Storage.local.get("budget") ?? $budget
+}, ["mount"])
+
+effect(() => {
+  Storage.local.set("expenses", $expenses)
+  Storage.local.set("budget", $budget)
+}, [$expenses, $budget, "debounce(300)"])
+
+function addExpense() {
+  $expenses = [...$expenses, {id: \`e\${Date.now()}\`, label: $newLabel, amount: $newAmount, category: $newCategory}]
+  $newLabel = ""
+  $newAmount = 0
+}
+
+function removeExpense(id) {
+  $expenses = $expenses.filter((e) => e.id != id)
+}
+
+spent = @Sum($expenses.amount)
+remaining = $budget - spent
+
+kpis = Stats([
+  StatCard("Budget",    { value: \`$\${$budget}\`,    trend: "flat", icon: "wallet" }),
+  StatCard("Spent",     { value: \`$\${spent}\`,      trend: "up",   delta: \`\${$expenses.length} items\`, icon: "receipt" }),
+  StatCard("Remaining", { value: \`$\${remaining}\`,  trend: remaining > 0 ? "flat" : "down", delta: remaining > 0 ? "On track" : "Over budget", icon: "piggy-bank" })
+])
+
+listView = Card([
+  SectionHeader("Expenses", { subtitle: \`\${$expenses.length} entries\`, eyebrow: "LIST" }),
+  Stack(
+    for (let e of $expenses) {
+      Stack([
+        Stack([Text(e.label, { variant: "body-heavy" }), Badge(e.category, { tone: "neutral", size: "sm" })], { direction: "row", gap: "xs" }),
+        Stack([Text(\`$\${e.amount}\`, { variant: "body-heavy" }), Button("Remove", { action: () => { removeExpense(e.id) }, variant: "ghost", size: "small", icon: "trash" })], { direction: "row", gap: "xs" })
+      ], { direction: "row", gap: "m", justify: "between", align: "center" })
+    },
+    { direction: "column", gap: "s" }
+  )
+])
+
+chartView = Card([
+  SectionHeader("Spending by category", { eyebrow: "CHART" }),
+  BarChart(["food", "entertainment", "transport", "health"], {
+    series: [Series("Amount", { values: [
+      @Sum($expenses.filter((e) => e.category == "food").amount),
+      @Sum($expenses.filter((e) => e.category == "entertainment").amount),
+      @Sum($expenses.filter((e) => e.category == "transport").amount),
+      @Sum($expenses.filter((e) => e.category == "health").amount)
+    ] })]
+  })
+])
+
+addForm = Card([
+  SectionHeader("Add expense", { eyebrow: "NEW" }),
+  Stack([
+    Input("newLabel", { placeholder: "Description…", value: $newLabel }),
+    NumberInput("newAmount", { value: $newAmount, min: 0, step: 1 }),
+    Select("newCategory", { items: [SelectItem("food", { label: "Food" }), SelectItem("entertainment", { label: "Entertainment" }), SelectItem("transport", { label: "Transport" }), SelectItem("health", { label: "Health" })], value: $newCategory }),
+    Button("Add expense", { action: addExpense, variant: "primary", icon: "plus" })
+  ], { direction: "row", gap: "m", wrap: true })
+])
+
+settingsView = Card([
+  SectionHeader("Budget settings", { eyebrow: "CONFIG" }),
+  FormControl("Monthly budget ($)", { field: NumberInput("budget", { value: $budget, min: 0, step: 50 }) }),
+  Progress(spent, { max: $budget, label: \`\${Math.round(spent / $budget * 100)}% used\`, tone: spent > $budget ? "danger" : "success" })
+])
+
+tabs = Tabs([
+  TabItem("list",     { label: "List",     children: [addForm, listView] }),
+  TabItem("chart",    { label: "Chart",    children: [chartView] }),
+  TabItem("settings", { label: "Settings", children: [settingsView] })
+], { defaultValue: $tab })
+
+aktion = Stack([
+  PageHeader("Expense tracker", { subtitle: \`\${remaining > 0 ? "On track" : "Over budget"} · $\${remaining} remaining\`, breadcrumbs: ["Finance", "Budget"] }),
+  kpis,
+  tabs
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-expenses", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-expenses");
+    el.setResponse(document.getElementById("src-expenses").textContent);
+    }
+  },
+  "chat-search": {
+    slug: "chat-search",
+    docTitle: `Chat search · Aktion`,
+    eyebrow: `Live demo · command palette + debounced search`,
+    heroTitleHtml: `A command-palette search bar with debounced results`,
+    heroDescriptionHtml: `Type a query — results appear after a debounced pause. Demonstrates
+        <code>effect</code> with <code>"debounce(250)"</code> and reactive
+        state driving a modal results panel.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · search`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `Type in the search box — results filter after 250ms of inactivity.
+        Click a result to "navigate" (just updates <code>$selected</code>).`,
+      codeBlocks: [
+      { codeId: "src-search", content: `$query = ""
+$open = true
+$selected = null
+$results = []
+
+allItems = [
+  {id: "1", title: "Dashboard",       category: "Pages",    icon: "chart-pie"},
+  {id: "2", title: "User settings",   category: "Pages",    icon: "gear"},
+  {id: "3", title: "Create project",  category: "Actions",  icon: "plus"},
+  {id: "4", title: "Invite teammate", category: "Actions",  icon: "user-plus"},
+  {id: "5", title: "Billing",         category: "Pages",    icon: "credit-card"},
+  {id: "6", title: "Export data",     category: "Actions",  icon: "file-csv"},
+  {id: "7", title: "API keys",        category: "Settings", icon: "key"},
+  {id: "8", title: "Webhooks",        category: "Settings", icon: "link"},
+  {id: "9", title: "Dark mode",       category: "Settings", icon: "moon"},
+  {id: "10", title: "Notifications",  category: "Settings", icon: "bell"}
+]
+
+effect(() => {
+  $results = $query.length > 0 ? allItems.filter((item) => item.title.toLowerCase().includes($query.toLowerCase())) : allItems
+}, [$query, "debounce(250)"])
+
+function selectItem(id) {
+  $selected = allItems.filter((i) => i.id == id)[0]
+}
+
+searchInput = Card([
+  SectionHeader("Command palette", { subtitle: "Search anything", eyebrow: "SEARCH",
+    status: Badge("⌘K", { tone: "neutral", size: "sm" }) }),
+  SearchBar("query", { placeholder: "Type to search…", value: $query })
+])
+
+resultsList = Card([
+  SectionHeader("Results", { subtitle: \`\${$results.length} matches\`, eyebrow: "RESULTS" }),
+  if ($results.length > 0) {
+    Stack(
+      for (let item of $results) {
+        Stack([
+          Icon(item.icon, { size: "sm" }),
+          Stack([Text(item.title, { variant: "body-heavy" }), Badge(item.category, { tone: "neutral", size: "sm" })], { direction: "row", gap: "xs" }),
+          Button("Go", { action: () => { selectItem(item.id) }, variant: "ghost", size: "small" })
+        ], { direction: "row", gap: "m", align: "center", justify: "between" })
+      },
+      { direction: "column", gap: "xs" }
+    )
+  } else {
+    EmptyState("No results", { description: "Try a different search term.", icon: "magnifying-glass" })
+  }
+])
+
+selectedCard = if ($selected != null) {
+  Card([
+    SectionHeader(\`Selected: \${$selected.title}\`, { eyebrow: "DETAIL",
+      status: Badge($selected.category, { tone: "primary", size: "sm" }) }),
+    Text(\`You selected "\${$selected.title}" from the \${$selected.category} group.\`, { variant: "body" }),
+    Buttons([Button("Clear selection", { action: () => { $selected = null }, variant: "ghost" })])
+  ])
+} else { null }
+
+aktion = Stack([
+  PageHeader("Chat search", { subtitle: "Command-palette style search with debounce", breadcrumbs: ["Tools", "Search"] }),
+  searchInput,
+  Grid([resultsList, selectedCard], { columns: {sm: 1, md: 2}, gap: "l" })
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-search", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-search");
+    el.setResponse(document.getElementById("src-search").textContent);
+    }
+  },
 };
 
 import "../../dist/aktion.js";
@@ -1032,9 +1489,13 @@ const example = EXAMPLES[slug];
 if (!example) {
   document.title = "Example not found · Aktion";
   root.innerHTML = renderNotFound(slug);
+  wireThemeSwitcher();
 } else {
   document.title = example.docTitle;
   root.innerHTML = renderShell(example);
+  highlightCode();
+  wireThemeSwitcher();
+  wireCopyButtons();
   customElements
     .whenDefined("aktion-app")
     .then(() => {
@@ -1049,13 +1510,7 @@ if (!example) {
 function renderNotFound(badSlug) {
   const known = Object.keys(EXAMPLES).sort().map((k) => `<li><a href="?example=${k}">${k}</a></li>`).join("");
   return `
-    <header class="example-topbar">
-      <a class="example-brand" href="live-examples.html">
-        <span class="dot"></span>
-        Aktion · live example
-      </a>
-      <a class="example-back" href="live-examples.html">← Back to live examples</a>
-    </header>
+    ${renderTopbar("live-examples.html", "Aktion · live example", "live-examples.html", "← Back to live examples")}
     <section class="example-hero">
       <span class="tag-pill">Not found</span>
       <h1 style="margin-top:10px">No example named "${escapeHtml(badSlug)}"</h1>
@@ -1068,22 +1523,32 @@ function renderNotFound(badSlug) {
   `;
 }
 
+function renderTopbar(brandHref, brandText, backHref, backText) {
+  const themeButtons = ["light", "dark", "neon", "pastel", "glass", "brutalist", "skyline"].map(
+    (t) => `<button data-theme="${t}" aria-pressed="false">${t[0].toUpperCase() + t.slice(1)}</button>`
+  ).join("");
+  return `
+    <header class="example-topbar">
+      <div class="example-topbar-left">
+        <a class="example-brand" href="${brandHref}"><span class="dot"></span>${brandText}</a>
+        <a class="example-back" href="${backHref}">${backText}</a>
+      </div>
+      <div class="example-topbar-right">
+        <nav class="theme-switcher" aria-label="Theme">${themeButtons}</nav>
+        <a class="example-playground-link" href="playground.html" target="_blank">Open in playground</a>
+      </div>
+    </header>`;
+}
+
 function renderShell(ex) {
   const cardsHtml = ex.cards.map(renderCard).join("");
   return `
-    <header class="example-topbar">
-      <a class="example-brand" href="${ex.brandHref}">
-        <span class="dot"></span>${ex.brandText}
-      </a>
-      <a class="example-back" href="${ex.backHref}">${ex.backText}</a>
-    </header>
-
+    ${renderTopbar(ex.brandHref, ex.brandText, ex.backHref, ex.backText)}
     <section class="example-hero">
       <span class="tag-pill">${ex.eyebrow}</span>
       <h1 style="margin-top:10px">${ex.heroTitleHtml}</h1>
       <p>${ex.heroDescriptionHtml}</p>
     </section>
-
     ${cardsHtml}
   `;
 }
@@ -1092,17 +1557,90 @@ function renderCard(card) {
   const idAttr = card.id ? ` id="${card.id}"` : "";
   const heading = card.heading ? `<h2>${card.heading}</h2>` : "";
   const lede = card.lede ? `<p class="lede">${card.lede}</p>` : "";
+  const hasSource = card.codeBlocks.length > 0;
+  const hasOutput = !!card.render;
+  const extra = card.extraHtml || "";
+
   const codeBlocks = card.codeBlocks
     .map((cb) => {
-      const idAttr = cb.codeId ? ` id="${cb.codeId}"` : "";
-      return `<pre class="example-source"><code${idAttr}>${cb.content}</code></pre>`;
+      const codeIdAttr = cb.codeId ? ` id="${cb.codeId}"` : "";
+      return `
+        <div class="example-source-panel">
+          <div class="example-source-header">
+            <span class="example-source-label">Aktion source</span>
+            <button class="example-copy-btn" data-copy-target="${cb.codeId || ""}">Copy</button>
+          </div>
+          <pre class="example-source"><code${codeIdAttr}>${cb.content}</code></pre>
+        </div>`;
     })
     .join("");
-  const output = card.render
+
+  const output = hasOutput
     ? `<div class="example-output"><aktion-app id="${card.render.elId}" theme="${card.render.theme}"></aktion-app></div>`
     : "";
-  const extra = card.extraHtml || "";
+
+  if (hasSource && hasOutput) {
+    return `<article class="example-card"${idAttr}>${heading}${lede}<div class=""><div>${output}</div><div>${codeBlocks}</div></div>${extra}</article>`;
+  }
   return `<article class="example-card"${idAttr}>${heading}${lede}${codeBlocks}${output}${extra}</article>`;
+}
+
+function highlightCode() {
+  document.querySelectorAll(".example-source code").forEach((el) => {
+    if (el.dataset.highlighted) return;
+    el.dataset.highlighted = "1";
+    el.innerHTML = tokenize(el.textContent);
+  });
+}
+
+function tokenize(src) {
+  return src.replace(
+    /(@\w+)|(\$\w+)|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b(?:function|let|const|var|if|else|for|of|switch|case|break|default|return|effect|aktion|true|false|null)\b)|(\b\d+(?:\.\d+)?\b)|([A-Z][A-Za-z0-9]*(?=\s*\())/g,
+    (m, builtin, state, comment, str, kw, num, comp) => {
+      if (builtin) return `<span class="tk-builtin">${escapeHtml(builtin)}</span>`;
+      if (state) return `<span class="tk-state">${escapeHtml(state)}</span>`;
+      if (comment) return `<span class="tk-comment">${escapeHtml(comment)}</span>`;
+      if (str) return `<span class="tk-string">${escapeHtml(str)}</span>`;
+      if (kw) return `<span class="tk-kw">${escapeHtml(kw)}</span>`;
+      if (num) return `<span class="tk-number">${escapeHtml(num)}</span>`;
+      if (comp) return `<span class="tk-comp">${escapeHtml(comp)}</span>`;
+      return m;
+    }
+  );
+}
+
+function wireThemeSwitcher() {
+  const switcher = document.querySelector(".theme-switcher");
+  if (!switcher) return;
+  const buttons = switcher.querySelectorAll("button");
+  const aktionEls = () => document.querySelectorAll("aktion-app");
+
+  function setTheme(name) {
+    buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.theme === name ? "true" : "false"));
+    aktionEls().forEach((el) => el.setAttribute("theme", name));
+  }
+
+  const initial = document.querySelector("aktion-app")?.getAttribute("theme") || "light";
+  setTheme(initial);
+
+  buttons.forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.theme)));
+}
+
+function wireCopyButtons() {
+  document.querySelectorAll(".example-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.copyTarget;
+      const code = target
+        ? document.getElementById(target)
+        : btn.closest(".example-source-panel")?.querySelector("code");
+      if (!code) return;
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        btn.classList.add("copied");
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "Copy"; }, 1800);
+      });
+    });
+  });
 }
 
 function escapeHtml(text) {

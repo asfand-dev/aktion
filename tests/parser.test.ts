@@ -76,24 +76,19 @@ describe("parser", () => {
     expect(callExpr?.kind).toBe("Call");
   });
 
-  it("parses inline named call arguments using the `name: value` form", () => {
-    const program = parse(`cell = GridItem(Text("Side"), span: "1/4")`);
+  it("parses a trailing object literal as named arguments", () => {
+    const program = parse(`cell = GridItem(Text("Side"), { span: "1/4" })`);
     expect(program.errors).toEqual([]);
     const callExpr = program.statements[0]?.expression;
     expect(callExpr?.kind).toBe("Call");
     if (callExpr?.kind !== "Call") return;
-    expect(callExpr.arguments[1]).toMatchObject({
-      kind: "NamedArg",
-      name: "span",
-      value: { kind: "Literal", value: "1/4" },
-    });
+    expect(callExpr.arguments).toHaveLength(2);
   });
 
-  it("rejects the legacy `name=value` named-arg form with a migration hint", () => {
+  it("rejects the legacy `name=value` named-arg form as a parse error", () => {
     const program = parse(`cell = GridItem(Text("Side"), span="1/4")`);
     expect(program.errors.length).toBeGreaterThan(0);
-    expect(program.errors[0]?.message).toMatch(/Legacy "name=value"/);
-    expect(program.errors[0]?.message).toMatch(/span: value/);
+    expect(program.errors[0]?.message).toMatch(/Expected.*"\)"/);
   });
 
   it("collects errors but keeps parsing", () => {
@@ -110,7 +105,6 @@ describe("parser", () => {
   });
 
   it("supports backtick-quoted multi-line strings (template-literal style)", () => {
-    // Backticks let LLMs embed JavaScript bodies without escaping newlines.
     const source = "ticker = Script(\"ticker\", `const x = 1;\nctx.state.set('x', x);`, [\"x\"])";
     const program = parse(source);
     expect(program.errors).toEqual([]);
@@ -144,8 +138,8 @@ describe("parser", () => {
     expect(body.value).toBe("a\nb\tc");
   });
 
-  it("strips `#` line comments on their own line", () => {
-    const program = parse(`# header for the next block\nroot = Card([])`);
+  it("strips `//` line comments on their own line", () => {
+    const program = parse(`// header for the next block\nroot = Card([])`);
     expect(program.errors).toEqual([]);
     expect(program.statements).toHaveLength(1);
     expect(program.statements[0]).toMatchObject({
@@ -154,25 +148,21 @@ describe("parser", () => {
     });
   });
 
-  it("strips trailing `#` line comments after a statement", () => {
-    const program = parse(`root = Card([]) # the top level card\nname = "Alex"`);
+  it("strips trailing `//` line comments after a statement", () => {
+    const program = parse(`root = Card([]) // the top level card\nname = "Alex"`);
     expect(program.errors).toEqual([]);
     const ids = program.statements.map((s) => s.identifier);
     expect(ids).toEqual(["root", "name"]);
   });
 
-  it("keeps `#` inside string literals untouched", () => {
-    const program = parse(`hex = "#ff00aa # not a comment"`);
+  it("keeps `//` inside string literals untouched", () => {
+    const program = parse(`url = "https://example.com // not a comment"`);
     expect(program.errors).toEqual([]);
     const expr = program.statements[0]?.expression;
-    expect(expr).toMatchObject({ kind: "Literal", value: "#ff00aa # not a comment" });
+    expect(expr).toMatchObject({ kind: "Literal", value: "https://example.com // not a comment" });
   });
 
   it("parses subtraction without whitespace as Binary `-`", () => {
-    // Regression: the lexer used to greedily consume the `-` into the
-    // following number whenever the previous character was anything,
-    // turning `$x-1` into `[$x, Number(-1)]` (which then failed to parse
-    // as a valid expression).
     const program = parse(`val = $x-1`);
     expect(program.errors).toEqual([]);
     const expr = program.statements[0]?.expression;

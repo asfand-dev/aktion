@@ -44,7 +44,7 @@ describe("Theme({...}) language construct", () => {
   radius: { button: "6px" },
   font:   { family: "-apple-system, sans-serif" }
 })
-root = Card([CardHeader("Hello")])`);
+aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0969da");
@@ -58,7 +58,7 @@ root = Card([CardHeader("Hello")])`);
     const el = create();
     el.setAttribute("theme", "dark");
     el.setResponse(`theme = Theme({colors: { primary: "#ff5722" }})
-root = Card([CardHeader("Hello")])`);
+aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#ff5722");
@@ -69,11 +69,11 @@ root = Card([CardHeader("Hello")])`);
   it("clears stale script tokens when Theme({...}) is removed from the program", async () => {
     const el = create();
     el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }})
-root = Card([CardHeader("v1")])`);
+aktion = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
 
-    el.setResponse(`root = Card([CardHeader("v2")])`);
+    el.setResponse(`aktion = Card([CardHeader("v2")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("");
@@ -85,13 +85,13 @@ root = Card([CardHeader("v1")])`);
   it("replaces previous script tokens when Theme({...}) changes between renders", async () => {
     const el = create();
     el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }, radius: { button: "12px" }})
-root = Card([CardHeader("v1")])`);
+aktion = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
     expect(el.style.getPropertyValue("--rui-radius-button")).toBe("12px");
 
     el.setResponse(`theme = Theme({colors: { primary: "#0070f3" }})
-root = Card([CardHeader("v2")])`);
+aktion = Card([CardHeader("v2")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0070f3");
@@ -104,7 +104,7 @@ root = Card([CardHeader("v2")])`);
     el.setResponse(`theme = Theme({
   colors: { primary: "#7928ca", notARealToken: "should be ignored" }
 })
-root = Card([CardHeader("Hello")])`);
+aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#7928ca");
@@ -114,7 +114,7 @@ root = Card([CardHeader("Hello")])`);
 
   it("does not require the theme binding — root alone still renders", async () => {
     const el = create();
-    el.setResponse(`root = Card([CardHeader("No theme block")])`);
+    el.setResponse(`aktion = Card([CardHeader("No theme block")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     const shadow = el.shadowRoot!;
     expect(shadow.querySelector(".rui-card-title")?.textContent).toBe(
@@ -125,7 +125,7 @@ root = Card([CardHeader("Hello")])`);
   it("Theme({...}) overrides survive host-level setTheme() updates", async () => {
     const el = create();
     el.setResponse(`theme = Theme({colors: { primary: "#0969da" }})
-root = Card([CardHeader("Hello")])`);
+aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0969da");
 

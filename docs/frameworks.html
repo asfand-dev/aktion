@@ -131,15 +131,15 @@
 
       <h2>Installation</h2>
       <p>Pick whichever channel suits your project:</p>
-<pre><code># From npm — works for any bundler
+<pre><code>// From npm — works for any bundler
 npm install aktion-runtime
-# yarn add aktion-runtime
-# pnpm add aktion-runtime
+// yarn add aktion-runtime
+// pnpm add aktion-runtime
 
-# Then, somewhere in your client-side entry point:
+// Then, somewhere in your client-side entry point:
 import "aktion-runtime";
 
-# Or load from CDN — no build step required
+// Or load from CDN — no build step required
 &lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;</code></pre>
 
       <p>
@@ -236,8 +236,8 @@ export function LLMResponse({ response, theme = "light" }: { response: string; t
 import { LLMResponse } from "./components/LLMResponse";
 
 export default function Page() {
-  const program = `_app_ = Stack([greeting])
-greeting = Card([CardHeader("Hello", subtitle: "Generative UI in Next.js")])`;
+  const program = `aktion = Stack([greeting])
+greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in Next.js" })])`;
   return &lt;LLMResponse response={program} theme="light" /&gt;;
 }</code></pre>
 
@@ -273,7 +273,7 @@ import { ref, onMounted, watch } from "vue";
 import "aktion-runtime";
 
 const target = ref&lt;HTMLElement | null&gt;(null);
-const response = ref(`_app_ = Stack([Card([CardHeader("Hello from Vue")])])`);
+const response = ref(`aktion = Stack([Card([CardHeader("Hello from Vue")])])`);
 const theme = ref("light");
 
 onMounted(() =&gt; (target.value as any)?.setResponse(response.value));
@@ -340,7 +340,7 @@ export class AppComponent implements AfterViewInit {
   @ViewChild("renderer") renderer!: ElementRef&lt;HTMLElement &amp; { setResponse(t: string): void }&gt;;
 
   ngAfterViewInit() {
-    this.renderer.nativeElement.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Angular")])])`);
+    this.renderer.nativeElement.setResponse(`aktion = Stack([Card([CardHeader("Hello, Angular")])])`);
   }
 }</code></pre>
 
@@ -359,7 +359,7 @@ export class AppComponent implements AfterViewInit {
   import "aktion-runtime";
 
   let renderer: any;
-  const program = `_app_ = Stack([Card([CardHeader("Hello from Svelte")])])`;
+  const program = `aktion = Stack([Card([CardHeader("Hello from Svelte")])])`;
   onMount(() =&gt; renderer?.setResponse(program));
 &lt;/script&gt;
 
@@ -382,7 +382,7 @@ import "aktion-runtime";
 
 export default function App() {
   let renderer: any;
-  onMount(() =&gt; renderer?.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Solid")])])`));
+  onMount(() =&gt; renderer?.setResponse(`aktion = Stack([Card([CardHeader("Hello, Solid")])])`));
   return &lt;aktion-app ref={renderer} theme="light" /&gt;;
 }</code></pre>
 
@@ -402,7 +402,7 @@ export default function App() {
 &lt;script&gt;
   import "aktion-runtime";
   const el = document.getElementById("response") as any;
-  el.setResponse(`_app_ = Stack([Card([CardHeader("Hello, Astro")])])`);
+  el.setResponse(`aktion = Stack([Card([CardHeader("Hello, Astro")])])`);
 &lt;/script&gt;</code></pre>
 
       <hr />
@@ -418,7 +418,7 @@ export default function App() {
     &lt;script type="module"&gt;
       import "https://asfand-dev.github.io/aktion/dist/aktion.js";
       const el = document.querySelector("aktion-app");
-      el.setResponse(`_app_ = Stack([Card([CardHeader("Hello, world")])])`);
+      el.setResponse(`aktion = Stack([Card([CardHeader("Hello, world")])])`);
     &lt;/script&gt;
   &lt;/body&gt;
 &lt;/html&gt;</code></pre>
@@ -453,7 +453,7 @@ el.streaming = false;</code></pre>
       <h3>Exposing tools to the script</h3>
       <p>
         Tools are async functions registered on the host. They&rsquo;re
-        available to <code>js{}</code> blocks inside actions and effects as
+        available inside action and effect bodies as
         <code>ctx.tools.&lt;name&gt;(args)</code>.
       </p>
 <pre><code>el.setTools({

@@ -89,7 +89,7 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "language.html": "syntax expressions state queries mutations builtins",
   "components.html": "props library catalog signatures",
-  "actions.html": "action assignment http emit assistant-message navigate _route_ js button click",
+  "actions.html": "action assignment http emit assistant-message navigate route js button click",
   "javascript-interactions.html": "script @js useeffect hooks",
   "routing.html": "routes navlink navigate hash router",
   "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",

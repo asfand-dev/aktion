@@ -3,9 +3,9 @@
  *
  * Walks a parsed `Program` and reports advisory diagnostics for:
  *
- *   - Closed-token enum mismatches (`Button("Save", tone: "magic")` →
+ *   - Closed-token enum mismatches (`Button("Save", { tone: "magic" })` →
  *     "magic" is not in the `tone` enum).
- *   - Unknown named args (`Stack(gap: "md", junk: 1)` → no such prop).
+ *   - Unknown props (`Stack([...], { gap: "md", junk: 1 })` → no such prop).
  *
  * The diagnostics are *warnings*, not errors — the runtime still
  * evaluates the program. Hosts may surface them as a banner or ignore
@@ -148,9 +148,6 @@ function walkExpression(
     case "Spread":
       walkExpression(expr.argument, library, out);
       return;
-    case "NamedArg":
-      walkExpression(expr.value, library, out);
-      return;
     case "If":
       walkExpression(expr.test, library, out);
       for (const inner of expr.consequent.body) walkStatement(inner, library, out);
@@ -162,20 +159,19 @@ function walkExpression(
         }
       }
       return;
-    case "Match":
+    case "Switch":
       walkExpression(expr.discriminant, library, out);
-      for (const arm of expr.arms) walkExpression(arm.body, library, out);
+      for (const c of expr.cases) {
+        if (c.test) walkExpression(c.test, library, out);
+        for (const inner of c.body) walkStatement(inner, library, out);
+      }
       return;
     case "For":
       walkExpression(expr.iterable, library, out);
       for (const inner of expr.body.body) walkStatement(inner, library, out);
       return;
     case "Lambda":
-      // Lambda body might be an expression or a JsBlock — only walk
-      // expressions; JsBlocks are opaque to schema validation.
-      if ((expr.body as Expression).kind !== "JsBlock") {
-        walkExpression(expr.body as Expression, library, out);
-      }
+      walkExpression(expr.body as Expression, library, out);
       return;
     default:
       return;
@@ -193,19 +189,19 @@ function walkExpression(
  */
 const LEGACY_V1_CALLS: Record<string, string> = {
   Script:
-    `Script("id", body, deps?) is not supported. Use an \`effect [$deps] { js{ … } }\` block (see §9 — effect declarations).`,
+    `Script("id", body, deps?) is not supported. Use \`effect(() => { … }, [deps])\` (see §9 — effect declarations).`,
   Action:
-    `Action([@Set, @Run, …]) payloads are removed in 0.5. Use \`action <Name>() { … }\` declarations and reference them by name (e.g. \`Button("Save", action: save)\`) — see §10.`,
+    `Action([@Set, @Run, …]) payloads are removed in 0.5. Use \`function name() { … }\` declarations and reference them by name (e.g. \`Button("Save", { action: save })\`) — see §10.`,
   Routes:
-    `Routes(items, default?) is removed in 0.5. Use \`pages = _router_({ "/": Home(), default: NotFound() })\` (see §12 — outlet-first router).`,
+    `Routes(items, default?) is removed in 0.5. Use \`pages = Router({ "/": Home(), default: NotFound() })\` (see §12 — outlet-first router).`,
   Route:
-    `Route(path, content) is only valid inside a v1 \`Routes(...)\` outlet, which has been removed. Use \`"/path": content\` arms inside a \`_router_({ … })\` call (see §12).`,
+    `Route(path, content) is only valid inside a v1 \`Routes(...)\` outlet, which has been removed. Use \`"/path": content\` arms inside a \`Router({ … })\` call (see §12).`,
   Query:
     `Query("name", args, placeholder, refreshSec?) is removed in 0.5. Declare a top-level \`query <Name>(args) { url, method, … }\` block and bind it with \`$query foo = <Name>(args)\` (see §11.2).`,
   Mutation:
     `Mutation("name", args) is removed in 0.5. Declare a top-level \`mutation <Name>(args) { url, method, body, … }\` block and bind it with \`$mutation save = <Name>\` (see §11.3).`,
   NavLinkRoute:
-    `NavLinkRoute is removed in 0.5. Use \`NavLink(label, to: "/path")\` (see §12 — Outlet-first router).`,
+    `NavLinkRoute is removed in 0.5. Use \`NavLink(label, { to: "/path" })\` (see §12 — Outlet-first router).`,
   useInstanceState:
     `useInstanceState(...) is removed in 0.5. Declare per-instance state inside the component body with \`$state name = init\` — identity is content-addressed (§13).`,
 };
@@ -240,68 +236,99 @@ function validateCall(
   // Allow `key:` everywhere (content-addressed identity, §13).
   propNames.add("key");
 
-  // Aktion 0.5 §19.1 — components allow at most one
-  // positional argument (the canonical primary slot). Additional
-  // positional args surface as advisory warnings naming the prop the
-  // author should switch to a `prop: value` form.
+  // Detect the named-props ObjectExpr (JS-style props: `Button("Save", { variant: "primary" })`).
+  // We accept the *last* ObjectExpr in the argument list so leading
+  // props (`Grid({ cols: 12 }, [children])`) and trailing props
+  // (`Button("Hi", { onClick })`) both validate consistently.
+  const args = expr.arguments;
+  let trailingObjIdx = -1;
+  for (let i = args.length - 1; i >= 0; i -= 1) {
+    if (args[i]!.kind === "Object") {
+      trailingObjIdx = i;
+      break;
+    }
+  }
+  const trailingObj =
+    trailingObjIdx >= 0
+      ? (args[trailingObjIdx] as Extract<Expression, { kind: "Object" }>)
+      : null;
+
   const positionalArgs: Expression[] = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "NamedArg") continue;
-    positionalArgs.push(arg);
+  for (let i = 0; i < args.length; i++) {
+    if (i === trailingObjIdx) continue;
+    positionalArgs.push(args[i]!);
   }
   if (positionalArgs.length > 1) {
     const positionalProp = findPositionalProp(spec);
     const positionalName = positionalProp?.name ?? "(none)";
-    // Hint the next props the author should switch to a `prop: value` form
-    // — skip the canonical positional (already filled by the first arg)
-    // and any prop already consumed by a named arg.
-    const namedNames = new Set(
-      expr.arguments
-        .filter((a): a is Extract<Expression, { kind: "NamedArg" }> => a.kind === "NamedArg")
-        .map((a) => a.name),
-    );
+    const namedNames = collectNamedPropNames(args, trailingObj);
     const extras = spec.props
       .filter((p) => p.name !== positionalName && !namedNames.has(p.name))
       .slice(0, positionalArgs.length - 1)
       .map((p) => p.name);
     const hints = extras.length > 0
       ? extras.map((n) => `${n}: …`).join(", ")
-      : "use named arguments";
+      : "use a trailing { prop: value } object";
     out.push({
       message:
         `${expr.callee}(...) — Aktion 0.5 §19.1 allows at most ` +
         `one positional argument (the "${positionalName}" prop). The extra ` +
         `${positionalArgs.length - 1} positional argument(s) must be passed ` +
-        `as named arguments: ${hints}. Multi-positional calls are removed.`,
+        `inside a trailing object: ${hints}. Multi-positional calls are removed.`,
       line: expr.loc?.line ?? 0,
       column: expr.loc?.column ?? 0,
     });
   }
 
-  for (const arg of expr.arguments) {
-    if (arg.kind !== "NamedArg") continue;
-    if (!propNames.has(arg.name)) {
+  // Collect named entries from trailing Object properties.
+  const namedEntries: Array<{ name: string; value: Expression; loc?: { line: number; column: number } }> = [];
+  if (trailingObj) {
+    for (const prop of trailingObj.properties) {
+      if (prop.spread) continue;
+      namedEntries.push({
+        name: prop.key,
+        value: prop.value,
+        loc: prop.value.loc ?? trailingObj.loc,
+      });
+    }
+  }
+
+  for (const entry of namedEntries) {
+    if (!propNames.has(entry.name)) {
       out.push({
-        message: `Unknown prop "${arg.name}" on <${expr.callee}>. Known props: ${spec.props.map((p) => p.name).join(", ")}.`,
-        line: arg.loc?.line ?? expr.loc?.line ?? 0,
-        column: arg.loc?.column ?? expr.loc?.column ?? 0,
+        message: `Unknown prop "${entry.name}" on <${expr.callee}>. Known props: ${spec.props.map((p) => p.name).join(", ")}.`,
+        line: entry.loc?.line ?? expr.loc?.line ?? 0,
+        column: entry.loc?.column ?? expr.loc?.column ?? 0,
       });
       continue;
     }
     const prop = spec.props.find(
-      (p) => p.name === arg.name || (p.aliases?.includes(arg.name) ?? false),
+      (p) => p.name === entry.name || (p.aliases?.includes(entry.name) ?? false),
     );
-    if (prop?.enum && arg.value.kind === "Literal" && typeof arg.value.value === "string") {
-      const value = arg.value.value;
+    if (prop?.enum && entry.value.kind === "Literal" && typeof entry.value.value === "string") {
+      const value = entry.value.value;
       if (!prop.enum.includes(value)) {
         out.push({
-          message: `<${expr.callee}> ${arg.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
-          line: arg.loc?.line ?? expr.loc?.line ?? 0,
-          column: arg.loc?.column ?? expr.loc?.column ?? 0,
+          message: `<${expr.callee}> ${entry.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+          line: entry.loc?.line ?? expr.loc?.line ?? 0,
+          column: entry.loc?.column ?? expr.loc?.column ?? 0,
         });
       }
     }
   }
+}
+
+function collectNamedPropNames(
+  _args: ReadonlyArray<Expression>,
+  trailingObj: Extract<Expression, { kind: "Object" }> | null,
+): Set<string> {
+  const names = new Set<string>();
+  if (trailingObj) {
+    for (const prop of trailingObj.properties) {
+      if (!prop.spread) names.add(prop.key);
+    }
+  }
+  return names;
 }
 
 /**
@@ -351,26 +378,24 @@ function validateThemeCall(
  * replacement.
  */
 const LEGACY_V1_BUILTINS: Record<string, string> = {
-  // Action steps (removed — actions are now `action Name() { … }` blocks).
   Set:
-    `@Set($x, value) is removed in 0.5. Inside an \`action Name() { … }\` body, assign directly: \`$x = value\`.`,
+    `@Set($x, value) is removed. Inside a \`function name() { … }\` body, assign directly: \`$x = value\`.`,
   Reset:
-    `@Reset($x) is removed in 0.5. Inside an \`action Name() { … }\` body, assign the default explicitly: \`$x = defaultValue\`.`,
+    `@Reset($x) is removed. Inside a \`function name() { … }\` body, assign the default explicitly: \`$x = defaultValue\`.`,
   Run:
-    `@Run(name) is removed in 0.5. Inside an \`action Name() { … }\` body, call the mutation: \`await $mutation.foo.call(args)\` (see §11.3).`,
+    `@Run(name) is removed. Inside a \`function name() { … }\` body, call the mutation directly.`,
   ToAssistant:
-    `@ToAssistant("text") is removed in 0.5. Use \`emit "assistant-message" { message: "..." }\` inside an \`action Name() { … }\` body (see §22.2).`,
+    `@ToAssistant("text") is removed. Use \`emit("assistant-message", { message: "..." })\` inside a function body.`,
   OpenUrl:
-    `@OpenUrl("https://…") is removed in 0.5. Inside an \`action Name() { js{ … } }\` body, call \`window.open(url, "_blank", "noopener,noreferrer")\`.`,
+    `@OpenUrl("https://…") is removed. Inside a function body, call \`window.open(url, "_blank", "noopener,noreferrer")\`.`,
   Navigate:
-    `@Navigate("/path") is removed in 0.5. Use \`pages = _router_({ … })\` (see §12) and navigate via the host (\`el.navigate("/path")\`), \`_route_.navigate("/path")\` from inside an action, or by linking to the path with \`NavLink(label, "/path")\`.`,
+    `@Navigate("/path") is removed. Use \`pages = Router({ … })\` and navigate via the host (\`el.navigate("/path")\`), \`route.navigate("/path")\` from inside an action, or by linking to the path with \`NavLink(label, { to: "/path" })\`.`,
   Js:
-    `@Js(body, args?) is removed in 0.5. Use \`effect <id> on $deps { js{ … } }\` or \`action Name() { js{ … } }\` (see §9, §10).`,
-  // Derived-value helpers (subsumed by `$computed`).
+    `@Js(body, args?) is removed. Use \`effect(() => { … }, [deps])\` or \`function name() { … }\`.`,
   Const:
-    `@Const(expr) is removed in 0.5. Use \`$computed name = expr\` (see §4 — state tiers).`,
+    `@Const(expr) is removed. Use \`$name = expr\` (reactive binding with $ prefix).`,
   Memo:
-    `@Memo(expr) is removed in 0.5. Use \`$computed name = expr\` (see §4 — state tiers).`,
+    `@Memo(expr) is removed. Use \`$name = expr\` (reactive binding with $ prefix).`,
   // Array helpers (subsumed by spread + builtins).
   Push:
     `@Push(arr, value) is removed in 0.5. Use spread: \`[...arr, value]\`.`,
@@ -385,13 +410,12 @@ const LEGACY_V1_BUILTINS: Record<string, string> = {
     `@FormatCurrency(value, opts?) is removed in 0.5. Use \`@Format(value, "currency", {currency: "USD"})\`.`,
   FormatNumber:
     `@FormatNumber(value, opts?) is removed in 0.5. Use \`@Format(value, "number", {locale: "en-US"})\`.`,
-  // Control-flow helpers (subsumed by expression-form if/match/for).
   Each:
-    `@Each(items, "x", template) is removed in 0.5. Use the expression-form loop: \`for x in items { template }\` (see §8.3).`,
+    `the Each(items, "x", template) builtin is removed in 0.5. Use: \`for (let x of items) { template }\` (see §8.3).`,
   If:
-    `@If(cond, then, else?) is removed in 0.5. Use the expression-form conditional: \`if cond { then } else { else }\` (see §8.1).`,
+    `the If(cond, then, else?) builtin is removed in 0.5. Use: \`if (cond) { then } else { else }\` (see §8.1).`,
   Switch:
-    `@Switch(value, cases, default?) is removed in 0.5. Use the expression-form match: \`match value { "a" -> A() _ -> Default() }\` (see §8.2).`,
+    `the Switch(value, cases, default?) builtin is removed in 0.5. Use: \`switch (value) { case "a": A(); break; default: Default() }\` (see §8.2).`,
 };
 
 function validateBuiltinCall(

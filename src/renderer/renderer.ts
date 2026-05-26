@@ -16,9 +16,11 @@
  */
 
 import {
+  enterUserComponent,
+  evaluateUserComponent,
   isComponentNode,
   isUserComponentNode,
-  evaluateUserComponent,
+  leaveUserComponent,
   type ComponentNode,
   type EvaluationContext,
   type ScopedEffectDecl,
@@ -52,7 +54,7 @@ export interface RenderOptions {
    */
   evaluationContext?: () => EvaluationContext;
   /**
-   * Mount `effect [ ...deps ] { … }` declarations discovered inside a
+   * Mount `effect(() => { … }, [deps])` declarations discovered inside a
    * `component { … }` body. Called by the renderer after every render of
    * the instance; the implementation is expected to be idempotent so
    * re-renders are no-ops once the effects are mounted. The host wires
@@ -173,7 +175,7 @@ export class Renderer {
       for (const dispose of disposers.values()) this.safeDispose(dispose);
       this.instanceDisposers.delete(instancePath);
     }
-    // Tear down per-instance effects (`effect [ … ] { … }` blocks declared
+    // Tear down per-instance effects (`effect(() => { … }, [deps])` declared
     // inside a `component { … }` body) for instances that vanished. The
     // host's EffectRunner clears timers / state subscriptions / cleanup
     // callbacks owned by that instance.
@@ -239,7 +241,7 @@ export class Renderer {
   }
 
   /**
-   * Expand a user-declared `component Foo(p) { ... }` invocation. Each
+   * Expand a user-declared `function Foo(p) { return ... }` invocation. Each
    * instance gets a stable instance key derived from its render path (or
    * the caller's explicit `key:` override); the evaluator then evaluates
    * the component's body with a fresh per-instance state-alias scope so
@@ -263,17 +265,29 @@ export class Renderer {
       : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.decl.name}${keyPart}`;
     this.aliveInstances.add(instancePath);
-    const { value, effects } = evaluateUserComponent(node, ctx, instancePath);
-    // Hand any `effect [ ...deps ] { … }` declarations discovered inside
-    // this component's body to the host's effect runner under the stable
-    // instance key. The runner is idempotent across re-renders — it only
-    // mounts effects new to this instance — and `endRender` tears them
-    // down when the instance disappears from the tree.
-    if (this.options.mountInstanceEffects) {
-      this.options.mountInstanceEffects(instancePath, effects, ctxRef);
-      if (effects.length > 0) this.instancesWithEffects.add(instancePath);
+    // Reserve a budget slot before walking the body. The matching
+    // `leaveUserComponent` MUST run in a finally that wraps the
+    // recursive `renderAt(value)` call — that's the chain that grows
+    // the depth counter for accidentally-recursive components like
+    // `function Foo() { return Foo() }`. Putting the bracket inside
+    // `evaluateUserComponent` instead would only bound a single body
+    // walk and miss the actual recursion (which happens in the renderer).
+    enterUserComponent(ctx, node.decl.name);
+    try {
+      const { value, effects } = evaluateUserComponent(node, ctx, instancePath);
+      // Hand any `effect(() => { … }, [deps])` declarations discovered
+      // inside this component's body to the host's effect runner under
+      // the stable instance key. The runner is idempotent across re-
+      // renders — it only mounts effects new to this instance — and
+      // `endRender` tears them down when the instance disappears.
+      if (this.options.mountInstanceEffects) {
+        this.options.mountInstanceEffects(instancePath, effects, ctxRef);
+        if (effects.length > 0) this.instancesWithEffects.add(instancePath);
+      }
+      return this.renderAt(value, instancePath);
+    } finally {
+      leaveUserComponent(ctx);
     }
-    return this.renderAt(value, instancePath);
   }
 
   private renderComponent(node: ComponentNode, path: string): Node {

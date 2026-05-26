@@ -2,8 +2,8 @@
  * Behavioural tests for Aktion effects, actions, and the HTTP
  * interceptor surface used by the runtime data layer. The tests below
  * exercise:
- *   - `effect [ ...deps ] { body }` — declarative side-effects.
- *   - `action Name() { body }` + lambda handlers — declarative click handlers.
+ *   - `effect(() => { body }, [...deps])` — declarative side-effects.
+ *   - `function name() { body }` + lambda handlers — declarative click handlers.
  *   - `registerHttpInterceptors({ … })` — extension point for the
  *     HTTP-native data layer.
  */
@@ -33,9 +33,6 @@ interface ElementWithApi extends HTMLElement {
 }
 
 const mount = (attributes: Record<string, string> = {}): ElementWithApi => {
-  // Cast through `unknown` because the class declares `state` private but
-  // we need to read it here for assertions; structural overlap rules require
-  // the intermediate cast.
   const el = document.createElement("aktion-app") as unknown as ElementWithApi;
   for (const [name, value] of Object.entries(attributes)) {
     el.setAttribute(name, value);
@@ -52,10 +49,10 @@ describe("effects: declaration, mount, and triggers", () => {
   it("runs an effect body once on mount", async () => {
     const el = mount();
     el.setResponse(`$count = 0
-effect [on:mount] {
+effect(() => {
   $count = 1
-}
-_app_ = Stack([])`);
+}, ["mount"])
+aktion = Stack([])`);
     await waitForRenders();
     expect(el.state.get("count")).toBe(1);
   });
@@ -64,12 +61,11 @@ _app_ = Stack([])`);
     const el = mount();
     el.setResponse(`$input = "a"
 $runs = 0
-effect [$input] {
+effect(() => {
   $runs = $runs + 1
-}
-_app_ = Stack([])`);
+}, [$input])
+aktion = Stack([])`);
     await waitForRenders();
-    // Initial run on mount.
     expect(el.state.get("runs")).toBe(1);
     el.state.set("input", "b");
     await waitForRenders();
@@ -84,29 +80,25 @@ _app_ = Stack([])`);
     el.setResponse(`$watched = 0
 $ignored = 0
 $runs = 0
-effect [$watched] {
+effect(() => {
   $runs = $runs + 1
-}
-_app_ = Stack([])`);
+}, [$watched])
+aktion = Stack([])`);
     await waitForRenders();
     expect(el.state.get("runs")).toBe(1);
-    // Bumping an unwatched atom should not re-fire the effect.
     el.state.set("ignored", 42);
     await waitForRenders();
     expect(el.state.get("runs")).toBe(1);
   });
 
-  it("mounts an effect declared inside a `component { … }` body on first render", async () => {
-    // Effects inside a component body are scoped to the component instance:
-    // the runner mounts them after the instance renders for the first time,
-    // and tears them down when the instance disappears.
+  it("mounts an effect declared inside a `function Name() { … }` body on first render", async () => {
     const el = mount();
-    el.setResponse(`_app_ = App()
+    el.setResponse(`aktion = App()
 $ticks = 0
-component App() {
-  effect [on:mount] {
+function App() {
+  effect(() => {
     $ticks = $ticks + 1
-  }
+  }, ["mount"])
   return Stack([])
 }`);
     await waitForRenders();
@@ -115,13 +107,13 @@ component App() {
 
   it("re-runs a component-local effect when its watched atom changes", async () => {
     const el = mount();
-    el.setResponse(`_app_ = App()
+    el.setResponse(`aktion = App()
 $input = "a"
 $runs = 0
-component App() {
-  effect [$input] {
+function App() {
+  effect(() => {
     $runs = $runs + 1
-  }
+  }, [$input])
   return Stack([])
 }`);
     await waitForRenders();
@@ -132,18 +124,14 @@ component App() {
   });
 
   it("tears down a component-local interval effect when the instance unmounts", async () => {
-    // Toggling `$showApp` between true / false causes the `App` instance to
-    // appear and disappear from the tree. The interval effect inside it must
-    // stop firing as soon as the instance leaves the tree, otherwise it
-    // would keep mutating state from the background.
     const el = mount();
-    el.setResponse(`_app_ = if $showApp { App() } else { Stack([]) }
+    el.setResponse(`aktion = if ($showApp) { App() } else { Stack([]) }
 $showApp = true
 $ticks = 0
-component App() {
-  effect [on:every(10)] {
+function App() {
+  effect(() => {
     $ticks = $ticks + 1
-  }
+  }, ["every(10)"])
   return Stack([])
 }`);
     await waitForRenders();
@@ -156,29 +144,19 @@ component App() {
     await waitForRenders();
     const ticksAtTeardown = el.state.get("ticks") as number;
 
-    // Sleep past several interval periods; the counter must NOT advance
-    // because the per-instance interval was cleared on unmount.
     await new Promise((r) => setTimeout(r, 60));
     await waitForRenders();
     expect(el.state.get("ticks")).toBe(ticksAtTeardown);
   });
 
   it("an effect inside a component body writes to the per-instance state slot, not the top-level one", async () => {
-    // Regression: pre-fix the effect body's `$count = 5` resolved
-    // `count` against an empty alias stack (the component body had
-    // already returned and popped its frame), so the write landed on a
-    // brand-new top-level `count` atom while the per-instance slot
-    // `<path>:count` stayed stuck at 0. The renderer kept showing "0"
-    // because that's what `$count` resolved to inside the component
-    // body. The fix snapshots the alias frame when the declaration is
-    // collected and restores it before running the body.
     const el = mount();
-    el.setResponse(`_app_ = Stack([Counter(), Counter()])
-component Counter() {
+    el.setResponse(`aktion = Stack([Counter(), Counter()])
+function Counter() {
   $count = 0
-  effect [on:mount] {
+  effect(() => {
     $count = $count + 5
-  }
+  }, ["mount"])
   return Text(\`\${$count}\`)
 }`);
     await waitForRenders();
@@ -186,41 +164,115 @@ component Counter() {
     const perInstanceSlots = [...state.entries()]
       .map(([k, v]) => [k, v] as const)
       .filter(([k]) => k.endsWith(":count"));
-    // Both Counter instances must have created their own slot…
     expect(perInstanceSlots).toHaveLength(2);
-    // …and each instance's effect must have run, writing into its OWN slot.
     for (const [, value] of perInstanceSlots) {
       expect(value).toBe(5);
     }
-    // The bare top-level `count` slot must NOT exist — proves the
-    // effect body's write went through the alias.
     expect((el.state as { get: (k: string) => unknown }).get("count")).toBeUndefined();
-    // The rendered shadow DOM should reflect the per-instance value
-    // rather than the initializer's 0.
     expect(el.shadowRoot?.textContent ?? "").toContain("5");
   });
 
-  it("does not register a component-local effect on the global runner", async () => {
-    // Regression: effects nested inside a component body must NOT leak into
-    // `ctx.effectDecls`, otherwise `syncEffects` would mount them once
-    // globally (and they'd outlive the instance).
-    const el = mount() as ElementWithApi & {
-      // Reach into the private evaluation context for the assertion.
-      // The shape mirrors `EvaluationContext.effectDecls`.
-      context?: { effectDecls?: Map<string, unknown> };
-    };
-    el.setResponse(`_app_ = App()
+  it("re-fires a per-instance `effect(fn, [$state])` when its per-instance atom changes (and only that instance)", async () => {
+    const el = mount();
+    el.setResponse(`aktion = Stack([Item("A"), Item("B")])
+function Item(label) {
+  $hits = 0
+  effect(() => {
+    $log = $log + 1
+  }, [$hits])
+  return Button(label, () => { $hits = $hits + 1 })
+}
+$log = 0`);
+    await waitForRenders();
+    expect(el.state.get("log")).toBe(2);
+
+    const buttons = Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button"));
+    expect(buttons).toHaveLength(2);
+    buttons[0]!.click();
+    await waitForRenders();
+    expect(el.state.get("log")).toBe(3);
+    buttons[1]!.click();
+    await waitForRenders();
+    expect(el.state.get("log")).toBe(4);
+    const perInstance = [...(el.state as unknown as { entries: () => Iterable<[string, unknown]> }).entries()]
+      .filter(([k]) => (k as string).endsWith(":hits"))
+      .map(([, v]) => v);
+    expect(perInstance.sort()).toEqual([1, 1]);
+  });
+
+  it("a per-instance effect with mixed per-instance + top-level deps fires for both", async () => {
+    const el = mount();
+    el.setResponse(`aktion = Item()
+$shared = 0
 $runs = 0
-component App() {
-  effect [on:mount] {
+function Item() {
+  $local = 0
+  effect(() => {
     $runs = $runs + 1
-  }
+  }, [$local, $shared])
   return Stack([])
 }`);
     await waitForRenders();
-    // The runner still ticked the body once — proves the per-instance mount fired.
     expect(el.state.get("runs")).toBe(1);
-    // …but the global effectDecls map must be empty.
+
+    el.state.set("shared", 1);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(2);
+
+    const localSlot = [...(el.state as unknown as { entries: () => Iterable<[string, unknown]> }).entries()]
+      .map(([k]) => k as string)
+      .find((k) => k.endsWith(":local"));
+    expect(localSlot).toBeDefined();
+    el.state.set(localSlot!, 1);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(3);
+  });
+
+  it("a per-instance effect tears down its subscription when the instance unmounts", async () => {
+    const el = mount();
+    el.setResponse(`aktion = if ($on) { Item() } else { Stack([]) }
+$on = true
+$runs = 0
+function Item() {
+  $local = 0
+  effect(() => {
+    $runs = $runs + 1
+  }, [$local])
+  return Stack([])
+}`);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(1);
+
+    const localKey = [...(el.state as unknown as { entries: () => Iterable<[string, unknown]> }).entries()]
+      .map(([k]) => k as string)
+      .find((k) => k.endsWith(":local"));
+    expect(localKey).toBeDefined();
+    el.state.set(localKey!, 1);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(2);
+
+    el.state.set("on", false);
+    await waitForRenders();
+    const runsAfterTeardown = el.state.get("runs") as number;
+    el.state.set(localKey!, 2);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(runsAfterTeardown);
+  });
+
+  it("does not register a component-local effect on the global runner", async () => {
+    const el = mount() as ElementWithApi & {
+      context?: { effectDecls?: Map<string, unknown> };
+    };
+    el.setResponse(`aktion = App()
+$runs = 0
+function App() {
+  effect(() => {
+    $runs = $runs + 1
+  }, ["mount"])
+  return Stack([])
+}`);
+    await waitForRenders();
+    expect(el.state.get("runs")).toBe(1);
     const ctx = (el as unknown as { context?: { effectDecls?: Map<string, unknown> } }).context;
     expect(ctx?.effectDecls?.size ?? 0).toBe(0);
   });
@@ -228,19 +280,18 @@ component App() {
   it("resets the effect runner cleanly across setResponse calls", async () => {
     const el = mount();
     el.setResponse(`$count = 0
-effect [on:mount] {
+effect(() => {
   $count = $count + 1
-}
-_app_ = Stack([])`);
+}, ["mount"])
+aktion = Stack([])`);
     await waitForRenders();
     expect(el.state.get("count")).toBe(1);
 
-    // A fresh program drops the previous effect and mounts the new one.
     el.setResponse(`$count = 0
-effect [on:mount] {
+effect(() => {
   $count = 99
-}
-_app_ = Stack([])`);
+}, ["mount"])
+aktion = Stack([])`);
     await waitForRenders();
     expect(el.state.get("count")).toBe(99);
   });
@@ -251,17 +302,15 @@ describe("actions: declarative click handlers", () => {
     document.body.innerHTML = "";
   });
 
-  it("runs an `action` body when a Button passes the action callable", async () => {
-    // `inc()` (call form) returns a callable the renderer invokes on click.
-    // This is the v0.5 equivalent of `Button("Inc", Action([@Set(...)]))`.
+  it("runs a `function` body when a Button passes the action callable", async () => {
     const el = mount();
-    el.setResponse(`$state count = 0
-action inc() {
+    el.setResponse(`$count = 0
+function inc() {
   $count = $count + 1
 }
 label = Text("" + $count, "large-heavy")
 btn = Button("Inc", inc())
-root = Stack([label, btn])`);
+aktion = Stack([label, btn])`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
     button.click();
@@ -273,17 +322,15 @@ root = Stack([label, btn])`);
   });
 
   it("supports the declarative 'add via spread' pattern with no JS at all", async () => {
-    // The canonical todo-app teaching pattern: mutating $todos by replacing
-    // the whole array, with `$draft` cleared explicitly inside the action.
     const el = mount();
-    el.setResponse(`$state todos = []
-$state draft = ""
-action add() {
+    el.setResponse(`$todos = []
+$draft = ""
+function add() {
   $todos = [...$todos, {id: $todos.length + 1, text: $draft}]
   $draft = ""
 }
 addBtn = Button("Add", add())
-root = Stack([addBtn])`);
+aktion = Stack([addBtn])`);
     await waitForRenders();
     el.state.set("draft", "first task");
     await waitForRenders();
@@ -296,15 +343,10 @@ root = Stack([addBtn])`);
     expect(el.state.get("draft")).toBe("");
   });
 
-  it("runs inline `() => { js{ … } }` body on Button click (lambda parity)", async () => {
-    // Regression: inline lambda + js{} must fire the JS body on click,
-    // exactly like the named-action form (`action onClick() { js { … } }`).
-    // The runtime wires `jsBlockExecutor` on the lambda call site — without
-    // it, the click resolved to a deferred JsBlock payload and nothing
-    // happened.
+  it("runs inline lambda body on Button click (lambda parity)", async () => {
     const el = mount();
-    (globalThis as { __ruiInlineHit?: number }).__ruiInlineHit = 0;
-    el.setResponse(`root = Button("Click Me", onClick: () => { js { globalThis.__ruiInlineHit = (globalThis.__ruiInlineHit || 0) + 1 } })`);
+    el.setResponse(`$hits = 0
+aktion = Button("Click Me", () => { $hits = $hits + 1 })`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
     expect(button).toBeTruthy();
@@ -312,19 +354,17 @@ root = Stack([addBtn])`);
     await waitForRenders();
     button.click();
     await waitForRenders();
-    expect((globalThis as { __ruiInlineHit?: number }).__ruiInlineHit).toBe(2);
+    expect(el.state.get("hits")).toBe(2);
   });
 
   it("repeats an action on multiple clicks", async () => {
-    // The same action callable can be invoked repeatedly from a button and
-    // state updates accumulate.
     const el = mount();
     el.setResponse(`$count = 0
-action next() {
+function next() {
   $count = $count + 1
 }
 btn = Button("Next", next())
-_app_ = Stack([btn])`);
+aktion = Stack([btn])`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
     button.click();
@@ -346,7 +386,6 @@ describe("HTTP interceptors (replacement for setTools)", () => {
     const el = mount();
     const onRequest = (req: HttpRequest): HttpRequest => req;
     const onResponse = (res: HttpResponse): HttpResponse => res;
-    // Each call merges onto the interceptor chain rather than replacing it.
     expect(() => el.registerHttpInterceptors({ onRequest })).not.toThrow();
     expect(() => el.registerHttpInterceptors({ onResponse })).not.toThrow();
   });
@@ -374,8 +413,7 @@ describe("HTTP interceptors (replacement for setTools)", () => {
         },
       });
       el.setResponse(`$items = http({ url: "/items", method: "GET" })
-_app_ = Stack([])`);
-      // Wait for the in-flight fetch to flush through the interceptor chain.
+aktion = Stack([])`);
       await waitForRenders(30);
       expect(phases).toContain("request");
       expect(phases).toContain("response");
@@ -398,25 +436,465 @@ describe("system prompt: effects + actions", () => {
     const prompt = el.getSystemPrompt();
     expect(prompt).toContain("Declarative side effects");
     expect(prompt).toContain("effect");
-    expect(prompt).toContain("on:mount");
+    expect(prompt).toContain("mount");
     expect(prompt).toContain("debounce(");
-    // The capability sandbox is gone — no `uses { … }` clause anywhere.
     expect(prompt).not.toMatch(/uses\s*\{/);
   });
 
-  it("documents the `action` declaration surface", () => {
+  it("documents the action declaration surface", () => {
     const el = mount();
     const prompt = el.getSystemPrompt();
     expect(prompt).toContain("## Actions");
-    expect(prompt).toContain("action save(");
+    expect(prompt).toContain("function save(");
   });
 
   it("omits the effects deep-dive from the compact chat-mode prompt", () => {
     const el = mount();
     const prompt = el.getSystemPrompt({ mode: "chat" });
-    // The chat-mode prompt is the compact flavour — no effects deep-dive,
-    // no router block walkthrough.
     expect(prompt).not.toContain("Declarative side effects");
-    expect(prompt).not.toContain("on:every(");
+    expect(prompt).not.toContain("every(");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Effect closures — captured component parameters / outer for-loop vars
+// ──────────────────────────────────────────────────────────────────────
+describe("effects: closures over component params + outer loop vars", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("reads the surrounding component parameter on mount (regression: `todo` was undefined)", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = App()
+
+function Item(todo) {
+  $isDone = null
+  effect(() => {
+    console.log("todo in effect:", todo)
+  }, [$isDone])
+  return Button(todo.title, () => { $isDone = !$isDone })
+}
+
+function App() {
+  return [for (let todo of $todos) { Item(todo) }]
+}
+
+$todos = [
+  { id: "1", title: "Design system audit", done: false },
+  { id: "2", title: "Update documentation", done: true }
+]`);
+      await waitForRenders();
+      const onMountLogs = logs.filter(([prefix]) => prefix === "todo in effect:");
+      expect(onMountLogs).toHaveLength(2);
+      const titles = onMountLogs.map(([, todo]) =>
+        (todo as { title: string }).title,
+      );
+      expect(titles).toEqual(["Design system audit", "Update documentation"]);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("retains the captured prop across re-fires triggered by per-instance state changes", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Stack([for (let todo of $todos) { Item(todo) }])
+function Item(todo) {
+  $isDone = false
+  effect(() => {
+    console.log("fire:", todo.title, $isDone)
+  }, [$isDone])
+  return Button(todo.title, () => { $isDone = !$isDone })
+}
+$todos = [{ id: "1", title: "A" }, { id: "2", title: "B" }]`);
+      await waitForRenders();
+      const buttons = Array.from(
+        el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button"),
+      );
+      expect(buttons).toHaveLength(2);
+      buttons[1]!.click();
+      await waitForRenders();
+      buttons[1]!.click();
+      await waitForRenders();
+      buttons[0]!.click();
+      await waitForRenders();
+      const fires = logs.filter(([prefix]) => prefix === "fire:");
+      expect(fires).toHaveLength(5);
+      expect(fires.map(([, title]) => title)).toEqual([
+        "A", "B", "B", "B", "A",
+      ]);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("refreshes captured props on re-render so the effect observes the latest values", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Stack([for (let todo of $todos) { Item(todo) }])
+function Item(todo) {
+  $isDone = false
+  effect(() => {
+    console.log("title:", todo.title)
+  }, [$isDone])
+  return Button(todo.title, () => { $isDone = !$isDone })
+}
+$todos = [{ id: "1", title: "Original" }]`);
+      await waitForRenders();
+      let titles = logs
+        .filter(([prefix]) => prefix === "title:")
+        .map(([, t]) => t);
+      expect(titles).toEqual(["Original"]);
+
+      el.state.set("todos", [{ id: "1", title: "Renamed" }]);
+      await waitForRenders();
+
+      const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button");
+      button!.click();
+      await waitForRenders();
+      titles = logs
+        .filter(([prefix]) => prefix === "title:")
+        .map(([, t]) => t);
+      expect(titles).toEqual(["Original", "Renamed"]);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("cleanup lambda closes over the captured prop and uses it on teardown", async () => {
+    const el = mount();
+    el.setResponse(`aktion = if ($on) { Item(name) } else { Stack([]) }
+function Item(name) {
+  effect(() => {
+    cleanup(() => { $mark = name })
+  }, ["mount"])
+  return Text(name)
+}
+$on = true
+$mark = ""
+name = "Alpha"`);
+    await waitForRenders();
+    expect(el.state.get("mark")).toBe("");
+    el.state.set("on", false);
+    await waitForRenders();
+    expect(el.state.get("mark")).toBe("Alpha");
+  });
+
+  it("`every(N)` interval effect sees the captured prop on every tick", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Item(name)
+function Item(name) {
+  effect(() => {
+    console.log("tick:", name)
+  }, ["every(10)"])
+  return Text(name)
+}
+name = "Beta"`);
+      await waitForRenders();
+      await new Promise((r) => setTimeout(r, 35));
+      await waitForRenders();
+      const ticks = logs.filter(([p]) => p === "tick:");
+      expect(ticks.length).toBeGreaterThanOrEqual(2);
+      for (const [, value] of ticks) expect(value).toBe("Beta");
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("two instances of the same component capture independent props", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Stack([Item("X"), Item("Y")])
+function Item(label) {
+  $hits = 0
+  effect(() => {
+    console.log("hit:", label)
+  }, [$hits])
+  return Button(label, () => { $hits = $hits + 1 })
+}`);
+      await waitForRenders();
+      let hits = logs
+        .filter(([p]) => p === "hit:")
+        .map(([, v]) => v);
+      expect(hits.sort()).toEqual(["X", "Y"]);
+      const buttons = Array.from(
+        el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button"),
+      );
+      buttons[1]!.click();
+      await waitForRenders();
+      hits = logs
+        .filter(([p]) => p === "hit:")
+        .map(([, v]) => v);
+      expect(hits.filter((v) => v === "X")).toHaveLength(1);
+      expect(hits.filter((v) => v === "Y")).toHaveLength(2);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("captures outer for-loop iterators that wrap the effect", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Stack([for (let n of [1, 2, 3]) { Item(n) }])
+function Item(n) {
+  effect(() => {
+    console.log("n=", n)
+  }, ["mount"])
+  return Text(\`\${n}\`)
+}`);
+      await waitForRenders();
+      const lines = logs.filter(([p]) => p === "n=").map(([, v]) => v);
+      expect(lines.sort()).toEqual([1, 2, 3]);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("debounced effect still sees the captured prop on its trailing-edge fire", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Item("Gamma")
+function Item(name) {
+  $count = 0
+  effect(() => {
+    console.log("debounced:", name, $count)
+  }, [$count, "debounce(20)"])
+  return Button("tap", () => { $count = $count + 1 })
+}`);
+      await waitForRenders();
+      await new Promise((r) => setTimeout(r, 40));
+      await waitForRenders();
+      const btn = el.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+      btn.click();
+      btn.click();
+      btn.click();
+      await new Promise((r) => setTimeout(r, 40));
+      await waitForRenders();
+      const fires = logs.filter(([p]) => p === "debounced:");
+      expect(fires.length).toBeGreaterThanOrEqual(2);
+      for (const [, name] of fires) expect(name).toBe("Gamma");
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("throttled effect leading/trailing fires both see the captured prop", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Item("Delta")
+function Item(name) {
+  $count = 0
+  effect(() => {
+    console.log("throttled:", name)
+  }, [$count, "throttle(30)"])
+  return Button("tap", () => { $count = $count + 1 })
+}`);
+      await waitForRenders();
+      const btn = el.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+      btn.click();
+      btn.click();
+      await new Promise((r) => setTimeout(r, 50));
+      await waitForRenders();
+      const fires = logs.filter(([p]) => p === "throttled:");
+      expect(fires.length).toBeGreaterThanOrEqual(1);
+      for (const [, name] of fires) expect(name).toBe("Delta");
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("writes still route through the per-instance state alias while reading captured props", async () => {
+    const el = mount();
+    el.setResponse(`aktion = Stack([Counter("a"), Counter("b")])
+function Counter(label) {
+  $count = 0
+  effect(() => {
+    $count = label == "a" ? 10 : 20
+  }, ["mount"])
+  return Text(\`\${label}:\${$count}\`)
+}`);
+    await waitForRenders();
+    const text = el.shadowRoot?.textContent ?? "";
+    expect(text).toContain("a:10");
+    expect(text).toContain("b:20");
+    expect(el.state.get("count")).toBeUndefined();
+  });
+
+  it("top-level effects are unaffected by the captured-loop-vars path", async () => {
+    const el = mount();
+    el.setResponse(`$count = 0
+$mark = "untouched"
+effect(() => {
+  $mark = "touched"
+}, [$count])
+aktion = Stack([])`);
+    await waitForRenders();
+    expect(el.state.get("mark")).toBe("touched");
+    el.state.set("count", 1);
+    await waitForRenders();
+    expect(el.state.get("mark")).toBe("touched");
+  });
+
+  it("for-loop iterators that have already exited are not captured by sibling effects", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Item("only")
+function Item(label) {
+  $rows = for (let n of [1, 2]) { n }
+  effect(() => {
+    console.log("label:", label, "n:", n)
+  }, ["mount"])
+  return Text(label)
+}`);
+      await waitForRenders();
+      const entry = logs.find(([p]) => p === "label:");
+      expect(entry).toBeDefined();
+      expect(entry![1]).toBe("only");
+      expect(entry![3]).toBeNull();
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("captured props do not keep teardown-cancelled effects alive", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = if ($on) { Item("only") } else { Stack([]) }
+function Item(label) {
+  $count = 0
+  effect(() => {
+    console.log("fire:", label, $count)
+  }, [$count])
+  return Button(label, () => { $count = $count + 1 })
+}
+$on = true`);
+      await waitForRenders();
+      expect(logs.filter(([p]) => p === "fire:")).toHaveLength(1);
+
+      const localKey = [...(el.state as unknown as {
+        entries: () => Iterable<[string, unknown]>;
+      }).entries()]
+        .map(([k]) => k as string)
+        .find((k) => k.endsWith(":count"));
+      expect(localKey).toBeDefined();
+
+      el.state.set("on", false);
+      await waitForRenders();
+      el.state.set(localKey!, 42);
+      await waitForRenders();
+      expect(logs.filter(([p]) => p === "fire:")).toHaveLength(1);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("effect inside an `if` arm still captures the component parameter", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Item(true, "Hi")
+function Item(visible, msg) {
+  effect(() => {
+    console.log("seen:", visible, msg)
+  }, ["mount"])
+  return if (visible) { Text(msg) } else { Stack([]) }
+}`);
+      await waitForRenders();
+      const entry = logs.find(([p]) => p === "seen:");
+      expect(entry).toBeDefined();
+      expect(entry![1]).toBe(true);
+      expect(entry![2]).toBe("Hi");
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("captures the slot props so effects can react to passed-in slot content", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Section("Hello", { footer: Text("Bye") })
+function Section(title, footer) {
+  effect(() => {
+    console.log("slot-present:", footer != null)
+  }, ["mount"])
+  return Stack([Text(title), footer])
+}`);
+      await waitForRenders();
+      const entry = logs.find(([p]) => p === "slot-present:");
+      expect(entry).toBeDefined();
+      expect(entry![1]).toBe(true);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it("re-rendering with unchanged props does not re-fire the effect", async () => {
+    const logs: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args);
+    try {
+      const el = mount();
+      el.setResponse(`aktion = Stack([Item("stable"), Counter()])
+function Item(label) {
+  effect(() => {
+    console.log("once:", label)
+  }, ["mount"])
+  return Text(label)
+}
+function Counter() {
+  $tick = 0
+  return Button("tick", () => { $tick = $tick + 1 })
+}`);
+      await waitForRenders();
+      expect(logs.filter(([p]) => p === "once:")).toHaveLength(1);
+
+      const buttons = Array.from(
+        el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button"),
+      );
+      buttons[0]!.click();
+      buttons[0]!.click();
+      await waitForRenders();
+      expect(logs.filter(([p]) => p === "once:")).toHaveLength(1);
+    } finally {
+      console.log = originalLog;
+    }
   });
 });

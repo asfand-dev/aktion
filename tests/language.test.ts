@@ -44,7 +44,7 @@ describe("getLanguageSpec", () => {
 
   it("includes every built-in @-function with a signature", () => {
     const names = new Set(spec.builtins.map((b) => b.name));
-    for (const required of ["Each", "If", "Switch", "Filter", "Sum", "Join", "Case", "Count", "Format"]) {
+    for (const required of ["Filter", "Sum", "Join", "Case", "Count", "Format"]) {
       expect(names.has(required), `@${required} should be in catalog`).toBe(true);
     }
     for (const entry of spec.builtins) {
@@ -81,7 +81,6 @@ describe("getComponentCatalog (pure derivation)", () => {
       expect(typeof entry.description).toBe("string");
       expect(typeof entry.signature).toBe("string");
       expect(Array.isArray(entry.params)).toBe(true);
-      // No render fn should leak into the catalog.
       expect((entry as unknown as { render?: unknown }).render).toBeUndefined();
     }
   });
@@ -89,10 +88,10 @@ describe("getComponentCatalog (pure derivation)", () => {
 
 describe("getBuiltinCatalog", () => {
   const builtins = getBuiltinCatalog();
-  it("covers data + iteration categories (legacy action / javascript builtins removed in 0.5)", () => {
+  it("covers the data category (legacy iteration / action / javascript builtins removed)", () => {
     const cats = new Set(builtins.map((b) => b.category));
     expect(cats.has("data")).toBe(true);
-    expect(cats.has("iteration")).toBe(true);
+    expect(cats.has("iteration" as unknown as "data")).toBe(false);
     expect(cats.has("action" as unknown as "data")).toBe(false);
     expect(cats.has("javascript" as unknown as "data")).toBe(false);
   });
@@ -109,10 +108,6 @@ describe("getSnippets", () => {
 });
 
 describe("createStreamTokenizer", () => {
-  /**
-   * Minimal fake stream that mirrors enough of CodeMirror's StringStream for
-   * the tokenizer to run. Each test feeds one logical line.
-   */
   function makeStream(line: string): StreamLike {
     let pos = 0;
     return {
@@ -190,9 +185,8 @@ describe("createStreamTokenizer", () => {
   }
 
   it("tags components, state refs, builtins, strings, numbers, and atoms", () => {
-    const tokens = tokenize('_app_ = Card([@Each($items, "x", x.name)])');
+    const tokens = tokenize('aktion = Card("title", [for (let x of $items) { x.name }])');
     expect(tokens).toContain("component");
-    expect(tokens).toContain("builtin");
     expect(tokens).toContain("state");
     expect(tokens).toContain("string");
   });
@@ -203,9 +197,9 @@ describe("createStreamTokenizer", () => {
     expect(tokens).toContain("number");
   });
 
-  it("treats `#` as an alternative line comment", () => {
+  it("`#` is not recognised as a comment (removed in 0.5)", () => {
     const tokens = tokenize("# header\nfoo = 1 # trailing");
-    expect(tokens.filter((t) => t === "comment").length).toBe(2);
+    expect(tokens.filter((t) => t === "comment").length).toBe(0);
     expect(tokens).toContain("number");
   });
 

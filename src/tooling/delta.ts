@@ -27,7 +27,7 @@
  *     Append an item to a top-level array binding. `binding`'s RHS
  *     must be a literal array expression.
  *
- *   { kind: "new", source: "component ReportCard(r) { Card([Text(r.title)]) }" }
+ *   { kind: "new", source: "function ReportCard(r) { return Card([Text(r.title)]) }" }
  *     Append a new top-level statement to the program.
  *
  *   { kind: "delete", binding: "legacyWidget" }
@@ -232,8 +232,6 @@ function stringifyExpression(expr: Expression): string {
       return `${expr.callee}(${expr.arguments.map(stringifyExpression).join(", ")})`;
     case "MethodCall":
       return `${stringifyExpression(expr.object)}${expr.optional ? "?." : "."}${expr.method}(${expr.arguments.map(stringifyExpression).join(", ")})`;
-    case "NamedArg":
-      return `${expr.name}: ${stringifyExpression(expr.value)}`;
     case "Array":
       return `[${expr.elements.map(stringifyExpression).join(", ")}]`;
     case "Object":
@@ -263,8 +261,8 @@ function stringifyExpression(expr: Expression): string {
       return `\`${parts.join("")}\``;
     }
     default:
-      // Less-common expression kinds — `if` / `match` / `for` /
-      // lambdas / `js{}` blocks. These would need a full pretty-
+      // Less-common expression kinds — `if` / `switch` / `for` /
+      // lambdas. These would need a full pretty-
       // printer to round-trip safely; we treat them as opaque
       // and surface a placeholder so the caller can detect the
       // limitation.

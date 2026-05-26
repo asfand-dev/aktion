@@ -68,19 +68,19 @@ async function loadCodeMirror() {
 const EXAMPLES = {
   chat: {
     label: "Chat reply",
-    code: `# Highlights: one positional + named args everywhere, template literals, FollowUpBlock dispatch.
-_app_ = Stack([greeting, sample, follow])
+    code: `// Highlights: one positional + named args everywhere, template literals, FollowUpBlock dispatch.
+aktion = Stack([greeting, sample, follow])
 
 greeting = Card([
-  CardHeader("Hello, world", subtitle: "Edit this text and watch it update")
+  CardHeader("Hello, world", { subtitle: "Edit this text and watch it update" })
 ])
 
 sample = Card([
   CardHeader("Sample stats"),
   Stats([
-    StatCard("Active users", value: \`\${@Format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users"),
-    StatCard("Revenue",      value: \`\${@Format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar"),
-    StatCard("Errors",       value: "12", trend: "down", delta: "-32%", icon: "triangle-exclamation")
+    StatCard("Active users", { value: \`\${@Format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users" }),
+    StatCard("Revenue",      { value: \`\${@Format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar" }),
+    StatCard("Errors",       { value: "12", trend: "down", delta: "-32%", icon: "triangle-exclamation" })
   ])
 ])
 
@@ -88,11 +88,11 @@ follow = FollowUpBlock([
   FollowUpItem("Add a chart"),
   FollowUpItem("Show an alert"),
   FollowUpItem("Export as CSV")
-], title: "Try editing")`,
+], { title: "Try editing" })`,
   },
   dashboard: {
     label: "Project dashboard",
-    code: `# Highlights: component declaration, for-loop with destructuring, named args, Badge tone alias.
+    code: `// Highlights: function declaration, for-loop with destructuring, named args, Badge tone alias.
 projects = [
   {title: "Migrate auth",      description: "Roll out the new SDK.",   tags: ["auth"],     assignee: "Asha", tone: "default", icon: "shield-halved",       stage: "todo"},
   {title: "Streaming UI v2",   description: "20 new components.",      tags: ["frontend"], assignee: "Alex", tone: "primary", icon: "wand-magic-sparkles", stage: "doing"},
@@ -102,66 +102,68 @@ projects = [
 
 $atRisk = @Filter(projects, "tone", "==", "warning")
 
-component Card2(p) {
-  return KanbanCard(p.title, description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon)
+function Card2(p) {
+  return KanbanCard(p.title, { description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon })
 }
 
-_app_ = Stack([
+aktion = Stack([
   PageHeader(
     "Engineering Q3",
-    subtitle: \`\${@Count(projects)} active · \${@Count($atRisk)} at risk\`,
-    breadcrumbs: ["Workspace", "Engineering"],
-    status: Badge("On track", tone: "success")
+    {
+      subtitle: \`\${@Count(projects)} active · \${@Count($atRisk)} at risk\`,
+      breadcrumbs: ["Workspace", "Engineering"],
+      status: Badge("On track", { tone: "success" })
+    }
   ),
   Stats([
-    StatCard("Active",  value: \`\${@Count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder"),
-    StatCard("At risk", value: \`\${@Count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation"),
-    StatCard("Shipped", value: "8",                       trend: "up",   delta: "+3 vs last week",                         icon: "rocket"),
-    StatCard("On-time", value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock")
+    StatCard("Active",  { value: \`\${@Count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder" }),
+    StatCard("At risk", { value: \`\${@Count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation" }),
+    StatCard("Shipped", { value: "8",                       trend: "up",   delta: "+3 vs last week",                         icon: "rocket" }),
+    StatCard("On-time", { value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock" })
   ]),
   KanbanBoard([
-    KanbanColumn("To do",  items: for p in @Filter(projects, "stage", "==", "todo")   { Card2(p) }),
-    KanbanColumn("Doing",  items: for p in @Filter(projects, "stage", "==", "doing")  { Card2(p) }, tone: "primary"),
-    KanbanColumn("Review", items: for p in @Filter(projects, "stage", "==", "review") { Card2(p) }, tone: "warning"),
-    KanbanColumn("Done",   items: for p in @Filter(projects, "stage", "==", "done")   { Card2(p) }, tone: "success")
+    KanbanColumn("To do",  { items: for (let p of @Filter(projects, "stage", "==", "todo"))   { Card2(p) } }),
+    KanbanColumn("Doing",  { items: for (let p of @Filter(projects, "stage", "==", "doing"))  { Card2(p) }, tone: "primary" }),
+    KanbanColumn("Review", { items: for (let p of @Filter(projects, "stage", "==", "review")) { Card2(p) }, tone: "warning" }),
+    KanbanColumn("Done",   { items: for (let p of @Filter(projects, "stage", "==", "done"))   { Card2(p) }, tone: "success" })
   ])
 ])`,
   },
   todo: {
     label: "Reactive todo",
-    code: `# Highlights: $-prefixed reactive state, template literals, for-loop destructuring, if expression for empty state.
+    code: `// Highlights: $-prefixed reactive state, template literals, for-loop destructuring, if expression for empty state.
 $todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done: false}]
 $draft = ""
 
-action addTodo() {
+function addTodo() {
   $todos = [...$todos, {id: $todos.length + 1, text: $draft, done: false}]
   $draft = ""
 }
 
-component Row(t) {
+function Row(t) {
   return Card([Stack([
     Text(t.text),
-    Button("Delete", action: () => { $todos = @Filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small")
-  ], direction: "row", gap: "s", align: "center", justify: "between")])
+    Button("Delete", { action: () => { $todos = @Filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
+  ], { direction: "row", gap: "s", align: "center", justify: "between" })])
 }
 
-list = for t in $todos { Row(t) }
-body = if $todos.length > 0 {
+list = for (let t of $todos) { Row(t) }
+body = if ($todos.length > 0) {
   list
 } else {
-  EmptyState("Nothing to do", description: "Add a task above to get started.", icon: "list-check")
+  EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
 }
 
-_app_ = Stack([
-  Card([CardHeader("Todo list", subtitle: \`\${@Count($todos)} \${@Plural(@Count($todos), "task", "tasks")} · persisted across reloads\`)]),
-  Input("draft-input", placeholder: "What needs doing?", value: $draft),
-  Button("Add", action: addTodo, variant: "primary"),
+aktion = Stack([
+  Card([CardHeader("Todo list", { subtitle: \`\${@Count($todos)} \${@Plural(@Count($todos), "task", "tasks")} · persisted across reloads\` })]),
+  Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
+  Button("Add", { action: addTodo, variant: "primary" }),
   body
 ])`,
   },
   reactiveApp: {
     label: "Reactive app",
-    code: `_app_ = Grid([items, addBtn], 2)
+    code: `aktion = Grid([items, addBtn], 2)
 
 $events = [
   { title: "Product Sync" },
@@ -169,100 +171,100 @@ $events = [
   { title: "Daily Standup" },
 ]
 
-action removeItem(name) {
+function removeItem(name) {
   $events = @Filter($events, "title", "!=", name)
 }
 
-action addEvent() {
+function addEvent() {
   $events = [...$events, { title: \`New Event \${@Now()}\` }]
 }
 
-component Item(name) {
+function Item(name) {
   return Card([
     Text(name),
-    Button("Remove", size: "xs", action: () => { removeItem(name) })
+    Button("Remove", { size: "xs", action: () => { removeItem(name) } })
   ])
 }
 
-addBtn = Card([Button("New Event", variant: "ghost", action: addEvent)])
+addBtn = Card([Button("New Event", { variant: "ghost", action: addEvent })])
 
-items = for { title } in $events { Item(title) }`,
+items = for (let { title } of $events) { Item(title) }`,
   },
   routing: {
     label: "Routing demo",
-    code: `# Highlights: _router_({…}) call, params injected per-arm, _route_.path reads, named-arg NavLink.
-page = _router_({
-  "/":          Card([CardHeader("Welcome", subtitle: "Click a link above to navigate")]),
+    code: `// Highlights: Router({…}) call, params injected per-arm, route.path reads, named-arg NavLink.
+page = Router({
+  "/":          Card([CardHeader("Welcome", { subtitle: "Click a link above to navigate" })]),
   "/dashboard": Card([
     CardHeader("Dashboard"),
-    Text(\`Live path: \${_route_.path}\`)
+    Text(\`Live path: \${route.path}\`)
   ]),
   "/users/:id": Card([
     CardHeader(\`User \${params.id}\`),
     Text(\`Looking at user \${params.id}\`)
   ]),
-  default:      Callout("Not found", tone: "warning", description: \`Nothing here at \${_route_.path}.\`)
+  default:      Callout("Not found", { tone: "warning", description: \`Nothing here at \${route.path}.\` })
 })
 
 nav = Stack([
-  NavLink("Home",      to: "/",            variant: "ghost"),
-  NavLink("Dashboard", to: "/dashboard",   variant: "ghost"),
-  NavLink("Alice",     to: "/users/alice", variant: "ghost")
-], direction: "row", gap: "s")
+  NavLink("Home",      { to: "/",            variant: "ghost" }),
+  NavLink("Dashboard", { to: "/dashboard",   variant: "ghost" }),
+  NavLink("Alice",     { to: "/users/alice", variant: "ghost" })
+], { direction: "row", gap: "s" })
 
-_app_ = Stack([nav, page])`,
+aktion = Stack([nav, page])`,
   },
   counter: {
     label: "JS counter",
-    code: `# Highlights: actions assign $atoms directly, @Clamp safe arithmetic, ?? for fallbacks.
+    code: `// Highlights: actions assign $atoms directly, @Clamp safe arithmetic, ?? for fallbacks.
 $count = 0
 
-action inc() { $count = ($count ?? 0) + 1 }
-action dec() { $count = ($count ?? 0) - 1 }
-action reset() { $count = 0 }
+function inc() { $count = ($count ?? 0) + 1 }
+function dec() { $count = ($count ?? 0) - 1 }
+function reset() { $count = 0 }
 
-_app_ = Card([
-  CardHeader("JS counter", subtitle: "Three actions, one $atom."),
+aktion = Card([
+  CardHeader("JS counter", { subtitle: "Three actions, one $atom." }),
   Stack([
     Text(\`Current: \${@Clamp($count, -99, 99)}\`),
     Stack([
-      Button("-",     action: dec),
-      Button("Reset", action: reset, variant: "ghost"),
-      Button("+",     action: inc,   variant: "primary")
-    ], direction: "row", gap: "s")
+      Button("-",     { action: dec }),
+      Button("Reset", { action: reset, variant: "ghost" }),
+      Button("+",     { action: inc,   variant: "primary" })
+    ], { direction: "row", gap: "s" })
   ])
 ])`,
   },
   chart: {
     label: "Chart + metrics",
-    code: `# Highlights: derived totals via @Sum + template literals, responsive Grid for chart row.
+    code: `// Highlights: derived totals via @Sum + template literals, responsive Grid for chart row.
 $range = "7"
 thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
 lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]
 
-_app_ = Stack([
-  PageHeader("Analytics", subtitle: \`Daily traffic last \${$range} days\`),
+aktion = Stack([
+  PageHeader("Analytics", { subtitle: \`Daily traffic last \${$range} days\` }),
   Stats([
-    StatCard("Sessions",     value: \`\${@Format(@Sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line"),
-    StatCard("Avg duration", value: "3m 12s",                              trend: "flat", delta: "stable",                                                     icon: "clock"),
-    StatCard("Bounce rate",  value: "32%",                                 trend: "down", delta: "-2%",                                                        icon: "arrow-trend-down")
+    StatCard("Sessions",     { value: \`\${@Format(@Sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
+    StatCard("Avg duration", { value: "3m 12s",                              trend: "flat", delta: "stable",                                                     icon: "clock" }),
+    StatCard("Bounce rate",  { value: "32%",                                 trend: "down", delta: "-2%",                                                        icon: "arrow-trend-down" })
   ]),
   Grid([
     Card([
       CardHeader("Sessions"),
       LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"],
-        series: [Series("This week", values: thisWk), Series("Last week", values: lastWk)])
+        { series: [Series("This week", { values: thisWk }), Series("Last week", { values: lastWk })] })
     ]),
     Card([
       CardHeader("By channel"),
-      PieChart(["Organic","Direct","Referral"], values: [60, 25, 15])
+      PieChart(["Organic","Direct","Referral"], { values: [60, 25, 15] })
     ])
-  ], columns: {sm: 1, md: 2}, gap: "l")
+  ], { columns: {sm: 1, md: 2}, gap: "l" })
 ])`,
   },
   dataGrid: {
     label: "DataGrid + bulk actions",
-    code: `# Highlights: sortable DataGrid, per-column filter chips, $-prefixed selection state, bulk-action toolbar.
+    code: `// Highlights: sortable DataGrid, per-column filter chips, $-prefixed selection state, bulk-action toolbar.
 $sort = {key: "Score", direction: "desc"}
 $selectedIds = []
 $page = 1
@@ -278,47 +280,51 @@ people = [
   {id: "u08", name: "Barbara Liskov",    team: "Compilers",   score: 89, commits: 272}
 ]
 
-bulkBar = if @Count($selectedIds) > 0 {
+bulkBar = if (@Count($selectedIds) > 0) {
   Toolbar(
-    left: [Badge(\`\${@Count($selectedIds)} selected\`, tone: "primary", icon: "check", size: "sm")],
-    right: [
-      Button("Email",  variant: "ghost",     size: "small", icon: "envelope"),
-      Button("Export", variant: "secondary", size: "small", icon: "file-csv"),
-      Button("Clear",  action: () => { $selectedIds = [] }, variant: "ghost", size: "small")
-    ]
+    {
+      left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+      right: [
+        Button("Email",  { variant: "ghost",     size: "small", icon: "envelope" }),
+        Button("Export", { variant: "secondary", size: "small", icon: "file-csv" }),
+        Button("Clear",  { action: () => { $selectedIds = [] }, variant: "ghost", size: "small" })
+      ]
+    }
   )
 } else {
   null
 }
 
-_app_ = Stack([
+aktion = Stack([
   PageHeader(
     "Top contributors",
-    subtitle: \`\${@Count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
-    breadcrumbs: ["Workspace", "Engineering"]
+    {
+      subtitle: \`\${@Count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+      breadcrumbs: ["Workspace", "Engineering"]
+    }
   ),
   bulkBar,
   Card([
-    SectionHeader("Leaderboard", eyebrow: "DATAGRID", actions: [Badge("Live", tone: "success", icon: "circle", size: "sm")]),
+    SectionHeader("Leaderboard", { eyebrow: "DATAGRID", actions: [Badge("Live", { tone: "success", icon: "circle", size: "sm" })] }),
     DataGrid([
-      Col("Id",      values: people.id,      align: "left"),
-      Col("Name",    values: people.name,    align: "left",  sortable: true, filterable: true),
-      Col("Team",    values: people.team,    align: "left",  sortable: true, filterable: true),
-      Col("Score",   values: people.score,   align: "right", format: "number", sortable: true),
-      Col("Commits", values: people.commits, align: "right", format: "number", sortable: true)
-    ], rowIds: people.id, sort: $sort, selectedIds: $selectedIds, page: $page, perPage: 5, emptyLabel: "No people match")
+      Col("Id",      { values: people.id,      align: "left" }),
+      Col("Name",    { values: people.name,    align: "left",  sortable: true, filterable: true }),
+      Col("Team",    { values: people.team,    align: "left",  sortable: true, filterable: true }),
+      Col("Score",   { values: people.score,   align: "right", format: "number", sortable: true }),
+      Col("Commits", { values: people.commits, align: "right", format: "number", sortable: true })
+    ], { rowIds: people.id, sort: $sort, selectedIds: $selectedIds, page: $page, perPage: 5, emptyLabel: "No people match" })
   ])
 ])`,
   },
   calendar: {
     label: "CalendarView planner",
-    code: `# Highlights: CalendarView grid, OnboardingChecklist with reactive state, ActivityLog timeline.
+    code: `// Highlights: CalendarView grid, OnboardingChecklist with reactive state, ActivityLog timeline.
 $selectedDate = "2026-05-17"
 $ob1 = false
 $ob2 = false
 $ob3 = false
 
-$obDone = (if $ob1 { 1 } else { 0 }) + (if $ob2 { 1 } else { 0 }) + (if $ob3 { 1 } else { 0 })
+$obDone = (if ($ob1) { 1 } else { 0 }) + (if ($ob2) { 1 } else { 0 }) + (if ($ob3) { 1 } else { 0 })
 
 events = [
   {date: "2026-05-04", title: "Sprint planning", time: "09:00", tone: "primary"},
@@ -329,16 +335,16 @@ events = [
   {date: "2026-05-22", title: "Retro",           time: "16:00", tone: "info"}
 ]
 
-_app_ = Stack([
-  PageHeader("May 2026", subtitle: \`\${@Count(events)} events · \${$obDone}/3 onboarding\`),
+aktion = Stack([
+  PageHeader("May 2026", { subtitle: \`\${@Count(events)} events · \${$obDone}/3 onboarding\` }),
   Grid([
     Card([
-      SectionHeader("Calendar", subtitle: "Focus a day to see details", eyebrow: "PLANNER"),
-      CalendarView($selectedDate, month: "2026-05", events: events, view: "month")
+      SectionHeader("Calendar", { subtitle: "Focus a day to see details", eyebrow: "PLANNER" }),
+      CalendarView($selectedDate, { month: "2026-05", events: events, view: "month" })
     ]),
     Stack([
       Card([
-        SectionHeader("Onboarding", subtitle: "Finish setup to enable publishing", eyebrow: "SETUP"),
+        SectionHeader("Onboarding", { subtitle: "Finish setup to enable publishing", eyebrow: "SETUP" }),
         OnboardingChecklist([
           {title: "Connect calendar",     description: "Sync with Google.",     done: $ob1, action: () => { $ob1 = true }, cta: "Connect"},
           {title: "Invite teammates",     description: "Share an invite link.", done: $ob2, action: () => { $ob2 = true }, cta: "Invite"},
@@ -353,13 +359,13 @@ _app_ = Stack([
           {actor: "Grace", title: "added release window",  time: "1d", icon: "rocket",        tone: "info"}
         ])
       ])
-    ], direction: "column", gap: "l")
-  ], columns: {sm: 1, lg: 2}, gap: "l")
+    ], { direction: "column", gap: "l" })
+  ], { columns: {sm: 1, lg: 2}, gap: "l" })
 ])`,
   },
   media: {
     label: "Media gallery + Map",
-    code: `# Highlights: Carousel hero, Gallery wired to Lightbox via $variable, VideoPlayer + AudioPlayer + Map.
+    code: `// Highlights: Carousel hero, Gallery wired to Lightbox via $variable, VideoPlayer + AudioPlayer + Map.
 $slide = 0
 $lightboxOpen = false
 $lightboxIdx = 0
@@ -373,52 +379,56 @@ photos = [
   {src: "https://picsum.photos/seed/aurora-aurora/1200/700",  caption: "Northern lights"}
 ]
 
-slides = for p in photos { {src: p.src, alt: p.caption, caption: p.caption} }
+slides = for (let p of photos) { {src: p.src, alt: p.caption, caption: p.caption} }
 
-_app_ = Stack([
-  PageHeader("Aurora Expedition", subtitle: "Iceland · Aug 2026", breadcrumbs: ["Trips", "Aurora"]),
+aktion = Stack([
+  PageHeader("Aurora Expedition", { subtitle: "Iceland · Aug 2026", breadcrumbs: ["Trips", "Aurora"] }),
   Card([
     SectionHeader("Highlights"),
-    Carousel(slides, activeIndex: $slide, ratio: "16:9", showDots: true)
+    Carousel(slides, { activeIndex: $slide, ratio: "16:9", showDots: true })
   ]),
   Card([
-    SectionHeader("Photos", subtitle: "Tap a thumbnail to zoom"),
-    Gallery(slides, columns: 3, onSelect: () => { $lightboxIdx = 0; $lightboxOpen = true })
+    SectionHeader("Photos", { subtitle: "Tap a thumbnail to zoom" }),
+    Gallery(slides, { columns: 3, onSelect: () => { $lightboxIdx = 0; $lightboxOpen = true } })
   ]),
   Grid([
     Card([
       SectionHeader("Trailer"),
       VideoPlayer(
         "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
-        poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
-        controls: true,
-        caption: "Aurora Expedition trailer",
-        ratio: "16:9"
+        {
+          poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+          controls: true,
+          caption: "Aurora Expedition trailer",
+          ratio: "16:9"
+        }
       )
     ]),
     Card([
       SectionHeader("Soundtrack"),
       AudioPlayer(
         "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
-        title: "Northern Skies",
-        artist: "Aurora Strings"
+        {
+          title: "Northern Skies",
+          artist: "Aurora Strings"
+        }
       )
     ])
-  ], columns: {sm: 1, md: 2}, gap: "l"),
+  ], { columns: {sm: 1, md: 2}, gap: "l" }),
   Card([
-    SectionHeader("Itinerary", subtitle: "Six stops"),
-    Map(65.0, lng: -16.0, zoom: 5, markers: [
+    SectionHeader("Itinerary", { subtitle: "Six stops" }),
+    Map(65.0, { lng: -16.0, zoom: 5, markers: [
       {lat: 64.1466, lng: -21.9426, label: "Reykjavík"},
       {lat: 64.7140, lng: -19.0608, label: "Highlands"},
       {lat: 65.6839, lng: -18.0907, label: "Akureyri"}
-    ], height: "320px")
+    ], height: "320px" })
   ]),
-  Lightbox(photos, open: $lightboxOpen, index: $lightboxIdx)
+  Lightbox(photos, { open: $lightboxOpen, index: $lightboxIdx })
 ])`,
   },
   wizard: {
     label: "MultiStepForm wizard",
-    code: `# Highlights: MultiStepForm steps, RichTextEditor, ColorPicker, PinInput, ValidationSummary.
+    code: `// Highlights: MultiStepForm steps, RichTextEditor, ColorPicker, PinInput, ValidationSummary.
 $step = 0
 $title = "Streaming UI v3 — release notes"
 $body = "<h2>What's new</h2><p>Thirty new components — DataGrid, CalendarView, RichTextEditor, six charts.</p>"
@@ -427,126 +437,126 @@ $brand = "#6366f1"
 $pin = ""
 
 $errors = @Filter([
-  if $title == "" { {label: "title", message: "Title is required."} } else { null },
-  if $pin.length != 4 { {label: "pin",   message: "PIN must be 4 digits."} } else { null }
+  if ($title == "") { {label: "title", message: "Title is required."} } else { null },
+  if ($pin.length != 4) { {label: "pin",   message: "PIN must be 4 digits."} } else { null }
 ], "label", "!=", null)
 
-publishGate = if @Count($errors) > 0 {
-  Card([ValidationSummary($errors, title: "Fix these before publishing")])
+publishGate = if (@Count($errors) > 0) {
+  Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
 } else {
-  Card([Callout("Ready to publish", tone: "success", description: "All gates passed.", icon: "circle-check", compact: true)])
+  Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
 }
 
-_app_ = Stack([
-  PageHeader($title, subtitle: "Compose, brand, gate, publish.", breadcrumbs: ["Content", "Drafts"]),
+aktion = Stack([
+  PageHeader($title, { subtitle: "Compose, brand, gate, publish.", breadcrumbs: ["Content", "Drafts"] }),
   MultiStepForm([
     {title: "Compose", details: "Title, body, tags", content: [
       Card([
-        SectionHeader("Body", eyebrow: "EDITOR"),
-        FormSection("Post", helper: "All fields stream into the preview.", children: [
-          FormControl("Title", field: Input("title", placeholder: "Headline…",     value: $title)),
-          FormControl("Body",  field: RichTextEditor("body", value: $body, placeholder: "Start composing…", minHeight: "200px")),
-          FormControl("Tags",  field: TagInput("tags", value: $tags, placeholder: "Press enter to add"))
-        ])
+        SectionHeader("Body", { eyebrow: "EDITOR" }),
+        FormSection("Post", { helper: "All fields stream into the preview.", children: [
+          FormControl("Title", { field: Input("title", { placeholder: "Headline…",     value: $title }) }),
+          FormControl("Body",  { field: RichTextEditor("body", { value: $body, placeholder: "Start composing…", minHeight: "200px" }) }),
+          FormControl("Tags",  { field: TagInput("tags", { value: $tags, placeholder: "Press enter to add" }) })
+        ] })
       ])
     ]},
     {title: "Brand", details: "Pick an accent", content: [
       Card([
         SectionHeader("Brand"),
-        ColorPicker("brand", value: $brand, label: "Accent",
-          swatches: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"])
+        ColorPicker("brand", { value: $brand, label: "Accent",
+          swatches: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"] })
       ])
     ]},
     {title: "Gate", details: "4-digit PIN", content: [
       Card([
-        SectionHeader("Two-factor publish", eyebrow: "GATE"),
-        FormControl("PIN", field: PinInput("pin", length: 4, value: $pin, type: "numeric")),
+        SectionHeader("Two-factor publish", { eyebrow: "GATE" }),
+        FormControl("PIN", { field: PinInput("pin", { length: 4, value: $pin, type: "numeric" }) }),
         publishGate
       ])
     ]}
-  ], current: $step)
+  ], { current: $step })
 ])`,
   },
   advancedCharts: {
     label: "Gauge, Heatmap, Radar, Scatter",
-    code: `# Highlights: every new chart primitive in one dashboard.
-_app_ = Stack([
-  PageHeader("Engineering analytics", subtitle: "Quarterly view"),
+    code: `// Highlights: every new chart primitive in one dashboard.
+aktion = Stack([
+  PageHeader("Engineering analytics", { subtitle: "Quarterly view" }),
   Stats([
-    StatCard("SLA",    value: "99.3%", trend: "up",   delta: "+0.2 pp", icon: "shield-halved"),
-    StatCard("P95",    value: "112ms", trend: "down", delta: "-12 ms",  icon: "gauge-high"),
-    StatCard("Errors", value: "0.42%", trend: "flat", delta: "stable",  icon: "circle-exclamation"),
-    StatCard("MRR",    value: "$84k",  trend: "up",   delta: "+12%",    icon: "sack-dollar")
+    StatCard("SLA",    { value: "99.3%", trend: "up",   delta: "+0.2 pp", icon: "shield-halved" }),
+    StatCard("P95",    { value: "112ms", trend: "down", delta: "-12 ms",  icon: "gauge-high" }),
+    StatCard("Errors", { value: "0.42%", trend: "flat", delta: "stable",  icon: "circle-exclamation" }),
+    StatCard("MRR",    { value: "$84k",  trend: "up",   delta: "+12%",    icon: "sack-dollar" })
   ]),
   Grid([
-    Card([SectionHeader("SLA uptime"),  Gauge(99.3, min: 95, max: 100, caption: "Above target", tone: "success", size: "lg")]),
-    Card([SectionHeader("P95 latency"), Gauge(112,  min: 0,  max: 250, caption: "ms",           tone: "primary", size: "lg")]),
-    Card([SectionHeader("Error rate"),  Gauge(0.42, min: 0,  max: 5,   caption: "% requests",   tone: "warning", size: "lg")])
-  ], columns: {sm: 1, md: 3}, gap: "l"),
+    Card([SectionHeader("SLA uptime"),  Gauge(99.3, { min: 95, max: 100, caption: "Above target", tone: "success", size: "lg" })]),
+    Card([SectionHeader("P95 latency"), Gauge(112,  { min: 0,  max: 250, caption: "ms",           tone: "primary", size: "lg" })]),
+    Card([SectionHeader("Error rate"),  Gauge(0.42, { min: 0,  max: 5,   caption: "% requests",   tone: "warning", size: "lg" })])
+  ], { columns: {sm: 1, md: 3}, gap: "l" }),
   Card([
-    SectionHeader("Signups · last 7 days", subtitle: "Stacked by source"),
+    SectionHeader("Signups · last 7 days", { subtitle: "Stacked by source" }),
     LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-      series: [
-        Series("Organic",  values: [40, 52, 65, 78, 92, 105, 124]),
-        Series("Referral", values: [20, 28, 35, 42, 50, 60,  72]),
-        Series("Paid",     values: [10, 14, 18, 24, 30, 36,  44])
-      ])
+      { series: [
+        Series("Organic",  { values: [40, 52, 65, 78, 92, 105, 124] }),
+        Series("Referral", { values: [20, 28, 35, 42, 50, 60,  72] }),
+        Series("Paid",     { values: [10, 14, 18, 24, 30, 36,  44] })
+      ] })
   ]),
   Grid([
     Card([
       SectionHeader("Office capacity"),
-      Heatmap(["Mon","Tue","Wed","Thu","Fri"], yLabels: ["9am","12pm","3pm","6pm"],
-        values: [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]])
+      Heatmap(["Mon","Tue","Wed","Thu","Fri"], { yLabels: ["9am","12pm","3pm","6pm"],
+        values: [[3,4,5,3,2],[8,9,11,7,5],[12,14,16,13,10],[6,7,9,10,12]] })
     ]),
     Card([
       SectionHeader("Vendor scorecard"),
-      RadarChart(["Speed","Quality","Cost","Coverage","Trust"], series: [
-        Series("Atlas Cloud", values: [80,70,60,75,85]),
-        Series("Northwind",   values: [60,85,70,65,80])
-      ])
+      RadarChart(["Speed","Quality","Cost","Coverage","Trust"], { series: [
+        Series("Atlas Cloud", { values: [80,70,60,75,85] }),
+        Series("Northwind",   { values: [60,85,70,65,80] })
+      ] })
     ])
-  ], columns: {sm: 1, md: 2}, gap: "l"),
+  ], { columns: {sm: 1, md: 2}, gap: "l" }),
   Grid([
     Card([
       SectionHeader("Sessions vs conversions"),
       ScatterChart([
-        Series("Cohort A", values: [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}]),
-        Series("Cohort B", values: [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}])
-      ], xLabel: "Sessions (k)", yLabel: "Conversions")
+        Series("Cohort A", { values: [{x:1,y:2},{x:2,y:4},{x:3,y:5},{x:4,y:7}] }),
+        Series("Cohort B", { values: [{x:1,y:3},{x:2,y:2},{x:3,y:6},{x:4,y:5}] })
+      ], { xLabel: "Sessions (k)", yLabel: "Conversions" })
     ]),
     Card([
       SectionHeader("Response time"),
-      Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], bins: 6)
+      Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], { bins: 6 })
     ])
-  ], columns: {sm: 1, md: 2}, gap: "l")
+  ], { columns: {sm: 1, md: 2}, gap: "l" })
 ])`,
   },
   storageConsole: {
     label: "Storage + console globals",
-    code: `# Highlights: \`storage\` namespace (local / session / cookies), \`console\` forwarder, named-arg method calls.
+    code: `// Highlights: \`storage\` namespace (local / session / cookies), \`console\` forwarder, named-arg method calls.
 $name = storage.get("rui:demo:name")
 $theme = storage.session.get("rui:demo:theme")
 $consent = storage.cookies.get("rui:demo:consent")
 
-action saveName(value) {
+function saveName(value) {
   storage.set("rui:demo:name", value)
   $name = value
   console.log("Saved name", value)
 }
 
-action setTheme(value) {
+function setTheme(value) {
   storage.session.set("rui:demo:theme", value)
   $theme = value
   console.info("Theme preference set to", value)
 }
 
-action acceptCookies() {
-  storage.cookies.set("rui:demo:consent", "accepted", expires: 30, path: "/", sameSite: "Lax")
+function acceptCookies() {
+  storage.cookies.set("rui:demo:consent", "accepted", { expires: 30, path: "/", sameSite: "Lax" })
   $consent = "accepted"
   console.warn("Cookies accepted — will persist for 30 days")
 }
 
-action clearAll() {
+function clearAll() {
   storage.clear()
   storage.session.clear()
   storage.cookies.clear()
@@ -556,53 +566,53 @@ action clearAll() {
   console.error("Cleared every storage namespace (demo only).")
 }
 
-_app_ = Stack([
-  PageHeader("Storage + console", subtitle: "All values persist across reloads via the matching browser API."),
+aktion = Stack([
+  PageHeader("Storage + console", { subtitle: "All values persist across reloads via the matching browser API." }),
   Card([
-    SectionHeader("localStorage", eyebrow: "PERSISTENT"),
-    FormControl("Display name", field: Input("name", placeholder: "Your name", value: $name ?? "")),
-    Button("Save name", action: () => { saveName($name ?? "") }, variant: "primary")
+    SectionHeader("localStorage", { eyebrow: "PERSISTENT" }),
+    FormControl("Display name", { field: Input("name", { placeholder: "Your name", value: $name ?? "" }) }),
+    Button("Save name", { action: () => { saveName($name ?? "") }, variant: "primary" })
   ]),
   Card([
-    SectionHeader("sessionStorage", eyebrow: "PER TAB"),
-    FormControl("Theme", field: Select("theme", items: [
+    SectionHeader("sessionStorage", { eyebrow: "PER TAB" }),
+    FormControl("Theme", { field: Select("theme", { items: [
       SelectItem("light", "Light"),
       SelectItem("dark",  "Dark"),
       SelectItem("auto",  "Auto")
-    ], value: $theme ?? "auto")),
-    Button("Save theme", action: () => { setTheme($theme ?? "auto") })
+    ], value: $theme ?? "auto" }) }),
+    Button("Save theme", { action: () => { setTheme($theme ?? "auto") } })
   ]),
   Card([
-    SectionHeader("cookies", eyebrow: "NAMED ARGS"),
+    SectionHeader("cookies", { eyebrow: "NAMED ARGS" }),
     Text(\`Current consent: \${$consent ?? "—"}\`),
     Stack([
-      Button("Accept cookies", action: acceptCookies, variant: "primary"),
-      Button("Reset everything", action: clearAll, variant: "ghost")
-    ], direction: "row", gap: "s")
+      Button("Accept cookies", { action: acceptCookies, variant: "primary" }),
+      Button("Reset everything", { action: clearAll, variant: "ghost" })
+    ], { direction: "row", gap: "s" })
   ])
 ])`,
   },
   gridLayout: {
     label: "12-col grid + named args",
-    code: `# Highlights: Grid(columns: 12), GridItem(span: "1/4"), named-arg layout props.
+    code: `// Highlights: Grid(columns: 12), GridItem(span: "1/4"), named-arg layout props.
 sidebar = Card([
-  CardHeader("Sidebar", subtitle: "GridItem span='1/4'"),
+  CardHeader("Sidebar", { subtitle: "GridItem span='1/4'" }),
   Stack([
-    NavLink("Overview", to: "/",         variant: "ghost"),
-    NavLink("Reports",  to: "/reports",  variant: "ghost"),
-    NavLink("Settings", to: "/settings", variant: "ghost")
-  ], direction: "column", gap: "s")
+    NavLink("Overview", { to: "/",         variant: "ghost" }),
+    NavLink("Reports",  { to: "/reports",  variant: "ghost" }),
+    NavLink("Settings", { to: "/settings", variant: "ghost" })
+  ], { direction: "column", gap: "s" })
 ])
 
 content = Card([
-  CardHeader("Main workspace", subtitle: "GridItem span='3/4' fills the rest"),
-  Text("Use Grid(columns: 12, gap: 'l', [...]) with GridItem(child, span: '1/4') for sidebar layouts.")
+  CardHeader("Main workspace", { subtitle: "GridItem span='3/4' fills the rest" }),
+  Text("Use Grid([...], { columns: 12, gap: 'l' }) with GridItem(child, { span: '1/4' }) for sidebar layouts.")
 ])
 
-_app_ = Grid([
-  GridItem(sidebar, span: "1/4"),
-  GridItem(content, span: "3/4")
-], columns: 12, gap: "l")`,
+aktion = Grid([
+  GridItem(sidebar, { span: "1/4" }),
+  GridItem(content, { span: "3/4" })
+], { columns: 12, gap: "l" })`,
   },
 };
 
@@ -785,58 +795,53 @@ const componentNames = new Set(langSpec.components.map((c) => c.name));
 /**
  * Reserved language keywords — surfaced in autocomplete so the LLM-author
  * (or a human) can discover the full grammar without leaving the editor.
- * Mirror the lexer's `KEYWORDS_AKTION` set plus the contextual
- * keywords (`on:mount`, `on:unmount`, `on:every`) that aren't true tokens
- * but still appear at the surface.
+ * Mirror the lexer's `KEYWORDS_AKTION` set plus the lifecycle string deps
+ * (`"mount"`, `"unmount"`, `"every(N)"`) that appear inside effect() calls.
  */
 const LANGUAGE_KEYWORDS = [
-  { label: "component", info: "Declare a reusable component: `component Name(arg) { return ... }`." },
-  { label: "effect",    info: "Declare an anonymous side-effect: `effect [$atom, on:mount, debounce(N)] { ... }`." },
-  { label: "action",    info: "Declare a callable action body: `action save(payload) { ... }`." },
-  { label: "if",        info: "Expression-form `if cond { ... } else { ... }`." },
+  { label: "function",  info: "Declare a function (component or callable action): `function Name(arg) { return ... }`." },
+  { label: "effect",    info: "Declare an anonymous side-effect: `effect(() => { ... }, [$atom, \"mount\", \"debounce(N)\"])`." },
+  { label: "if",        info: "Expression-form `if (cond) { ... } else { ... }`." },
   { label: "else",      info: "`else` arm of an `if` expression." },
-  { label: "match",     info: "Expression-form `match value { \"x\": A(), default: B() }`." },
-  { label: "for",       info: "Expression-form `for x in xs { Card(x) }`." },
-  { label: "in",        info: "Used in `for x in xs { ... }`." },
-  { label: "await",     info: "Wait for an HTTP / promise inside an action body." },
-  { label: "return",    info: "Return from a `component` / `action` / `effect` body." },
+  { label: "switch",    info: "Expression-form `switch (value) { case \"x\": A(); break; default: B() }`." },
+  { label: "case",      info: "Arm of a `switch` expression: `case \"x\": A(); break`." },
+  { label: "break",     info: "Terminate a `switch` arm." },
+  { label: "for",       info: "Expression-form `for (let x of xs) { Card(x) }`." },
+  { label: "of",        info: "Used in `for (let x of xs) { ... }`." },
+  { label: "await",     info: "Wait for an HTTP / promise inside a function body." },
+  { label: "return",    info: "Return from a `function` / `effect` body." },
   { label: "cleanup",   info: "Register a teardown handler inside an `effect` body." },
-  { label: "optimistic",info: "Mark an `action` as optimistic: `action save(...) optimistic { ... }`." },
-  { label: "on",        info: "Used inside `effect [...]` lifecycle deps: `on:mount`, `on:unmount`, `on:every(N)`." },
-  { label: "emit",      info: "Dispatch a custom event: `emit \"name\" { detail }`." },
-  { label: "default",   info: "Wildcard arm inside `_router_({...})` / `match`." },
-  { label: "on:mount",  info: "Effect trigger that fires once on mount." },
-  { label: "on:unmount",info: "Effect trigger that fires once on unmount." },
-  { label: "on:every",  info: "Effect trigger that fires every N ms: `on:every(1000)`." },
+  { label: "optimistic",info: "Mark a mutating `function` as optimistic: `function save(...) optimistic { ... }`." },
+  { label: "emit",      info: "Dispatch a custom event: `emit(\"name\", { detail })`." },
+  { label: "default",   info: "Wildcard arm inside `Router({...})`." },
 ];
 
 /**
  * Reserved identifiers / special globals exposed by the runtime. Surfaced
- * in autocomplete so authors learn the names — `_app_` and `_router_` are
- * underscore-bracketed so they're easy to type but never collide with
- * user identifiers.
+ * in autocomplete so authors learn the names — `aktion` is the top-level
+ * entry binding and `Router` / `route` are the routing primitives.
  */
 const SPECIAL_IDENTIFIERS = [
   {
-    label: "_app_",
-    info: "Top-level entry binding — the renderer reads `_app_` to draw the UI.",
-    apply: "_app_ = ",
+    label: "aktion",
+    info: "Top-level entry binding — the renderer reads `aktion` to draw the UI.",
+    apply: "aktion = ",
   },
   {
-    label: "_router_",
+    label: "Router",
     info: "Routing primitive. Pass an object literal whose keys are route patterns.",
-    apply: "_router_({\n  \"/\":     ${1:Home()},\n  default: ${2:NotFound()}\n})",
+    apply: "Router({\n  \"/\":     ${1:Home()},\n  default: ${2:NotFound()}\n})",
     snippet: true,
   },
   {
     label: "params",
-    info: "Inside an `_router_({...})` arm, holds the captured path segments (`params.id`, `params._`).",
+    info: "Inside a `Router({...})` arm, holds the captured path segments (`params.id`, `params._`).",
     apply: "params",
   },
   {
-    label: "_route_",
-    info: "Reserved router handle. Read-only reactive surface: `_route_.path`, `_route_.params`, `_route_.query`, `_route_.pattern`. Call `_route_.navigate(path)` to navigate imperatively.",
-    apply: "_route_",
+    label: "route",
+    info: "Reserved router handle. Read-only reactive surface: `route.path`, `route.params`, `route.query`, `route.pattern`. Call `route.navigate(path)` to navigate imperatively.",
+    apply: "route",
   },
   {
     label: "$http",
@@ -859,69 +864,68 @@ const SPECIAL_IDENTIFIERS = [
  * Top-level multi-line snippets — surfaced via the `…` ellipsis suffix
  * so they show up alongside ordinary identifiers without polluting the
  * inline completion list. Pulled from `langSpec.snippets` plus the
- * language constructs (`component`, `action`, `effect`, `match`,
- * `_router_`).
+ * language constructs (`function`, `effect`, `switch`, `Router`).
  */
 const LANGUAGE_SNIPPETS = [
   {
     name: "router",
-    description: "Multi-page _router_({...}) with NavLink nav.",
+    description: "Multi-page Router({...}) with NavLink nav.",
     template:
-      'pages = _router_({\n' +
+      'pages = Router({\n' +
       '  "/":          ${1:Home()},\n' +
-      '  "/users/:id": ${2:UserPage(id: params.id)},\n' +
+      '  "/users/:id": ${2:UserPage({ id: params.id })},\n' +
       '  default:      ${3:NotFound()}\n' +
       '})\n\n' +
       'nav = Stack([\n' +
-      '  NavLink("Home",  to: "/",      variant: "ghost", exact: true),\n' +
-      '  NavLink("Users", to: "/users", variant: "ghost")\n' +
-      '], direction: "row", gap: "s")\n\n' +
-      '_app_ = Stack([nav, pages])',
+      '  NavLink("Home",  { to: "/",      variant: "ghost", exact: true }),\n' +
+      '  NavLink("Users", { to: "/users", variant: "ghost" })\n' +
+      '], { direction: "row", gap: "s" })\n\n' +
+      'aktion = Stack([nav, pages])',
   },
   {
-    name: "component",
-    description: "User-defined component with explicit return.",
+    name: "function",
+    description: "User-defined function (component or action) with explicit return.",
     template:
-      'component ${1:Name}(${2:prop}) {\n' +
+      'function ${1:Name}(${2:prop}) {\n' +
       '  return ${3:Card([CardHeader(${2:prop})])}\n' +
       '}',
   },
   {
     name: "action",
-    description: "Callable action block — invoked via `action:` props.",
+    description: "Callable action — invoked via `{ action: name }` props.",
     template:
-      'action ${1:save}(${2:payload}) {\n' +
+      'function ${1:save}(${2:payload}) {\n' +
       '  $${3:result} = http({ url: "/api/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
       '}',
   },
   {
     name: "effect",
-    description: "Side-effect block — anonymous, with bracketed dependency list.",
+    description: "Side-effect call — body callback plus dependency array.",
     template:
-      'effect [$${1:dep}] {\n' +
+      'effect(() => {\n' +
       '  ${2:// side effect body}\n' +
       '  cleanup(() => { ${3:// teardown} })\n' +
-      '}',
+      '}, [$${1:dep}])',
   },
   {
-    name: "match",
-    description: "Pattern-matching expression — first match wins.",
+    name: "switch",
+    description: "Switch expression — first matching case wins.",
     template:
-      'match ${1:value} {\n' +
-      '  "${2:active}": ${3:onActive()},\n' +
-      '  default:    ${4:otherwise()}\n' +
+      'switch (${1:value}) {\n' +
+      '  case "${2:active}": ${3:onActive()}; break;\n' +
+      '  default:            ${4:otherwise()}\n' +
       '}',
   },
   {
     name: "for",
-    description: "for-comprehension loop expression.",
-    template: 'for ${1:item} in ${2:items} { ${3:Card(${1:item})} }',
+    description: "for-of loop expression.",
+    template: 'for (let ${1:item} of ${2:items}) { ${3:Card(${1:item})} }',
   },
   {
     name: "if",
     description: "Expression-form if / else.",
     template:
-      'if ${1:cond} {\n' +
+      'if (${1:cond}) {\n' +
       '  ${2:Body()}\n' +
       '} else {\n' +
       '  ${3:Fallback()}\n' +
@@ -956,16 +960,16 @@ const GLOBAL_NAMESPACES = [
       { label: "storage.session.get",    apply: "storage.session.get(\"${1:key}\")",                                                                                                info: "Per-tab sessionStorage read." },
       { label: "storage.session.remove", apply: "storage.session.remove(\"${1:key}\")",                                                                                             info: "Drop a sessionStorage entry." },
       { label: "storage.session.clear",  apply: "storage.session.clear()",                                                                                                          info: "Wipe sessionStorage." },
-      { label: "storage.cookies.set",    apply: "storage.cookies.set(\"${1:key}\", ${2:value}, expires: ${3:7}, path: \"/\")",                                                       info: "Set a cookie. Named-arg options: expires, maxAge, path, domain, secure, sameSite." },
+      { label: "storage.cookies.set",    apply: "storage.cookies.set(\"${1:key}\", ${2:value}, { expires: ${3:7}, path: \"/\" })",                                                  info: "Set a cookie. Options object: expires, maxAge, path, domain, secure, sameSite." },
       { label: "storage.cookies.get",    apply: "storage.cookies.get(\"${1:key}\")",                                                                                                info: "Read a cookie value." },
-      { label: "storage.cookies.remove", apply: "storage.cookies.remove(\"${1:key}\", path: \"/\")",                                                                                info: "Delete a cookie. Path/domain must match the original set call." },
+      { label: "storage.cookies.remove", apply: "storage.cookies.remove(\"${1:key}\", { path: \"/\" })",                                                                            info: "Delete a cookie. Path/domain must match the original set call." },
       { label: "storage.cookies.clear",  apply: "storage.cookies.clear()",                                                                                                          info: "Clear every cookie on this document." },
     ],
   },
   {
     name: "console",
     signature: "console.<log|error|warn|info|debug>(...)",
-    description: "Forwards to the browser console. Useful for stream-time debugging without an `js{}` escape hatch.",
+    description: "Forwards to the browser console. Useful for stream-time debugging from inside function / effect bodies.",
     members: [
       { label: "console.log",   apply: "console.log(${1})",   info: "Log a message at the default level." },
       { label: "console.error", apply: "console.error(${1})", info: "Log an error." },
@@ -1385,7 +1389,7 @@ function initPlayground(cm) {
       }
     }
 
-    // Reserved identifiers (`_app_`, `_router_`, `_route_`, `params`, …).
+    // Reserved identifiers (`aktion`, `Router`, `route`, `params`, …).
     if (!wordText.startsWith("@")) {
       for (const id of SPECIAL_IDENTIFIERS) {
         if (wordText.startsWith("$") && !id.label.startsWith("$")) continue;
@@ -2516,7 +2520,7 @@ function initPlayground(cm) {
 
     // Errors at line 0/undefined are surfaced as "Global" — they happen
     // when the parser couldn't anchor the diagnostic to a position (for
-    // example: missing `_app_` binding, structural failures, theme-level
+    // example: missing `aktion` binding, structural failures, theme-level
     // diagnostics). Showing them up front prevents the "errors with no
     // editor markers" confusion.
     const sorted = parseErrors

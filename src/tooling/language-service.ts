@@ -71,17 +71,16 @@ export interface HoverInfo {
 }
 
 const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
-  { label: "component",    detail: "Reusable UI block declaration" },
-  { label: "effect",       detail: "Reactive side-effect block" },
-  { label: "action",       detail: "Callable effect, may be optimistic" },
-  { label: "_router_",     detail: "pages = _router_({ '/': Home(), default: NotFound() })" },
-  { label: "match",        detail: "Expression-form pattern match" },
-  { label: "for",          detail: "for x in xs { … } loop" },
-  { label: "if",           detail: "Expression-form conditional" },
-  { label: "default",      detail: "Default arm in router/match blocks" },
-  { label: "optimistic",   detail: "Mark an action for snapshot-on-throw" },
-  { label: "slots",        detail: "Named-slot declaration in component signature" },
-  { label: "emit",         detail: "Dispatch a CustomEvent on the host" },
+  { label: "function",     detail: "Declare a component (PascalCase) or action (camelCase)" },
+  { label: "effect",       detail: "Reactive side-effect: effect(() => { ... }, [deps])" },
+  { label: "Router",       detail: "pages = Router({ '/': Home(), default: NotFound() })" },
+  { label: "switch",       detail: "switch (value) { case …: …; break; default: … }" },
+  { label: "for",          detail: "for (let x of xs) { … }" },
+  { label: "if",           detail: "if (condition) { … } else { … }" },
+  { label: "return",       detail: "Return value from a component or action" },
+  { label: "let",          detail: "Declare a variable (reactive if $-prefixed)" },
+  { label: "const",        detail: "Declare a constant" },
+  { label: "emit",         detail: "emit('name', detail) — dispatch a CustomEvent" },
   { label: "cleanup",      detail: "Register an effect teardown callback" },
 ];
 

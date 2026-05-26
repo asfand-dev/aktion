@@ -37,18 +37,18 @@
       <h2 id="mental-model">Mental model</h2>
       <p>
         Aktion has a single program shape: a list of named bindings. The
-        reserved name <code>_app_</code> is the entry point &mdash; every
-        response MUST begin with <code>_app_ = ...</code> on the first line.
-        Every other binding is referenced from <code>_app_</code> directly or
+        reserved name <code>aktion</code> is the entry point &mdash; every
+        response MUST begin with <code>aktion = ...</code> on the first line.
+        Every other binding is referenced from <code>aktion</code> directly or
         transitively. Re-render happens automatically whenever a reactive
         atom changes; there is no manual subscription model.
       </p>
-<pre><code>_app_ = Stack([header, dashboard])
+<pre><code>aktion = Stack([header, dashboard])
 
 header = SectionHeader("Acme Dashboard")
 
 dashboard = Card([
-  CardHeader("Active users", subtitle: "Last 7 days"),
+  CardHeader("Active users", { subtitle: "Last 7 days" }),
   Text(@Format($activeUsers))
 ])
 
@@ -58,24 +58,24 @@ $activeUsers = 12540</code></pre>
       <ul>
         <li><strong>Plain bindings</strong> &mdash; <code>name = expr</code>. A non-reactive alias; reading it never subscribes.</li>
         <li><strong>Reactive atoms</strong> &mdash; <code>$name = value</code>. A tracked cell; reading subscribes the surrounding component / effect, writing notifies subscribers.</li>
-        <li><strong>Reserved built-ins</strong> &mdash; <code>_app_</code> (UI root), <code>theme</code> (optional brand override), <code>_route_</code> (router-owned reactive surface), <code>$i18n</code> (i18n bundle).</li>
+        <li><strong>Reserved built-ins</strong> &mdash; <code>aktion</code> (UI root), <code>theme</code> (optional brand override), <code>route</code> (router-owned reactive surface), <code>$i18n</code> (i18n bundle).</li>
       </ul>
 
       <h2 id="statements">Statements</h2>
       <table class="signature-table">
         <thead><tr><th>Kind</th><th>Syntax</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Root assignment</td><td><code>_app_ = Expr</code></td><td>Reserved entry point; required, first line.</td></tr>
+          <tr><td>Root assignment</td><td><code>aktion = Expr</code></td><td>Reserved entry point; required, first line.</td></tr>
           <tr><td>Binding</td><td><code>name = Expr</code></td><td>Plain identifier &mdash; non-reactive alias, can reference other bindings (forward refs OK).</td></tr>
           <tr><td>Reactive atom</td><td><code>$name = Expr</code></td><td>Mutable, triggers re-render on change.</td></tr>
-          <tr><td>Component decl</td><td><code>component Name(args) { &hellip; return Expr }</code></td><td>User-declared component with per-instance state. MUST end with explicit <code>return</code>.</td></tr>
-          <tr><td>Action decl</td><td><code>action Name(args) { steps }</code></td><td>Imperative block triggered by events. MAY <code>return</code>.</td></tr>
-          <tr><td>Effect decl</td><td><code>effect [ ...deps ] { steps }</code></td><td>Anonymous declarative side effect. Dependencies (<code>$atom</code>, <code>on:mount</code>, <code>on:unmount</code>, <code>on:every(N)</code>, <code>debounce(N)</code>, <code>throttle(N)</code>) live in the bracketed list. <code>effect { &hellip; }</code> is equivalent to <code>effect [on:mount] { &hellip; }</code>.</td></tr>
-          <tr><td>Emit</td><td><code>emit "name" { detail }</code></td><td>Dispatch a <code>CustomEvent</code> on the host (inside action/effect bodies).</td></tr>
+          <tr><td>Component decl</td><td><code>function Name(args) { &hellip; return Expr }</code></td><td>User-declared component (PascalCase) with per-instance state. MUST end with explicit <code>return</code>.</td></tr>
+          <tr><td>Action decl</td><td><code>function name(args) { steps }</code></td><td>Imperative block (camelCase) triggered by events. MAY <code>return</code>.</td></tr>
+          <tr><td>Effect decl</td><td><code>effect(() =&gt; { steps }, [...deps])</code></td><td>Anonymous declarative side effect. Dependencies (<code>$atom</code>, <code>"mount"</code>, <code>"unmount"</code>, <code>"every(N)"</code>, <code>"debounce(N)"</code>, <code>"throttle(N)"</code>) live in the array. <code>effect(() =&gt; { &hellip; }, ["mount"])</code> is the default when no deps are given.</td></tr>
+          <tr><td>Emit</td><td><code>emit("name", { detail })</code></td><td>Dispatch a <code>CustomEvent</code> on the host (inside function/effect bodies).</td></tr>
           <tr><td>Theme override</td><td><code>theme = Theme({ tokens })</code></td><td>Top-level binding named <code>theme</code> &mdash; the runtime detects it and applies the tokens as CSS custom properties.</td></tr>
           <tr><td>i18n config</td><td><code>$i18n = i18n({ &hellip; })</code></td><td>Configures internationalization &mdash; messages, locale, fallback.</td></tr>
           <tr><td>HTTP defaults</td><td><code>$http = Http({ &hellip; })</code></td><td>Optional response-wide defaults (base URL, headers, retry).</td></tr>
-          <tr><td>Comment</td><td><code># text</code></td><td>Whole-line comment; ignored by the parser.</td></tr>
+          <tr><td>Comment</td><td><code>// text</code></td><td>Whole-line comment; ignored by the parser.</td></tr>
         </tbody>
       </table>
 
@@ -92,15 +92,15 @@ $activeUsers = 12540</code></pre>
         <li><strong>Template literals</strong> &mdash; backticks with <code>${expr}</code> interpolation: <code>`Hi ${$user.name}, you have ${@Count($todos)} todos`</code>.</li>
         <li><strong>Arrays</strong> &mdash; <code>[1, 2, 3]</code>, <code>[Card1(), Card2()]</code>, multi-line OK.</li>
         <li><strong>Object literals</strong> &mdash; <code>{ name: "Ada", role: "Engineer" }</code>. Commas optional between rows on separate lines.</li>
-        <li><strong>References</strong> &mdash; <code>name</code>, <code>$reactive</code>, <code>_route_</code>.</li>
+        <li><strong>References</strong> &mdash; <code>name</code>, <code>$reactive</code>, <code>route</code>.</li>
         <li><strong>Member access</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>. Optional chaining: <code>$user?.profile?.name</code>.</li>
         <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
-        <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>http({&hellip;})</code>, <code>_router_({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
+        <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>http({&hellip;})</code>, <code>Router({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
         <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / %</code>), comparison (<code>== != &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>), nullish coalescing (<code>??</code>), ternary (<code>cond ? a : b</code>).</li>
         <li><strong>Lambdas</strong> &mdash; <code>(args) =&gt; expr</code> for one-liners, <code>(args) =&gt; { &hellip; }</code> for multi-statement bodies.</li>
       </ul>
 
-<pre><code># Arithmetic + ternary + reactive read
+<pre><code>// Arithmetic + ternary + reactive read
 greeting = "Hi, " + ($user.name ?? "stranger") + "."
 score    = $hits * 10 + $bonus
 status   = $isActive ? "online" : "offline"
@@ -125,7 +125,7 @@ $user  = { name: "Ada", role: "Engineer" }
 $todos = []
 $theme = "dark"
 
-action increment() {
+function increment() {
   $count = $count + 1
 }</code></pre>
 
@@ -138,14 +138,14 @@ action increment() {
       <h3>Assignment rules</h3>
       <ul>
         <li><strong>Render position</strong> (top-level bindings, component body output, prop values): assignment is forbidden. Use <code>$name = &hellip;</code> declarations to seed.</li>
-        <li><strong>Inside <code>action</code> / <code>effect</code> / lambda bodies</strong>: <code>= += -= *= /= ??= ++ --</code> are allowed against any <code>$name</code> atom.</li>
+        <li><strong>Inside <code>function</code> / <code>effect</code> / lambda bodies</strong>: <code>= += -= *= /= ??= ++ --</code> are allowed against any <code>$name</code> atom.</li>
         <li><strong>Nested writes require whole-object replacement.</strong> Direct <code>$user.name = "Alex"</code> is rejected &mdash; spread instead: <code>$user = { ...$user, name: "Alex" }</code>. Arrays follow the same rule: <code>$todos = [...$todos, item]</code>, <code>$todos = @Filter($todos, "id", "!=", id)</code>.</li>
       </ul>
 
       <h3>Component-scoped state</h3>
       <p>
         A <code>$name = value</code> declared <em>inside</em> a
-        <code>component</code> body is per-instance. Two
+        component <code>function</code> body is per-instance. Two
         <code>UserCard</code> siblings each have their own
         <code>$hover</code>. Top-level <code>$name</code> declarations live
         for the lifetime of the response.
@@ -154,7 +154,7 @@ action increment() {
       <h3>Computed values</h3>
       <p>There is no dedicated <code>$computed</code> keyword. Just compute:</p>
 <pre><code>$cart  = []
-$total = @Sum($cart.price)        # re-derives when $cart changes
+$total = @Sum($cart.price)        // re-derives when $cart changes
 $open  = @Filter($todos, "done", "==", false)</code></pre>
 
       <h3>Persistence</h3>
@@ -164,7 +164,7 @@ $open  = @Filter($todos, "done", "==", false)</code></pre>
       </p>
 <pre><code>$theme = storage.get("theme") ?? "light"
 
-action toggleTheme() {
+function toggleTheme() {
   $theme = $theme == "light" ? "dark" : "light"
   storage.set("theme", $theme)
 }</code></pre>
@@ -184,29 +184,29 @@ action toggleTheme() {
 })</code></pre>
 
       <h3>Reactive resource shape</h3>
-<pre><code>$orders.data         # parsed response body (null until resolved)
-$orders.error        # null on success
-$orders.status       # HTTP status code, e.g. 200
-$orders.loading      # true while in-flight
-$orders.headers      # response headers as a plain object
-$orders.lastUpdated  # ms-epoch of last successful response
-$orders.refetch()    # re-issue the request
-$orders.cancel()     # abort in-flight request</code></pre>
+<pre><code>$orders.data         // parsed response body (null until resolved)
+$orders.error        // null on success
+$orders.status       // HTTP status code, e.g. 200
+$orders.loading      // true while in-flight
+$orders.headers      // response headers as a plain object
+$orders.lastUpdated  // ms-epoch of last successful response
+$orders.refetch()    // re-issue the request
+$orders.cancel()     // abort in-flight request</code></pre>
 
       <h3>Async helper</h3>
       <p>Use the <code>Async</code> helper component to branch on a resource's state:</p>
-<pre><code>_app_ = Async($orders,
+<pre><code>aktion = Async($orders, {
   loading: LoadingState("Loading orders…"),
   error:   ErrorState("Couldn't fetch orders"),
   empty:   EmptyState("No orders yet"),
-  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, format: "currency")])
-)</code></pre>
+  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
+})</code></pre>
 
       <h3>Mutations</h3>
-      <p>Mutations look identical &mdash; fire from inside an <code>action</code> body and observe the resource:</p>
-<pre><code>action saveOrder(payload) {
+      <p>Mutations look identical &mdash; fire from inside a <code>function</code> body and observe the resource:</p>
+<pre><code>function saveOrder(payload) {
   $save = http({ url: "/api/orders", method: "POST", body: payload })
-  emit "assistant-message" { message: "Saved." }
+  emit("assistant-message", { message: "Saved." })
 }</code></pre>
 
       <h3>Host-wide defaults</h3>
@@ -218,47 +218,48 @@ $orders.cancel()     # abort in-flight request</code></pre>
 })</code></pre>
 
       <h2 id="components">Components and lambdas</h2>
-<pre><code>component UserCard(user, tone: "default") {
+<pre><code>function UserCard(user, tone = "default") {
   $hover = false
   return Card([
-    Avatar(user.name, size: "md"),
-    Text(user.name, variant: "large-heavy"),
-    Text(user.role, tone: "muted"),
-    Badge(tone, tone: tone)
+    Avatar(user.name, { size: "md" }),
+    Text(user.name, { variant: "large-heavy" }),
+    Text(user.role, { tone: "muted" }),
+    Badge(tone, { tone: tone })
   ])
 }
 
-_app_ = Stack([
-  UserCard($alice),                                  # positional arg
-  UserCard($bob, tone: "primary"),                   # named arg
-  UserCard(user: $carol, tone: "warning")            # both named
+aktion = Stack([
+  UserCard($alice),                                  // positional arg
+  UserCard($bob, { tone: "primary" }),               // named arg
+  UserCard({ user: $carol, tone: "warning" })        // both named
 ])</code></pre>
 
       <ul>
         <li>Components <strong>must</strong> end with an explicit <code>return Expr</code>.</li>
-        <li>Defaults use <code>= expression</code> (literal or computed in the component's scope).</li>
+        <li>Defaults use <code>= expression</code> in the parameter list (literal or computed in the component's scope).</li>
         <li><code>children</code> is the implicit named slot &mdash; the trailing positional argument is delivered as <code>children</code> inside the body.</li>
       </ul>
 
       <h3>Local helpers &mdash; lambda form</h3>
       <p>Use a lambda binding for one-off helpers that don't need their own component:</p>
-<pre><code>priorityTone = (p) =&gt; match p { "high": "danger" "med": "warning" default: "muted" }
-rowFor       = (item) =&gt; Stack([Badge(item.label, tone: priorityTone(item.priority)), Text(item.title)])
-list         = for item in $items { rowFor(item) }</code></pre>
+<pre><code>priorityTone = (p) =&gt; switch (p) { case "high": "danger"; break; case "med": "warning"; break; default: "muted" }
+rowFor       = (item) =&gt; Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
+list         = for (let item of $items) { rowFor(item) }</code></pre>
 
       <h2 id="actions">Actions</h2>
       <p>
         Actions are imperative blocks invoked from event-bearing components
         (<code>Button(action:)</code>, <code>Button(onClick:)</code>, form
-        submits, &hellip;). They run in order; state writes batch into a
+        submits, &hellip;). They are declared with <code>function</code>
+        (camelCase name) and run in order; state writes batch into a
         single re-render.
       </p>
-<pre><code>action addTask(title) {
+<pre><code>function addTask(title) {
   $tasks = [...$tasks, { id: $tasks.length + 1, title: title, done: false }]
   $newTaskTitle = ""
 }
 
-action submit() {
+function submit() {
   $save = http({ url: "/api/tasks", method: "POST", body: { title: $newTaskTitle } })
 }</code></pre>
 
@@ -266,44 +267,43 @@ action submit() {
 
       <h2 id="effects">Effects</h2>
       <p>
-        Effects are <em>declarative</em>, anonymous side effects. Every
-        dependency lives in a single bracketed list right after the
-        <code>effect</code> keyword &mdash; there is no name and no
-        <code>on</code> keyword. Use them for polling, analytics,
+        Effects are <em>declarative</em>, anonymous side effects. The
+        callback is the first argument; dependencies go in an array as the
+        second argument. Use them for polling, analytics,
         hydration, and one-shot setup.
       </p>
-<pre><code># Mount-once: run when the app first renders
-effect [on:mount] {
+<pre><code>// Mount-once: run when the app first renders
+effect(() =&gt; {
   $session = http({ url: "/api/session", method: "GET" })
-}
+}, ["mount"])
 
-# Reactive: re-run whenever $query changes (debounced 300ms)
-effect [$query, debounce(300)] {
+// Reactive: re-run whenever $query changes (debounced 300ms)
+effect(() =&gt; {
   $results = http({ url: "/api/search", method: "GET", query: { q: $query } })
-}
+}, [$query, "debounce(300)"])
 
-# Interval: run every 5 seconds
-effect [on:every(5000)] {
+// Interval: run every 5 seconds
+effect(() =&gt; {
   $now = @Now()
-}
+}, ["every(5000)"])
 
-# Empty list — equivalent to `effect [on:mount] { &hellip; }`
-effect {
+// No deps — equivalent to effect(() =&gt; { &hellip; }, ["mount"])
+effect(() =&gt; {
   console.log("mounted")
-}</code></pre>
+}, ["mount"])</code></pre>
 
       <p>A dependency entry is one of:</p>
       <ul>
-        <li><code>$atom</code> &mdash; re-run when the named reactive atom changes (mixes multiple: <code>[$a, $b]</code>).</li>
-        <li><code>on:mount</code> &mdash; run once when the surrounding scope mounts.</li>
-        <li><code>on:unmount</code> &mdash; run once when it unmounts.</li>
-        <li><code>on:every(ms)</code> &mdash; re-run every <code>ms</code> milliseconds.</li>
-        <li><code>debounce(N)</code> / <code>throttle(N)</code> &mdash; wrap the body with a trailing-edge rate limit.</li>
+        <li><code>$atom</code> &mdash; re-run when the named reactive atom changes (mix multiple: <code>[$a, $b]</code>).</li>
+        <li><code>"mount"</code> &mdash; run once when the surrounding scope mounts.</li>
+        <li><code>"unmount"</code> &mdash; run once when it unmounts.</li>
+        <li><code>"every(ms)"</code> &mdash; re-run every <code>ms</code> milliseconds.</li>
+        <li><code>"debounce(N)"</code> / <code>"throttle(N)"</code> &mdash; wrap the body with a trailing-edge rate limit.</li>
       </ul>
 
-      <p>The order inside the brackets does not matter. <code>effect { &hellip; }</code> with no brackets and <code>effect [on:mount] { &hellip; }</code> are equivalent.</p>
+      <p>The order inside the dependency array does not matter. <code>effect(() =&gt; { &hellip; }, ["mount"])</code> is the canonical form for mount-once effects.</p>
 
-      <p>Use <code>cleanup(fn)</code> inside an effect body (typically from <code>js{}</code>) to register teardown for intervals, listeners, or observers.</p>
+      <p>Use <code>cleanup(fn)</code> inside an effect body to register teardown for intervals, listeners, or observers.</p>
 
       <h2 id="control-flow">Control flow</h2>
       <p>
@@ -313,27 +313,27 @@ effect {
       </p>
 
       <h3><code>if</code> / <code>else</code></h3>
-<pre><code>banner = if $hasError { Banner("Something went wrong", tone: "danger") } else { null }
-active = if $tab == "billing" { billingPanel } else { overviewPanel }</code></pre>
+<pre><code>banner = if ($hasError) { Banner("Something went wrong", { tone: "danger" }) } else { null }
+active = if ($tab == "billing") { billingPanel } else { overviewPanel }</code></pre>
       <p>A trailing <code>else</code> is optional &mdash; without it an unmatched <code>if</code> evaluates to <code>null</code> (renders nothing).</p>
 
-      <h3><code>match</code></h3>
-<pre><code>panel = match $stage {
-  "draft":     DraftView()
-  "review":    ReviewView()
-  "shipped":   ShippedView()
-  default:     EmptyState("Pick a stage")
+      <h3><code>switch</code></h3>
+<pre><code>panel = switch ($stage) {
+  case "draft":     DraftView(); break
+  case "review":    ReviewView(); break
+  case "shipped":   ShippedView(); break
+  default:          EmptyState("Pick a stage")
 }</code></pre>
       <ul>
-        <li>Arms use <code>: value</code> like object properties &mdash; <strong>not</strong> <code>-&gt;</code>.</li>
-        <li><code>default:</code> is the wildcard.</li>
-        <li>Arms can return arbitrary expressions, not just strings.</li>
-        <li>Wrap an arm body in <code>{ &hellip; }</code> to run a <strong>statement block</strong> (multiple state writes, ending in an optional last-expression result). To return a literal object from an arm, parenthesise it: <code>"a": ({ y: 1 })</code>.</li>
+        <li>Each branch uses <code>case value:</code> followed by the expression and <code>break</code>.</li>
+        <li><code>default:</code> is the wildcard (no <code>break</code> needed).</li>
+        <li>Cases can return arbitrary expressions, not just strings.</li>
+        <li>Wrap a case body in <code>{ &hellip; }</code> to run a <strong>statement block</strong> (multiple state writes, ending in an optional last-expression result).</li>
       </ul>
 
       <h3><code>for</code></h3>
-<pre><code>rows = for item in $todos { TaskRow(item) }
-rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }</code></pre>
+<pre><code>rows = for (let item of $todos) { TaskRow(item) }
+rowsWithIndex = for (let [item, idx] of $todos.entries()) { TaskRow(item, { index: idx }) }</code></pre>
       <p>
         <code>for</code> produces an array of nodes &mdash; assign it and
         reference the binding from a container (<code>Stack(rows)</code>,
@@ -342,12 +342,12 @@ rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }</code></
         wrong row.
       </p>
 
-      <h3>Statement form inside action / effect bodies</h3>
-<pre><code>action submit(payload) {
-  if !payload.email { return }
-  for tag in payload.tags { $tags = [...$tags, tag] }
-  match payload.kind {
-    "draft": { $drafts = [...$drafts, payload] }
+      <h3>Statement form inside function / effect bodies</h3>
+<pre><code>function submit(payload) {
+  if (!payload.email) { return }
+  for (let tag of payload.tags) { $tags = [...$tags, tag] }
+  switch (payload.kind) {
+    case "draft": { $drafts = [...$drafts, payload]; break }
     default: { $records = [...$records, payload] }
   }
 }</code></pre>
@@ -360,17 +360,17 @@ rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }</code></
         automatically.
       </p>
 <pre><code>$search = ""
-bar     = SearchBar("q", placeholder: "Search…", value: $search)
-list    = for row in @Filter($rows, "title", "contains", $search) { ListItem(row.title) }
+bar     = SearchBar("q", { placeholder: "Search…", value: $search })
+list    = for (let row of @Filter($rows, "title", "contains", $search)) { ListItem(row.title) }
 
 $tags = []
-chips = TagInput("tags", value: $tags)
+chips = TagInput("tags", { value: $tags })
 
-# Member chains rooted at a $variable bind deeply — the runtime rebuilds
-# the root object immutably so subscribers always wake up.
+// Member chains rooted at a $variable bind deeply — the runtime rebuilds
+// the root object immutably so subscribers always wake up.
 $form    = { email: "", remember: false }
-emailIn  = Input("email",    value: $form.email)
-remember = Switch("remember", value: $form.remember)</code></pre>
+emailIn  = Input("email", { value: $form.email })
+remember = Switch("remember", { value: $form.remember })</code></pre>
 
       <p>
         Any form control whose spec declares a primary value prop
@@ -431,17 +431,13 @@ remember = Switch("remember", value: $form.remember)</code></pre>
         <li><code>@Pow(base, exp)</code>, <code>@Sqrt(n)</code>, <code>@Log(n)</code>, <code>@Random()</code>.</li>
       </ul>
 
-      <h3>Iteration &amp; conditional fallbacks</h3>
+      <h3>Iteration &amp; conditional fallbacks (removed)</h3>
       <p>
-        The blessed surface is the expression-form
-        <code>for</code> / <code>if</code> / <code>match</code> covered
-        above. The <code>@</code>-form survives for tight inline expressions:
+        The legacy iteration / conditional builtins (Each, If, and Switch)
+        have been removed. Use the native <code>for</code> /
+        <code>if</code> / <code>switch</code> expressions covered above
+        instead.
       </p>
-      <ul>
-        <li><code>@Each(arr, "row", template)</code> &mdash; loop with a named variable.</li>
-        <li><code>@If(cond, trueBranch, falseBranch?)</code> &mdash; lazy branch.</li>
-        <li><code>@Switch(value, { overview: Node, billing: 'Invoice' }, default?)</code> &mdash; key-based selector.</li>
-      </ul>
 
       <h2 id="globals">Built-in globals</h2>
       <p>
@@ -452,17 +448,17 @@ remember = Switch("remember", value: $form.remember)</code></pre>
       </p>
 
       <h3><code>storage</code> &mdash; browser storage</h3>
-<pre><code>storage.set("name", "John")           # alias of storage.local.set
+<pre><code>storage.set("name", "John")           // alias of storage.local.set
 $name = storage.get("name")
 storage.remove("name")
 storage.clear()
 
-storage.session.set("draft", $draft)  # per-tab sessionStorage
+storage.session.set("draft", $draft)  // per-tab sessionStorage
 $draft = storage.session.get("draft")
 
-storage.cookies.set("user", "John", expires: 7, path: "/", sameSite: "Lax")
+storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
 $user = storage.cookies.get("user")
-storage.cookies.remove("user", path: "/")</code></pre>
+storage.cookies.remove("user", { path: "/" })</code></pre>
       <ul>
         <li>Values that aren't strings round-trip through JSON; missing keys return <code>null</code>.</li>
         <li>Cookie options: <code>expires</code> (days, Date, or ISO string), <code>maxAge</code> (seconds), <code>path</code>, <code>domain</code>, <code>secure</code>, <code>sameSite</code>.</li>
@@ -472,20 +468,20 @@ storage.cookies.remove("user", path: "/")</code></pre>
 <pre><code>console.log("Hello", $user)
 console.error("Failed", $error)
 console.warn("Deprecated path")
-console.info("Route changed", _route_.path)
+console.info("Route changed", route.path)
 console.debug({ days: $days, count: $count })</code></pre>
 
-      <h2 id="routing">Routing &mdash; <code>_router_({ &hellip; })</code></h2>
+      <h2 id="routing">Routing &mdash; <code>Router({ &hellip; })</code></h2>
       <p>The router is a plain function call. It returns the matched arm's evaluated value:</p>
-<pre><code>pages = _router_({
+<pre><code>pages = Router({
   "/":             Dashboard(),
   "/orders":       OrdersPage(),
-  "/orders/:id":   OrderDetail(id: params.id),
-  "/settings/*":   SettingsArea(rest: params._),
+  "/orders/:id":   OrderDetail({ id: params.id }),
+  "/settings/*":   SettingsArea({ rest: params._ }),
   default:         NotFound()
 })
 
-_app_ = AppShell(MainSidebar(), pages)</code></pre>
+aktion = AppShell(MainSidebar(), pages)</code></pre>
       <p>See the <a href="routing.html">Routing guide</a> for path patterns, params, query strings, and <code>NavLink</code>.</p>
 
       <h2 id="i18n">Internationalization</h2>
@@ -497,21 +493,21 @@ $i18n   = i18n({
   fallback: "en"
 })
 
-Text(t("orders.title"))                          # "Orders"
-Text(t("orders.greeting", { name: $userName }))  # "Welcome back, Alex"</code></pre>
+Text(t("orders.title"))                          // "Orders"
+Text(t("orders.greeting", { name: $userName }))  // "Welcome back, Alex"</code></pre>
       <ul>
         <li><code>t(key, vars?)</code> looks up the translation by dot-pathed key with <code>${name}</code> interpolation.</li>
         <li><code>Locale()</code> returns the active locale tag.</li>
         <li>Formatting builtins (<code>@Format</code>, <code>@FormatDate</code>) consult <code>Locale()</code> automatically.</li>
       </ul>
 
-      <h2 id="js-escape">JavaScript escape hatch &mdash; <code>js{ &hellip; }</code></h2>
+      <h2 id="js-escape">Inline JavaScript</h2>
       <p>
-        <code>js{ /* opaque JS body */ }</code> runs raw JavaScript inside
-        an <code>effect</code>, <code>action</code>, or lambda body. Use
-        sparingly &mdash; every other surface is preferred &mdash; but it is
-        always available for browser APIs not exposed natively (clipboard,
-        keyboard listeners, IntersectionObserver, audio, custom DOM work).
+        JavaScript code runs inline inside <code>function</code>,
+        <code>effect</code>, and lambda bodies &mdash; no wrapper syntax
+        is needed. Use it sparingly for browser APIs not exposed
+        natively (clipboard, keyboard listeners, IntersectionObserver,
+        audio, custom DOM work).
         See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.
       </p>
 
@@ -542,15 +538,15 @@ Text(t("orders.greeting", { name: $userName }))  # "Welcome back, Alex"</code></
           <code>behavior:</code>, or <code>@import</code> are dropped.
         </li>
       </ul>
-<pre><code>_app_ = Stack([
+<pre><code>aktion = Stack([
   Styles(`
     .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
     .hero-callout h2 { margin: 0 0 8px; }
   `),
-  HTMLTag("div", attributes: { class: "hero-callout" }, children: [
-    HTMLTag("h2", children: [Text("Custom block")]),
+  HTMLTag("div", { attributes: { class: "hero-callout" }, children: [
+    HTMLTag("h2", { children: [Text("Custom block")] }),
     Text("Use HTMLTag + Styles only when the standard components cannot capture the design.")
-  ])
+  ]})
 ])</code></pre>
 
       <h2 id="theming">In-script theming</h2>
@@ -570,7 +566,7 @@ Text(t("orders.greeting", { name: $userName }))  # "Welcome back, Alex"</code></
   font:   { family: "'Inter', sans-serif" }
 })
 
-_app_ = AppShell(...)</code></pre>
+aktion = AppShell(...)</code></pre>
       <p>The top-level keys must be one of <code>colors</code>, <code>radius</code>, <code>font</code>, <code>motion</code>, <code>elevation</code> (plus the metadata keys <code>name</code> and <code>direction</code>). See the <a href="themes.html">Themes guide</a> for the full token taxonomy.</p>
 
       <h2 id="icons">Icons (Font Awesome)</h2>
@@ -588,7 +584,7 @@ _app_ = AppShell(...)</code></pre>
 
       <h2 id="comments">Comments &amp; whitespace</h2>
       <ul>
-        <li>Whole-line comments start with <code>#</code>.</li>
+        <li>Whole-line comments start with <code>//</code>.</li>
         <li>End-of-line comments are not supported &mdash; put comments on their own line.</li>
         <li>Indentation is decorative; braces and brackets drive parsing.</li>
         <li>Blank lines are ignored.</li>
@@ -603,8 +599,8 @@ _app_ = AppShell(...)</code></pre>
       </p>
       <p>Required statement order for streaming-friendly output:</p>
       <ol>
-        <li><code>_app_ = ...</code> &mdash; emit this FIRST so the UI shell appears immediately.</li>
-        <li><code>component</code> / <code>action</code> / <code>effect</code> declarations &mdash; fill in layout &amp; behaviour.</li>
+        <li><code>aktion = ...</code> &mdash; emit this FIRST so the UI shell appears immediately.</li>
+        <li><code>function</code> / <code>effect</code> declarations &mdash; fill in layout &amp; behaviour.</li>
         <li>Leaf data values (strings, numbers, arrays, objects) &mdash; last.</li>
       </ol>
 
@@ -626,7 +622,7 @@ _app_ = AppShell(...)</code></pre>
         <a class="demo-card" href="routing.html">
           <span class="demo-tag">Navigation</span>
           <h3>Routing</h3>
-          <p>Hash-based multi-page UIs via <code>_router_</code> and <code>NavLink</code>.</p>
+          <p>Hash-based multi-page UIs via <code>Router</code> and <code>NavLink</code>.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="components.html">

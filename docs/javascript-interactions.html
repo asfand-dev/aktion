@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JavaScript interactions · Aktion</title>
-  <meta name="description" content="The js{} escape hatch — embed JavaScript in action and effect bodies for browser APIs the declarative surface doesn't cover." />
+  <meta name="description" content="Inline JavaScript — write browser API code directly in function and effect bodies with access to the ctx bridge for state, tools, and the host element." />
   <script>
     (function () {
       try {
@@ -25,43 +25,40 @@
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Advanced</span>
-        <h1>The js&#123;&#125; escape hatch.</h1>
+        <h1>Inline JavaScript.</h1>
         <p class="lead">
-          When the declarative surface doesn&rsquo;t cover what you need
-          &mdash; clipboard writes, IntersectionObserver, third-party SDKs
-          &mdash; drop into a <code>js&#123; &hellip; &#125;</code> block.
-          You get an async sandbox with access to state, host tools, and the
-          host element.
+          When you need browser APIs the declarative surface doesn&rsquo;t
+          cover &mdash; clipboard writes, IntersectionObserver, third-party
+          SDKs &mdash; write JavaScript directly in your function or effect
+          bodies. You get full async access to state, host tools, and the
+          host element via the <code>ctx</code> bridge.
         </p>
       </header>
 
       <h2 id="where">Where you can use it</h2>
-      <p><code>js{ &hellip; }</code> blocks are valid anywhere an imperative statement is valid:</p>
+      <p>JavaScript code &mdash; including <code>ctx</code> bridge calls &mdash; is valid in any imperative body:</p>
       <ul>
-        <li>Inside an <code>action</code> body.</li>
+        <li>Inside a <code>function</code> body (action handler).</li>
         <li>Inside an <code>effect</code> body.</li>
-        <li>Inside a multi-statement lambda body (rare; prefer named actions).</li>
+        <li>Inside a multi-statement lambda body (rare; prefer named functions).</li>
       </ul>
+      <p>No wrapper syntax is needed &mdash; JS code goes directly in the body:</p>
 
-<pre><code>action copyShareLink() {
-  js {
-    await navigator.clipboard.writeText(window.location.href)
-    ctx.state.set("copied", true)
-  }
+<pre><code>function copyShareLink() {
+  await navigator.clipboard.writeText(window.location.href)
+  ctx.state.set("copied", true)
 }
 
-effect [on:mount] {
-  js {
-    const onScroll = () =&gt; ctx.state.set("scrollY", window.scrollY)
-    window.addEventListener("scroll", onScroll, { passive: true })
-    ctx.cleanup(() =&gt; window.removeEventListener("scroll", onScroll))
-  }
-}</code></pre>
+effect(() =&gt; {
+  const onScroll = () =&gt; ctx.state.set("scrollY", window.scrollY)
+  window.addEventListener("scroll", onScroll, { passive: true })
+  ctx.cleanup(() =&gt; window.removeEventListener("scroll", onScroll))
+}, ["mount"])</code></pre>
 
       <h2 id="ctx">The <code>ctx</code> bridge</h2>
       <p>
-        Every <code>js{}</code> block runs as an <code>async</code> function
-        with one argument: <code>ctx</code>. The block can <code>await</code>
+        Function and effect bodies run as <code>async</code> functions with
+        access to a <code>ctx</code> bridge. The body can <code>await</code>
         anywhere. The surface is intentionally narrow &mdash; just enough to
         bridge the script and the host without leaking the entire runtime.
       </p>
@@ -74,7 +71,7 @@ effect [on:mount] {
           <tr><td><code>ctx.cleanup(fn)</code></td><td><code>(fn: () =&gt; void) =&gt; void</code></td><td>Register a cleanup callback (effect bodies only). Runs when the effect re-fires or unmounts.</td></tr>
           <tr><td><code>ctx.host</code></td><td><code>HTMLElement</code></td><td>The host <code>&lt;aktion-app&gt;</code> element &mdash; useful for <code>dispatchEvent</code>, attribute reads, or accessing the shadow root.</td></tr>
           <tr><td><code>ctx.tools</code></td><td><code>Record&lt;string, fn&gt;</code></td><td>Host-registered async tools (set via <code>el.setTools(...)</code>).</td></tr>
-          <tr><td><code>ctx.args</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td>Action/lambda parameters by name &mdash; e.g. <code>ctx.args.taskId</code>.</td></tr>
+          <tr><td><code>ctx.args</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td>Function/lambda parameters by name &mdash; e.g. <code>ctx.args.taskId</code>.</td></tr>
         </tbody>
       </table>
 
@@ -91,96 +88,82 @@ effect [on:mount] {
       <h2 id="recipes">Common recipes</h2>
 
       <h3>Clipboard</h3>
-<pre><code>action copyToClipboard(text) {
-  js {
-    try {
-      await navigator.clipboard.writeText(ctx.args.text)
-      ctx.state.set("toast", { kind: "success", message: "Copied" })
-    } catch (err) {
-      ctx.state.set("toast", { kind: "error", message: err.message })
-    }
+<pre><code>function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(ctx.args.text)
+    ctx.state.set("toast", { kind: "success", message: "Copied" })
+  } catch (err) {
+    ctx.state.set("toast", { kind: "error", message: err.message })
   }
 }</code></pre>
 
       <h3>File input &mdash; read as data URL</h3>
-<pre><code>action pickAvatar(file) {
-  js {
-    const reader = new FileReader()
-    reader.onload = () =&gt; ctx.state.set("avatarPreview", reader.result)
-    reader.readAsDataURL(ctx.args.file)
-  }
+<pre><code>function pickAvatar(file) {
+  const reader = new FileReader()
+  reader.onload = () =&gt; ctx.state.set("avatarPreview", reader.result)
+  reader.readAsDataURL(ctx.args.file)
 }</code></pre>
 
       <h3>IntersectionObserver for infinite scroll</h3>
-<pre><code>effect [on:mount] {
-  js {
-    const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
-    if (!sentinel) return
-    const observer = new IntersectionObserver((entries) =&gt; {
-      if (entries.some((e) =&gt; e.isIntersecting)) {
-        const page = ctx.state.get("page") || 1
-        ctx.state.set("page", page + 1)
-      }
-    })
-    observer.observe(sentinel)
-    ctx.cleanup(() =&gt; observer.disconnect())
-  }
-}</code></pre>
+<pre><code>effect(() =&gt; {
+  const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
+  if (!sentinel) return
+  const observer = new IntersectionObserver((entries) =&gt; {
+    if (entries.some((e) =&gt; e.isIntersecting)) {
+      const page = ctx.state.get("page") || 1
+      ctx.state.set("page", page + 1)
+    }
+  })
+  observer.observe(sentinel)
+  ctx.cleanup(() =&gt; observer.disconnect())
+}, ["mount"])</code></pre>
 
       <h3>WebSocket subscription</h3>
-<pre><code>effect [on:mount] {
-  js {
-    const socket = new WebSocket("wss://example.com/stocks")
-    socket.addEventListener("message", (event) =&gt; {
-      ctx.state.set("ticker", JSON.parse(event.data))
-    })
-    ctx.cleanup(() =&gt; socket.close())
-  }
-}</code></pre>
+<pre><code>effect(() =&gt; {
+  const socket = new WebSocket("wss://example.com/stocks")
+  socket.addEventListener("message", (event) =&gt; {
+    ctx.state.set("ticker", JSON.parse(event.data))
+  })
+  ctx.cleanup(() =&gt; socket.close())
+}, ["mount"])</code></pre>
 
       <h3>Keyboard shortcut listener</h3>
-<pre><code>effect [on:mount] {
-  js {
-    const onKey = (e) =&gt; {
-      if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true, composed: true }))
-      }
+<pre><code>effect(() =&gt; {
+  const onKey = (e) =&gt; {
+    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true, composed: true }))
     }
-    document.addEventListener("keydown", onKey)
-    ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
   }
-}</code></pre>
+  document.addEventListener("keydown", onKey)
+  ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+}, ["mount"])</code></pre>
 
       <h3>Browser navigation guard</h3>
-<pre><code>effect [on:mount] {
-  js {
-    const onBeforeUnload = (event) =&gt; {
-      if (ctx.state.get("isDirty")) {
-        event.preventDefault()
-        event.returnValue = ""
-      }
+<pre><code>effect(() =&gt; {
+  const onBeforeUnload = (event) =&gt; {
+    if (ctx.state.get("isDirty")) {
+      event.preventDefault()
+      event.returnValue = ""
     }
-    window.addEventListener("beforeunload", onBeforeUnload)
-    ctx.cleanup(() =&gt; window.removeEventListener("beforeunload", onBeforeUnload))
   }
-}</code></pre>
+  window.addEventListener("beforeunload", onBeforeUnload)
+  ctx.cleanup(() =&gt; window.removeEventListener("beforeunload", onBeforeUnload))
+}, ["mount"])</code></pre>
 
-      <h3>Reading lambda arguments</h3>
+      <h3>Reading function arguments</h3>
       <p>
-        When an action receives arguments, they land in <code>ctx.args</code>
+        When a function receives arguments, they land in <code>ctx.args</code>
         by name. This is handy for per-row action handlers.
       </p>
-<pre><code>action deleteTask(taskId) {
-  js {
-    const id = ctx.args.taskId
-    const remaining = (ctx.state.get("tasks") || []).filter(t =&gt; t.id !== id)
-    ctx.state.set("tasks", remaining)
-  }
+<pre><code>function deleteTask(taskId) {
+  const id = ctx.args.taskId
+  const remaining = (ctx.state.get("tasks") || []).filter(t =&gt; t.id !== id)
+  ctx.state.set("tasks", remaining)
 }
 
-# In the script:
-Button("Delete", action: () =&gt; deleteTask(task.id))</code></pre>
+// In the UI:
+Button("Delete", { action: () =&gt; deleteTask(task.id) })</code></pre>
 
       <h3>Talking to a host-registered tool</h3>
       <p>
@@ -200,35 +183,33 @@ el.setTools({
 });</code></pre>
 
       <p>Then call them from the script via <code>ctx.tools</code>:</p>
-<pre><code>action uploadAvatar(file) {
-  js {
-    const result = await ctx.tools.uploadFile({ file: ctx.args.file })
-    ctx.state.set("avatarUrl", result.url)
-  }
+<pre><code>function uploadAvatar(file) {
+  const result = await ctx.tools.uploadFile({ file: ctx.args.file })
+  ctx.state.set("avatarUrl", result.url)
 }</code></pre>
 
-      <h2 id="when-not">When NOT to use js&#123;&#125;</h2>
+      <h2 id="when-not">When to use declarative features instead</h2>
       <p>The declarative surface already covers most needs &mdash; prefer it whenever possible:</p>
       <ul>
         <li><strong>Fetching data</strong> &mdash; use <code>http({...})</code>, never <code>fetch()</code>.</li>
-        <li><strong>Navigation</strong> &mdash; use <code>_route_.navigate(path)</code>, never <code>window.location</code>.</li>
+        <li><strong>Navigation</strong> &mdash; use <code>route.navigate(path)</code>, never <code>window.location</code>.</li>
         <li><strong>Persistence</strong> &mdash; use the <code>storage</code> global directly (<code>storage.set</code>, <code>storage.cookies.set</code>, &hellip;).</li>
         <li><strong>Logging</strong> &mdash; use <code>console.log(...)</code> directly &mdash; it&rsquo;s an Aktion global.</li>
-        <li><strong>Dispatching events</strong> &mdash; use <code>emit "name" { detail }</code> from an action/effect body.</li>
-        <li><strong>Side-effect chaining</strong> &mdash; use multiple <code>action</code> calls or an <code>effect</code> with a state trigger.</li>
+        <li><strong>Dispatching events</strong> &mdash; use <code>emit("name", { detail })</code> from a function/effect body.</li>
+        <li><strong>Side-effect chaining</strong> &mdash; use multiple function calls or an <code>effect</code> with a state trigger.</li>
       </ul>
       <p>
-        Reach for <code>js{}</code> only when you need a browser API, a
-        third-party SDK, or a host integration that has no declarative
-        equivalent.
+        Reach for the <code>ctx</code> bridge and raw browser APIs only when
+        you need a DOM API, a third-party SDK, or a host integration that has
+        no declarative equivalent.
       </p>
 
       <h2 id="security">Security notes</h2>
       <ul>
-        <li>The body of <code>js{}</code> is executed with <code>new Function(...)</code>. It runs in the host page&rsquo;s realm, with full access to the page&rsquo;s globals and DOM.</li>
-        <li><strong>Only feed scripts from trusted sources.</strong> If you accept Aktion from arbitrary users, strip or refuse <code>js{}</code> blocks before passing the text to the element.</li>
-        <li>Strict CSP environments may need <code>'unsafe-eval'</code> for <code>js{}</code> blocks to execute. The rest of the runtime works without it.</li>
-        <li>Errors thrown inside <code>js{}</code> are caught and logged; they never crash the surrounding action or effect.</li>
+        <li>JavaScript in function/effect bodies is executed with <code>new Function(...)</code>. It runs in the host page&rsquo;s realm, with full access to the page&rsquo;s globals and DOM.</li>
+        <li><strong>Only feed scripts from trusted sources.</strong> If you accept Aktion from arbitrary users, strip or refuse JavaScript code before passing the text to the element.</li>
+        <li>Strict CSP environments may need <code>'unsafe-eval'</code> for function bodies that use browser APIs to execute. The rest of the runtime works without it.</li>
+        <li>Errors thrown inside function/effect bodies are caught and logged; they never crash the surrounding program.</li>
       </ul>
 
       <h2 id="next">Next</h2>

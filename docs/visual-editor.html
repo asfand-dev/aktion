@@ -897,7 +897,7 @@
 
     /* ----- Raw Edit canvas -----
        In Raw Edit mode the canvas pane swaps the WYSIWYG stage for a
-       tree-of-cards view of the underlying _app_ expression. The
+       tree-of-cards view of the underlying aktion expression. The
        palette and inspector stay put — only the canvas changes, just
        like switching between Edit and Preview. */
     .ve-app:not([data-mode="raw"]) .ve-raw-canvas { display: none; }
@@ -1787,7 +1787,7 @@
           <section class="ve-pane ve-canvas-pane" aria-label="Visual canvas">
             <div class="ve-canvas-toolbar">
               <span class="ve-breadcrumbs" id="ve-breadcrumbs">
-                <button type="button" class="is-current" data-root="true">_app_</button>
+                <button type="button" class="is-current" data-root="true">aktion</button>
               </span>
               <div class="ve-spacer"></div>
               <div class="ve-canvas-tools" role="group" aria-label="Device width" data-hide-in-raw="true">
@@ -1888,8 +1888,8 @@
           </h2>
           <p>
             Paste a complete Aktion program below, or upload a <code>.aktion</code>
-            file. The editor extracts the <code>_app_</code> assignment for visual
-            editing and keeps everything else (state, components, actions, effects)
+            file. The editor extracts the <code>aktion</code> assignment for visual
+            editing and keeps everything else (state, functions, effects)
             as a prelude block.
           </p>
           <label class="ve-file-input">
@@ -1897,7 +1897,7 @@
             <span>Choose a .aktion file…</span>
             <input type="file" id="ve-import-file" accept=".aktion,.txt,text/plain" />
           </label>
-          <textarea id="ve-import-text" placeholder="_app_ = Stack([&#10;  Card([CardHeader(&quot;Hello&quot;)])&#10;])"></textarea>
+          <textarea id="ve-import-text" placeholder="aktion = Stack([&#10;  Card([CardHeader(&quot;Hello&quot;)])&#10;])"></textarea>
           <div class="ve-modal-foot">
             <button class="ve-btn" id="ve-import-cancel">Cancel</button>
             <button class="ve-btn ve-btn--primary" id="ve-import-confirm">Import</button>

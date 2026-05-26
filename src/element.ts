@@ -27,7 +27,7 @@
  *     `helpers.sendToAssistant("...")`. `event.detail.message` carries the text.
  *   - `error`             — fired with `event.detail.errors` for parse failures.
  *   - `route-change`      — fired when the active hash route changes.
- *   - Custom events emitted via `emit "name" { detail }` inside
+ *   - Custom events emitted via `emit("name", detail)` inside
  *     `effect` / `action` bodies dispatch with the provided name and detail.
  */
 
@@ -41,11 +41,13 @@ import {
   disposeContext,
   planProgram,
   isThemeNode,
+  resetRuntimeBudget,
+  RuntimeBudgetError,
   type RouteChangeDetail,
 } from "./runtime/index.js";
 import { HttpRuntime } from "./runtime/http.js";
 import { I18nRuntime } from "./runtime/i18n.js";
-import { EffectRunner, ActionDeclRunner, createInlineJsExecutor } from "./runtime/effects.js";
+import { EffectRunner, ActionDeclRunner } from "./runtime/effects.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
 import { defaultLibrary, validateProgramSchema } from "./library/index.js";
@@ -85,16 +87,16 @@ export type { HttpInterceptors, HttpRequest, HttpResponse };
 /**
  * Internal state slot the router writes to so dependent renders can
  * subscribe to URL changes. Authors do NOT read this slot directly —
- * use the `_route_` identifier instead, which is bound to the same
+ * use the `route` identifier instead, which is bound to the same
  * underlying state and additionally exposes `navigate(path)`.
  */
 const STATE_ROUTE = "route";
 
 /**
- * Build the reactive `_route_` payload from the router's current state.
+ * Build the reactive `route` payload from the router's current state.
  * Returns a plain object with `path`, `params`, `pattern`, `query`, an
  * imperative `navigate(path)` method, plus a `toString()` so template
- * literals like `${_route_}` coerce to the path.
+ * literals like `${route}` coerce to the path.
  */
 function buildRouteObject(router: Router): Record<string, unknown> {
   const path = router.getPath();
@@ -124,7 +126,7 @@ function buildRouteObject(router: Router): Record<string, unknown> {
 }
 
 /**
- * Compare two `_route_` payloads field-by-field. The route store writes a
+ * Compare two `route` payloads field-by-field. The route store writes a
  * fresh object on every render — without a content-aware equality check
  * the reference-only test in `StateStore.set` would treat every replan as
  * a change and schedule a redundant follow-up render. That cascade also
@@ -211,13 +213,6 @@ export class AktionElement extends HTMLElement {
   private readonly i18n = new I18nRuntime();
   private readonly effectRunner: EffectRunner;
   private readonly actionDeclRunner: ActionDeclRunner;
-  /**
-   * Host-registered async tools, exposed to `js{}` blocks (effects + action
-   * bodies) as `ctx.tools.<name>(args)`. The runtime never inspects the
-   * registry — it just forwards calls — so each handler is responsible for
-   * its own validation, auth, and error handling.
-   */
-  private readonly tools: Record<string, (...args: unknown[]) => unknown> = {};
   private renderer: Renderer;
   private context: EvaluationContext;
   private root: ShadowRoot;
@@ -272,27 +267,16 @@ export class AktionElement extends HTMLElement {
       }));
     };
 
-    const emit = (eventName: string, detail: unknown): void => {
-      this.dispatchEvent(new CustomEvent(eventName, {
-        detail,
-        bubbles: true,
-        composed: true,
-      }));
-    };
     this.effectRunner = new EffectRunner({
       state: this.state,
       notify: () => this.scheduleRender(),
-      onEmit: emit,
-      host: this,
-      tools: this.tools,
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
     this.actionDeclRunner = new ActionDeclRunner({
       state: this.state,
       notify: () => this.scheduleRender(),
-      onEmit: emit,
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onAssistantMessage: dispatchAssistantMessage,
-      host: this,
-      tools: this.tools,
     });
 
     this.context = createContext(this.state, {
@@ -302,11 +286,7 @@ export class AktionElement extends HTMLElement {
       i18n: this.i18n,
       actionRunner: this.actionDeclRunner,
       notify: () => this.scheduleRender(),
-      jsBlockExecutor: createInlineJsExecutor({
-        state: this.state,
-        host: this,
-        tools: this.tools,
-      }),
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
     this.renderer = new Renderer({
       library: this.library,
@@ -314,13 +294,13 @@ export class AktionElement extends HTMLElement {
       router: this.router,
       onAssistantMessage: dispatchAssistantMessage,
       // Expose the evaluation context so the renderer can expand
-      // user-declared `component Foo() { ... }` calls (per-instance
+      // user-declared `function Foo() { ... }` calls (per-instance
       // state, §7). We pass a getter rather than the live ref because
       // `this.context` is rebuilt on every `replan()`.
       evaluationContext: () => this.context,
       // Per-instance effect lifecycle: the renderer drains effects
-      // discovered inside a `component { … }` body and hands them here
-      // so the EffectRunner mounts them with the instance key as prefix.
+      // discovered inside a function body and hands them here so the
+      // EffectRunner mounts them with the instance key as prefix.
       // Re-renders are idempotent; `unmountInstanceEffects` fires when
       // the instance disappears from the tree (component-scoped effect
       // teardown, §8 of the side-effects page).
@@ -531,18 +511,6 @@ export class AktionElement extends HTMLElement {
     this.router.navigate(path);
   }
 
-  /**
-   * Register host-supplied async tools exposed to `js{}` blocks as
-   * `ctx.tools.<name>(args)`. Replaces any previously-registered tools
-   * with the same name.
-   */
-  setTools(tools: Record<string, (...args: unknown[]) => unknown>): void {
-    for (const key of Object.keys(this.tools)) delete this.tools[key];
-    for (const [name, fn] of Object.entries(tools ?? {})) {
-      if (typeof fn === "function") this.tools[name] = fn;
-    }
-  }
-
   /** Current route path (`/`, `/about`, …). */
   get route(): string {
     return this.router.getPath();
@@ -597,6 +565,15 @@ export class AktionElement extends HTMLElement {
 
   // ----- Internal -----
 
+  /** Dispatch a custom event from `emit()` calls in effect/action bodies. */
+  private emitCustomEvent(eventName: string, detail: unknown): void {
+    this.dispatchEvent(new CustomEvent(eventName, {
+      detail,
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
   private buildInlineStyle(): HTMLStyleElement {
     const style = document.createElement("style");
     style.textContent = componentStyles;
@@ -604,19 +581,19 @@ export class AktionElement extends HTMLElement {
   }
 
   /**
-   * Start the router so the hash listener is attached and `_route_` is
+   * Start the router so the hash listener is attached and `route` is
    * seeded with the current URL. Idempotent — safe to call from
    * `connectedCallback`.
    */
   private startRouter(): void {
     this.router.start();
-    // Seed `_route_` immediately so the very first render sees the URL
+    // Seed `route` immediately so the very first render sees the URL
     // hash (instead of the default "/").
     this.writeRouteState();
   }
 
   /**
-   * Write `_route_` only when its content actually changed. Avoids
+   * Write `route` only when its content actually changed. Avoids
    * triggering a redundant render-after-replan cascade — see
    * `routesEqual` for the structural comparison.
    */
@@ -643,7 +620,7 @@ export class AktionElement extends HTMLElement {
 
   /**
    * React to any path change: write the new value into the route slot (so
-   * `_route_` reads re-evaluate), schedule a re-render, and bubble a
+   * `route` reads re-evaluate), schedule a re-render, and bubble a
    * `route-change` event so host pages can sync analytics or sidebars.
    */
   private handleRouteChange(detail: RouteChangeDetail): void {
@@ -707,22 +684,33 @@ export class AktionElement extends HTMLElement {
       this.programDirty = false;
     }
 
+    // Reset the runtime safety budget so this render starts with a full
+    // allowance. Counters persist across the entire render (component
+    // recursion, loop iterations) and trip an early abort when the
+    // program is accidentally divergent — a recursive `function Foo()
+    // { Foo() }`, a stray `for x in @Range(0, 1e9)`, etc. Without this
+    // every tab tab on the playground while the user is mid-keystroke
+    // could otherwise freeze the whole browser.
+    if (this.context.budget) resetRuntimeBudget(this.context.budget);
+
     // Apply any in-script `Theme({...})` declaration before render so the
     // tokens are in place when components measure themselves or read CSS
     // custom properties (charts that grab `--rui-chart-1`, etc.).
     this.applyScriptThemeOverrides();
 
-    // The program's entry-point binding is `_app_`. Older clients that
-    // still emit `root = …` keep working: we fall back to it when no
-    // `_app_` binding is registered.
-    const appBinding = this.context.bindings.get("_app_") ?? this.context.bindings.get("root");
+    // The program's entry-point binding is `aktion`.
+    const appBinding = this.context.bindings.get("aktion");
     let rootValue: unknown = null;
     if (appBinding) {
       try {
         rootValue = appBinding();
       } catch (err) {
+        if (err instanceof RuntimeBudgetError) {
+          this.handleRuntimeBudgetError(err);
+          return;
+        }
         // eslint-disable-next-line no-console
-        console.error("[aktion] _app_ evaluation error", err);
+        console.error("[aktion] entry point evaluation error", err);
       }
     }
 
@@ -736,10 +724,43 @@ export class AktionElement extends HTMLElement {
     // identity actually changes (different tag, replaced subtree).
     this.renderer.beginRender();
     const focusSnapshot = this.captureFocus();
-    const rendered = this.renderer.render(rootValue);
+    let rendered: Node;
+    try {
+      rendered = this.renderer.render(rootValue);
+    } catch (err) {
+      this.renderer.endRender();
+      if (err instanceof RuntimeBudgetError) {
+        this.handleRuntimeBudgetError(err);
+        return;
+      }
+      throw err;
+    }
     morphChildren(this.rootEl, rendered);
     this.renderer.endRender();
     this.restoreFocus(focusSnapshot);
+  }
+
+  /**
+   * Surface a runtime-budget abort the same way parse errors are
+   * surfaced: append it to `parseErrors`, refresh the error banner,
+   * and bubble an `error` event so the host page (or playground) can
+   * react. The rendered DOM is intentionally left untouched — the
+   * partially-rendered output from a previous tick is more useful to
+   * the user than a flash of blank UI.
+   */
+  private handleRuntimeBudgetError(err: RuntimeBudgetError): void {
+    const message = `Runtime aborted (${err.kind}): ${err.message}`;
+    if (!this.parseErrors.includes(message)) {
+      this.parseErrors = [...this.parseErrors, message];
+    }
+    this.updateErrorBanner();
+    if (!this.streaming) {
+      this.dispatchEvent(new CustomEvent("error", {
+        detail: { errors: [{ line: 0, column: 0, message: err.message }] },
+        bubbles: true,
+        composed: true,
+      }));
+    }
   }
 
   private captureFocus(): FocusSnapshot | null {
@@ -796,11 +817,7 @@ export class AktionElement extends HTMLElement {
       i18n: this.i18n,
       actionRunner: this.actionDeclRunner,
       notify: () => this.scheduleRender(),
-      jsBlockExecutor: createInlineJsExecutor({
-        state: this.state,
-        host: this,
-        tools: this.tools,
-      }),
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
 
     const program = parse(this.currentResponse);
@@ -813,19 +830,38 @@ export class AktionElement extends HTMLElement {
     if (schemaErrors.length > 0) {
       program.errors = [...program.errors, ...schemaErrors];
     }
-    planProgram(program, this.context);
+    // Reset the budget before planning so the computed-derivation pass
+    // (which re-evaluates `$x = expr` initializers) starts with a full
+    // iteration allowance.
+    if (this.context.budget) resetRuntimeBudget(this.context.budget);
+    try {
+      planProgram(program, this.context);
+    } catch (err) {
+      if (err instanceof RuntimeBudgetError) {
+        // Surface as a synthetic parse-style error so the banner still
+        // describes the problem. Leave the context partially planned —
+        // any bindings that did register before the abort are still
+        // useful to the user as their program stabilises.
+        program.errors = [
+          ...program.errors,
+          { line: 0, column: 0, message: err.message },
+        ];
+      } else {
+        throw err;
+      }
+    }
 
-    // Mount top-level `effect [ ...deps ] { … }` declarations from the
-    // program. The runner manages their lifecycle (mount, re-run on state
-    // changes, teardown). Component-local effects (declared *inside* a
-    // `component { … }` body) are mounted by the renderer per instance —
-    // see the `mountInstanceEffects` hook wired into the Renderer above.
+    // Mount top-level `effect(() => { … }, [...deps])` declarations from
+    // the program. The runner manages their lifecycle (mount, re-run on
+    // state changes, teardown). Component-local effects (declared *inside*
+    // a function body) are mounted by the renderer per instance — see the
+    // `mountInstanceEffects` hook wired into the Renderer above.
     const effectDecls = [...this.context.effectDecls.values()];
     if (effectDecls.length > 0) {
       this.effectRunner.syncEffects(effectDecls, () => this.context);
     }
 
-    // Seed `_route_` so user expressions like `_route_.path == "/about"`
+    // Seed `route` so user expressions like `route.path == "/about"`
     // resolve even before the first hashchange fires.
     this.writeRouteState();
 

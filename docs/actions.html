@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Actions · Aktion</title>
-  <meta name="description" content="Wire button clicks, form submits, and follow-ups to reactive state, HTTP, navigation, and JavaScript with action blocks." />
+  <meta name="description" content="Wire button clicks, form submits, and follow-ups to reactive state, HTTP, navigation, and JavaScript with action functions." />
   <script>
     (function () {
       try {
@@ -27,90 +27,95 @@
         <span class="hero-eyebrow">Behaviour</span>
         <h1>Actions: wire every visible button.</h1>
         <p class="lead">
-          Actions are imperative blocks invoked by events &mdash; a button
+          Actions are imperative functions invoked by events &mdash; a button
           click, a form submit, a follow-up tap. They&rsquo;re the only place
           a script mutates state, calls HTTP, navigates, or emits to the host.
         </p>
       </header>
 
       <h2 id="hello">Hello, action</h2>
-      <p>Declare an action at the top level; reference it from an event-handler prop:</p>
+      <p>Declare a function at the top level; reference it from an event-handler prop:</p>
 <pre><code>$count = 0
 
-_app_ = Card([
-  CardHeader("Counter", subtitle: "Reactive state via action"),
+aktion = Card([
+  CardHeader("Counter", { subtitle: "Reactive state via action" }),
   Text(`Count: ${$count}`),
-  Button("Increment", action: increment)
+  Button("Increment", { action: increment })
 ])
 
-action increment() {
+function increment() {
   $count = $count + 1
 }</code></pre>
 
       <p>
-        That&rsquo;s the entire model: <em>name a block, reference the name</em>.
-        When the button is clicked, the runtime invokes the block, applies
+        That&rsquo;s the entire model: <em>name a function, reference the name</em>.
+        When the button is clicked, the runtime invokes the function, applies
         every state write atomically, then re-renders.
       </p>
 
       <h2 id="signatures">Signatures &amp; invocations</h2>
 
       <h3>Positional arguments</h3>
-<pre><code>action addItem(title, price) {
+<pre><code>function addItem(title, price) {
   $items = [...$items, { id: $items.length + 1, title: title, price: price }]
 }
 
-# Invoke via a lambda that forwards the arguments
-Button("Add coffee", action: () =&gt; addItem("Coffee", 3.5))</code></pre>
+// Invoke via a lambda that forwards the arguments
+Button("Add coffee", { action: () =&gt; addItem("Coffee", 3.5) })</code></pre>
 
       <h3>Per-row handlers</h3>
-<pre><code>rows = for task in $tasks {
+<pre><code>rows = for (let task of $tasks) {
   Stack([
     Text(task.title),
-    Button("Toggle", action: () =&gt; toggleDone(task.id)),
-    Button("Delete", action: () =&gt; deleteTask(task.id))
+    Button("Toggle", { action: () =&gt; toggleDone(task.id) }),
+    Button("Delete", { action: () =&gt; deleteTask(task.id) })
   ])
 }</code></pre>
 
       <h3>Inline lambdas</h3>
       <p>For one-shot handlers, skip the named declaration:</p>
-<pre><code>Button("Reset", action: () =&gt; {
+<pre><code>Button("Reset", { action: () =&gt; {
   $count = 0
   $error = null
-})
+}})
 
-Button("+", action: () =&gt; $count = $count + 1)</code></pre>
+Button("+", { action: () =&gt; $count = $count + 1 })</code></pre>
 
       <h3>Return values</h3>
       <p>
         Actions MAY include a <code>return</code> statement. The result is
         observable from <code>$x = myAction(...)</code> expressions:
       </p>
-<pre><code>action greet(name) {
+<pre><code>function greet(name) {
   return "Hello, " + name
 }
 
-$hello = greet("Ada")             # re-runs whenever the action call's args change</code></pre>
+$hello = greet("Ada")             // re-runs whenever the function call's args change</code></pre>
 
       <h2 id="step-menu">Body grammar</h2>
-      <p>Inside an action body the imperative surface is small:</p>
+      <p>Inside a function body the imperative surface is small:</p>
 
       <table class="signature-table">
         <thead><tr><th>Step</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>$atom = expr</code></td><td>Write to reactive state. <code>+= -= *= /= ??= ++ --</code> are also allowed.</td></tr>
-          <tr><td><code>name = expr</code></td><td>Local binding for use inside this action block (transient, not reactive).</td></tr>
+          <tr><td><code>name = expr</code></td><td>Local binding for use inside this function body (transient, not reactive).</td></tr>
           <tr><td><code>$bag = http({ &hellip; })</code></td><td>Fire an HTTP request. Result is reactive: <code>.data</code>, <code>.loading</code>, <code>.error</code>, <code>.status</code>, <code>.refetch()</code>, <code>.cancel()</code>.</td></tr>
-          <tr><td><code>_route_.navigate("/path")</code></td><td>Router transition. Updates the URL hash, fires <code>route-change</code>.</td></tr>
-          <tr><td><code>emit "event-name" { &hellip; }</code></td><td>Dispatch a <code>CustomEvent</code> on the host element.</td></tr>
+          <tr><td><code>route.navigate("/path")</code></td><td>Router transition. Updates the URL hash, fires <code>route-change</code>.</td></tr>
+          <tr><td><code>emit("event-name", { &hellip; })</code></td><td>Dispatch a <code>CustomEvent</code> on the host element.</td></tr>
           <tr><td><code>storage.set("key", value)</code></td><td>Read or write <code>localStorage</code> / <code>sessionStorage</code> / <code>cookies</code> (see <a href="language.html#globals">globals</a>).</td></tr>
           <tr><td><code>console.log("...")</code></td><td>Log to the browser console.</td></tr>
-          <tr><td><code>otherAction(args)</code></td><td>Invoke another action declared elsewhere in the program.</td></tr>
-          <tr><td><code>if</code> / <code>match</code> / <code>for</code></td><td>Statement-form control flow (same keywords as the expression form).</td></tr>
-          <tr><td><code>js{ &hellip; }</code></td><td>JavaScript escape hatch with access to <code>ctx</code> (state, tools, host).</td></tr>
+          <tr><td><code>otherFn(args)</code></td><td>Invoke another function declared elsewhere in the program.</td></tr>
+          <tr><td><code>if</code> / <code>switch</code> / <code>for</code></td><td>Statement-form control flow (same keywords as the expression form).</td></tr>
           <tr><td><code>return expr</code></td><td>Optional return value.</td></tr>
         </tbody>
       </table>
+
+      <p>
+        JavaScript code is written directly in the function body &mdash; no
+        wrapper is needed. Use the <code>ctx</code> bridge for host access,
+        state reads/writes from JS, and cleanup registration.
+      </p>
 
       <h2 id="state-writes">State writes &mdash; immutable patterns</h2>
       <p>
@@ -118,26 +123,26 @@ $hello = greet("Ada")             # re-runs whenever the action call's args chan
         of object fields (<code>$user.name = "Alex"</code>) is rejected. Use
         spread and built-in filters instead:
       </p>
-<pre><code>action toggleDone(taskId) {
-  $tasks = for task in $tasks {
-    if task.id == taskId { { ...task, done: !task.done } } else { task }
+<pre><code>function toggleDone(taskId) {
+  $tasks = for (let task of $tasks) {
+    if (task.id == taskId) { { ...task, done: !task.done } } else { task }
   }
 }
 
-action removeTask(taskId) {
+function removeTask(taskId) {
   $tasks = @Filter($tasks, "id", "!=", taskId)
 }
 
-action updateUserName(newName) {
+function updateUserName(newName) {
   $user = { ...$user, name: newName }
 }
 
-action appendTodo(item) {
+function appendTodo(item) {
   $todos = [...$todos, item]
 }</code></pre>
 
       <p>
-        Multiple writes inside one action are batched: the renderer only fires
+        Multiple writes inside one function are batched: the renderer only fires
         once, no matter how many atoms change.
       </p>
 
@@ -147,7 +152,7 @@ action appendTodo(item) {
         method. Bind the resource bag to an atom so the UI can show loading
         and error states:
       </p>
-<pre><code>action saveTask() {
+<pre><code>function saveTask() {
   $save = http({
     url:    "/api/tasks",
     method: "POST",
@@ -156,31 +161,31 @@ action appendTodo(item) {
   $newTaskTitle = ""
 }
 
-# Show progress / error state in the UI
-status = Async($save,
+// Show progress / error state in the UI
+status = Async($save, {
   loading: LoadingState("Saving…"),
-  error:   ErrorState("Couldn't save", description: $save.error),
-  data:    Callout("success", title: "Saved")
-)</code></pre>
+  error:   ErrorState("Couldn't save", { description: $save.error }),
+  data:    Callout("success", { title: "Saved" })
+})</code></pre>
 
       <h2 id="navigate">Navigation</h2>
       <p>
-        <code>_route_</code> is the reactive router handle. Call its
+        <code>route</code> is the reactive router handle. Call its
         <code>navigate(path)</code> method to transition the URL:
       </p>
-<pre><code>action openOrder(id) {
-  _route_.navigate("/orders/" + id)
+<pre><code>function openOrder(id) {
+  route.navigate("/orders/" + id)
 }</code></pre>
 
       <p>For more on routing &mdash; matching, params, queries &mdash; see the <a href="routing.html">Routing guide</a>.</p>
 
       <h2 id="emit">Emit custom events</h2>
       <p>
-        Use <code>emit</code> to dispatch a <code>CustomEvent</code> on the
+        Use <code>emit()</code> to dispatch a <code>CustomEvent</code> on the
         host element. The host listens with <code>addEventListener</code>.
       </p>
-<pre><code>action submit() {
-  emit "form-submitted" { values: { email: $email, name: $name } }
+<pre><code>function submit() {
+  emit("form-submitted", { values: { email: $email, name: $name } })
 }
 
 // Host:
@@ -197,7 +202,7 @@ el.addEventListener("form-submitted", (event) =&gt; {
         dispatch an <code>assistant-message</code> event with the user's
         intent. Wire it into your chat composer:
       </p>
-<pre><code>_app_ = Stack([
+<pre><code>aktion = Stack([
   Markdown("Want to dig deeper? Try one of these:"),
   FollowUpBlock([
     "Show daily breakdown",
@@ -211,28 +216,26 @@ el.addEventListener("assistant-message", (event) =&gt; {
   sendToLLM(event.detail.message);
 });</code></pre>
 
-      <h2 id="js-escape">JavaScript escape hatch</h2>
+      <h2 id="js-escape">Inline JavaScript</h2>
       <p>
-        For browser APIs the declarative surface doesn&rsquo;t cover, embed a
-        <code>js{ &hellip; }</code> block inside the action body. The block
-        runs as an async function and has access to a <code>ctx</code>
-        bridge: state reads/writes, host-registered tools, the host element,
-        cleanup registration, and the action's arguments.
+        JavaScript code is written directly in function and effect bodies &mdash;
+        no wrapper or escape hatch is needed. The body runs as an async function
+        with access to a <code>ctx</code> bridge: state reads/writes,
+        host-registered tools, the host element, cleanup registration, and the
+        function&rsquo;s arguments.
       </p>
-<pre><code>action copyShareLink() {
-  js {
-    await navigator.clipboard.writeText(window.location.href)
-    ctx.state.set("copied", true)
-  }
+<pre><code>function copyShareLink() {
+  await navigator.clipboard.writeText(window.location.href)
+  ctx.state.set("copied", true)
 }</code></pre>
 
       <p>See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.</p>
 
       <h2 id="hosts">Talking to the host &mdash; tools</h2>
       <p>
-        Host-registered tools are async functions exposed to
-        <code>js{}</code> blocks as <code>ctx.tools.&lt;name&gt;(args)</code>.
-        The host registers them with <code>el.setTools({...})</code>:
+        Host-registered tools are async functions accessible as
+        <code>ctx.tools.&lt;name&gt;(args)</code> in function and effect
+        bodies. The host registers them with <code>el.setTools({...})</code>:
       </p>
 <pre><code>// Host
 el.setTools({
@@ -244,12 +247,10 @@ el.setTools({
   }
 });
 
-# Script
-action upload(file) {
-  js {
-    const result = await ctx.tools.uploadFile({ file: ctx.args.file })
-    ctx.state.set("uploadUrl", result.url)
-  }
+// Script
+function upload(file) {
+  const result = await ctx.tools.uploadFile({ file: ctx.args.file })
+  ctx.state.set("uploadUrl", result.url)
 }</code></pre>
 
       <h2 id="patterns">Common patterns</h2>
@@ -259,8 +260,8 @@ action upload(file) {
 $email = ""
 $message = ""
 
-action submit() {
-  if !$name || !$email { return }
+function submit() {
+  if (!$name || !$email) { return }
   $post = http({
     url:    "/api/contact",
     method: "POST",
@@ -268,42 +269,42 @@ action submit() {
   })
 }
 
-action resetForm() {
+function resetForm() {
   $name = ""
   $email = ""
   $message = ""
 }
 
 btns = Buttons([
-  Button("Send",  action: submit,    variant: "primary", icon: "paper-plane"),
-  Button("Reset", action: resetForm, variant: "ghost")
+  Button("Send",  { action: submit,    variant: "primary", icon: "paper-plane" }),
+  Button("Reset", { action: resetForm, variant: "ghost" })
 ])
 
-_app_ = Form("contact", buttons: btns, fields: [
-  FormControl("Name",    control: Input("name",    placeholder: "Your name",       value: $name)),
-  FormControl("Email",   control: Input("email",   placeholder: "you@example.com", type: "email", value: $email)),
-  FormControl("Message", control: TextArea("message", rows: 4, value: $message))
-])</code></pre>
+aktion = Form("contact", { buttons: btns, fields: [
+  FormControl("Name",    { control: Input("name",    { placeholder: "Your name",       value: $name }) }),
+  FormControl("Email",   { control: Input("email",   { placeholder: "you@example.com", type: "email", value: $email }) }),
+  FormControl("Message", { control: TextArea("message", { rows: 4, value: $message }) })
+]})</code></pre>
 
       <h3>Per-row actions in a table</h3>
-<pre><code>rows = for task in $tasks {
+<pre><code>rows = for (let task of $tasks) {
   Stack([
-    Badge(task.done ? "done" : "open", tone: task.done ? "success" : "neutral"),
+    Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
     Text(task.title),
     Buttons([
-      Button(task.done ? "Reopen" : "Done", action: () =&gt; toggleDone(task.id), variant: "primary", size: "sm"),
-      Button("Delete",                       action: () =&gt; deleteTask(task.id), variant: "ghost",   size: "sm")
+      Button(task.done ? "Reopen" : "Done", { action: () =&gt; toggleDone(task.id), variant: "primary", size: "sm" }),
+      Button("Delete",                       { action: () =&gt; deleteTask(task.id), variant: "ghost",   size: "sm" })
     ])
   ])
 }
 
-action toggleDone(id) {
-  $tasks = for t in $tasks {
-    if t.id == id { { ...t, done: !t.done } } else { t }
+function toggleDone(id) {
+  $tasks = for (let t of $tasks) {
+    if (t.id == id) { { ...t, done: !t.done } } else { t }
   }
 }
 
-action deleteTask(id) {
+function deleteTask(id) {
   $tasks = @Filter($tasks, "id", "!=", id)
   $remove = http({ url: "/api/tasks/" + id, method: "DELETE" })
 }</code></pre>
@@ -311,36 +312,36 @@ action deleteTask(id) {
       <h3>Confirm before destructive action</h3>
 <pre><code>$pendingDelete = null
 
-action requestDelete(id) { $pendingDelete = id }
-action cancelDelete()    { $pendingDelete = null }
-action confirmDelete() {
+function requestDelete(id) { $pendingDelete = id }
+function cancelDelete()    { $pendingDelete = null }
+function confirmDelete() {
   $tasks = @Filter($tasks, "id", "!=", $pendingDelete)
   $pendingDelete = null
 }
 
-dialog = Modal("Delete this task?",
+dialog = Modal("Delete this task?", {
   open: $pendingDelete != null,
   footer: [
-    Button("Cancel", action: cancelDelete, variant: "ghost"),
-    Button("Delete", action: confirmDelete, variant: "danger")
+    Button("Cancel", { action: cancelDelete, variant: "ghost" }),
+    Button("Delete", { action: confirmDelete, variant: "danger" })
   ],
   children: [Text("This cannot be undone.")]
-)
+})
 
-_app_ = Stack([TaskTable(rows: $tasks, onDelete: requestDelete), dialog])</code></pre>
+aktion = Stack([TaskTable({ rows: $tasks, onDelete: requestDelete }), dialog])</code></pre>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p>Browser APIs, tools, the <code>ctx</code> bridge inside <code>js&#123;&#125;</code> blocks.</p>
+          <p>Browser APIs, tools, the <code>ctx</code> bridge in function and effect bodies.</p>
           <span class="demo-arrow">Learn more &rarr;</span>
         </a>
         <a class="demo-card" href="routing.html">
           <span class="demo-tag">Navigation</span>
           <h3>Routing</h3>
-          <p><code>_route_.navigate(...)</code>, params, query strings, deep links.</p>
+          <p><code>route.navigate(...)</code>, params, query strings, deep links.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="examples.html">

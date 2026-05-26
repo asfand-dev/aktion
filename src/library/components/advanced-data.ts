@@ -172,7 +172,7 @@ export const DataGrid: ComponentSpec = {
     const selectedStateName = node.argMeta?.[4]?.stateRef;
     const pageStateName = node.argMeta?.[6]?.stateRef;
 
-    // Bulk-action toolbar (shows when at least one row is selected).
+    // Bulk-edit toolbar (shows when at least one row is selected).
     const toolbarChildren = asArray<unknown>(props.toolbar);
     if (selectedIds.length > 0 && toolbarChildren.length > 0) {
       const bar = el("div", { class: "rui-data-grid-bulk" });

@@ -2,7 +2,7 @@
  * Routing-related library components.
  *
  * In Aktion 0.5 routing is expressed with the
- * `_router_({...})` call (see `src/runtime/router.ts` and the
+ * `Router({...})` call (see `src/runtime/router.ts` and the
  * `evaluateRouterCall` intercept in `runtime/evaluator.ts`). The legacy
  * `Routes(...)` outlet and `Route(...)` row components, and the
  * `$router = router { … }` block syntax, were removed in the 0.5

@@ -45,7 +45,7 @@ export interface FrontierResult {
    *
    *   - Identifiers on the left of an assignment (`foo = …`).
  *   - State assignments (`$x = …`).
- *   - Component / effect / action / router declarations.
+ *   - Function / effect declarations.
    *
    * Names that only appear as call expressions (`Button(…)`) inside the
    * drafting tail are not listed — those are dependencies, not bindings.
@@ -70,12 +70,12 @@ export interface FrontierResult {
  *
  *   const f = computeFrontier(
  *     "$state count = 0\n" +
- *     "component Counter() {\n" +
+ *     "function Counter() {\n" +
  *     "  Stack(Te"               // mid-stream: half-written `Text`
  *   );
  *   // f.committedBindings = ["count"]
  *   // f.uncommittedBindings = ["Counter"]
- *   // f.committedSource ends just before "component Counter() {…"
+ *   // f.committedSource ends just before "function Counter() {…"
  */
 export function computeFrontier(source: string): FrontierResult {
   const program = parse(source);

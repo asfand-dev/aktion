@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Side effects · Aktion</title>
-  <meta name="description" content="The effect block — anonymous, declarative side effects with a bracketed dependency list mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers." />
+  <meta name="description" content="The effect() call — anonymous, declarative side effects with a dependency array mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers." />
   <script>
     (function () {
       try {
@@ -27,7 +27,7 @@
         <span class="hero-eyebrow">Behaviour</span>
         <h1>Side effects.</h1>
         <p class="lead">
-          <code>effect [ ...deps ] { &hellip; }</code> blocks attach
+          <code>effect(() =&gt; { &hellip; }, [...deps])</code> calls attach
           declarative, anonymous side effects to the program or to a
           single component instance. Use them for polling, hydration,
           analytics, keyboard listeners, autosave &mdash; anything that
@@ -38,23 +38,23 @@
 
       <h2 id="anatomy">Anatomy of an effect</h2>
       <p>An effect declaration has three parts:</p>
-<pre><code>effect [ ...dependencies ] {
+<pre><code>effect(() =&gt; {
   // body
-}</code></pre>
+}, [...dependencies])</code></pre>
       <ul>
-        <li>The <code>effect</code> keyword &mdash; effects are <strong>anonymous</strong>; there is no name and no <code>on</code> keyword.</li>
-        <li>An optional bracketed <strong>dependency list</strong> that controls when the body runs.</li>
-        <li>A <code>{ &hellip; }</code> body that performs the side effect &mdash; HTTP calls, state writes, <code>js{ &hellip; }</code> blocks, <code>emit</code>, <code>cleanup(&hellip;)</code>, &hellip;</li>
+        <li>The <code>effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name.</li>
+        <li>An arrow-function body that performs the side effect &mdash; HTTP calls, state writes, <code>emit(&hellip;)</code>, <code>cleanup(&hellip;)</code>, &hellip;</li>
+        <li>An optional second argument &mdash; a <strong>dependency array</strong> &mdash; that controls when the body runs.</li>
       </ul>
 
       <p>
-        <code>effect { &hellip; }</code> with no brackets is equivalent
-        to <code>effect [on:mount] { &hellip; }</code> &mdash; both run
-        the body once when the surrounding scope mounts.
+        <code>effect(() =&gt; { &hellip; })</code> with no dependency array is
+        equivalent to <code>effect(() =&gt; { &hellip; }, ["mount"])</code>
+        &mdash; both run the body once when the surrounding scope mounts.
       </p>
 
       <h2 id="dependencies">Dependency entries</h2>
-      <p>Each entry in the bracketed list is one of the following:</p>
+      <p>Each entry in the dependency array is one of the following:</p>
 
       <table class="signature-table">
         <thead><tr><th>Entry</th><th>Meaning</th></tr></thead>
@@ -64,38 +64,38 @@
             <td>Re-run the body whenever the named reactive atom changes. Mix multiple state triggers freely: <code>[$query, $page]</code> re-runs when either changes.</td>
           </tr>
           <tr>
-            <td><code>on:mount</code></td>
+            <td><code>"mount"</code></td>
             <td>Run the body once when the surrounding component (or top-level scope) mounts.</td>
           </tr>
           <tr>
-            <td><code>on:unmount</code></td>
+            <td><code>"unmount"</code></td>
             <td>Run the body once when it unmounts. Useful for teardown / analytics on close.</td>
           </tr>
           <tr>
-            <td><code>on:every(N)</code></td>
+            <td><code>"every(N)"</code></td>
             <td>Re-run the body every <code>N</code> milliseconds. Driven by <code>setInterval</code>; cleared automatically on unmount.</td>
           </tr>
           <tr>
-            <td><code>debounce(N)</code></td>
+            <td><code>"debounce(N)"</code></td>
             <td>Wrap the body with a trailing-edge debounce &mdash; the body only runs <code>N</code> ms after the last trigger. Combine with state / interval triggers.</td>
           </tr>
           <tr>
-            <td><code>throttle(N)</code></td>
+            <td><code>"throttle(N)"</code></td>
             <td>Wrap the body with a throttle &mdash; the body runs immediately, then suppresses further calls until <code>N</code> ms have elapsed (with a trailing call for the most recent state).</td>
           </tr>
         </tbody>
       </table>
 
       <p>
-        Order inside the brackets does not matter. Only one rate-limit
-        modifier (<code>debounce</code> or <code>throttle</code>) takes
+        Order inside the array does not matter. Only one rate-limit
+        modifier (<code>"debounce"</code> or <code>"throttle"</code>) takes
         effect per declaration.
       </p>
 
       <h2 id="scope">Scope: top-level vs. component-local</h2>
       <p>
         An <code>effect</code> can live at the <strong>program top level</strong>
-        or <strong>inside a component body</strong>. The dependency-list
+        or <strong>inside a component body</strong>. The dependency-array
         syntax is identical; only the lifecycle differs.
       </p>
 
@@ -105,7 +105,7 @@
           <tr>
             <td>Location</td>
             <td>Declared next to other top-level bindings.</td>
-            <td>Declared inside a <code>component Name() { &hellip; }</code> body.</td>
+            <td>Declared inside a <code>function Name() { &hellip; }</code> body.</td>
           </tr>
           <tr>
             <td>Mounted</td>
@@ -132,14 +132,14 @@
         program is parsed and lives until <code>setResponse</code> /
         <code>clear()</code> swaps the program.
       </p>
-<pre><code>_app_ = App()
+<pre><code>aktion = App()
 $value = 10
 
-effect [on:every(1000)] {
+effect(() =&gt; {
   $value = $value + 1
-}
+}, ["every(1000)"])
 
-component App() {
+function App() {
   return Box([
     Text("Value: " + $value)
   ])
@@ -152,13 +152,13 @@ component App() {
         component mounts and is cleared as soon as it leaves the tree.
         Two <code>App()</code> calls give you two independent intervals.
       </p>
-<pre><code>_app_ = App()
+<pre><code>aktion = App()
 $value = 10
 
-component App() {
-  effect [on:every(1000)] {
+function App() {
+  effect(() =&gt; {
     $value = $value + 1
-  }
+  }, ["every(1000)"])
   return Box([
     Text("Value: " + $value)
   ])
@@ -170,21 +170,21 @@ component App() {
         work to a piece of UI that is conditionally mounted. When
         <code>$showWidget</code> flips to <code>false</code> the
         <code>Widget()</code> instance is removed from the tree, and the
-        runtime tears down its <code>on:every</code> interval, its
+        runtime tears down its <code>"every"</code> interval, its
         <code>cleanup(&hellip;)</code> handlers, and any state
         subscriptions it registered.
       </p>
-<pre><code>_app_ = Stack([
-  Toggle("Show widget", value: $showWidget, onChange: () =&gt; { $showWidget = !$showWidget }),
-  if $showWidget { Widget() } else { null }
+<pre><code>aktion = Stack([
+  Toggle("Show widget", { value: $showWidget, onChange: () =&gt; { $showWidget = !$showWidget } }),
+  if ($showWidget) { Widget() } else { null }
 ])
 $showWidget = true
 $ticks = 0
 
-component Widget() {
-  effect [on:every(500)] {
+function Widget() {
+  effect(() =&gt; {
     $ticks = $ticks + 1
-  }
+  }, ["every(500)"])
   return Card([CardHeader("Widget"), Text("Ticks: " + $ticks)])
 }</code></pre>
 
@@ -194,17 +194,17 @@ component Widget() {
         rendering five of them produces five independent intervals, and
         removing one stops only that one.
       </p>
-<pre><code>_app_ = Stack([
+<pre><code>aktion = Stack([
   UserCard("alice"),
   UserCard("bob"),
   UserCard("carol")
 ])
 
-component UserCard(username) {
+function UserCard(username) {
   $status = "loading"
-  effect [on:every(5000)] {
+  effect(() =&gt; {
     $status = http({ url: "/api/users/" + username + "/status", method: "GET" }).data
-  }
+  }, ["every(5000)"])
   return Card([
     CardHeader(username),
     Text("Status: " + $status)
@@ -214,114 +214,107 @@ component UserCard(username) {
       <h2 id="examples">Examples</h2>
 
       <h3>Once on mount</h3>
-<pre><code>effect [on:mount] {
+<pre><code>effect(() =&gt; {
   $session = http({ url: "/api/session", method: "GET" })
-}
+}, ["mount"])
 
-# Empty deps list is equivalent
-effect {
+// Empty deps array is equivalent
+effect(() =&gt; {
   console.log("App mounted")
-}</code></pre>
+})</code></pre>
 
       <h3>React to a single atom</h3>
 <pre><code>$selectedId = null
 
-effect [$selectedId] {
-  if $selectedId {
+effect(() =&gt; {
+  if ($selectedId) {
     $detail = http({ url: "/api/items/" + $selectedId, method: "GET" })
   }
-}</code></pre>
+}, [$selectedId])</code></pre>
 
       <h3>React to multiple atoms with debouncing</h3>
 <pre><code>$query = ""
 $page  = 1
 
-effect [$query, $page, debounce(250)] {
+effect(() =&gt; {
   $results = http({
     url:   "/api/search",
     query: { q: $query, page: $page }
   })
-}</code></pre>
+}, [$query, $page, "debounce(250)"])</code></pre>
 
       <h3>Polling on an interval</h3>
-<pre><code>effect [on:every(30000)] {
+<pre><code>effect(() =&gt; {
   $orders.refetch()
-}
+}, ["every(30000)"])
 
-# Throttled interval — fire at most once per 500ms
-effect [on:every(1000), throttle(500)] {
+// Throttled interval — fire at most once per 500ms
+effect(() =&gt; {
   $now = @Now()
-}</code></pre>
+}, ["every(1000)", "throttle(500)"])</code></pre>
 
       <h3>Autosave with debounce</h3>
 <pre><code>$draft = ""
 
-effect [$draft, debounce(500)] {
+effect(() =&gt; {
   $save = http({
     url:    "/api/draft",
     method: "PUT",
     body:   { draft: $draft }
   })
-}</code></pre>
+}, [$draft, "debounce(500)"])</code></pre>
 
       <h3>Sync to <code>storage</code></h3>
-<pre><code>effect [$draft, debounce(500)] {
+<pre><code>effect(() =&gt; {
   storage.set("draft", $draft)
-}
+}, [$draft, "debounce(500)"])
 
-effect [on:mount] {
+effect(() =&gt; {
   $draft = storage.get("draft") ?? ""
-}</code></pre>
+}, ["mount"])</code></pre>
 
       <h2 id="cleanup">Cleanup</h2>
       <p>
         Long-running listeners (timers, observers, event handlers, network
         subscriptions) MUST be torn down so they don&rsquo;t leak across
         re-runs or unmount. Register a teardown with
-        <code>cleanup(fn)</code> from inside the body &mdash; or from
-        inside a <code>js{}</code> block via <code>ctx.cleanup(fn)</code>.
-        Cleanups run before the next re-fire AND on unmount.
+        <code>cleanup(fn)</code> or <code>ctx.cleanup(fn)</code> from inside
+        the body. Cleanups run before the next re-fire AND on unmount.
       </p>
 
-<pre><code>effect [on:mount] {
-  js{
-    const onKey = (e) =&gt; {
-      if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true }))
-      }
+<pre><code>effect(() =&gt; {
+  const onKey = (e) =&gt; {
+    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true }))
     }
-    document.addEventListener("keydown", onKey)
-    ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
   }
-}</code></pre>
+  document.addEventListener("keydown", onKey)
+  ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+}, ["mount"])</code></pre>
 
       <h3>WebSocket subscription</h3>
-<pre><code>effect [on:mount] {
-  js{
-    const socket = new WebSocket("wss://example.com/ticker")
-    socket.addEventListener("message", (event) =&gt; {
-      ctx.state.set("ticker", JSON.parse(event.data))
-    })
-    ctx.cleanup(() =&gt; socket.close())
-  }
-}</code></pre>
+<pre><code>effect(() =&gt; {
+  const socket = new WebSocket("wss://example.com/ticker")
+  socket.addEventListener("message", (event) =&gt; {
+    ctx.state.set("ticker", JSON.parse(event.data))
+  })
+  ctx.cleanup(() =&gt; socket.close())
+}, ["mount"])</code></pre>
 
       <h3>IntersectionObserver for infinite scroll</h3>
-<pre><code>effect [on:mount] {
-  js{
-    const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
-    if (!sentinel) return
-    const observer = new IntersectionObserver((entries) =&gt; {
-      if (entries.some((e) =&gt; e.isIntersecting)) {
-        const page = ctx.state.get("page") || 1
-        ctx.state.set("page", page + 1)
-      }
-    })
-    observer.observe(sentinel)
-    ctx.cleanup(() =&gt; observer.disconnect())
-  }
-}</code></pre>
+<pre><code>effect(() =&gt; {
+  const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
+  if (!sentinel) return
+  const observer = new IntersectionObserver((entries) =&gt; {
+    if (entries.some((e) =&gt; e.isIntersecting)) {
+      const page = ctx.state.get("page") || 1
+      ctx.state.set("page", page + 1)
+    }
+  })
+  observer.observe(sentinel)
+  ctx.cleanup(() =&gt; observer.disconnect())
+}, ["mount"])</code></pre>
 
       <h2 id="use-cases">When to reach for an effect</h2>
       <ul>
@@ -330,12 +323,12 @@ effect [on:mount] {
         <li><strong>Reactive autosave</strong> &mdash; persist a form / draft when a watched atom changes, debounced so you don&rsquo;t flood the network.</li>
         <li><strong>Derived async work</strong> &mdash; refetch search results when filters change, fetch detail data when a selection is made.</li>
         <li><strong>Analytics &amp; logging</strong> &mdash; track page views, log state transitions, instrument feature usage.</li>
-        <li><strong>Browser APIs</strong> &mdash; clipboard listeners, keyboard shortcuts, <code>IntersectionObserver</code>, <code>MutationObserver</code>, <code>matchMedia</code> &mdash; usually inside a <code>js{}</code> block.</li>
+        <li><strong>Browser APIs</strong> &mdash; clipboard listeners, keyboard shortcuts, <code>IntersectionObserver</code>, <code>MutationObserver</code>, <code>matchMedia</code> &mdash; use the <code>ctx</code> bridge for DOM access.</li>
       </ul>
 
       <h2 id="when-not">When NOT to use an effect</h2>
       <ul>
-        <li><strong>User-driven side effects</strong> &mdash; declare an <code>action</code> and wire it to a button instead.</li>
+        <li><strong>User-driven side effects</strong> &mdash; declare a function and wire it to a button instead.</li>
         <li><strong>HTTP that already depends on a reactive atom</strong> &mdash; <code>$results = http({ query: { q: $query } })</code> already re-issues when <code>$query</code> changes; no effect is needed.</li>
         <li><strong>Pure computations</strong> &mdash; a plain binding (<code>total = @Sum($cart.price)</code>) is reactive and re-derives automatically.</li>
         <li><strong>Per-element listeners</strong> &mdash; component event props (<code>onClick</code>, <code>onChange</code>, <code>onSubmit</code>) are simpler and don&rsquo;t need cleanup.</li>
@@ -343,7 +336,7 @@ effect [on:mount] {
 
       <h2 id="effect-vs-action">Effect vs. Action</h2>
       <table class="signature-table">
-        <thead><tr><th></th><th><code>effect [ ...deps ] { &hellip; }</code></th><th><code>action Name(args) { &hellip; }</code></th></tr></thead>
+        <thead><tr><th></th><th><code>effect(() =&gt; { &hellip; }, [&hellip;])</code></th><th><code>function Name(args) { &hellip; }</code></th></tr></thead>
         <tbody>
           <tr><td>Trigger</td><td>Mount, unmount, interval, watched atoms.</td><td>Explicit call from a handler or expression.</td></tr>
           <tr><td>Identity</td><td>Anonymous &mdash; the runtime keys on the source location.</td><td>Named &mdash; referenced by identifier from <code>onClick</code> / expressions.</td></tr>
@@ -359,13 +352,13 @@ effect [on:mount] {
         <a class="demo-card" href="actions.html">
           <span class="demo-tag">Behaviour</span>
           <h3>Actions</h3>
-          <p>Imperative blocks triggered by events &mdash; the user-driven counterpart to <code>effect</code>.</p>
+          <p>Imperative functions triggered by events &mdash; the user-driven counterpart to <code>effect</code>.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p>The <code>js{ &hellip; }</code> escape hatch &mdash; browser APIs the declarative surface doesn&rsquo;t cover.</p>
+          <p>Inline JavaScript &mdash; browser APIs, the <code>ctx</code> bridge, host tools.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
         <a class="demo-card" href="language.html">

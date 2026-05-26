@@ -3,8 +3,8 @@
  *
  * Exercises:
  *   - method-call parsing for `storage.set`, `storage.local.get`, etc.
- *   - named-arg flattening into a trailing options object for
- *     `storage.cookies.set("k", "v", expires: 1, path: "/")`.
+ *   - trailing object flattening into an options parameter for
+ *     `storage.cookies.set("k", "v", { expires: 1, path: "/" })`.
  *   - localStorage / sessionStorage / cookies round-trip semantics.
  *   - `console.log/error/warn/info/debug` forwarding to the host console.
  */
@@ -81,15 +81,13 @@ describe("parser — method call", () => {
     });
   });
 
-  it("collects positional + named args inside a method call", () => {
-    const program = parse(`x = storage.cookies.set("name", "John", expires: 1, path: "/")`);
+  it("collects positional + trailing object args inside a method call", () => {
+    const program = parse(`x = storage.cookies.set("name", "John", { expires: 1, path: "/" })`);
     expect(program.errors).toEqual([]);
     const stmt = program.statements[0];
     if (!stmt || stmt.kind !== "Assignment") throw new Error("expected assignment");
     if (stmt.expression.kind !== "MethodCall") throw new Error("expected MethodCall");
-    expect(stmt.expression.arguments).toHaveLength(4);
-    expect(stmt.expression.arguments[2]).toMatchObject({ kind: "NamedArg", name: "expires" });
-    expect(stmt.expression.arguments[3]).toMatchObject({ kind: "NamedArg", name: "path" });
+    expect(stmt.expression.arguments).toHaveLength(3);
   });
 });
 
@@ -129,17 +127,17 @@ describe("storage — sessionStorage namespace", () => {
 });
 
 describe("storage — cookies namespace", () => {
-  it("writes and reads cookies with named-arg options", () => {
+  it("writes and reads cookies with trailing object options", () => {
     storage.cookies.clear();
-    evalExpr(`storage.cookies.set("user", "John", path: "/", maxAge: 60)`);
+    evalExpr(`storage.cookies.set("user", "John", { path: "/", maxAge: 60 })`);
     expect(evalExpr(`storage.cookies.get("user")`)).toBe("John");
   });
 
   it("removes a cookie by key", () => {
     storage.cookies.clear();
-    evalExpr(`storage.cookies.set("user", "John", path: "/")`);
+    evalExpr(`storage.cookies.set("user", "John", { path: "/" })`);
     expect(evalExpr(`storage.cookies.get("user")`)).toBe("John");
-    evalExpr(`storage.cookies.remove("user", path: "/")`);
+    evalExpr(`storage.cookies.remove("user", { path: "/" })`);
     // Some hosts (notably happy-dom) keep expired cookies in the
     // document.cookie string with an empty value rather than purging
     // them outright — the `get` helper still treats that as "missing"

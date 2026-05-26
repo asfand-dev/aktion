@@ -453,7 +453,7 @@ export const Comment: ComponentSpec = {
   name: "Comment",
   description:
     "Single comment / message bubble. Renders avatar, author, timestamp, " +
-    "body, and an optional row of action buttons (reply, like, …).",
+    "body, and an optional row of toolbar buttons (reply, like, …).",
   props: [
     { name: "author", type: "string" },
     { name: "body", type: "string", aliases: ["text", "message"] },

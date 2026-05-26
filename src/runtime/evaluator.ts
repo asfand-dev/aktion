@@ -17,6 +17,7 @@ import type {
   ActionDeclaration,
   BlockExpr,
   ObjectProperty,
+  SwitchCase,
 } from "../parser/types.js";
 import type { StateStore } from "./state.js";
 import type { HttpRuntime } from "./http.js";
@@ -41,6 +42,161 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   storage: storageGlobal,
   console: consoleGlobal,
 };
+
+/**
+ * Runtime safety budget — bounds the work a single render can perform
+ * so a partial / accidentally-recursive program (e.g. while the user is
+ * still typing in the playground) cannot freeze the browser or exhaust
+ * the heap.
+ *
+ * Three independent dimensions are tracked:
+ *
+ *   - `componentDepth` — current user-component invocation depth.
+ *     `function Foo() { return Foo() }` would otherwise recurse until the JS
+ *     stack overflows; capping this at ~150 catches the typo in <1ms
+ *     and surfaces a friendly error instead of a frozen tab.
+ *   - `iterations` — cumulative count of loop body evaluations across
+ *     every `for` loop in the current render. Bounded across the
+ *     whole render (not per-loop) so a thousand tiny loops still get
+ *     caught before they pile up into seconds of work.
+ *   - `arrayLengthLimit` — pre-flight cap on `@Range` / `@Repeat`
+ *     allocations. A bare `@Range(0, 1e9)` would otherwise call
+ *     `Array.push` a billion times and OOM the renderer process.
+ *
+ * Limits are deliberately generous (anything a real app needs fits
+ * easily) but tight enough to abort runaway evaluations in
+ * milliseconds. The host element resets the budget at the start of
+ * every render so each pass starts fresh.
+ */
+export interface RuntimeBudget {
+  /** Max simultaneous depth of user-component invocations. */
+  componentDepthLimit: number;
+  /** Max total iterations executed across every loop in a single render. */
+  iterationLimit: number;
+  /** Max length of any array materialised by `@Range` / `@Repeat`. */
+  arrayLengthLimit: number;
+  /** Current depth — managed by enter/leave in `evaluateUserComponent`. */
+  componentDepth: number;
+  /** Iterations consumed so far in the current render. */
+  iterations: number;
+}
+
+/** Default limits — comfortable for real apps, fatal for runaway typos. */
+export const DEFAULT_RUNTIME_BUDGET: Readonly<Omit<RuntimeBudget, "componentDepth" | "iterations">> = {
+  componentDepthLimit: 150,
+  iterationLimit: 250_000,
+  arrayLengthLimit: 100_000,
+};
+
+/** Why the runtime aborted. Used by the host to render a friendly banner. */
+export type RuntimeBudgetKind = "component-depth" | "iterations" | "array-length";
+
+/**
+ * Thrown when the evaluator hits a runtime safety limit. Carries enough
+ * detail for the host to surface a parse-error-style message that
+ * points the user at the offending construct.
+ */
+export class RuntimeBudgetError extends Error {
+  readonly kind: RuntimeBudgetKind;
+  readonly limit: number;
+  readonly source: string;
+  constructor(kind: RuntimeBudgetKind, limit: number, source: string) {
+    super(buildBudgetMessage(kind, limit, source));
+    this.name = "RuntimeBudgetError";
+    this.kind = kind;
+    this.limit = limit;
+    this.source = source;
+  }
+}
+
+function buildBudgetMessage(kind: RuntimeBudgetKind, limit: number, source: string): string {
+  switch (kind) {
+    case "component-depth":
+      return `[aktion] runtime aborted at ${source}: component recursion exceeded ${limit} levels — check for a component that calls itself directly or transitively.`;
+    case "iterations":
+      return `[aktion] runtime aborted at ${source}: exceeded ${limit} total loop iterations in a single render — narrow the iterable or split the loop.`;
+    case "array-length":
+      return `[aktion] runtime aborted at ${source}: array length would exceed ${limit} elements.`;
+  }
+}
+
+/** Create a fresh budget with default (or overridden) limits. */
+export function createRuntimeBudget(
+  overrides: Partial<Omit<RuntimeBudget, "componentDepth" | "iterations">> = {},
+): RuntimeBudget {
+  return {
+    componentDepthLimit: overrides.componentDepthLimit ?? DEFAULT_RUNTIME_BUDGET.componentDepthLimit,
+    iterationLimit: overrides.iterationLimit ?? DEFAULT_RUNTIME_BUDGET.iterationLimit,
+    arrayLengthLimit: overrides.arrayLengthLimit ?? DEFAULT_RUNTIME_BUDGET.arrayLengthLimit,
+    componentDepth: 0,
+    iterations: 0,
+  };
+}
+
+/**
+ * Reset the per-render counters on an existing budget. Limits are
+ * preserved; only the running totals (`iterations`, `componentDepth`)
+ * are cleared. Called by the host between renders.
+ */
+export function resetRuntimeBudget(budget: RuntimeBudget): void {
+  budget.iterations = 0;
+  budget.componentDepth = 0;
+}
+
+/** Tick `n` iterations against the budget; throws when the limit is hit. */
+function tickIterations(budget: RuntimeBudget | undefined, n: number, source: string): void {
+  if (!budget) return;
+  budget.iterations += n;
+  if (budget.iterations > budget.iterationLimit) {
+    throw new RuntimeBudgetError("iterations", budget.iterationLimit, source);
+  }
+}
+
+/** Assert a planned allocation fits the array-length budget. */
+function enforceArrayLength(
+  budget: RuntimeBudget | undefined,
+  size: number,
+  source: string,
+): void {
+  if (!budget) return;
+  if (!Number.isFinite(size) || size > budget.arrayLengthLimit) {
+    throw new RuntimeBudgetError("array-length", budget.arrayLengthLimit, source);
+  }
+}
+
+/**
+ * Open a user-component frame against the budget. The caller MUST pair
+ * every successful return with a `leaveUserComponent(ctx)` call (use
+ * `try { … } finally { leaveUserComponent(ctx) }`).
+ *
+ * Lives here rather than inside `evaluateUserComponent` because the
+ * renderer drives the recursive expansion of nested user components
+ * via `renderAt(value, …) → renderUserComponent(…) → evaluateUserComponent`.
+ * The depth bracket has to span that whole chain — including the
+ * `renderAt` call that recurses — so it can't sit inside
+ * `evaluateUserComponent`'s own try/finally (that frame is popped
+ * before the recursive call starts).
+ */
+export function enterUserComponent(ctx: EvaluationContext, name: string): void {
+  const budget = ctx.budget;
+  if (!budget) return;
+  budget.componentDepth += 1;
+  if (budget.componentDepth > budget.componentDepthLimit) {
+    budget.componentDepth -= 1;
+    throw new RuntimeBudgetError(
+      "component-depth",
+      budget.componentDepthLimit,
+      `component "${name}"`,
+    );
+  }
+}
+
+/** Close a user-component frame previously opened by `enterUserComponent`. */
+export function leaveUserComponent(ctx: EvaluationContext): void {
+  const budget = ctx.budget;
+  if (!budget) return;
+  if (budget.componentDepth > 0) budget.componentDepth -= 1;
+}
 
 export interface ArgMeta {
   /**
@@ -80,7 +236,7 @@ export const isComponentNode = (value: unknown): value is ComponentNode => {
 };
 
 /**
- * Lazy node produced when a user-declared `component Foo(p) { ... }` is
+ * Lazy node produced when a user-declared `function Foo(p) { return ... }` is
  * called. The renderer expands these per-instance: each instance gets its
  * own state-alias scope so two `Counter()` calls hold independent `$state`
  * atoms (§7 — per-instance reactivity).
@@ -108,7 +264,7 @@ export const isUserComponentNode = (value: unknown): value is UserComponentNode 
 };
 
 /**
- * An `effect [ … ] { … }` declaration discovered inside a `component { … }`
+ * An `effect(() => { … }, [deps])` declaration discovered inside a `function` component
  * body, paired with the per-instance state-alias stack captured at the
  * moment the body was walked. The runner restores those aliases before
  * running the body so `$count = …` lands on the same instance slot the
@@ -122,6 +278,22 @@ export interface ScopedEffectDecl {
    * declared at the program top level, where no per-instance frame applies.
    */
   capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>;
+  /**
+   * Snapshot of `ctx.loopVars` at the moment the declaration was
+   * collected (component parameters, slots, and any outer `for`-loop
+   * variables in scope). Restored onto `ctx.loopVars` before the effect
+   * body runs so an effect declared inside
+   * `function Item(todo) { effect(() => { use(todo) }, [$x]) }` keeps seeing
+   * its `todo` parameter even after the body has returned and the
+   * runtime cleared the loop var. Without it `todo` resolves to
+   * `undefined` because the param binding only lives for the duration
+   * of `evaluateUserComponent`.
+   *
+   * Refreshed on every re-render via `EffectRunner.syncInstanceEffects`
+   * so the effect always observes the latest prop values rather than
+   * the ones captured at first mount.
+   */
+  capturedLoopVars: ReadonlyMap<string, unknown>;
 }
 
 export interface EvaluationContext {
@@ -146,13 +318,13 @@ export interface EvaluationContext {
    * not overridden.
    */
   stateAliases: Array<Map<string, string>>;
-  /** Optional router — exposed to the runtime for `_route_.path` / `params`. */
+  /** Optional router — exposed to the runtime for `route.path` / `params`. */
   router?: Router;
   /** Component library used to resolve trailing named-arg object literals. */
   library?: ComponentLibrary;
-  /** Component declarations from the program (`component Foo() { ... }`). */
+  /** Component declarations (`function Foo() { return ... }` — PascalCase). */
   componentDecls: Map<string, ComponentDeclaration>;
-  /** Effect declarations (`effect [ ...deps ] { ... }`), keyed by auto-generated name. */
+  /** Effect declarations (`effect(() => { ... }, [deps])`), keyed by auto-generated name. */
   effectDecls: Map<string, EffectDeclaration>;
   /**
    * Stack of per-component-invocation effect collection frames.
@@ -170,24 +342,18 @@ export interface EvaluationContext {
    * component body has returned and the alias frame has been popped.
    */
   componentEffectStack: ScopedEffectDecl[][];
-  /** Action declarations (`action Foo() { ... }`). */
+  /** Action declarations (`function foo() { ... }` — camelCase). */
   actionDecls: Map<string, ActionDeclaration>;
   /** HTTP runtime (`http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
   /** Aktion 0.5 i18n runtime (`$i18n = i18n({...})` declaration + `t()` builtin). */
   i18n?: I18nRuntime;
-  /** Aktion 0.5 action runner (`action Foo() optimistic { … }` invocations). */
+  /** Action runner for function declarations. */
   actionRunner?: ActionDeclRunner;
   /** Notify the host that something changed and a re-render is needed. */
   notify?: () => void;
-  /**
-   * Optional executor for raw `js{ … }` blocks encountered inside an
-   * inline lambda. When set, evaluating a lambda whose body resolves to
-   * a `JsBlock` payload will invoke this with the captured body so
-   * `Button("Hi", action: () => { js{ alert("Hi") } })` actually runs
-   * the script instead of returning the deferred payload.
-   */
-  jsBlockExecutor?: (body: string, args?: Record<string, unknown>) => unknown;
+  /** Dispatch a custom event from an `emit("name", detail)` call. */
+  onEmit?: (eventName: string, detail: unknown) => void;
   /**
    * Cleanup callbacks attached to this context. Populated during
    * `planProgram` for resources that outlive a single evaluation pass —
@@ -197,6 +363,17 @@ export interface EvaluationContext {
    * creating a fresh context so subscribers don't leak across replans.
    */
   disposers: Array<() => void>;
+  /**
+   * Runtime safety budget — bounds component recursion depth, loop
+   * iterations, and array allocations so a partial/recursive program
+   * (typed live in the playground, mid-stream LLM token, …) cannot
+   * freeze the browser. The host resets it between renders; tests
+   * inherit the defaults and never bother because realistic test
+   * programs are orders of magnitude under the limits. Set to
+   * `undefined` (via `createContext({ budget: null })`) to disable
+   * enforcement entirely — only do this in trusted offline pipelines.
+   */
+  budget?: RuntimeBudget;
 }
 
 /**
@@ -211,7 +388,15 @@ export interface CreateContextOptions {
   i18n?: I18nRuntime;
   actionRunner?: ActionDeclRunner;
   notify?: () => void;
-  jsBlockExecutor?: (body: string, args?: Record<string, unknown>) => unknown;
+  onEmit?: (eventName: string, detail: unknown) => void;
+  /**
+   * Runtime safety budget for this context.
+   *   - omitted (default): a fresh budget with `DEFAULT_RUNTIME_BUDGET` limits.
+   *   - explicit `RuntimeBudget`: caller-supplied limits (e.g. higher caps for
+   *     server-side batch renders that don't need browser-tab safety).
+   *   - `null`: disable enforcement entirely.
+   */
+  budget?: RuntimeBudget | null;
 }
 
 /**
@@ -238,8 +423,9 @@ export function createContext(
     i18n: options.i18n,
     actionRunner: options.actionRunner,
     notify: options.notify,
-    jsBlockExecutor: options.jsBlockExecutor,
+    onEmit: options.onEmit,
     disposers: [],
+    budget: options.budget === null ? undefined : (options.budget ?? createRuntimeBudget()),
   };
 }
 
@@ -260,21 +446,6 @@ export function disposeContext(ctx: EvaluationContext): void {
       console.error("[aktion] context disposer threw", err);
     }
   }
-}
-
-/**
- * Build the `args` map handed to a `js{ … }` body so authors can
- * reference lambda parameters via `ctx.args.<name>`.
- */
-function paramArgs(
-  params: ReadonlyArray<{ name: string }>,
-  callArgs: ReadonlyArray<unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (let i = 0; i < params.length; i += 1) {
-    out[params[i]!.name] = callArgs[i];
-  }
-  return out;
 }
 
 /**
@@ -567,8 +738,6 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
     case "ActionDeclaration":
       ctx.actionDecls.set(stmt.name, stmt);
       return;
-    case "Emit":
-    case "Cleanup":
     case "Await":
     case "Return":
     case "ExpressionStatement":
@@ -584,7 +753,7 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
 }
 
 /**
- * Evaluate a `_router_({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
+ * Evaluate a `Router({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
  * call. The argument MUST be an object literal whose keys are route patterns
  * (string literals) or the `default` keyword (wildcard fallback). Values are
  * arbitrary expressions, evaluated lazily — only the matching arm runs, and
@@ -605,7 +774,7 @@ function evaluateRouterCall(
   if (!arg || arg.kind !== "Object") {
     // eslint-disable-next-line no-console
     console.error(
-      `[aktion] _router_ expects an object literal of route arms (e.g. \`_router_({ "/": Home(), default: NotFound() })\`).`,
+      `[aktion] Router expects an object literal of route arms (e.g. \`Router({ "/": Home(), default: NotFound() })\`).`,
       loc,
     );
     ctx.router?.setActiveMatch(null, {});
@@ -690,13 +859,13 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
     case "Literal": return expr.value;
     case "Identifier": {
       if (ctx.loopVars.has(expr.name)) return ctx.loopVars.get(expr.name);
-      // `_route_` is the canonical handle for the router's reactive
+      // `route` is the canonical handle for the router's reactive
       // surface. Reading it subscribes to the internal `route` state slot
       // so the renderer re-runs when the URL hash changes, and the
       // returned object exposes `path`, `params`, `pattern`, `query`,
       // plus an imperative `navigate(path)` method that delegates to the
       // host router.
-      if (expr.name === "_route_") {
+      if (expr.name === "route") {
         ctx.trackedState.add("route");
         return ctx.router ? buildRouteState(ctx.router) : { path: "/", params: {}, pattern: null, query: {}, navigate() {}, toString() { return "/"; } };
       }
@@ -787,7 +956,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       return evaluate(expr.argument, ctx);
     }
     case "If": return evaluateIf(expr, ctx);
-    case "Match": return evaluateMatch(expr, ctx);
+    case "Switch": return evaluateSwitch(expr, ctx);
     case "For": return evaluateFor(expr, ctx);
     case "Block": return evaluateBlock(expr, ctx, {});
     case "Lambda": {
@@ -830,31 +999,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
           ctx.loopVars.set(param.name, value);
         }
         try {
-          if (lambdaBody.kind === "JsBlock") {
-            const body = (lambdaBody as { body: string }).body;
-            // Execute eagerly when the host has wired a runner — this is
-            // what lets `Button("…", action: () => { js{ … } })` run the
-            // script on click. When no runner is available we keep the
-            // legacy deferred payload so the action / effect machinery
-            // can still process it later.
-            if (ctx.jsBlockExecutor) {
-              return ctx.jsBlockExecutor(body, paramArgs(lambdaParams, callArgs));
-            }
-            return { __kind: "JsBlock", body };
-          }
-          const result = evaluate(lambdaBody as Expression, ctx);
-          // The body might be a `Block` that ends in a `js{}` expression
-          // (`() => { js{ … } }`) — when that returns a deferred payload
-          // and we have an executor, run it for its side effects.
-          if (
-            ctx.jsBlockExecutor &&
-            result && typeof result === "object" &&
-            (result as { __kind?: unknown }).__kind === "JsBlock"
-          ) {
-            const body = (result as { body: string }).body;
-            return ctx.jsBlockExecutor(body, paramArgs(lambdaParams, callArgs));
-          }
-          return result;
+          return evaluate(lambdaBody, ctx);
         } finally {
           for (const slot of restore) {
             if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
@@ -869,11 +1014,6 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
         }
       };
     }
-    case "JsBlock": {
-      return { __kind: "JsBlock", body: expr.body };
-    }
-    case "NamedArg":
-      return evaluate(expr.value, ctx);
     default: return null;
   }
 }
@@ -891,21 +1031,45 @@ function evaluateIf(expr: { test: Expression; consequent: BlockExpr; alternate?:
   return null;
 }
 
-function evaluateMatch(
-  expr: { discriminant: Expression; arms: ReadonlyArray<{ pattern: Expression | "_"; body: Expression }> },
+function evaluateSwitch(
+  expr: { discriminant: Expression; cases: ReadonlyArray<SwitchCase> },
   ctx: EvaluationContext,
 ): unknown {
   const value = evaluate(expr.discriminant, ctx);
-  for (const arm of expr.arms) {
-    if (arm.pattern === "_") {
-      return evaluate(arm.body, ctx);
+  for (const c of expr.cases) {
+    if (c.test === null) {
+      return evaluateSwitchBody(c.body, ctx);
     }
-    const patternValue = evaluate(arm.pattern, ctx);
+    const patternValue = evaluate(c.test, ctx);
     if (patternValue === value) {
-      return evaluate(arm.body, ctx);
+      return evaluateSwitchBody(c.body, ctx);
     }
   }
   return null;
+}
+
+function evaluateSwitchBody(
+  body: ReadonlyArray<Statement>,
+  ctx: EvaluationContext,
+): unknown {
+  let result: unknown = null;
+  for (const stmt of body) {
+    if (stmt.kind === "ExpressionStatement") {
+      result = evaluate(stmt.expression, ctx);
+    } else if (stmt.kind === "Assignment") {
+      const value = evaluate(stmt.expression, ctx);
+      if (stmt.isState) {
+        const target = resolveStateAlias(ctx, stmt.identifier);
+        ctx.state.set(target, value);
+      } else {
+        ctx.loopVars.set(stmt.identifier, value);
+      }
+      result = value;
+    } else if (stmt.kind === "Return") {
+      return stmt.argument ? evaluate(stmt.argument, ctx) : undefined;
+    }
+  }
+  return result;
 }
 
 function evaluateFor(
@@ -935,6 +1099,7 @@ function evaluateFor(
     }));
   try {
     for (let i = 0; i < iterableValue.length; i += 1) {
+      tickIterations(ctx.budget, 1, "`for` expression");
       const row = iterableValue[i];
       ctx.loopVars.set(expr.item, row);
       if (idxName) ctx.loopVars.set(idxName, i);
@@ -1058,6 +1223,12 @@ function evaluateBlock(
           frame.push({
             decl: stmt,
             capturedAliases: ctx.stateAliases.map((f) => new Map(f)),
+            // Capture the live loop-var map (component params, slots,
+            // outer for-loop bindings) so the effect body still sees
+            // them after `evaluateUserComponent` returns and clears the
+            // frame. Cloned so later mutations of `ctx.loopVars` don't
+            // bleed in.
+            capturedLoopVars: new Map(ctx.loopVars),
           });
         } else {
           installStatementBinding(stmt, ctx);
@@ -1071,11 +1242,9 @@ function evaluateBlock(
         // sibling statements without mutating outer scope.
         installStatementBinding(stmt, ctx);
         continue;
-      case "Emit":
-      case "Cleanup":
       case "Await":
-        // These are deferred to the action / effect runners; in a pure
-        // expression block they are no-ops.
+        // Deferred to the action / effect runners; in a pure expression
+        // block this is a no-op.
         continue;
     }
   }
@@ -1149,13 +1318,11 @@ function evaluateBinary(
 }
 
 /**
- * Evaluate an `object.method(args)` invocation. Positional arguments
- * pass through unchanged; any `NamedArg` entries in the argument list
- * collapse into a single trailing options object so authors can write
- * `storage.cookies.set("k", "v", expires: 1, path: "/")` instead of the
- * more verbose `{...}` literal. Unknown methods resolve to `null`
- * rather than throwing — keeps streaming scripts forgiving when a
- * runtime value disappears mid-render.
+ * Evaluate an `object.method(args)` invocation. All arguments are
+ * positional (the caller passes an object literal as the last arg if
+ * needed). Unknown methods resolve to `null` rather than throwing —
+ * keeps streaming scripts forgiving when a runtime value disappears
+ * mid-render.
  */
 function evaluateMethodCall(
   expr: {
@@ -1174,14 +1341,7 @@ function evaluateMethodCall(
   if (typeof fn !== "function") return null;
 
   const positional: unknown[] = [];
-  const named: Record<string, unknown> = {};
-  let hasNamed = false;
   for (const arg of expr.arguments) {
-    if (arg.kind === "NamedArg") {
-      named[arg.name] = evaluate(arg.value, ctx);
-      hasNamed = true;
-      continue;
-    }
     if (arg.kind === "Spread") {
       const value = evaluate(arg.argument, ctx);
       if (Array.isArray(value)) {
@@ -1191,7 +1351,7 @@ function evaluateMethodCall(
     }
     positional.push(evaluate(arg, ctx));
   }
-  const callArgs = hasNamed ? [...positional, named] : positional;
+  const callArgs = positional;
   try {
     return (fn as (...a: unknown[]) => unknown).apply(target, callArgs);
   } catch (err) {
@@ -1209,11 +1369,23 @@ function evaluateComponentCall(
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
-  // `_router_({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
+  // `Router({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
   // — the routing primitive. Intercept *before* arguments are evaluated so
   // only the matching arm's body runs (and so `params` is in scope for it).
-  if (callee === "_router_") {
+  if (callee === "Router") {
     return evaluateRouterCall(args, ctx, loc);
+  }
+  // `emit("name", detail)` — dispatch a custom event via the host.
+  if (callee === "emit") {
+    const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
+    const detail = args[1] ? evaluate(args[1], ctx) : undefined;
+    ctx.onEmit?.(eventName, detail);
+    return undefined;
+  }
+  // `Storage({...})` — returns the built-in storage namespace.
+  if (callee === "Storage") {
+    if (args[0]) evaluate(args[0], ctx);
+    return storageGlobal;
   }
   // Aktion 0.5 component declarations win over the legacy macro form and the
   // built-in library. This lets author code override built-in components
@@ -1233,9 +1405,7 @@ function evaluateComponentCall(
       return makeActionCallable(actionDecl, ctx);
     }
     // Eager invocation (`save(orderId)`) — schedule the action body.
-    const evaluated = args.map((a) =>
-      a.kind === "NamedArg" ? evaluate(a.value, ctx) : evaluate(a, ctx),
-    );
+    const evaluated = args.map((a) => evaluate(a, ctx));
     return invokeActionDecl(actionDecl, evaluated, ctx);
   }
   // `http({ url, method, body, headers, ... })` builtin — returns a
@@ -1243,9 +1413,7 @@ function evaluateComponentCall(
   // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`.
   if (callee === "http") {
     const optsArg = args[0];
-    const opts = optsArg
-      ? (optsArg.kind === "NamedArg" ? evaluate(optsArg.value, ctx) : evaluate(optsArg, ctx))
-      : {};
+    const opts = optsArg ? evaluate(optsArg, ctx) : {};
     return createHttpResource(opts, ctx);
   }
   // Local lambda registered into loopVars (e.g. an in-block helper
@@ -1255,14 +1423,12 @@ function evaluateComponentCall(
     const evaluated = args.map((arg) => evaluate(arg, ctx));
     return (localHelper as (...a: unknown[]) => unknown)(...evaluated);
   }
-  // Top-level lambda binding: e.g. `priorityTone = (p) => match p { ... }`.
+  // Top-level lambda binding: e.g. `priorityTone = (p) => switch (p) { case ... }`.
   const binding = ctx.bindings.get(callee);
   if (binding) {
     const fn = binding();
     if (typeof fn === "function") {
-      const evaluated = args.map((arg) =>
-        arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
-      );
+      const evaluated = args.map((arg) => evaluate(arg, ctx));
       return (fn as (...a: unknown[]) => unknown)(...evaluated);
     }
   }
@@ -1341,7 +1507,7 @@ function evaluateComponentCall(
   // the callee resolves against *neither* the library nor any user
   // declaration we return a synthetic Skeleton node (§2 — anticipatory
   // skeletons). This handles mid-stream forward references like
-  // `root = App()` that arrive before the `component App() { ... }`
+  // `aktion = App()` that arrive before the `function App() { ... }`
   // declaration has finished streaming: rather than dumping
   // `[unknown component: App]` into the DOM, the user sees a Skeleton
   // until the next render pass resolves the declaration.
@@ -1358,19 +1524,27 @@ function evaluateComponentCall(
     }
     return null;
   }
-  // Extract a `key:` named-arg up-front (§13 — content-addressed
-  // identity). The renderer uses it instead of the source location so
-  // reordering siblings keeps per-instance state attached to the right
-  // node. We strip it from the arg list before evaluating positional /
-  // named props so the library never sees it as a prop.
+  // Extract a `key:` prop from the trailing object literal (§13 —
+  // content-addressed identity). The renderer uses it instead of the
+  // source location so reordering siblings keeps per-instance state
+  // attached to the right node. We strip it from the arg list before
+  // evaluating positional / named props so the library never sees it.
   let explicitKey: unknown = undefined;
-  const propArgs: Expression[] = [];
-  for (const arg of args) {
-    if (arg.kind === "NamedArg" && arg.name === "key") {
-      explicitKey = evaluate(arg.value, ctx);
-      continue;
+  const propArgs: Expression[] = [...args];
+  if (propArgs.length > 0) {
+    const last = propArgs[propArgs.length - 1]!;
+    if (last.kind === "Object") {
+      const keyProp = last.properties.find((p) => !p.spread && p.key === "key");
+      if (keyProp) {
+        explicitKey = evaluate(keyProp.value, ctx);
+        const filtered = last.properties.filter((p) => p !== keyProp);
+        if (filtered.length > 0) {
+          propArgs[propArgs.length - 1] = { ...last, properties: filtered };
+        } else {
+          propArgs.pop();
+        }
+      }
     }
-    propArgs.push(arg);
   }
   const { args: evaluated, argMeta } = resolveLibraryCallArgs(ctx, callee, propArgs);
   const node: ComponentNode = {
@@ -1393,9 +1567,10 @@ function evaluateComponentCall(
  *     `$variable` reference (or member chain rooted at one, e.g.
  *     `$user.name`) lifts to `argMeta.stateRef` so the library renderer
  *     can wire two-way binding into the right nested slot.
- *   - `NamedArg`s — routed by prop name. If the named arg's value is a
- *     bare `$variable` (`Input("title", value: $title)`) or a member
- *     chain rooted at one (`value: $form.email`), the slot's
+ *   - A trailing `ObjectExpr` — its properties are treated as named
+ *     args routed by prop name. If a property's value is a bare
+ *     `$variable` (`Input("title", { value: $title })`) or a member
+ *     chain rooted at one (`{ value: $form.email }`), the slot's
  *     `argMeta.stateRef` carries the dotted path so renderers can wire
  *     a deep two-way binding.
  *   - Extra positional args (multi-positional, §19.1 violation) — fall
@@ -1414,12 +1589,9 @@ function resolveLibraryCallArgs(
 ): { args: unknown[]; argMeta: ArgMeta[] } {
   const spec = ctx.library ? findComponent(ctx.library, callee) : undefined;
   if (!spec) {
-    const args = propArgs.map((arg) =>
-      arg.kind === "NamedArg" ? evaluate(arg.value, ctx) : evaluate(arg, ctx),
-    );
+    const args = propArgs.map((arg) => evaluate(arg, ctx));
     const argMeta = propArgs.map<ArgMeta>((arg) => {
-      const source = arg.kind === "NamedArg" ? arg.value : arg;
-      const ref = stateRefForArg(source, ctx);
+      const ref = stateRefForArg(arg, ctx);
       return ref !== null ? { stateRef: ref } : {};
     });
     return { args, argMeta };
@@ -1441,21 +1613,41 @@ function resolveLibraryCallArgs(
     filled: false,
   }));
 
+  // Split the named-props ObjectExpr from positional args. The named-props
+  // block is the *last* ObjectExpr in `propArgs` — so `Foo("hi", {x: 1})`
+  // (trailing) and `Foo({x: 1}, [children])` (leading) both work. This is
+  // the most JS-natural shape and matches how React-style libraries pass
+  // props alongside positional children.
   type PositionalSource = { expr: Expression; value: unknown };
   const positionals: PositionalSource[] = [];
-
-  for (const arg of propArgs) {
-    if (arg.kind === "NamedArg") {
-      const slot = slotByName.get(arg.name);
-      if (slot === undefined) continue;
-      const value = evaluate(arg.value, ctx);
-      slots[slot]!.value = value;
-      slots[slot]!.filled = true;
-      const ref = stateRefForArg(arg.value, ctx);
-      if (ref !== null) slots[slot]!.meta = { stateRef: ref };
-      continue;
+  let trailingObjIdx = -1;
+  for (let i = propArgs.length - 1; i >= 0; i -= 1) {
+    if (propArgs[i]!.kind === "Object") {
+      trailingObjIdx = i;
+      break;
     }
+  }
+
+  for (let i = 0; i < propArgs.length; i += 1) {
+    if (i === trailingObjIdx) continue;
+    const arg = propArgs[i]!;
     positionals.push({ expr: arg, value: evaluate(arg, ctx) });
+  }
+
+  if (trailingObjIdx >= 0) {
+    const trailingObj = propArgs[trailingObjIdx]!;
+    if (trailingObj.kind === "Object") {
+      for (const prop of trailingObj.properties) {
+        if (prop.spread) continue;
+        const slot = slotByName.get(prop.key);
+        if (slot === undefined) continue;
+        const value = evaluate(prop.value, ctx);
+        slots[slot]!.value = value;
+        slots[slot]!.filled = true;
+        const ref = stateRefForArg(prop.value, ctx);
+        if (ref !== null) slots[slot]!.meta = { stateRef: ref };
+      }
+    }
   }
 
   // Aktion 0.5 §19.1 — exactly one positional argument max
@@ -1497,7 +1689,7 @@ function resolveLibraryCallArgs(
 }
 
 /**
- * Invoke a Aktion 0.5 `component Name(p) { ... }` declaration. Parameters are
+ * Invoke a `function Name(p) { return ... }` declaration. Parameters are
  * bound to the supplied positional / named arguments and the block body
  * is evaluated; the last expression's value is returned as the rendered
  * output. State and effect declarations inside the body are *registered
@@ -1512,22 +1704,58 @@ function invokeComponentDecl(
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
-  // Split positional vs. named so we can build the slot-aware UserComponentNode
-  // the renderer expands at render-time. Positional args bind to params in
-  // declaration order; extras become the implicit `children` slot. Named
-  // args bind by name (params first, then slots, then a special `key:`).
+  // Split positional vs. named for the slot-aware UserComponentNode. The
+  // named-props block is the *last* ObjectExpr in `args` (rightmost),
+  // which lets users write `Foo("hi", {x: 1})` (trailing) or
+  // `Foo({x: 1}, child)` (leading) — both routes through the same path.
   const positionalExprs: Expression[] = [];
   const named: Record<string, Expression> = {};
   let explicitKeyExpr: Expression | undefined;
-  for (const arg of args) {
-    if (arg.kind === "NamedArg") {
-      if (arg.name === "key") {
-        explicitKeyExpr = arg.value;
-      } else {
-        named[arg.name] = arg.value;
+
+  let trailingObjIdx = -1;
+  for (let i = args.length - 1; i >= 0; i -= 1) {
+    if (args[i]!.kind === "Object") {
+      trailingObjIdx = i;
+      break;
+    }
+  }
+  let trailingObjArg = trailingObjIdx >= 0 ? args[trailingObjIdx]! : null;
+
+  // Decide whether to treat the trailing object as named-args or a regular
+  // positional arg. Rule: if the object has `key:` or any key that matches
+  // one of the component's param names, it expands to named-args. If none
+  // of its keys match any param name, it's passed positionally — this lets
+  // callers pass an opaque data/slots object to a user component without
+  // surprising key-routing.
+  let expandAsNamed = false;
+  if (trailingObjArg && trailingObjArg.kind === "Object") {
+    const paramNames = new Set(decl.params.map((p) => p.name));
+    for (const prop of trailingObjArg.properties) {
+      if (prop.spread) continue;
+      if (prop.key === "key" || paramNames.has(prop.key)) {
+        expandAsNamed = true;
+        break;
       }
-    } else {
-      positionalExprs.push(arg);
+    }
+  }
+  if (!expandAsNamed) {
+    trailingObjIdx = -1;
+    trailingObjArg = null;
+  }
+
+  for (let i = 0; i < args.length; i += 1) {
+    if (i === trailingObjIdx) continue;
+    positionalExprs.push(args[i]!);
+  }
+
+  if (trailingObjArg && trailingObjArg.kind === "Object") {
+    for (const prop of trailingObjArg.properties) {
+      if (prop.spread) continue;
+      if (prop.key === "key") {
+        explicitKeyExpr = prop.value;
+      } else {
+        named[prop.key] = prop.value;
+      }
     }
   }
 
@@ -1537,7 +1765,7 @@ function invokeComponentDecl(
   const positional = positionalExprs.map((expr) =>
     expr.kind === "Spread" ? evaluate(expr.argument, ctx) : evaluate(expr, ctx),
   );
-  // Flatten Spread results inline so `Counter(...defaults, key: "a")` works.
+  // Flatten Spread results inline so `Counter(...defaults, { key: "a" })` works.
   const flatPositional: unknown[] = [];
   for (let i = 0; i < positionalExprs.length; i += 1) {
     const expr = positionalExprs[i]!;
@@ -1568,7 +1796,7 @@ function invokeComponentDecl(
  * Result of `evaluateUserComponent`. `value` is the body's last
  * expression value (a `ComponentNode`, another `UserComponentNode`, or a
  * primitive) that the renderer will materialise. `effects` is the list of
- * `effect [ ...deps ] { … }` declarations discovered inside the body
+ * `effect(() => { … }, [deps])` declarations discovered inside the body
  * (paired with the per-instance alias stack captured at walk time) —
  * the renderer hands them to the host's `EffectRunner` so they mount on
  * a per-instance scope and tear down when the instance unmounts.
@@ -1589,7 +1817,7 @@ export interface EvaluatedUserComponent {
  *
  * Returns the body's last-expression value (typically a `ComponentNode`
  * the renderer can hand to the library, or another `UserComponentNode`
- * to expand recursively) plus any `effect [ ...deps ] { … }` declarations
+ * to expand recursively) plus any `effect(() => { … }, [deps])` declarations
  * discovered inside the body that the renderer must mount per-instance.
  */
 export function evaluateUserComponent(
@@ -1597,6 +1825,9 @@ export function evaluateUserComponent(
   ctx: EvaluationContext,
   instanceKey: string,
 ): EvaluatedUserComponent {
+  // NB: component-recursion depth is bounded by the renderer (which is
+  // the only caller that drives recursive expansion). See
+  // `enterUserComponent` / `leaveUserComponent` and `renderer.ts`.
   const { decl, positional, named } = node;
   const restoreLoopVars: Array<{ name: string; had: boolean; prev: unknown }> = [];
   // Bind component params in declaration order, with defaults for absent
@@ -1666,7 +1897,7 @@ export function evaluateUserComponent(
     }
   }
   ctx.stateAliases.push(aliasFrame);
-  // Push a frame so `effect [ ...deps ] { … }` declarations encountered
+  // Push a frame so `effect(() => { … }, [deps])` declarations encountered
   // inside this body collect into a per-instance bucket instead of
   // mutating the global `effectDecls` map.
   const effectsFrame: ScopedEffectDecl[] = [];
@@ -1764,86 +1995,6 @@ function evaluateBuiltinCall(
   if (name === "__rui_postfix__") {
     return evaluateSyntheticPostfix(args, ctx);
   }
-  // Fallback iteration builtin (the blessed surface is the expression-form
-  // `for x in xs { ... }`). Kept available because some templates pre-date
-  // the `for` expression and the spec (§28) explicitly preserves these
-  // builtins as fallbacks for one positional-only iteration.
-  if (name === "Each") {
-    const sourceArg = args[0];
-    const varNameArg = args[1];
-    const templateArg = args[2];
-    if (!sourceArg || !varNameArg || !templateArg) return [];
-    const sourceValue = evaluate(sourceArg, ctx);
-    const arr = Array.isArray(sourceValue) ? sourceValue : [];
-    const varName = varNameArg.kind === "Literal" ? String(varNameArg.value ?? "") : "";
-    // Destructuring forms: `"{id, name, role}"` binds those fields directly
-    // in addition to the row object (also bound under its single-name
-    // counterpart for backward compatibility — `"{id, name}"` exposes
-    // `id` / `name`; `"row,{id,name}"` would expose `row`, `id`, `name`).
-    const destructuring = parseDestructureNames(varName);
-    const out: unknown[] = [];
-    // Snapshot every binding we are about to overwrite so we can restore
-    // the outer scope exactly — including the legitimate case where the
-    // outer value is `undefined`. Using `has(...)` instead of `prev ===
-    // undefined` prevents an inner @Each from accidentally deleting an
-    // outer loop var.
-    const snapshots = destructuring.bindings.map((name) => ({
-      name,
-      had: ctx.loopVars.has(name),
-      prev: ctx.loopVars.get(name),
-    }));
-    try {
-      for (const item of arr) {
-        if (destructuring.scalarName) {
-          ctx.loopVars.set(destructuring.scalarName, item);
-        }
-        for (const field of destructuring.fields) {
-          if (item && typeof item === "object") {
-            ctx.loopVars.set(field, (item as Record<string, unknown>)[field]);
-          } else {
-            ctx.loopVars.set(field, undefined);
-          }
-        }
-        out.push(evaluate(templateArg, ctx));
-      }
-    } finally {
-      for (const slot of snapshots) {
-        if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
-        else ctx.loopVars.delete(slot.name);
-      }
-    }
-    return out;
-  }
-
-  // Lazy conditional renderer: `@If(cond, trueNode, falseNode?)`. Only the
-  // selected branch is evaluated — useful for forms whose alternate branch
-  // would otherwise consume `params.id` / loop variables in scope.
-  if (name === "If") {
-    const condArg = args[0];
-    const thenArg = args[1];
-    const elseArg = args[2];
-    if (!condArg) return null;
-    const condition = evaluate(condArg, ctx);
-    if (condition) return thenArg ? evaluate(thenArg, ctx) : null;
-    return elseArg ? evaluate(elseArg, ctx) : null;
-  }
-
-  if (name === "Switch") {
-    const valueArg = args[0];
-    const casesArg = args[1];
-    const defaultArg = args[2];
-    if (!valueArg || !casesArg) return null;
-    const value = evaluate(valueArg, ctx);
-    const key = stringify(value);
-    if (casesArg.kind === "Object") {
-      for (const prop of casesArg.properties) {
-        if (prop.spread) continue;
-        if (prop.key === key) return evaluate(prop.value, ctx);
-      }
-    }
-    return defaultArg ? evaluate(defaultArg, ctx) : null;
-  }
-
   // Aktion 0.5 i18n: `t(key, vars?)` — global translation builtin.
   if (name === "T" || name === "t") {
     const keyArg = args[0];
@@ -1870,7 +2021,32 @@ function evaluateBuiltinCall(
   const fn = dataBuiltins[name];
   if (!fn) return null;
   const evaluated = args.map((a) => evaluate(a, ctx));
+  // Pre-flight allocation checks. Both builtins materialise an array
+  // proportional to a user-supplied number; without bounds, a stray
+  // `@Range(0, 1e9)` would push a billion entries before throwing JS-
+  // level errors. We compute the expected size cheaply and reject up
+  // front so the renderer never starts allocating.
+  if (name === "Range") {
+    enforceArrayLength(ctx.budget, expectedRangeSize(evaluated), "@Range");
+  } else if (name === "Repeat") {
+    enforceArrayLength(ctx.budget, Math.max(0, toNumber(evaluated[1])), "@Repeat");
+  }
   return fn(evaluated);
+}
+
+/**
+ * Compute how many entries `@Range(start, end, step?)` would emit
+ * *without* actually allocating the array. Matches the inclusive
+ * semantics of the `Range` builtin in `runtime/builtins.ts`.
+ */
+function expectedRangeSize(evaluated: unknown[]): number {
+  const start = toNumber(evaluated[0]);
+  const end = toNumber(evaluated[1]);
+  const stepArg = evaluated[2];
+  const step = stepArg === undefined ? (end >= start ? 1 : -1) : toNumber(stepArg);
+  if (step === 0) return 1;
+  const span = Math.abs(end - start);
+  return Math.floor(span / Math.abs(step)) + 1;
 }
 
 /**
@@ -2019,42 +2195,6 @@ function evaluateSyntheticPostfix(
 }
 
 /**
- * Parse an `@Each` loop variable specifier into the set of names to bind.
- * Supports:
- *   - `"row"`                       — single scalar binding
- *   - `"{id, name}"`                — destructure the row object's fields
- *   - `"row, {id, name}"`           — bind the row AND destructured fields
- * The result lists every name we will write into `ctx.loopVars` so the
- * caller can snapshot/restore them.
- */
-function parseDestructureNames(spec: string): {
-  scalarName: string;
-  fields: string[];
-  bindings: string[];
-} {
-  const trimmed = spec.trim();
-  if (!trimmed) return { scalarName: "", fields: [], bindings: [] };
-
-  // `{a, b, c}` — pure destructure.
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    const fields = trimmed.slice(1, -1).split(",").map((f) => f.trim()).filter(Boolean);
-    return { scalarName: "", fields, bindings: fields };
-  }
-  // `row, {a, b}` — row binding plus destructured fields.
-  const braceIdx = trimmed.indexOf("{");
-  if (braceIdx > 0) {
-    const head = trimmed.slice(0, braceIdx).trim();
-    const scalar = head.replace(/,\s*$/, "").trim();
-    const closeIdx = trimmed.indexOf("}", braceIdx);
-    const fields = closeIdx > braceIdx
-      ? trimmed.slice(braceIdx + 1, closeIdx).split(",").map((f) => f.trim()).filter(Boolean)
-      : [];
-    return { scalarName: scalar, fields, bindings: scalar ? [scalar, ...fields] : fields };
-  }
-  return { scalarName: trimmed, fields: [], bindings: [trimmed] };
-}
-
-/**
  * Resolve the current route path. Prefers the router (when present), falls
  * back to the `route` state slot, and finally to "/". Tracking the slot
  * here makes router bindings reactive to host pages that write the path
@@ -2077,12 +2217,12 @@ function readRoutePath(ctx: EvaluationContext): string {
 }
 
 /**
- * Build the reactive `_route_` payload from the host's `Router`. Returns
+ * Build the reactive `route` payload from the host's `Router`. Returns
  * a plain object with `path`, `params`, `pattern`, `query`, a
  * `navigate(path)` method that delegates to the router, plus a
- * `toString()` so template literals like `${_route_}` still coerce to
+ * `toString()` so template literals like `${route}` still coerce to
  * the path. Computed on every read so route arm matches that update
- * params mid-render are reflected in subsequent `_route_.params` reads
+ * params mid-render are reflected in subsequent `route.params` reads
  * in the same render pass.
  */
 function buildRouteState(router: NonNullable<EvaluationContext["router"]>): Record<string, unknown> {
@@ -2275,9 +2415,9 @@ function stringify(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
-  // Objects with a custom `toString()` (notably the reactive `_route_`
+  // Objects with a custom `toString()` (notably the reactive `route`
   // payload whose `toString()` returns `path`) get their string form so
-  // template literals like `${_route_}` keep coercing to the path.
+  // template literals like `${route}` keep coercing to the path.
   if (typeof v === "object" && v !== null) {
     const proto = Object.getPrototypeOf(v);
     const ownToString = (v as { toString?: () => string }).toString;

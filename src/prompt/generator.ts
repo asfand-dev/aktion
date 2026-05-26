@@ -2,15 +2,15 @@
  * System prompt generator — Aktion.
  *
  * Produces an ordered system prompt that teaches an LLM how to author
- * Aktion — the compact declarative language consumed by
+ * Aktion — a compact, JS-aligned declarative language consumed by
  * `<aktion-app>`. Two flavours ship side-by-side:
  *
  *   - `"full"` (default): comprehensive teaching prompt that covers every
- *     language feature — reactive state, components, actions, effects,
- *     `http({...})`, routing, JS escape hatch, builtins, helpers,
- *     globals, i18n, theming — plus the entire component library and a
- *     handful of worked examples. Use this when the LLM is generating
- *     full applications, dashboards, or websites.
+ *     language feature — reactive state, components (PascalCase functions),
+ *     actions (camelCase functions), effects, `http({...})`, routing,
+ *     builtins, helpers, globals, i18n, theming — plus the entire component
+ *     library and a handful of worked examples. Use this when the LLM is
+ *     generating full applications, dashboards, or websites.
  *
  *   - `"chat"`: compact, **read-only** prompt that teaches *just enough*
  *     to convert an LLM's prose reply into a rich UI surface. No state,
@@ -67,7 +67,7 @@ export interface PromptOptions {
   editMode?: boolean;
 }
 
-const ROOT_NAME = "_app_";
+const ROOT_NAME = "aktion";
 
 export function generatePrompt(
   library: ComponentLibrary,
@@ -106,7 +106,7 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   if (flags.toolCalls) sections.push(fullHttp());
   sections.push(fullControlFlow());
   sections.push(fullRouting());
-  sections.push(fullJsEscape());
+  sections.push(fullMarkupEscapeHatches());
   if (flags.toolCalls || flags.bindings) sections.push(fullBuiltins());
   sections.push(fullHelpers());
   sections.push(fullGlobals());
@@ -162,42 +162,49 @@ function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): str
 
 function fullHeader(preamble: string | undefined): string {
   const lead = preamble?.trim()
-    || "You are a full-stack UI engineer building **complete, working applications** in Aktion — a compact, declarative DSL for reactive, streaming-first user interfaces. Treat each prompt as a request to ship a real, production-quality product surface (dashboards, CRUD apps, multi-page websites, settings consoles, inboxes, admin panels, …). Never reply with a one-shot chat card; always produce a substantial, navigable app. Respond ONLY in Aktion — no prose, no JSON, no markdown, no HTML.";
-  return `${lead}\n\nEvery response MUST begin with \`${ROOT_NAME} = ...\` on the very first line. Use a top-level container (\`${ROOT_NAME} = AppShell(...)\` for full apps, \`${ROOT_NAME} = Stack(...)\` for landing pages, etc.) or a user-declared component (\`${ROOT_NAME} = App()\`). For multi-page apps wrap the main area in \`pages = _router_({ ... })\` and reference \`pages\` from \`${ROOT_NAME}\`. Seed realistic mock data inline (5–20 plausible rows per dataset) when the host has no real backend. Wire every visible button to an \`action\`. Use \`$name = value\` for reactive state, \`http({ ... })\` for any data fetch, \`effect [ ...deps ] { … }\` for lifecycle work, \`_router_({ … })\` for navigation. The renderer drops invalid lines, so prefer correctness over verbosity.`;
+    || "You are a full-stack UI engineer building **complete, working applications** in Aktion — a compact, JS-aligned declarative language for reactive, streaming-first user interfaces. Aktion is a strict subset of JavaScript: every program is valid JS syntax, but the runtime gives it reactive semantics. Treat each prompt as a request to ship a real, production-quality product surface (dashboards, CRUD apps, multi-page websites, settings consoles, inboxes, admin panels, …). Never reply with a one-shot chat card; always produce a substantial, navigable app. Respond ONLY in Aktion — no prose, no JSON, no markdown, no HTML.";
+  return `${lead}\n\nEvery response MUST begin with \`${ROOT_NAME} = ...\` on the very first line. Use a top-level container (\`${ROOT_NAME} = AppShell(...)\` for full apps, \`${ROOT_NAME} = Stack(...)\` for landing pages, etc.) or a user-declared component (\`${ROOT_NAME} = App()\`). For multi-page apps wrap the main area in \`pages = Router({ ... })\` and reference \`pages\` from \`${ROOT_NAME}\`. Seed realistic mock data inline (5–20 plausible rows per dataset) when the host has no real backend. Wire every visible button to a camelCase function (action). Use \`$name = value\` for reactive state, \`http({ ... })\` for any data fetch, \`effect(() => { … }, [...deps])\` for lifecycle work, \`Router({ … })\` for navigation. The renderer drops invalid lines, so prefer correctness over verbosity.`;
 }
 
 function fullMentalModel(): string {
   return `## Mental model
 
-Aktion is a streaming-first, declarative DSL. A program is a flat
-list of \`name = expression\` statements. The renderer evaluates them lazily,
-re-parses the stream on every chunk, and silently treats undefined references
-as empty — so a partially-streamed program renders progressively from the top.
+Aktion is a streaming-first, JS-aligned declarative language. A program is a
+flat list of \`name = expression\` statements using JavaScript syntax. The
+renderer evaluates them lazily, re-parses the stream on every chunk, and
+silently treats undefined references as empty — so a partially-streamed
+program renders progressively from the top.
 
 Three identifier conventions cooperate:
 
 - **Plain bindings**: \`name = expression\` — a non-reactive alias. Reading
   it never subscribes; the value is captured once when the statement runs.
-- **Reactive atoms**: \`$name = value\` — a single tracked cell. Reading
+- **Reactive atoms**: \`$name = value\` — a single tracked cell. The \`$\`
+  prefix is what makes a binding reactive (the \`let\`/\`const\`/\`var\`
+  keyword does NOT affect reactivity — only the \`$\` prefix does). Reading
   \`$name\` subscribes the surrounding component / effect; writing inside
-  an \`action\` / \`effect\` / lambda body notifies subscribers.
+  a function body (action) or effect notifies subscribers.
 - **Reserved built-ins**: \`${ROOT_NAME}\` (the UI root, required first
-  line), \`theme\` (optional brand override), \`_route_\` (router-owned
-  reactive surface — read \`_route_.path\` / \`_route_.params\` and call
-  \`_route_.navigate("/path")\` to navigate), \`$i18n\` (i18n bundle handle).
+  line), \`theme\` (optional brand override), \`route\` (router-owned
+  reactive surface — read \`route.path\` / \`route.params\` and call
+  \`route.navigate("/path")\` to navigate), \`$i18n\` (i18n bundle handle).
 
-Three declaration keywords are reserved at the top level:
+Two conventions replace the old \`component\` / \`action\` keywords:
 
-- \`component Name(args) { … return Expression }\` — first-class UI
-  primitive with optional defaults and per-instance state.
-- \`action Name(args) { … }\` — imperative side-effect block triggered by
-  events. MAY \`return\` a value.
-- \`effect [ ...deps ] { … }\` — declarative, anonymous background work
-  tied to a component / top-level binding. Dependencies (\`$atom\`,
-  \`on:mount\`, \`on:unmount\`, \`on:every(N)\`, \`debounce(N)\`,
-  \`throttle(N)\`) live in the bracketed list.
+- \`function Name(args) { … return Expression }\` — **PascalCase** name
+  means a first-class UI component with optional defaults and per-instance
+  state.
+- \`function name(args) { … }\` — **camelCase** name means an imperative
+  action (side-effect block) triggered by events. MAY \`return\` a value.
 
-Everything else (\`http({...})\`, \`_router_({...})\`, \`Theme({...})\`,
+Effects use a function-call form:
+
+- \`effect(() => { … }, [...deps])\` — declarative background work tied to a
+  component or top-level binding. Dependencies (\`$atom\`, \`"mount"\`,
+  \`"unmount"\`, \`"every(N)"\`, \`"debounce(N)"\`, \`"throttle(N)"\`) live
+  in the array.
+
+Everything else (\`http({...})\`, \`Router({...})\`, \`Theme({...})\`,
 \`i18n({...})\`, \`Toast(...)\`, \`Stack(...)\`) is a regular function /
 component call.`;
 }
@@ -205,10 +212,13 @@ component call.`;
 function fullSyntax(): string {
   return `## Syntax
 
-Source is line-oriented; **newline terminates a statement**. Never use
-semicolons or statement-level commas. \`{ … }\` braces open blocks (component
-bodies, action bodies, effect bodies, control-flow arms, object literals).
+Aktion is a strict subset of JavaScript. Source is line-oriented; **newline
+terminates a statement**. Semicolons are optional (ASI applies). \`{ … }\`
+braces open blocks (function bodies, control-flow arms, object literals).
 Indentation is purely cosmetic.
+
+### Comments
+Only \`//\` single-line and \`/* */\` multi-line comments are supported.
 
 ### Literals
 - Strings: \`"double"\` or \`'single'\`. Standard newline / tab / quote
@@ -243,39 +253,41 @@ Indentation is purely cosmetic.
 ### Statements
 - \`name = expression\` — plain binding (top-level or block-local).
 - \`$name = expression\` — declare or write a reactive atom.
-- \`component Name(args) { … }\` — component declaration.
-- \`action Name(args) { … }\` — action declaration.
-- \`effect [ ...deps ] { … }\` — anonymous effect declaration.
-- \`return expression\` — only valid inside \`component\` / \`action\` /
-  lambda bodies.
+- \`let\`/\`const\`/\`var\` keywords are optional. They do **not** affect
+  reactivity — only the \`$\` prefix does.
+- \`function Name(args) { … return expr }\` — component (PascalCase).
+- \`function name(args) { … }\` — action (camelCase).
+- \`effect(() => { … }, [...deps])\` — effect declaration.
+- \`return expression\` — only valid inside function bodies / lambdas.
 
-### Function calls and named arguments
-\`TypeName(arg1, prop: value, …)\` — arguments are matched against the
-spec's prop list in declaration order. Named arguments (\`prop: value\`)
-may appear at any position and override positional matching. Optional props
-can be omitted from the end.
+### Function calls and trailing props object
+\`TypeName(positionalArg, { prop: value, … })\` — the first argument is
+the canonical positional slot (primary label / content / children). All
+other arguments go in a trailing \`{ }\` object. Optional props can be
+omitted entirely.
 
-**One positional argument max** is the canonical 0.5 style — every
-component declares **at most one** canonical positional slot (its primary
-label / content / children). Pass that slot bare; every other argument is
-best supplied as a named argument:
+**One positional argument max** is the canonical style — every component
+declares **at most one** canonical positional slot. Pass that slot bare;
+every other argument goes in a trailing \`{ prop: value }\` object:
 
 \`\`\`
-Button("Save", variant: "primary", loading: $isSaving)        // canonical
-StatCard("Revenue", value: "$48k", trend: "up", delta: "+12%") // canonical
-Stack([Card1(), Card2()], direction: "row", gap: "md")         // canonical
-Callout("info", title: "Heads up", description: "Action required", icon: "circle-info", compact: true)
+Button("Save", { variant: "primary", loading: $isSaving })
+StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
+Stack([Card1(), Card2()], { direction: "row", gap: "md" })
+Callout("info", { title: "Heads up", description: "Action required", icon: "circle-info", compact: true })
 \`\`\`
 
 The component reference below tags the canonical positional with
 \`(positional)\`. For backwards-compatibility, additional positional
-arguments are still accepted in declaration order — but the named form is
-preferred because it survives prop renames and reorderings.
+arguments are still accepted in declaration order — but the trailing-object
+form is preferred because it survives prop renames and reorderings.
 
 ### Lambdas
 \`(arg) => expression\` for one-liners; \`(arg) => { … }\` for multi-statement
-bodies. A lambda body has the same imperative surface as an \`action\` body
-(assignments to \`$atoms\`, \`http(...)\`, \`emit\`, etc.).
+bodies. Lambda defaults use \`=\`: \`(x = 0) => x + 1\`.
+
+A lambda body has the same imperative surface as a camelCase function body
+(assignments to \`$atoms\`, \`http(...)\`, \`emit(...)\`, etc.).
 
 ### Forward references
 Statements may **reference names defined later in the program**. The parser
@@ -301,11 +313,13 @@ $theme = "dark"
 - \`count\` (no sigil) is a plain binding — NOT tracked, NOT reactive.
 - \`$count\` (with sigil) is a tracked atom — reading subscribes the
   surrounding component / effect; writing notifies subscribers.
+- \`let\`/\`const\`/\`var\` keywords are allowed but do **not** affect
+  reactivity. Only the \`$\` prefix matters.
 
 ### Assignment rules
 - **Render position** (top-level bindings, component body output, prop values):
   assignment is forbidden. Use \`$name = …\` declarations to seed.
-- **Inside \`action\` / \`effect\` / lambda bodies**: \`= += -= *= /= ??= ++ --\`
+- **Inside function bodies (actions) / effects / lambdas**: \`= += -= *= /= ??= ++ --\`
   are allowed against any \`$name\` atom *or* a member chain rooted at one
   (\`$user.name = "Alex"\`, \`$cart.items[0].qty += 1\`). The runtime
   rebuilds the root object immutably so subscribers always see a fresh
@@ -321,9 +335,9 @@ any input prop and the binding becomes two-way automatically.
 $draft = ""
 $form  = { email: "", remember: false }
 
-field    = Input("draft",    value: $draft)             // bound to $draft
-emailIn  = Input("email",    value: $form.email)        // deep bind
-remember = Switch("remember", value: $form.remember)    // deep bind
+field    = Input("draft", { value: $draft })
+emailIn  = Input("email", { value: $form.email })
+remember = Switch("remember", { value: $form.remember })
 \`\`\`
 
 Any form control that exposes a primary value prop participates:
@@ -336,46 +350,47 @@ Any form control that exposes a primary value prop participates:
 \`Pagination\` (binds \`page\`).
 
 ### Component-scoped state
-A \`$name = value\` declared **inside** a \`component\` body is per-instance.
-Two \`<Counter/>\` siblings each have their own \`count\`. Top-level
-\`$name\` declarations live for the lifetime of the response.
+A \`$name = value\` declared **inside** a PascalCase function body is
+per-instance. Two \`<Counter/>\` siblings each have their own \`$count\`.
+Top-level \`$name\` declarations live for the lifetime of the response.
 
 ### Computed values
 Just compute — every reference to a \`$\` atom inside an expression auto-tracks:
 
 \`\`\`
 $cart  = []
-$total = @Sum($cart.price)        // re-derives when $cart changes
+$total = @Sum($cart.price)
 $open  = @Filter($todos, "done", "==", false)
 \`\`\`
 
 ### URL-synced state
 URL state lives on the router, not as a separate tier:
-- \`_route_.path\` — current path (read-only).
-- \`_route_.params.id\` — path parameter; reactive.
-- \`_route_.query.tab\` — query string; **writable** (assigning updates the URL).
-- \`_route_.navigate("/path")\` — imperative navigation; only valid inside
-  \`action\` / \`effect\` bodies.`;
+- \`route.path\` — current path (read-only).
+- \`route.params.id\` — path parameter; reactive.
+- \`route.query.tab\` — query string; **writable** (assigning updates the URL).
+- \`route.navigate("/path")\` — imperative navigation; only valid inside
+  function bodies (actions) / effects.`;
 }
 
 function fullComponentsAndLambdas(): string {
   return `## Components and lambdas
 
-### Component declarations
+### Component declarations (PascalCase functions)
 \`\`\`
-component UserCard(user, tone: "default") {
+function UserCard(user, tone = "default") {
   $hover = false
   return Card([
-    Avatar(user.name, size: "md"),
-    Text(user.name, variant: "large-heavy"),
-    Text(user.role, tone: "muted"),
-    Badge(tone, tone: tone)
+    Avatar(user.name, { size: "md" }),
+    Text(user.name, { variant: "large-heavy" }),
+    Text(user.role, { tone: "muted" }),
+    Badge(tone, { tone: tone })
   ])
 }
 \`\`\`
 
+- **PascalCase** function name tells the runtime this is a component.
 - Components **must** end with an explicit \`return <expression>\`.
-- Defaults use \`= expression\` (literal or computed in the component's scope).
+- Defaults use \`= expression\` (JS default parameters).
 - \`children\` is the implicit named slot — the trailing positional argument
   at the call site is delivered as \`children\` inside the body.
 - Per-instance state: any \`$name = value\` declared inside the body is
@@ -384,49 +399,47 @@ component UserCard(user, tone: "default") {
 ### Call sites
 \`\`\`
 ${ROOT_NAME} = Stack([
-  UserCard($alice),                                  // positional arg
-  UserCard($bob, tone: "primary"),                   // named arg
-  UserCard(user: $carol, tone: "warning")            // both named
+  UserCard($alice),
+  UserCard($bob, { tone: "primary" }),
+  UserCard({ user: $carol, tone: "warning" })
 ])
 \`\`\`
 
 ### Local helpers — lambda form
 Use a lambda binding for one-off helpers that don't need their own component:
 \`\`\`
-priorityTone = (p) => match p { "high": "danger" "med": "warning" default: "muted" }
-rowFor       = (item) => Stack([Badge(item.label, tone: priorityTone(item.priority)), Text(item.title)])
-list         = for item in $items { rowFor(item) }
+priorityTone = (p) => p == "high" ? "danger" : p == "med" ? "warning" : "muted"
+rowFor       = (item) => Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
+list         = for (let item of $items) { rowFor(item) }
 \`\`\``;
 }
 
 function fullActions(): string {
-  return `## Actions — callable side effects
+  return `## Actions — callable side effects (camelCase functions)
 
-An \`action\` is a callable block of imperative statements. Declare at the
-top level (or inside a component body); invoke from any event-handler prop
-(\`onClick\`, \`onChange\`, \`onSubmit\`) or as an expression.
+A camelCase \`function\` is a callable block of imperative statements.
+Declare at the top level (or inside a component body); invoke from any
+event-handler prop (\`onClick\`, \`onChange\`, \`onSubmit\`) or as an expression.
 
 \`\`\`
-action save(item) {
+function save(item) {
   $items = [...$items, item]
   $save  = http({ url: "/api/save", method: "POST", body: { item: item } })
-  emit "saved" { id: item.id }
+  emit("saved", { id: item.id })
 }
 
-submitBtn = Button("Save", onClick: save)
+submitBtn = Button("Save", { onClick: save })
 \`\`\`
 
 ### Body grammar
-Inside an action body the imperative surface is small:
+Inside a function body (action) the imperative surface is small:
 - Assignments: \`$x = newValue\`, \`$x += 1\`, \`$x = { ...$x, field: v }\`.
 - \`http({ ... })\` — fire a request; the result is a reactive resource bag.
-- \`emit "event-name" { detail }\` — dispatch a \`CustomEvent\` on the host element.
-- \`_route_.navigate("/path")\` — programmatic navigation.
-- Statement-form \`if\` / \`match\` / \`for\` — same keywords as the expression
+- \`emit("event-name", { detail })\` — dispatch a \`CustomEvent\` on the host element.
+- \`route.navigate("/path")\` — programmatic navigation.
+- Statement-form \`if\` / \`switch\` / \`for\` — same keywords as the expression
   forms (covered below).
 - \`return\` — optionally yields a value to the caller.
-- \`js{ /* opaque JS */ }\` — escape hatch for browser APIs not exposed
-  natively (see § JS escape hatch).
 
 ### Optional \`return\`
 Actions MAY include a \`return\` statement. When omitted the action runs for
@@ -434,19 +447,18 @@ its side effects and yields \`undefined\`. When present the result is
 observable from \`$x = myAction(...)\` expressions:
 
 \`\`\`
-action greet(name) {
+function greet(name) {
   return "Hello, " + name
 }
-$hello = greet("Ada")             // re-runs whenever the action call's args change
+$hello = greet("Ada")
 \`\`\`
 
 ### Inline lambdas — the short form
-For trivial handlers, skip the \`action\` declaration entirely:
+For trivial handlers, skip the function declaration entirely:
 
 \`\`\`
-incBtn   = Button("+",     onClick: () => $count = $count + 1)
-resetBtn = Button("Reset", onClick: () => { $count = 0   $message = "" })
-copyBtn  = Button("Copy",  onClick: () => { js{ navigator.clipboard.writeText("hi") } })
+incBtn   = Button("+", { onClick: () => { $count = $count + 1 } })
+resetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })
 \`\`\``;
 }
 
@@ -454,33 +466,32 @@ function fullEffects(): string {
   return `## Effects — Declarative side effects
 
 \`effect\` blocks attach side effects to a component or top-level binding.
-They are **anonymous** — there is no name, no \`on\` keyword. Every
-dependency lives inside a single bracketed list right after the keyword:
+They use a function-call syntax with a callback and an optional dependency
+array:
 
 \`\`\`
-effect [ ...dependencies ] {
+effect(() => {
   // body
-}
+}, [...dependencies])
 \`\`\`
 
 A dependency entry is one of:
 - \`$atom\` — re-run when the named reactive atom changes.
-- \`on:mount\` — run once when the surrounding scope mounts.
-- \`on:unmount\` — run once when it unmounts.
-- \`on:every(N)\` — re-run every N milliseconds.
-- \`debounce(N)\` / \`throttle(N)\` — wrap the body with a trailing-edge rate limit.
+- \`"mount"\` — run once when the surrounding scope mounts.
+- \`"unmount"\` — run once when it unmounts.
+- \`"every(N)"\` — re-run every N milliseconds.
+- \`"debounce(N)"\` / \`"throttle(N)"\` — wrap the body with a trailing-edge rate limit.
 
 Dependencies may be combined freely (e.g.
-\`effect [$query, $page, debounce(250)] { … }\`). The order inside the
-brackets doesn't matter.
+\`effect(() => { … }, [$query, $page, "debounce(250)"])\`). The order inside
+the array doesn't matter.
 
-\`effect { ... }\` (no brackets) is equivalent to \`effect [on:mount] { ... }\` —
-both run the body once on mount.
+\`effect(() => { ... })\` (no second argument) is equivalent to
+\`effect(() => { ... }, ["mount"])\` — both run the body once on mount.
 
 ### Scope — top-level vs. component-local
-An effect can live at the program top level OR inside a
-\`component Name() { … }\` body. The syntax is identical; only the
-lifecycle differs:
+An effect can live at the program top level OR inside a PascalCase function
+body (component). The syntax is identical; only the lifecycle differs:
 
 - **Top-level** — mounted once when the program parses, torn down on
   \`setResponse\` / \`clear()\`. Use for global concerns (analytics,
@@ -492,29 +503,29 @@ lifecycle differs:
   polling, modal focus management, observers attached to a widget).
 
 \`\`\`
-_app_ = App()
+${ROOT_NAME} = App()
 $value = 10
 
-# Top-level — one shared interval for the whole program.
-effect [on:every(1000)] {
+// Top-level — one shared interval for the whole program.
+effect(() => {
   $value = $value + 1
-}
+}, ["every(1000)"])
 
-component App() {
+function App() {
   return Box([Text("Value: " + $value)])
 }
 \`\`\`
 
 \`\`\`
-_app_ = App()
+${ROOT_NAME} = App()
 $value = 10
 
-component App() {
-  # Component-local — interval starts on first render and is cleared
-  # automatically when the App instance leaves the tree.
-  effect [on:every(1000)] {
+function App() {
+  // Component-local — interval starts on first render and is cleared
+  // automatically when the App instance leaves the tree.
+  effect(() => {
     $value = $value + 1
-  }
+  }, ["every(1000)"])
   return Box([Text("Value: " + $value)])
 }
 \`\`\`
@@ -522,27 +533,19 @@ component App() {
 ### Examples
 
 \`\`\`
-component LiveClock() {
+function LiveClock() {
   $now = @Now()
-  effect [on:every(1000)] { $now = @Now() }
+  effect(() => { $now = @Now() }, ["every(1000)"])
   return Text(@FormatDate($now, "time"))
 }
 
-effect [$query, $page, debounce(250)] {
+effect(() => {
   $results = http({ url: "/api/search", query: { q: $query, page: $page } })
-}
+}, [$query, $page, "debounce(250)"])
 
-effect [$draft, debounce(500)] {
+effect(() => {
   $save = http({ url: "/api/draft", method: "PUT", body: $draft })
-}
-
-effect [on:mount] {
-  js{
-    const onKey = (e) => { if (e.key === "k" && e.metaKey) ctx.host.emit("toggle-palette", {}) }
-    document.addEventListener("keydown", onKey)
-    ctx.cleanup(() => document.removeEventListener("keydown", onKey))
-  }
-}
+}, [$draft, "debounce(500)"])
 \`\`\`
 
 ### Cleanup
@@ -569,11 +572,12 @@ $orders = http({
 \`\`\`
 
 ### Writes (POST / PUT / PATCH / DELETE)
-Fire writes from inside an \`action\` body and observe the resulting resource:
+Fire writes from inside a camelCase function (action) and observe the
+resulting resource:
 \`\`\`
-action saveOrder(payload) {
+function saveOrder(payload) {
   $save = http({ url: "/api/orders", method: "POST", body: payload })
-  emit "assistant-message" { message: "Saved." }
+  emit("assistant-message", { message: "Saved." })
 }
 \`\`\`
 
@@ -591,17 +595,17 @@ $orders.cancel()     // abort the in-flight request (no-op when idle)
 \`\`\`
 
 ### \`Async(resource, …)\` wrapper
-The standard library component \`Async(resource, loading:, error:, empty:, data:)\`
+The standard library component \`Async(resource, { loading:, error:, empty:, data: })\`
 covers the loading / error / empty / data branches uniformly. Prefer it over
 hand-rolled \`if\` chains:
 
 \`\`\`
-view = Async($orders,
+view = Async($orders, {
   loading: LoadingState("Loading orders…"),
-  error:   ErrorState("Couldn't fetch orders", description: "Try again in a moment."),
-  empty:   EmptyState("No orders yet", description: "Place your first order."),
-  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, format: "currency")])
-)
+  error:   ErrorState("Couldn't fetch orders", { description: "Try again in a moment." }),
+  empty:   EmptyState("No orders yet", { description: "Place your first order." }),
+  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
+})
 \`\`\`
 
 ### Optional \`Http({ ... })\` defaults
@@ -621,37 +625,34 @@ function fullControlFlow(): string {
 
 All three control-flow keywords are **expressions** — they yield a node (or
 array of nodes) that can be assigned, passed as a prop, or returned from a
-component / action body.
+component / action body. They use standard JavaScript syntax.
 
 ### \`if\` / \`else\`
 \`\`\`
-banner = if $hasError { Banner("Something went wrong", tone: "danger") } else { null }
-active = if $tab == "billing" { billingPanel } else { overviewPanel }
+banner = if ($hasError) { Banner("Something went wrong", { tone: "danger" }) } else { null }
+active = if ($tab == "billing") { billingPanel } else { overviewPanel }
 \`\`\`
 A trailing \`else\` is optional — without it an unmatched \`if\` evaluates to
-\`null\` (renders nothing).
+\`null\` (renders nothing). Conditions must be wrapped in parentheses.
 
-### \`match\`
+### \`switch\`
 \`\`\`
-panel = match $stage {
-  "draft":     DraftView()
-  "review":    ReviewView()
-  "shipped":   ShippedView()
-  default:     EmptyState("Pick a stage")
+panel = switch ($stage) {
+  case "draft":   DraftView(); break
+  case "review":  ReviewView(); break
+  case "shipped": ShippedView(); break
+  default:        EmptyState("Pick a stage")
 }
 \`\`\`
-- Arms use \`: value\` like object properties (the arrow form \`->\` is
-  not valid).
-- \`default:\` is the wildcard.
+- Each \`case\` arm uses \`case value:\` syntax followed by the expression or
+  statement block, terminated by \`break\`.
+- \`default:\` is the wildcard — its value is returned when no case matches.
 - Arms can return arbitrary expressions, not just strings.
-- Wrap an arm body in \`{ … }\` to run a **statement block** (multiple
-  state writes, then an optional last-expression result). To return an
-  object literal from an arm, parenthesise it: \`"a": ({ y: 1 })\`.
 
 ### \`for\`
 \`\`\`
-rows = for item in $todos { TaskRow(item) }
-rowsWithIndex = for (item, idx) in $todos { TaskRow(item, index: idx) }
+rows = for (let item of $todos) { TaskRow(item) }
+rowsWithIndex = for (let [idx, item] of $todos.entries()) { TaskRow(item, { index: idx }) }
 \`\`\`
 \`for\` produces an array of nodes — assign it and reference the binding
 from a container (\`Stack(rows)\`, \`Table([Col("Task", rows)])\`). The loop
@@ -660,30 +661,30 @@ variable is **block-scoped**, so a stale closure can never see the wrong row.
 ### Statement form inside action / effect bodies
 The same three keywords also work as statements:
 \`\`\`
-action submit(payload) {
-  if !payload.email { return }
-  for tag in payload.tags { $tags = [...$tags, tag] }
-  match payload.kind {
-    "draft": { $drafts = [...$drafts, payload] }
-    default: { $records = [...$records, payload] }
+function submit(payload) {
+  if (!payload.email) { return }
+  for (let tag of payload.tags) { $tags = [...$tags, tag] }
+  switch (payload.kind) {
+    case "draft": $drafts = [...$drafts, payload]; break
+    default: $records = [...$records, payload]
   }
 }
 \`\`\``;
 }
 
 function fullRouting(): string {
-  return `## Routing — \`_router_({ … })\`
+  return `## Routing — \`Router({ … })\`
 
 The router is a plain function call. It returns the matched arm's evaluated
 value — assign the result to any binding and reference that binding inside
 your shell.
 
 \`\`\`
-pages = _router_({
+pages = Router({
   "/":             Dashboard(),
   "/orders":       OrdersPage(),
-  "/orders/:id":   OrderDetail(id: params.id),
-  "/settings/*":   SettingsArea(rest: params._),
+  "/orders/:id":   OrderDetail({ id: params.id }),
+  "/settings/*":   SettingsArea({ rest: params._ }),
   default:         NotFound()
 })
 
@@ -693,73 +694,45 @@ ${ROOT_NAME} = AppShell(MainSidebar(), pages, TopBar())
 ### Path patterns
 - Literal segments: \`"/"\`, \`"/about"\`, \`"/settings/profile"\`.
 - Parameter segments: \`"/users/:id"\`. Read inside the arm body with
-  \`params.id\` (or \`_route_.params.id\` from elsewhere).
+  \`params.id\` (or \`route.params.id\` from elsewhere).
 - Trailing wildcard: \`"/docs/*"\`. Remainder lands in \`params._\`.
 - Default arm: \`default: NotFound()\` is the catch-all (synonym: \`"*"\`).
 
 ### Inside an arm body
 - \`params\` is bound to the matched route's path captures. It is scoped to
-  the arm — the value is **not** available outside \`_router_({…})\`.
-- Use \`_route_\` for cross-cutting reactive reads (current path, query
+  the arm — the value is **not** available outside \`Router({…})\`.
+- Use \`route\` for cross-cutting reactive reads (current path, query
   string) that don't depend on which arm matched.
 
 ### Reactive surface
-- \`_route_.path\` — current path (read-only).
-- \`_route_.params.id\` — path parameter; reactive.
-- \`_route_.query.tab\` — query string; **writable** (assigning updates the URL).
-- \`_route_.navigate("/path")\` — imperative navigation. Use inside any action
+- \`route.path\` — current path (read-only).
+- \`route.params.id\` — path parameter; reactive.
+- \`route.query.tab\` — query string; **writable** (assigning updates the URL).
+- \`route.navigate("/path")\` — imperative navigation. Use inside any action
   or effect body.
 
 ### \`NavLink\` companion
-\`NavLink(label, to)\` reads \`_route_.path\` and dispatches
-\`_route_.navigate(to)\` on click — use for sidebars, navbars and breadcrumbs.
+\`NavLink(label, { to: path })\` reads \`route.path\` and dispatches
+\`route.navigate(to)\` on click — use for sidebars, navbars and breadcrumbs.
 
 ### Common mistakes
-- \`_route_\` is read-only (apart from \`_route_.navigate(...)\`). Assigning
-  to \`_route_\` or to a state slot named \`route\` is ignored.
+- \`route\` is read-only (apart from \`route.navigate(...)\`). Assigning
+  to \`route\` or to a state slot named \`route\` is ignored.
 - Forgetting the \`default:\` arm. Without it, unknown paths render \`null\`
   and the outlet collapses.
-- Using \`->\` instead of \`:\` for arm bodies. Inside \`_router_({…})\` the
+- Using \`->\` instead of \`:\` for arm bodies. Inside \`Router({…})\` the
   arms are ordinary object properties — separate with \`:\` and commas.`;
 }
 
 
-function fullJsEscape(): string {
-  return `## JS escape hatch — \`js{ … }\`
-
-\`js{ /* opaque JS body */ }\` runs raw JavaScript inside an \`effect\`,
-\`action\`, or lambda body. Use sparingly — every other surface is preferred —
-but it is always available for browser APIs not exposed natively (clipboard,
-keyboard listeners, IntersectionObserver, audio, custom DOM work).
-
-The body receives a single \`ctx\` bridge:
-- \`ctx.host\` — the \`<aktion-app>\` host element (for \`dispatchEvent\`).
-- \`ctx.state\` — \`{ get(name), set(name, value) }\` for reactive atoms.
-- \`ctx.cleanup(fn)\` — register teardown (same semantics as \`effect\` cleanup).
-- \`ctx.tools\` — host-registered endpoint catalog (rarely needed; prefer \`http()\`).
-- \`ctx.args\` — when invoked from an \`action\` or lambda, the call's arguments.
-
-\`\`\`
-effect [on:mount] {
-  js{
-    const id = setInterval(() => ctx.state.set("now", Date.now()), 1000)
-    ctx.cleanup(() => clearInterval(id))
-  }
-}
-
-action copyShareLink() {
-  js{ navigator.clipboard.writeText(window.location.href) }
-  emit "assistant-message" { message: "Link copied" }
-}
-\`\`\`
-
-### Markup escape hatches — \`HTMLTag\` & \`Styles\`
+function fullMarkupEscapeHatches(): string {
+  return `## Markup escape hatches — \`HTMLTag\` & \`Styles\`
 
 When the standard catalogue cannot express the markup or visual treatment
 you need, reach for two last-resort components:
 
-- \`HTMLTag(tag, attributes?, children?)\` renders an allow-listed HTML tag
-  with an attribute object and child nodes. \`on*\` attributes,
+- \`HTMLTag(tag, { attributes?, children? })\` renders an allow-listed HTML
+  tag with an attribute object and child nodes. \`on*\` attributes,
   \`javascript:\` URLs in \`href\`/\`src\`, and unsafe \`style\` patterns are
   stripped; tag names outside the allow-list collapse to \`div\`.
 - \`Styles(css)\` injects a \`<style>\` block whose CSS targets your own
@@ -771,41 +744,42 @@ Prefer the standard library for everything they can express
 last resort.
 
 \`\`\`
-_app_ = Stack([
+${ROOT_NAME} = Stack([
   Styles(\`
     .hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }
     .hero-callout h2 { margin: 0 0 8px; }
   \`),
-  HTMLTag("div", attributes: { class: "hero-callout" }, children: [
-    HTMLTag("h2", children: [Text("Custom block")]),
+  HTMLTag("div", { attributes: { class: "hero-callout" }, children: [
+    HTMLTag("h2", { children: [Text("Custom block")] }),
     Text("Use HTMLTag + Styles only when the standard components cannot capture the design.")
-  ])
+  ] })
 ])
 \`\`\``;
 }
 
 function fullBuiltins(): string {
+  const catalog = getBuiltinCatalog();
   return `## Built-in \`@\`-functions
 
 All built-ins use the \`@\` prefix and may appear anywhere in an expression.
 They are **pure** — no side effects, no I/O. Use them for data shaping,
-formatting, and inline iteration.
+formatting, and inline computation.
 
-${formatBuiltinCatalog(getBuiltinCatalog())}
+${formatBuiltinCatalog(catalog)}
 
 ### Control flow — expression form
-Use the expression-form \`if\` / \`match\` / \`for\` covered above —
+Use the expression-form \`if\` / \`switch\` / \`for\` covered above —
 they return values that can be assigned, passed as props, or composed:
 
 \`\`\`
-active = if $tab == "billing" { billingPanel } else { overviewPanel }
-list   = for item in $todos { TaskRow(item) }
-panel  = match $stage { "done": Done() "ready": Ready() default: Pending() }
+active = if ($tab == "billing") { billingPanel } else { overviewPanel }
+list   = for (let item of $todos) { TaskRow(item) }
+panel  = switch ($stage) { case "done": Done(); break; case "ready": Ready(); break; default: Pending() }
 \`\`\`
 
 ### Responsive prop maps
-\`Grid(items, columns: {sm: 1, md: 2, lg: 4}, gap: "l")\` — 1 column on mobile,
-2 on tablet, 4 on desktop. \`Stack(children, direction: {sm: "column", md: "row"})\`
+\`Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "l" })\` — 1 column on mobile,
+2 on tablet, 4 on desktop. \`Stack(children, { direction: {sm: "column", md: "row"} })\`
 — stack on mobile, row on desktop. Both \`columns\` and \`gap\` accept either
 a single value or a responsive map.`;
 }
@@ -818,13 +792,13 @@ features as library components rather than language keywords:
 
 | Component | Purpose |
 |---|---|
-| \`Async(resource, loading:, error:, empty:, data:)\` | Branch on an \`http({...})\` resource's state. |
-| \`Show(when, fallback?, children)\` | Sugar over \`if when { children } else { fallback }\`. |
-| \`Portal(children, target?)\` | Render children outside the parent subtree. |
+| \`Async(resource, { loading:, error:, empty:, data: })\` | Branch on an \`http({...})\` resource's state. |
+| \`Show(when, { fallback?, children })\` | Sugar over \`if (when) { children } else { fallback }\`. |
+| \`Portal(children, { target? })\` | Render children outside the parent subtree. |
 | \`Redirect(path)\` | Navigate to \`path\` and unmount the rest of the subtree. |
-| \`Lazy(loader, fallback?, children)\` | Defer rendering children until \`loader\` resolves. |
-| \`ErrorBoundary(children, fallback?, onError?)\` | Catch render errors thrown by descendants. |
-| \`VirtualList(items, key:, render:)\` | Virtualised list — preferred for >100 rows. |`;
+| \`Lazy(loader, { fallback?, children })\` | Defer rendering children until \`loader\` resolves. |
+| \`ErrorBoundary(children, { fallback?, onError? })\` | Catch render errors thrown by descendants. |
+| \`VirtualList(items, { key:, render: })\` | Virtualised list — preferred for >100 rows. |`;
 }
 
 function fullGlobals(): string {
@@ -832,23 +806,23 @@ function fullGlobals(): string {
 
 Two namespace globals are always in scope — no import, no declaration.
 Invoke them through the standard \`obj.method(args)\` syntax. Named-arg
-options collapse into a single trailing options object on the method's
-arg list (same rule as component named args).
+options go in a trailing \`{ }\` object on the method's arg list (same rule
+as component calls).
 
-\`storage\` — browser storage (localStorage by default):
+\`Storage\` — browser storage (localStorage by default):
 \`\`\`
-storage.set("name", "John")           // alias of storage.local.set
-$name = storage.get("name")
-storage.remove("name")
-storage.clear()
+Storage.set("name", "John")
+$name = Storage.get("name")
+Storage.remove("name")
+Storage.clear()
 
-storage.session.set("draft", $draft)  // per-tab sessionStorage
-$draft = storage.session.get("draft")
+Storage.session.set("draft", $draft)
+$draft = Storage.session.get("draft")
 
-storage.cookies.set("user", "John", expires: 7, path: "/", sameSite: "Lax")
-$user = storage.cookies.get("user")
-storage.cookies.remove("user", path: "/")
-storage.cookies.clear()
+Storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$user = Storage.cookies.get("user")
+Storage.cookies.remove("user", { path: "/" })
+Storage.cookies.clear()
 \`\`\`
 - Values that aren't strings round-trip through JSON; missing keys return \`null\`.
 - Cookie options: \`expires\` (days, Date, or ISO string), \`maxAge\`
@@ -859,7 +833,7 @@ storage.cookies.clear()
 console.log("Hello", $user)
 console.error("Failed", $error)
 console.warn("Deprecated path")
-console.info("Route changed", _route_.path)
+console.info("Route changed", route.path)
 console.debug({ days: $days, count: $count })
 \`\`\``;
 }
@@ -876,8 +850,8 @@ $i18n = i18n({
   fallback: "en"
 })
 
-Text(t("orders.title"))                          // "Orders"
-Text(t("orders.greeting", { name: $userName }))  // "Welcome back, Alex"
+Text(t("orders.title"))
+Text(t("orders.greeting", { name: $userName }))
 \`\`\`
 
 - \`t(key, vars?)\` looks up the translation by dot-pathed key with
@@ -891,8 +865,9 @@ function fullTheming(): string {
   return `## In-script theming
 
 Assign a \`Theme({ … })\` call to a top-level binding named \`theme\` (the
-runtime looks for that exact name) **before** defining \`${ROOT_NAME}\`. The
-runtime writes the theme tokens to the host element as CSS custom properties.
+runtime looks for that exact name) **before** defining \`${ROOT_NAME}\`. You
+may also write \`${ROOT_NAME}.theme = Theme({…})\`. The runtime writes the
+theme tokens to the host element as CSS custom properties.
 
 \`\`\`
 theme = Theme({
@@ -924,8 +899,8 @@ auto-loads the Font Awesome stylesheet — no setup needed.
 - Variants: prefix with \`"regular:name"\` (outline set) or \`"brands:name"\`
   (brand logos).
 - **Never emit emoji characters in \`icon\` props.**
-- Use the \`Icon(name, variant?, size?)\` component to render an icon inline
-  anywhere a Node is expected.`;
+- Use the \`Icon(name, { variant?, size? })\` component to render an icon
+  inline anywhere a Node is expected.`;
 }
 
 function fullComponentLibrary(library: ComponentLibrary): string {
@@ -936,8 +911,8 @@ function fullComponentLibrary(library: ComponentLibrary): string {
   lines.push(
     "Use only these components. Each signature lists props in declaration " +
     "order; optional props end with `?`. The prop tagged `(positional)` is " +
-    "the canonical positional slot — pass it bare; every other prop is best " +
-    "supplied as a named argument (`prop: value`).",
+    "the canonical positional slot — pass it bare; every other prop goes in " +
+    "a trailing `{ prop: value }` object.",
   );
   lines.push("");
   for (const group of allGroups) {
@@ -988,7 +963,7 @@ response renders progressively without flashing errors.
 
 **Required statement order for streaming-friendly output:**
 1. \`${ROOT_NAME} = ...\` — emit this FIRST so the UI shell appears immediately.
-2. \`component\` / \`action\` / \`effect\` declarations — fill in layout & behaviour.
+2. \`function\` declarations (components and actions) / \`effect\` calls — fill in layout & behaviour.
 3. Leaf data values — strings, numbers, arrays, objects — last.
 
 **Streaming rules — follow strictly:**
@@ -1014,18 +989,20 @@ function fullOutputRules(): string {
 - Always start with \`${ROOT_NAME} = ...\` on the very first line.
 - Prefer many small, named statements over deeply nested inline expressions —
   this is what makes streaming work.
-- Order statements top-down: \`${ROOT_NAME}\` first, then components /
-  actions / effects, then leaf data.
+- Order statements top-down: \`${ROOT_NAME}\` first, then functions /
+  effects, then leaf data.
 - **Seed realistic mock data inline.** When no backend is available, write
   5–20 believable rows per dataset (real names, dates, numbers, statuses)
   inside \`$state\` declarations. Pages read from these atoms so changes
   propagate live.
-- **Wire every visible button.** Declare \`action Name() { … }\` blocks and
-  reference them via \`Button("Label", onClick: name)\`. No dead buttons —
-  forms submit by dispatching an action that writes to \`$state\`.
-- **Use \`_router_({...})\` for multi-page apps.** Declare \`pages = _router_({ "/": Home(), … })\` once,
-  reference \`pages\` from \`${ROOT_NAME}\`, link routes from the sidebar /
-  navbar with \`NavLink(label, to)\`. Each route must be a substantive
+- **Wire every visible button.** Declare camelCase \`function name() { … }\`
+  blocks and reference them via \`Button("Label", { onClick: name })\`. No
+  dead buttons — forms submit by dispatching an action that writes to
+  \`$state\`.
+- **Use \`Router({...})\` for multi-page apps.** Declare
+  \`pages = Router({ "/": Home(), … })\` once, reference \`pages\` from
+  \`${ROOT_NAME}\`, link routes from the sidebar / navbar with
+  \`NavLink(label, { to: path })\`. Each route must be a substantive
   page (PageHeader + at least one data view + at least one action).
 - **Match real-product polish.** Use \`Stats\`, \`PageHeader\`, \`Toolbar\`,
   \`Badge\` / \`StatusDot\` for state, \`PersonChip\` / \`Avatar\` where
@@ -1038,13 +1015,13 @@ function fullOutputRules(): string {
   reads much better than \`+\` concatenation.
 - Icons are Font Awesome names without the \`fa-\` prefix — never emoji.
 - Do not invent component names that are not in the library above.
-- Use expression-form \`if\` / \`match\` / \`for\` for control flow.
+- Use expression-form \`if\` / \`switch\` / \`for\` for control flow.
 - Use \`http({ ... })\` for every HTTP request; observe \`.data\`,
   \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`.
 - Never declare a state slot named \`route\` yourself. The router exposes
-  its reactive surface through the reserved \`_route_\` handle — read
-  \`_route_.path\` / \`_route_.params\` and call
-  \`_route_.navigate("/path")\` to navigate.`;
+  its reactive surface through the reserved \`route\` handle — read
+  \`route.path\` / \`route.params\` and call
+  \`route.navigate("/path")\` to navigate.`;
 }
 
 function fullFinalVerification(): string {
@@ -1059,20 +1036,22 @@ Before finishing, walk your output and verify:
    their own trailing lines.
 5. No statement is split across multiple lines unless it sits inside an
    unmatched \`[\`, \`(\`, or \`{\`.
-6. Components end with an explicit \`return\` statement.
+6. PascalCase functions (components) end with an explicit \`return\` statement.
 7. State uses the single-sigil \`$name = value\` form.
 8. HTTP uses \`http({ url, method, ... })\`; the reactive bag exposes
    \`.data\` / \`.error\` / \`.loading\` / \`.status\` / \`.refetch()\` / \`.cancel()\`.
-9. Router and \`match\` arms use \`:\` (not \`->\`) and \`default\` (not
-   \`_\`) as the wildcard.`;
+9. Router uses \`Router({…})\` and arms use \`:\` (not \`->\`) with \`default\`
+   (not \`_\`) as the wildcard.
+10. Named arguments use a trailing \`{ prop: value }\` object — not bare
+    \`prop: value\` syntax.`;
 }
 
 function fullDefaultExamples(): string[] {
   return [
-    `# Tasks dashboard backed by http()
+    `// Tasks dashboard backed by http()
 $tasks = http({ url: "/api/tasks", method: "GET" })
 
-action toggle(task) {
+function toggle(task) {
   $update = http({
     url:    "/api/tasks/" + task.id,
     method: "PATCH",
@@ -1081,44 +1060,44 @@ action toggle(task) {
   $tasks.refetch()
 }
 
-action removeTask(task) {
+function removeTask(task) {
   $delete = http({ url: "/api/tasks/" + task.id, method: "DELETE" })
   $tasks.refetch()
 }
 
 renderRow = (task) => Card([Stack([
-  Badge(task.done ? "done" : "open", tone: task.done ? "success" : "neutral"),
-  Text(task.title, tone: task.done ? "muted" : "default"),
+  Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
+  Text(task.title, { tone: task.done ? "muted" : "default" }),
   Buttons([
-    Button(task.done ? "Reopen" : "Done", onClick: () => toggle(task), variant: "primary", size: "sm"),
-    Button("Delete",                       onClick: () => removeTask(task), variant: "ghost",   size: "sm")
+    Button(task.done ? "Reopen" : "Done", { onClick: () => toggle(task), variant: "primary", size: "sm" }),
+    Button("Delete", { onClick: () => removeTask(task), variant: "ghost", size: "sm" })
   ])
 ])])
 
-component TasksPage() {
+function TasksPage() {
   return Stack([
-    PageHeader("Tasks", subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", onClick: $tasks.refetch, variant: "ghost")]),
-    Async($tasks,
+    PageHeader("Tasks", { subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
+    Async($tasks, {
       loading: LoadingState("Loading tasks…"),
-      error:   ErrorState("We couldn't fetch tasks", description: "Try again in a moment.", action: Button("Retry", onClick: $tasks.refetch, variant: "primary")),
-      empty:   EmptyState("No tasks yet", description: "Create your first task to get started.", icon: "list-check"),
-      data:    Stack(for t in $tasks.data { renderRow(t) }, direction: "column", gap: "s")
-    )
-  ], direction: "column", gap: "l")
+      error:   ErrorState("We couldn't fetch tasks", { description: "Try again in a moment.", action: Button("Retry", { onClick: $tasks.refetch, variant: "primary" }) }),
+      empty:   EmptyState("No tasks yet", { description: "Create your first task to get started.", icon: "list-check" }),
+      data:    Stack(for (let t of $tasks.data) { renderRow(t) }, { direction: "column", gap: "s" })
+    })
+  ], { direction: "column", gap: "l" })
 }
 
 ${ROOT_NAME} = TasksPage()`,
-    `# App shell with router
-action selectNav(label, path) { _route_.navigate(path) }
+    `// App shell with router
+function selectNav(label, path) { route.navigate(path) }
 
-pages = _router_({
+pages = Router({
   "/":           Overview(),
   "/projects":   Projects(),
   "/calendar":   Calendar(),
   default:       NotFound()
 })
 
-renderNav = (label, icon, path) => SidebarItem(label, icon: icon, active: _route_.path == path, action: () => selectNav(label, path))
+renderNav = (label, icon, path) => SidebarItem(label, { icon: icon, active: route.path == path, action: () => selectNav(label, path) })
 
 nav   = Sidebar([
   SidebarSection("Workspace", [
@@ -1130,53 +1109,53 @@ nav   = Sidebar([
 
 ${ROOT_NAME}  = AppShell(nav, pages)
 
-component Overview() {
+function Overview() {
   return Stack([
-    PageHeader("Overview", subtitle: "Everything happening across your workspace"),
+    PageHeader("Overview", { subtitle: "Everything happening across your workspace" }),
     Stats([
-      StatCard("MRR",          value: "$48.2k", trend: "up",   delta: "+12% vs last month", icon: "sack-dollar"),
-      StatCard("Active users", value: "2,184",  trend: "up",   delta: "+184",               icon: "users"),
-      StatCard("Open tickets", value: "23",     trend: "down", delta: "-9",                 icon: "ticket")
+      StatCard("MRR", { value: "$48.2k", trend: "up", delta: "+12% vs last month", icon: "sack-dollar" }),
+      StatCard("Active users", { value: "2,184", trend: "up", delta: "+184", icon: "users" }),
+      StatCard("Open tickets", { value: "23", trend: "down", delta: "-9", icon: "ticket" })
     ])
-  ], direction: "column", gap: "l")
+  ], { direction: "column", gap: "l" })
 }
 
-component Projects()  { return Stack([PageHeader("Projects")], direction: "column", gap: "l") }
-component Calendar()  { return Stack([PageHeader("Calendar")], direction: "column", gap: "l") }
-component NotFound()  { return Stack([PageHeader("Not found")], direction: "column", gap: "l") }`,
-    `# Contact form with two-way binding and validation
+function Projects()  { return Stack([PageHeader("Projects")], { direction: "column", gap: "l" }) }
+function Calendar()  { return Stack([PageHeader("Calendar")], { direction: "column", gap: "l" }) }
+function NotFound()  { return Stack([PageHeader("Not found")], { direction: "column", gap: "l" }) }`,
+    `// Contact form with two-way binding and validation
 $name    = ""
 $email   = ""
 $message = ""
 $sent    = false
 
-action submit() {
-  if !$name || !$email { return }
+function submit() {
+  if (!$name || !$email) { return }
   $post = http({ url: "/api/contact", method: "POST", body: { name: $name, email: $email, message: $message } })
   $sent = true
 }
 
-action reset() { $name = ""   $email = ""   $message = ""   $sent = false }
+function reset() { $name = ""; $email = ""; $message = ""; $sent = false }
 
 formCard = Card([
-  CardHeader("Get in touch", subtitle: "We typically reply within one business day."),
+  CardHeader("Get in touch", { subtitle: "We typically reply within one business day." }),
   Form("contact", btns, [
-    FormControl("Name",    Input("name",    placeholder: "Your name",       value: $name)),
-    FormControl("Email",   Input("email",   placeholder: "you@example.com", type: "email", value: $email)),
-    FormControl("Message", TextArea("message", placeholder: "Tell us more…", rows: 4, value: $message))
+    FormControl("Name",    Input("name", { placeholder: "Your name", value: $name })),
+    FormControl("Email",   Input("email", { placeholder: "you@example.com", type: "email", value: $email })),
+    FormControl("Message", TextArea("message", { placeholder: "Tell us more…", rows: 4, value: $message }))
   ])
 ])
 
 btns = Buttons([
-  Button("Send",  onClick: submit, variant: "primary", icon: "paper-plane"),
-  Button("Reset", onClick: reset,  variant: "ghost")
+  Button("Send", { onClick: submit, variant: "primary", icon: "paper-plane" }),
+  Button("Reset", { onClick: reset, variant: "ghost" })
 ])
 
-resultCard = if $sent {
-  Card([Callout("success", "Message sent", description: \`Thanks \${$name}, we'll be in touch at \${$email}.\`, icon: "envelope-circle-check")])
+resultCard = if ($sent) {
+  Card([Callout("success", { title: "Message sent", description: \`Thanks \${$name}, we'll be in touch at \${$email}.\`, icon: "envelope-circle-check" })])
 } else { null }
 
-${ROOT_NAME} = Stack([formCard, resultCard], direction: "column", gap: "l")`,
+${ROOT_NAME} = Stack([formCard, resultCard], { direction: "column", gap: "l" })`,
   ];
 }
 
@@ -1187,10 +1166,9 @@ ${ROOT_NAME} = Stack([formCard, resultCard], direction: "column", gap: "l")`,
 /**
  * The chat prompt teaches **just enough** to convert an LLM's prose
  * response into a rich UI surface. The LLM is NOT expected to emit any
- * interactive behaviour — no `$state` writes, no `action`, no `effect`,
- * no `http(...)`, no `_router_(...)`, no `js{…}`. Only static layout,
- * content, data-presentation, and `FollowUpBlock` for canned follow-up
- * prompts.
+ * interactive behaviour — no `$state` writes, no actions, no effects,
+ * no `http(...)`, no `Router(...)`. Only static layout, content,
+ * data-presentation, and `FollowUpBlock` for canned follow-up prompts.
  */
 const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
   // Layout
@@ -1225,7 +1203,7 @@ const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
 
 function chatHeader(preamble: string | undefined): string {
   const lead = preamble?.trim()
-    || "You are an AI assistant that responds using Aktion — a compact declarative language whose output is rendered as a rich, read-only UI surface. Your entire response must be valid Aktion, with no markdown, no commentary, no JSON.";
+    || "You are an AI assistant that responds using Aktion — a compact, JS-aligned declarative language whose output is rendered as a rich, read-only UI surface. Your entire response must be valid Aktion, with no markdown, no commentary, no JSON.";
   return `${lead}
 Every response MUST start with \`${ROOT_NAME} = ...\` on the very first line.
 
@@ -1234,8 +1212,8 @@ data-presentation, and feedback components listed below. Do NOT emit any
 of the following — they are interactive surfaces reserved for full-app
 mode and will not function here:
 
-- Reactive-state writes, \`action\` blocks, \`effect\` blocks, raw \`js\`
-  escape hatches, HTTP calls, or routing primitives.
+- Reactive-state writes, action functions, \`effect\` calls, HTTP calls,
+  or routing primitives.
 - Form controls and clickable buttons (text inputs, dropdowns, submit
   controls, file pickers, etc.).
 - App shells, sidebars, split views, and kanban-style boards.
@@ -1253,6 +1231,9 @@ A program is a flat list of \`name = expression\` statements terminated by
 newlines. \`${ROOT_NAME}\` is the entry point — every program MUST begin
 with \`${ROOT_NAME} = ...\` (typically \`${ROOT_NAME} = Stack([...])\`).
 
+### Comments
+Only \`//\` single-line and \`/* */\` multi-line comments are supported.
+
 ### Expressions
 - Strings: \`"hello"\` or \`'hello'\`. Both forms support escapes.
 - Template literals: backticks with \`\${expr}\` interpolation —
@@ -1265,15 +1246,14 @@ with \`${ROOT_NAME} = ...\` (typically \`${ROOT_NAME} = Stack([...])\`).
   member access \`obj.field\`, optional chaining \`obj?.field\`.
 
 ### Component calls
-\`TypeName(arg1, arg2, prop: value, …)\`. Arguments are matched against the
-spec's prop list in declaration order; named arguments (\`prop: value\`) may
-appear at any position and override positional matching. Optional props can
-be omitted from the end.
+\`TypeName(positionalArg, { prop: value, … })\`. The first argument is
+the canonical positional slot; all other arguments go in a trailing
+\`{ }\` object. Optional props can be omitted entirely.
 
 \`\`\`
-Callout("info", "Heads up", description: "Action required", icon: "circle-info", compact: true)
-Stack([card1, card2], direction: "row", gap: "m")
-Badge("Live", tone: "success", icon: "circle-dot")
+Callout("info", { title: "Heads up", description: "Action required", icon: "circle-info", compact: true })
+Stack([card1, card2], { direction: "row", gap: "m" })
+Badge("Live", { tone: "success", icon: "circle-dot" })
 \`\`\`
 
 ### Repeating UI from data
@@ -1281,16 +1261,16 @@ Use the expression-form \`for\` loop to render an array of items into
 multiple nodes:
 
 \`\`\`
-rows = for item in items { ListItem(item.title, description: item.desc) }
+rows = for (let item of items) { ListItem(item.title, { description: item.desc }) }
 list = List(rows)
 \`\`\`
 
 ### Branching (optional)
-Use \`if\` / \`match\` when the UI depends on a literal you computed:
+Use \`if\` / \`switch\` when the UI depends on a literal you computed:
 
 \`\`\`
-greeting = if isMorning { "Good morning" } else { "Hello" }
-tone     = match status { "ok": "success" "warn": "warning" default: "neutral" }
+greeting = if (isMorning) { "Good morning" } else { "Hello" }
+tone     = switch (status) { case "ok": "success"; break; case "warn": "warning"; break; default: "neutral" }
 \`\`\`
 
 ### Array helpers
@@ -1304,9 +1284,9 @@ tone     = match status { "ok": "success" "warn": "warning" default: "neutral" }
 \`\`\`
 ${ROOT_NAME} = Stack([heroCard, statsRow, table, follow])
 
-heroCard = Card([CardHeader("Q4 results", subtitle: "Across all teams")])
+heroCard = Card([CardHeader("Q4 results", { subtitle: "Across all teams" })])
 statsRow = Stats(stats)
-table    = Table([Col("Region", rows.region), Col("Revenue", rows.revenue, format: "currency")])
+table    = Table([Col("Region", rows.region), Col("Revenue", rows.revenue, { format: "currency" })])
 follow   = FollowUpBlock(["Break down by region", "Compare to Q3"])
 
 stats = [
@@ -1331,8 +1311,8 @@ function chatComponentLibrary(library: ComponentLibrary): string {
   const lines: string[] = [
     "## Component library (read-only)",
     "Use only these components. Each signature lists props in declaration " +
-    "order; optional props end with `?`. Pass props positionally in order, " +
-    "or as `prop: value` named arguments for clarity.",
+    "order; optional props end with `?`. Pass the positional prop bare, " +
+    "then all other props in a trailing `{ prop: value }` object.",
   ];
   for (const group of allGroups) {
     const filtered = group.components.filter((name) => CHAT_COMPONENT_ALLOWLIST.includes(name));
@@ -1358,28 +1338,20 @@ as a string — no \`fa-\` prefix, no emoji characters.
 - Variants: prefix with \`"regular:name"\` (outline set) or
   \`"brands:name"\` (brand logos).
 - Render an icon inline anywhere a Node is expected with
-  \`Icon(name, variant?, size?)\`.`;
+  \`Icon(name, { variant?, size? })\`.`;
 }
 
 function chatBuiltins(): string {
   const catalog = getBuiltinCatalog();
-  const data = catalog.filter((e) => e.category === "data");
-  const iter = catalog.filter((e) => e.category === "iteration");
-
-  const dataLines = data.map(formatBuiltinEntry).join("\n");
-  const iterLines = iter.map(formatBuiltinEntry).join("\n");
+  const dataLines = catalog.filter((e) => e.category === "data").map(formatBuiltinEntry).join("\n");
 
   return `## Built-in \`@\`-functions
 
 \`@\`-prefixed functions are **pure helpers** — no side effects. Use them
-for data shaping, counts, sums, formatting, and inline iteration when the
-expression-form \`for\` / \`if\` / \`match\` would be awkward.
+for data shaping, counts, sums, formatting, and inline computation.
 
 ### Data helpers
 ${dataLines}
-
-### Iteration helpers
-${iterLines}
 
 Template literals (\`backticks with \${expr}\`) compose naturally with these
 helpers — \`\`\`Found \${@Count(rows)} \${@Plural(@Count(rows), "result", "results")} (\${@Format(@Sum(rows.amount), "currency")} total)\`\`\``;
@@ -1423,15 +1395,15 @@ function chatToolsList(tools: ReadonlyArray<ToolSpec>): string {
 
 function chatDefaultExamples(): ReadonlyArray<string> {
   return [
-    `# Comparison table reply with template literal summary
+    `// Comparison table reply with template literal summary
 ${ROOT_NAME} = Stack([title, tbl, totals, follow])
-title  = Text("Top languages by users", variant: "large-heavy")
+title  = Text("Top languages by users", { variant: "large-heavy" })
 tbl    = Table([
   Col("Language",   langs.name),
-  Col("Users (M)",  langs.users, format: "number"),
-  Col("First seen", langs.year,  format: "number")
+  Col("Users (M)",  langs.users, { format: "number" }),
+  Col("First seen", langs.year, { format: "number" })
 ])
-totals = Callout("info", \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, icon: "chart-line", compact: true)
+totals = Callout("info", { title: \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, icon: "chart-line", compact: true })
 follow = FollowUpBlock(["Sort by users", "Show this as a chart", "Tell me about TypeScript"])
 
 langs = [
@@ -1441,22 +1413,21 @@ langs = [
   { name: "TypeScript", users: 8.5,  year: 2012 },
   { name: "Go",         users: 5.2,  year: 2009 }
 ]`,
-    `# Bar chart reply with a summary callout
+    `// Bar chart reply with a summary callout
 ${ROOT_NAME} = Stack([title, chart, summary, follow])
-title   = Text("Q4 revenue by product", variant: "large-heavy")
-chart   = BarChart(labels, [Series("Product A", a), Series("Product B", b)])
-summary = Callout("info", \`Q4 total: \${@Format(@Sum(a) + @Sum(b), "currency")} across \${@Count(labels)} months\`, icon: "chart-column", compact: true)
+title   = Text("Q4 revenue by product", { variant: "large-heavy" })
+chart   = BarChart(labels, { series: [Series("Product A", { data: a }), Series("Product B", { data: b })] })
+summary = Callout("info", { title: \`Q4 total: \${@Format(@Sum(a) + @Sum(b), "currency")} across \${@Count(labels)} months\`, icon: "chart-column", compact: true })
 follow  = FollowUpBlock(["Compare to Q3", "Break down by region", "Show as a line chart"])
 
 labels = ["Oct", "Nov", "Dec"]
 a      = [120, 150, 180]
 b      = [90, 110, 140]`,
-    `# Article-style reply with Markdown body and a KPI strip
+    `// Article-style reply with Markdown body and a KPI strip
 ${ROOT_NAME} = Stack([header, body, kpis, related])
 header = Hero(
   "The fastest open-source UI runtime",
-  subtitle: "Three releases in, the renderer parses and paints 38,000 LLM responses per second.",
-  eyebrow: "Engineering update"
+  { subtitle: "Three releases in, the renderer parses and paints 38,000 LLM responses per second.", eyebrow: "Engineering update" }
 )
 body    = Markdown(article)
 kpis    = Stats([
@@ -1473,11 +1444,11 @@ related = SectionBlock("Related reads", [
 ])
 
 article = "The renderer started as a hack to display LLM responses without a framework. Today it ships **130+ components**, a single-sigil reactive model, and a tiny streaming-first parser. Read on for the architecture deep-dive."`,
-    `# Code-snippet reply — title + Markdown + summary callout
+    `// Code-snippet reply — title + Markdown + summary callout
 ${ROOT_NAME} = Stack([header, answer, hint, follow])
-header = Text("Recommended Postgres index", variant: "large-heavy")
-answer = CodeBlock("sql", indexSql, showLineNumbers: true)
-hint   = Callout("success", "Composite index cuts query time ~12×", description: "Postgres reads index entries already in the requested order, so the planner skips the sort step entirely.", icon: "lightbulb")
+header = Text("Recommended Postgres index", { variant: "large-heavy" })
+answer = CodeBlock("sql", indexSql, { showLineNumbers: true })
+hint   = Callout("success", { title: "Composite index cuts query time ~12×", description: "Postgres reads index entries already in the requested order, so the planner skips the sort step entirely.", icon: "lightbulb" })
 follow = FollowUpBlock(["Show EXPLAIN ANALYZE output", "How big is the index?", "Compare to a partial index"])
 
 indexSql = "CREATE INDEX idx_orders_user_status_created\\n  ON orders (user_id, status, created_at DESC);"`,
@@ -1491,12 +1462,12 @@ function chatImportantRules(): string {
   comparisons, charts for trends, \`Callout\` / \`Banner\` for highlights,
   \`Markdown\` for paragraph prose with inline formatting, \`Hero\` /
   \`PageHeader\` for top-of-reply titles, \`Stats\` for KPI strips.
-- **Lead with a clear title.** Use \`Text(text, variant: "large-heavy")\`,
+- **Lead with a clear title.** Use \`Text(text, { variant: "large-heavy" })\`,
   \`SectionHeader(...)\`, \`PageHeader(...)\`, or \`Hero(...)\` so the user sees
   what the reply is about at a glance.
 - **Generate realistic data.** When asked about data, write believable
   names, numbers, and dates. Never write Lorem Ipsum.
-- **Tables are column-oriented**: \`Table([Col("Label", arr1), Col("Count", arr2, format: "number")])\`.
+- **Tables are column-oriented**: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`.
 - **Charts need numeric arrays**, not arrays of objects. Use array pluck:
   \`PieChart(rows.label, rows.value)\` instead of passing \`rows\` directly.
 - **End conversational replies with \`FollowUpBlock([...])\`** — 2–4 short
@@ -1506,7 +1477,9 @@ function chatImportantRules(): string {
 - **Icons are Font Awesome names** (no \`fa-\` prefix, no emoji). Example
   values: \`"house"\`, \`"chart-line"\`, \`"star"\`, \`"circle-check"\`.
 - **Use template literals** for any string that mixes copy with values:
-  \`\`\`\${@Count(rows)} results\`\`\` instead of \`"..." + ... + "..."\` concatenation.`;
+  \`\`\`\${@Count(rows)} results\`\`\` instead of \`"..." + ... + "..."\` concatenation.
+- **Named arguments use a trailing \`{ }\` object** — write
+  \`Button("Save", { variant: "primary" })\`, not \`Button("Save", variant: "primary")\`.`;
 }
 
 function chatFinalVerification(): string {
@@ -1519,12 +1492,13 @@ Before finishing, walk your output and verify:
    \`${ROOT_NAME}\` (directly or transitively).
 4. Only the read-only components listed above are used — no forms,
    clickable buttons, modal overlays, app shells, reactive-state writes,
-   action blocks, effect blocks, HTTP calls, routing primitives, or raw
-   \`js\` escape hatches.
+   action functions, effect calls, HTTP calls, routing primitives.
 5. No statement is split across multiple lines unless it sits inside an
    unmatched \`[\`, \`(\`, or \`{\`.
 6. Tables are column-oriented; charts use numeric arrays (use array pluck
-   like \`rows.value\` when needed).`;
+   like \`rows.value\` when needed).
+7. Named arguments use a trailing \`{ prop: value }\` object — not bare
+   \`prop: value\` syntax.`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1546,16 +1520,10 @@ function formatComponentSignature(spec: ComponentSpec): string {
 
 function formatBuiltinCatalog(entries: ReadonlyArray<BuiltinEntry>): string {
   const data = entries.filter((e) => e.category === "data");
-  const iter = entries.filter((e) => e.category === "iteration");
   const lines: string[] = [];
   if (data.length > 0) {
     lines.push("### Data helpers");
     for (const entry of data) lines.push(formatBuiltinEntry(entry));
-    lines.push("");
-  }
-  if (iter.length > 0) {
-    lines.push("### Iteration helpers");
-    for (const entry of iter) lines.push(formatBuiltinEntry(entry));
   }
   return lines.join("\n");
 }

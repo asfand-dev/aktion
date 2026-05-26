@@ -101,13 +101,13 @@ const WEBSITE_RULES = [
   "WEBSITE MODE — always return a full, multi-section website assigned to `root`. Never reply with a single Card or a chat-style bubble in this mode.",
   "Lead with a `Navbar` (logo + 3–6 links + CTA) and end with a footer section (Stack with brand line, link columns, and a small copyright note).",
   "Between the navbar and footer compose 5+ sections drawn from: `Hero`, `Cover`, `FeatureGrid`, `MediaCard`, `PricingTable`, `Testimonial`, `Stats`, `Timeline`, `Banner`, `EmptyState` (for CTA blocks), and `Section`/`Card` for custom blocks. Use `Container(maxWidth, content)` to constrain each section.",
-  "Use multiple routes when the user implies more than one page (Home, Pricing, About, Contact, etc.) — declare them once with `pages = _router_({ \"/\": Home(), \"/pricing\": Pricing(), … })` and link them from the navbar with `NavLink(\"Pricing\", to: \"/pricing\")`. Each page must be substantive (3+ sections).",
+  "Use multiple routes when the user implies more than one page (Home, Pricing, About, Contact, etc.) — declare them once with `pages = Router({ \"/\": Home(), \"/pricing\": Pricing(), … })` and link them from the navbar with `NavLink(\"Pricing\", { to: \"/pricing\" })`. Each page must be substantive (3+ sections).",
   "Use real-looking copy. Never write Lorem Ipsum or placeholder text — write actual marketing-ready microcopy that fits the product/brand the user asked for.",
   "Use `Icon`/`Badge` liberally for visual polish, and `Quote` for testimonials. Pair text-heavy sections with `Image` URLs that look plausible (https://images.unsplash.com/... or https://picsum.photos/).",
   // Modern-language nudges
   "Prefer **responsive prop maps** for layout: write `Grid(items, {sm: 1, md: 2, lg: 3}, \"l\")` (NOT `Grid(items, 3, \"l\")`) so the site looks right on phone AND desktop. The same goes for `Stack(direction)` (e.g. `{sm:\"column\",md:\"row\"}`).",
   "Use **template literals** for any string that mixes copy with values: `${@Count(plans)} plans starting from today's date` instead of `\"…\" + … + \"…\"` concatenation.",
-  "Use **`component` declarations** to factor out repeated sections — e.g. `component FeatureRow(f) { FeatureItem(f.title, f.desc, f.icon) }` then `FeatureGrid(for f in features { FeatureRow(f) })`. Keeps the page short and consistent.",
+  "Use **`function` declarations** to factor out repeated sections — e.g. `function FeatureRow(f) { return FeatureItem(f.title, f.desc, f.icon) }` then `FeatureGrid(for (let f of features) { FeatureRow(f) })`. Keeps the page short and consistent.",
   "Keep the response in pure Aktion — no HTML, no markdown wrappers, no commentary.",
 ];
 
@@ -116,18 +116,18 @@ const APP_PREAMBLE =
 
 const APP_RULES = [
   "APP MODE — always reply with a complete application assigned to `root` using `AppShell` (or `Sidebar`+`SplitView`) for the layout. Never reply with a single Card.",
-  "The application MUST have a left `Sidebar` with logical sections (`SidebarSection`) and 4–8 `SidebarItem`s pointing to routes. Every nav item must lead to a real, working page rendered via a `pages = _router_({ … })` call.",
-  "Every page must be substantive: KPIs (`Stats(layout: \"grid\", …)`), at least one data view (`Table`, `KanbanBoard`, `Timeline`, `List`, or `Tree`), filters/toolbar (`Toolbar`, `SearchBar`), and at least one working action button (Create / Edit / Delete / Status change).",
+  "The application MUST have a left `Sidebar` with logical sections (`SidebarSection`) and 4–8 `SidebarItem`s pointing to routes. Every nav item must lead to a real, working page rendered via a `pages = Router({ … })` call.",
+  "Every page must be substantive: KPIs (`Stats(items, { layout: \"grid\" })`), at least one data view (`Table`, `KanbanBoard`, `Timeline`, `List`, or `Tree`), filters/toolbar (`Toolbar`, `SearchBar`), and at least one working interactive Button (Create / Edit / Delete / Status change).",
   "MOCK DATA — if the user did not provide a data source, seed realistic mock data inline via `$state` declarations at the top of the program. Aim for 5–20 sample rows per dataset, with believable names, dates, numbers, and statuses. Pages must read from these `$state` variables so changes propagate live.",
-  "Every visible button must be wired. Declare `action name() { … }` blocks (mark them `optimistic` when they mutate state before an async hop) and reference them via `Button(\"Label\", action: name)`. No dead buttons. Forms submit by dispatching an action that writes to `$state`.",
-  "Use `$name = expr` for derived values (totals, filtered lists) and `effect [ ...deps ] { … }` (deps mix `$atom`, `on:mount`, `on:unmount`, `on:every(N)`, `debounce(N)`, `throttle(N)`) for lifecycle work (interval refreshes, keyboard shortcuts). Avoid raw `js{ … }` inside views — keep it inside `action` / `effect` bodies.",
+  "Every visible button must be wired. Declare `function name() { … }` blocks (mark them `optimistic` when they mutate state before an async hop) and reference them via `Button(\"Label\", { action: name })`. No dead buttons. Forms submit by dispatching an action that writes to `$state`.",
+  "Use `$name = expr` for derived values (totals, filtered lists) and `effect(() => { … }, [ ...deps ])` (deps mix `$atom`, `\"mount\"`, `\"unmount\"`, `\"every(N)\"`, `\"debounce(N)\"`, `\"throttle(N)\"`) for lifecycle work (interval refreshes, keyboard shortcuts). Keep inline JavaScript inside `function` / `effect` bodies — views stay declarative.",
   "Match the design quality of shadcn/Tailwind apps: rich layouts, `PageHeader` on each page, `Toolbar` strips, `StatCard` density, `Badge`/`StatusDot` for state, `Avatar`/`PersonChip` where people appear, `EmptyState` for empty lists.",
   // Modern-language nudges
   "Reactive state is `$name = value` — there is one atom kind; the host handles persistence via `serializeState()` / `hydrateState()`.",
-  "Use **`if cond { … } else { … }` and `match value { \"key\": branch  default: fallback }`** as first-class expressions instead of nested ternaries when routing tabs/views — branches are evaluated lazily so loop variables stay safe.",
+  "Use **`if (cond) { … } else { … }` and `switch (value) { case \"key\": branch; break; default: fallback }`** as first-class expressions instead of nested ternaries when routing tabs/views — branches are evaluated lazily so loop variables stay safe.",
   "Use **template literals** for any computed copy: `` `${@Count(rows)} ${@Plural(@Count(rows), \"order\", \"orders\")} · ${@Format(@Sum(rows, \"total\"), \"currency\", \"USD\")}` `` reads much better than `+` concatenation.",
-  "Use **`for x in xs { … }`** as an expression to iterate lists (with optional `key:` for stable identity), e.g. `for u in $users { UserRow(u) }`.",
-  "Use **`component Name(args) { … }` declarations** for repeated rows/cards: `component RowCard(p) { Card([Avatar(p.name), Text(p.role)]) }`, then `for p in $people { RowCard(p) }`. One source of truth for visual style.",
+  "Use **`for (let x of xs) { … }`** as an expression to iterate lists (with optional `key:` for stable identity), e.g. `for (let u of $users) { UserRow(u) }`.",
+  "Use **`function Name(args) { … }` declarations** for repeated rows/cards: `function RowCard(p) { return Card([Avatar(p.name), Text(p.role)]) }`, then `for (let p of $people) { RowCard(p) }`. One source of truth for visual style.",
   "Use **responsive prop maps** for `Grid`/`Stack` (`{sm:1, md:2, lg:4}`) so the app works on mobile AND desktop.",
   "Keep the response in pure Aktion — no HTML, no markdown wrappers, no commentary.",
 ];

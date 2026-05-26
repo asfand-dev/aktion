@@ -26,11 +26,11 @@
 import { parse } from "../parser/index.js";
 import type {
   Expression,
-  MatchArm,
   ObjectProperty,
   ParseError,
   Program,
   Statement,
+  SwitchCase,
 } from "../parser/types.js";
 
 const INDENT = "  ";
@@ -92,10 +92,7 @@ function printStatement(stmt: Statement, indent: number): string {
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map(printDeclParam).join(", ");
-      const slots = stmt.slots.length > 0
-        ? (stmt.params.length > 0 ? ", " : "") + `slots: { ${stmt.slots.map((s) => `${s}?`).join(", ")} }`
-        : "";
-      const head = `${pad}component ${stmt.name}(${params}${slots}) {`;
+      const head = `${pad}function ${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return body.length > 0
         ? `${head}\n${body}\n${pad}}`
@@ -104,25 +101,17 @@ function printStatement(stmt: Statement, indent: number): string {
     case "EffectDeclaration": {
       const deps: string[] = stmt.triggers.map(printTrigger).filter((s) => s.length > 0);
       if (stmt.rateLimit) {
-        deps.push(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`);
+        deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
       }
-      const depsClause = deps.length > 0 ? ` [${deps.join(", ")}]` : "";
-      const head = `${pad}effect${depsClause} {`;
       const body = printBlock(stmt.body.body, indent + 1);
-      return `${head}\n${body}\n${pad}}`;
+      const depsArray = `[${deps.join(", ")}]`;
+      return `${pad}effect(() => {\n${body}\n${pad}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
       const params = stmt.params.map(printDeclParam).join(", ");
-      const opt = stmt.optimistic ? " optimistic" : "";
-      const head = `${pad}action ${stmt.name}(${params})${opt} {`;
+      const head = `${pad}function ${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return `${head}\n${body}\n${pad}}`;
-    }
-    case "Emit": {
-      return `${pad}emit ${printStringLiteral(stmt.eventName)} { ${printExpression(stmt.detail, indent)} }`;
-    }
-    case "Cleanup": {
-      return `${pad}cleanup(${printExpression(stmt.callback, indent)})`;
     }
     case "Await": {
       return `${pad}await ${printExpression(stmt.argument, indent)}`;
@@ -139,19 +128,15 @@ function printStatement(stmt: Statement, indent: number): string {
 }
 
 function printDeclParam(p: { name: string; defaultValue?: Expression; optional?: boolean }): string {
-  const opt = p.optional ? "?" : "";
-  // §3 parser grammar — declaration parameters use `name: default`,
-  // matching the named-arg call shape. (Not `name = default`, which
-  // the parser would read as a separate assignment.)
   if (p.defaultValue) {
-    return `${p.name}${opt}: ${printExpression(p.defaultValue, 0)}`;
+    return `${p.name} = ${printExpression(p.defaultValue, 0)}`;
   }
-  return `${p.name}${opt}`;
+  return p.name;
 }
 
 function printTrigger(t: { kind: string } & Record<string, unknown>): string {
-  if (t.kind === "lifecycle") return `on:${t.name as string}`;
-  if (t.kind === "every") return `on:every(${t.intervalMs as number})`;
+  if (t.kind === "lifecycle") return `"${t.name as string}"`;
+  if (t.kind === "every") return `"every(${t.intervalMs as number})"`;
   if (t.kind === "state") return `$${t.name as string}`;
   return "";
 }
@@ -213,29 +198,24 @@ function printExpression(expr: Expression, indent: number): string {
       return printTemplate(expr.quasis, expr.expressions, indent);
     case "Spread":
       return `...${printExpression(expr.argument, indent)}`;
-    case "NamedArg":
-      return `${expr.name}: ${printExpression(expr.value, indent)}`;
     case "If": {
       const test = printExpression(expr.test, indent);
       const cons = `{\n${printBlock(expr.consequent.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      if (!expr.alternate) return `if ${test} ${cons}`;
+      if (!expr.alternate) return `if (${test}) ${cons}`;
       const alt = expr.alternate.kind === "If"
         ? printExpression(expr.alternate, indent)
         : `{\n${printBlock(expr.alternate.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      return `if ${test} ${cons} else ${alt}`;
+      return `if (${test}) ${cons} else ${alt}`;
     }
-    case "Match": {
+    case "Switch": {
       const disc = printExpression(expr.discriminant, indent);
-      const arms = expr.arms.map((arm) => printMatchArm(arm, indent + 1)).join("\n");
-      return `match ${disc} {\n${arms}\n${INDENT.repeat(indent)}}`;
+      const cases = expr.cases.map((c) => printSwitchCase(c, indent + 1)).join("\n");
+      return `switch (${disc}) {\n${cases}\n${INDENT.repeat(indent)}}`;
     }
     case "For": {
       const iter = printExpression(expr.iterable, indent);
-      const head = expr.index
-        ? `for (${expr.item}, ${expr.index}) in ${iter}`
-        : `for ${expr.item} in ${iter}`;
       const body = `{\n${printBlock(expr.body.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      return `${head} ${body}`;
+      return `for (let ${expr.item} of ${iter}) ${body}`;
     }
     case "Lambda": {
       const params = expr.params
@@ -244,17 +224,8 @@ function printExpression(expr: Expression, indent: number): string {
       const head = expr.params.length === 1 && !expr.params[0]!.defaultValue
         ? expr.params[0]!.name
         : `(${params})`;
-      if (expr.body.kind === "JsBlock") {
-        return `${head} => js{${expr.body.body}}`;
-      }
       return `${head} => ${printExpression(expr.body, indent)}`;
     }
-    case "JsBlock":
-      // `body` is the raw, verbatim JS text the lexer captured between
-      // `js{` and the matching `}`. Re-emit exactly so semantics stay
-      // identical after the round-trip — even formatter-illegal
-      // whitespace inside the body must survive.
-      return `js{${expr.body}}`;
     case "Block":
       return `{\n${printBlock(expr.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
   }
@@ -269,10 +240,13 @@ function printCall(callee: string, args: Expression[], indent: number): string {
   return `${callee}(\n${parts.map((s) => `${pad}${s}`).join(",\n")}\n${INDENT.repeat(indent)})`;
 }
 
-function printMatchArm(arm: MatchArm, indent: number): string {
+function printSwitchCase(c: SwitchCase, indent: number): string {
   const pad = INDENT.repeat(indent);
-  const pat = arm.pattern === "_" ? "default" : printExpression(arm.pattern, indent);
-  return `${pad}${pat}: ${printExpression(arm.body, indent)}`;
+  const body = c.body.map((s) => printStatement(s, indent + 1)).join("\n");
+  if (c.test === null) {
+    return `${pad}default:\n${body}\n${printStatement({ kind: "ExpressionStatement", expression: { kind: "Identifier", name: "break" } } as Statement, indent + 1)}`;
+  }
+  return `${pad}case ${printExpression(c.test, indent)}:\n${body}\n${INDENT.repeat(indent + 1)}break`;
 }
 
 function printObjectProp(prop: ObjectProperty, indent: number): string {

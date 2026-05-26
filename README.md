@@ -5,16 +5,16 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](#contributing)
 
 A framework-agnostic web component that renders LLM-generated UI from
-**Aktion** — a compact, declarative language designed for chat
-assistants. Drop one `<script>` tag and one `<aktion-app>` tag into
-any HTML page and you have a streaming, interactive renderer for an LLM's
-response.
+**Aktion** — a reactive language whose surface syntax is a strict subset of
+JavaScript, designed for chat assistants. Drop one `<script>` tag and one
+`<aktion-app>` tag into any HTML page and you have a streaming, interactive
+renderer for an LLM's response.
 
 ```html
 <script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"></script>
 <aktion-app theme="light">
-  _app_ = Card([
-    CardHeader("Hello", subtitle: "Generative UI in plain HTML"),
+  aktion = Card([
+    CardHeader("Hello", { subtitle: "Generative UI in plain HTML" }),
     Markdown("This card was streamed in as **plain text**.")
   ])
 </aktion-app>
@@ -42,8 +42,7 @@ HTML, or no framework at all.
 - [Themes](#themes)
 - [Icons](#icons)
 - [Routing](#routing)
-- [JavaScript escape hatch](#javascript-escape-hatch)
-- [Built-in globals (`storage`, `console`)](#built-in-globals)
+- [Built-in globals (`Storage`, `console`)](#built-in-globals)
 - [Internationalization (`i18n`)](#internationalization)
 - [System prompt generator](#system-prompt-generator)
 - [Tooling](#tooling)
@@ -62,14 +61,14 @@ HTML, or no framework at all.
 Everything you need at runtime ships in a single bundle:
 
 - **A streaming-first parser.** Line-oriented, error-tolerant. Each
-  statement commits to the DOM as soon as it arrives. Single, double, and
-  backtick-quoted strings (with `${expression}` interpolation). `js{ … }`
-  opaque blocks and `{ … }` declaration bodies for `component` / `effect` /
-  `action`.
+  statement commits to the DOM as soon as it arrives. The surface syntax is
+  standard JavaScript — `function` declarations, `for...of`, `if/else`,
+  `switch/case`, template literals with `${expression}` interpolation, arrow
+  functions, and object-literal named arguments.
 - **One reactive atom kind.** Declare any reactive state with `$name = value`
   and read or write it with `$name`. The runtime tracks dependencies
   automatically. Template literals, spread, bracket access, optional
-  chaining, nullish coalescing, expression-form `if` / `match` / `for`,
+  chaining, nullish coalescing, expression-form `if` / `switch` / `for`,
   lambdas (`(p) => …`), automatic two-way binding via direct state refs
   (and member chains rooted at one — `value: $form.email`), and **30+
   pure `@`-functions** (`@Filter`, `@Sort`, `@Find`, `@GroupBy`,
@@ -79,10 +78,9 @@ Everything you need at runtime ships in a single bundle:
   `data | error | status | loading | headers | lastUpdated`, plus the
   callables `refetch()` and `cancel()`. Re-runs automatically when any
   reactive input in the options object changes.
-- **`storage` and `console` globals.** Always in scope. `storage.set/get`
-  (localStorage by default), `storage.session.*`, `storage.cookies.*` with
-  named-arg options, and `console.log/error/warn/info/debug`. No `js{}`
-  escape hatch needed.
+- **`Storage` and `console` globals.** Always in scope. `Storage.set/get`
+  (localStorage by default), `Storage.session.*`, `Storage.cookies.*` with
+  object-literal options, and `console.log/error/warn/info/debug`.
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -91,26 +89,27 @@ Everything you need at runtime ships in a single bundle:
 - **A rich component library** of **130+ components** spanning layout,
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
   editors, advanced UI, and standard helpers. See [Component library](#component-library).
-- **Declarative side effects.** `effect [ ...deps ] { … }` for background
-  work — anonymous blocks where the dependency list mixes state triggers
-  (`$atom`), lifecycle triggers (`on:mount`, `on:unmount`, `on:every(N)`),
-  and rate-limit modifiers (`debounce(N)`, `throttle(N)`). `effect { … }`
-  with an empty list is equivalent to `effect [on:mount] { … }`. Declare
-  an effect **at the top level** for program-wide work, or **inside a
-  `component { … }` body** to scope it to a single instance — timers,
-  watched atoms, and `cleanup(fn)` registrations tear down when the
-  component leaves the tree. `action Name(args) { … }` declares
-  click-driven mutations and may optionally `return` a value.
-- **A built-in router.** `pages = _router_({ "/path": Component(), "/users/:id": UserPage(id: params.id), default: NotFound() })` plus
-  `NavLink(label, to)` and a reserved `_route_` handle that exposes
-  `_route_.path`, `_route_.params`, `_route_.query`, `_route_.pattern`,
-  and `_route_.navigate("/path")`. Hash-based, framework-agnostic,
+- **Declarative side effects.** `effect(() => { body }, [...deps])` for
+  background work — anonymous blocks where the dependency list mixes state
+  triggers (`$atom`), lifecycle triggers (`"mount"`, `"unmount"`,
+  `"every(N)"`), and rate-limit modifiers (`"debounce(N)"`,
+  `"throttle(N)"`). `effect(() => { … })` with no dependency array is
+  equivalent to `effect(() => { … }, ["mount"])`. Declare an effect **at
+  the top level** for program-wide work, or **inside a component function
+  body** to scope it to a single instance — timers, watched atoms, and
+  `cleanup(fn)` registrations tear down when the component leaves the tree.
+  `function name(args) { … }` (camelCase) declares an action — click-driven
+  mutations that may optionally `return` a value.
+- **A built-in router.** `pages = Router({ "/path": Component(), "/users/:id": UserPage({ id: params.id }), default: NotFound() })` plus
+  `NavLink(label, { to })` and a reserved `route` handle that exposes
+  `route.path`, `route.params`, `route.query`, `route.pattern`,
+  and `route.navigate("/path")`. Hash-based, framework-agnostic,
   always wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`,
   `brutalist`, `skyline`) plus full custom-token support via CSS custom
   properties. **50+ design tokens** organised into `colors`, `radius`,
   `font`, `motion`, and `elevation` groups. Brand the UI from inside the
-  script with `theme = Theme({...})`.
+  script with `aktion.theme = Theme({...})`.
 - **`i18n` runtime.** `$i18n = i18n({ locale, messages, fallback })` plus
   a global `t("key", vars?)` builtin and a `Locale()` helper that feeds
   the active locale into `@Format` / `@FormatDate`.
@@ -189,19 +188,19 @@ Three equivalent ways:
 
 ```html
 <!-- as an attribute -->
-<aktion-app response='_app_ = Card([CardHeader("Hi")])'></aktion-app>
+<aktion-app response='aktion = Card([CardHeader("Hi")])'></aktion-app>
 
 <!-- as inner text (rendered on connect) -->
 <aktion-app>
-  _app_ = Card([CardHeader("Hi")])
+  aktion = Card([CardHeader("Hi")])
 </aktion-app>
 
 <!-- as a property/method -->
 <script>
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-    _app_ = Stack([greeting])
-    greeting = Card([CardHeader("Hello", subtitle: "Generative UI in plain HTML")])
+    aktion = Stack([greeting])
+    greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
   `);
 </script>
 ```
@@ -249,7 +248,7 @@ const prompt = el.getSystemPrompt({
 
 ### 6. (Optional) Provide tools
 
-Register host-side async functions exposed to `js{}` bodies as
+Register host-side async functions exposed to effect/action bodies as
 `ctx.tools.<name>(args)`:
 
 ```js
@@ -285,9 +284,9 @@ All members live on the `<aktion-app>` element.
 | `response`      | Aktion text                        | Sets the program declaratively. Re-renders whenever the attribute changes.          |
 | `showerrors`    | `true` / unset                                  | If present and `true`, displays parse errors in the rendered UI. Defaults to off.   |
 
-Routing and the JavaScript escape hatch (`js{ … }` inside `effect` /
-`action` bodies) are always available — no host attribute, no allow-list.
-To omit those surfaces from the *generated prompt*, build it via
+Routing and JavaScript execution inside `effect` / action bodies are
+always available — no host attribute, no allow-list. To omit those
+surfaces from the *generated prompt*, build it via
 `getSystemPrompt({ mode: "chat" })`.
 
 ### Properties
@@ -307,7 +306,7 @@ To omit those surfaces from the *generated prompt*, build it via
 | `appendChunk(chunk)`                                            | Append a streaming chunk and re-render.                                                                                      |
 | `clear()`                                                       | Reset state, queries, and the rendered output.                                                                               |
 | `setTheme(name \| tokens)`                                      | Apply a built-in theme by name or a partial token map.                                                                       |
-| `setTools(tools)`                                               | Register host async tools exposed to `js{}` blocks as `ctx.tools.<name>(args)`. Replaces previously-registered tools.        |
+| `setTools(tools)`                                               | Register host async tools exposed to effect/action bodies as `ctx.tools.<name>(args)`. Replaces previously-registered tools. |
 | `registerComponents(specs, root?)`                              | Extend the built-in library with your own components.                                                                        |
 | `getSystemPrompt(options?)`                                     | Build a system prompt that matches the current library and tools. Pass `{ mode: "chat" }` for the compact variant.            |
 | `navigate(path)`                                                | Programmatically navigate. Updates `window.location.hash`.                                                                   |
@@ -321,41 +320,66 @@ To omit those surfaces from the *generated prompt*, build it via
 
 | Event                | Detail                                        | When it fires                                                                  |
 | -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `assistant-message`  | `{ message: string }`                         | When an action or lambda emits `emit "assistant-message" { message: "..." }`.   |
+| `assistant-message`  | `{ message: string }`                         | When an action or lambda calls `emit("assistant-message", { message: "..." })`. |
 | `error`              | `{ errors: ParseError[] }`                    | After each render whose source had parse errors.                               |
 | `route-change`       | `{ path, previousPath, source }`              | When the current hash path changes. `source` is `"init" \| "hashchange" \| "navigate" \| "external"`. |
-| `<custom-name>`      | User-defined `{ ... }`                        | When script emits `emit "name" { ... }` inside an `action` / `effect` body.    |
+| `<custom-name>`      | User-defined `{ ... }`                        | When script calls `emit("name", { ... })` inside an action / effect body.       |
 
 The `error` event always fires regardless of `showerrors`, so host apps
 can log or report errors even when the in-page banner is suppressed.
+
+### Runtime safety limits
+
+Every program is evaluated under a per-render **runtime budget** that
+bounds three independent dimensions so a partial / accidentally
+recursive program (typed live in the playground, mid-stream LLM token,
+…) can't freeze the browser:
+
+| Dimension           | Default      | Triggers on                                              |
+| ------------------- | ------------ | -------------------------------------------------------- |
+| `componentDepth`    | 150 levels   | `function Foo() { return Foo() }` and other recursive trees |
+| `iterations`        | 250 000 / render | unbounded `for (let x of items) { … }` loops            |
+| `arrayLength`       | 100 000 entries | `@Range(0, 1e9)`, `@Repeat(value, 1e9)`                 |
+
+When a limit trips, the runtime aborts the render, emits an `error`
+event whose detail is shaped like a parse error (`{ line: 0, column:
+0, message }`), and leaves the previous tick's DOM intact so the user
+still sees something useful. The defaults comfortably fit any
+realistic app; tighten or relax them by constructing a custom budget
+via `createRuntimeBudget({ … })` and passing it through `createContext`
+(or pass `null` to disable enforcement entirely in trusted offline
+pipelines).
 
 ---
 
 ## Aktion — the language
 
-A program is a flat list of `name = expression` statements. The renderer
+Aktion's surface syntax is a **strict subset of JavaScript**. Every
+declaration uses standard JS constructs — `function`, `for...of`,
+`if/else`, `switch/case`, arrow functions, object literals — so any
+developer reading the output immediately knows what it does. The renderer
 commits each line as soon as it streams in, so the user sees the page
 shell before the leaves arrive.
 
-```text
+```js
 $count = 0
 $theme = "dark"
 
-component Counter(label: "Count") {
+function Counter(label = "Count") {
   return Stack([
     SectionHeader(label),
-    Button("Inc", onClick: () => $count = $count + 1),
+    Button("Inc", { onClick: () => $count = $count + 1 }),
     Text(`Current: ${$count}`)
   ])
 }
 
-action loadOrders() {
+function loadOrders() {
   $orders = http({ url: "/api/orders", method: "GET" })
 }
 
-effect [$draft, debounce(500)] {
+effect(() => {
   $save = http({ url: "/api/draft", method: "PUT", body: $draft })
-}
+}, [$draft, "debounce(500)"])
 
 $orders = http({
   url:    "/api/users/42/orders",
@@ -363,75 +387,80 @@ $orders = http({
   query:  { limit: 5 }
 })
 
-pages = _router_({
+pages = Router({
   "/":         Counter(),
-  "/orders":   Async($orders, loading: Spinner(), data: OrderTable($orders.data)),
+  "/orders":   Async($orders, { loading: Spinner(), data: OrderTable($orders.data) }),
   default:     NotFound()
 })
 
-_app_ = pages
+aktion = pages
 ```
 
 ### Key constructs
 
-- `_app_ = …` — the reserved entry point. Every program starts with it.
+- `aktion = …` — the reserved entry point. Every program renders from it.
 - `$name = value` — reactive state. One kind. Read or write with the
-  same sigil. Inside `action` / `effect` / lambda bodies, assignment
+  same sigil. Inside action / effect / lambda bodies, assignment
   operators (`= += -= *= /= ??= ++ --`) are all allowed.
-- `component Name(p: default) { return Expression }` — first-class
-  declarations with default expressions, lexical scope, and per-instance
-  state. Inside the body, `$x = expr` is a **declaration**: the
-  initializer runs once when the instance first mounts, and re-renders
-  preserve whatever value the user (or an action / effect) has written.
+  `let/const/var` are optional and do not affect reactivity — only the
+  `$` prefix makes a value reactive.
+- `function Name(p = default) { return Expression }` — PascalCase name
+  means it's a component. Parameters use standard JS defaults (`=`).
+  Inside the body, `$x = expr` is a **declaration**: the initializer
+  runs once when the instance first mounts, and re-renders preserve
+  whatever value the user (or an action / effect) has written.
   **Always** end with an explicit `return`.
-- `action Name(args) { body }` — callable effects with optional
-  `return`. Used as event handlers (`onClick: save`) or as expressions
-  (`$result = greet("Ada")`).
-- `effect [ ...deps ] { body }` — declarative, anonymous side effects.
-  The bracketed dependency list mixes state triggers (`$atom`),
-  lifecycle / interval triggers (`on:mount`, `on:unmount`,
-  `on:every(N)`), and rate-limit modifiers (`debounce(N)`,
-  `throttle(N)`). `effect { ... }` (no brackets) is equivalent to
-  `effect [on:mount] { ... }`. Declare at the program top level for
-  global work, or inside a `component { … }` body to scope the effect
+- `function name(args) { body }` — camelCase name means it's an action.
+  Callable effects with optional `return`. Used as event handlers
+  (`onClick: save`) or as expressions (`$result = greet("Ada")`).
+- `effect(() => { body }, [...deps])` — declarative, anonymous side
+  effects. The dependency array mixes state triggers (`$atom`),
+  lifecycle / interval triggers (`"mount"`, `"unmount"`, `"every(N)"`),
+  and rate-limit modifiers (`"debounce(N)"`, `"throttle(N)"`).
+  `effect(() => { … })` (no second argument) is equivalent to
+  `effect(() => { … }, ["mount"])`. Declare at the program top level for
+  global work, or inside a component function body to scope the effect
   to that instance — the runtime mounts it on first render and tears
   down its timers / subscriptions / `cleanup(fn)` handlers when the
   instance leaves the tree.
-- Expression-form control flow: `if cond { … } else { … }`,
-  `match expr { "a": A() default: Else() }`, `for x in xs { Row(x) }`.
-  Match and router arms use `:` and `default:` (not `->` / `_`).
+- Standard JS control flow: `if (cond) { … } else { … }`,
+  `switch (expr) { case "a": A(); break; default: Else() }`,
+  `for (let x of xs) { Row(x) }`.
 - `http({ url, method, headers, body, query, ... })` — the only network
   primitive. Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
   `.cancel()`.
-- `pages = _router_({ "/path": Component(), default: NotFound() })` —
-  function-call router. The reserved `_route_` handle exposes the
+- `pages = Router({ "/path": Component(), default: NotFound() })` —
+  function-call router. The reserved `route` handle exposes the
   reactive surface and a `navigate("/path")` method; each arm body
   additionally receives a scoped `params` loop var with its captures.
 - Two-way binding is implicit: pass a `$variable` (or a member chain
   rooted at one — `value: $form.email`) as an input prop and the
   runtime wires it both ways.
-- Lambdas `(args) => expr` and opaque `js{ … }` blocks placed inside
-  `effect` / `action` bodies.
-- `emit "name" { detail }` — dispatch an outbound `CustomEvent` on the
+- Lambdas `(args) => expr` with standard default parameters
+  (`(x = 0) => x + 1`).
+- `emit("name", { detail })` — dispatch an outbound `CustomEvent` on the
   host element.
-- Comments: `// line`, `# line`, and `/* block */` — all stripped silently.
+- Comments: `//` line comments and `/* block */` comments — standard JS
+  style.
 
 ### The 60-second pitch
 
-```text
+```js
 $days = "7"
 $data = http({ url: "/api/metrics", method: "GET", query: { days: $days } })
 
-filter = FormControl("Range", control: Select("days",
+filter = FormControl("Range", { control: Select("days", {
   items: [SelectItem("7", "7d"), SelectItem("30", "30d")],
-  value: $days))
-kpi    = StatCard("Events", value: `${$data.data?.events ?? 0}`, trend: "up")
-chart  = LineChart(
+  value: $days
+}) })
+kpi    = StatCard("Events", { value: `${$data.data?.events ?? 0}`, trend: "up" })
+chart  = LineChart({
   labels: $data.data?.daily?.day ?? [],
-  series: [Series("Events", $data.data?.daily?.events ?? [])])
+  series: [Series("Events", $data.data?.daily?.events ?? [])]
+})
 
-_app_ = Stack([CardHeader("Analytics"), filter, kpi, chart])
+aktion = Stack([CardHeader("Analytics"), filter, kpi, chart])
 ```
 
 Highlights:
@@ -445,86 +474,86 @@ Highlights:
 - Array shortcuts: `$rows.length`, `$rows.first`, `$rows.last`,
   plus pluck (`$rows.title` → `[title1, title2, …]`).
 - Responsive prop maps on layout components:
-  `Grid(items, columns: { sm: 1, md: 2, lg: 4 }, gap: "l")`.
-- Forward references are allowed — list `_app_ = Stack([...])` first
+  `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "l" })`.
+- Forward references are allowed — list `aktion = Stack([...])` first
   and let the children stream in beneath it.
 
-### Declarative todo app (no JS required)
+### Declarative todo app
 
-```text
+```js
 $todos = [{ id: 1, text: "Welcome — try editing", done: false }]
 $draft = ""
 
-action add() {
+function add() {
   $todos = [...$todos, { id: $todos.length + 1, text: $draft, done: false }]
   $draft = ""
 }
 
-action remove(id) {
+function remove(id) {
   $todos = @Filter($todos, "id", "!=", id)
 }
 
 row = (t) => Card([Stack([
   Text(t.text),
-  Button("Delete", onClick: () => remove(t.id), variant: "ghost")
+  Button("Delete", { onClick: () => remove(t.id), variant: "ghost" })
 ])])
 
-list  = for t in $todos { row(t) }
-_app_ = Stack([
-  Input("draft-input", placeholder: "What needs doing?", value: $draft),
-  Button("Add", onClick: add, variant: "primary"),
+list  = for (let t of $todos) { row(t) }
+aktion = Stack([
+  Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
+  Button("Add", { onClick: add, variant: "primary" }),
   list
 ])
 ```
 
 ### Per-instance state & content-addressed identity
 
-```text
-component Counter(label) {
+```js
+function Counter(label) {
   $n = 0
   return Stack([
     Text(`${label}: ${$n}`),
-    Button("inc", onClick: () => $n = $n + 1)
+    Button("inc", { onClick: () => $n = $n + 1 })
   ])
 }
 
-# Two independent counters — each holds its own atom.
-_app_ = Stack([Counter("A"), Counter("B")])
+// Two independent counters — each holds its own atom.
+aktion = Stack([Counter("A"), Counter("B")])
 ```
 
-Every call site accepts a universal `key:` named argument. The renderer
+Every call site accepts a universal `key` named argument. The renderer
 uses it as the instance suffix instead of source location, so reordering
 siblings keeps per-instance state attached to the right element:
 
-```text
-component TaskRow(task) {
-  return Stack([Text(task.title)], key: task.id)
+```js
+function TaskRow(task) {
+  return Stack([Text(task.title)], { key: task.id })
 }
 ```
 
 ### Component-scoped effects
 
-`effect [ ...deps ] { … }` blocks can live at the program top level
-**or** inside a `component { … }` body. Inside a component body the
+`effect(() => { … }, [...deps])` blocks can live at the program top level
+**or** inside a component function body. Inside a component body the
 runtime mounts the effect when the instance first renders and tears it
 down (clearing timers, unsubscribing watched atoms, firing every
 registered `cleanup(fn)`) the moment the instance disappears from the
 tree. Two `LiveClock()` calls produce two independent intervals — and
 removing one stops only that one:
 
-```text
-_app_ = Stack([LiveClock("UTC"), LiveClock("Local")])
+```js
+aktion = Stack([LiveClock("UTC"), LiveClock("Local")])
 
-component LiveClock(label) {
+function LiveClock(label) {
   $now = @Now()
-  effect [on:every(1000)] {
+  effect(() => {
     $now = @Now()
-  }
+  }, ["every(1000)"])
   return Stack([Text(label), Text(@FormatDate($now, "time"))])
 }
 ```
 
-Use a top-level `effect [...] { … }` for global work (analytics,
+Use a top-level `effect(() => { … }, [...])` for global work (analytics,
 app-wide keyboard shortcuts, hydration of shared atoms); use a
 component-local effect whenever the background work logically belongs
 to the UI it serves.
@@ -535,10 +564,10 @@ to the UI it serves.
 [`src/library/index.js`](./src/library/index.ts)) emits **hard errors**
 for:
 
-- Closed-token enum mismatches (`Button("Save", variant: "magic")`).
-- Unknown named args (`Stack(junk: 1)`).
+- Closed-token enum mismatches (`Button("Save", { variant: "magic" })`).
+- Unknown named args (`Stack({ junk: 1 })`).
 - One-positional-max violations (`Button("Save", "primary", true)` →
-  "use `variant: "primary"`, `loading: true`").
+  "use `{ variant: "primary", loading: true }`").
 
 The host element merges these into `program.errors` so the on-screen
 banner surfaces every violation.
@@ -582,7 +611,7 @@ production-quality SaaS UI in a single line.
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
 | **Theming**        | `Theme` |
-| **Routing**        | `_router_({ … })`, `NavLink` |
+| **Routing**        | `Router({ … })`, `NavLink` |
 
 The full catalog with positional signatures, prop tables, enum values, and
 live previews is at
@@ -590,27 +619,27 @@ live previews is at
 
 ### Rich pattern composites
 
-```text
-action export_q3() { $exp = http({ url: "/exports/q3", method: "POST" }) }
-action new_project() { _route_.navigate("/projects/new") }
+```js
+function export_q3() { $exp = http({ url: "/exports/q3", method: "POST" }) }
+function new_project() { route.navigate("/projects/new") }
 
-dashHeader  = PageHeader("Engineering Q3", subtitle: "12 active · 4 at risk", breadcrumbs: ["Workspace", "Engineering"], actions: dashActions, status: Badge("On track", "success"))
-dashActions = [Button("Export", onClick: export_q3, variant: "secondary"), Button("New project", onClick: new_project, variant: "primary")]
+dashHeader  = PageHeader("Engineering Q3", { subtitle: "12 active · 4 at risk", breadcrumbs: ["Workspace", "Engineering"], actions: dashActions, status: Badge("On track", "success") })
+dashActions = [Button("Export", { onClick: export_q3, variant: "secondary" }), Button("New project", { onClick: new_project, variant: "primary" })]
 kpis        = Stats([
-  StatCard("Active",  value: "12",  trend: "flat"),
-  StatCard("At risk", value: "4",   trend: "up",   delta: "+2"),
-  StatCard("Shipped", value: "8",   trend: "up",   delta: "+3"),
-  StatCard("On-time", value: "87%", trend: "down", delta: "-3%")
+  StatCard("Active",  { value: "12",  trend: "flat" }),
+  StatCard("At risk", { value: "4",   trend: "up",   delta: "+2" }),
+  StatCard("Shipped", { value: "8",   trend: "up",   delta: "+3" }),
+  StatCard("On-time", { value: "87%", trend: "down", delta: "-3%" })
 ])
 board = KanbanBoard([
-  KanbanColumn("To do",  items: [KanbanCard("Migrate auth", description: "Roll out new SDK.", tags: ["auth"],     assignee: "Asha")]),
-  KanbanColumn("Doing",  items: [KanbanCard("Streaming UI v2", description: "20 new components.", tags: ["frontend"], assignee: "Alex", tone: "primary")]),
-  KanbanColumn("Review", items: [KanbanCard("Mobile onboarding", description: "Awaiting design.", tags: ["mobile"], assignee: "Wren", tone: "warning")]),
-  KanbanColumn("Done",   items: [KanbanCard("Activity timeline",  description: "Shipped to 100%.", tags: ["shipped"], assignee: "Mira", tone: "success")])
+  KanbanColumn("To do",  { items: [KanbanCard("Migrate auth", { description: "Roll out new SDK.", tags: ["auth"],     assignee: "Asha" })] }),
+  KanbanColumn("Doing",  { items: [KanbanCard("Streaming UI v2", { description: "20 new components.", tags: ["frontend"], assignee: "Alex", tone: "primary" })] }),
+  KanbanColumn("Review", { items: [KanbanCard("Mobile onboarding", { description: "Awaiting design.", tags: ["mobile"], assignee: "Wren", tone: "warning" })] }),
+  KanbanColumn("Done",   { items: [KanbanCard("Activity timeline",  { description: "Shipped to 100%.", tags: ["shipped"], assignee: "Mira", tone: "success" })] })
 ])
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
 
-_app_ = Stack([dashHeader, kpis, board, follow])
+aktion = Stack([dashHeader, kpis, board, follow])
 ```
 
 ### Adding your own components
@@ -683,11 +712,11 @@ el.setTheme({
 ### `Theme({...})` from inside a response
 
 A response can brand itself by assigning a `Theme({...})` call to the
-reserved `theme` binding. The tokens land on the host as CSS variables on
-top of the base theme.
+reserved `aktion.theme` binding. The tokens land on the host as CSS
+variables on top of the base theme.
 
-```text
-theme = Theme({
+```js
+aktion.theme = Theme({
   colors: {
     primary: "#0969da",
     border:  "#d0d7de",
@@ -701,7 +730,7 @@ theme = Theme({
   radius: { button: "6px", input: "6px" }
 })
 
-_app_ = Stack([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
+aktion = Stack([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
 ```
 
 `Theme` expects the **structured** form — top-level groups `colors` /
@@ -751,16 +780,16 @@ shadow root. Host apps do **not** need to add a stylesheet.
   stripped silently so legacy emoji leftovers still resolve to the
   proper icon.
 
-```text
+```js
 brandIcon  = Icon("rocket", "solid", "lg")
 homeIcon   = Icon("house")
-profileTab = NavLink("Profile", to: "/profile", variant: "ghost", icon: "user")
+profileTab = NavLink("Profile", { to: "/profile", variant: "ghost", icon: "user" })
 kpis       = Stats([
-  StatCard("Revenue", value: "$48k", trend: "up",   delta: "+12%", icon: "sack-dollar"),
-  StatCard("Orders",  value: "1,284", trend: "up",   delta: "+8%",  icon: "cart-shopping"),
-  StatCard("Refunds", value: "12",   trend: "down", delta: "-3",   icon: "rotate-left")
+  StatCard("Revenue", { value: "$48k", trend: "up",   delta: "+12%", icon: "sack-dollar" }),
+  StatCard("Orders",  { value: "1,284", trend: "up",   delta: "+8%",  icon: "cart-shopping" }),
+  StatCard("Refunds", { value: "12",   trend: "down", delta: "-3",   icon: "rotate-left" })
 ])
-_app_      = Stack([brandIcon, kpis, profileTab])
+aktion     = Stack([brandIcon, kpis, profileTab])
 ```
 
 ---
@@ -772,39 +801,39 @@ stay in sync with the URL (`#/dashboard`, `#/users/42`). Browser
 back/forward, bookmarks, and deep links all work — and the host page
 never reloads.
 
-```text
-pages = _router_({
+```js
+pages = Router({
   "/":          homePage,
   "/dashboard": dashboardPage,
-  "/users/:id": userPage(id: params.id),
+  "/users/:id": userPage({ id: params.id }),
   default:      notFoundPage
 })
 
 nav = Stack([
-  NavLink("Home",      to: "/", exact: true),
-  NavLink("Dashboard", to: "/dashboard"),
-  NavLink("Users",     to: "/users")
-], direction: "row", gap: "s")
+  NavLink("Home",      { to: "/", exact: true }),
+  NavLink("Dashboard", { to: "/dashboard" }),
+  NavLink("Users",     { to: "/users" })
+], { direction: "row", gap: "s" })
 
-_app_ = Stack([nav, pages])
+aktion = Stack([nav, pages])
 
 homePage      = Card([CardHeader("Welcome")])
 dashboardPage = Card([CardHeader("Dashboard")])
 userPage      = (id) => Card([CardHeader(`User ${id}`)])
-notFoundPage  = Callout("Not found", description: `We couldn't find ${_route_.path}.`, variant: "warning")
+notFoundPage  = Callout("Not found", { description: `We couldn't find ${route.path}.`, variant: "warning" })
 ```
 
-- `pages = _router_({ "/path": Component(), default: Fallback() })` picks
+- `pages = Router({ "/path": Component(), default: Fallback() })` picks
   the matching arm based on the current hash path. First match wins;
   `default:` is the fallback.
 - Route patterns support literal segments (`"/about"`), parameter
   segments (`"/users/:id"` → `params.id`), and trailing wildcards
   (`"/docs/*"` → `params._`).
-- `NavLink(label, to:, variant?, exact?, icon?)` is a router-aware anchor
-  that intercepts clicks and reflects `data-active="true"` for the
+- `NavLink(label, { to, variant?, exact?, icon? })` is a router-aware
+  anchor that intercepts clicks and reflects `data-active="true"` for the
   current path.
-- The reactive `_route_` handle exposes `_route_.path`, `_route_.params`,
-  `_route_.query`, and `_route_.pattern`. Call `_route_.navigate("/path")`
+- The reactive `route` handle exposes `route.path`, `route.params`,
+  `route.query`, and `route.pattern`. Call `route.navigate("/path")`
   from inside the script, or `el.navigate("/path")` from the host.
 
 The default ("full") system prompt teaches the LLM about routing. The
@@ -814,88 +843,27 @@ for the full walkthrough.
 
 ---
 
-## JavaScript escape hatch
-
-`js{ … }` blocks live inside `effect` or `action` bodies — no host
-attribute, no allow-list. Reach for them only when no declarative path
-captures the behaviour (timers, clipboard, audio, complex computations,
-host-tool calls).
-
-```text
-$todos = []
-
-action toggle(id) {
-  js {
-    const todos = ctx.state.get("todos") || []
-    ctx.state.set("todos", todos.map(t => t.id === ctx.args.id ? { ...t, done: !t.done } : t))
-  }
-}
-
-row = (t) => Card([Stack([
-  Text(t.text),
-  Button("Toggle", onClick: () => toggle(t.id))
-])])
-
-list  = for t in $todos { row(t) }
-_app_ = Stack([list])
-```
-
-Inside the `js{ … }` block:
-
-- `ctx.state.get(name)` / `ctx.state.set(name, value)` read and write
-  reactive atoms.
-- `ctx.args` exposes the action's positional parameters keyed by name.
-- `ctx.cleanup(fn)` (effects only) registers a teardown to fire on
-  re-run and unmount.
-- `ctx.host` is the host element, for DOM-observing effects.
-- `ctx.tools` is a host-registered async tool registry (see `el.setTools(...)`).
-
-The body runs inside `(async () => { … })()` so `await` is free. Errors
-are caught and logged — a broken body never crashes the host page.
-
-For long-lived behaviour, prefer an `effect`:
-
-```text
-effect [$draft, debounce(500)] {
-  js {
-    await fetch("/save", { method: "POST", body: JSON.stringify({ draft: ctx.state.get("draft") }) })
-  }
-}
-```
-
-The default (full) system prompt teaches `effect` / `action` / `js{}`;
-the chat-flavoured prompt (`getSystemPrompt({ mode: "chat" })`) omits
-the JS section entirely.
-
-See the
-[JavaScript interactions guide](https://asfand-dev.github.io/aktion/javascript-interactions.html)
-or the deep
-[`coding-gen-skill.md`](./coding-gen-skill.md)
-for a full walkthrough.
-
----
-
 ## Built-in globals
 
-Two namespace globals are always in scope inside a Aktion
-program — no import, no `js{}` block required. Both follow the standard
-`obj.method(args)` method-call syntax and accept named-arg options.
+Two namespace globals are always in scope inside an Aktion
+program — no import required. Both follow the standard
+`obj.method(args)` method-call syntax and accept object-literal options.
 
-```text
-# localStorage is the default; `storage.local` is its alias.
-storage.set("name", "John")
-$name = storage.get("name")
+```js
+// localStorage is the default; `Storage.local` is its alias.
+Storage.set("name", "John")
+$name = Storage.get("name")
 
-# Per-tab sessionStorage.
-storage.session.set("draft", $draft)
-$draft = storage.session.get("draft")
+// Per-tab sessionStorage.
+Storage.session.set("draft", $draft)
+$draft = Storage.session.get("draft")
 
-# Cookies — named-arg options become a single options object.
-storage.cookies.set("user", "John", expires: 7, path: "/", sameSite: "Lax")
-$user = storage.cookies.get("user")
-storage.cookies.remove("user", path: "/")
+// Cookies — options as an object literal.
+Storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$user = Storage.cookies.get("user")
+Storage.cookies.remove("user", { path: "/" })
 
-# Forwards to the host console.
+// Forwards to the host console.
 console.log("Hello", $user)
 console.error("Something failed", $error)
 ```
@@ -920,7 +888,7 @@ The `$i18n = i18n({...})` declaration configures the active locale,
 message bundles, and fallback. A global `t(key, vars?)` builtin and a
 `Locale()` helper feed the active locale into `@Format` / `@FormatDate`.
 
-```text
+```js
 $i18n = i18n({
   locale: "fr-FR",
   fallback: "en",
@@ -930,9 +898,9 @@ $i18n = i18n({
   }
 })
 
-welcome    = Text(t("greeting", { name: $user.name }))
+welcome     = Text(t("greeting", { name: $user.name }))
 sectionTitle = SectionHeader(t("orders.title"))
-formatted  = Text(@Format(1234.5, "currency", {currency: "EUR", locale: Locale()}))
+formatted   = Text(@Format(1234.5, "currency", { currency: "EUR", locale: Locale() }))
 ```
 
 Keys support dot paths. Variables are interpolated using `${name}`
@@ -992,7 +960,7 @@ import {
 ```
 
 - `formatProgram` projects the parsed AST back to canonical source —
-  `prop: value` named args, double-quoted strings, two-space block
+  object-literal named args, double-quoted strings, two-space block
   indentation, template literals intact.
 - `inspectAST(source)` returns a JSON-friendly view of the Committed +
   Drafting ASTs at the current byte position — bindings (with
@@ -1021,14 +989,14 @@ consumes from the CDN.
 | `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
 | `language.html`                     | Full Aktion language reference.                                            |
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
-| `actions.html`                      | `action Name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
-| `side-effects.html`                 | `effect [ ...deps ] { … }` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
-| `javascript-interactions.html`      | `effect [ ...deps ] { js { … } }` + action `js{}` bodies — the JS escape hatch.         |
+| `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
+| `side-effects.html`                 | `effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
+| `javascript-interactions.html`      | Effect + action bodies — the JavaScript execution surface.                               |
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
 | `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
-| `visual-editor.html`                | Drag-and-drop visual editor for the full 130+ component library: typed prop editors (text, number, boolean, enum, expression), DnD reorder, slot-aware drop zones, breadcrumbs, live preview, and import / export `.aktion` + self-contained HTML. The palette pane has two tabs — **Components** (DnD palette) and **Outline** (the program's top-level entities: assignments, `$state`, `component`/`action`/`effect` declarations). The Outline tab lets you focus the canvas on any entity, create new ones (`+` menu), and rename / delete them. The canvas pane has three modes: **Raw Edit** (tree-of-cards view of the active assignment, useful for surgical structural edits), **Visual Edit** (WYSIWYG canvas with overlay chrome), and **Preview** (chrome-free WYSIWYG render). The palette, inspector, and toolbar stay identical across modes. **Cross-entity selection**: clicking any rendered component on the canvas — even when it lives in a different binding (e.g. `_app_ = Stack([block])` where `block = Box(...)` lives in its own assignment) — selects the component, automatically focuses its owning entity, and surfaces its props in the inspector. The breadcrumb adds a "home" button to jump back to `_app_`. The **Source drawer** ships an editable `.aktion` textarea with **Apply changes** / **Revert** so power users can hand-edit the whole program and re-import it; parse diagnostics surface in a hint banner below the editor. |
+| `visual-editor.html`                | Drag-and-drop visual editor for the full 130+ component library: typed prop editors (text, number, boolean, enum, expression), DnD reorder, slot-aware drop zones, breadcrumbs, live preview, and import / export `.aktion` + self-contained HTML. The palette pane has two tabs — **Components** (DnD palette) and **Outline** (the program's top-level entities: assignments, `$state`, component/action/effect declarations). The Outline tab lets you focus the canvas on any entity, create new ones (`+` menu), and rename / delete them. The canvas pane has three modes: **Raw Edit** (tree-of-cards view of the active assignment, useful for surgical structural edits), **Visual Edit** (WYSIWYG canvas with overlay chrome), and **Preview** (chrome-free WYSIWYG render). The palette, inspector, and toolbar stay identical across modes. **Cross-entity selection**: clicking any rendered component on the canvas — even when it lives in a different binding (e.g. `aktion = Stack([block])` where `block = Box(...)` lives in its own assignment) — selects the component, automatically focuses its owning entity, and surfaces its props in the inspector. The breadcrumb adds a "home" button to jump back to `aktion`. The **Source drawer** ships an editable `.aktion` textarea with **Apply changes** / **Revert** so power users can hand-edit the whole program and re-import it; parse diagnostics surface in a hint banner below the editor. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
 | `live-examples.html`                | Catalog page that links every demo into the shared `live-example.html?example=<slug>` shell. |
 | `live-example.html`                 | Shared shell for the bundled live examples — picks the demo from the `?example=<slug>` query parameter. |
@@ -1039,7 +1007,7 @@ consumes from the CDN.
 
 Every standalone demo is served by a single shell page
 (`docs/live-example.html`) and a single JS bundle
-(`docs/assets/live-example.js`) that ships every demo's UI Script source
+(`docs/assets/live-example.js`) that ships every demo's Aktion source
 and setup code together. Open any example with
 `live-example.html?example=<slug>` — the shell renders the original
 hero / source / output layout, so each demo doubles as an integration
@@ -1047,7 +1015,7 @@ recipe for `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
 
 | Demo slug                       | Highlights                                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `routing-demo`                  | A four-page app driven by `pages = _router_({ … })` + `NavLink`, deep links, browser back/forward.          |
+| `routing-demo`                  | A four-page app driven by `pages = Router({ … })` + `NavLink`, deep links, browser back/forward.            |
 | `settings-app`                  | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Drawer`.                        |
 | `data-explorer`                 | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `LineChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `ActivityLog`. |
 | `media-gallery`                 | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer`, `AudioPlayer`, Leaflet-backed `Map`. |
@@ -1069,12 +1037,12 @@ The full catalog with tag filters lives at
 │   │   ├── builtins.ts        #     pure @-function helpers
 │   │   ├── evaluator.ts       #     program planner + binding resolver
 │   │   ├── state.ts           #     reactive store — `$name = value`
-│   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner + js{} executor
+│   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner
 │   │   ├── http.ts            #     http({...}) reactive HTTP primitive + interceptors
 │   │   ├── i18n.ts            #     $i18n runtime + t() / Locale() builtins
-│   │   ├── storage.ts         #     storage.local / .session / .cookies bridge
+│   │   ├── storage.ts         #     Storage.local / .session / .cookies bridge
 │   │   ├── console.ts         #     console.* host bridge
-│   │   └── router.ts          #     Hash-based router for _router_({…}) calls and NavLink
+│   │   └── router.ts          #     Hash-based router for Router({…}) calls and NavLink
 │   ├── library/               #   Component specs and registry
 │   │   └── components/        #     layout / content / forms / data / charts / chat /
 │   │                          #     feedback / navigation / menu / patterns / helpers / router
@@ -1165,7 +1133,7 @@ The suite covers:
 
 - Parser / lexer correctness (`tests/parser.test.ts`).
 - Runtime evaluator + reactive state + `http({...})` (`tests/runtime.test.ts`).
-- `effect` / `action` declarations + `js{}` execution (`tests/javascript-integration.test.ts`).
+- Effect and action declarations — see `tests/javascript-integration.test.ts`.
 - Hash-based router + `NavLink` (`tests/router.test.ts`).
 - Theme resolution and token application (`tests/theme.test.ts`).
 - In-script `Theme(...)` overrides (`tests/in-script-theme.test.ts`).
@@ -1223,11 +1191,11 @@ renderer get `rel="noopener noreferrer"` so the destination cannot
 read the opener's `document.referrer`.
 
 If you embed `<aktion-app>` behind a CSP, the bundle does not
-use `eval`. `js{}` bodies inside `effect` / `action` declarations are
-evaluated with `new Function(...)` which requires `'unsafe-eval'` if
-you want them to work; if you cannot relax CSP, simply avoid emitting
-`js{}` blocks from the LLM — every other part of the runtime keeps
-working without the JS escape hatch.
+use `eval`. Effect and action bodies are evaluated with
+`new Function(...)` which requires `'unsafe-eval'` if you want them to
+run arbitrary JavaScript; if you cannot relax CSP, simply avoid emitting
+complex JS expressions from the LLM — declarative constructs (component
+trees, `http()`, `@`-functions) keep working without `unsafe-eval`.
 
 ---
 

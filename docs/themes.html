@@ -1170,13 +1170,13 @@ el.setTheme({
   radius: { button: "6px" }
 })
 
-_app_ = Stack([
-  CardHeader("Welcome", subtitle: "Sign in to your workspace"),
-  Buttons([Button("Sign in"), Button("Cancel", variant: "secondary")])
+aktion = Stack([
+  CardHeader("Welcome", { subtitle: "Sign in to your workspace" }),
+  Buttons([Button("Sign in"), Button("Cancel", { variant: "secondary" })])
 ])</code></pre>
 
             <ul>
-              <li><strong>Reserved name.</strong> Only <code>theme</code> (alongside <code>_app_</code>) is allowed without being referenced elsewhere. The runtime picks both up by name.</li>
+              <li><strong>Reserved name.</strong> Only <code>theme</code> (alongside <code>aktion</code>) is allowed without being referenced elsewhere. The runtime picks both up by name.</li>
               <li><strong>Structured groups only.</strong> The top-level keys must be <code>colors</code>, <code>radius</code>, <code>font</code>, <code>motion</code>, <code>elevation</code> (plus the metadata keys <code>name</code> and <code>direction</code>). Flat-shape tokens (<code>colorPrimary</code>, <code>radiusMd</code>) and free-form CSS variables (<code>--rui-color-x</code>) raise a schema-validator warning and are dropped.</li>
               <li><strong>Naming convention.</strong> Inside each group, camel-case keys flatten predictably: <code>colors.primary</code> &rarr; <code>colorPrimary</code>, <code>colors.primaryHover</code> &rarr; <code>colorPrimaryHover</code>, <code>radius.md</code> &rarr; <code>radiusMd</code>, <code>radius.button</code> &rarr; <code>radiusButton</code>, <code>font.familyHeading</code> &rarr; <code>fontFamilyHeading</code>.</li>
               <li><strong>Partial maps.</strong> Pass only the groups you want to override &mdash; everything else inherits from the base theme set on the host (<code>theme="light"</code>, <code>theme="dark"</code>, &hellip;).</li>
@@ -1469,7 +1469,7 @@ el.setTheme(brandTheme);</code></pre>
        Preview programs.
        ------------------------------------------------------------------- */
 
-    const PREVIEW_PROGRAM = `_app_ = Stack([hero, kpis, form, follow])
+    const PREVIEW_PROGRAM = `aktion = Stack([hero, kpis, form, follow])
 hero = Card([
   CardHeader("Theme preview", "Same content, different palettes"),
   Markdown("This card lives inside <aktion-app>. Try swapping themes — every component picks up the new tokens instantly, no re-render needed.")
@@ -1491,7 +1491,7 @@ follow = FollowUpBlock([
   FollowUpItem("Customize the chart palette")
 ], "Try editing")`;
 
-    const MINI_PROGRAM = `_app_ = Stack([head, kpi, btns])
+    const MINI_PROGRAM = `aktion = Stack([head, kpi, btns])
 head = Card([CardHeader("Theme preview", "Identical content")])
 kpi = Stack([
   StatCard("Active", "1.2k", "up", "+12%"),

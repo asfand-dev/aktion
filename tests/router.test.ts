@@ -151,16 +151,16 @@ describe("<aktion-app>: routing", () => {
     return el;
   };
 
-  it("renders the matching arm of `_router_({ … })` based on the current path", async () => {
+  it("renders the matching arm of `Router({ … })` based on the current path", async () => {
     const el = create();
     window.location.hash = "#/about";
     await flush();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")]),
   default:  Callout("warning", "Not found")
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const shadow = el.shadowRoot!;
     const titles = Array.from(shadow.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
@@ -172,12 +172,12 @@ _app_ = Stack([pages])`);
     const el = create();
     window.location.hash = "#/nonexistent";
     await flush();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")]),
   default:  Card([CardHeader("404")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const titles = Array.from(el.shadowRoot!.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
     expect(titles).toContain("404");
@@ -188,11 +188,11 @@ _app_ = Stack([pages])`);
     const el = create();
     window.location.hash = "#/anything-goes/here";
     await flush();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/": Card([CardHeader("Home")]),
   "*": Card([CardHeader("404")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const titles = Array.from(el.shadowRoot!.querySelectorAll(".rui-card-title")).map((n) => n.textContent);
     expect(titles).toContain("404");
@@ -202,25 +202,25 @@ _app_ = Stack([pages])`);
     const el = create();
     window.location.hash = "#/users/42";
     await flush();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/users/:id": Card([CardHeader("User " + params.id, "Detail page")]),
   default:      Card([CardHeader("404")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
     expect(title).toBe("User 42");
   });
 
-  it("exposes the reactive `_route_` object with .path / .params / .pattern", async () => {
+  it("exposes the reactive `route` object with .path / .params / .pattern", async () => {
     const el = create();
     window.location.hash = "#/users/7";
     await flush();
-    el.setResponse(`pages = _router_({
-  "/users/:id": Card([CardHeader(\`User \${_route_.params.id}\`, _route_.path)]),
+    el.setResponse(`pages = Router({
+  "/users/:id": Card([CardHeader(\`User \${route.params.id}\`, route.path)]),
   default:      Card([CardHeader("404")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const shadow = el.shadowRoot!;
     const title = shadow.querySelector(".rui-card-title")?.textContent;
@@ -229,25 +229,25 @@ _app_ = Stack([pages])`);
     expect(subtitle).toBe("/users/7");
   });
 
-  it("template literal `${_route_}` coerces to the current path string", async () => {
+  it("template literal `${route}` coerces to the current path string", async () => {
     const el = create();
     window.location.hash = "#/dashboard";
     await flush();
-    el.setResponse(`_app_ = Card([CardHeader("Path", \`Now at \${_route_}\`)])`);
+    el.setResponse(`aktion = Card([CardHeader("Path", \`Now at \${route}\`)])`);
     await waitForRenders();
     const subtitle = el.shadowRoot!.querySelector(".rui-card-subtitle")?.textContent;
     expect(subtitle).toBe("Now at /dashboard");
   });
 
-  it("`_route_.navigate(path)` updates the URL hash and re-renders", async () => {
+  it("`route.navigate(path)` updates the URL hash and re-renders", async () => {
     const el = create();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":         Card([CardHeader("Home")]),
   "/settings": Card([CardHeader("Settings")])
 })
-action goSettings() { _route_.navigate("/settings") }
-trigger = Button("Go", onClick: goSettings)
-_app_ = Stack([trigger, pages])`);
+function goSettings() { route.navigate("/settings") }
+trigger = Button("Go", { onClick: goSettings })
+aktion = Stack([trigger, pages])`);
     await waitForRenders();
     expect(el.route).toBe("/");
 
@@ -263,11 +263,11 @@ _app_ = Stack([trigger, pages])`);
 
   it("re-renders when the element's `navigate()` method is called", async () => {
     const el = create();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":         Card([CardHeader("Home")]),
   "/settings": Card([CardHeader("Settings")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     expect(el.route).toBe("/");
     let title = el.shadowRoot!.querySelector(".rui-card-title")?.textContent;
@@ -284,16 +284,16 @@ _app_ = Stack([pages])`);
     const el = create();
     window.location.hash = "#/settings/profile";
     await flush();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":           Card([CardHeader("Home")]),
   "/settings/*": Card([CardHeader("Settings")])
 })
 nav = Stack([
-  NavLink("Home", to: "/", exact: true),
-  NavLink("Settings", to: "/settings"),
-  NavLink("Profile", to: "/settings/profile", exact: true)
-], direction: "row")
-_app_ = Stack([nav, pages])`);
+  NavLink("Home", { to: "/", exact: true }),
+  NavLink("Settings", { to: "/settings" }),
+  NavLink("Profile", { to: "/settings/profile", exact: true })
+], { direction: "row" })
+aktion = Stack([nav, pages])`);
     await waitForRenders();
     const links = Array.from(el.shadowRoot!.querySelectorAll<HTMLAnchorElement>(".rui-nav-link"));
     const states = links.map((a) => ({ label: a.textContent?.trim(), active: a.getAttribute("data-active") }));
@@ -306,15 +306,15 @@ _app_ = Stack([nav, pages])`);
 
   it("NavLink onclick navigates to the target route", async () => {
     const el = create();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")])
 })
 nav = Stack([
-  NavLink("Home", to: "/"),
-  NavLink("About", to: "/about")
-], direction: "row")
-_app_ = Stack([nav, pages])`);
+  NavLink("Home", { to: "/" }),
+  NavLink("About", { to: "/about" })
+], { direction: "row" })
+aktion = Stack([nav, pages])`);
     await waitForRenders();
     expect(el.route).toBe("/");
 
@@ -329,11 +329,11 @@ _app_ = Stack([nav, pages])`);
 
   it("dispatches a route-change event when the path changes", async () => {
     const el = create();
-    el.setResponse(`pages = _router_({
+    el.setResponse(`pages = Router({
   "/":  Card([CardHeader("A")]),
   "/b": Card([CardHeader("B")])
 })
-_app_ = Stack([pages])`);
+aktion = Stack([pages])`);
     await waitForRenders();
     const events: Array<{ path: string; previousPath: string | null }> = [];
     el.addEventListener("route-change", (evt) => {
@@ -349,9 +349,9 @@ _app_ = Stack([pages])`);
 describe("system prompt: routing", () => {
   it("includes a routing section in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("_router_({");
+    expect(text).toContain("Router({");
     expect(text).toContain("NavLink");
-    expect(text).toContain("_route_");
+    expect(text).toContain("route.path");
     expect(text).not.toContain("$route");
   });
 

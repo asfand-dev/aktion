@@ -1,17 +1,17 @@
 /**
- * Aktion effect runtime — mounts `effect [ ...deps ] { … }` blocks,
+ * Aktion effect runtime — mounts `effect(() => { … }, [...deps])` declarations,
  * runs their triggers, and tears them down on unmount.
  *
- * Each declaration's bracketed dependency list mixes:
+ * Each declaration's dependency array mixes:
  *   - state triggers (`$atom`) — re-run when any listed atom changes.
  *   - lifecycle triggers (`on:mount`, `on:unmount`).
  *   - interval triggers (`on:every(N)`) — re-run every N ms.
  *   - rate-limit modifiers (`debounce(N)`, `throttle(N)`) — wrap the body
  *     with a trailing-edge rate-limit.
  *
- * Empty dependency lists (`effect { ... }`) and explicit
- * `effect [on:mount] { ... }` are equivalent — both run the body once on
- * mount.
+ * Empty dependency arrays (`effect(() => { ... }, [])`) and explicit
+ * `effect(() => { ... }, [on:mount])` are equivalent — both run the body
+ * once on mount.
  *
  * `cleanup(fn)` registrations inside the body are collected and fired on
  * unmount, on re-run, or on program reload.
@@ -30,17 +30,8 @@ export interface EffectRunnerOptions {
   state: StateStore;
   /** Called whenever an effect mutates state or completes — schedules render. */
   notify: () => void;
-  /** Called when the action body emits a CustomEvent via `emit`. */
+  /** Called when the effect/action body emits a CustomEvent via `emit()`. */
   onEmit?: (eventName: string, detail: unknown) => void;
-  /** Host element — exposed to `js{}` block bodies as `ctx.host`. */
-  host?: HTMLElement;
-  /**
-   * Optional pluggable async tool registry — exposed to `js{}` blocks as
-   * `ctx.tools.<name>(...)`. Each entry is invoked with whatever args the
-   * JS body passes; the return value is awaited. Hosts can register fetch
-   * shims, persistence helpers, etc.
-   */
-  tools?: Record<string, (...args: unknown[]) => unknown>;
 }
 
 interface MountedEffect {
@@ -52,13 +43,24 @@ interface MountedEffect {
   ctxRef: () => EvaluationContext;
   /**
    * Per-instance state-alias frames captured at the moment the
-   * declaration was discovered inside a `component { … }` body. Empty
+   * declaration was discovered inside a function body. Empty
    * for program-level effects, where no alias frame applies. The runner
    * restores these onto `ctx.stateAliases` before evaluating the body
    * so `$x = …` writes resolve to the per-instance slot the surrounding
-   * component owns.
+   * function owns.
    */
   capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>;
+  /**
+   * Loop variables captured at the moment the declaration was collected
+   * — function parameters (`todo` in `function Item(todo) {…}`),
+   * slot bindings, and any enclosing `for`-loop variables. The runner
+   * restores these onto `ctx.loopVars` before running the body so an
+   * effect referencing the surrounding function's parameters keeps
+   * working even though the param binding only lives for the duration
+   * of `evaluateUserComponent`. Refreshed on every re-render via
+   * `syncInstanceEffects` so the effect always sees the latest values.
+   */
+  capturedLoopVars: ReadonlyMap<string, unknown>;
 }
 
 /**
@@ -68,6 +70,13 @@ interface MountedEffect {
  * top-level program effect.
  */
 const INSTANCE_KEY_SEPARATOR = "::";
+
+/**
+ * Shared empty captured-loop-vars map for top-level effects. Reusing a
+ * single readonly instance avoids allocating a throwaway `Map` for every
+ * top-level effect on every replan.
+ */
+const EMPTY_LOOP_VARS: ReadonlyMap<string, unknown> = new Map();
 
 export class EffectRunner {
   private mounted = new Map<string, MountedEffect>();
@@ -86,7 +95,7 @@ export class EffectRunner {
    * alone, those that vanish from the new program are torn down.
    *
    * Only touches global (top-level) effects. Per-instance effects mounted
-   * inside `component { … }` bodies are managed via `syncInstanceEffects`
+   * inside function bodies are managed via `syncInstanceEffects`
    * / `unmountInstance` and are not affected by this call.
    */
   syncEffects(
@@ -105,13 +114,15 @@ export class EffectRunner {
     }
     for (const decl of decls) {
       if (!this.mounted.has(decl.name)) {
-        this.mount(decl.name, decl, getCtx, []);
+        // Top-level effects have no captured alias frames *or* loop
+        // vars — they run against the bare program context.
+        this.mount(decl.name, decl, getCtx, [], EMPTY_LOOP_VARS);
       }
     }
   }
 
   /**
-   * Mount per-instance effects discovered inside a `component { … }` body.
+   * Mount per-instance effects discovered inside a function body.
    * Idempotent: re-rendering the same instance with the same effect set is
    * a no-op; effects that vanished from the body since the last render are
    * torn down. Effects belonging to other instances are untouched.
@@ -129,9 +140,24 @@ export class EffectRunner {
     }
     for (const scoped of decls) {
       const key = `${prefix}${scoped.decl.name}`;
-      if (!this.mounted.has(key)) {
-        this.mount(key, scoped.decl, getCtx, scoped.capturedAliases);
+      const existing = this.mounted.get(key);
+      if (existing) {
+        // Re-render: keep the same mounted effect (don't re-fire the
+        // body), but refresh the captured loop vars so the next time
+        // the body runs it observes the latest prop values rather than
+        // the snapshot taken on first mount. Alias frames are stable
+        // per instance — derived from `instanceKey` — so they don't
+        // need refreshing.
+        existing.capturedLoopVars = scoped.capturedLoopVars;
+        continue;
       }
+      this.mount(
+        key,
+        scoped.decl,
+        getCtx,
+        scoped.capturedAliases,
+        scoped.capturedLoopVars,
+      );
     }
   }
 
@@ -161,6 +187,7 @@ export class EffectRunner {
     decl: EffectDeclaration,
     getCtx: () => EvaluationContext,
     capturedAliases: ReadonlyArray<ReadonlyMap<string, string>>,
+    capturedLoopVars: ReadonlyMap<string, unknown>,
   ): void {
     const mounted: MountedEffect = {
       decl,
@@ -169,6 +196,7 @@ export class EffectRunner {
       unsubscribers: [],
       ctxRef: getCtx,
       capturedAliases,
+      capturedLoopVars,
     };
     this.mounted.set(mountKey, mounted);
 
@@ -210,7 +238,14 @@ export class EffectRunner {
           break;
         }
         case "state": {
-          const targetName = trigger.name;
+          // Per-instance effects declared inside a function body need to
+          // subscribe to the *aliased* atom name, not the bare `$isDone`
+          // written by the author. Without this lookup, a Counter
+          // instance's effect subscribes to a global `isDone` slot that
+          // never changes — the per-instance slot is named
+          // `<instanceKey>:isDone`, so the subscriber's `has(…)` check
+          // would never match and the effect would never fire.
+          const targetName = resolveTriggerAlias(trigger.name, capturedAliases);
           const unsub = this.options.state.subscribe((changed) => {
             if (changed.has(targetName)) runBody();
           });
@@ -317,14 +352,21 @@ function runEffectBody(
   //   - assignments (`$state = …`) — committed as state writes.
   //   - expression statements — evaluated for side effects.
   //   - `cleanup(fn)` calls — register a teardown handler.
-  //   - `emit "name" { detail }` — dispatch an outbound event.
+  //   - `emit("name", detail)` — dispatch an outbound event.
   //
-  // For per-instance effects (declared inside a `component { … }` body)
-  // the captured alias stack is restored around the run so `$x = …`
-  // writes resolve to the per-instance slot the surrounding component
-  // owns — without this the assignment would silently write the
-  // top-level `x` instead. Top-level effects pass an empty array which
-  // makes the push/pop a no-op.
+  // For per-instance effects (declared inside a function body)
+  // both the alias stack AND the loop-var map are restored around the
+  // run:
+  //   - aliases so `$x = …` writes resolve to the per-instance slot the
+  //     surrounding function owns (otherwise the assignment would land
+  //     on a brand-new top-level atom).
+  //   - loop vars so the body can still read function parameters and
+  //     enclosing for-loop bindings (`effect(() => { use(todo) }, [$x])`
+  //     inside `function Item(todo) { … }`). Without this the param
+  //     resolves to `undefined` because `evaluateUserComponent` already
+  //     restored the outer scope by the time the effect fires.
+  // Top-level effects pass empty captures, so both restore blocks
+  // become no-ops.
   const restoreAliases = mounted.capturedAliases.length > 0
     ? ctx.stateAliases.slice()
     : null;
@@ -334,6 +376,13 @@ function runEffectBody(
       ctx.stateAliases.push(new Map(frame));
     }
   }
+  const restoreLoopVars = mounted.capturedLoopVars.size > 0
+    ? new Map(ctx.loopVars)
+    : null;
+  if (restoreLoopVars) {
+    ctx.loopVars.clear();
+    for (const [k, v] of mounted.capturedLoopVars) ctx.loopVars.set(k, v);
+  }
   try {
     for (const stmt of decl.body.body) {
       runStatement(stmt, ctx, mounted, options);
@@ -342,6 +391,10 @@ function runEffectBody(
     if (restoreAliases) {
       ctx.stateAliases.length = 0;
       for (const frame of restoreAliases) ctx.stateAliases.push(frame);
+    }
+    if (restoreLoopVars) {
+      ctx.loopVars.clear();
+      for (const [k, v] of restoreLoopVars) ctx.loopVars.set(k, v);
     }
   }
 }
@@ -355,8 +408,8 @@ function runStatement(
   switch (stmt.kind) {
     case "ExpressionStatement": {
       const expr = stmt.expression;
-      // `cleanup(fn)` is a function call — recognise it and register the
-      // callback rather than evaluating the call normally.
+      // `cleanup(fn)` — recognise it and register the callback rather
+      // than evaluating the call normally.
       if (expr.kind === "Call" && expr.callee === "cleanup") {
         const cb = expr.arguments[0] ? evaluate(expr.arguments[0], ctx) : null;
         if (typeof cb === "function") {
@@ -364,9 +417,13 @@ function runStatement(
         }
         return undefined;
       }
-      // Inline `js { ... }` block — execute the opaque body.
-      if (expr.kind === "JsBlock") {
-        return executeJsBlock(expr.body, mounted.decl.name, ctx, options, mounted);
+      // `emit("name", detail)` — dispatch an outbound CustomEvent.
+      if (expr.kind === "Call" && expr.callee === "emit") {
+        const args = expr.arguments;
+        const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
+        const detail = args[1] ? evaluate(args[1], ctx) : undefined;
+        options.onEmit?.(eventName, detail);
+        return undefined;
       }
       return evaluate(expr, ctx);
     }
@@ -374,25 +431,12 @@ function runStatement(
       const value = evaluate(stmt.expression, ctx);
       if (stmt.identifier && stmt.identifier !== "") {
         // Treat any assignment inside an effect body as a state write.
-        // This mirrors the spec's "$x = …" mutation form. Route through
-        // the per-instance alias stack so writes from inside a component
-        // body hit the right per-instance slot (§7).
+        // Route through the per-instance alias stack so writes from
+        // inside a function body hit the right per-instance slot (§7).
         const target = resolveStateAlias(ctx, stmt.identifier);
         ctx.state.set(target, value as StateValue);
       }
       return value;
-    }
-    case "Cleanup": {
-      const cb = stmt.callback ? evaluate(stmt.callback, ctx) : null;
-      if (typeof cb === "function") {
-        mounted.cleanups.push(cb as () => void);
-      }
-      return undefined;
-    }
-    case "Emit": {
-      const detail = evaluate(stmt.detail, ctx);
-      options.onEmit?.(stmt.eventName, detail);
-      return undefined;
     }
     default:
       return undefined;
@@ -404,88 +448,28 @@ function logCleanupError(name: string, err: unknown): void {
   console.error(`[aktion] cleanup for effect "${name}" threw`, err);
 }
 
-/* -------------------------------------------------------------------------- */
-/*  JS escape hatch — executes `js { ... }` blocks inside effect/action bodies */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Shape exposed to `js{}` bodies as the `ctx` parameter. Intentionally
- * narrow — `ctx.state`, `ctx.cleanup`, `ctx.host`, `ctx.tools`, and
- * `ctx.args` (for action bodies) cover the common cases without leaking
- * the entire runtime surface to opaque JS.
+ * Walk the captured per-instance alias frames (top-of-stack → bottom)
+ * looking for `name`. Returns the aliased atom (e.g.
+ * `Item@2:0#0:isDone`) when one matches, falls back to the bare name
+ * for top-level effects where no frame is captured.
+ *
+ * Used by the state-trigger subscriber so an effect's dependency list
+ * (`effect(() => { … }, [$isDone])`) wires up to the same atom the body
+ * reads/writes via the alias stack (§7 — per-instance state). Without
+ * this, a per-instance effect would silently never fire because the
+ * subscription points at a global `isDone` slot the component never
+ * touches.
  */
-interface JsBlockCtx {
-  state: {
-    get: (name: string) => unknown;
-    set: (name: string, value: unknown) => void;
-  };
-  cleanup: (fn: () => void) => void;
-  host?: HTMLElement;
-  tools: Record<string, (...args: unknown[]) => unknown>;
-  args: Record<string, unknown>;
-}
-
-interface JsBlockExecOptions {
-  state: StateStore;
-  host?: HTMLElement;
-  tools?: Record<string, (...args: unknown[]) => unknown>;
-}
-
-/**
- * Build a standalone `js{ … }` runner closure for the renderer / inline
- * lambdas to invoke. Identical sandbox surface as the effect/action
- * runners (host, tools, state get/set, optional cleanup hook).
- */
-export function createInlineJsExecutor(
-  options: JsBlockExecOptions,
-): (body: string, args?: Record<string, unknown>) => unknown {
-  return (body, args = {}) => executeJsBlock(body, "<inline>", undefined as unknown as EvaluationContext, options, undefined, args);
-}
-
-function executeJsBlock(
-  body: string,
-  ownerName: string,
-  ctx: EvaluationContext,
-  options: JsBlockExecOptions,
-  mounted?: MountedEffect,
-  args: Record<string, unknown> = {},
-): unknown {
-  const blockCtx: JsBlockCtx = {
-    state: {
-      get: (name) => options.state.get(name),
-      set: (name, value) => options.state.set(name, value as StateValue),
-    },
-    cleanup: (fn) => {
-      if (typeof fn !== "function") return;
-      if (mounted) mounted.cleanups.push(fn);
-    },
-    host: options.host,
-    tools: options.tools ?? {},
-    args,
-  };
-  try {
-    // Wrap the body as `(async (ctx) => { <body> })(ctx)` so authors can
-    // freely use `await`. The block is opaque — we never reparse it.
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-    const fn = new Function(
-      "ctx",
-      `return (async () => { ${body}\n })()`,
-    ) as (c: JsBlockCtx) => Promise<unknown>;
-    const result = fn(blockCtx);
-    if (result && typeof (result as Promise<unknown>).then === "function") {
-      (result as Promise<unknown>).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.error(`[aktion] js{} body in "${ownerName}" rejected`, err);
-      });
-    }
-    return result;
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(`[aktion] js{} body in "${ownerName}" threw`, err);
-    return undefined;
+function resolveTriggerAlias(
+  name: string,
+  frames: ReadonlyArray<ReadonlyMap<string, string>>,
+): string {
+  for (let i = frames.length - 1; i >= 0; i -= 1) {
+    const aliased = frames[i]!.get(name);
+    if (aliased !== undefined) return aliased;
   }
-  // ctx ref kept to silence "unused" linter on a future no-op refactor.
-  void ctx;
+  return name;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -497,10 +481,6 @@ export interface ActionRunnerOptions {
   notify: () => void;
   onEmit?: (eventName: string, detail: unknown) => void;
   onAssistantMessage?: (message: string) => void;
-  /** Host element exposed to `js{}` blocks as `ctx.host`. */
-  host?: HTMLElement;
-  /** Pluggable tool registry exposed to `js{}` blocks as `ctx.tools.<name>`. */
-  tools?: Record<string, (...args: unknown[]) => unknown>;
 }
 
 /**
@@ -516,10 +496,8 @@ export class ActionDeclRunner {
     callArgs: unknown[],
     ctx: EvaluationContext,
   ): Promise<unknown> {
-    // Bind parameters into loop vars + collect them as a name-keyed map so
-    // `js{}` bodies can read them via `ctx.args.<name>`.
+    // Bind parameters into loop vars so the body can reference them.
     const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
-    const args: Record<string, unknown> = {};
     for (let i = 0; i < decl.params.length; i += 1) {
       const param = decl.params[i]!;
       const value = callArgs[i];
@@ -529,7 +507,6 @@ export class ActionDeclRunner {
         prev: ctx.loopVars.get(param.name),
       });
       ctx.loopVars.set(param.name, value);
-      args[param.name] = value;
     }
     // Snapshot for optimistic rollback. We snapshot the entire state
     // store; the spec only requires snapshotting writes-before-first-await
@@ -541,7 +518,7 @@ export class ActionDeclRunner {
     try {
       let lastValue: unknown;
       for (const stmt of decl.body.body) {
-        lastValue = await this.runStatement(stmt, ctx, decl, args);
+        lastValue = await this.runStatement(stmt, ctx);
       }
       this.options.notify();
       return lastValue;
@@ -564,22 +541,17 @@ export class ActionDeclRunner {
   private async runStatement(
     stmt: Statement,
     ctx: EvaluationContext,
-    decl: ActionDeclaration,
-    args: Record<string, unknown>,
   ): Promise<unknown> {
     switch (stmt.kind) {
       case "ExpressionStatement": {
         const expr = stmt.expression;
-        if (expr.kind === "JsBlock") {
-          const result = executeJsBlock(
-            expr.body,
-            decl.name,
-            ctx,
-            this.options,
-            undefined,
-            args,
-          );
-          return await unwrapPromise(result);
+        // `emit("name", detail)` — dispatch an outbound CustomEvent.
+        if (expr.kind === "Call" && expr.callee === "emit") {
+          const args = expr.arguments;
+          const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
+          const detail = args[1] ? evaluate(args[1], ctx) : undefined;
+          this.options.onEmit?.(eventName, detail);
+          return undefined;
         }
         const value = evaluate(expr, ctx);
         return await unwrapPromise(value);
@@ -592,7 +564,7 @@ export class ActionDeclRunner {
         const value = await unwrapPromise(evaluate(stmt.expression, ctx));
         if (stmt.identifier) {
           // Resolve through the per-instance alias stack so an `action`
-          // declared inside a `component` body writes the right slot (§7).
+          // declared inside a function body writes the right slot (§7).
           const target = resolveStateAlias(ctx, stmt.identifier);
           this.options.state.set(target, value as StateValue);
         }
@@ -601,11 +573,6 @@ export class ActionDeclRunner {
       case "Return": {
         if (!stmt.argument) return undefined;
         return await unwrapPromise(evaluate(stmt.argument, ctx));
-      }
-      case "Emit": {
-        const detail = evaluate(stmt.detail, ctx);
-        this.options.onEmit?.(stmt.eventName, detail);
-        return undefined;
       }
       default:
         return undefined;

@@ -15,9 +15,9 @@ import { getLanguageSpec } from "aktion/language";
 
 const spec = getLanguageSpec();
 spec.components     // every built-in component with positional params + enums
-spec.builtins       // every @-builtin (@Each, @Set, @Filter, …) with signatures
+spec.builtins       // every @-builtin (@Sum, @Filter, @Format, …) with signatures
 spec.snippets       // ready-to-insert templates (Card, Hero, Routes, …)
-spec.grammar        // token / string / operator / bracket data
+spec.grammar        // token / string / operator / bracket / keyword data
 spec.tokenizer      // CodeMirror-compatible StreamParser (no CM import)
 spec.tagMap         // grammar token kind → highlight tag name
 spec.themeNames     // built-in theme names for theme-picker autocomplete
@@ -27,6 +27,45 @@ spec.iconAliases    // shortlist of Font Awesome names
 Pass a custom `ComponentLibrary` to `getLanguageSpec(library)` and the catalog
 will automatically include any components your host has registered via
 `<aktion-app>.registerComponents([...])`.
+
+## Syntax overview
+
+Aktion uses a JS-aligned syntax:
+
+```
+// Declarations
+function MyComponent(data) {       // PascalCase = component
+  return Card([Text(data.name)])
+}
+function handleClick() {           // camelCase = action
+  $count = $count + 1
+}
+
+// Control flow
+if ($loggedIn) { Dashboard() } else { LoginForm() }
+for (let item of $items) { Card([Text(item.name)]) }
+switch ($tab) { case "a": PanelA(); break; default: PanelB() }
+
+// Named props via trailing object
+Button("Save", { variant: "primary", action: handleClick })
+
+// Effects
+effect(() => {
+  let id = setInterval(() => { $now = Date.now() }, 1000)
+  return () => { clearInterval(id) }
+}, ["mount"])
+
+// App entry + theming
+aktion = Stack([MyComponent($data)])
+aktion.theme = Theme({ colors: { primary: "#0969da" } })
+
+// Router
+pages = Router({
+  "/":          HomePage(),
+  "/users/:id": UserPage(params.id),
+  default:      NotFoundPage()
+})
+```
 
 ## CodeMirror 6
 
@@ -45,7 +84,7 @@ const language = StreamLanguage.define({
 });
 
 const highlight = HighlightStyle.define([
-  { tag: tags.keyword,         color: "#7c3aed" },  // @builtins
+  { tag: tags.keyword,         color: "#7c3aed" },  // keywords + @builtins
   { tag: tags.typeName,        color: "#0ea5e9" },  // Components
   { tag: tags.variableName,    color: "#0f172a" },
   { tag: tags.propertyName,    color: "#0f172a" },

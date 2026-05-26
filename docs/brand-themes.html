@@ -273,81 +273,84 @@
       </p>
       <pre class="example-source"><code id="src-shared">head = PageHeader(
   "Acme Platform",
-  subtitle: "All your operations, one workspace.",
-  breadcrumbs: ["Workspace", "Dashboard"],
-  actions: [
-    Button("Settings",    variant: "secondary", size: "sm", icon: "gear"),
-    Button("New project", variant: "primary",   size: "sm", icon: "plus")
-  ],
-  badge: Badge("On track", tone: "success")
+  {
+    subtitle: "All your operations, one workspace.",
+    breadcrumbs: ["Workspace", "Dashboard"],
+    actions: [
+      Button("Settings",    { variant: "secondary", size: "sm", icon: "gear" }),
+      Button("New project", { variant: "primary",   size: "sm", icon: "plus" })
+    ],
+    badge: Badge("On track", { tone: "success" })
+  }
 )
 
 kpis = Stats([
-  StatCard("Active deals",    value: "1,284",  trend: "up",   delta: "+12%", icon: "briefcase"),
-  StatCard("Monthly revenue", value: "$48.2k", trend: "up",   delta: "+8%",  icon: "sack-dollar"),
-  StatCard("Open tickets",    value: "42",     trend: "down", delta: "-15%", icon: "ticket"),
-  StatCard("Churn",           value: "1.4%",   trend: "flat", delta: "0",    icon: "user-minus")
+  StatCard("Active deals",    { value: "1,284",  trend: "up",   delta: "+12%", icon: "briefcase" }),
+  StatCard("Monthly revenue", { value: "$48.2k", trend: "up",   delta: "+8%",  icon: "sack-dollar" }),
+  StatCard("Open tickets",    { value: "42",     trend: "down", delta: "-15%", icon: "ticket" }),
+  StatCard("Churn",           { value: "1.4%",   trend: "flat", delta: "0",    icon: "user-minus" })
 ])
 
 trendChart = Card([
-  SectionHeader("Revenue trend", subtitle: "Last 12 weeks",
-    actions: [Button("Export", variant: "ghost", size: "sm", icon: "arrow-up-from-bracket")]
-  ),
-  LineChart(
+  SectionHeader("Revenue trend", {
+    subtitle: "Last 12 weeks",
+    actions: [Button("Export", { variant: "ghost", size: "sm", icon: "arrow-up-from-bracket" })]
+  }),
+  LineChart({
     labels: ["W1","W2","W3","W4","W5","W6","W7","W8","W9","W10","W11","W12"],
     series: [
-      Series("This quarter", values: [22, 28, 26, 32, 34, 31, 38, 42, 44, 41, 46, 48]),
-      Series("Last quarter", values: [18, 21, 20, 24, 27, 25, 28, 31, 33, 30, 34, 36])
+      Series("This quarter", { values: [22, 28, 26, 32, 34, 31, 38, 42, 44, 41, 46, 48] }),
+      Series("Last quarter", { values: [18, 21, 20, 24, 27, 25, 28, 31, 33, 30, 34, 36] })
     ]
-  )
+  })
 ])
 
 teamCard = Card([
-  SectionHeader("Team", subtitle: "6 members", eyebrow: "Engineering"),
+  SectionHeader("Team", { subtitle: "6 members", eyebrow: "Engineering" }),
   Stack([
-    PersonChip("Asha Patel",   role: "Engineering lead", size: "md", status: "online"),
-    PersonChip("Linus Wong",   role: "Senior developer", size: "md", status: "online"),
-    PersonChip("Mira Sanchez", role: "Product designer", size: "md", status: "away"),
-    PersonChip("Sam Reyes",    role: "QA engineer",      size: "md", status: "offline")
-  ], direction: "column", gap: "s")
+    PersonChip("Asha Patel",   { role: "Engineering lead", size: "md", status: "online" }),
+    PersonChip("Linus Wong",   { role: "Senior developer", size: "md", status: "online" }),
+    PersonChip("Mira Sanchez", { role: "Product designer", size: "md", status: "away" }),
+    PersonChip("Sam Reyes",    { role: "QA engineer",      size: "md", status: "offline" })
+  ], { direction: "column", gap: "s" })
 ])
 
 activityCard = Card([
-  SectionHeader("Recent activity", subtitle: "Last 24h"),
+  SectionHeader("Recent activity", { subtitle: "Last 24h" }),
   Timeline([
-    TimelineItem("Deployed v2.4.1",          time: "12:04", icon: "rocket",               tone: "primary"),
-    TimelineItem("Closed 4 support tickets", time: "11:18", icon: "circle-check",         tone: "success"),
-    TimelineItem("Updated billing API",      time: "10:02", icon: "credit-card",          tone: "info"),
-    TimelineItem("Investigating latency",    time: "08:47", icon: "triangle-exclamation", tone: "warning")
+    TimelineItem("Deployed v2.4.1",          { time: "12:04", icon: "rocket",               tone: "primary" }),
+    TimelineItem("Closed 4 support tickets", { time: "11:18", icon: "circle-check",         tone: "success" }),
+    TimelineItem("Updated billing API",      { time: "10:02", icon: "credit-card",          tone: "info" }),
+    TimelineItem("Investigating latency",    { time: "08:47", icon: "triangle-exclamation", tone: "warning" })
   ])
 ])
 
 planCard = Card([
-  SectionHeader("Workspace plan", subtitle: "Renews in 12 days"),
-  ProgressRing(72, max: 100, label: "12 / 17", description: "Seats used", tone: "primary"),
+  SectionHeader("Workspace plan", { subtitle: "Renews in 12 days" }),
+  ProgressRing(72, { max: 100, label: "12 / 17", description: "Seats used", tone: "primary" }),
   Buttons([
-    Button("Manage seats", variant: "secondary", size: "sm"),
-    Button("Upgrade",      variant: "primary",   size: "sm")
+    Button("Manage seats", { variant: "secondary", size: "sm" }),
+    Button("Upgrade",      { variant: "primary",   size: "sm" })
   ])
 ])
 
 quickForm = Card([
-  SectionHeader("Quick capture", subtitle: "Add a new task"),
-  FormControl("Title", control: Input("title", placeholder: "Ship the analytics tab")),
-  FormControl("Owner", control: Select("owner", items: [
+  SectionHeader("Quick capture", { subtitle: "Add a new task" }),
+  FormControl("Title", { control: Input("title", { placeholder: "Ship the analytics tab" }) }),
+  FormControl("Owner", { control: Select("owner", { items: [
     SelectItem("asha",  "Asha Patel"),
     SelectItem("linus", "Linus Wong"),
     SelectItem("mira",  "Mira Sanchez")
-  ], value: "asha")),
+  ], value: "asha" }) }),
   Buttons([
-    Button("Add task", variant: "primary"),
-    Button("Cancel",   variant: "ghost")
+    Button("Add task", { variant: "primary" }),
+    Button("Cancel",   { variant: "ghost" })
   ])
 ])
 
-bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], columns: 2, gap: "l")
+bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], { columns: 2, gap: "l" })
 
-_app_ = Stack([head, kpis, trendChart, bottomGrid], direction: "column", gap: "l")</code></pre>
+aktion = Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "l" })</code></pre>
     </article>
 
     <article class="example-card">
@@ -363,7 +366,7 @@ el.setResponse(`theme = Theme({
   font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightButton: "500" },
   radius: { button: "6px" }
 })
-_app_ = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
+aktion = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
 
 // 2. Or apply a flat token map programmatically (host-wide).
 //    The host-side setTheme() still accepts the flat token names.

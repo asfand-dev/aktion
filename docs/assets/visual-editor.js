@@ -9,20 +9,20 @@
  *   └─────────┴──────────────────────────┴────────────┘
  *   │ Bottom: live preview · code · standalone HTML    │
  *
- * The user composes the right-hand side of the `_app_` assignment by
+ * The user composes the right-hand side of the `aktion` assignment by
  * dragging components from the palette onto the canvas. Every component
  * surfaces its real prop catalog (read from the language spec) so the
  * inspector can render typed editors with enum suggestions, and any prop
  * can be flipped into "raw expression" mode for advanced Aktion syntax.
  *
  * Source-text round-trip:
- *   - Import: parses the program, extracts the `_app_` expression by
+ *   - Import: parses the program, extracts the `aktion` expression by
  *     bracket-tracking the original source, and walks the AST into the
  *     visual tree. Every other top-level statement (state, components,
  *     actions, effects, theme overrides) survives verbatim as a "prelude"
  *     block.
  *   - Export: emits the prelude unchanged, then re-serialises the visual
- *     tree as `_app_ = <expr>` and concatenates the two.
+ *     tree as `aktion = <expr>` and concatenates the two.
  */
 
 import {
@@ -64,10 +64,10 @@ const GROUP_ORDER = [
 // State
 //
 // The editor models the program as a list of "entities" — typed top-level
-// declarations (assignments, state, component / action / effect decls, and
+// declarations (assignments, state, function / effect decls, and
 // any free-form leftover source that we can't classify safely). Each
 // entity has its own visual tree (for component-call assignments) or raw
-// text body (for actions/effects/state defaults).
+// text body (for functions/effects/state defaults).
 //
 // `activeEntityId` decides which entity drives the canvas. The live
 // preview always re-emits the FULL program so identifier references
@@ -81,7 +81,7 @@ const state = {
   // state and as a fallback when no entities are loaded yet).
   tree: null,             // root VisualNode of the active entity
   prelude: "",            // free-form leftover that we couldn't classify
-  rootId: "_app_",
+  rootId: "aktion",
   // Entity-based model — see `parseEntities()` for the shape.
   entities: [],           // Entity[]
   activeEntityId: null,
@@ -559,7 +559,7 @@ function createDefaultTree() {
 //   - `source`: original or current source slice (always round-tripped).
 //   - `tree` / `raw`: optional structured form for visual editing.
 
-const ROOT_ENTITY_NAME = "_app_";
+const ROOT_ENTITY_NAME = "aktion";
 
 function uuidEntity() {
   return "e_" + Math.random().toString(36).slice(2, 10) + "_" + Date.now().toString(36);
@@ -572,18 +572,19 @@ function uuidEntity() {
  */
 function classifyStatement(line) {
   const trimmed = line.trim();
-  if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("//")) return null;
-  if (/^component\s+[A-Za-z_]\w*\s*\(/.test(trimmed)) return "component-decl";
-  if (/^action\s+[A-Za-z_]\w*\s*\(/.test(trimmed)) return "action-decl";
-  if (/^effect\b/.test(trimmed)) return "effect-decl";
+  if (trimmed === "" || trimmed.startsWith("//")) return null;
+  if (/^function\s+[A-Z]\w*\s*\(/.test(trimmed)) return "component-decl";
+  if (/^function\s+[a-z_]\w*\s*\(/.test(trimmed)) return "action-decl";
+  if (/^effect\s*\(/.test(trimmed)) return "effect-decl";
   if (/^\$[A-Za-z_]\w*\s*=/.test(trimmed)) return "state";
+  if (/^(let\s+)?\$[A-Za-z_]\w*\s*=/.test(trimmed)) return "state";
   if (/^[A-Za-z_]\w*\s*=/.test(trimmed)) return "assignment";
   return "free";
 }
 
 /**
  * Same bracket-tracking logic as `scanExpressionEnd` but extended to
- * follow `{ … }` blocks (component / action / effect bodies). Returns
+ * follow `{ … }` blocks (function / effect bodies). Returns
  * the position one past the statement's last character.
  */
 function scanStatementEnd(source, start, kind) {
@@ -624,7 +625,6 @@ function scanStatementEnd(source, start, kind) {
       i++; continue;
     }
     if (ch === "/" && source[i + 1] === "/") { comment = "line"; i += 2; continue; }
-    if (ch === "#") { comment = "line"; i++; continue; }
     if (ch === "/" && source[i + 1] === "*") { comment = "block"; i += 2; continue; }
     if (ch === '"' || ch === "'") { str = ch; i++; continue; }
     if (ch === "`") { str = "`"; i++; continue; }
@@ -673,7 +673,7 @@ function parseEntities(source) {
     while (i < text.length && /\s/.test(text[i])) i++;
     if (i >= text.length) break;
     // Skip whole-line comments and accumulate them into the free bucket.
-    if (text[i] === "#" || (text[i] === "/" && text[i + 1] === "/")) {
+    if (text[i] === "/" && text[i + 1] === "/") {
       const nl = text.indexOf("\n", i);
       i = nl < 0 ? text.length : nl + 1;
       continue;
@@ -731,14 +731,14 @@ function buildEntityFromSource(kind, sliceRaw) {
     return { id, kind: "assignment", name, tree, raw, source: slice };
   }
   if (kind === "component-decl") {
-    const headerMatch = slice.match(/^component\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    const headerMatch = slice.match(/^function\s+([A-Z]\w*)\s*\(([^)]*)\)/);
     if (!headerMatch) return { id, kind: "free", name: "Misc", source: slice };
     const name = headerMatch[1];
     const params = headerMatch[2].split(",").map((s) => s.trim()).filter(Boolean);
     return { id, kind: "component-decl", name, params, source: slice };
   }
   if (kind === "action-decl") {
-    const headerMatch = slice.match(/^action\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    const headerMatch = slice.match(/^function\s+([a-z_]\w*)\s*\(([^)]*)\)/);
     const name = headerMatch ? headerMatch[1] : "anonymous";
     return { id, kind: "action-decl", name, source: slice };
   }
@@ -750,7 +750,7 @@ function buildEntityFromSource(kind, sliceRaw) {
 
 /**
  * Locate the active entity in the entity list, falling back to the root
- * `_app_` entity (or the first one) so the canvas always has something
+ * `aktion` entity (or the first one) so the canvas always has something
  * to display.
  */
 function activeEntity() {
@@ -880,7 +880,7 @@ function emitProgram() {
   const exprSrc = emitNode(tree, 0);
   const prelude = (state.prelude || "").trim();
   const head = prelude ? prelude + "\n\n" : "";
-  const rootId = state.rootId || "_app_";
+  const rootId = state.rootId || "aktion";
   return head + rootId + " = " + exprSrc + "\n";
 }
 
@@ -953,38 +953,58 @@ function emitComponent(node, depth) {
     args.push({ name, src: raw, multiLine: String(raw).includes("\n"), named: true });
   }
 
-  const orderedArgs = positionalArg ? [positionalArg, ...args] : args;
-  if (orderedArgs.length === 0) return node.name + "()";
+  // Canonical "one positional + trailing options object" emission.
+  //
+  // Named args (everything in `args`) become entries in a trailing
+  // `{ key: value, ... }` object literal. Empty options object is
+  // omitted entirely.
+  if (!positionalArg && args.length === 0) return node.name + "()";
 
-  const renderedSingleLine = orderedArgs.map((a, i) => {
-    const isFirstPositional = i === 0 && a === positionalArg;
-    return isFirstPositional ? a.src : a.name + ": " + a.src;
-  });
-  const totalLen = renderedSingleLine.reduce((n, p) => n + p.length + 2, 0);
-  const hasMultiline = orderedArgs.some((a) => a.multiLine);
+  const optionsSrc = args.length > 0 ? buildOptionsObject(args, depth) : null;
+  const positionalSrc = positionalArg ? positionalArg.src : null;
 
-  if (!hasMultiline && totalLen <= 80) {
-    return node.name + "(" + renderedSingleLine.join(", ") + ")";
+  const parts = [];
+  if (positionalSrc != null) parts.push(positionalSrc);
+  if (optionsSrc != null) parts.push(optionsSrc.src);
+
+  const hasMultiline =
+    (positionalArg && positionalArg.multiLine) ||
+    (optionsSrc && optionsSrc.multiLine);
+  const inline = node.name + "(" + parts.join(", ") + ")";
+  if (!hasMultiline && inline.length <= 80) return inline;
+
+  const fuseHead = fusedPositional && positionalArg && parts.length > 1;
+  if (fuseHead && optionsSrc) {
+    return node.name + "(" + positionalSrc + ", " + optionsSrc.src + ")";
   }
-
-  // Multi-line: each non-fused arg lands on its own indented line; the
-  // fused positional children array stays glued to the opening paren.
-  const fuseHead = fusedPositional && positionalArg && positionalArg === orderedArgs[0];
-  const headPart = fuseHead ? positionalArg.src : null;
-  const tailArgs = headPart ? orderedArgs.slice(1) : orderedArgs;
-  const tailLines = tailArgs.map((a, i) => {
-    const isFirstPositional = !headPart && i === 0 && a === positionalArg;
-    const prefix = isFirstPositional ? "" : a.name + ": ";
-    return childIndent + prefix + a.src;
-  });
-
-  if (headPart && tailArgs.length === 0) {
-    return node.name + "(" + headPart + ")";
+  if (parts.length === 1) {
+    return node.name + "(" + parts[0] + ")";
   }
-  if (headPart) {
-    return node.name + "(" + headPart + ",\n" + tailLines.join(",\n") + "\n" + indent + ")";
+  return (
+    node.name + "(\n" +
+    parts.map((p) => childIndent + p).join(",\n") + "\n" +
+    indent + ")"
+  );
+}
+
+/**
+ * Pack a list of named args into a single trailing options-object literal.
+ * Returns `{ src, multiLine }` where `src` is the rendered `{ ... }` text.
+ * Omits the object entirely when `args` is empty.
+ */
+function buildOptionsObject(args, depth) {
+  const indent = INDENT_UNIT.repeat(depth);
+  const inner = INDENT_UNIT.repeat(depth + 1);
+  const props = args.map((a) => a.name + ": " + a.src);
+  const totalLen = props.reduce((n, p) => n + p.length + 2, 0) + 2;
+  const anyMulti = args.some((a) => a.multiLine);
+  if (!anyMulti && totalLen <= 70) {
+    return { src: "{ " + props.join(", ") + " }", multiLine: false };
   }
-  return node.name + "(\n" + tailLines.join(",\n") + "\n" + indent + ")";
+  return {
+    src: "{\n" + props.map((p) => inner + p).join(",\n") + "\n" + indent + "}",
+    multiLine: true,
+  };
 }
 
 /**
@@ -1095,12 +1115,10 @@ function exprToSource(expr, depth = 0) {
     case "BuiltinCall": return builtinCallToSource(expr, depth);
     case "Template": return templateToSource(expr);
     case "Spread": return "..." + exprToSource(expr.argument, depth);
-    case "NamedArg": return expr.name + ": " + exprToSource(expr.value, depth);
     case "If": return ifToSource(expr, depth);
-    case "Match": return matchToSource(expr, depth);
+    case "Switch": return switchToSource(expr, depth);
     case "For": return forToSource(expr, depth);
     case "Lambda": return lambdaToSource(expr, depth);
-    case "JsBlock": return "js{ " + expr.body + " }";
     case "Block": return blockToSource(expr, depth);
     default: return "/* unsupported: " + (expr.kind || "?") + " */";
   }
@@ -1132,13 +1150,25 @@ function objectToSource(properties, depth) {
   const inner = INDENT_UNIT.repeat(depth + 1);
   const parts = properties.map((p) => {
     if (p.spread) return "..." + exprToSource(p.value, depth + 1);
-    return p.key + ": " + exprToSource(p.value, depth + 1);
+    return formatObjectKey(p.key) + ": " + exprToSource(p.value, depth + 1);
   });
   const totalLen = parts.reduce((n, p) => n + p.length + 2, 0);
   if (totalLen <= 60 && !parts.some((p) => p.includes("\n"))) {
     return "{" + parts.join(", ") + "}";
   }
   return "{\n" + parts.map((p) => inner + p).join(",\n") + "\n" + indent + "}";
+}
+
+/**
+ * Object literal keys must be either a valid identifier, the reserved
+ * `default` keyword (for Router arms), or a quoted string. Anything with
+ * special characters (slashes, colons, dashes…) needs quotes.
+ */
+const VALID_IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function formatObjectKey(key) {
+  if (key === "default") return "default";
+  if (VALID_IDENT_KEY.test(key)) return key;
+  return quote(key);
 }
 
 function memberToSource(expr, depth) {
@@ -1191,7 +1221,7 @@ function templateToSource(expr) {
 function ifToSource(expr, depth) {
   const indent = INDENT_UNIT.repeat(depth);
   const ind1 = INDENT_UNIT.repeat(depth + 1);
-  let out = "if " + exprToSource(expr.test, depth) + " {\n" + ind1 + blockBody(expr.consequent, depth + 1) + "\n" + indent + "}";
+  let out = "if (" + exprToSource(expr.test, depth) + ") {\n" + ind1 + blockBody(expr.consequent, depth + 1) + "\n" + indent + "}";
   if (expr.alternate) {
     if (expr.alternate.kind === "If") {
       out += " else " + ifToSource(expr.alternate, depth);
@@ -1202,26 +1232,35 @@ function ifToSource(expr, depth) {
   return out;
 }
 
-function matchToSource(expr, depth) {
+function switchToSource(expr, depth) {
   const indent = INDENT_UNIT.repeat(depth);
   const ind1 = INDENT_UNIT.repeat(depth + 1);
-  const arms = expr.arms.map((arm) => {
-    const pat = arm.pattern === "_" ? "default" : exprToSource(arm.pattern, depth + 1);
-    return ind1 + pat + ": " + exprToSource(arm.body, depth + 1);
+  const ind2 = INDENT_UNIT.repeat(depth + 2);
+  const arms = (expr.cases || []).map((c) => {
+    const bodyStr = (c.body || []).map((s) => statementToSource(s, depth + 2)).join("\n" + ind2);
+    if (c.test === null) {
+      return ind1 + "default: " + bodyStr;
+    }
+    // Trailing `break` keeps subsequent cases independent. The parser
+    // accepts `break` with or without a semicolon — emit without to
+    // avoid the newline-after-break edge case in switch-as-expression.
+    return ind1 + "case " + exprToSource(c.test, depth + 1) + ": " + bodyStr + "; break";
   });
-  return "match " + exprToSource(expr.discriminant, depth) + " {\n" + arms.join(",\n") + "\n" + indent + "}";
+  return "switch (" + exprToSource(expr.discriminant, depth) + ") {\n" + arms.join("\n") + "\n" + indent + "}";
 }
 
 function forToSource(expr, depth) {
   const indent = INDENT_UNIT.repeat(depth);
   const ind1 = INDENT_UNIT.repeat(depth + 1);
-  let head = "for ";
+  let binding;
   if (expr.destructure) {
-    head += "{" + expr.destructure.join(", ") + "}";
+    binding = "{" + expr.destructure.join(", ") + "}";
+  } else if (expr.index) {
+    binding = "[" + expr.item + ", " + expr.index + "]";
   } else {
-    head += expr.item + (expr.index ? ", " + expr.index : "");
+    binding = expr.item;
   }
-  head += " in " + exprToSource(expr.iterable, depth);
+  const head = "for (let " + binding + " of " + exprToSource(expr.iterable, depth) + ")";
   return head + " {\n" + ind1 + blockBody(expr.body, depth + 1) + "\n" + indent + "}";
 }
 
@@ -1231,6 +1270,11 @@ function lambdaToSource(expr, depth) {
     const indent = INDENT_UNIT.repeat(depth);
     const ind1 = INDENT_UNIT.repeat(depth + 1);
     return "(" + params + ") => {\n" + ind1 + blockBody(expr.body, depth + 1) + "\n" + indent + "}";
+  }
+  // An expression-bodied lambda whose body is an Object literal needs
+  // parens to disambiguate from a Block: `(x) => ({ a: 1 })`.
+  if (expr.body && expr.body.kind === "Object") {
+    return "(" + params + ") => (" + exprToSource(expr.body, depth) + ")";
   }
   return "(" + params + ") => " + exprToSource(expr.body, depth);
 }
@@ -1258,8 +1302,6 @@ function statementToSource(stmt, depth) {
       return "return" + (stmt.argument ? " " + exprToSource(stmt.argument, depth) : "");
     case "Await":
       return "await " + exprToSource(stmt.argument, depth);
-    case "Cleanup":
-      return "cleanup(" + exprToSource(stmt.callback, depth) + ")";
     default:
       return "/* statement: " + stmt.kind + " */";
   }
@@ -1372,7 +1414,6 @@ function scanExpressionEnd(source, start) {
       i++; continue;
     }
     if (ch === "/" && source[i + 1] === "/") { comment = "line"; i += 2; continue; }
-    if (ch === "#") { comment = "line"; i++; continue; }
     if (ch === "/" && source[i + 1] === "*") { comment = "block"; i += 2; continue; }
     if (ch === '"' || ch === "'") { str = ch; i++; continue; }
     if (ch === "`") { str = "`"; i++; continue; }
@@ -1427,8 +1468,8 @@ function importFromSource(source) {
     };
   }
 
-  // Ensure there's always a `_app_` entity so the canvas has a default
-  // focus. If the source had no `_app_`, synthesize a stub pointing at
+  // Ensure there's always an `aktion` entity so the canvas has a default
+  // focus. If the source had no `aktion`, synthesize a stub pointing at
   // an empty stack so authors can continue editing visually.
   const hasApp = entities.some(
     (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME,
@@ -1469,7 +1510,7 @@ function importFromSource(source) {
 }
 
 /**
- * Default entity list — a single `_app_` assignment with the default
+ * Default entity list — a single `aktion` assignment with the default
  * starter tree. Used when no source is provided or no statements parse.
  */
 function defaultEntities() {
@@ -1503,27 +1544,31 @@ function buildComponentNode(expr, warnings) {
   const entry = getEntry(name);
   const node = { id: uuid(), kind: "component", name, slots: {}, raws: {} };
   if (!entry) {
-    // Unknown component (extension-registered). Keep all args as raw.
-    expr.arguments.forEach((arg, idx) => {
-      if (arg.kind === "NamedArg") {
-        node.raws[arg.name] = exprToSource(arg.value);
-      } else {
-        node.raws["__arg_" + idx] = exprToSource(arg);
-      }
+    const args = expr.arguments || [];
+    const lastArg = args.length > 0 ? args[args.length - 1] : null;
+    const hasTrailingObj = lastArg && lastArg.kind === "Object";
+    const positionalArgs = hasTrailingObj ? args.slice(0, -1) : args;
+    positionalArgs.forEach((arg, idx) => {
+      node.raws["__arg_" + idx] = exprToSource(arg);
     });
+    if (hasTrailingObj) {
+      for (const prop of lastArg.properties) {
+        if (!prop.spread) node.raws[prop.key] = exprToSource(prop.value);
+      }
+    }
     return node;
   }
 
   const positional = getPositionalPropName(name);
-  // The first positional arg (if any) maps to the spec's positional prop.
+  const args = expr.arguments || [];
+  const lastArg = args.length > 0 ? args[args.length - 1] : null;
+  const hasTrailingObj = lastArg && lastArg.kind === "Object"
+    && !(positional && args.length === 1);
+  const positionalArgs = hasTrailingObj ? args.slice(0, -1) : args;
+  const namedProps = hasTrailingObj ? (lastArg.properties || []) : [];
+
   let positionalConsumed = false;
-  for (const arg of expr.arguments) {
-    if (arg.kind === "NamedArg") {
-      const param = entry.params.find((p) => p.name === arg.name);
-      if (param) assignArg(node, param, arg.value, warnings);
-      else node.raws[arg.name] = exprToSource(arg.value);
-      continue;
-    }
+  for (const arg of positionalArgs) {
     if (!positionalConsumed && positional) {
       const param = entry.params.find((p) => p.name === positional);
       if (param) {
@@ -1532,12 +1577,17 @@ function buildComponentNode(expr, warnings) {
         continue;
       }
     }
-    // Otherwise: stray positional arg. Bucket it onto the first unassigned
-    // prop so we keep round-tripping working — the user can fix it later.
     const next = entry.params.find((p) =>
       !(p.name in node.slots) && !(p.name in node.raws),
     );
     if (next) assignArg(node, next, arg, warnings);
+  }
+
+  for (const prop of namedProps) {
+    if (prop.spread) continue;
+    const param = entry.params.find((p) => p.name === prop.key);
+    if (param) assignArg(node, param, prop.value, warnings);
+    else node.raws[prop.key] = exprToSource(prop.value);
   }
 
   // Ensure required Node[] slots exist as empty arrays so the user can
@@ -1905,7 +1955,7 @@ function renderOutlineItem(ent) {
 }
 
 function canDeleteEntity(ent) {
-  // The root `_app_` binding is required by the runtime — keep it.
+  // The root `aktion` binding is required by the runtime — keep it.
   return !(ent.kind === "assignment" && ent.name === ROOT_ENTITY_NAME);
 }
 
@@ -1955,14 +2005,14 @@ function createEntity(kind) {
       id,
       kind: "action-decl",
       name,
-      source: "action " + name + "() {\n  // TODO: implement\n}",
+      source: "function " + name + "() {\n  // TODO: implement\n}",
     };
   } else if (kind === "effect-decl") {
     entity = {
       id,
       kind: "effect-decl",
       name: "effect",
-      source: "effect [on:mount] {\n  // TODO: implement\n}",
+      source: "effect(() => {\n  // TODO: implement\n}, [\"mount\"])",
     };
   } else if (kind === "component-decl") {
     const name = uniqueEntityName("MyComponent", "component-decl");
@@ -1972,7 +2022,7 @@ function createEntity(kind) {
       name,
       params: [],
       source:
-        "component " + name + "() {\n" +
+        "function " + name + "() {\n" +
         "  return Card([CardHeader(\"" + name + "\")])\n" +
         "}",
     };
@@ -2638,9 +2688,9 @@ function paintNonAssignmentStage(ent) {
   if (state.mode === "preview") return; // let the preview show as-is
   const messages = {
     "state": ["Editing state default", "Adjust the $" + ent.name + " default in the inspector. The live preview reflects your changes."],
-    "action-decl": ["Editing action", "Edit the `action " + ent.name + "()` body in the inspector. Component callers stay live."],
-    "effect-decl": ["Editing effect", "Edit the effect body in the inspector. Triggers and the rate-limit modifier go inside the `[...]` brackets."],
-    "component-decl": ["Editing component", "Edit the `component " + ent.name + "()` declaration in the inspector. Switch to `_app_` in the outline to compose it visually."],
+    "action-decl": ["Editing action", "Edit the `function " + ent.name + "()` body in the inspector. Component callers stay live."],
+    "effect-decl": ["Editing effect", "Edit the effect body in the inspector. Deps and the rate-limit modifier go inside the `[...]` array."],
+    "component-decl": ["Editing component", "Edit the `function " + ent.name + "()` declaration in the inspector. Switch to `aktion` in the outline to compose it visually."],
     "free": ["Editing source", "This block didn't classify as a known declaration. Edit it directly in the inspector."],
   };
   const [title, sub] = messages[ent.kind] || ["Editing entity", "Use the inspector to make changes."];
@@ -2803,11 +2853,11 @@ function decorateRenderedDOM() {
     }
   }
   if (!rendered) return;
-  // Walk from `_app_` so the WYSIWYG canvas can tag (and therefore select /
+  // Walk from `aktion` so the WYSIWYG canvas can tag (and therefore select /
   // hover / drop on) every rendered component — even those defined in a
-  // different top-level binding (e.g. `_app_ = Stack([block])` where
+  // different top-level binding (e.g. `aktion = Stack([block])` where
   // `block`, `card`, `followup` live in their own assignments). Falling
-  // back to the active tree keeps the old behaviour when no `_app_`
+  // back to the active tree keeps the old behaviour when no `aktion`
   // entity exists yet.
   const rootEnt = (state.entities || []).find(
     (e) => e.kind === "assignment" && e.name === ROOT_ENTITY_NAME && e.tree,
@@ -2825,7 +2875,7 @@ function decorateRenderedDOM() {
   if (!startTree) return;
   // The rui-root wraps the program tree in one element. Drill down into
   // its single child if the visual root is a single component (the common
-  // case — `_app_ = Stack(...)`).
+  // case — `aktion = Stack(...)`).
   let renderedRoot = rendered;
   if (startTree.kind === "component" && rendered.children.length === 1) {
     renderedRoot = rendered.children[0];
@@ -3031,7 +3081,7 @@ function renderOverlay() {
   // Drop zones (visible while a drag is active).
   if (currentDragPayload) renderDropZones(overlay);
 
-  // Selection outline + floating action bar (hide bar while dragging so it
+  // Selection outline + floating toolbar (hide bar while dragging so it
   // doesn't get in the way of the drop targets).
   if (state.selectedId && !currentDragPayload) {
     const sel = state.rectsById.get(state.selectedId);
@@ -3425,7 +3475,7 @@ function buildDropZone(info, index, isRow) {
  * Yield every component node that has been tagged on the canvas by the
  * most recent `decorateRenderedDOM` pass. With cross-entity walking
  * enabled, this includes components defined in other assignment
- * bindings (e.g. `block`, `card` referenced from `_app_`), so the
+ * bindings (e.g. `block`, `card` referenced from `aktion`), so the
  * overlay chrome — slot fills, drop zones, container outlines — keeps
  * working when the user has navigated into a child binding.
  */
@@ -3460,9 +3510,9 @@ function* allComponentNodes() {
 // ---------------------------------------------------------------------------
 // Rendering — Raw Edit canvas (tree of cards)
 //
-// In Raw Edit mode the canvas pane shows the underlying _app_ expression
+// In Raw Edit mode the canvas pane shows the underlying aktion expression
 // as a nested tree of cards — one per VisualNode — with drag handles,
-// inline action buttons (move up/down, duplicate, delete) and per-slot
+// inline toolbar buttons (move up/down, duplicate, delete) and per-slot
 // drop zones. It reuses the same payload model (currentDragPayload,
 // attachDropTarget, performDrop) as the WYSIWYG canvas, so dragging from
 // the palette or rearranging cards stays in sync with the live preview
@@ -3478,7 +3528,7 @@ function renderRawCanvas() {
     canvas.append(el("div", { class: "ve-raw-empty" }, [
       el("i", { class: "fa-solid " + entityIcon(ent), "aria-hidden": "true" }),
       el("h3", null, ent.kind + " · " + ent.name),
-      el("p", null, "Source-only entity. Use the inspector to edit, or focus _app_ in the outline to keep composing visually."),
+      el("p", null, "Source-only entity. Use the inspector to edit, or focus aktion in the outline to keep composing visually."),
     ]));
     return;
   }
@@ -3768,7 +3818,7 @@ function renderBreadcrumbs() {
   const root = $("ve-breadcrumbs");
   if (!root) return;
   root.innerHTML = "";
-  // Quick way back to `_app_` whenever the user has drilled into another
+  // Quick way back to `aktion` whenever the user has drilled into another
   // binding (either by clicking a cross-entity component on the canvas
   // or by selecting one from the Outline tab). A single click goes home;
   // a tooltip explains the shortcut.
@@ -3942,10 +3992,10 @@ function renderEntitySourceEditor(ent) {
   wrap.append(el("h4", null, heading));
   if (ent.kind === "action-decl") {
     wrap.append(el("p", null,
-      "Full source of the `action " + ent.name + "(...) { ... }` declaration. Edit freely — the entire block is written back verbatim."));
+      "Full source of the `function " + ent.name + "(...) { ... }` declaration. Edit freely — the entire block is written back verbatim."));
   } else if (ent.kind === "effect-decl") {
     wrap.append(el("p", null,
-      "Full source of the `effect [...] { ... }` declaration. Triggers and rate-limit modifiers go between the brackets."));
+      "Full source of the `effect(() => { ... }, [...])` declaration. Deps and rate-limit modifiers go in the array."));
   } else {
     wrap.append(el("p", null,
       "Top-level source the editor couldn't classify. Edit directly — the original text is preserved on export."));
@@ -3986,7 +4036,7 @@ function renderComponentDeclEditor(ent) {
     onInput: (e) => {
       const next = e.target.value.replace(/[^A-Za-z0-9_]/g, "");
       // Keep the source in sync so the header still matches the new name.
-      ent.source = ent.source.replace(/^component\s+[A-Za-z_]\w*/, "component " + next);
+      ent.source = ent.source.replace(/^function\s+[A-Za-z_]\w*/, "function " + next);
       ent.name = next;
       queueCodeUpdate();
       saveState();
@@ -4022,7 +4072,7 @@ function renderComponentDeclEditor(ent) {
       ent.source = e.target.value;
       // Re-derive name/params from the header so the outline label stays
       // in sync without forcing the user to keep the inputs above edited.
-      const header = e.target.value.match(/^component\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+      const header = e.target.value.match(/^function\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
       if (header) {
         ent.name = header[1];
         ent.params = header[2].split(",").map((s) => s.trim()).filter(Boolean);
@@ -4074,9 +4124,9 @@ function renderComponentInspector(node, root) {
     root.append(el("p", { class: "ve-insp-desc" }, entry.description));
   }
   // Cross-entity context hint: if the selected node is the root of a
-  // non-`_app_` binding, surface that so the user knows duplicating /
+  // non-`aktion` binding, surface that so the user knows duplicating /
   // deleting from here only affects this binding — to remove the
-  // reference from `_app_`, they need to switch back.
+  // reference from `aktion`, they need to switch back.
   const cont = findContainer(node.id);
   const owningEnt = findOwnerEntity(node.id);
   if (cont && !cont.parent && owningEnt && owningEnt.name !== ROOT_ENTITY_NAME) {
@@ -4394,11 +4444,11 @@ function renderPreludeBlock(root) {
   wrap.append(el("h4", null, "Prelude"));
   wrap.append(el("p", null,
     "Free-form Aktion source emitted before the " + state.rootId + " assignment. " +
-    "Use this for state ($), components, actions, effects, theme overrides."));
+    "Use this for state ($), functions, effects, theme overrides."));
   const ta = el("textarea", {
     class: "ve-prop-input",
     rows: 6,
-    placeholder: "$count = 0\naction inc() { $count = $count + 1 }",
+    placeholder: "$count = 0\nfunction inc() { $count = $count + 1 }",
     onInput: (e) => { state.prelude = e.target.value; queueCodeUpdate(); saveState(); },
   });
   ta.value = state.prelude || "";
@@ -4628,7 +4678,7 @@ function loadState() {
     if (data && (data.tree || (Array.isArray(data.entities) && data.entities.length > 0))) {
       state.tree = data.tree || null;
       state.prelude = data.prelude || "";
-      state.rootId = data.rootId || "_app_";
+      state.rootId = data.rootId || "aktion";
       state.entities = Array.isArray(data.entities) ? data.entities : [];
       state.activeEntityId = data.activeEntityId || null;
       state.theme = data.theme || "light";
@@ -4685,8 +4735,8 @@ const EXAMPLES = [
     name: "Welcome card",
     desc: "Stack with a card and a follow-up block.",
     code:
-      '_app_ = Stack([\n' +
-      '  Card([CardHeader("Hello, world", subtitle: "Generated visually")]),\n' +
+      'aktion = Stack([\n' +
+      '  Card([CardHeader("Hello, world", { subtitle: "Generated visually" })]),\n' +
       '  FollowUpBlock([\n' +
       '    FollowUpItem("Tell me more"),\n' +
       '    FollowUpItem("Show an example")\n' +
@@ -4697,17 +4747,17 @@ const EXAMPLES = [
     name: "Dashboard",
     desc: "Header + KPI strip + chart.",
     code:
-      '_app_ = Stack([\n' +
-      '  PageHeader("Sales", subtitle: "This week"),\n' +
+      'aktion = Stack([\n' +
+      '  PageHeader("Sales", { subtitle: "This week" }),\n' +
       '  Stats([\n' +
-      '    StatCard("Revenue", value: "$12,540", trend: "up", delta: "+12%", icon: "sack-dollar"),\n' +
-      '    StatCard("Orders",  value: "138",     trend: "up", delta: "+4%",  icon: "cart-shopping"),\n' +
-      '    StatCard("Returns", value: "4",       trend: "down", delta: "-1", icon: "rotate-left")\n' +
+      '    StatCard("Revenue", { value: "$12,540", trend: "up", delta: "+12%", icon: "sack-dollar" }),\n' +
+      '    StatCard("Orders",  { value: "138",     trend: "up", delta: "+4%",  icon: "cart-shopping" }),\n' +
+      '    StatCard("Returns", { value: "4",       trend: "down", delta: "-1", icon: "rotate-left" })\n' +
       '  ]),\n' +
       '  Card([\n' +
       '    CardHeader("Daily traffic"),\n' +
       '    LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"],\n' +
-      '      series: [Series("This week", values: [820, 1240, 1500, 1180, 1310, 980, 740])])\n' +
+      '      { series: [Series("This week", { values: [820, 1240, 1500, 1180, 1310, 980, 740] })] })\n' +
       '  ])\n' +
       '])',
   },
@@ -4717,30 +4767,30 @@ const EXAMPLES = [
     code:
       '$todos = [{id: 1, text: "First task", done: false}]\n' +
       '$draft = ""\n\n' +
-      'action addTodo() {\n' +
+      'function addTodo() {\n' +
       '  $todos = [...$todos, {id: $todos.length + 1, text: $draft, done: false}]\n' +
       '  $draft = ""\n' +
       '}\n\n' +
-      'component Row(t) {\n' +
+      'function Row(t) {\n' +
       '  return Card([Text(t.text)])\n' +
       '}\n\n' +
-      '_app_ = Stack([\n' +
+      'aktion = Stack([\n' +
       '  Card([CardHeader("Todo list")]),\n' +
-      '  Input("draft", placeholder: "What needs doing?", value: $draft),\n' +
-      '  Button("Add", action: addTodo, variant: "primary"),\n' +
-      '  for t in $todos { Row(t) }\n' +
+      '  Input("draft", { placeholder: "What needs doing?", value: $draft }),\n' +
+      '  Button("Add", { action: addTodo, variant: "primary" }),\n' +
+      '  for (let t of $todos) { Row(t) }\n' +
       '])',
   },
   {
     name: "Pricing table",
     desc: "Three pricing cards in a grid.",
     code:
-      '_app_ = Stack([\n' +
-      '  Hero("Plans for every team", subtitle: "Pick the size that fits."),\n' +
+      'aktion = Stack([\n' +
+      '  Hero("Plans for every team", { subtitle: "Pick the size that fits." }),\n' +
       '  PricingTable([\n' +
-      '    PricingCard("Starter", price: "$0",  period: "/mo", features: ["1 user", "Community support"]),\n' +
-      '    PricingCard("Team",    price: "$24", period: "/mo", features: ["10 users", "Email support"], featured: true),\n' +
-      '    PricingCard("Scale",   price: "$99", period: "/mo", features: ["Unlimited", "Priority support"])\n' +
+      '    PricingCard("Starter", { price: "$0",  period: "/mo", features: ["1 user", "Community support"] }),\n' +
+      '    PricingCard("Team",    { price: "$24", period: "/mo", features: ["10 users", "Email support"], featured: true }),\n' +
+      '    PricingCard("Scale",   { price: "$99", period: "/mo", features: ["Unlimited", "Priority support"] })\n' +
       '  ])\n' +
       '])',
   },
@@ -5375,7 +5425,7 @@ function closeCreateEntityMenu() {
 /**
  * Popover menu listing every entity in the current program. Clicking
  * one swaps it in as the active entity without having to leave the
- * canvas. `_app_` always floats to the top with a "home" icon so the
+ * canvas. `aktion` always floats to the top with a "home" icon so the
  * user can find their entry point at a glance, no matter how many
  * bindings the program has.
  */
@@ -5383,7 +5433,7 @@ function openEntitySwitcher(anchor) {
   closeCreateEntityMenu();
   const menu = el("div", { class: "ve-add-menu", id: "ve-add-menu", style: "max-height: 320px; min-width: 220px; overflow: auto;" });
   const visible = (state.entities || []).filter((e) => e.kind !== "free");
-  // Sort: `_app_` first, then alphabetically by name within kind so the
+  // Sort: `aktion` first, then alphabetically by name within kind so the
   // long-tail bindings stay scannable.
   const sorted = visible.slice().sort((a, b) => {
     if (a.name === ROOT_ENTITY_NAME) return -1;

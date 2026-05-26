@@ -17,7 +17,8 @@ export type GrammarTokenKind =
   | "string"         // "double" 'single' `backtick`
   | "number"         // 12, -3.14
   | "atom"           // true / false / null
-  | "builtin"        // @Each, @Sum, @Filter, @Format, …
+  | "keyword"        // function, if, else, for, switch, return, …
+  | "builtin"        // @Sum, @Filter, @Format, …
   | "state"          // $variable
   | "component"      // Capitalised identifier in call position
   | "identifier"     // lowercase identifier
@@ -28,8 +29,10 @@ export type GrammarTokenKind =
 
 export interface GrammarSpec {
   name: "aktion";
-  /** No keywords reserved beyond literal atoms. */
+  /** Literal atoms (true / false / null). */
   atoms: readonly string[];
+  /** Reserved keywords that drive control flow and declarations. */
+  keywords: readonly string[];
   /** Operators (longest-match first when tokenising). */
   operators: readonly string[];
   /** Two-character operators that must be matched before single chars. */
@@ -39,12 +42,6 @@ export interface GrammarSpec {
   comments: {
     /** Primary line-comment introducer (used by editors for Ctrl+/ toggle). */
     line: string;
-    /**
-     * Additional line-comment introducers. Tokenizers strip these the same
-     * way as `line`; editors that expose a single comment-toggle keystroke
-     * should still use `line` as the canonical form.
-     */
-    extraLine: readonly string[];
     blockStart: string;
     blockEnd: string;
   };
@@ -68,6 +65,10 @@ export interface GrammarSpec {
 export const grammarSpec: GrammarSpec = {
   name: "aktion",
   atoms: ["true", "false", "null"],
+  keywords: [
+    "function", "return", "if", "else", "for", "let", "of",
+    "switch", "case", "default", "break", "effect", "aktion", "emit",
+  ],
   operators: ["+", "-", "*", "/", "%", "!", "=", "<", ">", "?", ":", ".", ","],
   // Long operators include `??` and `?.` (nullish coalescing + optional chain)
   // and `...` (spread). Order matters: longest match wins.
@@ -77,7 +78,7 @@ export const grammarSpec: GrammarSpec = {
     { open: "[", close: "]" },
     { open: "{", close: "}" },
   ],
-  comments: { line: "//", extraLine: ["#"], blockStart: "/*", blockEnd: "*/" },
+  comments: { line: "//", blockStart: "/*", blockEnd: "*/" },
   strings: {
     singleLineQuotes: ['"', "'"],
     multiLineQuote: "`",
@@ -145,6 +146,7 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
   const copyState = (state: StreamState): StreamState => ({ ...state });
 
   const atomSet = new Set(spec.atoms);
+  const keywordSet = new Set(spec.keywords);
   const componentCallRe = /^[A-Z][A-Za-z0-9_]*/;
   const lowerIdentRe = /^[a-z_][A-Za-z0-9_]*/;
   const numberRe = /^-?\d+(?:\.\d+)?/;
@@ -186,18 +188,9 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
     // Skip whitespace.
     if (stream.eatWhile(/[ \t]/)) return null;
 
-    // Comments. `line` is the primary introducer (used by editors for the
-    // Ctrl+/ toggle); `extraLine` lists alternative single-line introducers
-    // such as `#` for shell-style remarks.
     if (stream.match(spec.comments.line, true)) {
       stream.skipToEnd();
       return "comment";
-    }
-    for (const alt of spec.comments.extraLine) {
-      if (stream.match(alt, true)) {
-        stream.skipToEnd();
-        return "comment";
-      }
     }
     if (stream.match(spec.comments.blockStart, true)) {
       state.inBlockComment = true;
@@ -267,8 +260,7 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
       if (lower) {
         const text = (lower as RegExpMatchArray)[0];
         if (atomSet.has(text)) return "atom";
-        // Heuristic: `row.field` highlights `row` as a loop variable. We
-        // detect this by the next non-whitespace char being `.`.
+        if (keywordSet.has(text)) return "keyword";
         const ahead = stream.peek();
         if (ahead === ".") return "loopvar";
         return "identifier";
@@ -330,6 +322,7 @@ export const defaultTagMap: Record<GrammarTokenKind, string | null> = {
   string: "string",
   number: "number",
   atom: "atom",
+  keyword: "keyword",
   builtin: "keyword",
   state: "variableName.special",
   component: "typeName",

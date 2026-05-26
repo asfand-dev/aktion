@@ -18,9 +18,9 @@ export interface SnippetEntry {
 export const snippetCatalog: readonly SnippetEntry[] = [
   {
     name: "App",
-    description: "Top-level `_app_` binding — every program needs one.",
+    description: "Top-level `aktion` binding — every program needs one.",
     template:
-      '_app_ = Stack([\n' +
+      'aktion = Stack([\n' +
       '  ${1:Card([CardHeader("${2:Hello}")])}\n' +
       '])',
   },
@@ -29,7 +29,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     description: "Card with header + body block.",
     template:
       'card${1} = Card([\n' +
-      '  CardHeader("${2:Title}", subtitle: "${3:Subtitle}"),\n' +
+      '  CardHeader("${2:Title}", { subtitle: "${3:Subtitle}" }),\n' +
       '  Stack([\n' +
       '    Text("${4:Body copy goes here.}")\n' +
       '  ])\n' +
@@ -39,27 +39,27 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     name: "Hero",
     description: "Landing-page hero with eyebrow, title, subtitle, and a CTA.",
     template:
-      'action ${4:Start}() { _route_.navigate("/start") }\n' +
-      'action ${5:OpenDemo}() { _route_.navigate("/demo") }\n' +
+      'function ${4:start}() { route.navigate("/start") }\n' +
+      'function ${5:openDemo}() { route.navigate("/demo") }\n' +
       'hero${1} = Hero(\n' +
       '  "${2:Ship faster}",\n' +
-      '  subtitle: "${3:From idea to production in minutes.}",\n' +
-      '  primary: Button("${6:Get started}", action: ${4:Start}, variant: "primary"),\n' +
-      '  secondary: Button("${7:Live demo}", action: ${5:OpenDemo}, variant: "ghost"),\n' +
-      '  eyebrow: "${8:v2 launch}"\n' +
+      '  { subtitle: "${3:From idea to production in minutes.}",\n' +
+      '    primary: Button("${6:Get started}", { action: ${4:start}, variant: "primary" }),\n' +
+      '    secondary: Button("${7:Live demo}", { action: ${5:openDemo}, variant: "ghost" }),\n' +
+      '    eyebrow: "${8:v2 launch}" }\n' +
       ')',
   },
   {
     name: "PageHeader",
     description: "Dashboard page header with breadcrumbs and actions.",
     template:
-      'action ${6:RunAction}() { /* TODO: implement */ }\n' +
+      'function ${6:runAction}() { /* TODO: implement */ }\n' +
       'header${1} = PageHeader(\n' +
       '  "${2:Page title}",\n' +
-      '  subtitle: "${3:Subtitle / meta line}",\n' +
-      '  breadcrumbs: ["${4:Workspace}", "${5:Section}"],\n' +
-      '  actions: [Button("${7:Action}", action: ${6:RunAction}, variant: "primary")],\n' +
-      '  status: Badge("${8:On track}", variant: "success")\n' +
+      '  { subtitle: "${3:Subtitle / meta line}",\n' +
+      '    breadcrumbs: ["${4:Workspace}", "${5:Section}"],\n' +
+      '    actions: [Button("${7:Action}", { action: ${6:runAction}, variant: "primary" })],\n' +
+      '    status: Badge("${8:On track}", { variant: "success" }) }\n' +
       ')',
   },
   {
@@ -67,10 +67,10 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     description: "Responsive KPI strip with four StatCards.",
     template:
       'metrics${1} = Stats([\n' +
-      '  StatCard("${2:Active}", value: "${3:12}", trend: "flat"),\n' +
-      '  StatCard("${4:At risk}", value: "${5:4}", trend: "up", delta: "+2"),\n' +
-      '  StatCard("${6:Shipped}", value: "${7:8}", trend: "up", delta: "+3"),\n' +
-      '  StatCard("${8:On-time}", value: "${9:87%}", trend: "down", delta: "-3%")\n' +
+      '  StatCard("${2:Active}", { value: "${3:12}", trend: "flat" }),\n' +
+      '  StatCard("${4:At risk}", { value: "${5:4}", trend: "up", delta: "+2" }),\n' +
+      '  StatCard("${6:Shipped}", { value: "${7:8}", trend: "up", delta: "+3" }),\n' +
+      '  StatCard("${8:On-time}", { value: "${9:87%}", trend: "down", delta: "-3%" })\n' +
       '])',
   },
   {
@@ -79,25 +79,25 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'sidebar${1} = Card([CardHeader("${2:Sidebar}")])\n' +
       'main${1}    = Card([CardHeader("${3:Main}")])\n' +
-      '_app_ = Grid([\n' +
-      '  GridItem(sidebar${1}, span: "1/4"),\n' +
-      '  GridItem(main${1}, span: "3/4")\n' +
-      '], columns: 12, gap: "l")',
+      'aktion = Grid([\n' +
+      '  GridItem(sidebar${1}, { span: "1/4" }),\n' +
+      '  GridItem(main${1}, { span: "3/4" })\n' +
+      '], { columns: 12, gap: "l" })',
   },
   {
     name: "KanbanBoard",
     description: "Three-column kanban board with sample cards.",
     template:
       'board${1} = KanbanBoard([\n' +
-      '  KanbanColumn("To do", items: [\n' +
-      '    KanbanCard("${2:Migrate auth}", description: "${3:Roll out the new SDK.}", tags: ["auth"], assignee: "${4:Asha}")\n' +
-      '  ]),\n' +
-      '  KanbanColumn("Doing", items: [\n' +
-      '    KanbanCard("${5:Streaming UI v2}", description: "${6:Ship 20 new components.}", tags: ["frontend"], assignee: "${7:Alex}", tone: "primary")\n' +
-      '  ]),\n' +
-      '  KanbanColumn("Done", items: [\n' +
-      '    KanbanCard("${8:Activity timeline}", description: "${9:Shipped to 100%.}", tags: ["shipped"], assignee: "${10:Mira}", tone: "success")\n' +
-      '  ])\n' +
+      '  KanbanColumn("To do", { items: [\n' +
+      '    KanbanCard("${2:Migrate auth}", { description: "${3:Roll out the new SDK.}", tags: ["auth"], assignee: "${4:Asha}" })\n' +
+      '  ] }),\n' +
+      '  KanbanColumn("Doing", { items: [\n' +
+      '    KanbanCard("${5:Streaming UI v2}", { description: "${6:Ship 20 new components.}", tags: ["frontend"], assignee: "${7:Alex}", tone: "primary" })\n' +
+      '  ] }),\n' +
+      '  KanbanColumn("Done", { items: [\n' +
+      '    KanbanCard("${8:Activity timeline}", { description: "${9:Shipped to 100%.}", tags: ["shipped"], assignee: "${10:Mira}", tone: "success" })\n' +
+      '  ] })\n' +
       '])',
   },
   {
@@ -112,45 +112,45 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Router",
-    description: "Multi-page router via _router_({…}) with NavLink sidebar.",
+    description: "Multi-page router via Router({…}) with NavLink sidebar.",
     template:
-      'pages = _router_({\n' +
-      '  "/":            homePage(),\n' +
-      '  "/dashboard":   dashboardPage(),\n' +
-      '  "/users/:id":   userPage(id: params.id),\n' +
-      '  "/docs/*":      docsPage(rest: params._),\n' +
-      '  default:        notFoundPage()\n' +
+      'pages = Router({\n' +
+      '  "/":            HomePage(),\n' +
+      '  "/dashboard":   DashboardPage(),\n' +
+      '  "/users/:id":   UserPage(params.id),\n' +
+      '  "/docs/*":      DocsPage(params._),\n' +
+      '  default:        NotFoundPage()\n' +
       '})\n\n' +
-      'component homePage() {\n' +
+      'function HomePage() {\n' +
       '  return Card([CardHeader("Welcome")])\n' +
       '}\n' +
-      'component dashboardPage() {\n' +
+      'function DashboardPage() {\n' +
       '  return Card([CardHeader("Dashboard")])\n' +
       '}\n' +
-      'component userPage(id) {\n' +
+      'function UserPage(id) {\n' +
       '  return Card([CardHeader(`User ${id}`)])\n' +
       '}\n' +
-      'component docsPage(rest) {\n' +
+      'function DocsPage(rest) {\n' +
       '  return Card([CardHeader(`Docs · ${rest}`)])\n' +
       '}\n' +
-      'component notFoundPage() {\n' +
-      '  return Callout("Not found", variant: "warning", description: `We couldn\'t find ${_route_.path}.`)\n' +
+      'function NotFoundPage() {\n' +
+      '  return Callout("Not found", { variant: "warning", description: `We couldn\'t find ${route.path}.` })\n' +
       '}\n\n' +
       'nav${1} = Stack([\n' +
-      '  NavLink("Home",      to: "/",          variant: "ghost", exact: true),\n' +
-      '  NavLink("Dashboard", to: "/dashboard", variant: "ghost"),\n' +
-      '  NavLink("Users",     to: "/users",     variant: "ghost")\n' +
-      '], direction: "row", gap: "s")',
+      '  NavLink("Home",      { to: "/",          variant: "ghost", exact: true }),\n' +
+      '  NavLink("Dashboard", { to: "/dashboard", variant: "ghost" }),\n' +
+      '  NavLink("Users",     { to: "/users",     variant: "ghost" })\n' +
+      '], { direction: "row", gap: "s" })',
   },
   {
     name: "Effect",
     description: "Lifecycle-managed effect (clock/interval) with cleanup.",
     template:
       '$${3:now} = ""\n\n' +
-      'effect [on:mount] {\n' +
-      '  let id = js{ setInterval(() => helpers.setState("${3:now}", new Date().toISOString()), 1000) }\n' +
-      '  cleanup { js{ clearInterval(id) } }\n' +
-      '}\n\n' +
+      'effect(() => {\n' +
+      '  let id = setInterval(() => helpers.setState("${3:now}", new Date().toISOString()), 1000)\n' +
+      '  return () => { clearInterval(id) }\n' +
+      '}, ["mount"])\n\n' +
       'body = Text($${3:now})',
   },
   {
@@ -158,16 +158,16 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     description: "Action declaration that POSTs through the http() builtin.",
     template:
       '$${1:items} = []\n\n' +
-      'action Add(text) {\n' +
+      'function add(text) {\n' +
       '  $${1:items} = [...$${1:items}, { id: $${1:items}.length + 1, text: text }]\n' +
       '  $response = http({ url: "/api/save", method: "POST", body: { item: { text: text } } })\n' +
       '}',
   },
   {
     name: "Each",
-    description: "Iterate over an array using the expression-form `for` loop.",
+    description: "Iterate over an array using `for (let x of xs)`.",
     template:
-      'list${1} = for item in $items {\n' +
+      'list${1} = for (let item of $items) {\n' +
       '  Card([Text(item.${2:name})])\n' +
       '}',
   },
@@ -177,20 +177,20 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       '$draft = ""\n' +
       '$items = []\n\n' +
-      'action Add() {\n' +
+      'function add() {\n' +
       '  $items = [...$items, { id: $items.length + 1, text: $draft }]\n' +
       '  $draft = ""\n' +
       '}\n\n' +
       'form${1} = Stack([\n' +
-      '  Input("${2:draft}", placeholder: "What needs doing?", type: "text", value: $draft),\n' +
-      '  Button("Add", action: Add, variant: "primary")\n' +
+      '  Input("${2:draft}", { placeholder: "What needs doing?", type: "text", value: $draft }),\n' +
+      '  Button("Add", { action: add, variant: "primary" })\n' +
       '])',
   },
   {
     name: "Theme",
     description: "Brand-style theme override applied on top of the base theme.",
     template:
-      'theme = Theme({\n' +
+      'aktion.theme = Theme({\n' +
       '  name: "${1:brand}",\n' +
       '  colors: {\n' +
       '    primary:      "${2:#0969da}",\n' +
@@ -207,35 +207,35 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Component",
-    description: "Reusable component declaration — components MUST `return`.",
+    description: "Reusable component declaration — PascalCase functions MUST `return`.",
     template:
-      'component ${1:UserCard}(${2:user}) {\n' +
+      'function ${1:UserCard}(${2:user}) {\n' +
       '  return Card([\n' +
       '    Avatar(${2:user}.name),\n' +
       '    Text(${2:user}.role)\n' +
       '  ])\n' +
       '}\n\n' +
-      'list = for u in $users { ${1:UserCard}(u) }',
+      'list = for (let u of $users) { ${1:UserCard}(u) }',
   },
   {
     name: "If",
-    description: "Expression-form `if`.",
+    description: "Expression-form `if (cond) { ... }`.",
     template:
-      'body${1} = if ${2:condition} {\n' +
+      'body${1} = if (${2:condition}) {\n' +
       '  ${3:trueBranch}\n' +
       '} else {\n' +
       '  ${4:falseBranch}\n' +
       '}',
   },
   {
-    name: "Match",
-    description: "Pattern match on a value with arms.",
+    name: "Switch",
+    description: "Switch on a value with case/default/break.",
     template:
-      'panel${1} = match ${2:$tab} {\n' +
-      '  "overview" : overviewPanel\n' +
-      '  "billing"  : billingPanel\n' +
-      '  "security" : securityPanel\n' +
-      '  default    : overviewPanel\n' +
+      'panel${1} = switch (${2:$tab}) {\n' +
+      '  case "overview": overviewPanel; break\n' +
+      '  case "billing":  billingPanel; break\n' +
+      '  case "security": securityPanel; break\n' +
+      '  default: overviewPanel\n' +
       '}',
   },
   {
@@ -261,7 +261,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   {
     name: "ResponsiveGrid",
     description: "Grid with a responsive column map per breakpoint.",
-    template: 'cards${1} = Grid(${2:items}, columns: {sm: 1, md: 2, lg: 4}, gap: "${3:l}")',
+    template: 'cards${1} = Grid(${2:items}, { columns: {sm: 1, md: 2, lg: 4}, gap: "${3:l}" })',
   },
 ];
 

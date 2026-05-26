@@ -76,7 +76,7 @@ const deserialise = (raw: string | null): unknown => {
   if (raw === null || raw === "") return raw;
   // Numbers/booleans/null/objects are JSON-encoded by `set`; plain strings
   // fail JSON.parse and fall back to the raw value (so legacy keys keep
-  // working even when authors wrote raw strings via `js{}` blocks).
+  // working even when authors wrote raw strings directly).
   try {
     return JSON.parse(raw);
   } catch {

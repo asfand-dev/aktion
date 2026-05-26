@@ -805,7 +805,7 @@ export const Toast: ComponentSpec = {
     { name: "tone", type: "string", optional: true, enum: TOAST_TONES, description: "Visual accent (default \"default\")" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (default picked from tone)" },
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
-    { name: "action", type: "Button", optional: true, description: "Optional inline action Button(...) shown above the message" },
+    { name: "action", type: "Button", optional: true, description: "Optional inline `Button` action shown above the message" },
     { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
     { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)`" },
   ],

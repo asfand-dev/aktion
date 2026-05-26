@@ -20,7 +20,7 @@ export interface BuiltinParam {
 
 export interface BuiltinEntry {
   name: string;
-  category: "data" | "iteration";
+  category: "data";
   description: string;
   params: BuiltinParam[];
   signature: string;
@@ -331,46 +331,6 @@ const DATA_DESCRIPTIONS: Record<string, Omit<BuiltinEntry, "name" | "category" |
   },
 };
 
-/**
- * Iteration and conditional builtins. These are *fallbacks* — the blessed
- * Aktion 0.5 surface uses expression-form `if`, `match`, and
- * `for`. The `@`-form survives because some templates pre-date the
- * expression syntax and `@Each` remains the easiest way to inline a one-line
- * loop inside a positional arg list.
- */
-const ITERATION_ENTRIES: Array<Omit<BuiltinEntry, "signature">> = [
-  {
-    name: "Each",
-    category: "iteration",
-    description: "Iterate over an array. The loop variable is scoped to the template. Supports destructuring: \"{id, name}\" binds those fields per row.",
-    params: [
-      { name: "array", type: "any[]", required: true },
-      { name: "varName", type: "string", required: true },
-      { name: "template", type: "Node", required: true },
-    ],
-  },
-  {
-    name: "If",
-    category: "iteration",
-    description: "Lazy conditional renderer — only the selected branch is evaluated. Useful when an unused branch would otherwise read missing loop variables.",
-    params: [
-      { name: "condition", type: "any", required: true },
-      { name: "trueBranch", type: "Node", required: true },
-      { name: "falseBranch", type: "Node", required: false },
-    ],
-  },
-  {
-    name: "Switch",
-    category: "iteration",
-    description: "Key-based branch selector. Stringifies `value` and renders the matching property of `cases` (or `default` when no key matches).",
-    params: [
-      { name: "value", type: "any", required: true },
-      { name: "cases", type: "{key: Node | string, ...}, i.e. {overview: Node, billing: 'Invoice', security: Node}", required: true },
-      { name: "default", type: "Node", required: false },
-    ],
-  },
-];
-
 const buildSignature = (entry: Omit<BuiltinEntry, "signature">): string => {
   const parts = entry.params.map((p) => (p.required ? p.name : `${p.name}?`));
   return `@${entry.name}(${parts.join(", ")})`;
@@ -383,14 +343,14 @@ const finalize = (entry: Omit<BuiltinEntry, "signature">): BuiltinEntry => ({
 
 /**
  * Return the catalog of all `@-builtins`. The list is deterministic — data
- * builtins first (sourced from the runtime registry), then iteration
- * fallbacks. Aktion 0.5 removed the legacy action-step builtins
- * (`@Set`, `@Run`, `@Reset`, `@ToAssistant`, `@OpenUrl`, `@Navigate`, `@Js`)
- * and the `@Const` memo helper; use `action` declarations and `$computed`
- * bindings instead.
+ * builtins sourced from the runtime registry. Aktion 0.5 removed the legacy
+ * action-step builtins (`@Set`, `@Run`, `@Reset`, `@ToAssistant`,
+ * `@OpenUrl`, `@Navigate`, `@Js`), the `@Const` memo helper, and the
+ * iteration/conditional builtins (Each/If/Switch — removed in 0.5). Use `function`
+ * declarations and native `for`/`if`/`switch` instead.
  */
 export function getBuiltinCatalog(): BuiltinEntry[] {
-  const dataEntries: BuiltinEntry[] = Object.keys(dataBuiltins).map((name) => {
+  return Object.keys(dataBuiltins).map((name) => {
     const meta = DATA_DESCRIPTIONS[name];
     if (!meta) {
       return finalize({
@@ -402,10 +362,6 @@ export function getBuiltinCatalog(): BuiltinEntry[] {
     }
     return finalize({ name, category: "data", ...meta });
   });
-  return [
-    ...dataEntries,
-    ...ITERATION_ENTRIES.map(finalize),
-  ];
 }
 
 export function indexBuiltins(entries: BuiltinEntry[]): Record<string, BuiltinEntry> {

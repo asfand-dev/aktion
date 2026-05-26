@@ -1,8 +1,8 @@
 /**
  * Aktion — core runtime regression tests.
  *
- * Exercises the evaluator, data builtins, state store, named-arg merging,
- * `@Each` loop scoping, and HTTP-native `http({...})` resources.
+ * Exercises the evaluator, data builtins, state store, trailing-object merging,
+ * `for...of` loop scoping, and HTTP-native `http({...})` resources.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,11 +33,11 @@ function buildContext(source: string, opts: { http?: HttpRuntime } = {}) {
 describe("evaluator", () => {
   it("evaluates a simple component reference graph", () => {
     const { ctx, program } = buildContext(`
-_app_ = Stack([card])
+aktion = Stack([card])
 card = Card([CardHeader("Hi", "There")])
 `);
     expect(program.errors).toEqual([]);
-    const app = ctx.bindings.get("_app_")?.();
+    const app = ctx.bindings.get("aktion")?.();
     expect(app).toMatchObject({ name: "Stack" });
   });
 
@@ -199,19 +199,9 @@ describe("bracket member access", () => {
 });
 
 describe("named component arguments", () => {
-  it("treats a trailing object literal as an opaque positional arg (no implicit named-arg expansion)", () => {
+  it("merges a trailing object literal into the component's named prop slots", () => {
     const { ctx } = buildContext(
       'btn = Button("Hi", {variant: "primary", size: "small"})',
-    );
-    const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
-    expect(node.name).toBe("Button");
-    expect(node.args[0]).toBe("Hi");
-    expect(node.args[1]).toEqual({ variant: "primary", size: "small" });
-  });
-
-  it("merges inline `name: value` args into the component's prop order", () => {
-    const { ctx } = buildContext(
-      'btn = Button("Hi", variant: "primary", size: "small")',
     );
     const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Button");
@@ -220,9 +210,20 @@ describe("named component arguments", () => {
     expect(node.args[4]).toBe("small");
   });
 
-  it("merges inline `name: value` args with positional props", () => {
+  it("merges trailing object keys into the component's prop order", () => {
     const { ctx } = buildContext(
-      'cell = GridItem(Text("Side"), span: "1/4")',
+      'btn = Button("Hi", { variant: "primary", size: "small" })',
+    );
+    const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
+    expect(node.name).toBe("Button");
+    expect(node.args[0]).toBe("Hi");
+    expect(node.args[2]).toBe("primary");
+    expect(node.args[4]).toBe("small");
+  });
+
+  it("merges trailing object keys with positional props", () => {
+    const { ctx } = buildContext(
+      'cell = GridItem(Text("Side"), { span: "1/4" })',
     );
     const node = ctx.bindings.get("cell")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("GridItem");
@@ -230,9 +231,9 @@ describe("named component arguments", () => {
     expect(node.args[1]).toBe("1/4");
   });
 
-  it("merges named args before a trailing children array", () => {
+  it("merges trailing object after a leading children array", () => {
     const { ctx } = buildContext(
-      'layout = Grid(columns: 12, gap: "l", [GridItem(Text("A"), span: "1/4")])',
+      'layout = Grid([GridItem(Text("A"), { span: "1/4" })], { columns: 12, gap: "l" })',
     );
     const node = ctx.bindings.get("layout")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Grid");
@@ -242,12 +243,12 @@ describe("named component arguments", () => {
   });
 });
 
-describe("@Each loop variable scoping", () => {
+describe("for...of loop variable scoping", () => {
   it("restores the outer loop binding even when the inner item is undefined", () => {
     const { ctx } = buildContext(
       `$items = [10, 20]\n` +
       `$sub = [null, "x"]\n` +
-      `row = @Each($items, "i", @Each($sub, "i", i))`,
+      `row = for (let i of $items) { for (let i of $sub) { i } }`,
     );
     const out = ctx.bindings.get("row")?.();
     expect(Array.isArray(out)).toBe(true);
@@ -256,7 +257,7 @@ describe("@Each loop variable scoping", () => {
   });
 
   it("does not crash when the items source is not an array", () => {
-    const { ctx } = buildContext(`$items = null\nrow = @Each($items, "i", i)`);
+    const { ctx } = buildContext(`$items = null\nrow = for (let i of $items) { i }`);
     const out = ctx.bindings.get("row")?.();
     expect(out).toEqual([]);
   });
@@ -292,7 +293,7 @@ $response = http({
   headers: { "Content-Type": "application/json" },
   body: { id: $id }
 })
-_app_ = Stack()
+aktion = Stack()
       `,
       { http },
     );
@@ -312,11 +313,10 @@ _app_ = Stack()
     const { ctx } = buildContext(
       `
 $response = http({ url: "/api/items", method: "GET" })
-_app_ = Stack()
+aktion = Stack()
       `,
       { http },
     );
-    // Flush enough microtasks for: void run() → fetch → response.json() → resource bag mutation.
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
     const response = ctx.state.get("response") as {
       data: unknown;
@@ -339,7 +339,7 @@ _app_ = Stack()
     buildContext(
       `
 $response = http({ url: "/api/users", method: "GET", query: { limit: 5, slug: "abc" } })
-_app_ = Stack()
+aktion = Stack()
       `,
       { http },
     );
@@ -399,11 +399,6 @@ describe("StateStore behaviour", () => {
   });
 
   it("non-literal state initializers are computed against the current store", () => {
-    // Computed `$state = expr` atoms (`$total = @Count($rows)`) re-derive
-    // against the current state — see the "Computed values" section of
-    // the language skill. Forward references resolve because every
-    // `$state` slot is declared (with a literal default) before the
-    // computed-derivation pass runs.
     const { state } = buildContext(`$total = @Count($rows)\n$rows = [1, 2]`);
     expect(state.get("total")).toBe(2);
   });

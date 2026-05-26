@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Routing · Aktion</title>
-  <meta name="description" content="Hash-based multi-page UIs via _router_({ ... }) and NavLink. Deep links, params, query, and back/forward — all built in." />
+  <meta name="description" content="Hash-based multi-page UIs via Router({ ... }) and NavLink. Deep links, params, query, and back/forward — all built in." />
   <script>
     (function () {
       try {
@@ -28,7 +28,7 @@
         <h1>Routing in one expression.</h1>
         <p class="lead">
           A single primitive &mdash;
-          <code>_router_({ &hellip; })</code> &mdash; turns a flat program
+          <code>Router({ &hellip; })</code> &mdash; turns a flat program
           into a multi-page app. The router uses the URL hash, so deep links
           and back/forward work without any server config.
         </p>
@@ -37,31 +37,31 @@
       <h2 id="essentials">The essentials</h2>
       <p>Routing has three moving parts:</p>
       <ul>
-        <li><code>_router_({ "/": Home(), "/about": About(), default: NotFound() })</code> &mdash; an expression that returns the page for the current hash.</li>
-        <li><code>NavLink(label:, to:)</code> &mdash; an anchor that navigates on click and reflects the active route.</li>
-        <li><code>_route_</code> &mdash; a reactive global with the current path, params, query, hash, and a <code>navigate(target)</code> method.</li>
+        <li><code>Router({ "/": Home(), "/about": About(), default: NotFound() })</code> &mdash; an expression that returns the page for the current hash.</li>
+        <li><code>NavLink({ label, to })</code> &mdash; an anchor that navigates on click and reflects the active route.</li>
+        <li><code>route</code> &mdash; a reactive global with the current path, params, query, hash, and a <code>navigate(target)</code> method.</li>
       </ul>
 
-<pre><code>_app_ = AppShell([sidebar, main])
+<pre><code>aktion = AppShell([sidebar, main])
 
 sidebar = Sidebar([
-  NavLink(label: "Home", to: "/"),
-  NavLink(label: "Dashboard", to: "/dashboard"),
-  NavLink(label: "Settings", to: "/settings")
+  NavLink({ label: "Home", to: "/" }),
+  NavLink({ label: "Dashboard", to: "/dashboard" }),
+  NavLink({ label: "Settings", to: "/settings" })
 ])
 
-main = _router_({
+main = Router({
   "/":           Home(),
   "/dashboard":  Dashboard(),
   "/settings":   Settings(),
   default:       NotFound()
 })
 
-# User-declared page components
-component Home()      { return Card([CardHeader("Welcome")]) }
-component Dashboard() { return Card([CardHeader("Dashboard")]) }
-component Settings()  { return Card([CardHeader("Settings")]) }
-component NotFound()  { return Card([CardHeader("Page not found")]) }</code></pre>
+// User-declared page components
+function Home()      { return Card([CardHeader("Welcome")]) }
+function Dashboard() { return Card([CardHeader("Dashboard")]) }
+function Settings()  { return Card([CardHeader("Settings")]) }
+function NotFound()  { return Card([CardHeader("Page not found")]) }</code></pre>
 
       <h2 id="patterns">Route patterns</h2>
       <table class="signature-table">
@@ -80,50 +80,50 @@ component NotFound()  { return Card([CardHeader("Page not found")]) }</code></pr
         an object with the captured segments. Pass it into your page
         component:
       </p>
-<pre><code>main = _router_({
+<pre><code>main = Router({
   "/users":         UsersIndex(),
   "/users/:id":     UserDetail(params),
   "/docs/*":        DocsPage(params),
   default:          NotFound()
 })
 
-component UserDetail(params) {
+function UserDetail(params) {
   return Card([CardHeader("User " + params.id)])
 }
 
-component DocsPage(params) {
-  # params._ contains the wildcard suffix
+function DocsPage(params) {
+  // params._ contains the wildcard suffix
   return Markdown("You're viewing /docs/" + params._)
 }</code></pre>
 
       <h2 id="reading-route">Reading the active route</h2>
       <p>
-        The <code>_route_</code> global is a reactive object. Reading any of
+        The <code>route</code> global is a reactive object. Reading any of
         its fields registers the current binding as a dependency &mdash; the
         UI re-renders on every transition.
       </p>
       <table class="signature-table">
         <thead><tr><th>Field</th><th>Type</th><th>Example value</th></tr></thead>
         <tbody>
-          <tr><td><code>_route_.path</code></td><td><code>string</code></td><td><code>"/users/42"</code></td></tr>
-          <tr><td><code>_route_.params</code></td><td><code>{ [key]: string }</code></td><td><code>{ id: "42" }</code></td></tr>
-          <tr><td><code>_route_.query</code></td><td><code>{ [key]: string }</code></td><td><code>{ sort: "name" }</code></td></tr>
-          <tr><td><code>_route_.pattern</code></td><td><code>string | null</code></td><td>The route pattern that matched (e.g. <code>"/users/:id"</code>).</td></tr>
-          <tr><td><code>_route_.navigate(to)</code></td><td><code>fn</code></td><td>Programmatic transition.</td></tr>
+          <tr><td><code>route.path</code></td><td><code>string</code></td><td><code>"/users/42"</code></td></tr>
+          <tr><td><code>route.params</code></td><td><code>{ [key]: string }</code></td><td><code>{ id: "42" }</code></td></tr>
+          <tr><td><code>route.query</code></td><td><code>{ [key]: string }</code></td><td><code>{ sort: "name" }</code></td></tr>
+          <tr><td><code>route.pattern</code></td><td><code>string | null</code></td><td>The route pattern that matched (e.g. <code>"/users/:id"</code>).</td></tr>
+          <tr><td><code>route.navigate(to)</code></td><td><code>fn</code></td><td>Programmatic transition.</td></tr>
         </tbody>
       </table>
 
-<pre><code>breadcrumbs = Breadcrumbs(items: @Split(_route_.path, "/"))
-queryString = "Sort: " + (_route_.query.sort || "default")</code></pre>
+<pre><code>breadcrumbs = Breadcrumbs({ items: @Split(route.path, "/") })
+queryString = "Sort: " + (route.query.sort || "default")</code></pre>
 
       <h2 id="navigate">Navigating programmatically</h2>
-      <p>Call <code>_route_.navigate(target)</code> inside an action:</p>
-<pre><code>action openOrder(id) {
-  _route_.navigate("/orders/" + id)
+      <p>Call <code>route.navigate(target)</code> inside an action:</p>
+<pre><code>function openOrder(id) {
+  route.navigate("/orders/" + id)
 }</code></pre>
 
       <p>Or skip the action and pass an inline lambda:</p>
-<pre><code>Button("Go to dashboard", action: () =&gt; _route_.navigate("/dashboard"))</code></pre>
+<pre><code>Button("Go to dashboard", { action: () =&gt; route.navigate("/dashboard") })</code></pre>
 
       <p>
         Targets can be absolute (<code>"/orders/42"</code>) or query-bearing
@@ -157,19 +157,19 @@ queryString = "Sort: " + (_route_.query.sort || "default")</code></pre>
         re-renders.
       </p>
 
-<pre><code>_app_ = AppShell([
+<pre><code>aktion = AppShell([
   TopBar([
     Brand("Acme"),
     Group([
-      NavLink(label: "Home", to: "/"),
-      NavLink(label: "Reports", to: "/reports"),
-      NavLink(label: "Settings", to: "/settings")
-    ], align: "end")
+      NavLink({ label: "Home", to: "/" }),
+      NavLink({ label: "Reports", to: "/reports" }),
+      NavLink({ label: "Settings", to: "/settings" })
+    ], { align: "end" })
   ]),
   Container([page])
 ])
 
-page = _router_({
+page = Router({
   "/":          HomePage(),
   "/reports":   ReportsPage(),
   "/settings":  SettingsPage(),
@@ -178,8 +178,8 @@ page = _router_({
 
       <h2 id="protected">Protected routes</h2>
       <p>Use an expression-form <code>if</code> &mdash; gate the entire router on a state atom:</p>
-<pre><code>page = if $session.user {
-  _router_({
+<pre><code>page = if ($session.user) {
+  Router({
     "/":        HomePage(),
     "/admin":   AdminPage(),
     default:    NotFoundPage()
@@ -191,9 +191,9 @@ page = _router_({
       <p>
         For per-route gating, branch inside the arm:
       </p>
-<pre><code>main = _router_({
+<pre><code>main = Router({
   "/":         HomePage(),
-  "/admin":    if $session.role == "admin" { AdminPage() } else { Forbidden() },
+  "/admin":    if ($session.role == "admin") { AdminPage() } else { Forbidden() },
   default:     NotFoundPage()
 })</code></pre>
 

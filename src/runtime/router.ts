@@ -2,11 +2,10 @@
  * Hash-based router for `<aktion-app>`.
  *
  * The router is owned by the host element and exposed to:
- *   - The evaluator (which special-cases `Routes(...)` to pick the matching
- *     `Route(path, content)` and inject path params as the loop variable
- *     `params`).
+ *   - The evaluator (which special-cases `Router({...})` to pick the matching
+ *     route arm and inject path params as the `params` scope).
  *   - The renderer's helpers (so `NavLink(...)` can wire click handlers).
- *   - The action runner (`@Navigate("/path")` step).
+ *   - Action functions (via `route.navigate("/path")`).
  *
  * The wire format is hash-based — `#/page-name`. The router strips the leading
  * `#` and any trailing `?…` query string before exposing the path. Navigating
@@ -185,13 +184,13 @@ export class Router {
     return this.currentParams;
   }
 
-  /** Path pattern of the most recently matched `Route` (or null). */
+  /** Path pattern of the most recently matched route arm (or null). */
   getActivePattern(): string | null {
     return this.currentPattern;
   }
 
   /**
-   * Called by `Routes(...)` after each render so we have the canonical
+   * Called by `Router({...})` after each render so we have the canonical
    * pattern + params for the active page (used by `NavLink` to highlight the
    * active link). The state store is NOT touched here.
    */
