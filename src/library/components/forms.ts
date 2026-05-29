@@ -9,6 +9,7 @@ import type { ComponentNode } from "../../runtime/evaluator.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { extractComboboxItems } from "./forms-shared.js";
+import { attachOnChange } from "./wrappers.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
 const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl", "small", "normal", "large"] as const;
@@ -32,10 +33,13 @@ function normaliseButtonSize(value: unknown): string {
 
 export const Button: ComponentSpec = {
   name: "Button",
-  description: "Clickable button. The action argument runs when clicked.",
+  description:
+    "Clickable button. `onClick` (a callable) runs when the user " +
+    "presses the button. The legacy `action` prop is an alias and is " +
+    "still accepted.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable invoked when clicked" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable invoked when the button is clicked" },
     { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
     { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Canonical `xs|sm|md|lg|xl` (legacy `small|normal|large` still accepted)" },
@@ -78,7 +82,7 @@ export const Button: ComponentSpec = {
     }
     button.onclick = () => {
       if (loading) return;
-      helpers.invoke(props.action);
+      helpers.invoke(props.onClick);
     };
     return button;
   },
@@ -103,13 +107,14 @@ export const Buttons: ComponentSpec = {
 
 export const Input: ComponentSpec = {
   name: "Input",
-  description: "Text input field. Pass a $variable as `value` for two-way binding.",
+  description: "Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string.",
   props: [
     { name: "id", type: "string", description: "Input identifier" },
     { name: "placeholder", type: "string", optional: true },
     { name: "type", type: "string", optional: true, enum: INPUT_TYPES },
     { name: "validations", type: "any", optional: true, description: "Array or object of validation hints" },
     { name: "value", type: "any", optional: true, description: "Bound value (typically $variable)" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const input = el("input", {
@@ -119,8 +124,12 @@ export const Input: ComponentSpec = {
       type: asString(props.type, "text"),
       placeholder: asString(props.placeholder),
       value: asString(props.value),
-    });
+    }) as HTMLInputElement;
     bindToStateAtArg(input, node, 4, helpers);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     applyValidations(input, props.validations);
     return input;
   },
@@ -128,12 +137,13 @@ export const Input: ComponentSpec = {
 
 export const TextArea: ComponentSpec = {
   name: "TextArea",
-  description: "Multi-line text input.",
+  description: "Multi-line text input. `onChange(value)` fires on every keystroke with the current text.",
   props: [
     { name: "id", type: "string" },
     { name: "placeholder", type: "string", optional: true },
     { name: "rows", type: "number", optional: true },
     { name: "value", type: "any", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const textarea = el("textarea", {
@@ -142,9 +152,13 @@ export const TextArea: ComponentSpec = {
       name: asString(props.id),
       placeholder: asString(props.placeholder),
       rows: String(Number(props.rows ?? 4) || 4),
-    });
+    }) as HTMLTextAreaElement;
     textarea.value = asString(props.value);
     bindToStateAtArg(textarea, node, 3, helpers);
+    attachOnChange(textarea, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLTextAreaElement).value,
+    });
     return textarea;
   },
 };
@@ -165,7 +179,8 @@ export const Select: ComponentSpec = {
   name: "Select",
   description:
     "Dropdown select. Pass a `$variable` as `value` for two-way binding. " +
-    "Set `searchable: true` for a combobox-style filter UI on long option lists.",
+    "Set `searchable: true` for a combobox-style filter UI on long option " +
+    "lists. `onChange(value)` fires with the newly-selected value.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "SelectItem[]" },
@@ -173,6 +188,7 @@ export const Select: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "value", type: "any", optional: true },
     { name: "searchable", type: "boolean", optional: true, description: "Render as a filterable combobox" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected value" },
   ],
   render: (node, props, helpers) => {
     if (asBoolean(props.searchable)) {
@@ -182,7 +198,7 @@ export const Select: ComponentSpec = {
       class: "rui-select",
       id: asString(props.id),
       name: asString(props.id),
-    });
+    }) as HTMLSelectElement;
     const placeholder = asString(props.placeholder);
     if (placeholder) {
       select.append(el("option", { value: "", disabled: "", selected: "" }, [placeholder]));
@@ -192,17 +208,22 @@ export const Select: ComponentSpec = {
     }
     select.value = asString(props.value);
     bindToStateAtArg(select, node, 4, helpers);
+    attachOnChange(select, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => (n as HTMLSelectElement).value,
+    });
     return select;
   },
 };
 
 export const Checkbox: ComponentSpec = {
   name: "Checkbox",
-  description: "Boolean checkbox.",
+  description: "Boolean checkbox. `onChange(checked)` fires with the new boolean state.",
   props: [
     { name: "id", type: "string" },
     { name: "label", type: "string" },
     { name: "value", type: "boolean", optional: true, aliases: ["checked"] },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new boolean value" },
   ],
   render: (node, props, helpers) => {
     const wrapper = el("label", { class: "rui-checkbox" });
@@ -215,6 +236,10 @@ export const Checkbox: ComponentSpec = {
     }) as HTMLInputElement;
     input.checked = isChecked;
     bindToStateAtArg(input, node, 2, helpers);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => (n as HTMLInputElement).checked,
+    });
     wrapper.append(input, el("span", { class: "rui-checkbox-label" }, [asString(props.label)]));
     return wrapper;
   },
@@ -254,11 +279,12 @@ export const CheckBoxItem: ComponentSpec = {
 
 export const CheckBoxGroup: ComponentSpec = {
   name: "CheckBoxGroup",
-  description: "Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` for two-way binding.",
+  description: "Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` for two-way binding. `onChange(value)` fires with the full updated object.",
   props: [
     { name: "name", type: "string", description: "Group identifier" },
     { name: "items", type: "CheckBoxItem[]" },
     { name: "value", type: "any", optional: true, description: "Bound value (typically $variable)" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the updated `{name: checked}` object when any item toggles" },
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.name);
@@ -294,23 +320,31 @@ export const CheckBoxGroup: ComponentSpec = {
     });
 
     const stateName = node.argMeta?.[2]?.stateRef;
+    // Snapshot the live `{name: checked}` object from the rendered DOM. The
+    // CheckBoxGroup re-derives the object on every event so morphing and
+    // user-supplied `onChange` handlers stay in sync.
+    const readGroupValue = (rootEl: HTMLElement): Record<string, boolean> => {
+      const out: Record<string, boolean> = {};
+      rootEl
+        .querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+        .forEach((input) => {
+          out[input.name] = input.checked;
+        });
+      return out;
+    };
     if (stateName) {
       helpers.bindState(root, stateName, {
         event: "change",
         // Read from the *live* DOM rooted at the event target, never from
         // the closure's `inputs` array. After a morph re-render those
         // captured input elements are detached and report stale `checked`.
-        getValue: (rootEl) => {
-          const out: Record<string, boolean> = {};
-          rootEl
-            .querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
-            .forEach((input) => {
-              out[input.name] = input.checked;
-            });
-          return out;
-        },
+        getValue: readGroupValue,
       });
     }
+    attachOnChange(root, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => readGroupValue(n as HTMLElement),
+    });
 
     return root;
   },
@@ -318,11 +352,12 @@ export const CheckBoxGroup: ComponentSpec = {
 
 export const Radio: ComponentSpec = {
   name: "Radio",
-  description: "Radio button group.",
+  description: "Radio button group. `onChange(value)` fires with the newly-selected option value.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "SelectItem[]" },
     { name: "value", type: "any", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected radio value" },
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.id);
@@ -342,6 +377,10 @@ export const Radio: ComponentSpec = {
       }) as HTMLInputElement;
       input.checked = isChecked;
       bindToStateAtArg(input, node, 2, helpers);
+      attachOnChange(input, props.onChange, helpers, {
+        event: "change",
+        getValue: (n) => (n as HTMLInputElement).value,
+      });
       itemRoot.append(input, el("span", { class: "rui-radio-label" }, [label]));
       root.append(itemRoot);
     }
@@ -380,14 +419,15 @@ export const SearchBar: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "value", type: "string", optional: true, description: "Bound value (typically $variable)" },
     { name: "shortcut", type: "string", optional: true, description: "Keyboard hint chip on the right (e.g. \"/\")" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onSubmit"], description: "Optional submit callable; clicking the trailing button or pressing Enter invokes it" },
+    { name: "onSubmit", type: "callable", optional: true, aliases: ["action", "onClick"], description: "Optional submit callable; clicking the trailing button or pressing Enter invokes it" },
     { name: "submitLabel", type: "string", optional: true, description: "Label for the trailing submit button (default \"Search\"). Omitted when no action is provided." },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current query on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const root = el("form", { class: "rui-search-bar", role: "search" });
     root.onsubmit = (event) => {
       event.preventDefault();
-      helpers.invoke(props.action);
+      helpers.invoke(props.onSubmit);
     };
     const iconWrap = renderIcon("magnifying-glass", { className: "rui-search-bar-icon" })
       ?? el("span", { class: "rui-search-bar-icon", "aria-hidden": "true" });
@@ -400,12 +440,16 @@ export const SearchBar: ComponentSpec = {
       placeholder: asString(props.placeholder, "Search…"),
       value: asString(props.value),
       autocomplete: "off",
-    });
+    }) as HTMLInputElement;
     bindToStateAtArg(input, node, 2, helpers);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     root.append(input);
     const shortcut = asString(props.shortcut);
     if (shortcut) root.append(el("span", { class: "rui-search-bar-shortcut" }, [shortcut]));
-    if (props.action != null) {
+    if (props.onSubmit != null) {
       const btn = el("button", {
         type: "submit",
         class: "rui-search-bar-submit",
@@ -418,15 +462,23 @@ export const SearchBar: ComponentSpec = {
 
 export const Form: ComponentSpec = {
   name: "Form",
-  description: "Form container. Children FormControls render in order; buttons render at the bottom.",
+  description:
+    "Form container. Children FormControls render in order; buttons " +
+    "render at the bottom. Provide `onSubmit` to handle form submission " +
+    "(invoked when the user presses Enter on a focused input or clicks a " +
+    "`type=\"submit\"` Button inside the form).",
   props: [
     { name: "id", type: "string" },
     { name: "buttons", type: "Buttons | Button" },
     { name: "fields", type: "FormControl[]" },
+    { name: "onSubmit", type: "callable", optional: true, aliases: ["onsubmit"], description: "Called when the form is submitted (Enter key or submit button)" },
   ],
   render: (_node, props, helpers) => {
     const form = el("form", { class: "rui-form", id: asString(props.id) });
-    form.onsubmit = (event) => event.preventDefault();
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      helpers.invoke(props.onSubmit);
+    };
     for (const field of asArray(props.fields)) form.append(helpers.renderNode(field));
     if (props.buttons) {
       const actions = el("div", { class: "rui-form-actions" });
@@ -452,6 +504,7 @@ export const Slider: ComponentSpec = {
     { name: "label", type: "string", optional: true },
     { name: "showValue", type: "boolean", optional: true, description: "Render the current numeric value beside the slider" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number as the user drags" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -498,6 +551,10 @@ export const Slider: ComponentSpec = {
         getValue: (n) => Number((n as HTMLInputElement).value),
       });
     }
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => Number((n as HTMLInputElement).value),
+    });
     root.append(input);
     return root;
   },
@@ -518,6 +575,7 @@ export const NumberInput: ComponentSpec = {
     { name: "step", type: "number", optional: true, description: "Default 1" },
     { name: "placeholder", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank)" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -555,17 +613,19 @@ export const NumberInput: ComponentSpec = {
       disabled: disabled ? "" : null,
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
+    const readNumberValue = (n: HTMLElement): number | null => {
+      const raw = (n as HTMLInputElement).value;
+      if (raw === "") return null;
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    };
     if (stateName) {
-      helpers.bindState(input, stateName, {
-        event: "input",
-        getValue: (n) => {
-          const raw = (n as HTMLInputElement).value;
-          if (raw === "") return null;
-          const num = Number(raw);
-          return Number.isFinite(num) ? num : null;
-        },
-      });
+      helpers.bindState(input, stateName, { event: "input", getValue: readNumberValue });
     }
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: readNumberValue,
+    });
     const adjust = (origin: Element, delta: number): void => {
       // Resolve the *live* input via the DOM. The `input` captured by this
       // closure points at the freshly-rendered node, which is detached
@@ -600,6 +660,7 @@ export const DatePicker: ComponentSpec = {
     { name: "max", type: "string", optional: true, description: "Latest ISO date" },
     { name: "placeholder", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new ISO date string when the picker changes" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -616,8 +677,12 @@ export const DatePicker: ComponentSpec = {
       max: asString(props.max) || null,
       placeholder: asString(props.placeholder),
       disabled: asBoolean(props.disabled) ? "" : null,
-    });
+    }) as HTMLInputElement;
     bindToStateAtArg(input, node, 1, helpers);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     root.append(input);
     return root;
   },
@@ -636,7 +701,7 @@ export const FileUpload: ComponentSpec = {
     { name: "hint", type: "string", optional: true, description: "Secondary helper text" },
     { name: "accept", type: "string", optional: true, description: "Comma-separated MIME types or extensions" },
     { name: "multiple", type: "boolean", optional: true },
-    { name: "action", type: "callable", optional: true, aliases: ["onChange", "onSelect"], description: "Callable fired when files are picked" },
+    { name: "onSelect", type: "callable", optional: true, aliases: ["action", "onChange"], description: "Callable fired with the FileList when files are picked" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon (default \"cloud-arrow-up\")" },
     { name: "disabled", type: "boolean", optional: true },
   ],
@@ -676,8 +741,11 @@ export const FileUpload: ComponentSpec = {
       /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(file.name);
 
     input.onchange = (event) => {
-      helpers.invoke(props.action);
       const fileInput = event.currentTarget as HTMLInputElement;
+      // Pass the FileList as the first argument so handlers can read it
+      // directly: `(files) => uploadAll(files)`. Older handlers that
+      // ignore arguments keep working unchanged.
+      helpers.invoke(props.onSelect, fileInput.files);
       const uploadRoot = fileInput.closest(".rui-file-upload") as HTMLElement | null;
       if (!uploadRoot) return;
       const files = fileInput.files;
@@ -726,6 +794,7 @@ export const Combobox: ComponentSpec = {
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no items match the filter (default \"No matches\")" },
     { name: "disabled", type: "boolean", optional: true },
     { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the dropdown" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected value" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -817,6 +886,7 @@ export const Combobox: ComponentSpec = {
       if (stateName) {
         helpers.setState(stateName, value);
       }
+      helpers.invoke(props.onChange, value);
       openSlot.set(false);
       filterSlot.set("");
       const live = origin.closest(".rui-combobox") as HTMLElement | null;
@@ -904,6 +974,7 @@ export const MultiSelect: ComponentSpec = {
     { name: "max", type: "number", optional: true, description: "Maximum number of selections" },
     { name: "disabled", type: "boolean", optional: true },
     { name: "open", type: "boolean", optional: true, description: "Initial open state — use to demo or pre-open the dropdown" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the updated array of selected values" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -939,8 +1010,8 @@ export const MultiSelect: ComponentSpec = {
     });
     const chipRow = el("span", { class: "rui-multiselect-chips" });
     const writeSelection = (next: string[]): void => {
-      if (!stateName) return;
-      helpers.setState(stateName, next);
+      if (stateName) helpers.setState(stateName, next);
+      helpers.invoke(props.onChange, next);
     };
     if (selected.length === 0) {
       chipRow.append(el("span", { class: "rui-multiselect-placeholder" }, [placeholder]));
@@ -1079,6 +1150,7 @@ export const DateRangePicker: ComponentSpec = {
     { name: "min", type: "string", optional: true, description: "Earliest selectable ISO date" },
     { name: "max", type: "string", optional: true, description: "Latest selectable ISO date" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with `{from, to}` whenever either endpoint changes" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -1121,6 +1193,16 @@ export const DateRangePicker: ComponentSpec = {
     const toState = node.argMeta?.[2]?.stateRef;
     if (fromState) helpers.bindState(fromInput, fromState);
     if (toState) helpers.bindState(toInput, toState);
+    if (props.onChange != null) {
+      const readRange = (target: HTMLInputElement) => {
+        const wrapper = target.closest(".rui-date-range-picker");
+        const from = wrapper?.querySelector<HTMLInputElement>(".rui-date-range-picker-input[data-role=\"from\"]")?.value ?? "";
+        const to = wrapper?.querySelector<HTMLInputElement>(".rui-date-range-picker-input[data-role=\"to\"]")?.value ?? "";
+        return { from, to };
+      };
+      fromInput.addEventListener("change", (e) => helpers.invoke(props.onChange, readRange(e.currentTarget as HTMLInputElement)));
+      toInput.addEventListener("change", (e) => helpers.invoke(props.onChange, readRange(e.currentTarget as HTMLInputElement)));
+    }
     return root;
   },
 };

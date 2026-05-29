@@ -64,10 +64,17 @@ export interface GrammarSpec {
 
 export const grammarSpec: GrammarSpec = {
   name: "aktion",
-  atoms: ["true", "false", "null"],
+  atoms: ["true", "false", "null", "undefined"],
+  // Full reserved-word set, kept in sync with `KEYWORDS_AKTION` in
+  // `src/parser/lexer.ts` plus the reserved top-level handles
+  // (`aktion`, `route`) and `emit`. Every entry is documented in
+  // `keywordDocs` so the playground can show an explanation popup.
   keywords: [
-    "function", "return", "if", "else", "for", "let", "of",
-    "switch", "case", "default", "break", "effect", "aktion", "emit",
+    "function", "effect", "if", "else", "switch", "case", "break",
+    "continue", "for", "while", "do", "of", "in", "let", "var", "const",
+    "await", "async", "return", "default", "try", "catch", "finally",
+    "throw", "new", "typeof", "instanceof", "delete", "void",
+    "aktion", "route", "emit",
   ],
   operators: ["+", "-", "*", "/", "%", "!", "=", "<", ">", "?", ":", ".", ","],
   // Long operators include `??` and `?.` (nullish coalescing + optional chain)
@@ -88,6 +95,190 @@ export const grammarSpec: GrammarSpec = {
     part: /[A-Za-z0-9_]/,
   },
   sigils: { builtin: "@", state: "$" },
+};
+
+/**
+ * Documentation for a reserved keyword — surfaced by the language
+ * service hover provider and the playground keyword-popup. Each entry
+ * has a one-line `summary`, a `syntax` skeleton, and a runnable
+ * `example` snippet.
+ */
+export interface KeywordDoc {
+  /** One-line description of what the keyword does. */
+  summary: string;
+  /** Syntax skeleton, e.g. `if (condition) { … } else { … }`. */
+  syntax: string;
+  /** Short usage example. */
+  example: string;
+}
+
+/**
+ * Canonical explanations for every reserved word / top-level handle in
+ * `grammarSpec.keywords`. Single source of truth shared by the language
+ * service (`getHoverInfo`) and the playground keyword popups so the two
+ * never drift. Keep this in sync with `grammarSpec.keywords`.
+ */
+export const keywordDocs: Record<string, KeywordDoc> = {
+  aktion: {
+    summary: "Reserved entry-point binding — the root of the rendered UI tree.",
+    syntax: "aktion = Component(...)",
+    example: 'aktion = Stack([Heading("Hi"), Text("Welcome")])',
+  },
+  route: {
+    summary: "Reactive router handle — exposes path, params, query, and navigate().",
+    syntax: "route.path · route.params · route.query · route.navigate(path)",
+    example: 'Button("Home", () => route.navigate("/"))',
+  },
+  emit: {
+    summary: "Dispatch a custom DOM event from the host element.",
+    syntax: 'emit("event-name", detail)',
+    example: 'Button("Save", () => emit("saved", { id: $id }))',
+  },
+  function: {
+    summary: "Declare a component (PascalCase) or action/helper (camelCase).",
+    syntax: "function Name(params) { return ... }",
+    example: 'function Greeting(name) {\n  return Text(`Hello ${name}`)\n}',
+  },
+  effect: {
+    summary: "Run a side-effect when dependencies change (timers, fetch, analytics).",
+    syntax: "effect(() => { ... }, [deps])",
+    example: 'effect(() => {\n  $now = @Now()\n}, [interval(1000)])',
+  },
+  if: {
+    summary: "Conditional statement — run a block when a condition is truthy.",
+    syntax: "if (condition) { ... } else { ... }",
+    example: "if (!$user) {\n  return Spinner()\n}",
+  },
+  else: {
+    summary: "Fallback branch executed when the matching `if` condition is falsy.",
+    syntax: "if (condition) { ... } else { ... }",
+    example: 'if ($ok) { return Done() } else { return Retry() }',
+  },
+  switch: {
+    summary: "Multi-way branch on a value — pair each arm with `case` / `default`.",
+    syntax: "switch (value) { case x: ...; default: ... }",
+    example: 'switch (tab) {\n  case "list": return List()\n  default: return Empty()\n}',
+  },
+  case: {
+    summary: "A labelled arm inside a `switch` statement.",
+    syntax: "case value: statements; break",
+    example: 'case "grid": return Grid($items)',
+  },
+  break: {
+    summary: "Exit the nearest enclosing loop or `switch` immediately.",
+    syntax: "break",
+    example: "for (let i = 0; i < n; i++) {\n  if (done) break\n}",
+  },
+  continue: {
+    summary: "Skip to the next iteration of the nearest enclosing loop.",
+    syntax: "continue",
+    example: "for (let x of items) {\n  if (!x.ok) continue\n}",
+  },
+  for: {
+    summary: "Loop — classic `for`, `for…of` (values), or `for…in` (keys).",
+    syntax: "for (let i = 0; i < n; i++) { ... }",
+    example: "for (let item of $items) {\n  log(item)\n}",
+  },
+  while: {
+    summary: "Loop while a condition stays truthy (checked before each pass).",
+    syntax: "while (condition) { ... }",
+    example: "while (i > 0) {\n  i = i - 1\n}",
+  },
+  do: {
+    summary: "Run a block once, then repeat while a condition holds.",
+    syntax: "do { ... } while (condition)",
+    example: "do {\n  step()\n} while (hasMore)",
+  },
+  of: {
+    summary: "Iterate the VALUES of an array/iterable in a `for…of` loop.",
+    syntax: "for (let item of iterable) { ... }",
+    example: "for (let row of $rows) { render(row) }",
+  },
+  in: {
+    summary: "Iterate the KEYS of an object (`for…in`) or test key membership.",
+    syntax: 'for (let key in obj) { ... }  ·  "key" in obj',
+    example: 'for (let k in $config) { use(k) }',
+  },
+  let: {
+    summary: "Declare a block-scoped mutable variable (supports destructuring).",
+    syntax: "let name = value  ·  let [a, b] = arr  ·  let { x } = obj",
+    example: "let { name, age = 0 } = $user",
+  },
+  var: {
+    summary: "Declare a variable (function-scoped) — `let` is preferred.",
+    syntax: "var name = value",
+    example: "var total = 0",
+  },
+  const: {
+    summary: "Declare a block-scoped constant binding (supports destructuring).",
+    syntax: "const name = value",
+    example: "const [first, ...rest] = $items",
+  },
+  await: {
+    summary: "Await a promise inside an action/effect body (or expression).",
+    syntax: "await expression",
+    example: "let res = await http({ url: \"/api\" })",
+  },
+  async: {
+    summary: "Marks a function as async — accepted as a no-op modifier.",
+    syntax: "async function name() { ... }",
+    example: "async function load() {\n  let data = await fetch()\n}",
+  },
+  return: {
+    summary: "Return a value from a component / action / helper body.",
+    syntax: "return expression",
+    example: 'return Card({ title: "Done" })',
+  },
+  default: {
+    summary: "The fallback arm of a `switch` (or wildcard route in Router).",
+    syntax: "default: statements",
+    example: 'default: return NotFound()',
+  },
+  try: {
+    summary: "Run code that may throw, handling errors in a `catch` block.",
+    syntax: "try { ... } catch (e) { ... } finally { ... }",
+    example: 'try {\n  risky()\n} catch (e) {\n  log(e)\n}',
+  },
+  catch: {
+    summary: "Handle an error thrown inside the preceding `try` block.",
+    syntax: "catch (error) { ... }",
+    example: 'catch (e) { $error = e }',
+  },
+  finally: {
+    summary: "Run cleanup after `try` / `catch`, regardless of outcome.",
+    syntax: "finally { ... }",
+    example: 'finally { $loading = false }',
+  },
+  throw: {
+    summary: "Raise an error — caught by an enclosing `try` / `catch`.",
+    syntax: "throw value",
+    example: 'throw "invalid state"',
+  },
+  new: {
+    summary: "Construct an instance of a host class (Date, Map, Set, …).",
+    syntax: "new Constructor(args)",
+    example: "let now = new Date()",
+  },
+  typeof: {
+    summary: 'Return a string naming a value\'s type ("number", "string", …).',
+    syntax: "typeof value",
+    example: 'if (typeof x === "number") { ... }',
+  },
+  instanceof: {
+    summary: "Test whether a value is an instance of a constructor.",
+    syntax: "value instanceof Constructor",
+    example: "if (d instanceof Date) { ... }",
+  },
+  delete: {
+    summary: "Remove a property from an object.",
+    syntax: "delete obj.prop",
+    example: "delete $form.draft",
+  },
+  void: {
+    summary: "Evaluate an expression and yield `undefined`.",
+    syntax: "void expression",
+    example: "void sideEffect()",
+  },
 };
 
 /**

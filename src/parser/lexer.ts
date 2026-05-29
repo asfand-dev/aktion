@@ -38,15 +38,28 @@ export const KEYWORDS_AKTION = new Set([
   "switch",
   "case",
   "break",
+  "continue",
   "for",
+  "while",
+  "do",
   "of",
   "in",
   "let",
   "var",
   "const",
   "await",
+  "async",
   "return",
   "default",
+  "try",
+  "catch",
+  "finally",
+  "throw",
+  "new",
+  "typeof",
+  "instanceof",
+  "delete",
+  "void",
 ]);
 
 export type TemplatePart =
@@ -379,23 +392,37 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Multi-character operators: ==, !=, >=, <=, &&, ||, ??, ?., ->, =>,
-    // +=, -=, *=, /=, ??=, ++, --.
+    // Multi-character operators. Order matters — longer matches must
+    // be attempted before shorter ones (`===` before `==`, `**=` before
+    // `**`, `&&=` before `&&`, `>>>=` before `>>>` before `>>`).
     const two = ch + (peek(1) ?? "");
     const three = two + (peek(2) ?? "");
-    if (three === "??=") {
+    const four = three + (peek(3) ?? "");
+    // Unsigned right-shift assignment — the only 4-char operator in JS.
+    if (four === ">>>=") {
+      const startLine = line;
+      const startCol = column;
+      advance(); advance(); advance(); advance();
+      push("Operator", four, startLine, startCol);
+      continue;
+    }
+    if (three === "===" || three === "!==" || three === "**=" ||
+        three === "??=" || three === "&&=" || three === "||=" ||
+        three === ">>>" || three === ">>=" || three === "<<=") {
       const startLine = line;
       const startCol = column;
       advance(); advance(); advance();
-      push("Operator", "??=", startLine, startCol);
+      push("Operator", three, startLine, startCol);
       continue;
     }
     if (
       two === "==" || two === "!=" || two === ">=" || two === "<=" ||
       two === "&&" || two === "||" || two === "??" || two === "?." ||
-      two === "->" || two === "=>" ||
+      two === "->" || two === "=>" || two === "**" || two === "%=" ||
       two === "+=" || two === "-=" || two === "*=" || two === "/=" ||
-      two === "++" || two === "--"
+      two === "++" || two === "--" ||
+      two === "<<" || two === ">>" ||
+      two === "&=" || two === "|=" || two === "^="
     ) {
       const startLine = line;
       const startCol = column;
@@ -405,8 +432,8 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Single-char operators.
-    if ("+-*/%!=<>".includes(ch)) {
+    // Single-char operators (arithmetic, comparison, bitwise).
+    if ("+-*/%!=<>&|^~".includes(ch)) {
       const startLine = line;
       const startCol = column;
       advance();

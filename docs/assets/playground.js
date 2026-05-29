@@ -122,16 +122,16 @@ aktion = Stack([
     StatCard("On-time", { value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock" })
   ]),
   KanbanBoard([
-    KanbanColumn("To do",  { items: for (let p of @Filter(projects, "stage", "==", "todo"))   { Card2(p) } }),
-    KanbanColumn("Doing",  { items: for (let p of @Filter(projects, "stage", "==", "doing"))  { Card2(p) }, tone: "primary" }),
-    KanbanColumn("Review", { items: for (let p of @Filter(projects, "stage", "==", "review")) { Card2(p) }, tone: "warning" }),
-    KanbanColumn("Done",   { items: for (let p of @Filter(projects, "stage", "==", "done"))   { Card2(p) }, tone: "success" })
+    KanbanColumn("To do",  { items: @Filter(projects, "stage", "==", "todo").map(p => Card2(p)) }),
+    KanbanColumn("Doing",  { items: @Filter(projects, "stage", "==", "doing").map(p => Card2(p)), tone: "primary" }),
+    KanbanColumn("Review", { items: @Filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
+    KanbanColumn("Done",   { items: @Filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
   ])
 ])`,
   },
   todo: {
     label: "Reactive todo",
-    code: `// Highlights: $-prefixed reactive state, template literals, for-loop destructuring, if expression for empty state.
+    code: `// Highlights: $-prefixed reactive state, template literals, .map for lists, ternary for the empty state.
 $todos = [{id: 1, text: "Welcome — try editing. Refresh me, I persist!", done: false}]
 $draft = ""
 
@@ -147,12 +147,10 @@ function Row(t) {
   ], { direction: "row", gap: "s", align: "center", justify: "between" })])
 }
 
-list = for (let t of $todos) { Row(t) }
-body = if ($todos.length > 0) {
-  list
-} else {
-  EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
-}
+list = $todos.map(t => Row(t))
+body = $todos.length > 0
+  ? list
+  : EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
 
 aktion = Stack([
   Card([CardHeader("Todo list", { subtitle: \`\${@Count($todos)} \${@Plural(@Count($todos), "task", "tasks")} · persisted across reloads\` })]),
@@ -188,7 +186,7 @@ function Item(name) {
 
 addBtn = Card([Button("New Event", { variant: "ghost", action: addEvent })])
 
-items = for (let { title } of $events) { Item(title) }`,
+items = $events.map(e => Item(e.title))`,
   },
   routing: {
     label: "Routing demo",
@@ -280,20 +278,18 @@ people = [
   {id: "u08", name: "Barbara Liskov",    team: "Compilers",   score: 89, commits: 272}
 ]
 
-bulkBar = if (@Count($selectedIds) > 0) {
-  Toolbar(
-    {
-      left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
-      right: [
-        Button("Email",  { variant: "ghost",     size: "small", icon: "envelope" }),
-        Button("Export", { variant: "secondary", size: "small", icon: "file-csv" }),
-        Button("Clear",  { action: () => { $selectedIds = [] }, variant: "ghost", size: "small" })
-      ]
-    }
-  )
-} else {
-  null
-}
+bulkBar = @Count($selectedIds) > 0
+  ? Toolbar(
+      {
+        left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+        right: [
+          Button("Email",  { variant: "ghost",     size: "small", icon: "envelope" }),
+          Button("Export", { variant: "secondary", size: "small", icon: "file-csv" }),
+          Button("Clear",  { action: () => { $selectedIds = [] }, variant: "ghost", size: "small" })
+        ]
+      }
+    )
+  : null
 
 aktion = Stack([
   PageHeader(
@@ -324,7 +320,7 @@ $ob1 = false
 $ob2 = false
 $ob3 = false
 
-$obDone = (if ($ob1) { 1 } else { 0 }) + (if ($ob2) { 1 } else { 0 }) + (if ($ob3) { 1 } else { 0 })
+$obDone = ($ob1 ? 1 : 0) + ($ob2 ? 1 : 0) + ($ob3 ? 1 : 0)
 
 events = [
   {date: "2026-05-04", title: "Sprint planning", time: "09:00", tone: "primary"},
@@ -379,7 +375,7 @@ photos = [
   {src: "https://picsum.photos/seed/aurora-aurora/1200/700",  caption: "Northern lights"}
 ]
 
-slides = for (let p of photos) { {src: p.src, alt: p.caption, caption: p.caption} }
+slides = photos.map(p => ({src: p.src, alt: p.caption, caption: p.caption}))
 
 aktion = Stack([
   PageHeader("Aurora Expedition", { subtitle: "Iceland · Aug 2026", breadcrumbs: ["Trips", "Aurora"] }),
@@ -437,15 +433,13 @@ $brand = "#6366f1"
 $pin = ""
 
 $errors = @Filter([
-  if ($title == "") { {label: "title", message: "Title is required."} } else { null },
-  if ($pin.length != 4) { {label: "pin",   message: "PIN must be 4 digits."} } else { null }
+  $title == "" ? {label: "title", message: "Title is required."} : null,
+  $pin.length != 4 ? {label: "pin",   message: "PIN must be 4 digits."} : null
 ], "label", "!=", null)
 
-publishGate = if (@Count($errors) > 0) {
-  Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
-} else {
-  Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
-}
+publishGate = @Count($errors) > 0
+  ? Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
+  : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
 
 aktion = Stack([
   PageHeader($title, { subtitle: "Compose, brand, gate, publish.", breadcrumbs: ["Content", "Drafts"] }),
@@ -791,6 +785,10 @@ function downloadStandaloneHtml(source, theme, title) {
 
 const langSpec = getLanguageSpec();
 const componentNames = new Set(langSpec.components.map((c) => c.name));
+// Reserved-keyword documentation (definition + syntax + example) — drives
+// the keyword hover-popup and enriches keyword autocomplete. Sourced from
+// the shared grammar module so the editor never drifts from the runtime.
+const KEYWORD_DOCS = langSpec.keywordDocs || {};
 
 /**
  * Reserved language keywords — surfaced in autocomplete so the LLM-author
@@ -803,11 +801,18 @@ const LANGUAGE_KEYWORDS = [
   { label: "effect",    info: "Declare an anonymous side-effect: `effect(() => { ... }, [$atom, \"mount\", \"debounce(N)\"])`." },
   { label: "if",        info: "Expression-form `if (cond) { ... } else { ... }`." },
   { label: "else",      info: "`else` arm of an `if` expression." },
-  { label: "switch",    info: "Expression-form `switch (value) { case \"x\": A(); break; default: B() }`." },
-  { label: "case",      info: "Arm of a `switch` expression: `case \"x\": A(); break`." },
-  { label: "break",     info: "Terminate a `switch` arm." },
-  { label: "for",       info: "Expression-form `for (let x of xs) { Card(x) }`." },
+  { label: "switch",    info: "Statement-form `switch (value) { case \"x\": A(); break; default: B() }`. Use inside a function body — wrap and `return` to pick a value." },
+  { label: "case",      info: "Arm of a `switch` statement: `case \"x\": A(); break`." },
+  { label: "break",     info: "Terminate a `switch` arm or `for`/`while` loop." },
+  { label: "continue",  info: "Skip to the next iteration of a `for`/`while` loop." },
+  { label: "for",       info: "Statement-form `for (let x of xs) { … }` / `for (let i = 0; i < n; i += 1) { … }`. Use `xs.map(x => …)` for value-producing iteration." },
+  { label: "while",     info: "Statement-form `while (cond) { … }` — inside a function body." },
   { label: "of",        info: "Used in `for (let x of xs) { ... }`." },
+  { label: "try",       info: "`try { … } catch (err) { … } finally { … }` — inside a function body." },
+  { label: "throw",     info: "`throw new Error(\"msg\")` — surfaces as a thrown JS error." },
+  { label: "new",       info: "`new Constructor(args)` — invoke a JS constructor (e.g. `new FormData()`, `new Date()`)." },
+  { label: "typeof",    info: "`typeof x` — JS type guard returning a string." },
+  { label: "instanceof",info: "`x instanceof Ctor` — prototype check." },
   { label: "await",     info: "Wait for an HTTP / promise inside a function body." },
   { label: "return",    info: "Return from a `function` / `effect` body." },
   { label: "cleanup",   info: "Register a teardown handler inside an `effect` body." },
@@ -909,7 +914,7 @@ const LANGUAGE_SNIPPETS = [
   },
   {
     name: "switch",
-    description: "Switch expression — first matching case wins.",
+    description: "Switch statement — first matching case wins. Use inside a function body.",
     template:
       'switch (${1:value}) {\n' +
       '  case "${2:active}": ${3:onActive()}; break;\n' +
@@ -918,18 +923,28 @@ const LANGUAGE_SNIPPETS = [
   },
   {
     name: "for",
-    description: "for-of loop expression.",
-    template: 'for (let ${1:item} of ${2:items}) { ${3:Card(${1:item})} }',
+    description: "for-of loop statement — use `.map(item => …)` for value-producing iteration.",
+    template: 'for (let ${1:item} of ${2:items}) { ${3:console.log(${1:item})} }',
+  },
+  {
+    name: "map",
+    description: "Project an array of items into a list of components.",
+    template: '${1:items}.map(${2:item} => ${3:Card([Text(${2:item}.name)])})',
   },
   {
     name: "if",
-    description: "Expression-form if / else.",
+    description: "Statement-form if / else (use a ternary for value picking).",
     template:
       'if (${1:cond}) {\n' +
-      '  ${2:Body()}\n' +
+      '  ${2:body}\n' +
       '} else {\n' +
-      '  ${3:Fallback()}\n' +
+      '  ${3:fallback}\n' +
       '}',
+  },
+  {
+    name: "ternary",
+    description: "JS ternary — `cond ? a : b`. Use it on the RHS of an assignment.",
+    template: '${1:result} = ${2:cond} ? ${3:trueBranch} : ${4:falseBranch}',
   },
   {
     name: "http",
@@ -1018,6 +1033,10 @@ function initPlayground(cm) {
     string: tags.string,
     number: tags.number,
     atom: tags.atom,
+    // Reserved control-flow / declaration keywords (`if`, `for`, `function`,
+    // `return`, `switch`, `try`, …). Mapped to `controlKeyword` so they get
+    // a distinct style from the `@builtin` functions (which use `keyword`).
+    keyword: tags.controlKeyword,
     builtin: tags.keyword,
     state: tags.special(tags.variableName),
     component: tags.typeName,
@@ -1045,6 +1064,7 @@ function initPlayground(cm) {
 
   const highlightStyle = lang.HighlightStyle.define([
     { tag: tags.keyword, color: "#7c3aed", fontWeight: "600" },          // @builtins
+    { tag: tags.controlKeyword, color: "#c026d3", fontWeight: "700" },   // reserved keywords
     { tag: tags.typeName, color: "#2563eb", fontWeight: "500" },         // Components
     { tag: tags.special(tags.variableName), color: "#ea580c" },          // $state
     { tag: tags.local(tags.variableName), color: "#0891b2" },            // loop vars
@@ -1627,6 +1647,49 @@ function initPlayground(cm) {
     return null;
   }
 
+  /**
+   * Build the hover-popup DOM for a reserved keyword: header, one-line
+   * definition, the syntax skeleton, and a usage example.
+   */
+  function buildKeywordTooltipDom(name, doc) {
+    const wrap = document.createElement("div");
+
+    const header = document.createElement("h4");
+    const icon = document.createElement("i");
+    icon.className = "fa-solid fa-key";
+    header.append(icon, document.createTextNode(` ${name}`));
+    const tag = document.createElement("span");
+    tag.className = "pg-cm-group";
+    tag.textContent = "keyword";
+    header.append(tag);
+    wrap.append(header);
+
+    const desc = document.createElement("p");
+    desc.className = "pg-cm-desc";
+    desc.textContent = doc.summary;
+    wrap.append(desc);
+
+    const syntaxLabel = document.createElement("div");
+    syntaxLabel.className = "pg-cm-section";
+    syntaxLabel.textContent = "Syntax";
+    wrap.append(syntaxLabel);
+    const syntax = document.createElement("code");
+    syntax.className = "pg-cm-sig";
+    syntax.textContent = doc.syntax;
+    wrap.append(syntax);
+
+    const exampleLabel = document.createElement("div");
+    exampleLabel.className = "pg-cm-section";
+    exampleLabel.textContent = "Example";
+    wrap.append(exampleLabel);
+    const example = document.createElement("pre");
+    example.className = "pg-cm-example";
+    example.textContent = doc.example;
+    wrap.append(example);
+
+    return wrap;
+  }
+
   function buildSpecTooltipDom(spec, kind, activeIndex, namedArgName) {
     const wrap = document.createElement("div");
 
@@ -1866,6 +1929,25 @@ function initPlayground(cm) {
     const prev = word.from > 0 ? text[word.from - 1] : "";
     const fromIdx = prev === "@" ? word.from - 1 : word.from;
     const rawName = text.slice(fromIdx, word.to);
+
+    // Reserved-keyword popup: definition + syntax + example. Only when the
+    // hovered word isn't sigil-prefixed (`@builtin` / `$state` are handled
+    // elsewhere) and is a known keyword.
+    if (prev !== "@" && prev !== "$" && KEYWORD_DOCS[rawName]) {
+      const kwDoc = KEYWORD_DOCS[rawName];
+      return {
+        pos: word.from,
+        end: word.to,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "pg-cm-tooltip";
+          dom.append(buildKeywordTooltipDom(rawName, kwDoc));
+          return { dom };
+        },
+      };
+    }
+
     const resolved = resolveSpec(rawName);
     if (resolved) {
       return {

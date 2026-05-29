@@ -553,11 +553,7 @@ function Item(todo) {
 }
 
 function App() {
-  return [
-    for (let todo of $todos) {
-      Item(todo)
-    }
-  ]
+  return $todos.map(todo => Item(todo))
 }
 
 $todos = [

@@ -74,7 +74,7 @@ Everything you need at runtime ships in a single bundle:
   `var` keywords are optional and have no effect on reactivity. The
   runtime tracks dependencies automatically. Automatic two-way binding
   via direct state refs (and member chains rooted at one —
-  `value: $form.email`), and **30+ pure `@`-functions** (`@Filter`,
+  `value: $form.email`), and **50+ pure `@`-functions** (`@Filter`,
   `@Sort`, `@Find`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`,
   `@Case`, `@Range`, `@Pick`, …).
 - **One component-call shape.** Every call follows the trailing-object
@@ -95,7 +95,7 @@ Everything you need at runtime ships in a single bundle:
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
   across renders. Components that need to hold UI state get a
   `helpers.useInstanceState(...)` slot keyed by their position in the tree.
-- **A rich component library** of **130+ components** spanning layout,
+- **A rich component library** of **170+ components** spanning layout,
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
   editors, advanced UI, and standard helpers. See [Component library](#component-library).
 - **Declarative side effects.** `effect(() => { body }, [...deps])` for
@@ -259,24 +259,15 @@ const prompt = el.getSystemPrompt({
   mode: "full", // or "chat" for the compact read-only prompt
   preamble: "You are an analytics assistant.",
   additionalRules: ["Always end with a FollowUpBlock of 2 prompts."],
-  tools: [{ name: "list_orders", description: "Return recent orders.", argsExample: { limit: 10 } }],
 });
 ```
 
-### 6. (Optional) Provide tools
+> Network calls are issued by the LLM-authored code itself via the
+> `http({ url, method, body, ... })` primitive. The host is not involved.
+> Install `el.registerHttpInterceptors(...)` if you need to attach auth
+> headers, retry on 401, or log every request.
 
-Register host-side async functions exposed to effect/action bodies as
-`ctx.tools.<name>(args)`:
-
-```js
-el.setTools({
-  list_orders: async ({ limit }) => fetch(`/api/orders?limit=${limit}`).then(r => r.json()),
-  update_order: async ({ id, status }) =>
-    fetch(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }).then(r => r.json()),
-});
-```
-
-### 7. (Optional) Listen for assistant messages
+### 6. (Optional) Listen for assistant messages
 
 Wire LLM-driven follow-ups back into your chat loop:
 
@@ -323,9 +314,8 @@ surfaces from the *generated prompt*, build it via
 | `appendChunk(chunk)`                                            | Append a streaming chunk and re-render.                                                                                      |
 | `clear()`                                                       | Reset state, queries, and the rendered output.                                                                               |
 | `setTheme(name \| tokens)`                                      | Apply a built-in theme by name or a partial token map.                                                                       |
-| `setTools(tools)`                                               | Register host async tools exposed to effect/action bodies as `ctx.tools.<name>(args)`. Replaces previously-registered tools. |
 | `registerComponents(specs, root?)`                              | Extend the built-in library with your own components.                                                                        |
-| `getSystemPrompt(options?)`                                     | Build a system prompt that matches the current library and tools. Pass `{ mode: "chat" }` for the compact variant.            |
+| `getSystemPrompt(options?)`                                     | Build a system prompt that matches the current library. Pass `{ mode: "chat" }` for the compact variant.                     |
 | `navigate(path)`                                                | Programmatically navigate. Updates `window.location.hash`.                                                                   |
 | `registerHttpInterceptors({ onRequest?, onResponse?, onError? })` | Install interceptors for the `http({...})` layer. `onResponse` receives a `retry()` one-shot for e.g. 401 refresh flows.       |
 | `serializeState()`                                              | Return every reactive atom as a plain JSON-friendly object (for SSR / resumption).                                           |
@@ -355,7 +345,7 @@ recursive program (typed live in the playground, mid-stream LLM token,
 | Dimension           | Default      | Triggers on                                              |
 | ------------------- | ------------ | -------------------------------------------------------- |
 | `componentDepth`    | 150 levels   | `function Foo() { return Foo() }` and other recursive trees |
-| `iterations`        | 250 000 / render | unbounded `for (let x of items) { … }` loops            |
+| `iterations`        | 250 000 / render | unbounded `for`/`while` loops inside function bodies    |
 | `arrayLength`       | 100 000 entries | `@Range(0, 1e9)`, `@Repeat(value, 1e9)`                 |
 
 When a limit trips, the runtime aborts the render, emits an `error`
@@ -458,19 +448,39 @@ aktion = pages
   the host element. Call from any action / effect / lambda body
   whenever the surrounding host page needs to react to a user
   interaction.
-- Standard JS control flow as **expressions** — `if`, `switch`, and
-  `for` evaluate to a value, so they can be assigned directly to a
-  binding or passed as a child:
+- Standard JS control flow — `if`, `switch`, `for`, `while`, `do…while`,
+  `try` are **statements**, exactly as in JavaScript. They run inside
+  any imperative body (`function`, lambda with `{ … }`, `effect`) but
+  cannot appear on the right-hand side of an assignment. Use ternaries
+  and `.map`/`.filter` for value-producing expressions. Bodies may be
+  either a block or a single statement (`if (!ok) return`):
 
   ```js
-  banner   = if ($error) { ErrorAlert($error) } else { Notice("All good") }
-  view     = switch ($tab) {
-    case "list":  ListView($items); break
-    case "grid":  GridView($items); break
-    default:      EmptyState("Pick a view")
+  banner = $error ? ErrorAlert($error) : Notice("All good")
+  rows   = $items.map(item => Row(item))
+  // Multi-way dispatch: wrap a `switch` in a function and `return` per arm.
+  function viewFor(tab) {
+    switch (tab) {
+      case "list":  return ListView($items)
+      case "grid":  return GridView($items)
+      default:      return EmptyState("Pick a view")
+    }
   }
-  rows     = for (let item of $items) { Row(item) }
+  view = viewFor($tab)
   ```
+- Full operator set — arithmetic (`+`, `-`, `*`, `/`, `%`, `**`),
+  comparison (`==` / `!=` / `===` / `!==`, `<` / `>` / `<=` / `>=`),
+  logical (`&&`, `||`, `??`), bitwise / shift (`&`, `|`, `^`, `~`, `<<`,
+  `>>`, `>>>`), and the relational keywords `instanceof` / `in`. Every
+  compound-assignment form is supported too (`+=`, `-=`, `*=`, `/=`,
+  `%=`, `**=`, `&&=`, `||=`, `??=`, `&=`, `|=`, `^=`, `<<=`, `>>=`,
+  `>>>=`).
+- Line continuations — any expression operator (`.`, `?.`, `?`, `:`,
+  `&&`, `||`, `??`, `==` / `!=` / `===` / `!==`, `<` / `>` / `<=` /
+  `>=`, `instanceof`, `+`, `-`, `*`, `/`, `%`, `**`) may appear at the
+  start of the next line and the parser keeps building the same
+  expression — matches JavaScript's ASI rules. Use this to split long
+  method chains, ternaries, and logical expressions across lines.
 - `http({ url, method, headers, body, query, ... })` — the only network
   primitive. Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
@@ -484,9 +494,30 @@ aktion = pages
 - Two-way binding is implicit: pass a `$variable` (or a member chain
   rooted at one — `value: $form.email`) as an input prop and the
   runtime wires it both ways.
-- Lambdas `(args) => expr` with standard default parameters
-  (`(x = 0) => x + 1`). Lambdas with `{ }` bodies are action-style
-  blocks and may `return`.
+- Lambdas — every JavaScript arrow form is supported: `() => expr`,
+  `x => expr` (single param, no parens), `(x) => expr`, `(x, y) => expr`,
+  `(x = 0) => x + 1` (defaults), `(...args) => sum(args)` (rest),
+  `({ a, b }) => a + b` / `([x, y]) => x` (destructured params),
+  `(args) => { … }` (multi-statement, may `return`). The body can wrap
+  onto the next line (`x =>\n  expr`).
+- Destructured parameters — both `function` declarations and lambdas
+  accept array / object patterns (`function Card({ title, tone = "info" })`,
+  `function head([first, ...rest])`), with the same defaults / renames /
+  rest support as `let`-destructuring.
+- JS expression niceties — array / object spread (`[...xs, y]`,
+  `{ ...base, k: v }`), array / object destructuring in `let` / `const`
+  / `var` (`let [a, b, ...rest] = arr`, `let { name, age = 0 } = user`),
+  computed property keys (`{ [$dynamic]: value }`), prefix and postfix
+  `++` / `--` (with JS-accurate return semantics), `new Constructor(...)`
+  with trailing member / call chains (`new Date(0).getTime()`), trailing
+  commas in function params / call args / literal lists. `async function`
+  is accepted as a no-op modifier; `await` is allowed in both statement
+  and expression position inside action / effect bodies.
+- Top-level imperative statements — `if` / `for` / `while` / `try` and
+  bare expression statements written at the program top level run once
+  per plan (e.g. building a `$state` array with a `while` loop). Inside
+  a render they behave like a module init block; prefer pure expressions
+  (`.map`, `@Range`) where you can.
 - **Built-in `@`-functions** — pure, side-effect-free helpers for data
   shaping, formatting, dates, math, and strings (`@Filter`, `@Sort`,
   `@Map`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`, `@Range`,
@@ -509,9 +540,12 @@ aktion = pages
 | `storage` | Browser persistence — `storage.set/get`, `storage.session.*`, `storage.cookies.*`. |
 | `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
+| JS stdlib | A curated, side-effect-free slice of the JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
 
 Both `storage` and `console` are **lowercase**; the `route` handle is
-**reserved** (never declare a state slot named `route`).
+**reserved** (never declare a state slot named `route`). Capability-granting
+globals (`fetch`, `eval`, `Function`, `window`, timers) are intentionally
+**not** exposed — use `http({...})` and `effect(...)` instead.
 
 ### The 60-second pitch
 
@@ -562,12 +596,12 @@ function remove(id) {
   $todos = @Filter($todos, "id", "!=", id)
 }
 
-row = (t) => Card([Stack([
+row = t => Card([Stack([
   Text(t.text),
   Button("Delete", { onClick: () => remove(t.id), variant: "ghost" })
 ])])
 
-list  = for (let t of $todos) { row(t) }
+list  = $todos.map(t => row(t))
 aktion = Stack([
   Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
   Button("Add", { onClick: add, variant: "primary" }),
@@ -656,7 +690,7 @@ deep authoring guide [`coding-gen-skill.md`](./coding-gen-skill.md).
 
 ## Component library
 
-The bundle ships **130+ components** grouped by domain. Reach for **pattern composites**
+The bundle ships **170+ components** grouped by domain. Reach for **pattern composites**
 (`Hero`, `PageHeader`, `Stats`, `Toolbar`, `EmptyState`, `Timeline`,
 `KanbanBoard`, `DescriptionList`, `PricingTable`, …) before hand-rolling
 the equivalent with `Card` + `Stack` — they're tuned to produce dense,
@@ -665,7 +699,7 @@ production-quality SaaS UI in a single line.
 | Group              | Components |
 | ------------------ | ---------- |
 | **Layout**         | `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
-| **Content**        | `Text`, `Image`, `Icon`, `Link`, `Badge`, `BadgeList`, `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd` |
+| **Content**        | `Text`, `Image`, `Icon`, `Badge`, `BadgeList`, `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd` |
 | **Forms**          | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm` |
 | **Data**           | `Table`, `Col`, `DataGrid`, `List`, `ListItem`, `StatCard`, `Stats`, `Sparkline`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList` |
 | **Charts**         | `BarChart`, `LineChart`, `PieChart`, `RadarChart`, `ScatterChart`, `Histogram`, `Heatmap`, `Gauge`, `Series` |
@@ -675,12 +709,56 @@ production-quality SaaS UI in a single line.
 | **Editors**        | `RichTextEditor`, `CodeEditor` |
 | **Chat**           | `SectionBlock`, `ListBlock`, `FollowUpBlock`, `FollowUpItem`, `ActionLink`, `ChatBubble` |
 | **Patterns**       | `Hero`, `PageHeader`, `SectionHeader`, `Toolbar`, `EmptyState`, `Timeline`, `TimelineItem`, `ActivityLog`, `FeatureGrid`, `FeatureItem`, `MediaCard`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `Notification`, `InboxPanel`, `OnboardingChecklist`, `KanbanBoard`, `KanbanColumn`, `KanbanCard`, `DescriptionList`, `DescriptionItem`, `StatusDot`, `PricingTable`, `PricingCard`, `LoadingState`, `ErrorState`, `SuccessState`, `Tour`, `Spotlight` |
-| **App shell**      | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView` |
+| **App shell**      | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem` (supports `to` for router navigation), `SplitView` |
 | **Advanced UI**    | `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`, `Truncate`, `InlineEdit`, `NotificationBell` |
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
+| **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection listeners or raw class / style to ANY component without it needing a dedicated prop. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
 | **Theming**        | `Theme` |
 | **Routing**        | `Router({ … })`, `NavLink` |
+
+### Form `onChange` callback
+
+Every input component accepts an optional `onChange(value)` callable
+that fires with the freshly-read value on every change. Use it alongside
+(or instead of) `$variable` two-way binding when you need to react
+beyond a state write (debounce a search, persist a setting, kick off
+a fetch).
+
+```js
+Input("query", { onChange: q => $results = http({ url: `/api/search?q=${q}` }) })
+Slider("vol", { min: 0, max: 100, value: $vol, onChange: v => storage.set("volume", v) })
+Switch("dark", { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
+```
+
+### Behaviour wrappers
+
+Six tiny wrappers attach behaviour to any component:
+
+```js
+// Clickable / tappable card
+OnClick(Card([Text("View order")]), { onClick: () => route.navigate("/orders/4821") })
+
+// Lazy-load sentinel — fires once when the placeholder scrolls into view
+OnIntersect(Skeleton({ variant: "card" }), { onEnter: $items.refetch, once: true })
+
+// Drop zone — uses standard HTML5 drag-and-drop
+OnMouse(Card([Text("Drop files here")]), {
+  dragOver: e => e.preventDefault(),
+  drop: e => { e.preventDefault(); $files = e.dataTransfer.files }
+})
+
+// Apply a custom class / style without breaking out of the component
+Css(Card([Text("Highlighted")]), { class: "highlight", style: "border-color: #f59e0b;" })
+```
+
+`OnClick` / `OnMouse` / `OnKeyboard` / `OnFocus` render the child via a
+transparent wrapper (`display: contents`) so the visual tree is
+unchanged — only events bubble through the wrapper. `OnIntersect` uses
+`IntersectionObserver` and disposes cleanly when the component leaves
+the tree. `Css` merges classes / inline styles directly onto the
+rendered child element. `Link` is the same wrapper applied as an
+`<a>` anchor with optional router-aware navigation (`to`).
 
 The full catalog with positional signatures, prop tables, enum values, and
 live previews is at
@@ -1065,7 +1143,7 @@ consumes from the CDN.
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
 | `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
-| `visual-editor.html`                | Drag-and-drop visual editor for the full 130+ component library: typed prop editors (text, number, boolean, enum, expression), DnD reorder, slot-aware drop zones, breadcrumbs, live preview, and import / export `.aktion` + self-contained HTML. The palette pane has two tabs — **Components** (DnD palette) and **Outline** (the program's top-level entities: assignments, `$state`, component/action/effect declarations). The Outline tab lets you focus the canvas on any entity, create new ones (`+` menu), and rename / delete them. The canvas pane has three modes: **Raw Edit** (tree-of-cards view of the active assignment, useful for surgical structural edits), **Visual Edit** (WYSIWYG canvas with overlay chrome), and **Preview** (chrome-free WYSIWYG render). The palette, inspector, and toolbar stay identical across modes. **Cross-entity selection**: clicking any rendered component on the canvas — even when it lives in a different binding (e.g. `aktion = Stack([block])` where `block = Box(...)` lives in its own assignment) — selects the component, automatically focuses its owning entity, and surfaces its props in the inspector. The breadcrumb adds a "home" button to jump back to `aktion`. The **Source drawer** ships an editable `.aktion` textarea with **Apply changes** / **Revert** so power users can hand-edit the whole program and re-import it; parse diagnostics surface in a hint banner below the editor. |
+| `visual-editor.html`                | Drag-and-drop visual editor for the full 170+ component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
 | `live-examples.html`                | Catalog page that links every demo into the shared `live-example.html?example=<slug>` shell. |
 | `live-example.html`                 | Shared shell for the bundled live examples — picks the demo from the `?example=<slug>` query parameter. |
@@ -1080,7 +1158,7 @@ Every standalone demo is served by a single shell page
 and setup code together. Open any example with
 `live-example.html?example=<slug>` — the shell renders the original
 hero / source / output layout, so each demo doubles as an integration
-recipe for `setResponse`, `appendChunk`, `setTools`, and `setTheme`.
+recipe for `setResponse`, `appendChunk`, and `setTheme`.
 
 | Demo slug                       | Highlights                                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -1198,26 +1276,14 @@ script.
 npm test
 ```
 
-The suite covers:
-
-- Parser / lexer correctness (`tests/parser.test.ts`).
-- Runtime evaluator + reactive state + `http({...})` (`tests/runtime.test.ts`).
-- Effect and action declarations — see `tests/javascript-integration.test.ts`.
-- Hash-based router + `NavLink` (`tests/router.test.ts`).
-- Theme resolution and token application (`tests/theme.test.ts`).
-- In-script `Theme(...)` overrides (`tests/in-script-theme.test.ts`).
-- Component library smoke tests (`tests/library.test.ts`).
-- Element-level integration via happy-dom (`tests/element.test.ts`).
-- System prompt generator output (`tests/prompt.test.ts`).
-- Storage + console globals (`tests/storage-console.test.ts`).
-- End-to-end programs (`tests/suis2-end-to-end.test.ts`).
-- Language support spec for editor / tooling integrations (`tests/language.test.ts`).
-- One-positional-max enforcement (`tests/suis2-one-positional.test.ts`).
-- Component prop aliases (`tests/suis2-prop-aliases.test.ts`).
-- Icon rendering (`tests/icons.test.ts`).
-- Language concept coverage — computed values, math, lambdas,
-  hoisting, i18n, `Theme({...})`, `for` extensions, user components,
-  reactive state edge cases (`tests/language-concepts.test.ts`).
+The suite covers parser/lexer, runtime evaluator + reactive state +
+`http({...})`, effects / actions, the hash-based router + `NavLink`,
+theme resolution, in-script `Theme(...)` overrides, the component
+library, element-level integration via happy-dom, the system prompt
+generator, storage / console globals, the language-support spec for
+editor tooling, prop aliases & one-positional-max enforcement, icon
+rendering, and language-concept coverage (computed values, math,
+lambdas, hoisting, i18n, `for` extensions, user components).
 
 ### Build the documentation site
 
@@ -1270,27 +1336,11 @@ trees, `http()`, `@`-functions) keep working without `unsafe-eval`.
 
 ## CDN deployment
 
-This repository ships its own copy of the bundle on GitHub Pages, so
-most users do not need to host anything themselves:
-
-```html
-<script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"></script>
-<aktion-app theme="dark"></aktion-app>
-```
-
-…plus a fetch of `system_prompt.txt` server-side to build LLM messages:
-
-```bash
-curl https://asfand-dev.github.io/aktion/dist/system_prompt.txt
-```
-
-To ship your own copy, run `npm run build` and serve the `dist/` folder
-from any static host — every artifact in `dist/` is self-contained.
-
-GitHub Pages deployment for this repo is automated via
-[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
-Push to `main` and the workflow will build, test, assemble `site/`, and
-publish.
+This repo serves its own bundle on GitHub Pages (see Quick start §1).
+To ship your own copy, run `npm run build` and serve `dist/` from any
+static host — every artifact in `dist/` is self-contained. Push to
+`main` and [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)
+builds, tests, and publishes.
 
 ---
 

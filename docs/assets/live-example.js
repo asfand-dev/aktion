@@ -121,12 +121,14 @@ gateSection = Card([
 ])
 
 formErrors = [
-  if ($title == "") { {label: "title",   message: "Title is required."} } else { null },
-  if ($pin.length != 4) { {label: "pin",     message: "PIN must be 4 digits."} } else { null },
-  if ($otp.length != 6) { {label: "otp",     message: "Enter the 6-digit OTP."} } else { null }
+  $title == "" ? {label: "title",   message: "Title is required."} : null,
+  $pin.length != 4 ? {label: "pin",     message: "PIN must be 4 digits."} : null,
+  $otp.length != 6 ? {label: "otp",     message: "Enter the 6-digit OTP."} : null
 ]
 
-validationCard = if (@Count(@Filter(formErrors, "label", "!=", null)) > 0) { Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), { title: "Fix these before publishing" })]) } else { Card([Callout("Ready to publish", { tone: "success", description: "All gates passed — hit Publish to go live.", icon: "circle-check", compact: true })]) }
+validationCard = @Count(@Filter(formErrors, "label", "!=", null)) > 0
+  ? Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), { title: "Fix these before publishing" })])
+  : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed — hit Publish to go live.", icon: "circle-check", compact: true })])
 
 wizardSteps = [
   {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
@@ -137,7 +139,7 @@ wizardSteps = [
 
 wizard = MultiStepForm(wizardSteps, { value: $step, onComplete: () => { $published = true; emit("assistant-message", { message: "Wizard submitted" }) } })
 
-tagBadges = Stack(for (let t of $tags) { Badge(t, { tone: "primary", icon: "tag", size: "sm" }) }, { direction: "row", gap: "xs" })
+tagBadges = Stack($tags.map(t => Badge(t, { tone: "primary", icon: "tag", size: "sm" })), { direction: "row", gap: "xs" })
 
 previewCard = Card([
   SectionHeader("Live preview", { subtitle: $title, eyebrow: "OUTPUT",
@@ -148,7 +150,7 @@ previewCard = Card([
 ])
 
 teammateChips = Stack(
-  for (let {name, handle, role} of teammates) { PersonChip(name, { role: role, size: "sm" }) },
+  teammates.map(m => PersonChip(m.name, { role: m.role, size: "sm" })),
   { direction: "row", gap: "s" }
 )
 
@@ -157,7 +159,9 @@ teammatesCard = Card([
   teammateChips
 ])
 
-publishedBanner = if ($published) { Banner("Published!", { message: \`\${$title} went live.\`, action: Button("View live post", { action: () => { window.open("/blog", "_blank", "noopener,noreferrer") }, variant: "primary" }), icon: "rocket", tone: "success" }) } else { null }
+publishedBanner = $published
+  ? Banner("Published!", { message: \`\${$title} went live.\`, action: Button("View live post", { action: () => { window.open("/blog", "_blank", "noopener,noreferrer") }, variant: "primary" }), icon: "rocket", tone: "success" })
+  : null
 
 contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], { direction: "column", gap: "l" })], { columns: {sm: 1, lg: 2}, gap: "l" })
 
@@ -256,12 +260,14 @@ cols = [
   Col("Commits", { values: contributors.commits, format: "number", align: "right", sortable: true,  filterable: false })
 ]
 
-bulkToolbar = if (@Count($selectedIds) > 0) { Toolbar({
-    left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
-    right: [Button("Email selected", { variant: "ghost", size: "small", icon: "envelope" }),
-     Button("Export CSV", { variant: "secondary", size: "small", icon: "file-csv" }),
-     Button("Clear", { action: () => { $selectedIds = "" }, variant: "ghost", size: "small" })]
-  }) } else { null }
+bulkToolbar = @Count($selectedIds) > 0
+  ? Toolbar({
+      left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+      right: [Button("Email selected", { variant: "ghost", size: "small", icon: "envelope" }),
+       Button("Export CSV", { variant: "secondary", size: "small", icon: "file-csv" }),
+       Button("Clear", { action: () => { $selectedIds = "" }, variant: "ghost", size: "small" })]
+    })
+  : null
 
 leaderboard = Card([
   SectionHeader("Top contributors", { subtitle: \`\${@Count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
@@ -449,12 +455,12 @@ photos = [
 ]
 
 heroCarousel = Carousel(
-  for (let {src, caption} of photos) { {src: src, alt: caption, caption: caption} },
+  photos.map(p => ({src: p.src, alt: p.caption, caption: p.caption})),
   { activeIndex: $slide, aspectRatio: "16:9", autoplay: true }
 )
 
 galleryGrid = Gallery(
-  for (let {src, caption} of photos) { {src: src, alt: caption, caption: caption} },
+  photos.map(p => ({src: p.src, alt: p.caption, caption: p.caption})),
   { columns: 3, onClick: () => { $lightboxIdx = 0; $lightboxOpen = true } }
 )
 
@@ -680,7 +686,7 @@ function UserRow(id, name, role, joined) {
 
 usersListPage = Card([
   CardHeader("Users", { subtitle: "Click a row to deep-link into the detail page" }),
-  Stack(for (let {id, name, role, joined} of $users) { UserRow(id, name, role, joined) })
+  Stack($users.map(u => UserRow(u.id, u.name, u.role, u.joined)))
 ])
 
 function userDetailPage(id) {
@@ -821,11 +827,14 @@ function deleteWorkspace() {
   emit("assistant-message", { message: "Workspace deleted" })
 }
 
-saveBanner = switch ($saveStatus) {
-  case "saving": Banner("Saving…", { message: "Hang tight while we sync your preferences.", icon: "spinner", tone: "info" }); break
-  case "saved": Banner("Saved", { message: "Your preferences are up to date.", icon: "circle-check", tone: "success" }); break
-  default: null
+function makeSaveBanner(status) {
+  switch (status) {
+    case "saving": return Banner("Saving…", { message: "Hang tight while we sync your preferences.", icon: "spinner", tone: "info" })
+    case "saved":  return Banner("Saved", { message: "Your preferences are up to date.", icon: "circle-check", tone: "success" })
+    default:       return null
+  }
 }
+saveBanner = makeSaveBanner($saveStatus)
 
 header = PageHeader("Settings", {
   subtitle: "Personalise your workspace",
@@ -1059,13 +1068,13 @@ function archiveCard(cardId) {
 }
 
 board = KanbanBoard(
-  for (let col of $columns) {
+  $columns.map(col =>
     KanbanColumn(col.title, {
-      items: for (let card of col.cards) {
+      items: col.cards.map(card =>
         KanbanCard(card.title, { tags: [card.priority], assignee: card.assignee })
-      }
+      )
     })
-  }
+  )
 )
 
 addForm = Card([
@@ -1152,9 +1161,9 @@ overviewTab = Stack([kpis, chart], { direction: "column", gap: "l" })
 feedTab = Card([
   SectionHeader("Event feed", { subtitle: "Latest 10 events", eyebrow: "FEED" }),
   InfiniteList(
-    for (let e of $events.slice(-10).reverse()) {
+    $events.slice(-10).reverse().map(e =>
       ListItem(\`\${e.ts} — \${e.source}\`, { description: \`Value: \${e.value}\`, icon: e.source == "web" ? "globe" : "server" })
-    },
+    ),
     { hasMore: false }
   )
 ])
@@ -1230,20 +1239,18 @@ toolbar = Card([
 ])
 
 recipeGrid = Grid(
-  for (let r of filtered) {
-    Card([
-      Image(r.image, { alt: r.title, aspectRatio: "16:10" }),
-      CardHeader(r.title, { subtitle: \`\${r.cuisine} · \${r.time}\` }),
-      Stack([
-        Badge(\`★ \${r.rating}\`, { tone: r.rating >= 4.7 ? "success" : "primary", size: "sm" }),
-        Stack(r.tags.map((t) => Badge(t, { tone: "neutral", size: "sm" })), { direction: "row", gap: "xs" })
-      ], { direction: "row", gap: "s" })
-    ])
-  },
+  filtered.map(r => Card([
+    Image(r.image, { alt: r.title, aspectRatio: "16:10" }),
+    CardHeader(r.title, { subtitle: \`\${r.cuisine} · \${r.time}\` }),
+    Stack([
+      Badge(\`★ \${r.rating}\`, { tone: r.rating >= 4.7 ? "success" : "primary", size: "sm" }),
+      Stack(r.tags.map((t) => Badge(t, { tone: "neutral", size: "sm" })), { direction: "row", gap: "xs" })
+    ], { direction: "row", gap: "s" })
+  ])),
   { columns: {sm: 1, md: 2, lg: 3}, gap: "l" }
 )
 
-emptyState = if (filtered.length == 0) { EmptyState("No recipes found", { description: "Try a different search or filter.", icon: "utensils" }) } else { null }
+emptyState = filtered.length == 0 ? EmptyState("No recipes found", { description: "Try a different search or filter.", icon: "utensils" }) : null
 
 aktion = Stack([
   PageHeader("Recipe explorer", { subtitle: \`\${filtered.length} of \${$recipes.length} recipes\`, breadcrumbs: ["Kitchen", "Browse"] }),
@@ -1325,12 +1332,10 @@ kpis = Stats([
 listView = Card([
   SectionHeader("Expenses", { subtitle: \`\${$expenses.length} entries\`, eyebrow: "LIST" }),
   Stack(
-    for (let e of $expenses) {
-      Stack([
-        Stack([Text(e.label, { variant: "body-heavy" }), Badge(e.category, { tone: "neutral", size: "sm" })], { direction: "row", gap: "xs" }),
-        Stack([Text(\`$\${e.amount}\`, { variant: "body-heavy" }), Button("Remove", { action: () => { removeExpense(e.id) }, variant: "ghost", size: "small", icon: "trash" })], { direction: "row", gap: "xs" })
-      ], { direction: "row", gap: "m", justify: "between", align: "center" })
-    },
+    $expenses.map(e => Stack([
+      Stack([Text(e.label, { variant: "body-heavy" }), Badge(e.category, { tone: "neutral", size: "sm" })], { direction: "row", gap: "xs" }),
+      Stack([Text(\`$\${e.amount}\`, { variant: "body-heavy" }), Button("Remove", { action: () => { removeExpense(e.id) }, variant: "ghost", size: "small", icon: "trash" })], { direction: "row", gap: "xs" })
+    ], { direction: "row", gap: "m", justify: "between", align: "center" })),
     { direction: "column", gap: "s" }
   )
 ])
@@ -1437,30 +1442,26 @@ searchInput = Card([
 
 resultsList = Card([
   SectionHeader("Results", { subtitle: \`\${$results.length} matches\`, eyebrow: "RESULTS" }),
-  if ($results.length > 0) {
-    Stack(
-      for (let item of $results) {
-        Stack([
+  $results.length > 0
+    ? Stack(
+        $results.map(item => Stack([
           Icon(item.icon, { size: "sm" }),
           Stack([Text(item.title, { variant: "body-heavy" }), Badge(item.category, { tone: "neutral", size: "sm" })], { direction: "row", gap: "xs" }),
           Button("Go", { action: () => { selectItem(item.id) }, variant: "ghost", size: "small" })
-        ], { direction: "row", gap: "m", align: "center", justify: "between" })
-      },
-      { direction: "column", gap: "xs" }
-    )
-  } else {
-    EmptyState("No results", { description: "Try a different search term.", icon: "magnifying-glass" })
-  }
+        ], { direction: "row", gap: "m", align: "center", justify: "between" })),
+        { direction: "column", gap: "xs" }
+      )
+    : EmptyState("No results", { description: "Try a different search term.", icon: "magnifying-glass" })
 ])
 
-selectedCard = if ($selected != null) {
-  Card([
-    SectionHeader(\`Selected: \${$selected.title}\`, { eyebrow: "DETAIL",
-      status: Badge($selected.category, { tone: "primary", size: "sm" }) }),
-    Text(\`You selected "\${$selected.title}" from the \${$selected.category} group.\`, { variant: "body" }),
-    Buttons([Button("Clear selection", { action: () => { $selected = null }, variant: "ghost" })])
-  ])
-} else { null }
+selectedCard = $selected != null
+  ? Card([
+      SectionHeader(\`Selected: \${$selected.title}\`, { eyebrow: "DETAIL",
+        status: Badge($selected.category, { tone: "primary", size: "sm" }) }),
+      Text(\`You selected "\${$selected.title}" from the \${$selected.category} group.\`, { variant: "body" }),
+      Buttons([Button("Clear selection", { action: () => { $selected = null }, variant: "ghost" })])
+    ])
+  : null
 
 aktion = Stack([
   PageHeader("Chat search", { subtitle: "Command-palette style search with debounce", breadcrumbs: ["Tools", "Search"] }),

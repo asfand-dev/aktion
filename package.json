@@ -23,7 +23,7 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run build && vite",
     "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs && node scripts/emit-entry.mjs",
     "build:lib": "vite build",
     "build:prompt": "node scripts/emit-prompt.mjs",

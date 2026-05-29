@@ -199,11 +199,12 @@ export const MenuItem: ComponentSpec = {
   name: "MenuItem",
   description:
     "Single item inside a DropdownMenu. Renders a button-style row with an " +
-    "optional leading icon and trailing keyboard-shortcut hint. The action " +
-    "argument runs when clicked; the menu closes automatically afterwards.",
+    "optional leading icon and trailing keyboard-shortcut hint. `onClick` " +
+    "(legacy: `action`) runs when clicked; the menu closes automatically " +
+    "afterwards.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable to execute on click" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable to execute on click" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown before the label" },
     { name: "shortcut", type: "string", optional: true, description: "Trailing keyboard-shortcut hint (e.g. \"⌘ K\")" },
     { name: "variant", type: "string", optional: true, enum: MENU_VARIANTS, description: "Use \"danger\" for destructive actions" },
@@ -227,7 +228,7 @@ export const MenuItem: ComponentSpec = {
     if (shortcut) btn.append(el("span", { class: "rui-menu-item-shortcut" }, [shortcut]));
     if (!disabled) {
       btn.onclick = () => {
-        helpers.invoke(props.action);
+        helpers.invoke(props.onClick);
       };
     }
     return btn;

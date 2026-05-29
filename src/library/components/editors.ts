@@ -9,6 +9,7 @@
 
 import type { ComponentSpec } from "../types.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
+import { attachOnChange } from "./wrappers.js";
 
 /* ----------------------------------------------------------------------- *
  * RichTextEditor
@@ -48,6 +49,7 @@ export const RichTextEditor: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true, description: "Empty-state prompt" },
     { name: "minHeight", type: "string", optional: true, description: "CSS min-height for the editor area (default 160px)" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current HTML on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -138,6 +140,10 @@ export const RichTextEditor: ComponentSpec = {
       const target = (event.currentTarget ?? event.target) as HTMLElement;
       refreshEmpty(target);
     };
+    attachOnChange(editor, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLElement).innerHTML,
+    });
     root.append(editor);
     return root;
   },
@@ -167,6 +173,7 @@ export const CodeEditor: ComponentSpec = {
     { name: "tabSize", type: "number", optional: true, description: "Spaces per Tab (default 2)" },
     { name: "showGutter", type: "boolean", optional: true, description: "Show line-number gutter (default true)" },
     { name: "readonly", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current source on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -242,6 +249,12 @@ export const CodeEditor: ComponentSpec = {
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName && !readonly) {
       helpers.bindState(textarea, stateName, {
+        event: "input",
+        getValue: (n) => (n as HTMLTextAreaElement).value,
+      });
+    }
+    if (!readonly) {
+      attachOnChange(textarea, props.onChange, helpers, {
         event: "input",
         getValue: (n) => (n as HTMLTextAreaElement).value,
       });
@@ -429,6 +442,7 @@ export const ColorPicker: ComponentSpec = {
     { name: "label", type: "string", optional: true },
     { name: "swatches", type: "string[]", optional: true, description: "Preset hex colors (default to a 12-color palette)" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected hex string" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -490,6 +504,12 @@ export const ColorPicker: ComponentSpec = {
         colorInput.value = next;
         colorInput.dispatchEvent(new Event("input", { bubbles: true }));
       };
+    }
+    if (!disabled) {
+      attachOnChange(colorInput, props.onChange, helpers, {
+        event: "input",
+        getValue: (n) => (n as HTMLInputElement).value,
+      });
     }
     row.append(colorInput, textInput);
     root.append(row, swatchRow);

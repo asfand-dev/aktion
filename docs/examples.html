@@ -887,7 +887,7 @@ aktion = Card([
 
   // --- Components ---
   function CatalogPage() {
-    $visible = if ($category == "all") { products } else { @Filter(products, "category", "==", $category) }
+    $visible = $category == "all" ? products : @Filter(products, "category", "==", $category)
 
     header = PageHeader("Product Catalog", {
       subtitle: "Explore our latest arrivals and essentials",
@@ -912,43 +912,37 @@ aktion = Card([
       right: [Text(`${$visible.length} products found`, { tone: "muted" })]
     })
 
-    cards = Grid(for (let p of $visible) {
-      MediaCard(p.name, {
-        imageSrc: p.img,
-        description: @Format(p.price, "currency", "USD"),
-        badge: Badge(p.category, { tone: "info" }),
-        actions: [
-          Button("Add to cart", {
-            icon: "plus",
-            onClick: () => addToCart(p),
-            variant: "primary",
-            fullWidth: true
-          })
-        ],
-        ratio: "4:3"
-      })
-    }, { columns: { sm: 1, md: 2, lg: 4 }, gap: "m" })
+    cards = Grid($visible.map(p =&gt; MediaCard(p.name, {
+      imageSrc: p.img,
+      description: @Format(p.price, "currency", "USD"),
+      badge: Badge(p.category, { tone: "info" }),
+      actions: [
+        Button("Add to cart", {
+          icon: "plus",
+          onClick: () => addToCart(p),
+          variant: "primary",
+          fullWidth: true
+        })
+      ],
+      ratio: "4:3"
+    })), { columns: { sm: 1, md: 2, lg: 4 }, gap: "m" })
 
     return Stack([header, filters, cards], { gap: "xl" })
   }
 
   cartContent = Stack([
-    if ($cart.length == 0) {
-      EmptyState("Your cart is empty", { icon: "cart-shopping" })
-    } else {
-      Stack([
-        for (let item of $cart) {
-          PersonChip(item.name, { role: @Format(item.price, "currency", "USD"), avatarSrc: item.img })
-        },
-        Separator(),
-        Stack([
-          Text("Total", { variant: "body-heavy" }),
-          Spacer(),
-          Text(@Format(@Sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
-        ], { direction: "row" }),
-        Button("Checkout", { onClick: checkout, variant: "primary", fullWidth: true })
-      ], { gap: "s" })
-    }
+    $cart.length == 0
+      ? EmptyState("Your cart is empty", { icon: "cart-shopping" })
+      : Stack([
+          ...$cart.map(item =&gt; PersonChip(item.name, { role: @Format(item.price, "currency", "USD"), avatarSrc: item.img })),
+          Separator(),
+          Stack([
+            Text("Total", { variant: "body-heavy" }),
+            Spacer(),
+            Text(@Format(@Sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
+          ], { direction: "row" }),
+          Button("Checkout", { onClick: checkout, variant: "primary", fullWidth: true })
+        ], { gap: "s" })
   ], { padding: "m", maxWidth: "320px" })
 
   // --- Router & Layout ---
@@ -1022,16 +1016,16 @@ function checkout() {
   emit("assistant-message", { message: "Proceed to checkout" })
 }
 
-$lines = for (let item of $cart) { item.qty * item.price }
+$lines = $cart.map(item =&gt; item.qty * item.price)
 $subtotal = @Sum($lines)
-$shipping = if ($subtotal &gt;= 100) { 0 } else { 9 }
+$shipping = $subtotal &gt;= 100 ? 0 : 9
 $total = $subtotal + $shipping
 
-items = for (let item of $cart) {
+items = $cart.map(item =&gt;
   ListItem(item.name, {
     meta: `${item.qty} × ${@Format(item.price, "currency", "USD")}`,
     icon: "box" })
-}
+)
 
 summary = Card([
   SectionHeader("Order summary"),
@@ -1086,65 +1080,6 @@ aktion = Stack([
       Button("Reset", { action: reset, variant: "secondary", size: "small" })
     ], { direction: "row", gap: "m", align: "center", justify: "between" })
   ])</code></pre>
-        </div>
-      </div>
-
-      <div class="example">
-        <div class="example-header"><h3>Live form validation (effect + reactive errors)</h3></div>
-        <div class="example-tabs" role="tablist">
-          <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-          <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <aktion-app theme="light"></aktion-app>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">$email = ""
-$password = ""
-$emailError = ""
-$pwError = ""
-$strength = ""
-
-effect(() => {
-  const email = (ctx.state.get("email") ?? "").trim();
-  const pw = ctx.state.get("password") ?? "";
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  ctx.state.set("emailError",
-    !email ? "" : (emailRe.test(email) ? "" : "Looks like an invalid email."));
-  let strength = "";
-  if (pw.length === 0) strength = "";
-  else if (pw.length &lt; 8) strength = "Too short — use at least 8 characters.";
-  else if (!/\d/.test(pw) || !/[A-Z]/.test(pw)) strength = "Add a number and an uppercase letter.";
-  else strength = "Strong enough.";
-  ctx.state.set("strength", strength);
-  ctx.state.set("pwError", pw && pw.length &lt; 8 ? "Password is too short." : "");
-}, [$email, $password])
-
-function createAccount() {
-  emit("assistant-message", { message: "Account created!" })
-}
-
-$canSubmit = $email != "" &amp;&amp; $password != "" &amp;&amp; $emailError == "" &amp;&amp; $pwError == ""
-
-aktion = Stack([
-  Card([
-    CardHeader("Sign up", { subtitle: "Validation runs in-browser as you type" }),
-    FormControl("Email", Input("email", {
-      type: "email", placeholder: "you@example.com", value: $email })),
-    if ($emailError != "") { Callout("error", { title: "Email", text: $emailError }) } else { null },
-    FormControl("Password", Input("password", {
-      type: "password", placeholder: "At least 8 characters", value: $password })),
-    if ($strength != "") {
-      Callout(if ($pwError == "") { "info" } else { "warning" }, {
-        title: "Password strength", text: $strength })
-    } else { null },
-    Button("Create account", {
-      action: createAccount,
-      variant: if ($canSubmit) { "primary" } else { "ghost" } })
-  ])
-])</code></pre>
         </div>
       </div>
     </main>

@@ -24,9 +24,12 @@ import {
   MediaCard, Stats, Tile, Notification, PersonChip,
 } from "../src/library/components/patterns.js";
 import {
-  Container, Spacer, Quote, Markdown, Image, Link, Skeleton,
+  Container, Spacer, Quote, Markdown, Image, Skeleton,
   Spinner, Badge, BadgeList, Callout, CodeBlock, Text, TextContent,
 } from "../src/library/components/content.js";
+import {
+  Link, OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css,
+} from "../src/library/components/wrappers.js";
 import { SearchBar, MultiSelect, DateRangePicker, Button } from "../src/library/components/forms.js";
 import {
   Stack, StackItem, Grid, GridItem, Box, resolveSpan,
@@ -624,7 +627,7 @@ describe("Pattern composites", () => {
     };
     const node = KanbanCard.render(
       makeNode("KanbanCard", []),
-      { title: "Task", action },
+      { title: "Task", onClick: action },
       localHelpers,
     ) as HTMLElement;
     expect(node.getAttribute("role")).toBe("button");
@@ -732,7 +735,7 @@ describe("Rich layout patterns", () => {
     };
     const node = SidebarItem.render(
       makeNode("SidebarItem", []),
-      { label: "Projects", icon: "folder", active: true, badge: "12", action },
+      { label: "Projects", icon: "folder", active: true, badge: "12", onClick: action },
       localHelpers,
     ) as HTMLButtonElement;
     expect(node.getAttribute("data-active")).toBe("true");
@@ -1283,7 +1286,7 @@ describe("Tile", () => {
     };
     const node = Tile.render(
       makeNode("Tile", []),
-      { label: "Inbox", icon: "inbox", value: "12", description: "Unread", tone: "primary", action },
+      { label: "Inbox", icon: "inbox", value: "12", description: "Unread", tone: "primary", onClick: action },
       localHelpers,
     ) as HTMLElement;
     expect(node.tagName.toLowerCase()).toBe("button");
@@ -1349,7 +1352,7 @@ describe("PersonChip", () => {
     };
     const node = PersonChip.render(
       makeNode("PersonChip", []),
-      { name: "Asha", action },
+      { name: "Asha", onClick: action },
       localHelpers,
     ) as HTMLElement;
     expect(node.tagName.toLowerCase()).toBe("button");
@@ -1515,7 +1518,7 @@ describe("SearchBar", () => {
     };
     const form = SearchBar.render(
       makeNode("SearchBar", ["q"]),
-      { id: "q", action, submitLabel: "Go" },
+      { id: "q", onSubmit: action, submitLabel: "Go" },
       localHelpers,
     ) as HTMLFormElement;
     const submit = form.querySelector<HTMLButtonElement>("button.rui-search-bar-submit");
@@ -1931,7 +1934,7 @@ describe("FileUpload", () => {
     };
     const node = FileUpload.render(
       makeNode("FileUpload", ["avatar"]),
-      { id: "avatar", label: "Drop a photo", accept: "image/*", action },
+      { id: "avatar", label: "Drop a photo", accept: "image/*", onSelect: action },
       localHelpers,
     ) as HTMLElement;
     expect(node.classList.contains("rui-file-upload")).toBe(true);
@@ -2035,7 +2038,7 @@ describe("Tree & TreeNode", () => {
     };
     const node = TreeNode.render(
       makeNode("TreeNode", ["index.ts"]),
-      { label: "index.ts", action },
+      { label: "index.ts", onClick: action },
       localHelpers,
     ) as HTMLElement;
     (node as HTMLButtonElement).click();
@@ -2093,7 +2096,7 @@ describe("Navbar & NavbarItem", () => {
     };
     const node = MenuItem.render(
       makeNode("MenuItem", ["Save", action, "save", "⌘S"]),
-      { label: "Save", action, icon: "save", shortcut: "⌘S" },
+      { label: "Save", onClick: action, icon: "save", shortcut: "⌘S" },
       localHelpers,
     ) as HTMLElement;
     expect(node.tagName.toLowerCase()).toBe("button");

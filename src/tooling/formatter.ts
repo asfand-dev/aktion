@@ -124,6 +124,79 @@ function printStatement(stmt: Statement, indent: number): string {
     case "ExpressionStatement": {
       return `${pad}${printExpression(stmt.expression, indent)}`;
     }
+    case "IfStatement": {
+      const test = printExpression(stmt.test, indent);
+      const cons = `{\n${printBlock(stmt.consequent.body, indent + 1)}\n${pad}}`;
+      if (!stmt.alternate) return `${pad}if (${test}) ${cons}`;
+      const alt = stmt.alternate.kind === "IfStatement"
+        ? printStatement(stmt.alternate, indent).trimStart()
+        : `{\n${printBlock(stmt.alternate.body, indent + 1)}\n${pad}}`;
+      return `${pad}if (${test}) ${cons} else ${alt}`;
+    }
+    case "SwitchStatement": {
+      const disc = printExpression(stmt.discriminant, indent);
+      const cases = stmt.cases.map((c) => printSwitchCase(c, indent + 1)).join("\n");
+      return `${pad}switch (${disc}) {\n${cases}\n${pad}}`;
+    }
+    case "ForOfStatement": {
+      const iter = printExpression(stmt.iterable, indent);
+      const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
+      return `${pad}for (let ${stmt.item} of ${iter}) ${body}`;
+    }
+    case "ForClassicStatement": {
+      const init = stmt.init ? printStatement(stmt.init, 0).trimStart() : "";
+      const test = stmt.test ? printExpression(stmt.test, indent) : "";
+      const update = stmt.update ? printExpression(stmt.update, indent) : "";
+      const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
+      return `${pad}for (${init}; ${test}; ${update}) ${body}`;
+    }
+    case "WhileStatement": {
+      const test = printExpression(stmt.test, indent);
+      const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
+      return `${pad}while (${test}) ${body}`;
+    }
+    case "DoWhileStatement": {
+      const test = printExpression(stmt.test, indent);
+      const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
+      return `${pad}do ${body} while (${test})`;
+    }
+    case "ForInStatement": {
+      const iter = printExpression(stmt.iterable, indent);
+      const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
+      return `${pad}for (let ${stmt.item} in ${iter}) ${body}`;
+    }
+    case "DestructureStatement": {
+      const open = stmt.patternKind === "array" ? "[" : "{";
+      const close = stmt.patternKind === "array" ? "]" : "}";
+      const parts = stmt.bindings.map((b) => {
+        const lead = b.rest ? "..." : "";
+        const keyed = b.sourceKey ? `${b.sourceKey}: ${b.name}` : (b.name || "");
+        const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent)}` : "";
+        return `${lead}${keyed}${def}`;
+      });
+      const expr = printExpression(stmt.expression, indent);
+      return `${pad}let ${open}${parts.join(", ")}${close} = ${expr}`;
+    }
+    case "BreakStatement":
+      return `${pad}break`;
+    case "ContinueStatement":
+      return `${pad}continue`;
+    case "ThrowStatement":
+      return `${pad}throw ${printExpression(stmt.argument, indent)}`;
+    case "TryStatement": {
+      const block = `{\n${printBlock(stmt.block.body, indent + 1)}\n${pad}}`;
+      let out = `${pad}try ${block}`;
+      if (stmt.catchBlock) {
+        const catchHead = stmt.catchParam ? ` (${stmt.catchParam})` : "";
+        const catchBody = `{\n${printBlock(stmt.catchBlock.body, indent + 1)}\n${pad}}`;
+        out += ` catch${catchHead} ${catchBody}`;
+      }
+      if (stmt.finallyBlock) {
+        const finBody = `{\n${printBlock(stmt.finallyBlock.body, indent + 1)}\n${pad}}`;
+        out += ` finally ${finBody}`;
+      }
+      return out;
+    }
   }
 }
 
@@ -192,36 +265,31 @@ function printExpression(expr: Expression, indent: number): string {
       const sep = expr.optional ? "?." : ".";
       return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent);
     }
+    case "Invoke": {
+      const callee = printExpression(expr.callee, indent);
+      const sep = expr.optional ? "?." : "";
+      return printCall(`${callee}${sep}`, expr.arguments, indent);
+    }
+    case "New": {
+      const callee = printExpression(expr.callee, indent);
+      return `new ${printCall(callee, expr.arguments, indent)}`;
+    }
     case "BuiltinCall":
       return printCall(`@${expr.name}`, expr.arguments, indent);
     case "Template":
       return printTemplate(expr.quasis, expr.expressions, indent);
     case "Spread":
       return `...${printExpression(expr.argument, indent)}`;
-    case "If": {
-      const test = printExpression(expr.test, indent);
-      const cons = `{\n${printBlock(expr.consequent.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      if (!expr.alternate) return `if (${test}) ${cons}`;
-      const alt = expr.alternate.kind === "If"
-        ? printExpression(expr.alternate, indent)
-        : `{\n${printBlock(expr.alternate.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      return `if (${test}) ${cons} else ${alt}`;
-    }
-    case "Switch": {
-      const disc = printExpression(expr.discriminant, indent);
-      const cases = expr.cases.map((c) => printSwitchCase(c, indent + 1)).join("\n");
-      return `switch (${disc}) {\n${cases}\n${INDENT.repeat(indent)}}`;
-    }
-    case "For": {
-      const iter = printExpression(expr.iterable, indent);
-      const body = `{\n${printBlock(expr.body.body, indent + 1)}\n${INDENT.repeat(indent)}}`;
-      return `for (let ${expr.item} of ${iter}) ${body}`;
-    }
     case "Lambda": {
       const params = expr.params
-        .map((p) => p.defaultValue ? `${p.name} = ${printExpression(p.defaultValue, indent)}` : p.name)
+        .map((p) => {
+          const prefix = p.rest ? "..." : "";
+          return p.defaultValue
+            ? `${prefix}${p.name} = ${printExpression(p.defaultValue, indent)}`
+            : `${prefix}${p.name}`;
+        })
         .join(", ");
-      const head = expr.params.length === 1 && !expr.params[0]!.defaultValue
+      const head = expr.params.length === 1 && !expr.params[0]!.defaultValue && !expr.params[0]!.rest
         ? expr.params[0]!.name
         : `(${params})`;
       return `${head} => ${printExpression(expr.body, indent)}`;

@@ -15,6 +15,7 @@
 
 import type { ComponentSpec } from "../types.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
+import { attachOnChange } from "./wrappers.js";
 
 const PIN_TYPES = ["numeric", "alphanumeric"] as const;
 
@@ -116,6 +117,7 @@ export const PinInput: ComponentSpec = {
     { name: "type", type: "string", optional: true, enum: PIN_TYPES },
     { name: "mask", type: "boolean", optional: true, description: "Render slots as `<input type=password>`" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current joined string on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -127,6 +129,7 @@ export const PinInput: ComponentSpec = {
     const stateName = node.argMeta?.[2]?.stateRef;
     return renderPin(id, length, type, value, disabled, mask, (next) => {
       if (stateName) helpers.setState(stateName, next);
+      helpers.invoke(props.onChange, next);
     });
   },
 };
@@ -161,6 +164,7 @@ export const PasswordInput: ComponentSpec = {
     { name: "label", type: "string", optional: true, description: "Inline label above the field" },
     { name: "strengthMeter", type: "boolean", optional: true, aliases: ["showStrength"] },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -206,6 +210,10 @@ export const PasswordInput: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     row.append(input);
     row.append(toggleBtn);
     root.append(row);
@@ -245,6 +253,7 @@ export const TagInput: ComponentSpec = {
     { name: "label", type: "string", optional: true, description: "Inline label above the field" },
     { name: "max", type: "number", optional: true, description: "Maximum number of tags" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the updated array of tags whenever one is added or removed" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -253,8 +262,8 @@ export const TagInput: ComponentSpec = {
     const disabled = asBoolean(props.disabled);
     const stateName = node.argMeta?.[1]?.stateRef;
     const setTags = (next: string[]) => {
-      if (!stateName) return;
-      helpers.setState(stateName, next);
+      if (stateName) helpers.setState(stateName, next);
+      helpers.invoke(props.onChange, next);
     };
     const labelText = asString(props.label);
     const root = el("div", {
@@ -354,6 +363,7 @@ export const MentionInput: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "rows", type: "number", optional: true, description: "TextArea rows (default 3)" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current text on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -448,6 +458,10 @@ export const MentionInput: ComponentSpec = {
     } else {
       textarea.oninput = updateFromCaret;
     }
+    attachOnChange(textarea, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLTextAreaElement).value,
+    });
     textarea.onkeydown = (event) => {
       if (suggestions.getAttribute("data-open") !== "true" || activeMatches.length === 0) return;
       if (event.key === "ArrowDown") {
@@ -497,6 +511,7 @@ export const TimePicker: ComponentSpec = {
     { name: "max", type: "string", optional: true },
     { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new HH:MM string when the user picks a time" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -513,9 +528,13 @@ export const TimePicker: ComponentSpec = {
       max: asString(props.max) || null,
       step: props.step != null ? String(asNumber(props.step, 60)) : null,
       disabled: asBoolean(props.disabled) ? "" : null,
-    });
+    }) as HTMLInputElement;
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName) helpers.bindState(input, stateName);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     root.append(input);
     return root;
   },
@@ -535,6 +554,7 @@ export const DateTimePicker: ComponentSpec = {
     { name: "max", type: "string", optional: true },
     { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new ISO `YYYY-MM-DDTHH:MM` string" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -551,9 +571,13 @@ export const DateTimePicker: ComponentSpec = {
       max: asString(props.max) || null,
       step: props.step != null ? String(asNumber(props.step, 60)) : null,
       disabled: asBoolean(props.disabled) ? "" : null,
-    });
+    }) as HTMLInputElement;
     const stateName = node.argMeta?.[1]?.stateRef;
     if (stateName) helpers.bindState(input, stateName);
+    attachOnChange(input, props.onChange, helpers, {
+      event: "change",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     root.append(input);
     return root;
   },
@@ -614,6 +638,7 @@ export const MaskedInput: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "label", type: "string", optional: true, description: "Inline label above the field" },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the masked value on every keystroke" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -658,6 +683,10 @@ export const MaskedInput: ComponentSpec = {
         formatInPlace((event.currentTarget ?? event.target) as HTMLInputElement);
       };
     }
+    attachOnChange(input, props.onChange, helpers, {
+      event: "input",
+      getValue: (n) => (n as HTMLInputElement).value,
+    });
     if (labelText) {
       const wrapper = el("div", { class: "rui-masked-input-wrapper" });
       wrapper.append(el("label", { class: "rui-masked-input-label", for: id }, [labelText]));

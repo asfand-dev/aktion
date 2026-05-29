@@ -234,7 +234,7 @@ export const NavbarItem: ComponentSpec = {
   description:
     "Single link inside a Navbar's main item slot. Renders as an inline " +
     "anchor / button — pass `to` for a router-aware link, `href` for an " +
-    "external link, or `action` for a click handler. `active=true` " +
+    "external link, or `onClick` for a click handler. `active=true` " +
     "highlights the current page.",
   props: [
     { name: "label", type: "string" },
@@ -242,7 +242,7 @@ export const NavbarItem: ComponentSpec = {
     { name: "href", type: "string", optional: true, description: "External href; opens in a new tab when set with `external=true`" },
     { name: "icon", type: "string", optional: true },
     { name: "active", type: "boolean", optional: true },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable fired on click (alternative to `to`/`href`)" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable fired on click (alternative to `to`/`href`)" },
     { name: "external", type: "boolean", optional: true },
   ],
   render: (_node, props, helpers) => {
@@ -275,10 +275,10 @@ export const NavbarItem: ComponentSpec = {
         event.preventDefault();
         helpers.router.navigate(to);
       };
-    } else if (typeof props.action === "function") {
+    } else if (typeof props.onClick === "function") {
       root.onclick = (event) => {
         event.preventDefault();
-        helpers.invoke(props.action);
+        helpers.invoke(props.onClick);
       };
     }
     return root;

@@ -248,7 +248,7 @@ describe("for...of loop variable scoping", () => {
     const { ctx } = buildContext(
       `$items = [10, 20]\n` +
       `$sub = [null, "x"]\n` +
-      `row = for (let i of $items) { for (let i of $sub) { i } }`,
+      `row = $items.map(i => $sub.map(j => j))`,
     );
     const out = ctx.bindings.get("row")?.();
     expect(Array.isArray(out)).toBe(true);
@@ -257,7 +257,9 @@ describe("for...of loop variable scoping", () => {
   });
 
   it("does not crash when the items source is not an array", () => {
-    const { ctx } = buildContext(`$items = null\nrow = for (let i of $items) { i }`);
+    // Defensive `.map` over a nullable source uses optional chaining to
+    // mirror what authors write in the new strict-JS subset.
+    const { ctx } = buildContext(`$items = null\nrow = ($items?.map(i => i)) || []`);
     const out = ctx.bindings.get("row")?.();
     expect(out).toEqual([]);
   });

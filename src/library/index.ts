@@ -13,7 +13,7 @@ import {
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
 import {
-  Text, TextContent, Image, Link, Badge, BadgeList,
+  Text, TextContent, Image, Badge, BadgeList,
   Callout, CodeBlock, Skeleton, Markdown,
   Container, Spacer, Quote, Icon, Spinner,
 } from "./components/content.js";
@@ -82,6 +82,9 @@ import {
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
 } from "./components/helpers.js";
 import { HTMLTag, Styles } from "./components/escape-hatch.js";
+import {
+  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css, Link,
+} from "./components/wrappers.js";
 
 export * from "./types.js";
 export * from "./registry.js";
@@ -133,6 +136,8 @@ const components: ComponentSpec[] = [
   Truncate, InlineEdit, NotificationBell,
   // Aktion 0.5 standard helpers
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
+  // Behavioural & styling wrappers
+  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css, Link,
   // Escape hatches for raw HTML / CSS — last-resort primitives
   HTMLTag, Styles,
 ];
@@ -165,7 +170,7 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Content",
     components: [
-      "Text", "Image", "Link", "Badge", "BadgeList",
+      "Text", "Image", "Badge", "BadgeList",
       "Callout", "Quote", "CodeBlock", "Skeleton", "Spinner",
       "Markdown", "Kbd", "Icon",
     ],
@@ -410,6 +415,22 @@ const componentGroups: ComponentGroup[] = [
       "- `Redirect(path)` is a router-aware component — see Routing.",
       "- `Lazy(loader, fallback?)` defers children until `loader` resolves.",
       "- `ErrorBoundary(fallback?, onError?, children)` catches rendering errors thrown by descendants.",
+    ],
+  },
+  {
+    name: "Behaviour wrappers",
+    components: [
+      "OnClick", "OnMouse", "OnKeyboard", "OnFocus", "OnIntersect", "Css", "Link",
+    ],
+    notes: [
+      "- Wrappers compose: any built-in component can be made clickable, hoverable, observable, or restyled by wrapping it in one of these primitives — no need for the underlying component to grow another prop.",
+      "- `OnClick(child, { onClick, disabled?, stopPropagation? })` makes any component clickable / tappable (touch devices fire `click` too). Use for clickable cards, list rows, media tiles, and any custom layout that needs a tap target without a `<button>` baseline.",
+      "- `OnMouse(child, { enter?, leave?, hover?, move?, down?, up?, click?, doubleClick?, contextMenu?, scroll?, wheel?, drag?, drop?, dragStart?, dragEnd?, dragEnter?, dragLeave?, dragOver?, draggable?, passiveScroll? })` attaches any combination of mouse / pointer / drag listeners. Pass `draggable: true` to make the wrapper itself draggable. Scroll / wheel listeners default to `{ passive: true }` for smooth scrolling.",
+      "- `OnKeyboard(child, { onKeyDown?, onKeyUp?, onKeyPress?, focusable? })` attaches keyboard listeners. The wrapper is focusable by default; pass `focusable: false` when the child is already focusable (input, button).",
+      "- `OnFocus(child, { onFocus?, onBlur? })` tracks focus moving into or out of a subtree (uses bubbling `focusin` / `focusout` so descendants count).",
+      "- `OnIntersect(child, { onEnter?, onLeave?, onChange?, threshold?, rootMargin?, once? })` is the IntersectionObserver wrapper — perfect for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations.",
+      "- `Css(child, { style?, class? })` merges raw class tokens and inline styles onto the wrapped child. Reach for it ONLY when the standard component props can't express the styling — prefer `Box`/`Stack`/`Grid` for layout and `Theme(...)` for tokens.",
+      "- `Link(label_or_child, { to?, href?, external?, variant? })` is the anchor primitive — accepts either a plain string label or a wrapped component. Use `to` for client-side router navigation and `href` (with `external: true`) for outbound links.",
     ],
   },
   {

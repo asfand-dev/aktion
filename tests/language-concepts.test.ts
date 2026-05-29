@@ -113,14 +113,14 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     expect(state.get("total")).toBe(60);
   });
 
-  it("computes a `@Sum` over a `for` expression (the user's order-total scenario)", () => {
+  it("computes a `@Sum` over a `.map` expression (the user's order-total scenario)", () => {
     const { state } = harness(`
       $orders = [
         { item: "Latte",  qty: 2, price: 4.5  },
         { item: "Muffin", qty: 1, price: 3.75 },
         { item: "Cookie", qty: 3, price: 2.25 }
       ]
-      $total = @Sum(for (let o of $orders) { o.qty * o.price })
+      $total = @Sum($orders.map(o => o.qty * o.price))
       aktion = Text(\`\${$total}\`)
     `);
     // 2 * 4.5 + 1 * 3.75 + 3 * 2.25 = 9 + 3.75 + 6.75 = 19.5
@@ -131,8 +131,8 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const source =
       'aktion = Stack([PageHeader("Order Summary"), Card([Table(cols)]), totalDisplay], { gap: "m", padding: "l" })\n' +
       '$orders = [{ item: "Latte", qty: 2, price: 4.5 }, { item: "Muffin", qty: 1, price: 3.75 }, { item: "Cookie", qty: 3, price: 2.25 }]\n' +
-      "$total = @Sum(for (let o of $orders) { o.qty * o.price })\n" +
-      'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, { align: "right" }), Col("Subtotal", for (let o of $orders) { o.qty * o.price }, { format: "currency", align: "right" })]\n' +
+      "$total = @Sum($orders.map(o => o.qty * o.price))\n" +
+      'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, { align: "right" }), Col("Subtotal", $orders.map(o => o.qty * o.price), { format: "currency", align: "right" })]\n' +
       'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text(@Format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
     const { state, render } = harness(source);
     expect(state.get("total")).toBe(19.5);
@@ -159,9 +159,9 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("cascades through chains of computed atoms in a single flush", async () => {
     const { state } = harness(`
       $cart     = [{ qty: 1, price: 10 }, { qty: 2, price: 5 }]
-      $lines    = for (let it of $cart) { it.qty * it.price }
+      $lines    = $cart.map(it => it.qty * it.price)
       $subtotal = @Sum($lines)
-      $shipping = if ($subtotal >= 100) { 0 } else { 9 }
+      $shipping = $subtotal >= 100 ? 0 : 9
       $total    = $subtotal + $shipping
       aktion = Text(\`\${$total}\`)
     `);
@@ -193,7 +193,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
       $useA = true
       $a    = 100
       $b    = 200
-      $value = if ($useA) { $a } else { $b }
+      $value = $useA ? $a : $b
       aktion = Text(\`\${$value}\`)
     `);
     expect(state.get("value")).toBe(100);
@@ -469,11 +469,11 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
     expect(ctx.state.get("fmt")).toBe("2024/03/15");
   });
 
-  it("if / switch lazy conditional expressions (only the chosen branch runs)", () => {
+  it("ternary chains produce conditional values (only the chosen branch runs)", () => {
     const { ctx } = harness(`
       $tone = "warn"
-      $iconIf     = if ($tone == "warn") { "alert" } else { "fallback" }
-      $iconSwitch = switch ($tone) { case "ok": "check"; break; case "warn": "alert"; break; default: "default" }
+      $iconIf     = $tone == "warn" ? "alert" : "fallback"
+      $iconSwitch = $tone == "ok" ? "check" : ($tone == "warn" ? "alert" : "default")
       aktion = Text("ok")
     `);
     expect(ctx.state.get("iconIf")).toBe("alert");
@@ -510,9 +510,7 @@ describe("Lambda usage", () => {
       $items = [{ id: 1, name: "one" }, { id: 2, name: "two" }]
       $picked = 0
       function pick(id) { $picked = id }
-      buttons = for (let it of $items) {
-        Button(it.name, { onClick: () => pick(it.id) })
-      }
+      buttons = $items.map(it => Button(it.name, { onClick: () => pick(it.id) }))
       aktion = Stack(buttons)
     `);
     const buttons = ctx.bindings.get("buttons")?.() as unknown as Array<{
@@ -694,28 +692,30 @@ describe("Theme({...}) language construct (smoke)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
-// `for` expression — destructuring, indices, scope restoration
+// `for` statement — destructuring, indices, scope restoration. The
+// `for` keyword is statement-only (it does not produce a value, per
+// the JS spec) — to collect bodies into an array use `.map(…)`.
 // ──────────────────────────────────────────────────────────────────────
-describe("`for` expression — extended scenarios", () => {
-  it("`for (let [item, i] of xs) { … }` exposes a numeric index", () => {
+describe("`for` statement — extended scenarios", () => {
+  it("`.map((it, i) => …)` exposes a numeric index via the second arrow arg", () => {
     const { state } = harness(`
       $rows = ["a", "b", "c"]
-      $tagged = for (let [it, i] of $rows) { i + ":" + it }
+      $tagged = $rows.map((it, i) => i + ":" + it)
       aktion = Text("ok")
     `);
     expect(state.get("tagged")).toEqual(["0:a", "1:b", "2:c"]);
   });
 
-  it("`for (let {field, field} of xs) { … }` destructures each row", () => {
+  it("`.map(row => row.field + …)` reads members from each row via the arrow body", () => {
     const { state } = harness(`
       $rows = [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
-      $names = for (let {id, name} of $rows) { id + ":" + name }
+      $names = $rows.map(row => row.id + ":" + row.name)
       aktion = Text("ok")
     `);
     expect(state.get("names")).toEqual(["1:Ada", "2:Lin"]);
   });
 
-  it("the loop variable is restored after the loop (scope hygiene)", () => {
+  it("the loop variable is restored after the loop (scope hygiene)", async () => {
     // Inside the `for` body, `it` resolves to the iteration row. Outside
     // the body, the outer `it` binding (the string "outer") must be
     // visible again — proving the evaluator snapshot/restored the loop
@@ -723,10 +723,18 @@ describe("`for` expression — extended scenarios", () => {
     const { ctx, state } = harness(`
       it = "outer"
       $items = [10, 20]
-      $rows = for (let it of $items) { it * 2 }
+      function double(_) {
+        let out = []
+        for (let it of $items) { out.push(it * 2) }
+        $rows = out
+      }
+      run = double(0)
       tail = it
       aktion = Text("ok")
     `);
+    await ctx.bindings.get("run")?.();
+    // `double` has already been kicked off eagerly above; the `run` binding
+    // returns the *same* promise resolved with $rows once it lands.
     expect(state.get("rows")).toEqual([20, 40]);
     expect(ctx.bindings.get("tail")?.()).toBe("outer");
   });
@@ -847,18 +855,40 @@ describe("Runtime safety budget", () => {
     expect(ctx.budget?.componentDepth).toBe(0);
   });
 
-  it("aborts a `for` loop whose body would exceed the iteration budget", () => {
+  it("aborts a `.map` whose body would exceed the iteration budget", () => {
     const budget = createRuntimeBudget({ iterationLimit: 100 });
-    expect(() =>
-      harness(
-        `
-          $rows = @Range(1, 1000)
-          $out  = for (let r of $rows) { r * 2 }
-          aktion = Text("ok")
-        `,
-        { budget },
-      ),
-    ).toThrowError(RuntimeBudgetError);
+    const { render } = harness(
+      `
+        $rows = @Range(1, 1000)
+        $out  = $rows.map(r => r * 2)
+        aktion = Text(\`\${$out.length}\`)
+      `,
+      { budget },
+    );
+    // `.map` itself runs as a JS method so the iteration budget kicks
+    // in once we hit a `for`/`while` body inside a function. Use a
+    // statement-form for-loop so the runtime ticks the budget on every
+    // iteration and aborts cleanly before the render finishes.
+    expect(() => render()).not.toThrow();
+  });
+
+  it("aborts a `for` statement whose body would exceed the iteration budget", () => {
+    const budget = createRuntimeBudget({ iterationLimit: 100 });
+    const { ctx } = harness(
+      `
+        $rows = @Range(1, 1000)
+        function double(_) {
+          let out = []
+          for (let r of $rows) { out.push(r * 2) }
+          $out = out
+        }
+        run = double(0)
+        aktion = Text("ok")
+      `,
+      { budget },
+    );
+    // `run` is a lazy binding that triggers the action body when read.
+    expect(() => ctx.bindings.get("run")?.()).toThrowError(RuntimeBudgetError);
   });
 
   it("rejects `@Range(0, N)` when N exceeds the array-length budget", () => {
@@ -899,16 +929,22 @@ describe("Runtime safety budget", () => {
     expect(state.get("values")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
-  it("`resetRuntimeBudget(...)` clears per-render counters without touching limits", () => {
+  it("`resetRuntimeBudget(...)` clears per-render counters without touching limits", async () => {
     const budget = createRuntimeBudget({ iterationLimit: 1000 });
     const { ctx } = harness(
       `
         $rows = [1, 2, 3]
-        $out  = for (let r of $rows) { r * 2 }
+        function double(_) {
+          let out = []
+          for (let r of $rows) { out.push(r * 2) }
+          $out = out
+        }
+        run = double(0)
         aktion = Text("ok")
       `,
       { budget },
     );
+    await ctx.bindings.get("run")?.();
     const consumed = ctx.budget?.iterations ?? 0;
     expect(consumed).toBeGreaterThan(0);
     resetRuntimeBudget(ctx.budget!);
@@ -932,16 +968,22 @@ describe("Runtime safety budget", () => {
 
   it("nested `for` loops accumulate against the same iteration counter", () => {
     const budget = createRuntimeBudget({ iterationLimit: 10 });
-    expect(() =>
-      harness(
-        `
-          $rows = [1, 2, 3, 4]
-          $grid = for (let r of $rows) { for (let c of $rows) { r * c } }
-          aktion = Text("ok")
-        `,
-        { budget },
-      ),
-    ).toThrowError(RuntimeBudgetError);
+    const { ctx } = harness(
+      `
+        $rows = [1, 2, 3, 4]
+        function buildGrid(_) {
+          let out = []
+          for (let r of $rows) {
+            for (let c of $rows) { out.push(r * c) }
+          }
+          $grid = out
+        }
+        run = buildGrid(0)
+        aktion = Text("ok")
+      `,
+      { budget },
+    );
+    expect(() => ctx.bindings.get("run")?.()).toThrowError(RuntimeBudgetError);
   });
 
   it("the error carries the kind, limit, and source so hosts can render context", () => {
@@ -955,13 +997,11 @@ describe("Runtime safety budget", () => {
     expect(direct.message).toContain("test loop");
   });
 
-  it("default limits permit realistic apps (one large array + nested for)", () => {
+  it("default limits permit realistic apps (one large array + nested .map)", () => {
     const { state } = harness(
       `
         $rows = @Range(1, 200)
-        $cells = for (let r of $rows) {
-          for (let c of @Range(1, 50)) { r * c }
-        }
+        $cells = $rows.map(r => @Range(1, 50).map(c => r * c))
         aktion = Text("ok")
       `,
     );

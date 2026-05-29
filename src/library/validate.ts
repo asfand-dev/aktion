@@ -90,6 +90,60 @@ function walkStatement(
     case "Return":
       if (stmt.argument) walkExpression(stmt.argument, library, out);
       return;
+    case "Await":
+      walkExpression(stmt.argument, library, out);
+      return;
+    case "IfStatement":
+      walkExpression(stmt.test, library, out);
+      for (const inner of stmt.consequent.body) walkStatement(inner, library, out);
+      if (stmt.alternate) {
+        if (stmt.alternate.kind === "IfStatement") {
+          walkStatement(stmt.alternate, library, out);
+        } else {
+          for (const inner of stmt.alternate.body) walkStatement(inner, library, out);
+        }
+      }
+      return;
+    case "SwitchStatement":
+      walkExpression(stmt.discriminant, library, out);
+      for (const c of stmt.cases) {
+        if (c.test) walkExpression(c.test, library, out);
+        for (const inner of c.body) walkStatement(inner, library, out);
+      }
+      return;
+    case "ForOfStatement":
+      walkExpression(stmt.iterable, library, out);
+      for (const inner of stmt.body.body) walkStatement(inner, library, out);
+      return;
+    case "ForClassicStatement":
+      if (stmt.init) walkStatement(stmt.init, library, out);
+      if (stmt.test) walkExpression(stmt.test, library, out);
+      if (stmt.update) walkExpression(stmt.update, library, out);
+      for (const inner of stmt.body.body) walkStatement(inner, library, out);
+      return;
+    case "WhileStatement":
+    case "DoWhileStatement":
+      walkExpression(stmt.test, library, out);
+      for (const inner of stmt.body.body) walkStatement(inner, library, out);
+      return;
+    case "ForInStatement":
+      walkExpression(stmt.iterable, library, out);
+      for (const inner of stmt.body.body) walkStatement(inner, library, out);
+      return;
+    case "DestructureStatement":
+      walkExpression(stmt.expression, library, out);
+      for (const binding of stmt.bindings) {
+        if (binding.defaultValue) walkExpression(binding.defaultValue, library, out);
+      }
+      return;
+    case "TryStatement":
+      for (const inner of stmt.block.body) walkStatement(inner, library, out);
+      if (stmt.catchBlock) for (const inner of stmt.catchBlock.body) walkStatement(inner, library, out);
+      if (stmt.finallyBlock) for (const inner of stmt.finallyBlock.body) walkStatement(inner, library, out);
+      return;
+    case "ThrowStatement":
+      walkExpression(stmt.argument, library, out);
+      return;
     default:
       return;
   }
@@ -148,30 +202,23 @@ function walkExpression(
     case "Spread":
       walkExpression(expr.argument, library, out);
       return;
-    case "If":
-      walkExpression(expr.test, library, out);
-      for (const inner of expr.consequent.body) walkStatement(inner, library, out);
-      if (expr.alternate) {
-        if (expr.alternate.kind === "If") {
-          walkExpression(expr.alternate, library, out);
-        } else {
-          for (const inner of expr.alternate.body) walkStatement(inner, library, out);
-        }
-      }
+    case "Invoke":
+      walkExpression(expr.callee, library, out);
+      for (const arg of expr.arguments) walkExpression(arg, library, out);
       return;
-    case "Switch":
-      walkExpression(expr.discriminant, library, out);
-      for (const c of expr.cases) {
-        if (c.test) walkExpression(c.test, library, out);
-        for (const inner of c.body) walkStatement(inner, library, out);
-      }
-      return;
-    case "For":
-      walkExpression(expr.iterable, library, out);
-      for (const inner of expr.body.body) walkStatement(inner, library, out);
+    case "New":
+      walkExpression(expr.callee, library, out);
+      for (const arg of expr.arguments) walkExpression(arg, library, out);
       return;
     case "Lambda":
-      walkExpression(expr.body as Expression, library, out);
+      if (expr.body.kind === "Block") {
+        for (const inner of expr.body.body) walkStatement(inner, library, out);
+      } else {
+        walkExpression(expr.body, library, out);
+      }
+      return;
+    case "Block":
+      for (const inner of expr.body) walkStatement(inner, library, out);
       return;
     default:
       return;

@@ -28,6 +28,7 @@ import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types
 import { findComponent } from "../library/registry.js";
 import { validateProgramSchema } from "../library/validate.js";
 import { findPositionalProp } from "../library/types.js";
+import { keywordDocs, type KeywordDoc } from "../language/grammar.js";
 
 export interface Position {
   /** 1-indexed line number. */
@@ -146,9 +147,26 @@ export function getCompletions(
     }
   }
 
-  // Default: top-level keywords + all library component names.
+  // Default: top-level keywords + all library component names. We merge
+  // the curated `KEYWORDS` (which include non-reserved helpers like
+  // `Router` / `cleanup`) with the full reserved-word set from
+  // `keywordDocs`, de-duplicated by label.
+  const keywordItems = new Map<string, CompletionItem>();
+  for (const [label, doc] of Object.entries(keywordDocs)) {
+    keywordItems.set(label, {
+      label,
+      kind: "keyword",
+      detail: doc.summary,
+      documentation: `${doc.syntax}\n\n${doc.example}`,
+    });
+  }
+  for (const k of KEYWORDS) {
+    if (!keywordItems.has(k.label)) {
+      keywordItems.set(k.label, { label: k.label, kind: "keyword", detail: k.detail });
+    }
+  }
   return [
-    ...KEYWORDS.map((k) => ({ label: k.label, kind: "keyword" as const, detail: k.detail })),
+    ...keywordItems.values(),
     ...library.components.map((c) => ({
       label: c.name,
       kind: "component" as const,
@@ -181,11 +199,26 @@ export function getHoverInfo(
   if (word.startsWith("$")) {
     return { kind: "state", contents: `**${word}** — reactive state atom` };
   }
+  // Reserved-word hover: rich definition + syntax + example from the
+  // shared keyword docs (single source of truth in `grammar.ts`).
+  const doc = keywordDocs[word];
+  if (doc) {
+    return { kind: "unknown", contents: formatKeywordHover(word, doc) };
+  }
   const kw = KEYWORDS.find((k) => k.label === word);
   if (kw) {
     return { kind: "unknown", contents: `**${word}** — ${kw.detail}` };
   }
   return null;
+}
+
+/** Render a keyword's docs as Markdown (definition, syntax, example). */
+function formatKeywordHover(word: string, doc: KeywordDoc): string {
+  return (
+    `**${word}** — ${doc.summary}\n\n` +
+    `**Syntax**\n\n\`\`\`js\n${doc.syntax}\n\`\`\`\n\n` +
+    `**Example**\n\n\`\`\`js\n${doc.example}\n\`\`\``
+  );
 }
 
 // ---------------------------------------------------------------------------

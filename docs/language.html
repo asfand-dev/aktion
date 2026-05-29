@@ -100,8 +100,10 @@ $activeUsers = 12540</code></pre>
         <li><strong>Member access</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>. Optional chaining: <code>$user?.profile?.name</code>.</li>
         <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
         <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>http({&hellip;})</code>, <code>Router({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
-        <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / %</code>), comparison (<code>== != &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>), nullish coalescing (<code>??</code>), ternary (<code>cond ? a : b</code>).</li>
-        <li><strong>Lambdas</strong> &mdash; <code>(args) =&gt; expr</code> for one-liners, <code>(args) =&gt; { &hellip; }</code> for multi-statement bodies.</li>
+        <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>), nullish coalescing (<code>??</code>), ternary (<code>cond ? a : b</code>), prefix / postfix <code>++</code> / <code>--</code>.</li>
+        <li><strong>Lambdas</strong> &mdash; every JS arrow form: <code>() =&gt; expr</code>, <code>x =&gt; expr</code> (single param, no parens), <code>(x) =&gt; expr</code>, <code>(x, y) =&gt; expr</code>, <code>(args) =&gt; { &hellip; }</code> for multi-statement bodies, <code>(x = 0) =&gt; &hellip;</code> for default params, <code>(...args) =&gt; &hellip;</code> for rest. The body may wrap onto the next line.</li>
+        <li><strong>Destructuring</strong> &mdash; <code>let [a, b, ...rest] = arr</code> and <code>let { name, role = "guest", ...other } = user</code> (renaming via <code>{ key: alias }</code>, defaults via <code>= value</code>).</li>
+        <li><strong>Line continuations</strong> &mdash; any expression operator (<code>.</code>, <code>?.</code>, <code>?</code>, <code>:</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>??</code>, equality / comparison / arithmetic operators) may start the next line and the parser keeps the same expression going.</li>
       </ul>
 
 <pre><code>// Arithmetic + ternary + reactive read
@@ -276,14 +278,17 @@ StatCard("Revenue", "$48k", "up", "+12%", "sack-dollar")</code></pre>
 
       <h3>Local helpers &mdash; lambda form</h3>
       <p>Use a lambda binding for one-off helpers that don't need their own component:</p>
-<pre><code>priorityTone = (p) =&gt; p === "high" ? "danger" : p === "med" ? "warning" : "muted"
-rowFor       = (item) =&gt; Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
-list         = for (let item of $items) { rowFor(item) }</code></pre>
+<pre><code>priorityTone = p =&gt; p === "high" ? "danger" : p === "med" ? "warning" : "muted"
+rowFor       = item =&gt; Stack([Badge(item.label, { tone: priorityTone(item.priority) }), Text(item.title)])
+list         = $items.map(item =&gt; rowFor(item))</code></pre>
       <p>
         Lambdas with <code>{ }</code> bodies are action-style blocks and may
-        <code>return</code> a value (<code>(x) =&gt; { $count += 1; return x * 2 }</code>).
-        Lambdas with bare-expression bodies (<code>(x) =&gt; x * 2</code>)
-        evaluate the expression and return it directly.
+        <code>return</code> a value (<code>x =&gt; { $count += 1; return x * 2 }</code>).
+        Lambdas with bare-expression bodies (<code>x =&gt; x * 2</code>)
+        evaluate the expression and return it directly. A single parameter
+        does <strong>not</strong> need parentheses (<code>x =&gt; x + 1</code>);
+        zero or multi-parameter forms always do (<code>() =&gt; 1</code>,
+        <code>(a, b) =&gt; a + b</code>).
       </p>
 
       <h2 id="emit">Outbound events &mdash; <code>emit()</code></h2>
@@ -369,52 +374,127 @@ effect(() =&gt; {
 
       <p>Use <code>cleanup(fn)</code> inside an effect body to register teardown for intervals, listeners, or observers.</p>
 
-      <h2 id="control-flow">Control flow</h2>
+      <h2 id="control-flow">Control flow &mdash; strict JS subset</h2>
       <p>
-        All three control-flow keywords are <strong>expressions</strong>
-        &mdash; they yield a value (or array of nodes) that can be assigned,
-        passed as a prop, or returned from a component / action body.
+        Aktion follows JavaScript: <code>if</code>, <code>switch</code>,
+        <code>for</code>, <code>while</code>, <code>try</code> are
+        <strong>statements</strong>, not expressions &mdash; they do not
+        produce a value and cannot appear on the right-hand side of an
+        assignment. To express a value-producing conditional, use a
+        ternary; to project an array, use <code>.map()</code> /
+        <code>.filter()</code>.
       </p>
 
-      <h3><code>if</code> / <code>else</code></h3>
-<pre><code>banner = if ($hasError) { Banner("Something went wrong", { tone: "danger" }) } else { null }
-active = if ($tab == "billing") { billingPanel } else { overviewPanel }</code></pre>
-      <p>A trailing <code>else</code> is optional &mdash; without it an unmatched <code>if</code> evaluates to <code>null</code> (renders nothing).</p>
+      <h3>Pick a value &mdash; ternary</h3>
+<pre><code>banner = $hasError ? Banner("Something went wrong", { tone: "danger" }) : null
+active = $tab == "billing" ? billingPanel : overviewPanel
+tone   = $value &gt; 0 ? "success" : ($value &lt; 0 ? "danger" : "muted")</code></pre>
 
-      <h3><code>switch</code></h3>
-<pre><code>panel = switch ($stage) {
-  case "draft":     DraftView(); break
-  case "review":    ReviewView(); break
-  case "shipped":   ShippedView(); break
-  default:          EmptyState("Pick a stage")
-}</code></pre>
-      <ul>
-        <li>Each branch uses <code>case value:</code> followed by the expression and <code>break</code>.</li>
-        <li><code>default:</code> is the wildcard (no <code>break</code> needed).</li>
-        <li>Cases can return arbitrary expressions, not just strings.</li>
-        <li>Wrap a case body in <code>{ &hellip; }</code> to run a <strong>statement block</strong> (multiple state writes, ending in an optional last-expression result).</li>
-      </ul>
-
-      <h3><code>for</code></h3>
-<pre><code>rows = for (let item of $todos) { TaskRow(item) }
-rowsWithIndex = for (let [item, idx] of $todos.entries()) { TaskRow(item, { index: idx }) }</code></pre>
+      <h3>Project an array &mdash; <code>.map</code> / <code>.filter</code></h3>
+<pre><code>rows          = $todos.map(item =&gt; TaskRow(item))
+rowsWithIndex = $todos.map((item, idx) =&gt; TaskRow(item, { index: idx }))
+visibleRows   = $todos.filter(t =&gt; !t.done).map(t =&gt; TaskRow(t))</code></pre>
       <p>
-        <code>for</code> produces an array of nodes &mdash; assign it and
-        reference the binding from a container (<code>Stack(rows)</code>,
-        <code>Table([Col("Task", rows)])</code>). The loop variable is
-        <strong>block-scoped</strong>, so a stale closure can never see the
-        wrong row.
+        <code>.map</code> always produces a new array of nodes &mdash; assign
+        it and reference the binding from a container
+        (<code>Stack(rows)</code>, <code>Table([Col("Task", rows)])</code>).
+        The loop variable is the lambda parameter, so a stale closure can
+        never see the wrong row.
       </p>
 
-      <h3>Statement form inside function / effect bodies</h3>
+      <h3>Statement form &mdash; inside function / effect / lambda bodies</h3>
+      <p>
+        Inside any imperative body the full JavaScript control-flow surface
+        is available: <code>if</code> / <code>else</code>, <code>switch</code>
+        / <code>case</code> / <code>break</code> / <code>default</code>,
+        <code>for (let x of xs)</code>, <code>for (let key in obj)</code>,
+        <code>for (let i = 0; i &lt; n; i += 1)</code>,
+        <code>while</code>, <code>do { &hellip; } while (cond)</code>,
+        <code>break</code> / <code>continue</code>,
+        <code>try</code> / <code>catch</code> / <code>finally</code>,
+        <code>throw</code>. Bodies may be a brace-delimited block or a
+        single statement &mdash; <code>if (!ok) return</code> and
+        <code>while (q.length &gt; 0) q.pop()</code> both work.
+      </p>
 <pre><code>function submit(payload) {
-  if (!payload.email) { return }
-  for (let tag of payload.tags) { $tags = [...$tags, tag] }
+  if (!payload.email) return                              // single-statement body
+  for (let tag of payload.tags) $tags = [...$tags, tag]   // single-statement body
   switch (payload.kind) {
-    case "draft": { $drafts = [...$drafts, payload]; break }
-    default: { $records = [...$records, payload] }
+    case "draft": $drafts = [...$drafts, payload]; break
+    default:      $records = [...$records, payload]
+  }
+}
+
+function poll() {
+  let attempts = 0
+  do {
+    attempts = attempts + 1
+    $log = [...$log, "try " + attempts]
+  } while (attempts &lt; 3 &amp;&amp; !$ready)
+}
+
+function safeFetch() {
+  try {
+    $resp = http({ url: "/api/data" })
+  } catch (err) {
+    $error = err
+  } finally {
+    $loading = false
   }
 }</code></pre>
+
+      <h3>Line continuations &mdash; JS-style ASI</h3>
+      <p>
+        Any expression operator can appear at the <strong>start of the
+        next line</strong> and the parser keeps building the same
+        expression. This works for <code>.</code>, <code>?.</code>,
+        <code>?</code>, <code>:</code>, <code>&amp;&amp;</code>,
+        <code>||</code>, <code>??</code>, the equality / comparison
+        operators, <code>instanceof</code>, and every arithmetic
+        operator. <code>(&hellip;)</code> and <code>[&hellip;]</code>
+        after a newline still terminate the previous statement &mdash;
+        same as JS&apos;s ASI rules.
+      </p>
+<pre><code>// Method chain split across lines.
+filteredTodos = $todos
+  .filter(t =&gt; t.category == $filter)
+  .filter(t =&gt; t.title.includes($searchQuery))
+
+// Ternary split across lines.
+tabUI = @Count(filteredTodos) == 0
+  ? EmptyState()
+  : Stack(filteredTodos.map(TodoRow))
+
+// Arrow-body wrap + logical operators on continuation lines.
+filtered = attractions.filter(a =&gt;
+  ($selectedDistrict == "All") &amp;&amp;
+  (a.name.includes($searchQuery))
+)</code></pre>
+
+      <h3>Destructuring, spread, computed keys, increment</h3>
+<pre><code>// Destructuring in let / const / var.
+let [first, second, ...rest] = arr
+let { name, role = "guest", ...other } = user
+
+// Spread anywhere arrays, objects, or calls accept arguments.
+$cart  = [...$cart, item]
+$user  = { ...$user, role: "admin" }
+result = fn(...args)
+
+// Computed property keys.
+$obj = { [$dynamic]: value, fixed: "ok" }
+
+// Increment / decrement &mdash; matches JS:
+//   postfix returns the OLD value, prefix returns the NEW value.
+let prev = i++
+let next = ++i</code></pre>
+
+      <h3>Common anti-patterns the parser rejects</h3>
+      <ul>
+        <li><code>x = if (&hellip;) { &hellip; }</code> &mdash; <code>if</code> is a statement. Use a ternary.</li>
+        <li><code>x = for (let r of rows) { &hellip; }</code> &mdash; <code>for</code> is a statement. Use <code>.map()</code>.</li>
+        <li><code>x = switch (v) { &hellip; }</code> &mdash; <code>switch</code> is a statement. Use a ternary chain, or wrap in a function that <code>return</code>s per arm.</li>
+      </ul>
 
       <h2 id="two-way">Two-way binding</h2>
       <p>
@@ -425,7 +505,7 @@ rowsWithIndex = for (let [item, idx] of $todos.entries()) { TaskRow(item, { inde
       </p>
 <pre><code>$search = ""
 bar     = SearchBar("q", { placeholder: "Search…", value: $search })
-list    = for (let row of @Filter($rows, "title", "contains", $search)) { ListItem(row.title) }
+list    = @Filter($rows, "title", "contains", $search).map(row =&gt; ListItem(row.title))
 
 $tags = []
 chips = TagInput("tags", { value: $tags })

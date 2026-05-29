@@ -223,7 +223,7 @@ export const TreeNode: ComponentSpec = {
   description:
     "Single node in a Tree view. When `children` is provided the node " +
     "renders as an expandable branch with a chevron; otherwise it renders " +
-    "as a leaf. `action` fires on click. Use `active=true` to highlight " +
+    "as a leaf. `onClick` fires on click. Use `active=true` to highlight " +
     "the current selection.",
   props: [
     { name: "label", type: "string" },
@@ -232,14 +232,14 @@ export const TreeNode: ComponentSpec = {
     { name: "expanded", type: "boolean", optional: true, description: "Whether the branch is open by default" },
     { name: "active", type: "boolean", optional: true, aliases: ["selected"], description: "Highlights the row as the current selection" },
     { name: "badge", type: "string", optional: true, description: "Trailing chip (count or status)" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Callable fired when the row is clicked" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable fired when the row is clicked" },
   ],
   render: (_node, props, helpers) => {
     const children = asArray<unknown>(props.children);
     const hasChildren = children.length > 0;
     const expanded = asBoolean(props.expanded);
     const active = asBoolean(props.active);
-    const isClickable = typeof props.action === "function";
+    const isClickable = typeof props.onClick === "function";
 
     const row = el(isClickable ? "button" : "div" as "div", {
       type: isClickable ? "button" : null,
@@ -262,7 +262,7 @@ export const TreeNode: ComponentSpec = {
     if (badge) row.append(el("span", { class: "rui-tree-node-badge" }, [badge]));
 
     if (isClickable) {
-      row.onclick = () => helpers.invoke(props.action);
+      row.onclick = () => helpers.invoke(props.onClick);
     }
 
     if (!hasChildren) return row;

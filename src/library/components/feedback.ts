@@ -201,13 +201,15 @@ export const Switch: ComponentSpec = {
   name: "Switch",
   description:
     "Compact on/off toggle. Pass a `$variable` as `value` for two-way binding " +
-    "— prefer Switch over Checkbox when the control represents a setting.",
+    "— prefer Switch over Checkbox when the control represents a setting. " +
+    "`onChange(checked)` fires with the new boolean.",
   props: [
     { name: "id", type: "string" },
     { name: "label", type: "string", optional: true },
     { name: "value", type: "boolean", optional: true, aliases: ["checked"], description: "Bound value (typically $variable)" },
     { name: "description", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new boolean value" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -237,6 +239,11 @@ export const Switch: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).checked,
       });
     }
+    if (props.onChange != null) {
+      input.addEventListener("change", (e) => {
+        helpers.invoke(props.onChange, (e.currentTarget as HTMLInputElement).checked);
+      });
+    }
     const label = asString(props.label);
     const description = asString(props.description);
     root.append(input, track);
@@ -256,13 +263,14 @@ export const ToggleGroup: ComponentSpec = {
     "Group of mutually-exclusive Toggle-style buttons (single-select). Items " +
     "are `[value, label]` arrays, `{value, label, icon?}` objects, or plain " +
     "strings (used for both value and label). Pass a `$variable` as `value` " +
-    "for two-way binding.",
+    "for two-way binding. `onChange(value)` fires with the newly-selected value.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "any[]" },
     { name: "value", type: "any", optional: true },
     { name: "variant", type: "string", optional: true, enum: ["default", "outline"] },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected value" },
   ],
   render: (node, props, helpers) => {
     const current = asString(props.value);
@@ -291,11 +299,10 @@ export const ToggleGroup: ComponentSpec = {
       const itemIconNode = renderIcon(icon, { className: "rui-toggle-icon" });
       if (itemIconNode) btn.append(itemIconNode);
       btn.append(el("span", { class: "rui-toggle-label" }, [label]));
-      if (stateName) {
-        btn.onclick = () => {
-          helpers.setState(stateName, value);
-        };
-      }
+      btn.onclick = () => {
+        if (stateName) helpers.setState(stateName, value);
+        helpers.invoke(props.onChange, value);
+      };
       root.append(btn);
     }
     return root;
@@ -417,6 +424,7 @@ export const Rating: ComponentSpec = {
     { name: "readonly", type: "boolean", optional: true, description: "Force read-only (overrides `interactive`)" },
     { name: "halfStep", type: "boolean", optional: true, description: "Allow half-star resolution when interactive" },
     { name: "icon", type: "string", optional: true, description: "Icon family — `star` (default), `heart`, `thumb`, `fire`, `bolt`, or any FA name" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new rating when the user clicks a star (interactive mode)" },
   ],
   render: (node, props, helpers) => {
     const max = Math.max(1, Math.floor(asNumber(props.max, 5)));
@@ -464,6 +472,7 @@ export const Rating: ComponentSpec = {
             }
           }
           helpers.setState(stateName, next);
+          helpers.invoke(props.onChange, next);
         };
       }
       stars.append(star);

@@ -83,14 +83,19 @@ Internalize these rules and you will write correct, polished programs:
    - ✅ `Button("Save", { variant: "primary", loading: $isSaving })`
    - ✅ `StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })`
    - ❌ `Button("Save", "primary", true)`
-9. **`for (let item of items) { Row(item) }` scopes `item` strictly to
-   the body.** The loop variable is not state and cannot be read via
-   `ctx.state` from external JS.
-10. **Pass per-item data to JS via arguments.** From a lambda body access
-    `ctx.args.id`, `ctx.state.get(name)`, etc.
+9. **`items.map(item => Row(item))` is the value-producing iteration form.**
+   `for`/`if`/`switch` are JavaScript **statements** — they don't return
+   a value, so they cannot appear on the RHS of `name = …`. Use them
+   only inside imperative bodies (`function`, lambda with `{ … }`,
+   `effect`). The lambda parameter is block-scoped, just like a `for`
+   loop variable.
+10. **Pass per-item data to JS via standard parameters.** Lambdas and
+    action functions use ordinary JS parameter binding —
+    `(id, status) => …` and `function update(id, status) { … }` read
+    their arguments by name. There is no `ctx.args` indirection.
 11. **Prefer declarative builtins** (`[...spread]`, `@Filter`, `@Sort`,
-    `.map()`, ternary, `for`/`if`/`switch`) over raw DOM manipulation.
-    Only reach for the `ctx` bridge when no builtin captures the change.
+    `.map()`, ternary) over imperative DOM code. Reach for raw
+    JavaScript only when no builtin captures the change.
 12. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use
     them for multi-line bodies and `${expression}` interpolation.
@@ -457,8 +462,6 @@ aktion = Stack([...])
 | No nav for a multi-page surface                                             | `AppShell(Sidebar(...), [...])` — sidebar stays visible across content                       |
 | Empty list rendered as bare grey text                                        | `EmptyState(title, { description, icon, action: Button(...) })`                              |
 | Hand-rolled progress bar inside a Stack                                     | `Progress(value, { max, label, tone })` or `ProgressRing({...})`                             |
-| `$state x = …` / `$persist x = …` / `$computed x = …`                       | `$x = …` — one atom kind covers every use case                                              |
-| `root = Stack([...])`                                                       | `aktion = Stack([...])` — `aktion` is the canonical entry point                              |
 
 ---
 
@@ -479,10 +482,25 @@ the language doesn't model **is just JavaScript**:
   template literals (`` `Hello ${name}` ``), optional chaining
   (`obj?.deep?.field`), nullish coalescing (`a ?? b`), default
   parameters, rest parameters, computed object keys.
+- The **full operator set**: arithmetic, comparison, logical, plus
+  bitwise / shift (`& | ^ ~ << >> >>>`) and the relational keywords
+  `instanceof` / `in`. Every compound-assignment form works too
+  (`+= -= *= /= %= **= &&= ||= ??= &= |= ^= <<= >>= >>>=`).
+- **Destructured parameters** in both `function` declarations and
+  lambdas: `function Card({ title, tone = "info" })`,
+  `function head([first, ...rest])`, `({ a, b }) => a + b`.
+- A **curated, safe slice of the JS standard library** is available
+  everywhere as globals — `Math`, `JSON`, `Object`, `Array`, `Number`,
+  `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, and
+  the functions `parseInt` / `parseFloat` / `isNaN` / `isFinite` /
+  `encodeURIComponent` / `decodeURIComponent`. Use them directly
+  (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
+  (`new Date(0).getTime()`, `new Map([[k, v]])`). Capability-granting
+  globals (`fetch`, `eval`, `window`, timers) are **not** exposed — use
+  `http({...})` and `effect(...)`.
 - Inside **action bodies, effect callbacks, and lambda bodies**, you
   may also call browser APIs directly — `navigator.clipboard`,
   `window.open`, `document.addEventListener`, `setTimeout`,
-  `JSON.parse`, `Math.random`, `fetch` (use `http({...})` instead),
   `crypto.randomUUID`, etc.
 - The `@`-functions (§8) and library components (§9) cover the cases
   where pure JS would be verbose — but you are never *forced* to use
@@ -490,9 +508,13 @@ the language doesn't model **is just JavaScript**:
 
 Three identifier conventions cooperate:
 
-- **Plain bindings**: `name = expression` — a non-reactive alias.
-  Reading it never subscribes; the value is captured once when the
-  statement runs.
+- **Plain bindings**: `name = expression` (or `let name = …`) — a
+  non-reactive alias. Reading it never subscribes. Within a single
+  render it is a **stable, mutable slot**: re-reads return the same
+  value/reference (so `name.push(x)` and `name = [...name, x]` stick),
+  and it is re-seeded from its initialiser on the next render. Use it
+  as a scratch container during a render; reach for a `$state` atom
+  when you need the value to persist across renders or drive reactivity.
 - **Reactive atoms**: `$name = value` — a single tracked cell. Reading
   `$name` subscribes the surrounding component / effect; writing inside
   a function body or effect callback notifies subscribers.
@@ -872,7 +894,7 @@ list = $todos.map(t => TaskRow(t))
 
 An action is a camelCase function. Declare at the top level (or inside
 a component body); invoke from any event-handler prop (`onClick`,
-`onChange`, `onSubmit`, `action`) or as an expression.
+`onChange`, `onSubmit`, `onClose`, `onSelect`, …) or as an expression.
 
 ```javascript
 function save(item) {
@@ -882,6 +904,23 @@ function save(item) {
 }
 
 submitBtn = Button("Save", { onClick: save })
+```
+
+### Pass declarations directly to array helpers
+
+Both PascalCase **component** and camelCase **action** declarations can
+be passed by name to any array helper (`.map`, `.filter`, `.find`,
+`.some`, `.every`, `.forEach`, `.sort`, `.reduce`, …) — the runtime
+resolves the bare identifier to a synchronous callable with the
+standard `(item, index, array)` signature, so there's no need to wrap
+in an arrow:
+
+```javascript
+function Fruit(name) { return Badge(name) }
+function long(name) { return name.length > 5 }
+fruits = ["Apple", "Banana", "Orange"]
+
+aktion = Grid(fruits.filter(long).map(Fruit))   // ✅ equivalent to .map(n => Fruit(n))
 ```
 
 ### Body grammar
@@ -1071,7 +1110,7 @@ intervals, listeners, observers:
 ```javascript
 effect(() => {
   const onKey = (e) => {
-    if (e.key === "k" && e.metaKey) ctx.host.emit("toggle-palette", {})
+    if (e.key === "k" && e.metaKey) emit("toggle-palette", {})
   }
   document.addEventListener("keydown", onKey)
   cleanup(() => document.removeEventListener("keydown", onKey))
@@ -1100,12 +1139,8 @@ effect(() => {
 
 ```javascript
 effect(() => {
-  const onChange = () => {
-    ctx.host.dispatchEvent(new CustomEvent("track", { detail: { event: "page_view", path: location.hash } }))
-  }
-  ctx.host.addEventListener("route-change", onChange)
-  cleanup(() => ctx.host.removeEventListener("route-change", onChange))
-}, ["mount"])
+  emit("track", { event: "page_view", path: route.path })
+}, [route.path])
 ```
 
 ---
@@ -1258,66 +1293,185 @@ expression. They are **pure** — no side effects, no I/O.
 - `$rows.first` / `$rows.last` — first or last element.
 - **Array pluck**: `$rows.title` returns `[row.title for each row]`.
 
-### Control-flow
+### Control-flow — strict JavaScript subset
 
-Control flow uses standard JavaScript syntax, but the three statement
-forms — `if`/`else`, `switch`/`case`, and `for`/`of` — are also valid
-**expressions** in Aktion. They evaluate to a value, so they can be
-assigned directly to a binding or passed as a child:
+Aktion follows JS exactly: `if`, `switch`, `for`, `while`, and `try`
+are **statements** — they don't produce a value and cannot appear on
+the RHS of an assignment. Use the JavaScript-native expression forms
+to pick values:
 
 ```javascript
-// Ternary — best for two-way conditions.
+// Ternary — two-way conditional value.
 active = $tab == "billing" ? billingPanel : overviewPanel
 
-// Expression `if` — handy when the condition has multiple branches.
-banner = if ($error) {
-  ErrorAlert($error.message)
-} else if ($loading) {
-  Spinner({ label: "Loading…" })
-} else {
-  Notice("Everything looks good")
-}
+// Ternary chain — multi-way dispatch as a single expression.
+tone = $value > 0 ? "success" : ($value < 0 ? "danger" : "muted")
 
-// Expression `switch` — multi-way dispatch as a single expression.
-view = switch ($tab) {
-  case "list":  ListView($items); break
-  case "grid":  GridView($items); break
-  case "table": Table($items);    break
-  default:      EmptyState("Pick a view")
-}
-
-// Expression `for` — iterate over an array and collect the bodies.
-rows = for (let item of $items) {
-  Row(item, { key: item.id })
-}
-
-// .map() is equally idiomatic — pick whichever reads cleaner.
+// .map() — collect a rendered row per item. Lambda param is block-scoped.
+rows = $items.map(item => Row(item, { key: item.id }))
 list = $todos.map(item => TaskRow(item))
+
+// .filter().map() chains read fluently.
+visible = $todos.filter(t => !t.done).map(t => TaskRow(t))
 ```
 
-Inside function bodies (actions/components/effects) you can also use the
-**statement forms** with `return`:
+For multi-way dispatch that doesn't fit a ternary chain, **wrap a
+`switch` statement inside a function** and `return` per arm. Or use a
+plain lookup object:
 
 ```javascript
-function getPanel(stage) {
-  switch (stage) {
-    case "done":  return Done()
-    case "ready": return Ready()
-    default:      return Pending()
+function panelFor(tab) {
+  switch (tab) {
+    case "list":  return ListView($items)
+    case "grid":  return GridView($items)
+    case "table": return Table($items)
+    default:      return EmptyState("Pick a view")
   }
+}
+view = panelFor($tab)
+
+// Object-as-switch idiom — terse for label / colour maps.
+toneFor = { ok: "success", warn: "warning", err: "danger" }
+tone    = toneFor[$status] ?? "muted"
+```
+
+Inside function / lambda / effect bodies the **full statement-form
+control flow** is available — exactly as in JS: `if`/`else`,
+`switch`/`case`/`break`/`default`, `for (let x of xs)`,
+`for (let key in obj)`, `for (let i = 0; i < n; i += 1)`, `while`,
+`do { … } while (cond)`, `break`/`continue`,
+`try`/`catch`/`finally`, `throw`. Mutate `$state` or local `let` arrays
+inside the body; the body itself produces no value (use `return` to
+yield one from a function).
+
+Bodies may be either a brace-delimited block or a single statement —
+the same shape as JS allows. `if (!ok) return` and
+`while (q.length > 0) q.pop()` both work.
+
+```javascript
+function submit(payload) {
+  if (!payload.email) return                              // single-statement body
+  for (let tag of payload.tags) $tags = [...$tags, tag]   // single-statement body
+  switch (payload.kind) {
+    case "draft": $drafts = [...$drafts, payload]; break
+    default:      $records = [...$records, payload]
+  }
+}
+
+function safeFetch(_) {
+  try   { $resp = http({ url: "/api/data" }) }
+  catch (err) { $error = err }
+  finally     { $loading = false }
+}
+
+function poll() {
+  let attempts = 0
+  do {
+    attempts = attempts + 1
+    $log = [...$log, "try " + attempts]
+  } while (attempts < 3 && !$ready)
 }
 ```
 
-**Rules of thumb:**
+### Line continuations (JS ASI)
 
-- Reach for ternary for two-way conditions, expression-`switch` for
-  multi-way dispatch, and expression-`for` for collecting rendered
-  rows.
-- `for (let x of xs) { Row(x) }` scopes `x` strictly to the body — it
-  is **not** a reactive atom and cannot be read from outside.
-- Both expression-`if` and expression-`switch` short-circuit — only
-  the chosen branch is evaluated, so guarded `Show(...)` blocks remain
-  cheap.
+Any expression operator can appear at the start of the next line and
+the parser keeps building the same expression. Use this to break up
+long method chains, ternaries, and logical expressions:
+
+```javascript
+// Method chain split across lines.
+filteredTodos = $todos
+  .filter(t => t.category == $filter)
+  .filter(t => t.title.includes($searchQuery))
+
+// Ternary split across lines.
+tabUI = @Count(filteredTodos) == 0
+  ? EmptyState()
+  : Stack(filteredTodos.map(TodoRow))
+
+// Logical operators on the continuation line.
+filtered = attractions.filter(a =>
+  ($selectedDistrict == "All") &&
+  (a.name.includes($searchQuery))
+)
+```
+
+Continuation-eligible tokens: `.`, `?.`, `?`, `:`, `&&`, `||`, `??`,
+`==` / `!=` / `===` / `!==`, `<` / `>` / `<=` / `>=`, `instanceof`,
+`+`, `-`, `*`, `/`, `%`, `**`, plus the bitwise / shift operators
+(`& | ^ << >> >>>`) and `in`. (`(`/`[` after a newline still terminate
+the previous statement — same as JS.)
+
+### Destructuring, spread, computed keys
+
+```javascript
+// Destructuring in let / const / var.
+let [first, second, ...rest] = arr
+let { name, role = "guest", ...other } = user
+
+// Destructured PARAMETERS (function declarations + lambdas).
+function Card({ title, tone = "info" }) { return Badge(title, { tone }) }
+function head([first, ...rest]) { return first }
+sum = ({ a, b }) => a + b
+
+// Spread in array / object literals and function calls.
+$cart   = [...$cart, item]
+$user   = { ...$user, role: "admin" }
+result  = fn(...args)
+
+// Computed property keys.
+$obj = { [$dynamic]: value, fixed: "ok" }
+```
+
+### Operators & JS standard-library globals
+
+```javascript
+// Arithmetic / comparison / logical, plus bitwise & shift.
+flags = READ | WRITE          // 6
+masked = perms & 0xF
+toggled = state ^ 1
+high = value >> 8
+inv = ~mask                   // bitwise NOT
+// Relational keywords.
+isDate = d instanceof Date
+hasKey = "name" in $user
+// Compound assignment (all JS forms).
+$count += 1; $bits <<= 2; $opts ??= {}
+
+// Safe JS stdlib — call directly or with `new`.
+biggest = Math.max(...$scores)
+json    = JSON.stringify($user)
+keys    = Object.keys($config)
+when    = new Date().getTime()
+seen    = new Set($ids).size
+```
+
+### Increment / decrement & `async` / `await`
+
+`i++`, `++i`, `i--`, `--i` all work. Postfix returns the OLD value
+(`let prev = i++`); prefix returns the NEW value (`let next = ++i`).
+
+`async function name(…)` is accepted as a no-op modifier in front of a
+function declaration. `await` works in both statement and expression
+position inside action / effect bodies — the runner unwraps thenables
+automatically:
+
+```javascript
+async function loadUser(id) {
+  let user = await http({ url: "/users/" + id }).data
+  $current = user
+  return user
+}
+```
+
+**Anti-patterns the parser rejects** (each has a clean JS replacement):
+
+| Anti-pattern | Replace with |
+| --- | --- |
+| `x = if (cond) { a } else { b }` | `x = cond ? a : b` |
+| `x = for (let r of rows) { Row(r) }` | `x = rows.map(r => Row(r))` |
+| `x = switch (v) { case "a": A; … }` | ternary chain, lookup object, or `function pickX(v) { switch (v) { … } }; x = pickX(v)` |
 
 ### Responsive prop maps
 
@@ -1358,7 +1512,7 @@ Notes:
 
 ### Content
 
-`Text`, `Image`, `Icon`, `Link`, `Badge`, `BadgeList`, `Callout`,
+`Text`, `Image`, `Icon`, `Badge`, `BadgeList`, `Callout`,
 `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd`.
 
 Notes:
@@ -1367,6 +1521,10 @@ Notes:
 - `Badge(label, { variant, icon, size })` for pills;
   `BadgeList(["a","b","c"], { variant, size })` for arrays.
 - `Icon(name, { variant, size })` for a standalone Font Awesome icon.
+- For anchors / links, reach for `Link(label_or_child, { to, href, external })`
+  from the Behaviour wrappers section — it accepts either a plain string
+  or a wrapped component and supports both router-aware (`to`) and plain
+  (`href`) navigation.
 
 ### Forms
 
@@ -1381,6 +1539,14 @@ Notes:
 Notes:
 
 - Pass a `$variable` as `value:` for two-way binding.
+- Every input also accepts an optional `onChange(value)` callable that
+  fires with the freshly-read value on every change (use it to debounce
+  a search, persist a setting, or kick off an HTTP call beyond a bare
+  state write). Shape of `value`: `string` for text inputs / pickers,
+  `boolean` for `Checkbox` / `Switch`, `number` for `Slider` /
+  `NumberInput`, `string[]` for `MultiSelect` / `TagInput`,
+  `{name: checked}` for `CheckBoxGroup`, `{from, to}` for
+  `DateRangePicker`, `FileList` for `FileUpload`.
 - Prefer `Switch` over `Checkbox` for settings.
 - `SearchBar(id, { placeholder, value, shortcut })` for filter fields.
 - `FormSection(label, children, { helper })` for related fields.
@@ -1442,6 +1608,14 @@ Notes:
 
 `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem`, `SplitView`.
 
+Notes:
+
+- `SidebarItem(label, { icon, to, badge })` — pass `to` for router
+  navigation and the item auto-derives its `active` state from
+  `route.path` (no need to thread it manually). `action` still works
+  for arbitrary click handlers and runs in addition to `to`-based
+  navigation.
+
 ### Editors
 
 `RichTextEditor`, `CodeEditor`.
@@ -1455,6 +1629,95 @@ Notes:
 ### Helpers
 
 `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary`.
+
+### Behaviour & styling wrappers
+
+`OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `Css`,
+`Link`.
+
+These six wrappers attach **behaviour** (click / mouse / keyboard /
+focus / intersection) or **styling** (class / inline style) onto any
+component without forcing every primitive to grow another prop. They
+render the child via a transparent wrapper (`display: contents`) so
+the visual tree stays identical — only the event / styling layer
+changes.
+
+Notes:
+
+- `OnClick(child, { onClick, disabled?, stopPropagation? })` — makes
+  any component clickable / tappable. Click events fire on touch
+  devices too, so a single handler covers both. The wrapper is
+  keyboard-activatable (Enter / Space) for accessibility. Don't wrap
+  `Button` / `IconButton` — they already expose `onClick`.
+- `OnMouse(child, { enter?, leave?, hover?, move?, down?, up?, click?,
+  doubleClick?, contextMenu?, scroll?, wheel?, drag?, drop?, dragStart?,
+  dragEnd?, dragEnter?, dragLeave?, dragOver?, draggable?, passiveScroll? })`
+  — attaches mouse / pointer / drag listeners. Pass only the events
+  you need; unused props install no listener. Set `draggable: true`
+  to make the wrapper itself draggable. Scroll / wheel listeners
+  default to `{ passive: true }` so smooth scrolling stays smooth.
+- `OnKeyboard(child, { onKeyDown?, onKeyUp?, onKeyPress?, focusable? })`
+  — attaches keyboard listeners. Focusable by default; pass
+  `focusable: false` when the child is already focusable.
+- `OnFocus(child, { onFocus?, onBlur? })` — tracks focus moving into
+  or out of a subtree (uses bubbling `focusin` / `focusout`).
+- `OnIntersect(child, { onEnter?, onLeave?, onChange?, threshold?,
+  rootMargin?, once? })` — IntersectionObserver wrapper for lazy-load
+  sentinels, infinite-scroll triggers, impression analytics, and
+  reveal-on-scroll animations. `onChange` receives `{visible, ratio}`.
+- `Css(child, { style?, class? })` — merge raw class tokens and inline
+  style declarations onto the child. Use ONLY when the standard
+  component props can't express the styling. Prefer `Box` / `Stack` /
+  `Grid` props for layout and `Theme(...)` for tokens.
+- `Link(label_or_child, { to?, href?, external?, variant? })` —
+  anchor primitive. The positional accepts either a string label or
+  a wrapped component. Pass `to` for client-side router navigation
+  (no reload) and `href` (with `external: true` for outbound links)
+  for plain anchors.
+
+```javascript
+// Clickable card → opens a detail page
+aktion = OnClick(Card([
+  CardHeader("Order #4821", { subtitle: "$1,240 · 3 items" }),
+  Text("Shipped from Berlin · arrives Mon", { tone: "muted" })
+]), { onClick: () => route.navigate("/orders/4821") })
+
+// Lazy-load sentinel for infinite scrolling
+sentinel = OnIntersect(Skeleton({ variant: "card" }), {
+  onEnter: () => $items.loadMore(),
+  once: true
+})
+
+// Drop zone using standard HTML5 drag-and-drop
+dropZone = OnMouse(Card([Text("Drop files here")]), {
+  dragOver: (e) => e.preventDefault(),
+  drop: (e) => { e.preventDefault(); $files = e.dataTransfer.files }
+})
+
+// Custom class / one-off styling without breaking out of the component
+highlighted = Css(Card([Text("Featured")]), {
+  class: "highlight",
+  style: "border-color: #f59e0b; box-shadow: 0 0 0 2px #fde68a;"
+})
+
+// Wrap a component as a router-aware link
+profileLink = Link(PersonChip("Ada Lovelace", { role: "Lead engineer" }), {
+  to: "/people/ada"
+})
+```
+
+When to reach for what:
+
+- Need a clickable surface? → `OnClick`. Need a clickable surface that
+  is also an `<a href>`? → `Link`.
+- Need a real `<button>`? → `Button` / `IconButton` (don't wrap them
+  in `OnClick`).
+- Need drag-and-drop? → `OnMouse` with `dragStart` / `dragOver` /
+  `drop`. Mark the source draggable with `draggable: true`.
+- Need infinite scroll? → `OnIntersect({ onEnter: loadMore, once: true })`
+  on a sentinel at the bottom of the list.
+- Need a custom CSS class or one-off style? → `Css`. Need theme tokens
+  or sweeping styles? → `Theme(...)` or `Styles` + a selector.
 
 ### Escape hatches — last-resort raw HTML / CSS
 
@@ -1510,17 +1773,22 @@ Aktion programs ARE JavaScript. The entire surface syntax is standard JS,
 so there is no separate "escape hatch" — all browser APIs are directly
 accessible inside function bodies and effect callbacks.
 
-### The `ctx` bridge
+### Available globals inside action / effect / lambda bodies
 
-Inside effect callbacks and action functions, a `ctx` object provides
-access to the host:
+Two globals (beyond `window` and the usual browser APIs) are recognised
+by the runtime:
 
-- `ctx.host` — the `<aktion-app>` host element (for `dispatchEvent`).
-- `ctx.state` — `{ get(name), set(name, value) }` for reactive atoms.
-- `ctx.cleanup(fn)` — register teardown (same semantics as `cleanup()`).
-- `ctx.tools` — host-registered endpoint catalog.
-- `ctx.args` — when invoked from a lambda, the call's arguments keyed
-  by name.
+- `emit("name", detail?)` — dispatches a `CustomEvent` on the
+  `<aktion-app>` host element. Reserved names: `assistant-message`,
+  `error`, `route-change`. Hosts listen with
+  `el.addEventListener("name", ...)`.
+- `cleanup(fn)` — register teardown for the surrounding effect /
+  component. Fires on dependency re-run, unmount, or `clear()`.
+
+The other always-available bindings (also documented in §12 and §11)
+are `storage` (localStorage / sessionStorage / cookies), `console`,
+`route` (the router handle), `$http` / `$i18n` setup bindings, and
+your own reactive `$atom`s.
 
 ### Common recipes
 
@@ -1561,12 +1829,11 @@ function LiveClock() {
 }
 ```
 
-**Host-registered tool call:**
+**HTTP-driven fetch:**
 
 ```javascript
 function loadOrders() {
-  const data = await ctx.tools.list_orders({ limit: 10 })
-  $orders = data
+  $orders = http({ url: "/api/orders", query: { limit: 10 } })
 }
 ```
 
@@ -1583,7 +1850,7 @@ function upload(files) {
   $status = "done"
 }
 
-picker = FileUpload("upload", { label: "Drop files", action: upload })
+picker = FileUpload("upload", { label: "Drop files", onSelect: upload })
 ```
 
 The CSP note: effect callbacks and action functions are evaluated with
@@ -2435,12 +2702,12 @@ aktion = Stack([
 ```javascript
 docTree = [
   TreeNode("Getting started", { children: [
-    TreeNode("Installation", { action: () => route.navigate("/docs/install"),    active: route.path == "/docs/install" }),
-    TreeNode("Quick start",  { action: () => route.navigate("/docs/quickstart"), active: route.path == "/docs/quickstart" })
+    TreeNode("Installation", { onClick: () => route.navigate("/docs/install"),    active: route.path == "/docs/install" }),
+    TreeNode("Quick start",  { onClick: () => route.navigate("/docs/quickstart"), active: route.path == "/docs/quickstart" })
   ], expanded: true }),
   TreeNode("Guides", { children: [
-    TreeNode("Routing", { action: () => route.navigate("/docs/routing") }),
-    TreeNode("Theming", { action: () => route.navigate("/docs/theming") })
+    TreeNode("Routing", { onClick: () => route.navigate("/docs/routing") }),
+    TreeNode("Theming", { onClick: () => route.navigate("/docs/theming") })
   ]})
 ]
 
@@ -2475,10 +2742,10 @@ aktion = AppShell(sidebar, Stack([
 
 ```javascript
 $tasks = [
-  { title: "Connect your data",    description: "Hook up a database.",        done: true,  action: () => route.navigate("/connect") },
-  { title: "Invite your team",     description: "Add at least one teammate.", done: false, action: () => route.navigate("/team") },
-  { title: "Configure billing",    description: "Pick a plan.",               done: false, action: () => route.navigate("/billing") },
-  { title: "Customize your theme", description: "Match your brand.",          done: false, action: () => route.navigate("/theme") }
+  { title: "Connect your data",    description: "Hook up a database.",        done: true,  onClick: () => route.navigate("/connect") },
+  { title: "Invite your team",     description: "Add at least one teammate.", done: false, onClick: () => route.navigate("/team") },
+  { title: "Configure billing",    description: "Pick a plan.",               done: false, onClick: () => route.navigate("/billing") },
+  { title: "Customize your theme", description: "Match your brand.",          done: false, onClick: () => route.navigate("/theme") }
 ]
 
 aktion = Stack([
@@ -2601,7 +2868,7 @@ $active = 1
 
 function open(id) { $active = id }
 
-list = InboxPanel($threads.map(t => ({ ...t, action: () => open(t.id) })), { title: "Inbox" })
+list = InboxPanel($threads.map(t => ({ ...t, onClick: () => open(t.id) })), { title: "Inbox" })
 
 thread = $active
   ? Card([
@@ -2752,7 +3019,7 @@ Use only the JS-aligned surface. Common shapes to follow:
 | `function User(u) { return Card([...]) }`                                                                | PascalCase function = component. MUST `return` its tree. The DSL `component` keyword is gone. |
 | `function save() { ... }`                                                                                | camelCase function = action. The DSL `action` keyword is gone.                       |
 | `effect(() => { ... }, [$x])`                                                                            | Callback + deps array. The old square-bracket effect form is gone.                   |
-| `items.map(x => ...)` / `cond ? a : b`                                                                   | Use standard JS `.map()` and ternaries in expression position.                       |
+| `items.map(x => ...)` / `cond ? a : b`                                                                   | Use standard JS `.map()` and ternaries in expression position. Function declarations work as bare callbacks too — `items.map(Row)` and `items.filter(isReady)`. |
 | `switch (value) { case "a": return X; default: return Y }`                                               | Standard JS `switch`. The DSL `match` keyword is gone.                               |
 | `Router({ ... })` / `route.path`                                                                         | Capitalised helper, no-underscore route surface. Legacy underscored forms are gone.  |
 | `emit("name", { detail })`                                                                               | Function-call syntax. The old whitespace-string form is gone.                        |
@@ -2812,7 +3079,7 @@ Before finishing, walk your output and verify:
 | HTTP — `http({...})`, `Async`, interceptors                            | §7.                                    |
 | Built-in `@` functions (aggregation, formatting, dates)                | §8.                                    |
 | Component catalog by group                                             | §9.                                    |
-| JavaScript layer — `ctx` bridge, browser APIs                          | §10.                                   |
+| JavaScript layer — `emit`, `cleanup`, browser APIs                     | §10.                                   |
 | Routing — `Router`, `params`, `route`                                  | §11.                                   |
 | Globals — `storage`, `console`                                         | §12.                                   |
 | Internationalisation — `$i18n`, `t()`, `Locale()`                      | §13.                                   |

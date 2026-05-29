@@ -186,7 +186,7 @@ export const IconButton: ComponentSpec = {
   props: [
     { name: "icon", type: "string", description: "Font Awesome icon name" },
     { name: "label", type: "string", description: "Accessible label (visually hidden)" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"] },
     { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
     { name: "size", type: "string", optional: true, enum: BUTTON_SIZES },
     { name: "disabled", type: "boolean", optional: true },
@@ -203,7 +203,7 @@ export const IconButton: ComponentSpec = {
     });
     const iconNode = renderIcon(props.icon, { className: "rui-icon-button-icon" });
     if (iconNode) btn.append(iconNode);
-    btn.onclick = () => helpers.invoke(props.action);
+    btn.onclick = () => helpers.invoke(props.onClick);
     return btn;
   },
 };

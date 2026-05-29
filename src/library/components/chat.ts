@@ -110,16 +110,16 @@ export const FollowUpItem: ComponentSpec = {
 
 export const ActionLink: ComponentSpec = {
   name: "ActionLink",
-  description: "Inline link that runs an Action when clicked instead of navigating.",
+  description: "Inline link that runs an action when clicked instead of navigating.",
   props: [
     { name: "label", type: "string" },
-    { name: "action", type: "callable", aliases: ["onClick", "onclick"] },
+    { name: "onClick", type: "callable", aliases: ["action", "onclick"] },
   ],
   render: (_node, props, helpers) => {
     const link = el("a", { class: "rui-action-link", href: "#", role: "button" }, [asString(props.label)]);
     link.onclick = (event) => {
       event.preventDefault();
-      helpers.invoke(props.action);
+      helpers.invoke(props.onClick);
     };
     return link;
   },

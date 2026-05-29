@@ -40,6 +40,7 @@ import {
   createLocalStorageAdapter,
   disposeContext,
   planProgram,
+  resetMutableBindings,
   isThemeNode,
   resetRuntimeBudget,
   RuntimeBudgetError,
@@ -697,6 +698,13 @@ export class AktionElement extends HTMLElement {
     // tokens are in place when components measure themselves or read CSS
     // custom properties (charts that grab `--rui-chart-1`, etc.).
     this.applyScriptThemeOverrides();
+
+    // Drop the previous render's mutable-binding cache so top-level
+    // `let`/`var`/plain variables re-seed from their initialisers this
+    // render (keeping derived values reactive) while staying stable
+    // within the render (so `.push` / `[...x, y]` mutations behave like
+    // ordinary JS module variables instead of leaking across renders).
+    resetMutableBindings(this.context);
 
     // The program's entry-point binding is `aktion`.
     const appBinding = this.context.bindings.get("aktion");

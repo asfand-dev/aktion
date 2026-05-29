@@ -125,7 +125,7 @@ function App() {
 
   it("tears down a component-local interval effect when the instance unmounts", async () => {
     const el = mount();
-    el.setResponse(`aktion = if ($showApp) { App() } else { Stack([]) }
+    el.setResponse(`aktion = $showApp ? App() : Stack([])
 $showApp = true
 $ticks = 0
 function App() {
@@ -230,7 +230,7 @@ function Item() {
 
   it("a per-instance effect tears down its subscription when the instance unmounts", async () => {
     const el = mount();
-    el.setResponse(`aktion = if ($on) { Item() } else { Stack([]) }
+    el.setResponse(`aktion = $on ? Item() : Stack([])
 $on = true
 $runs = 0
 function Item() {
@@ -481,7 +481,7 @@ function Item(todo) {
 }
 
 function App() {
-  return [for (let todo of $todos) { Item(todo) }]
+  return $todos.map(todo => Item(todo))
 }
 
 $todos = [
@@ -506,7 +506,7 @@ $todos = [
     console.log = (...args: unknown[]) => logs.push(args);
     try {
       const el = mount();
-      el.setResponse(`aktion = Stack([for (let todo of $todos) { Item(todo) }])
+      el.setResponse(`aktion = Stack($todos.map(todo => Item(todo)))
 function Item(todo) {
   $isDone = false
   effect(() => {
@@ -542,7 +542,7 @@ $todos = [{ id: "1", title: "A" }, { id: "2", title: "B" }]`);
     console.log = (...args: unknown[]) => logs.push(args);
     try {
       const el = mount();
-      el.setResponse(`aktion = Stack([for (let todo of $todos) { Item(todo) }])
+      el.setResponse(`aktion = Stack($todos.map(todo => Item(todo)))
 function Item(todo) {
   $isDone = false
   effect(() => {
@@ -574,7 +574,7 @@ $todos = [{ id: "1", title: "Original" }]`);
 
   it("cleanup lambda closes over the captured prop and uses it on teardown", async () => {
     const el = mount();
-    el.setResponse(`aktion = if ($on) { Item(name) } else { Stack([]) }
+    el.setResponse(`aktion = $on ? Item(name) : Stack([])
 function Item(name) {
   effect(() => {
     cleanup(() => { $mark = name })
@@ -656,7 +656,7 @@ function Item(label) {
     console.log = (...args: unknown[]) => logs.push(args);
     try {
       const el = mount();
-      el.setResponse(`aktion = Stack([for (let n of [1, 2, 3]) { Item(n) }])
+      el.setResponse(`aktion = Stack([1, 2, 3].map(n => Item(n)))
 function Item(n) {
   effect(() => {
     console.log("n=", n)
@@ -770,7 +770,7 @@ aktion = Stack([])`);
       const el = mount();
       el.setResponse(`aktion = Item("only")
 function Item(label) {
-  $rows = for (let n of [1, 2]) { n }
+  $rows = [1, 2].map(n => n)
   effect(() => {
     console.log("label:", label, "n:", n)
   }, ["mount"])
@@ -792,7 +792,7 @@ function Item(label) {
     console.log = (...args: unknown[]) => logs.push(args);
     try {
       const el = mount();
-      el.setResponse(`aktion = if ($on) { Item("only") } else { Stack([]) }
+      el.setResponse(`aktion = $on ? Item("only") : Stack([])
 function Item(label) {
   $count = 0
   effect(() => {
@@ -821,7 +821,7 @@ $on = true`);
     }
   });
 
-  it("effect inside an `if` arm still captures the component parameter", async () => {
+  it("effect inside a conditional return still captures the component parameter", async () => {
     const logs: unknown[][] = [];
     const originalLog = console.log;
     console.log = (...args: unknown[]) => logs.push(args);
@@ -832,7 +832,7 @@ function Item(visible, msg) {
   effect(() => {
     console.log("seen:", visible, msg)
   }, ["mount"])
-  return if (visible) { Text(msg) } else { Stack([]) }
+  return visible ? Text(msg) : Stack([])
 }`);
       await waitForRenders();
       const entry = logs.find(([p]) => p === "seen:");

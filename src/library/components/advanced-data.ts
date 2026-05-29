@@ -96,7 +96,7 @@ export const DataGrid: ComponentSpec = {
     { name: "page", type: "number", optional: true, description: "1-indexed current page — bind a $variable" },
     { name: "perPage", type: "number", optional: true, description: "Page size (default 20)" },
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when no rows match (default `No results`)" },
-    { name: "rowAction", type: "callable", optional: true, description: "Callable fired when a row is clicked" },
+    { name: "onRowClick", type: "callable", optional: true, aliases: ["rowAction"], description: "Callable fired when a row is clicked. Receives the row index." },
     { name: "toolbar", type: "Node[]", optional: true, description: "Bulk-action toolbar shown above the table when any rows are selected" },
     { name: "density", type: "string", optional: true, enum: ["comfortable", "compact"] },
     { name: "striped", type: "boolean", optional: true },
@@ -333,12 +333,12 @@ export const DataGrid: ComponentSpec = {
           }
           tr.append(td);
         });
-        if (typeof props.rowAction === "function") {
+        if (typeof props.onRowClick === "function") {
           tr.setAttribute("data-clickable", "true");
           tr.onclick = (event) => {
             const target = event.target as Element | null;
             if (target?.closest("input,button,a,label,select,textarea")) return;
-            helpers.invoke(props.rowAction);
+            helpers.invoke(props.onRowClick, r);
           };
         }
         tbody.append(tr);

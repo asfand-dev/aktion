@@ -23,7 +23,14 @@ import type {
   Statement,
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
-import { evaluate, resolveStateAlias } from "./evaluator.js";
+import {
+  BreakSignal,
+  ContinueSignal,
+  ReturnSignal,
+  evaluate,
+  resolveStateAlias,
+  runControlFlowStatement,
+} from "./evaluator.js";
 import type { StateStore, StateValue } from "./state.js";
 
 export interface EffectRunnerOptions {
@@ -438,6 +445,23 @@ function runStatement(
       }
       return value;
     }
+    case "IfStatement":
+    case "ForOfStatement":
+    case "ForClassicStatement":
+    case "ForInStatement":
+    case "SwitchStatement":
+    case "WhileStatement":
+    case "DoWhileStatement":
+    case "TryStatement":
+    case "BreakStatement":
+    case "ContinueStatement":
+    case "ThrowStatement":
+    case "DestructureStatement":
+      // Control-flow statements share semantics with the rest of the
+      // evaluator — delegate so `for` / `while` / `if` bodies inside an
+      // effect run with the same break/continue/return handling.
+      runControlFlowStatement(stmt, ctx);
+      return undefined;
     default:
       return undefined;
   }
@@ -517,12 +541,28 @@ export class ActionDeclRunner {
       : null;
     try {
       let lastValue: unknown;
-      for (const stmt of decl.body.body) {
-        lastValue = await this.runStatement(stmt, ctx);
+      try {
+        for (const stmt of decl.body.body) {
+          lastValue = await this.runStatement(stmt, ctx);
+        }
+      } catch (err) {
+        if (err instanceof ReturnSignal) {
+          this.options.notify();
+          return err.value;
+        }
+        throw err;
       }
       this.options.notify();
       return lastValue;
     } catch (err) {
+      // Control-flow signals leaking past the action body are author
+      // bugs (`break` outside a loop, etc.) — surface them but don't
+      // crash the page.
+      if (err instanceof BreakSignal || err instanceof ContinueSignal) {
+        // eslint-disable-next-line no-console
+        console.error(`[aktion] action "${decl.name}" — \`${err.kind}\` outside a loop.`);
+        return undefined;
+      }
       if (snapshot) {
         restoreState(this.options.state, snapshot);
         this.options.notify();
@@ -563,17 +603,39 @@ export class ActionDeclRunner {
       case "Assignment": {
         const value = await unwrapPromise(evaluate(stmt.expression, ctx));
         if (stmt.identifier) {
-          // Resolve through the per-instance alias stack so an `action`
-          // declared inside a function body writes the right slot (§7).
-          const target = resolveStateAlias(ctx, stmt.identifier);
-          this.options.state.set(target, value as StateValue);
+          if (stmt.isState) {
+            // Resolve through the per-instance alias stack so an `action`
+            // declared inside a function body writes the right slot (§7).
+            const target = resolveStateAlias(ctx, stmt.identifier);
+            this.options.state.set(target, value as StateValue);
+          } else {
+            // `let x = …` inside an action body is a local — keep it in
+            // the per-frame `loopVars` map so the rest of the body can
+            // read it without it leaking into the reactive state store.
+            ctx.loopVars.set(stmt.identifier, value);
+          }
         }
         return value;
       }
       case "Return": {
-        if (!stmt.argument) return undefined;
-        return await unwrapPromise(evaluate(stmt.argument, ctx));
+        if (!stmt.argument) throw new ReturnSignal(undefined);
+        const value = await unwrapPromise(evaluate(stmt.argument, ctx));
+        throw new ReturnSignal(value);
       }
+      case "IfStatement":
+      case "ForOfStatement":
+      case "ForClassicStatement":
+      case "ForInStatement":
+      case "SwitchStatement":
+      case "WhileStatement":
+      case "DoWhileStatement":
+      case "TryStatement":
+      case "BreakStatement":
+      case "ContinueStatement":
+      case "ThrowStatement":
+      case "DestructureStatement":
+        runControlFlowStatement(stmt, ctx);
+        return undefined;
       default:
         return undefined;
     }

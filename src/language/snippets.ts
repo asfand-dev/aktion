@@ -164,11 +164,21 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '}',
   },
   {
-    name: "Each",
-    description: "Iterate over an array using `for (let x of xs)`.",
+    name: "MapList",
+    description: "Map an array of items into a list of components using `.map`.",
     template:
-      'list${1} = for (let item of $items) {\n' +
-      '  Card([Text(item.${2:name})])\n' +
+      'list${1} = $items.map(item => Card([Text(item.${2:name})]))',
+  },
+  {
+    name: "ForLoop",
+    description: "Iterate over an array statement-style — usable in a function body.",
+    template:
+      'function build${1:List}() {\n' +
+      '  let out = []\n' +
+      '  for (let item of $items) {\n' +
+      '    out.push(Card([Text(item.${2:name})]))\n' +
+      '  }\n' +
+      '  return Stack(out)\n' +
       '}',
   },
   {
@@ -215,27 +225,33 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '    Text(${2:user}.role)\n' +
       '  ])\n' +
       '}\n\n' +
-      'list = for (let u of $users) { ${1:UserCard}(u) }',
+      'list = $users.map(u => ${1:UserCard}(u))',
   },
   {
-    name: "If",
-    description: "Expression-form `if (cond) { ... }`.",
+    name: "Ternary",
+    description: "Pick between two expressions — the JS way to express a value-producing if.",
     template:
-      'body${1} = if (${2:condition}) {\n' +
-      '  ${3:trueBranch}\n' +
+      'body${1} = ${2:condition} ? ${3:trueBranch} : ${4:falseBranch}',
+  },
+  {
+    name: "IfStatement",
+    description: "Imperative `if (cond) { … } else { … }` — usable inside function / effect bodies.",
+    template:
+      'if (${1:condition}) {\n' +
+      '  ${2:// then branch}\n' +
       '} else {\n' +
-      '  ${4:falseBranch}\n' +
+      '  ${3:// else branch}\n' +
       '}',
   },
   {
-    name: "Switch",
-    description: "Switch on a value with case/default/break.",
+    name: "SwitchStatement",
+    description: "Switch on a value with case/default/break — statement form.",
     template:
-      'panel${1} = switch (${2:$tab}) {\n' +
-      '  case "overview": overviewPanel; break\n' +
-      '  case "billing":  billingPanel; break\n' +
-      '  case "security": securityPanel; break\n' +
-      '  default: overviewPanel\n' +
+      'switch (${1:$tab}) {\n' +
+      '  case "overview": ${2:// …}; break\n' +
+      '  case "billing":  ${3:// …}; break\n' +
+      '  case "security": ${4:// …}; break\n' +
+      '  default: ${5:// …}\n' +
       '}',
   },
   {

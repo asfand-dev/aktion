@@ -4778,7 +4778,7 @@ const EXAMPLES = [
       '  Card([CardHeader("Todo list")]),\n' +
       '  Input("draft", { placeholder: "What needs doing?", value: $draft }),\n' +
       '  Button("Add", { action: addTodo, variant: "primary" }),\n' +
-      '  for (let t of $todos) { Row(t) }\n' +
+      '  ...$todos.map(t => Row(t))\n' +
       '])',
   },
   {

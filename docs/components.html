@@ -1601,6 +1601,65 @@ aktion = pages`,
 )`,
 
       // -------------------------------------------------------------------
+      // Behaviour & styling wrappers
+      // -------------------------------------------------------------------
+      OnClick: `aktion = OnClick(
+  Card([
+    CardHeader("Clickable card"),
+    Text("Click anywhere — fires the OnClick handler.")
+  ]),
+  { onClick: () => console.log("card clicked") }
+)`,
+      OnMouse: `aktion = OnMouse(
+  Card([
+    CardHeader("Hover / drag surface", { subtitle: "Open the console to watch events" }),
+    Text("Move the mouse, right-click, or drag a file onto this card.")
+  ]),
+  {
+    enter:     () => console.log("enter"),
+    leave:     () => console.log("leave"),
+    dragOver:  (e) => e.preventDefault(),
+    drop:      (e) => { e.preventDefault(); console.log("dropped", e.dataTransfer.files) }
+  }
+)`,
+      OnKeyboard: `aktion = OnKeyboard(
+  Card([
+    CardHeader("Press a key"),
+    Text("Focus this card and press any key — the handler logs to console.")
+  ]),
+  { onKeyDown: (e) => console.log("key:", e.key) }
+)`,
+      OnFocus: `aktion = OnFocus(
+  Card([
+    CardHeader("Focus tracker"),
+    Input("Try focusing me", { placeholder: "Tab to focus / blur" })
+  ]),
+  {
+    onFocus: () => console.log("focus entered"),
+    onBlur:  () => console.log("focus left")
+  }
+)`,
+      OnIntersect: `aktion = OnIntersect(
+  Card([
+    CardHeader("Visible-on-scroll sentinel"),
+    Text("Fires onEnter when this card enters the viewport.")
+  ]),
+  { onEnter: () => console.log("visible!"), once: true }
+)`,
+      Css: `aktion = Css(
+  Card([
+    CardHeader("Custom styled card"),
+    Text("Class + inline style merged onto the rendered Card element.")
+  ]),
+  { class: "highlight", style: "border-color: #f59e0b; box-shadow: 0 0 0 2px #fde68a;" }
+)`,
+      Link: `aktion = Stack([
+  Link("Internal route",   { to: "/dashboard" }),
+  Link("External docs",    { href: "https://example.com", external: true }),
+  Link(Badge("Wrapped component", { tone: "primary" }), { to: "/profile" })
+], { gap: "s" })`,
+
+      // -------------------------------------------------------------------
       // Escape hatches — last-resort raw HTML / CSS primitives
       // -------------------------------------------------------------------
       HTMLTag: `aktion = HTMLTag("section",

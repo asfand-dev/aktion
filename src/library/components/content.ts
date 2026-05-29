@@ -9,7 +9,7 @@
 import type { ComponentSpec } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
-  sanitiseCssLength, sanitiseHref, sanitiseImageSrc,
+  sanitiseCssLength, sanitiseImageSrc,
 } from "../utils.js";
 import { ICON_SIZES } from "../../icons/index.js";
 
@@ -194,31 +194,6 @@ function parseImageRatio(input: string): string {
   const n = Number(input);
   return Number.isFinite(n) && n > 0 ? `${n} / 1` : "auto";
 }
-
-export const Link: ComponentSpec = {
-  name: "Link",
-  description: "Anchor link.",
-  props: [
-    { name: "label", type: "string" },
-    { name: "href", type: "string" },
-    { name: "external", type: "boolean", optional: true },
-  ],
-  render: (_node, props) => {
-    const external = asBoolean(props.external);
-    // Sanitise the href before it lands on the anchor so a hostile
-    // `javascript:` (or `vbscript:` / control-char-bypassed) URL coming from
-    // an LLM/tool response cannot execute on click.
-    const safeHref = sanitiseHref(props.href, "#");
-    return el("a", {
-      class: "rui-link",
-      href: safeHref,
-      target: external ? "_blank" : null,
-      // `noreferrer` rounds out `noopener` so the destination cannot read the
-      // opener's `document.referrer` either — important for external links.
-      rel: external ? "noopener noreferrer" : null,
-    }, [asString(props.label)]);
-  },
-};
 
 const BADGE_VARIANTS = ["neutral", "primary", "success", "warning", "danger", "info"] as const;
 

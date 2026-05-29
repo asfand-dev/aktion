@@ -527,22 +527,22 @@ export const KanbanCard: ComponentSpec = {
     { name: "assignee", type: "string", optional: true, description: "Name shown next to avatar initials" },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name shown beside the title" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"], description: "Optional callable fired when the card is clicked" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Optional callable fired when the card is clicked" },
   ],
   render: (_node, props, helpers) => {
     const root = el("div", {
       class: "rui-kanban-card",
       "data-tone": asString(props.tone, "default"),
     });
-    if (typeof props.action === "function") {
+    if (typeof props.onClick === "function") {
       root.setAttribute("role", "button");
       root.setAttribute("tabindex", "0");
-      root.onclick = () => helpers.invoke(props.action);
+      root.onclick = () => helpers.invoke(props.onClick);
       root.onkeydown = (event) => {
         const e = event as KeyboardEvent;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          helpers.invoke(props.action);
+          helpers.invoke(props.onClick);
         }
       };
     }
@@ -715,28 +715,57 @@ export const SidebarItem: ComponentSpec = {
   name: "SidebarItem",
   description:
     "Single navigation item inside a Sidebar. Pass `active=true` to mark " +
-    "as the current page, an `action` Action for click handling, or an " +
-    "optional `badge` (string/number) for a trailing chip.",
+    "as the current page, a `to` path to navigate via the runtime router " +
+    "on click, an `onClick` callable for arbitrary click handling, or an " +
+    "optional `badge` (string/number) for a trailing chip. `to` and " +
+    "`onClick` can coexist — `onClick` is invoked AFTER the router " +
+    "navigates so authors can do extra work (analytics, side-effects).",
   props: [
     { name: "label", type: "string" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name rendered before the label" },
-    { name: "active", type: "boolean", optional: true },
+    { name: "active", type: "boolean", optional: true, description: "Mark this item as the current page. When `to` is provided and `active` is omitted, the item auto-detects the active state from the current router path." },
     { name: "badge", type: "string", optional: true, description: "Trailing chip (count or status)" },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
+    { name: "to", type: "string", optional: true, description: "Router path to navigate to on click (e.g. \"/\", \"/orders\"). Uses the runtime router — no full page reload." },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable invoked on click. Runs in addition to `to`-based navigation." },
   ],
   render: (_node, props, helpers) => {
+    const to = asString(props.to);
+    const explicitActive = props.active !== undefined && props.active !== null;
+    const currentPath = to ? helpers.router.getPath() : "";
+    // When the caller supplies `to` without an explicit `active`, derive
+    // the active state from the current router path so a single declaration
+    // (`SidebarItem("Home", { to: "/", icon: "house" })`) renders the
+    // active highlight without extra wiring.
+    const autoActive = (() => {
+      if (!to) return false;
+      if (to === "/") return currentPath === "/";
+      if (currentPath === to) return true;
+      return currentPath.startsWith(to + "/");
+    })();
+    const isActive = explicitActive ? asBoolean(props.active) : autoActive;
     const root = el("button", {
       type: "button",
       class: "rui-sidebar-item",
-      "data-active": asBoolean(props.active) ? "true" : "false",
+      "data-active": isActive ? "true" : "false",
+      "data-to": to || null,
     });
     const iconNode = renderIcon(props.icon, { className: "rui-sidebar-item-icon" });
     if (iconNode) root.append(iconNode);
     root.append(el("span", { class: "rui-sidebar-item-label" }, [asString(props.label)]));
     const badge = asString(props.badge);
     if (badge) root.append(el("span", { class: "rui-sidebar-item-badge" }, [badge]));
-    if (typeof props.action === "function") {
-      root.onclick = () => helpers.invoke(props.action);
+    if (to || props.onClick != null) {
+      root.onclick = (event) => {
+        if (to) {
+          // Honour modifier keys (Cmd/Ctrl + click etc.) the way an anchor
+          // would — but the trigger is a <button>, so we have no native
+          // fallback. Just navigate via the runtime router.
+          const e = event as MouseEvent;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          helpers.router.navigate(to);
+        }
+        if (props.onClick != null) helpers.invoke(props.onClick);
+      };
     }
     return root;
   },
@@ -1239,10 +1268,10 @@ export const Tile: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "Secondary value rendered next to/under the label" },
     { name: "description", type: "string", optional: true },
     { name: "tone", type: "string", optional: true, enum: SURFACE_TONES },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"] },
   ],
   render: (_node, props, helpers) => {
-    const isClickable = typeof props.action === "function";
+    const isClickable = typeof props.onClick === "function";
     const tag = isClickable ? "button" : "div";
     const root = el(tag as "div", {
       type: isClickable ? "button" : null,
@@ -1259,7 +1288,7 @@ export const Tile: ComponentSpec = {
     if (description) body.append(el("div", { class: "rui-tile-description" }, [description]));
     root.append(body);
     if (isClickable) {
-      root.onclick = () => helpers.invoke(props.action);
+      root.onclick = () => helpers.invoke(props.onClick);
     }
     return root;
   },
@@ -1333,10 +1362,10 @@ export const PersonChip: ComponentSpec = {
     { name: "avatarSrc", type: "string", optional: true, aliases: ["src"] },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
     { name: "status", type: "string", optional: true, enum: ["online", "offline", "busy", "away"] },
-    { name: "action", type: "callable", optional: true, aliases: ["onClick", "onclick"] },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"] },
   ],
   render: (_node, props, helpers) => {
-    const isClickable = typeof props.action === "function";
+    const isClickable = typeof props.onClick === "function";
     const tag = isClickable ? "button" : "div";
     const size = asString(props.size, "md");
     const avatarSize = size === "lg" ? "lg" : size === "sm" ? "sm" : "md";
@@ -1356,7 +1385,7 @@ export const PersonChip: ComponentSpec = {
     if (role) meta.append(el("span", { class: "rui-person-chip-role" }, [role]));
     root.append(meta);
     if (isClickable) {
-      root.onclick = () => helpers.invoke(props.action);
+      root.onclick = () => helpers.invoke(props.onClick);
     }
     return root;
   },

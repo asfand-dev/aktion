@@ -22,50 +22,18 @@ export type Expression =
   | TernaryExpr
   | CallExpr
   | MethodCallExpr
+  | InvokeExpr
   | BuiltinCallExpr
+  | NewExpr
   | TemplateLiteralExpr
   | SpreadExpr
-  | IfExpr
-  | SwitchExpr
-  | ForExpr
   | LambdaExpr
   | BlockExpr;
-
-/** `if (cond) { ... } else { ... }` — JS if statement used as expression. */
-export interface IfExpr {
-  kind: "If";
-  test: Expression;
-  consequent: BlockExpr;
-  alternate?: IfExpr | BlockExpr;
-  loc?: SourceLocation;
-}
-
-/** `switch (value) { case X: ...; break; default: ... }` expression. */
-export interface SwitchExpr {
-  kind: "Switch";
-  discriminant: Expression;
-  cases: ReadonlyArray<SwitchCase>;
-  loc?: SourceLocation;
-}
 
 export interface SwitchCase {
   /** `null` for the `default` case. */
   test: Expression | null;
   body: ReadonlyArray<Statement>;
-}
-
-/** `for (let x of arr) { body }` expression — collects body values into an array. */
-export interface ForExpr {
-  kind: "For";
-  /** Item binding name. */
-  item: string;
-  /** Optional index binding via `for (let [item, i] of ...)`. */
-  index?: string;
-  /** Optional `{a, b, c}` destructuring — binds each named field of the row. */
-  destructure?: ReadonlyArray<string>;
-  iterable: Expression;
-  body: BlockExpr;
-  loc?: SourceLocation;
 }
 
 /** `(args) => body` lambda / arrow function. */
@@ -79,6 +47,14 @@ export interface LambdaExpr {
 export interface LambdaParam {
   name: string;
   defaultValue?: Expression;
+  /** True for `...rest` parameters — must be the final param. */
+  rest?: boolean;
+  /**
+   * Destructuring pattern parameter — `(x => …)` stays a plain name, but
+   * `({ a, b }) => …` / `([a, b]) => …` carry the pattern here. When set,
+   * `name` is empty and the binder fans the argument out into the pattern.
+   */
+  pattern?: DestructuringPattern;
 }
 
 /**
@@ -126,6 +102,12 @@ export interface ObjectProperty {
   value: Expression;
   /** True for `{...source}` shorthand — `key` is ignored when set. */
   spread?: boolean;
+  /**
+   * Computed property key: `{ [expr]: value }`. When set the literal
+   * `key` field is ignored and the key is resolved at runtime by
+   * evaluating this expression. Falls back to a string coercion.
+   */
+  computedKey?: Expression;
 }
 
 export interface ObjectExpr {
@@ -175,15 +157,17 @@ export interface TemplateLiteralExpr {
 
 export interface UnaryExpr {
   kind: "Unary";
-  operator: "!" | "-";
+  operator: "!" | "-" | "+" | "~" | "typeof" | "void" | "delete";
   argument: Expression;
   loc?: SourceLocation;
 }
 
 export type BinaryOperator =
-  | "+" | "-" | "*" | "/" | "%"
-  | "==" | "!=" | ">" | "<" | ">=" | "<="
-  | "&&" | "||"
+  | "+" | "-" | "*" | "/" | "%" | "**"
+  | "==" | "!=" | "===" | "!==" | ">" | "<" | ">=" | "<="
+  | "&&" | "||" | "instanceof" | "in"
+  /** Bitwise / shift operators — coerced through ToInt32 / ToUint32 like JS. */
+  | "&" | "|" | "^" | "<<" | ">>" | ">>>"
   /**
    * Nullish coalescing — returns `left` unless it is `null` or `undefined`.
    * Distinct from `||`, which also short-circuits on `0`, `""`, and `false`.
@@ -228,9 +212,32 @@ export interface MethodCallExpr {
   loc?: SourceLocation;
 }
 
+/**
+ * Postfix call on an arbitrary expression — `(fn)(args)`, IIFE
+ * `(() => { … })()`, or `arr[i](args)`. The dedicated `Call` node is
+ * still used for bare-identifier callees so the evaluator can resolve
+ * component / action / library lookups by name.
+ */
+export interface InvokeExpr {
+  kind: "Invoke";
+  callee: Expression;
+  arguments: Expression[];
+  /** True for `expr?.()` — short-circuits when `callee` is null/undefined. */
+  optional?: boolean;
+  loc?: SourceLocation;
+}
+
 export interface BuiltinCallExpr {
   kind: "BuiltinCall";
   name: string;
+  arguments: Expression[];
+  loc?: SourceLocation;
+}
+
+/** `new Constructor(args)` expression. */
+export interface NewExpr {
+  kind: "New";
+  callee: Expression;
   arguments: Expression[];
   loc?: SourceLocation;
 }
@@ -266,6 +273,24 @@ export interface DeclParam {
   name: string;
   defaultValue?: Expression;
   optional?: boolean;
+  /** True for `...rest` parameters — must be the final param. */
+  rest?: boolean;
+  /**
+   * Destructuring pattern parameter — `function Foo({ name }) { … }` /
+   * `function Foo([a, b]) { … }`. When set, `name` is empty and the
+   * argument value is fanned out into the pattern's bindings.
+   */
+  pattern?: DestructuringPattern;
+}
+
+/**
+ * A destructuring pattern shared by `let`-declarations and
+ * function / lambda parameters. `kind` selects positional (array) vs.
+ * keyed (object) destructuring.
+ */
+export interface DestructuringPattern {
+  kind: "array" | "object";
+  bindings: DestructuringBinding[];
 }
 
 /**
@@ -340,6 +365,138 @@ export interface ExpressionStatement {
   loc?: SourceLocation;
 }
 
+/** `if (cond) { … } else { … }` — JS if/else statement (body grammar). */
+export interface IfStatement {
+  kind: "IfStatement";
+  test: Expression;
+  consequent: BlockExpr;
+  alternate?: IfStatement | BlockExpr;
+  loc?: SourceLocation;
+}
+
+/** `switch (value) { case X: …; break; default: … }` statement. */
+export interface SwitchStatement {
+  kind: "SwitchStatement";
+  discriminant: Expression;
+  cases: ReadonlyArray<SwitchCase>;
+  loc?: SourceLocation;
+}
+
+/**
+ * `for (let x of arr) { body }` statement — iterates without producing a
+ * value. Use `arr.map(x => …)` to collect the bodies into an array.
+ */
+export interface ForOfStatement {
+  kind: "ForOfStatement";
+  /** Item binding name. */
+  item: string;
+  /** Optional index binding via `for (let [item, i] of ...)`. */
+  index?: string;
+  /** Optional `{a, b, c}` destructuring — binds each named field of the row. */
+  destructure?: ReadonlyArray<string>;
+  iterable: Expression;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
+/**
+ * `for (init; test; update) { body }` — classic C-style for loop.
+ * `init` is an Assignment statement (`let i = 0`) or null; `test` and
+ * `update` are expressions (`i < 10`, `i++`).
+ */
+export interface ForClassicStatement {
+  kind: "ForClassicStatement";
+  init?: AssignmentStatement | ExpressionStatement;
+  test?: Expression;
+  update?: Expression;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
+/**
+ * `for (let key in obj) { body }` — iterates over the enumerable string
+ * keys of `obj`. Use this for plain-object dictionaries; prefer the
+ * `for…of` form for arrays.
+ */
+export interface ForInStatement {
+  kind: "ForInStatement";
+  item: string;
+  iterable: Expression;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
+/** `while (cond) { body }` statement. */
+export interface WhileStatement {
+  kind: "WhileStatement";
+  test: Expression;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
+/** `do { body } while (cond)` — body always runs at least once. */
+export interface DoWhileStatement {
+  kind: "DoWhileStatement";
+  test: Expression;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
+/** `break` — exits the nearest enclosing loop or switch case. */
+export interface BreakStatement {
+  kind: "BreakStatement";
+  loc?: SourceLocation;
+}
+
+/** `continue` — skips to the next loop iteration. */
+export interface ContinueStatement {
+  kind: "ContinueStatement";
+  loc?: SourceLocation;
+}
+
+/** `throw expr` — throws the given value. */
+export interface ThrowStatement {
+  kind: "ThrowStatement";
+  argument: Expression;
+  loc?: SourceLocation;
+}
+
+/**
+ * Single binding produced by an `Array` / `Object` destructuring pattern.
+ * Nested patterns are intentionally not modelled — authors with more
+ * complex needs can destructure in two steps. `defaultValue` is JS's
+ * `let {a = 1} = obj` / `let [a = 1] = arr` fallback.
+ */
+export interface DestructuringBinding {
+  /** Variable name introduced by this slot. */
+  name: string;
+  /** Optional renamed source key (object pattern only): `let {a: b} = …`. */
+  sourceKey?: string;
+  /** `let [a, ...rest] = …` / `let {a, ...rest} = …`. */
+  rest?: boolean;
+  defaultValue?: Expression;
+}
+
+/** `let [a, b, ...rest] = …` / `let {x, y: alias, z = 0, ...rest} = …`. */
+export interface DestructureStatement {
+  kind: "DestructureStatement";
+  /** `"array"` for positional, `"object"` for keyed destructuring. */
+  patternKind: "array" | "object";
+  bindings: DestructuringBinding[];
+  expression: Expression;
+  loc?: SourceLocation;
+}
+
+/** `try { … } catch (e) { … } finally { … }` statement. */
+export interface TryStatement {
+  kind: "TryStatement";
+  block: BlockExpr;
+  catchParam?: string;
+  catchBlock?: BlockExpr;
+  finallyBlock?: BlockExpr;
+  loc?: SourceLocation;
+}
+
 export type Statement =
   | AssignmentStatement
   | ComponentDeclaration
@@ -347,7 +504,19 @@ export type Statement =
   | ActionDeclaration
   | AwaitStatement
   | ReturnStatement
-  | ExpressionStatement;
+  | ExpressionStatement
+  | IfStatement
+  | SwitchStatement
+  | ForOfStatement
+  | ForClassicStatement
+  | ForInStatement
+  | WhileStatement
+  | DoWhileStatement
+  | DestructureStatement
+  | BreakStatement
+  | ContinueStatement
+  | ThrowStatement
+  | TryStatement;
 
 export interface Program {
   statements: Statement[];

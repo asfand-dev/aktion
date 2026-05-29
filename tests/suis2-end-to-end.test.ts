@@ -149,7 +149,7 @@ describe("Components and per-instance state", () => {
       aktion = App()
       function App() {
         $isHide = true
-        return Text(if ($isHide) { "hidden" } else { "shown" })
+        return Text($isHide ? "hidden" : "shown")
       }
     `);
     expect(render().textContent).toBe("hidden");
@@ -240,28 +240,24 @@ describe("Slots (via regular params)", () => {
   });
 });
 
-describe("Expression control flow", () => {
-  it("`if (expr) { … } else { … }` is a value-yielding expression", () => {
+describe("Expression control flow (strict JS subset)", () => {
+  it("ternary expression `cond ? a : b` is a value-yielding expression", () => {
     const { render } = harness(`
       $active = true
-      aktion = if ($active) { Text("on") } else { Text("off") }
+      aktion = $active ? Text("on") : Text("off")
     `);
     expect(render().textContent).toBe("on");
   });
 
-  it("`switch` with `default` arm renders the matching arm", () => {
+  it("a chained ternary acts as a value-yielding switch", () => {
     const { render } = harness(`
       $status = "warn"
-      aktion = switch ($status) {
-        case "ok": Text("Ok"); break
-        case "warn": Text("Warn"); break
-        default: Text("Other")
-      }
+      aktion = $status == "ok" ? Text("Ok") : ($status == "warn" ? Text("Warn") : Text("Other"))
     `);
     expect(render().textContent).toBe("Warn");
   });
 
-  it("`switch` arm bodies run side-effecting statements", () => {
+  it("`switch (…)` statement runs side-effecting arm bodies inside a function", () => {
     const { state, ctx } = harness(`
       $drafts  = []
       $records = []
@@ -282,21 +278,24 @@ describe("Expression control flow", () => {
     expect(state.get("records")).toEqual([{ kind: "final", title: "second" }]);
   });
 
-  it("`switch` arm bodies return the last expression as value", () => {
+  it("a function with `switch` + `return` picks a value per arm", () => {
     const { render } = harness(`
       $stage = "draft"
-      aktion = switch ($stage) {
-        case "draft": Text("Draft view"); break
-        default: Text("Other")
+      function viewFor(stage) {
+        switch (stage) {
+          case "draft": return Text("Draft view")
+          default: return Text("Other")
+        }
       }
+      aktion = viewFor($stage)
     `);
     expect(render().textContent).toBe("Draft view");
   });
 
-  it("`for (let x of xs) { … }` produces a renderable array", () => {
+  it("`xs.map(item => …)` produces a renderable array", () => {
     const { render } = harness(`
       $items = ["a", "b", "c"]
-      aktion = Stack(for (let item of $items) { Text(item) })
+      aktion = Stack($items.map(item => Text(item)))
     `);
     expect(render().textContent).toBe("abc");
   });
@@ -376,7 +375,7 @@ describe("Explicit `key:` for content-addressed identity", () => {
   it("an explicit `key:` survives reorderings of the surrounding list", () => {
     const { state, render } = harness(`
       $items = [{id: 1, label: "one"}, {id: 2, label: "two"}]
-      aktion = Stack(for (let item of $items) { Text(item.label, { key: item.id }) })
+      aktion = Stack($items.map(item => Text(item.label, { key: item.id })))
     `);
     const host = render();
     expect(host.textContent).toBe("onetwo");

@@ -284,6 +284,8 @@ function summariseExpression(expr: Expression): string {
   switch (expr.kind) {
     case "Call":      return `${expr.callee}(...)`;
     case "MethodCall": return `${summariseExpression(expr.object)}${expr.optional ? "?." : "."}${expr.method}(...)`;
+    case "Invoke":    return `${summariseExpression(expr.callee)}(...)`;
+    case "New":       return `new ${summariseExpression(expr.callee)}(...)`;
     case "BuiltinCall": return `@${expr.name}(...)`;
     case "Literal":   return typeof expr.value === "string" ? `"${expr.value}"` : String(expr.value);
     case "Identifier": return expr.name;
@@ -291,9 +293,6 @@ function summariseExpression(expr: Expression): string {
     case "Array":     return "[…]";
     case "Object":    return "{…}";
     case "Template":  return "`…`";
-    case "If":        return "if (…) { … }";
-    case "Switch":    return "switch (…) { … }";
-    case "For":       return "for (let … of …) { … }";
     case "Lambda":    return "(…) => …";
     default:          return expr.kind;
   }

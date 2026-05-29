@@ -138,7 +138,7 @@ describe("§19.1 — validateProgramSchema warns on multi-positional", () => {
     expect(warn).toBeDefined();
     expect(warn!.message).toMatch(/at most one positional argument/);
     expect(warn!.message).toMatch(/"label" prop/);
-    expect(warn!.message).toMatch(/action: …/);
+    expect(warn!.message).toMatch(/onClick: …/);
   });
 
   it("flags `StatCard(\"Revenue\", \"$48k\", \"up\", …)` with extras counted", () => {

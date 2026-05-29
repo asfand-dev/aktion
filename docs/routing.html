@@ -177,23 +177,21 @@ page = Router({
 })</code></pre>
 
       <h2 id="protected">Protected routes</h2>
-      <p>Use an expression-form <code>if</code> &mdash; gate the entire router on a state atom:</p>
-<pre><code>page = if ($session.user) {
-  Router({
-    "/":        HomePage(),
-    "/admin":   AdminPage(),
-    default:    NotFoundPage()
-  })
-} else {
-  LoginPage()
-}</code></pre>
+      <p>Use a ternary &mdash; gate the entire router on a state atom:</p>
+<pre><code>page = $session.user
+  ? Router({
+      "/":        HomePage(),
+      "/admin":   AdminPage(),
+      default:    NotFoundPage()
+    })
+  : LoginPage()</code></pre>
 
       <p>
-        For per-route gating, branch inside the arm:
+        For per-route gating, branch inside the arm with a ternary:
       </p>
 <pre><code>main = Router({
   "/":         HomePage(),
-  "/admin":    if ($session.role == "admin") { AdminPage() } else { Forbidden() },
+  "/admin":    $session.role == "admin" ? AdminPage() : Forbidden(),
   default:     NotFoundPage()
 })</code></pre>
 

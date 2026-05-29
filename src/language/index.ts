@@ -20,9 +20,11 @@ import {
   grammarSpec,
   createStreamTokenizer,
   defaultTagMap,
+  keywordDocs,
   type GrammarSpec,
   type GrammarTokenKind,
   type StreamTokenizer,
+  type KeywordDoc,
 } from "./grammar.js";
 import {
   getComponentCatalog,
@@ -42,6 +44,7 @@ export type {
   GrammarSpec,
   GrammarTokenKind,
   StreamTokenizer,
+  KeywordDoc,
   ComponentEntry,
   ComponentParam,
   BuiltinEntry,
@@ -53,6 +56,7 @@ export {
   grammarSpec,
   createStreamTokenizer,
   defaultTagMap,
+  keywordDocs,
   getComponentCatalog,
   indexCatalog,
   getBuiltinCatalog,
@@ -78,6 +82,11 @@ export interface LanguageSpec {
   builtins: BuiltinEntry[];
   builtinsByName: Record<string, BuiltinEntry>;
   snippets: readonly SnippetEntry[];
+  /**
+   * Reserved-keyword documentation (definition + syntax + example),
+   * keyed by keyword. Powers keyword highlight-popups and hover help.
+   */
+  keywordDocs: Record<string, KeywordDoc>;
   /** Built-in theme names; useful for theme-picker autocomplete. */
   themeNames: readonly string[];
   /** Default severity for the parser's ParseError stream. */
@@ -107,6 +116,7 @@ export function getLanguageSpec(library: ComponentLibrary = defaultLibrary): Lan
     builtins,
     builtinsByName: indexBuiltins(builtins),
     snippets: getSnippets(),
+    keywordDocs,
     themeNames: Object.keys(builtInThemes),
     severityTokenMap: { "parse-error": "error" },
     iconAliases: COMMON_ICON_ALIASES,

@@ -398,11 +398,13 @@ export const Tabs: ComponentSpec = {
   description:
     "Tabbed container. Children must be TabItem components. Supports " +
     "`orientation=\"vertical\"` for sidebar-style tabs and built-in " +
-    "keyboard navigation (←/→ or ↑/↓, Home, End).",
+    "keyboard navigation (←/→ or ↑/↓, Home, End). Provide `onChange` to " +
+    "react when the user switches tabs (called with the new tab's value).",
   props: [
     { name: "items", type: "TabItem[]", description: "Tab definitions" },
     { name: "defaultValue", type: "string", optional: true, description: "Initially active tab value" },
     { name: "orientation", type: "string", optional: true, enum: ["horizontal", "vertical"], description: "Layout direction (default `horizontal`)" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-activated tab value when the user switches tabs" },
   ],
   render: (_node, props, helpers) => {
     const items = asArray<unknown>(props.items);
@@ -452,17 +454,20 @@ export const Tabs: ComponentSpec = {
     // mounted nodes — the closures' local refs point at the discarded fresh
     // subtree, but `event.currentTarget` is always the in-DOM button.
     const setActive = (next: string, originBtn: Element): void => {
+      const previous = activeSlot.get();
       activeSlot.set(next);
       const liveRoot = originBtn.closest(".rui-tabs");
-      if (!liveRoot) return;
-      liveRoot.querySelectorAll<HTMLButtonElement>(".rui-tab-trigger").forEach((b) => {
-        const isActive = b.getAttribute("data-value") === next;
-        b.setAttribute("aria-selected", isActive ? "true" : "false");
-        b.tabIndex = isActive ? 0 : -1;
-      });
-      liveRoot.querySelectorAll<HTMLElement>(".rui-tab-content").forEach((p) => {
-        p.setAttribute("data-active", p.getAttribute("data-value") === next ? "true" : "false");
-      });
+      if (liveRoot) {
+        liveRoot.querySelectorAll<HTMLButtonElement>(".rui-tab-trigger").forEach((b) => {
+          const isActive = b.getAttribute("data-value") === next;
+          b.setAttribute("aria-selected", isActive ? "true" : "false");
+          b.tabIndex = isActive ? 0 : -1;
+        });
+        liveRoot.querySelectorAll<HTMLElement>(".rui-tab-content").forEach((p) => {
+          p.setAttribute("data-active", p.getAttribute("data-value") === next ? "true" : "false");
+        });
+      }
+      if (previous !== next) helpers.invoke(props.onChange, next);
     };
 
     items.forEach((item, idx) => {
@@ -880,7 +885,8 @@ export const Modal: ComponentSpec = {
     "`open` to control it. The header always renders a × close button " +
     "(disable via `closable: false`); the optional `footer` slot is the " +
     "canonical place for action buttons. `closeOnBackdrop=true` opts in " +
-    "to backdrop-click dismissal.",
+    "to backdrop-click dismissal. `onClose` fires every time the modal " +
+    "closes (× button, backdrop, programmatic state write).",
   props: [
     { name: "title", type: "string" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
@@ -889,6 +895,7 @@ export const Modal: ComponentSpec = {
     { name: "footer", type: "Node[]", optional: true, description: "Footer slot — typically a row of action Buttons" },
     { name: "closable", type: "boolean", optional: true, description: "Render the header × button (default true)" },
     { name: "closeOnBackdrop", type: "boolean", optional: true, description: "Close when the overlay is clicked (default false)" },
+    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked when the modal is closed (× button or backdrop)" },
   ],
   render: (node, props, helpers) => {
     const size = asString(props.size, "md");
@@ -907,8 +914,8 @@ export const Modal: ComponentSpec = {
     header.append(el("h3", { class: "rui-modal-title" }, [asString(props.title)]));
     const stateName = node.argMeta?.[1]?.stateRef;
     const closeModal = () => {
-      if (!stateName) return;
-      helpers.setState(stateName, false);
+      if (stateName) helpers.setState(stateName, false);
+      helpers.invoke(props.onClose);
     };
     if (closable) {
       const closeBtn = el("button", {
@@ -933,7 +940,7 @@ export const Modal: ComponentSpec = {
       dialog.append(footRow);
     }
     overlay.append(dialog);
-    if (asBoolean(props.closeOnBackdrop) && stateName) {
+    if (asBoolean(props.closeOnBackdrop)) {
       overlay.onclick = (event) => {
         if (event.target === overlay) closeModal();
       };

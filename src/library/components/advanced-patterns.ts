@@ -31,7 +31,7 @@ interface InboxEntry {
   tone: string;
   unread: boolean;
   avatarSrc: string;
-  action: unknown;
+  onClick: unknown;
 }
 
 function readInboxEntries(raw: unknown): InboxEntry[] {
@@ -47,7 +47,7 @@ function readInboxEntries(raw: unknown): InboxEntry[] {
         tone: asString(r.tone, "default"),
         unread: asBoolean(r.unread),
         avatarSrc: asString(r.avatarSrc),
-        action: r.action,
+        onClick: r.onClick ?? r.action,
       };
     })
     .filter((e): e is InboxEntry => e !== null);
@@ -58,8 +58,8 @@ export const InboxPanel: ComponentSpec = {
   description:
     "Grouped notification list — entries are grouped into Unread/Earlier " +
     "sections, with a count chip on each group header. Pass `items` as " +
-    "`{title, message, time, icon?, tone?, unread?, avatarSrc?, action?}` " +
-    "objects. Pair with a `SectionHeader` for the panel title (the " +
+    "`{title, message, time, icon?, tone?, unread?, avatarSrc?, onClick?}` " +
+    "objects (`action` is also accepted as an alias). Pair with a `SectionHeader` for the panel title (the " +
     "component does not render its own title to avoid duplication). Use " +
     "for top-bar notification trays, activity drawers, and alert center " +
     "pages.",
@@ -105,9 +105,9 @@ export const InboxPanel: ComponentSpec = {
           },
           helpers,
         ) as HTMLElement;
-        if (typeof entry.action === "function") {
+        if (typeof entry.onClick === "function") {
           card.setAttribute("data-clickable", "true");
-          card.onclick = () => helpers.invoke(entry.action);
+          card.onclick = () => helpers.invoke(entry.onClick);
         }
         group.append(card);
       }
@@ -127,7 +127,7 @@ interface ChecklistItem {
   title: string;
   description: string;
   done: boolean;
-  action: unknown;
+  onClick: unknown;
   cta: string;
 }
 
@@ -140,7 +140,7 @@ function readChecklistItems(raw: unknown): ChecklistItem[] {
         title: asString(r.title),
         description: asString(r.description),
         done: asBoolean(r.done),
-        action: r.action,
+        onClick: r.onClick ?? r.action,
         cta: asString(r.cta, "Start"),
       };
     })
@@ -151,8 +151,8 @@ export const OnboardingChecklist: ComponentSpec = {
   name: "OnboardingChecklist",
   description:
     "Step-by-step product checklist with completion progress at the top. " +
-    "Pass `items` as `{title, description?, done?, action?, cta?}` " +
-    "objects. The progress percentage is computed automatically from " +
+    "Pass `items` as `{title, description?, done?, onClick?, cta?}` " +
+    "objects (`action` is also accepted as an alias). The progress percentage is computed automatically from " +
     "`done`. Use on first-run dashboards, empty workspaces, and " +
     "\"complete your profile\" surfaces.",
   props: [
@@ -196,14 +196,14 @@ export const OnboardingChecklist: ComponentSpec = {
       body.append(el("div", { class: "rui-onboarding-checklist-item-title" }, [item.title]));
       if (item.description) body.append(el("p", { class: "rui-onboarding-checklist-item-description" }, [item.description]));
       li.append(body);
-      if (!item.done && typeof item.action === "function") {
+      if (!item.done && typeof item.onClick === "function") {
         const btn = el("button", {
           type: "button",
           class: "rui-button",
           "data-variant": "secondary",
           "data-size": "sm",
         }, [item.cta]);
-        btn.onclick = () => helpers.invoke(item.action);
+        btn.onclick = () => helpers.invoke(item.onClick);
         li.append(btn);
       }
       list.append(li);
@@ -534,13 +534,16 @@ export const Drawer: ComponentSpec = {
   name: "Drawer",
   description:
     "Side drawer overlay shown when `open` is true. Pass a `$variable` as " +
-    "`open` to control it. Choose `side` for slide direction (default right).",
+    "`open` to control it. Choose `side` for slide direction (default right). " +
+    "`onClose` fires whenever the drawer is dismissed (× button or " +
+    "backdrop click).",
   props: [
     { name: "title", type: "string" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
     { name: "children", type: "Node[]" },
     { name: "side", type: "string", optional: true, enum: ["right", "left", "top", "bottom"] },
     { name: "footer", type: "Node[]", optional: true, description: "Optional footer actions row" },
+    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked when the drawer is dismissed" },
   ],
   render: (node, props, helpers) => {
     const isOpen = asBoolean(props.open);
@@ -564,12 +567,14 @@ export const Drawer: ComponentSpec = {
       "aria-label": "Close",
     }, ["×"]);
     const stateName = node.argMeta?.[1]?.stateRef;
-    if (stateName) {
-      closeBtn.onclick = () => helpers.setState(stateName, false);
-      overlay.onclick = (event) => {
-        if (event.target === overlay) helpers.setState(stateName, false);
-      };
-    }
+    const closeDrawer = () => {
+      if (stateName) helpers.setState(stateName, false);
+      helpers.invoke(props.onClose);
+    };
+    closeBtn.onclick = closeDrawer;
+    overlay.onclick = (event) => {
+      if (event.target === overlay) closeDrawer();
+    };
     header.append(closeBtn);
     panel.append(header);
     const body = el("div", { class: "rui-sheet-body" });

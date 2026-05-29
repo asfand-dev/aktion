@@ -64,13 +64,11 @@ function increment() {
 Button("Add coffee", { action: () =&gt; addItem("Coffee", 3.5) })</code></pre>
 
       <h3>Per-row handlers</h3>
-<pre><code>rows = for (let task of $tasks) {
-  Stack([
-    Text(task.title),
-    Button("Toggle", { action: () =&gt; toggleDone(task.id) }),
-    Button("Delete", { action: () =&gt; deleteTask(task.id) })
-  ])
-}</code></pre>
+<pre><code>rows = $tasks.map(task =&gt; Stack([
+  Text(task.title),
+  Button("Toggle", { action: () =&gt; toggleDone(task.id) }),
+  Button("Delete", { action: () =&gt; deleteTask(task.id) })
+]))</code></pre>
 
       <h3>Inline lambdas</h3>
       <p>For one-shot handlers, skip the named declaration:</p>
@@ -106,7 +104,7 @@ $hello = greet("Ada")             // re-runs whenever the function call's args c
           <tr><td><code>storage.set("key", value)</code></td><td>Read or write <code>localStorage</code> / <code>sessionStorage</code> / <code>cookies</code> (see <a href="language.html#globals">globals</a>).</td></tr>
           <tr><td><code>console.log("...")</code></td><td>Log to the browser console.</td></tr>
           <tr><td><code>otherFn(args)</code></td><td>Invoke another function declared elsewhere in the program.</td></tr>
-          <tr><td><code>if</code> / <code>switch</code> / <code>for</code></td><td>Statement-form control flow (same keywords as the expression form).</td></tr>
+          <tr><td><code>if</code> / <code>switch</code> / <code>for</code> / <code>while</code> / <code>try</code></td><td>Standard JS statement-form control flow (with <code>break</code> / <code>continue</code> / <code>throw</code>). Use a ternary on the RHS of an assignment to pick a value.</td></tr>
           <tr><td><code>return expr</code></td><td>Optional return value.</td></tr>
         </tbody>
       </table>
@@ -124,9 +122,9 @@ $hello = greet("Ada")             // re-runs whenever the function call's args c
         spread and built-in filters instead:
       </p>
 <pre><code>function toggleDone(taskId) {
-  $tasks = for (let task of $tasks) {
-    if (task.id == taskId) { { ...task, done: !task.done } } else { task }
-  }
+  $tasks = $tasks.map(task =&gt;
+    task.id == taskId ? { ...task, done: !task.done } : task
+  )
 }
 
 function removeTask(taskId) {
@@ -287,21 +285,17 @@ aktion = Form("contact", { buttons: btns, fields: [
 ]})</code></pre>
 
       <h3>Per-row actions in a table</h3>
-<pre><code>rows = for (let task of $tasks) {
-  Stack([
-    Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
-    Text(task.title),
-    Buttons([
-      Button(task.done ? "Reopen" : "Done", { action: () =&gt; toggleDone(task.id), variant: "primary", size: "sm" }),
-      Button("Delete",                       { action: () =&gt; deleteTask(task.id), variant: "ghost",   size: "sm" })
-    ])
+<pre><code>rows = $tasks.map(task =&gt; Stack([
+  Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
+  Text(task.title),
+  Buttons([
+    Button(task.done ? "Reopen" : "Done", { action: () =&gt; toggleDone(task.id), variant: "primary", size: "sm" }),
+    Button("Delete",                       { action: () =&gt; deleteTask(task.id), variant: "ghost",   size: "sm" })
   ])
-}
+]))
 
 function toggleDone(id) {
-  $tasks = for (let t of $tasks) {
-    if (t.id == id) { { ...t, done: !t.done } } else { t }
-  }
+  $tasks = $tasks.map(t =&gt; t.id == id ? { ...t, done: !t.done } : t)
 }
 
 function deleteTask(id) {
