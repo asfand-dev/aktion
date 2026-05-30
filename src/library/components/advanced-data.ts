@@ -13,7 +13,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, renderIcon, fillTableCell } from "../utils.js";
 
 const COL_ALIGN = ["left", "center", "right"] as const;
 
@@ -24,6 +24,10 @@ interface ColDef {
   align: string;
   sortable: boolean;
   filterable: boolean;
+  /** `(value, index) => Component|string|array` per-cell renderer. */
+  render: unknown;
+  /** `(value, index) => void` per-cell click handler. */
+  onClick: unknown;
   key: string;
 }
 
@@ -38,6 +42,8 @@ function readDataGridCols(raw: unknown): ColDef[] {
       align: (COL_ALIGN as readonly string[]).includes(asString(args[3])) ? asString(args[3]) : "",
       sortable: asBoolean(args[4]),
       filterable: asBoolean(args[5]),
+      render: args[6],
+      onClick: args[7],
       key: header || `col-${idx}`,
     };
   });
@@ -319,18 +325,12 @@ export const DataGrid: ComponentSpec = {
           tr.append(cellTd);
         }
         cols.forEach((col, c) => {
-          const cellValue = col.values[r];
           const td = el("td", {
             "data-format": col.format,
             "data-align": col.align || null,
             "data-first": c === 0 ? "true" : null,
           });
-          if (cellValue !== null && typeof cellValue === "object"
-              && (cellValue as { __kind?: string }).__kind === "Component") {
-            td.append(helpers.renderNode(cellValue));
-          } else {
-            td.textContent = formatCellValue(cellValue, col.format);
-          }
+          fillTableCell(td, col, col.values[r], r, helpers, formatCellValue);
           tr.append(td);
         });
         if (typeof props.onRowClick === "function") {
@@ -391,18 +391,12 @@ export const DataGrid: ComponentSpec = {
             tr.append(cellTd);
           }
           cols.forEach((col, c) => {
-            const cellValue = col.values[row];
             const td = el("td", {
               "data-format": col.format,
               "data-align": col.align || null,
               "data-first": c === 0 ? "true" : null,
             });
-            if (cellValue !== null && typeof cellValue === "object"
-              && (cellValue as { __kind?: string }).__kind === "Component") {
-              td.append(helpers.renderNode(cellValue));
-            } else {
-              td.textContent = formatCellValue(cellValue, col.format);
-            }
+            fillTableCell(td, col, col.values[row], row, helpers, formatCellValue);
             tr.append(td);
           });
           target.append(tr);

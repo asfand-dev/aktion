@@ -582,9 +582,15 @@ aktion = Combobox("country", { items: countries, value: $country, placeholder: "
   Col("Stars", { values: [1820, 2300, 940], align: "right", format: "number" }),
   Col("Forks", { values: [220,  412,  80],  align: "right", format: "number" })
 ], { title: "Top contributors" })`,
-      Col: `aktion = Table([
-  Col("Name",  { values: ["Ada", "Linus", "Grace"] }),
-  Col("Stars", { values: [1820, 2300, 940], align: "right", format: "number" })
+      Col: `$rows = [
+  { name: "Ada",   active: true },
+  { name: "Linus", active: false },
+  { name: "Grace", active: true }
+]
+aktion = Table([
+  Col("Name", $rows.name, { onClick: (name) =&gt; { $picked = name } }),
+  Col("Status", $rows, { render: (r) =&gt; Badge(r.active ? "Active" : "Off", { tone: r.active ? "success" : "neutral" }) }),
+  Col("", $rows, { render: (r) =&gt; Button("Edit", { onClick: () =&gt; { $picked = r.name }, size: "sm", variant: "ghost" }) })
 ])`,
       List: `aktion = List([
   ListItem("Tasks",    { meta: "3 active",   icon: "list-check" }),

@@ -685,7 +685,7 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 - Seed realistic mock data inline when no backend is available (5–20 plausible rows).
 - Use responsive prop maps (\`{ sm: 1, md: 2, lg: 4 }\`) on \`Grid\` / \`Stack\` so the app works on phone and desktop.
 - Use template literals for any string mixing copy with values.
-- Tables are column-oriented: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`.
+- Tables are column-oriented: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`. A column can render any component (action buttons, badges, links) — pass \`render: (value, index) => Component\`; pass the full row array as the column values when the cell needs the whole row. Make a column clickable with \`onClick: (value, index) => …\`. Both work in \`Table\` and \`DataGrid\`. Example: \`Col("", rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })\`.
 - Charts need numeric arrays. Use array pluck: \`PieChart(rows.label, rows.value)\`.
 - Icons are Font Awesome names (no \`fa-\` prefix, no emoji).
 - Named arguments use a trailing \`{ prop: value }\` object — never bare \`prop: value\` in a call.
@@ -943,7 +943,7 @@ function chatImportantRules(): string {
 - **Pick the right component for the content.** Tables for comparisons, charts for trends, \`Callout\`/\`Banner\` for highlights, \`Markdown\` for paragraph prose, \`Hero\`/\`PageHeader\` for top titles, \`Stats\` for KPI strips.
 - **Lead with a clear title.** \`Text(text, { variant: "large-heavy" })\`, \`SectionHeader(...)\`, \`PageHeader(...)\`, or \`Hero(...)\`.
 - **Realistic data** — believable names, numbers, and dates. Never Lorem Ipsum.
-- **Tables are column-oriented:** \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`.
+- **Tables are column-oriented:** \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`. Columns can hold components via \`Col("", rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id) }) })\`, and a whole column can be clickable with \`onClick: (value, index) => …\`.
 - **Charts need numeric arrays** — use array pluck (\`PieChart(rows.label, rows.value)\`).
 - **End conversational replies with \`FollowUpBlock([...])\`** — 2–4 short next-prompt suggestions.
 - **\`Markdown\`** for rich paragraph prose; **\`Text\`** for short labels.

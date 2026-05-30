@@ -2397,6 +2397,11 @@ function initPlayground(cm) {
         ...autocomplete.completionKeymap,
         ...search.searchKeymap,
         ...lint.lintKeymap,
+        // Accept the highlighted completion with Tab (in addition to Enter).
+        // `acceptCompletion` returns false when no completion popup is open,
+        // so Tab falls through to snippet-field navigation / indentation.
+        // Ordered before `indentWithTab` so an open popup wins over indent.
+        { key: "Tab", run: autocomplete.acceptCompletion },
         commands.indentWithTab,
         {
           key: "Mod-Enter",

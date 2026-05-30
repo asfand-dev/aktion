@@ -1592,8 +1592,16 @@ Notes:
 Notes:
 
 - Build columns with array pluck: `Col("Title", data.rows.title, { format, align })`.
+- Columns can render **any component** — action buttons, badges, links,
+  avatars — not just text. Pass `render: (value, index) => Component` and
+  give the column the full row array as its values:
+  `Col("", $rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })`.
+  `render` may return a component, a string, or an array of either.
+- Make a whole column clickable (pointer + keyboard) with
+  `onClick: (value, index) => …` — e.g. `Col("Name", $rows.name, { onClick: (name) => open(name) })`.
+- Both `render` and `onClick` work in `Table` and `DataGrid`.
 - `DataGrid` adds sortable headers, filter chips, row selection,
-  pagination.
+  pagination, and an `onRowClick: (index) => …` for whole-row clicks.
 
 ### Charts
 

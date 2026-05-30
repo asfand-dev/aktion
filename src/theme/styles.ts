@@ -5466,6 +5466,22 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-table td[data-align="right"], .rui-table th[data-align="right"] { text-align: right; }
 .rui-table td[data-align="left"], .rui-table th[data-align="left"] { text-align: left; }
 
+/* Clickable cells (Col onClick) — both Table and DataGrid. The whole cell
+   is an accessible button; show affordance + a keyboard focus ring. */
+.rui-table td[data-clickable="true"],
+.rui-data-grid-table td[data-clickable="true"] {
+  cursor: pointer;
+}
+.rui-table td[data-clickable="true"]:hover,
+.rui-data-grid-table td[data-clickable="true"]:hover {
+  background: var(--rui-color-surface-hover, rgba(0, 0, 0, 0.04));
+}
+.rui-table td[data-clickable="true"]:focus-visible,
+.rui-data-grid-table td[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--rui-color-primary, #6366f1);
+  outline-offset: -2px;
+}
+
 /* Pagination summary + per-page selector ------------------------------ */
 .rui-pagination {
   display: flex;

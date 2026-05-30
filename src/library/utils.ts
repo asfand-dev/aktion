@@ -240,6 +240,111 @@ export function sanitiseImageSrc(raw: unknown): string {
   return cleaned;
 }
 
+/** `true` when a value is a renderable component node produced by the runtime. */
+export function isComponentNode(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { __kind?: string }).__kind === "Component"
+  );
+}
+
+/** Subset of `RenderHelpers` the table cell builder needs. */
+export interface CellRenderHelpers {
+  renderNode: (node: unknown) => Node;
+  invoke: (callable: unknown, ...args: unknown[]) => void;
+}
+
+/** A column's cell-rendering configuration, shared by Table and DataGrid. */
+export interface TableCellCol {
+  /** Cell value formatting hint (`text|number|currency|date`). */
+  format?: string;
+  /**
+   * Optional `(value, rowIndex) => Component | string | (Component|string)[]`
+   * mapper. Lets a column render arbitrary components — action buttons,
+   * badges, avatars, links — instead of plain text. When omitted, a cell
+   * value that is itself a component node still renders directly.
+   */
+  render?: unknown;
+  /**
+   * Optional `(value, rowIndex) => void` fired when the cell is clicked or
+   * activated via keyboard. Clicks originating on an interactive child
+   * (a rendered Button / link / input) are ignored so nested actions keep
+   * their own handlers.
+   */
+  onClick?: unknown;
+}
+
+/**
+ * Populate a `<td>` for one Table / DataGrid cell. Content resolution order:
+ *
+ *   1. `col.render(value, rowIndex)` — when provided, its result (a
+ *      component, string, or array of either) is rendered. This is the
+ *      idiomatic way to put buttons / badges / links in a column.
+ *   2. a component-node `value` — rendered directly (so authors can also
+ *      pass a pre-built array of component cells as the column `values`).
+ *   3. otherwise the value is formatted as text via `formatValue`.
+ *
+ * When `col.onClick` is a callable the whole cell becomes an accessible
+ * button (pointer + Enter/Space), firing `onClick(value, rowIndex)`.
+ */
+export function fillTableCell(
+  td: HTMLElement,
+  col: TableCellCol,
+  value: unknown,
+  rowIndex: number,
+  helpers: CellRenderHelpers,
+  formatValue: (value: unknown, format: string) => string,
+): void {
+  const format = col.format ?? "text";
+
+  let content: unknown = value;
+  if (typeof col.render === "function") {
+    try {
+      content = (col.render as (...a: unknown[]) => unknown)(value, rowIndex);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[aktion] Col render() threw", err);
+      content = null;
+    }
+  }
+
+  const appendOne = (item: unknown): void => {
+    if (isComponentNode(item)) {
+      td.append(helpers.renderNode(item));
+    } else if (item !== null && item !== undefined) {
+      td.append(document.createTextNode(formatValue(item, format)));
+    }
+  };
+  if (Array.isArray(content)) {
+    for (const item of content) appendOne(item);
+  } else {
+    appendOne(content);
+  }
+
+  if (typeof col.onClick === "function") {
+    td.setAttribute("data-clickable", "true");
+    td.setAttribute("role", "button");
+    td.tabIndex = 0;
+    const guardedFire = (event: Event): boolean => {
+      const target = event.target as Element | null;
+      // Let interactive children (rendered buttons / links / inputs) handle
+      // their own clicks without also firing the cell handler.
+      if (target?.closest("input,button,a,label,select,textarea")) return false;
+      // Stop the event bubbling to an enclosing clickable row (DataGrid's
+      // `onRowClick`) so a cell action doesn't double-fire.
+      event.stopPropagation();
+      helpers.invoke(col.onClick, value, rowIndex);
+      return true;
+    };
+    td.onclick = (event) => { guardedFire(event); };
+    td.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (guardedFire(event)) event.preventDefault();
+    };
+  }
+}
+
 /**
  * Render an icon-typed prop into an `<i class="rui-icon fa-...">` element.
  *
