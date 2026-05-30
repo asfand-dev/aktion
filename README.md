@@ -544,13 +544,17 @@ aktion = pages
 | `storage` | Browser persistence — `storage.set/get`, `storage.session.*`, `storage.cookies.*`. |
 | `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
-| JS stdlib | A curated, side-effect-free slice of the JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
+| JS stdlib | The JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
 | timers    | `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` — like their JS counterparts, but tracked by the runtime and cleared automatically on re-plan/disconnect. Use inside an `effect` and clear in `cleanup`. |
+| full JS globals | The **entire** JavaScript global surface is available — dialogs (`alert`, `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`, `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`, `BigInt`, `Reflect`, …), and `window` / `document` themselves. Any `globalThis` member resolves by name. |
 
 Both `storage` and `console` are **lowercase**; the `route` handle is
-**reserved** (never declare a state slot named `route`). The remaining
-capability-granting globals (`fetch`, `eval`, `Function`, `window`) are
-intentionally **not** exposed — use `Http({...})` and `effect(...)` instead.
+**reserved** (never declare a state slot named `route`). Author declarations
+and built-in components always win over a same-named global (a library
+`Text` / `Map` component is never shadowed by the DOM `Text` / `Map`), so the
+global passthrough only resolves names you haven't otherwise defined. For
+reactive data prefer `Http({...})` over raw `fetch`, and timers/listeners
+belong inside an `effect(...)` so they're cleaned up on unmount.
 
 ### The 60-second pitch
 

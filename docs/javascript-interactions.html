@@ -87,6 +87,23 @@ effect(() =&gt; {
 
       <h2 id="recipes">Common recipes</h2>
 
+      <h3>Browser dialogs &mdash; <code>alert</code> / <code>confirm</code> / <code>prompt</code></h3>
+      <p>
+        The dialog globals work like plain JavaScript. They are most useful
+        for quick confirmations from an action handler; for richer UX prefer a
+        <code>Modal</code> / <code>Drawer</code> component bound to state.
+      </p>
+<pre><code>function deleteItem(id) {
+  if (!confirm("Delete this item? This cannot be undone.")) { return }
+  $items = $items.filter(x =&gt; x.id != ctx.args.id)
+  alert("Item deleted.")
+}
+
+function rename(id) {
+  const name = prompt("New name?", "")
+  if (name) { $items = $items.map(x =&gt; x.id == ctx.args.id ? { ...x, name } : x) }
+}</code></pre>
+
       <h3>Clipboard</h3>
 <pre><code>function copyToClipboard(text) {
   try {

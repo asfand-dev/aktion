@@ -42,15 +42,18 @@ import { consoleNs as consoleGlobal } from "./console.js";
 const GLOBAL_NAMESPACES: Record<string, unknown> = {
   storage: storageGlobal,
   console: consoleGlobal,
-  // Curated, side-effect-free JS standard library. Exposed so authors can
-  // write `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`,
-  // `new Date()`, `new Map()`, `Number("5")`, etc. without an import.
-  // Intentionally omits capability-granting globals (`fetch`, `eval`,
-  // `Function`, `globalThis`, `window`) — those route through the host
-  // runtime (`Http(...)`, effects) instead. Timers (`setTimeout` /
-  // `setInterval` / `clear*`) ARE supported, but via dedicated handlers in
-  // `evaluateComponentCall` (not here) so each handle is tracked on the
-  // context and cleared on dispose rather than leaking past a replan.
+  // Curated fast-path for the most-used JS standard library globals, so
+  // `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`, `new Date()`,
+  // `new Map()`, `Number("5")`, etc. resolve without an import and without
+  // touching the host realm. This is NOT the full set: every *other* JS
+  // global (`window`, `document`, `URL`, `Blob`, `FormData`, `crypto`,
+  // `Intl`, `BigInt`, `Reflect`, `fetch`, `alert`, `confirm`, `prompt`,
+  // `atob`/`btoa`, `eval`, `Function`, …) resolves through the
+  // `lookupHostGlobal` passthrough below — see that helper. Timers
+  // (`setTimeout` / `setInterval` / `clear*`) ARE supported, but via
+  // dedicated handlers in `evaluateComponentCall` (not here) so each handle
+  // is tracked on the context and cleared on dispose rather than leaking
+  // past a replan.
   Math,
   JSON,
   Object,
@@ -82,6 +85,39 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   decodeURI,
   structuredClone: typeof structuredClone === "function" ? structuredClone : undefined,
 };
+
+/**
+ * Resolve any host JavaScript global by name (`window`, `document`, `URL`,
+ * `Blob`, `FormData`, `crypto`, `navigator`, `localStorage`, `Intl`,
+ * `BigInt`, `Reflect`, `Proxy`, `fetch`, `alert`, `confirm`, `prompt`,
+ * `atob`/`btoa`, `requestAnimationFrame`, `queueMicrotask`, `eval`,
+ * `Function`, …) as the FINAL fallback in identifier / call resolution.
+ *
+ * This is what makes the language expose the *full* JavaScript global
+ * surface rather than only the curated `GLOBAL_NAMESPACES` set above. It is
+ * always tried LAST — after user state, bindings, actions, user components,
+ * the curated globals, and the component library — so it can never shadow
+ * an author declaration or a built-in component (a library `Text` / `Map`
+ * component still wins over the DOM `Text` / `Map` constructor).
+ *
+ * Lookup is prototype-aware (`name in globalThis`) so browser accessor
+ * globals that live on `Window.prototype` (e.g. `location`, `navigator`)
+ * resolve too, but names inherited *only* from `Object.prototype`
+ * (`toString`, `constructor`, `hasOwnProperty`, …) are skipped so a bare
+ * undeclared identifier can't accidentally resolve to prototype noise.
+ *
+ * Security note: this is a deliberate full passthrough to the embedding
+ * realm. The runtime already executes author-supplied code through this
+ * evaluator, so surfacing capability-granting globals does not widen the
+ * trust boundary beyond what the host page already grants the script.
+ */
+function lookupHostGlobal(name: string): { found: boolean; value: unknown } {
+  if (typeof globalThis === "undefined") return { found: false, value: undefined };
+  if (name in Object.prototype) return { found: false, value: undefined };
+  const g = globalThis as Record<string, unknown>;
+  if (name in g) return { found: true, value: g[name] };
+  return { found: false, value: undefined };
+}
 
 /**
  * Runtime safety budget — bounds the work a single render can perform
@@ -1077,6 +1113,14 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       if (ctx.library && findComponent(ctx.library, expr.name)) {
         return makeLibraryComponentCallable(expr.name, ctx);
       }
+      // Full JavaScript global surface — any host global (`window`,
+      // `document`, `URL`, `crypto`, `navigator`, `Intl`, `alert`, `fetch`,
+      // …) not shadowed by an author declaration or library component above.
+      // This also powers `new URL(...)`, `crypto.randomUUID()`, and bare
+      // references like `onClick: alert`, because `New` / `MethodCall`
+      // resolve their callee / object through this identifier path.
+      const hostGlobal = lookupHostGlobal(expr.name);
+      if (hostGlobal.found) return hostGlobal.value;
       // Unknown identifier — render as null so the parser is forgiving.
       return null;
     }
@@ -2225,6 +2269,30 @@ function evaluateComponentCall(
   // `[unknown component: App]` into the DOM, the user sees a Skeleton
   // until the next render pass resolves the declaration.
   if (ctx.library && !findComponent(ctx.library, callee)) {
+    // Full JavaScript global surface — a direct call to any host global
+    // function not shadowed by a user/curated/library name: `alert("hi")`,
+    // `confirm("ok?")`, `prompt("name")`, `fetch(url)`, `btoa(s)`, … Tried
+    // here (after the library check) so a library component always wins.
+    const hostGlobal = lookupHostGlobal(callee);
+    if (hostGlobal.found && typeof hostGlobal.value === "function") {
+      const fn = hostGlobal.value as (...a: unknown[]) => unknown;
+      const evaluated: unknown[] = [];
+      for (const arg of args) {
+        if (arg.kind === "Spread") {
+          const value = evaluate(arg.argument, ctx);
+          if (Array.isArray(value)) for (const item of value) evaluated.push(item);
+          continue;
+        }
+        evaluated.push(evaluate(arg, ctx));
+      }
+      try {
+        return fn(...evaluated);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[aktion] global "${callee}" threw`, err);
+        return null;
+      }
+    }
     if (findComponent(ctx.library, "Skeleton")) {
       const skeleton: ComponentNode = {
         __kind: "Component",

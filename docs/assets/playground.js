@@ -1117,10 +1117,14 @@ const ROUTE_MEMBERS = [
 
 /**
  * Plain callable globals and constructors exposed by the runtime — the
- * network primitive `Http`, the timer family, and the curated slice of the
- * JS standard library that is callable directly or with `new`. Surfaced as
- * bare-identifier completions so authors can discover and insert them.
- * Keep in sync with the timer handlers + `GLOBAL_NAMESPACES` in
+ * network primitive `Http`, the timer family, the curated slice of the JS
+ * standard library, and the most-reached-for browser globals. Surfaced as
+ * bare-identifier completions so authors can discover and insert them. This
+ * is NOT exhaustive: the runtime exposes the FULL JavaScript global surface
+ * (any `window` / `globalThis` member — `document`, `fetch`, `crypto`,
+ * `localStorage`, `Reflect`, `eval`, …) via a host passthrough, so anything
+ * not listed here still works when typed. Keep in sync with the timer
+ * handlers + `GLOBAL_NAMESPACES` + `lookupHostGlobal` in
  * `src/runtime/evaluator.ts`.
  */
 const CALLABLE_GLOBALS = [
@@ -1152,6 +1156,20 @@ const CALLABLE_GLOBALS = [
   { label: "Set",     detail: "constructor", info: "Set constructor — `new Set([1, 2, 3])`.", apply: "Set(${1})", snippet: true },
   { label: "RegExp",  detail: "constructor", info: "RegExp constructor — `new RegExp(\"\\\\d+\")`.", apply: "RegExp(${1})", snippet: true },
   { label: "Promise", detail: "constructor", info: "Promise constructor — `new Promise((resolve) => …)`.", apply: "Promise(${1})", snippet: true },
+  // Browser dialog + common Web globals (resolved via the host passthrough).
+  { label: "alert",   detail: "dialog", info: "Show a blocking alert dialog: `alert(message)`.", apply: "alert(${1})", snippet: true },
+  { label: "confirm", detail: "dialog", info: "Show a blocking confirm dialog — returns `true`/`false`: `confirm(message)`.", apply: "confirm(${1})", snippet: true },
+  { label: "prompt",  detail: "dialog", info: "Show a blocking prompt dialog — returns the entered string (or null): `prompt(message, default?)`.", apply: "prompt(${1})", snippet: true },
+  { label: "fetch",   detail: "global", info: "Low-level network fetch. Prefer the reactive `Http({…})` primitive for UI data — use `fetch` only for imperative one-off requests inside actions.", apply: "fetch(${1:url})", snippet: true },
+  { label: "URL",            detail: "constructor", info: "URL parser — `new URL(\"https://example.com/path?q=1\")`.", apply: "URL(${1})", snippet: true },
+  { label: "URLSearchParams", detail: "constructor", info: "Query-string helper — `new URLSearchParams(\"a=1&b=2\")`.", apply: "URLSearchParams(${1})", snippet: true },
+  { label: "atob",    detail: "global", info: "Decode a base-64 string.", apply: "atob(${1})", snippet: true },
+  { label: "btoa",    detail: "global", info: "Encode a string to base-64.", apply: "btoa(${1})", snippet: true },
+  { label: "crypto",  detail: "namespace", info: "Web Crypto namespace — e.g. `crypto.randomUUID()`.", apply: "crypto" },
+  { label: "navigator", detail: "namespace", info: "Browser navigator — e.g. `navigator.clipboard.writeText(text)`.", apply: "navigator" },
+  { label: "localStorage",  detail: "namespace", info: "Raw Web Storage. Prefer the `storage` global for a friendlier API.", apply: "localStorage" },
+  { label: "Intl",    detail: "namespace", info: "Internationalization API — `Intl.NumberFormat`, `Intl.DateTimeFormat`.", apply: "Intl" },
+  { label: "BigInt",  detail: "global", info: "Arbitrary-precision integer — `BigInt(123)`.", apply: "BigInt(${1})", snippet: true },
 ];
 
 // Build the inverse mapping (rui-* class → component name) for inspect mode.

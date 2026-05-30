@@ -491,18 +491,21 @@ the language doesn't model **is just JavaScript**:
 - **Destructured parameters** in both `function` declarations and
   lambdas: `function Card({ title, tone = "info" })`,
   `function head([first, ...rest])`, `({ a, b }) => a + b`.
-- A **curated, safe slice of the JS standard library** is available
-  everywhere as globals — `Math`, `JSON`, `Object`, `Array`, `Number`,
-  `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, and
-  the functions `parseInt` / `parseFloat` / `isNaN` / `isFinite` /
-  `encodeURIComponent` / `decodeURIComponent`. Use them directly
-  (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
+- The **full JavaScript global surface** is available everywhere. The
+  standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`,
+  `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` /
+  `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … — works
+  directly (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
   (`new Date(0).getTime()`, `new Map([[k, v]])`). The timer globals
-  `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` are also
-  exposed — they behave like JS but are tracked by the runtime and cleared
-  automatically on re-plan/disconnect. The remaining capability-granting
-  globals (`fetch`, `eval`, `window`) are **not** exposed — use
-  `Http({...})` and `effect(...)`.
+  `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` are
+  runtime-tracked and cleared automatically on re-plan/disconnect. Every
+  other host global also resolves by name — browser dialogs (`alert`,
+  `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`,
+  `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`,
+  `BigInt`, …), and `window` / `document`. Author declarations and built-in
+  components always win over a same-named global. Still prefer `Http({...})`
+  over raw `fetch` for reactive data, and keep timers/listeners inside
+  `effect(...)` so they're torn down on unmount.
 - Inside **action bodies, effect callbacks, and lambda bodies**, you
   may also call browser APIs directly — `navigator.clipboard`,
   `window.open`, `document.addEventListener`, `setTimeout`,

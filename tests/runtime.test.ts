@@ -679,6 +679,81 @@ describe("timers (setTimeout / setInterval / clearTimeout / clearInterval)", () 
   });
 });
 
+describe("full JavaScript global surface", () => {
+  const g = globalThis as Record<string, unknown>;
+
+  it("calls an arbitrary host global function (call fallback)", () => {
+    g.__aktTestFn = (a: number, b: number) => a + b;
+    try {
+      const { ctx } = buildContext('sum = __aktTestFn(2, 3)');
+      expect(ctx.bindings.get("sum")?.()).toBe(5);
+    } finally {
+      delete g.__aktTestFn;
+    }
+  });
+
+  it("reads an arbitrary host global value by bare identifier", () => {
+    g.__aktTestVal = 42;
+    try {
+      const { ctx } = buildContext('v = __aktTestVal');
+      expect(ctx.bindings.get("v")?.()).toBe(42);
+    } finally {
+      delete g.__aktTestVal;
+    }
+  });
+
+  it("supports alert / confirm / prompt", () => {
+    const orig = { alert: g.alert, confirm: g.confirm, prompt: g.prompt };
+    const seen: string[] = [];
+    g.alert = (msg: unknown) => { seen.push(`alert:${msg}`); };
+    g.confirm = () => true;
+    g.prompt = () => "Ada";
+    try {
+      const { ctx } = buildContext('a = alert("hi")\nc = confirm("ok?")\np = prompt("name?")');
+      ctx.bindings.get("a")?.();
+      expect(seen).toContain("alert:hi");
+      expect(ctx.bindings.get("c")?.()).toBe(true);
+      expect(ctx.bindings.get("p")?.()).toBe("Ada");
+    } finally {
+      g.alert = orig.alert; g.confirm = orig.confirm; g.prompt = orig.prompt;
+    }
+  });
+
+  it("constructs host globals via `new` (URL) and reads namespaces (Intl, JSON)", () => {
+    const { ctx } = buildContext(
+      'path = new URL("https://example.com/a/b?x=1").pathname\n' +
+      'kind = typeof Intl',
+    );
+    expect(ctx.bindings.get("path")?.()).toBe("/a/b");
+    expect(ctx.bindings.get("kind")?.()).toBe("object");
+  });
+
+  it("exposes eval / Function (full passthrough)", () => {
+    const { ctx } = buildContext('r = eval("1 + 2")');
+    expect(ctx.bindings.get("r")?.()).toBe(3);
+  });
+
+  it("a library component wins over a same-named DOM global (Text)", () => {
+    const { ctx } = buildContext('node = Text("hi")');
+    expect(ctx.bindings.get("node")?.()).toMatchObject({ __kind: "Component", name: "Text" });
+  });
+
+  it("a user binding wins over a host global of the same name", () => {
+    g.__aktShadowed = "from-global";
+    try {
+      const { ctx } = buildContext('__aktShadowed = "from-user"\nv = __aktShadowed');
+      expect(ctx.bindings.get("v")?.()).toBe("from-user");
+    } finally {
+      delete g.__aktShadowed;
+    }
+  });
+
+  it("a curated global (Math) is unaffected by the passthrough", () => {
+    const { ctx } = buildContext('m = Math.max(3, 9, 1)');
+    expect(ctx.bindings.get("m")?.()).toBe(9);
+  });
+});
+
 describe("StateStore snapshot", () => {
   it("exposes entries() and snapshot()", () => {
     const { state } = buildContext(`$count = 1\n$name = "ada"`);

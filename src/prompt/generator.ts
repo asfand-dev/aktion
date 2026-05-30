@@ -508,7 +508,23 @@ console.log("Hello", $user)
 console.error("Failed", $error)
 \`\`\`
 
-Non-string values JSON-roundtrip; missing keys return \`null\`. Cookie options: \`expires\` (days/Date/ISO), \`maxAge\` (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`. Failures (quota, disabled storage) are swallowed silently.`;
+Non-string values JSON-roundtrip; missing keys return \`null\`. Cookie options: \`expires\` (days/Date/ISO), \`maxAge\` (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`. Failures (quota, disabled storage) are swallowed silently.
+
+### The full JavaScript global surface
+Beyond \`storage\` and \`console\`, **every** JavaScript global resolves by name — the standard library (\`Math\`, \`JSON\`, \`Object\`, \`Date\`, \`Map\`, …), browser dialogs (\`alert\`, \`confirm\`, \`prompt\`), and Web APIs (\`fetch\`, \`URL\`, \`URLSearchParams\`, \`Blob\`, \`FormData\`, \`crypto\`, \`navigator\`, \`localStorage\`, \`atob\`/\`btoa\`, \`Intl\`, \`BigInt\`, …), plus \`window\` / \`document\`.
+
+\`\`\`
+function copyLink() {
+  navigator.clipboard.writeText(window.location.href)
+  $toast = "Link copied"
+}
+function remove(id) {
+  if (confirm("Delete this item?")) { $items = $items.filter(x => x.id != id) }
+}
+id = crypto.randomUUID()
+\`\`\`
+
+Author declarations and built-in components always win over a same-named global, so the passthrough only fills in names you haven't defined. Prefer the reactive \`Http({...})\` over raw \`fetch\` for data that drives the UI, and keep timers/listeners inside \`effect(...)\` so they're cleaned up.`;
 }
 
 
