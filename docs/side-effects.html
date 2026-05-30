@@ -203,7 +203,7 @@ function Widget() {
 function UserCard(username) {
   $status = "loading"
   effect(() =&gt; {
-    $status = http({ url: "/api/users/" + username + "/status", method: "GET" }).data
+    $status = Http({ url: "https://api.example.com/users/" + username + "/status", method: "GET" }).data
   }, ["every(5000)"])
   return Card([
     CardHeader(username),
@@ -215,7 +215,7 @@ function UserCard(username) {
 
       <h3>Once on mount</h3>
 <pre><code>effect(() =&gt; {
-  $session = http({ url: "/api/session", method: "GET" })
+  $session = Http({ url: "https://api.example.com/session", method: "GET" })
 }, ["mount"])
 
 // Empty deps array is equivalent
@@ -228,7 +228,7 @@ effect(() =&gt; {
 
 effect(() =&gt; {
   if ($selectedId) {
-    $detail = http({ url: "/api/items/" + $selectedId, method: "GET" })
+    $detail = Http({ url: "https://api.example.com/items/" + $selectedId, method: "GET" })
   }
 }, [$selectedId])</code></pre>
 
@@ -237,8 +237,8 @@ effect(() =&gt; {
 $page  = 1
 
 effect(() =&gt; {
-  $results = http({
-    url:   "/api/search",
+  $results = Http({
+    url:   "https://api.example.com/search",
     query: { q: $query, page: $page }
   })
 }, [$query, $page, "debounce(250)"])</code></pre>
@@ -257,8 +257,8 @@ effect(() =&gt; {
 <pre><code>$draft = ""
 
 effect(() =&gt; {
-  $save = http({
-    url:    "/api/draft",
+  $save = Http({
+    url:    "https://api.example.com/draft",
     method: "PUT",
     body:   { draft: $draft }
   })
@@ -329,7 +329,7 @@ effect(() =&gt; {
       <h2 id="when-not">When NOT to use an effect</h2>
       <ul>
         <li><strong>User-driven side effects</strong> &mdash; declare a function and wire it to a button instead.</li>
-        <li><strong>HTTP that already depends on a reactive atom</strong> &mdash; <code>$results = http({ query: { q: $query } })</code> already re-issues when <code>$query</code> changes; no effect is needed.</li>
+        <li><strong>One-shot fetches</strong> &mdash; a top-level <code>$results = Http({ &hellip; })</code> already fires once on mount; you only need an effect when the request must <em>re-run</em> as a <code>$atom</code> changes (wrap it in <code>effect(() =&gt; { $results = Http({ query: { q: $query } }) }, [$query])</code>) or call <code>$results.refetch()</code> directly.</li>
         <li><strong>Pure computations</strong> &mdash; a plain binding (<code>total = @Sum($cart.price)</code>) is reactive and re-derives automatically.</li>
         <li><strong>Per-element listeners</strong> &mdash; component event props (<code>onClick</code>, <code>onChange</code>, <code>onSubmit</code>) are simpler and don&rsquo;t need cleanup.</li>
       </ul>

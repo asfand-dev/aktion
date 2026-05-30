@@ -217,7 +217,7 @@ export const keywordDocs: Record<string, KeywordDoc> = {
   await: {
     summary: "Await a promise inside an action/effect body (or expression).",
     syntax: "await expression",
-    example: "let res = await http({ url: \"/api\" })",
+    example: "let res = await Http({ url: \"https://api.example.com\" })",
   },
   async: {
     summary: "Marks a function as async — accepted as a no-op modifier.",

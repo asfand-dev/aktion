@@ -98,7 +98,7 @@ $hello = greet("Ada")             // re-runs whenever the function call's args c
         <tbody>
           <tr><td><code>$atom = expr</code></td><td>Write to reactive state. <code>+= -= *= /= ??= ++ --</code> are also allowed.</td></tr>
           <tr><td><code>name = expr</code></td><td>Local binding for use inside this function body (transient, not reactive).</td></tr>
-          <tr><td><code>$bag = http({ &hellip; })</code></td><td>Fire an HTTP request. Result is reactive: <code>.data</code>, <code>.loading</code>, <code>.error</code>, <code>.status</code>, <code>.refetch()</code>, <code>.cancel()</code>.</td></tr>
+          <tr><td><code>$bag = Http({ &hellip; })</code></td><td>Fire an HTTP request. Result is reactive: <code>.data</code>, <code>.loading</code>, <code>.error</code>, <code>.status</code>, <code>.refetch()</code>, <code>.cancel()</code>.</td></tr>
           <tr><td><code>route.navigate("/path")</code></td><td>Router transition. Updates the URL hash, fires <code>route-change</code>.</td></tr>
           <tr><td><code>emit("event-name", { &hellip; })</code></td><td>Dispatch a <code>CustomEvent</code> on the host element.</td></tr>
           <tr><td><code>storage.set("key", value)</code></td><td>Read or write <code>localStorage</code> / <code>sessionStorage</code> / <code>cookies</code> (see <a href="language.html#globals">globals</a>).</td></tr>
@@ -146,13 +146,13 @@ function appendTodo(item) {
 
       <h2 id="http">HTTP from actions</h2>
       <p>
-        Mutations are just <code>http({...})</code> calls with a non-GET
+        Mutations are just <code>Http({...})</code> calls with a non-GET
         method. Bind the resource bag to an atom so the UI can show loading
         and error states:
       </p>
 <pre><code>function saveTask() {
-  $save = http({
-    url:    "/api/tasks",
+  $save = Http({
+    url:    "https://api.example.com/tasks",
     method: "POST",
     body:   { title: $newTaskTitle, done: false }
   })
@@ -260,8 +260,8 @@ $message = ""
 
 function submit() {
   if (!$name || !$email) { return }
-  $post = http({
-    url:    "/api/contact",
+  $post = Http({
+    url:    "https://api.example.com/contact",
     method: "POST",
     body:   { name: $name, email: $email, message: $message }
   })
@@ -300,7 +300,7 @@ function toggleDone(id) {
 
 function deleteTask(id) {
   $tasks = @Filter($tasks, "id", "!=", id)
-  $remove = http({ url: "/api/tasks/" + id, method: "DELETE" })
+  $remove = Http({ url: "https://api.example.com/tasks/" + id, method: "DELETE" })
 }</code></pre>
 
       <h3>Confirm before destructive action</h3>

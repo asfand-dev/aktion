@@ -78,7 +78,6 @@ $activeUsers = 12540</code></pre>
           <tr><td>Emit</td><td><code>emit("name", { detail })</code></td><td>Dispatch a <code>CustomEvent</code> on the host (inside function/effect bodies).</td></tr>
           <tr><td>Theme override</td><td><code>theme = Theme({ tokens })</code></td><td>Top-level binding named <code>theme</code> &mdash; the runtime detects it and applies the tokens as CSS custom properties.</td></tr>
           <tr><td>i18n config</td><td><code>$i18n = i18n({ &hellip; })</code></td><td>Configures internationalization &mdash; messages, locale, fallback.</td></tr>
-          <tr><td>HTTP defaults</td><td><code>$http = Http({ &hellip; })</code></td><td>Optional response-wide defaults (base URL, headers, retry).</td></tr>
           <tr><td>Comment</td><td><code>// text</code> or <code>/* &hellip; */</code></td><td>Line or block comment; ignored by the parser.</td></tr>
         </tbody>
       </table>
@@ -99,7 +98,7 @@ $activeUsers = 12540</code></pre>
         <li><strong>References</strong> &mdash; <code>name</code>, <code>$reactive</code>, <code>route</code>.</li>
         <li><strong>Member access</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>. Optional chaining: <code>$user?.profile?.name</code>.</li>
         <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
-        <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>http({&hellip;})</code>, <code>Router({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
+        <li><strong>Function calls</strong> &mdash; component calls (<code>Card([&hellip;])</code>), built-in helpers (<code>Http({&hellip;})</code>, <code>Router({&hellip;})</code>), and <code>@</code>-builtins (<code>@Format($n)</code>).</li>
         <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>), nullish coalescing (<code>??</code>), ternary (<code>cond ? a : b</code>), prefix / postfix <code>++</code> / <code>--</code>.</li>
         <li><strong>Lambdas</strong> &mdash; every JS arrow form: <code>() =&gt; expr</code>, <code>x =&gt; expr</code> (single param, no parens), <code>(x) =&gt; expr</code>, <code>(x, y) =&gt; expr</code>, <code>(args) =&gt; { &hellip; }</code> for multi-statement bodies, <code>(x = 0) =&gt; &hellip;</code> for default params, <code>(...args) =&gt; &hellip;</code> for rest. The body may wrap onto the next line.</li>
         <li><strong>Destructuring</strong> &mdash; <code>let [a, b, ...rest] = arr</code> and <code>let { name, role = "guest", ...other } = user</code> (renaming via <code>{ key: alias }</code>, defaults via <code>= value</code>).</li>
@@ -177,14 +176,19 @@ function toggleTheme() {
 
       <h2 id="http">HTTP &mdash; the network primitive</h2>
       <p>
-        There is exactly one network primitive: <code>http({ url, method, headers, body, query, &hellip; })</code>.
-        Pass any <code>fetch</code>-compatible option plus a convenience
-        <code>query</code> object that is serialised into the URL. The result
-        is a reactive resource bag.
+        There is exactly one network primitive:
+        <code>Http({ url, method, headers, body, query, &hellip; })</code>.
+        Every call is <strong>self-contained</strong> &mdash; pass a full
+        absolute <code>url</code>, an optional <code>method</code>
+        (<code>GET</code> is the default), a convenience <code>query</code>
+        object serialised into the URL, plus any other
+        <code>fetch</code>-compatible option. There are no host-wide
+        defaults. The result is a reactive resource bag. For a full guide
+        see the <a href="http.html">HTTP guide</a>.
       </p>
-<pre><code>$orders = http({
-  url:    "/api/users/" + $userId + "/orders",
-  method: "GET",
+<pre><code>$orders = Http({
+  url:    "https://api.example.com/users/" + $userId + "/orders",
+  method: "GET",                       // GET is the default — can be omitted
   query:  { limit: 5, status: "open" },
   headers:{ "X-Tenant": $tenant }
 })</code></pre>
@@ -204,24 +208,27 @@ $orders.cancel()     // abort in-flight request</code></pre>
 <pre><code>aktion = Async($orders, {
   loading: LoadingState("Loading orders…"),
   error:   ErrorState("Couldn't fetch orders"),
-  empty:   EmptyState("No orders yet"),
+  empty:   EmptyState("No orders yet"),   // shown when data is null or an empty array
   data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
 })</code></pre>
 
       <h3>Mutations</h3>
-      <p>Mutations look identical &mdash; fire from inside a <code>function</code> body and observe the resource:</p>
+      <p>Mutations look identical &mdash; fire from inside a <code>function</code> body and observe the resource. Refresh a list with <code>.refetch()</code> after a write:</p>
 <pre><code>function saveOrder(payload) {
-  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $orders.refetch()
   emit("assistant-message", { message: "Saved." })
 }</code></pre>
 
-      <h3>Host-wide defaults</h3>
-<pre><code>$http = Http({
-  baseUrl: "https://api.example.com",
-  headers: { "Accept": "application/json" },
-  timeout: 10000,
-  retry:   { count: 2, backoff: "exponential" }
-})</code></pre>
+      <h3>Re-running a request</h3>
+      <p>
+        A request fires once when its binding mounts. To re-issue it, call
+        <code>$orders.refetch()</code>, or wrap the call in an
+        <code>effect</code> so it re-runs when a dependency changes:
+      </p>
+<pre><code>effect(() =&gt; {
+  $results = Http({ url: "https://api.example.com/search", query: { q: $query } })
+}, [$query, "debounce(300)"])</code></pre>
 
       <h2 id="components">Components and lambdas</h2>
 <pre><code>function UserCard(user, { tone = "default" } = {}) {
@@ -301,7 +308,7 @@ list         = $items.map(item =&gt; rowFor(item))</code></pre>
         The host listens with <code>el.addEventListener("name", e =&gt; &hellip;)</code>.
       </p>
 <pre><code>function saveOrder(payload) {
-  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
   emit("order:saved", { id: payload.id })
 }
 
@@ -329,7 +336,7 @@ function selectRow(row) {
 }
 
 function submit() {
-  $save = http({ url: "/api/tasks", method: "POST", body: { title: $newTaskTitle } })
+  $save = Http({ url: "https://api.example.com/tasks", method: "POST", body: { title: $newTaskTitle } })
 }</code></pre>
 
       <p>For the full body grammar and patterns, see the <a href="actions.html">Actions guide</a>.</p>
@@ -343,12 +350,12 @@ function submit() {
       </p>
 <pre><code>// Mount-once: run when the app first renders
 effect(() =&gt; {
-  $session = http({ url: "/api/session", method: "GET" })
+  $session = Http({ url: "https://api.example.com/session", method: "GET" })
 }, ["mount"])
 
 // Reactive: re-run whenever $query changes (debounced 300ms)
 effect(() =&gt; {
-  $results = http({ url: "/api/search", method: "GET", query: { q: $query } })
+  $results = Http({ url: "https://api.example.com/search", method: "GET", query: { q: $query } })
 }, [$query, "debounce(300)"])
 
 // Interval: run every 5 seconds
@@ -435,7 +442,7 @@ function poll() {
 
 function safeFetch() {
   try {
-    $resp = http({ url: "/api/data" })
+    $resp = Http({ url: "https://api.example.com/data" })
   } catch (err) {
     $error = err
   } finally {
@@ -630,7 +637,7 @@ aktion = AppShell(MainSidebar(), pages)</code></pre>
 
       <h2 id="i18n">Internationalization</h2>
 <pre><code>$locale = storage.get("locale") ?? "en"
-$bundle = http({ url: "/i18n/" + $locale + ".json", method: "GET" })
+$bundle = Http({ url: "https://api.example.com/i18n/" + $locale + ".json", method: "GET" })
 $i18n   = i18n({
   locale:   $locale,
   messages: $bundle.data ?? {},

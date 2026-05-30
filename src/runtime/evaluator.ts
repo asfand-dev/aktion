@@ -47,7 +47,7 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   // `new Date()`, `new Map()`, `Number("5")`, etc. without an import.
   // Intentionally omits capability-granting globals (`fetch`, `eval`,
   // `Function`, `globalThis`, `window`, timers) — those route through the
-  // host runtime (`http(...)`, effects) instead.
+  // host runtime (`Http(...)`, effects) instead.
   Math,
   JSON,
   Object,
@@ -393,7 +393,7 @@ export interface EvaluationContext {
   componentEffectStack: ScopedEffectDecl[][];
   /** Action declarations (`function foo() { ... }` — camelCase). */
   actionDecls: Map<string, ActionDeclaration>;
-  /** HTTP runtime (`http({...})` calls + interceptor configuration). */
+  /** HTTP runtime (`Http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
   /** Aktion 0.5 i18n runtime (`$i18n = i18n({...})` declaration + `t()` builtin). */
   i18n?: I18nRuntime;
@@ -597,28 +597,12 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
       ctx.state.declare(stmt.identifier, initial);
     }
   }
-  // 1.25 pass: state declarations whose RHS is a `http({...})` call need
-  // their resource bag created eagerly so the request fires at program
-  // mount. We re-run those initializers through the full evaluator now
-  // that every state slot has at least a literal default.
-  for (const stmt of program.statements) {
-    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
-    if (stmt.expression.kind !== "Call") continue;
-    if (stmt.expression.callee !== "http") continue;
-    const value = evaluate(stmt.expression, ctx);
-    ctx.state.set(stmt.identifier, value);
-  }
-
-  // 1.5 pass: resolve `Http({...})` / `i18n({...})` setup helpers so any
-  // subsequent http() calls observe the configured defaults.
+  // 1.5 pass: resolve `i18n({...})` setup helper so subsequent reads of
+  // `$i18n` observe the configured locale/messages.
   for (const stmt of program.statements) {
     if (stmt.kind !== "Assignment") continue;
     const expr = stmt.expression;
     if (expr.kind !== "Call") continue;
-    if ((stmt.identifier === "http" || stmt.identifier === "$http") && expr.callee === "Http") {
-      evaluate(expr, ctx);
-      continue;
-    }
     if ((stmt.identifier === "i18n" || stmt.identifier === "$i18n") && expr.callee === "i18n") {
       evaluate(expr, ctx);
       continue;
@@ -637,6 +621,19 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   // if `greet` happened to be declared later in source order.
   for (const stmt of program.statements) {
     installStatementBinding(stmt, ctx);
+  }
+
+  // 1.55 pass: state declarations whose RHS is a `Http({...})` call need
+  // their resource bag created eagerly so the request fires at program
+  // mount. We run this *after* bindings are installed so the request
+  // config can reference forward-declared plain bindings, components, and
+  // state (e.g. `base = "https://api…"` then `$todos = Http({ url: base + "/todos" })`).
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
+    if (stmt.expression.kind !== "Call") continue;
+    if (stmt.expression.callee !== "Http") continue;
+    const value = evaluate(stmt.expression, ctx);
+    ctx.state.set(stmt.identifier, value);
   }
 
   // 1.6 pass: run any top-level *imperative* statements once per plan —
@@ -702,7 +699,7 @@ function installComputedStateDerivations(
     if (stmt.kind !== "Assignment" || !stmt.isState) continue;
     if (isPureLiteralExpression(stmt.expression)) continue;
     if (isHttpResourceCall(stmt.expression)) continue; // already handled in 1.25 pass
-    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // Http()/i18n()
+    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // i18n()
 
     const entry: ComputedDerivation = {
       name: stmt.identifier,
@@ -780,17 +777,14 @@ function isPureLiteralExpression(expr: Expression): boolean {
   }
 }
 
-/** `true` for `http({...})` resource declarations (handled in 1.25 pass). */
+/** `true` for `Http({...})` resource declarations (handled in 1.25 pass). */
 function isHttpResourceCall(expr: Expression): boolean {
-  return expr.kind === "Call" && expr.callee === "http";
+  return expr.kind === "Call" && expr.callee === "Http";
 }
 
-/** `true` for `$http = Http({...})` / `$i18n = i18n({...})` setups (handled in 1.5 pass). */
+/** `true` for `$i18n = i18n({...})` setups (handled in 1.5 pass). */
 function isRuntimeSetupCall(identifier: string, expr: Expression): boolean {
   if (expr.kind !== "Call") return false;
-  if (expr.callee === "Http" && (identifier === "http" || identifier === "$http")) {
-    return true;
-  }
   if (expr.callee === "i18n" && (identifier === "i18n" || identifier === "$i18n")) {
     return true;
   }
@@ -2084,10 +2078,11 @@ function evaluateComponentCall(
     const evaluated = args.map((a) => evaluate(a, ctx));
     return runActionDeclSync(actionDecl, evaluated, ctx);
   }
-  // `http({ url, method, body, headers, ... })` builtin — returns a
-  // reactive `EndpointResource` bag with `data`, `error`, `loading`,
-  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`.
-  if (callee === "http") {
+  // `Http({ url, method, body, headers, query, ... })` builtin — returns
+  // a reactive `EndpointResource` bag with `data`, `error`, `loading`,
+  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`. Each
+  // call is fully self-contained; there are no host-wide defaults.
+  if (callee === "Http") {
     const optsArg = args[0];
     const opts = optsArg ? evaluate(optsArg, ctx) : {};
     return createHttpResource(opts, ctx);
@@ -2150,39 +2145,6 @@ function evaluateComponentCall(
     const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
     const node: ThemeNode = { kind: "Theme", tokens };
     return node;
-  }
-  if (callee === "Http") {
-    // `Http({ baseUrl, headers, retry, ... })` — pushes config into the
-    // host runtime and returns a marker so callers can `$http = Http({...})`
-    // without crashing the evaluator. The marker has a stable shape so
-    // host code introspecting `$http` sees the configured defaults.
-    const configArg = args[0];
-    const config = configArg ? evaluate(configArg, ctx) : null;
-    if (config && typeof config === "object" && !Array.isArray(config) && ctx.http) {
-      const cfg = config as Record<string, unknown>;
-      ctx.http.setDefaults({
-        baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl : undefined,
-        headers: cfg.headers && typeof cfg.headers === "object" && !Array.isArray(cfg.headers)
-          ? Object.fromEntries(
-              Object.entries(cfg.headers as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "")]),
-            )
-          : undefined,
-        timeoutMs: typeof cfg.timeout === "number" ? cfg.timeout : undefined,
-        retry: cfg.retry && typeof cfg.retry === "object" && !Array.isArray(cfg.retry)
-          ? {
-              count: Number((cfg.retry as Record<string, unknown>).count ?? 0) || 0,
-              backoff: (cfg.retry as Record<string, unknown>).backoff === "linear"
-                ? "linear"
-                : "exponential",
-            }
-          : undefined,
-        credentials:
-          cfg.credentials === "omit" || cfg.credentials === "same-origin" || cfg.credentials === "include"
-            ? cfg.credentials
-            : undefined,
-      });
-    }
-    return { __kind: "Http", config };
   }
   if (callee === "i18n") {
     // `i18n({ locale, messages, fallback })` — push into the host runtime.

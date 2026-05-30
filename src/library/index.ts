@@ -409,7 +409,7 @@ const componentGroups: ComponentGroup[] = [
     name: "Helpers",
     components: ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary"],
     notes: [
-      "- `Async(resource, { loading:, error:, empty:, data: })` switches a `$query` / `$mutation` / `$subscription` resource on its `state` field.",
+      "- `Async(resource, { loading:, error:, empty:, data: })` switches an `Http({...})` resource on its `state` field (`empty` shows for `null`/empty-array data).",
       "- `Show(when, { fallback?, children })` is sugar over `if (expr) { children } else { fallback }`.",
       "- `Portal(target?, children)` renders into a different DOM subtree (defaults to `document.body`).",
       "- `Redirect(path)` is a router-aware component — see Routing.",

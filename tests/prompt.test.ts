@@ -15,14 +15,14 @@ describe("generatePrompt", () => {
   it("toggles tool/binding sections by feature flag", () => {
     const minimal = generatePrompt(defaultLibrary, { toolCalls: false, bindings: false });
     expect(minimal).not.toContain("## Reactive State");
-    expect(minimal).not.toContain("## Data — `http({...})`");
+    expect(minimal).not.toContain("## Data — `Http({...})`");
     expect(minimal).not.toContain("## Built-in functions");
 
     const full = generatePrompt(defaultLibrary, {
       tools: [{ name: "list_users", description: "Returns users.", argsExample: { limit: 10 } }],
     });
     expect(full).toContain("## Reactive State");
-    expect(full).toContain("## Data — `http({...})`");
+    expect(full).toContain("## Data — `Http({...})`");
     expect(full).toContain("list_users");
   });
 
@@ -58,11 +58,11 @@ describe("generatePrompt", () => {
     });
     expect(text).toContain("## Effects");
     expect(text).toContain("## Actions");
-    expect(text).toContain("## Data — `http({...})`");
+    expect(text).toContain("## Data — `Http({...})`");
     expect(text).toContain("effect");
     expect(text).toContain("mount");
     expect(text).toContain("debounce(");
-    expect(text).toContain("http({");
+    expect(text).toContain("Http({");
     expect(text).toContain(".refetch()");
     expect(text).toContain(".loading");
     expect(text).toContain("Async(");
@@ -161,8 +161,8 @@ describe("generatePrompt", () => {
       expect(text).not.toContain("## Routing");
       expect(text).not.toContain("## Actions");
       expect(text).not.toContain("Router({");
-      expect(text).not.toContain("## Data — `http({...})`");
-      expect(text).not.toContain("http({");
+      expect(text).not.toContain("## Data — `Http({...})`");
+      expect(text).not.toContain("Http({");
       expect(text).not.toContain(`js` + `{`);
       expect(text).not.toContain("bind:value:");
     });

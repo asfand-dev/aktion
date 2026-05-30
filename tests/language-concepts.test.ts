@@ -251,20 +251,27 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     expect(state.get("total")).toBe(1);
   });
 
-  it("`http({...})` slots are NOT clobbered by the computed-derivation pass", () => {
-    const { state } = harness(
-      `
-        $orders = http({ url: "/api/orders" })
-        aktion = Text("ok")
-      `,
-      { http: new HttpRuntime() },
-    );
-    const resource = state.get("orders") as { loading: boolean; data: unknown };
-    expect(resource).toBeDefined();
-    expect(typeof resource).toBe("object");
-    // The resource bag carries the reactive HTTP shape — proving the
-    // computed pass left the `http({…})` slot alone.
-    expect("loading" in resource).toBe(true);
+  it("`Http({...})` slots are NOT clobbered by the computed-derivation pass", () => {
+    const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    (globalThis as { fetch?: typeof fetch }).fetch = (async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    try {
+      const { state } = harness(
+        `
+          $orders = Http({ url: "https://api.example.com/orders" })
+          aktion = Text("ok")
+        `,
+        { http: new HttpRuntime() },
+      );
+      const resource = state.get("orders") as { loading: boolean; data: unknown };
+      expect(resource).toBeDefined();
+      expect(typeof resource).toBe("object");
+      // The resource bag carries the reactive HTTP shape — proving the
+      // computed pass left the `Http({…})` slot alone.
+      expect("loading" in resource).toBe(true);
+    } finally {
+      if (originalFetch) (globalThis as { fetch?: typeof fetch }).fetch = originalFetch;
+    }
   });
 });
 

@@ -5,8 +5,8 @@
  * rather than language constructs (per spec §24). Keeping them as
  * components keeps the language core small and the runtime tractable.
  *
- * - `Async(resource, loading:, error:, empty:, data:)` — branches on a
- *   `$query` / `$mutation` / `$subscription` resource state.
+ * - `Async(resource, loading:, error:, empty:, data:)` — branches on an
+ *   `Http({...})` resource state.
  * - `ErrorBoundary(fallback:, onError:, children)` — subtree error catcher.
  * - `Portal(target?, children)` — escape-hatch render to another DOM node.
  * - `Redirect(path)` — navigate then unmount. Recognised by the router.
@@ -36,7 +36,7 @@ const isResourceShape = (
 export const Async: ComponentSpec = {
   name: "Async",
   description:
-    "Render `loading`, `error`, `empty`, or `data` slot based on an `http({...})` resource's state.",
+    "Render `loading`, `error`, `empty`, or `data` slot based on an `Http({...})` resource's state.",
   props: [
     { name: "resource", type: "any", positional: true, required: true },
     { name: "loading", type: "Node", optional: true },

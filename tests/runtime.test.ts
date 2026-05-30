@@ -265,16 +265,24 @@ describe("for...of loop variable scoping", () => {
   });
 });
 
-describe("http({...}) reactive resource", () => {
+describe("Http({...}) reactive resource", () => {
   let originalFetch: typeof fetch | undefined;
   let fetchMock: ReturnType<typeof vi.fn>;
 
+  /** Flush enough microtasks for an `Http({...})` lifecycle to settle. */
+  const settle = async (turns = 12): Promise<void> => {
+    for (let i = 0; i < turns; i += 1) await Promise.resolve();
+  };
+
+  const jsonResponse = (body: unknown, status = 200): Response =>
+    new Response(status === 204 ? null : JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
   beforeEach(() => {
     originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
-    fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
+    fetchMock = vi.fn(async () => jsonResponse({ ok: true }));
     (globalThis as { fetch?: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
   });
 
@@ -289,8 +297,8 @@ describe("http({...}) reactive resource", () => {
     buildContext(
       `
 $id = 5
-$response = http({
-  url: "/api/items",
+$response = Http({
+  url: "https://api.example.com/items",
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: { id: $id }
@@ -299,29 +307,54 @@ aktion = Stack()
       `,
       { http },
     );
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     expect(fetchMock).toHaveBeenCalled();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/items");
+    expect(url).toBe("https://api.example.com/items");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     expect(init.body).toBe(JSON.stringify({ id: 5 }));
   });
 
-  it("exposes the reactive resource bag with data / status / refetch / cancel", async () => {
+  it("defaults the method to GET when omitted", async () => {
     const http = new HttpRuntime();
-    const { ctx } = buildContext(
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/todos" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("GET");
+  });
+
+  it("resolves a forward-declared plain binding in the request url (hoisting)", async () => {
+    const http = new HttpRuntime();
+    buildContext(
       `
-$response = http({ url: "/api/items", method: "GET" })
+$todos = Http({ url: base + "/todos" })
+base = "https://api.example.com"
 aktion = Stack()
       `,
       { http },
     );
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    await settle();
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toBe("https://api.example.com/todos");
+  });
+
+  it("exposes the reactive resource bag with data / status / headers / lastUpdated / refetch / cancel", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `
+$response = Http({ url: "https://api.example.com/items", method: "GET" })
+aktion = Stack()
+      `,
+      { http },
+    );
+    await settle();
     const response = ctx.state.get("response") as {
       data: unknown;
+      error: unknown;
       loading: boolean;
       status?: number;
       refetch: () => Promise<void>;
@@ -331,7 +364,11 @@ aktion = Stack()
     };
     expect(response).toBeDefined();
     expect(response.data).toEqual({ ok: true });
+    expect(response.error).toBeUndefined();
+    expect(response.loading).toBe(false);
     expect(response.status).toBe(200);
+    expect(response.headers?.["content-type"]).toContain("application/json");
+    expect(typeof response.lastUpdated).toBe("number");
     expect(typeof response.refetch).toBe("function");
     expect(typeof response.cancel).toBe("function");
   });
@@ -340,17 +377,134 @@ aktion = Stack()
     const http = new HttpRuntime();
     buildContext(
       `
-$response = http({ url: "/api/users", method: "GET", query: { limit: 5, slug: "abc" } })
+$response = Http({ url: "https://api.example.com/users", method: "GET", query: { limit: 5, slug: "abc" } })
 aktion = Stack()
       `,
       { http },
     );
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("limit=5");
     expect(url).toContain("slug=abc");
+  });
+
+  it("appends query params with `&` when the url already has a querystring", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/users?team=core", query: { limit: 5 } })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toBe("https://api.example.com/users?team=core&limit=5");
+  });
+
+  it("forwards unknown options verbatim as fetch init (`...rest`)", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/me", credentials: "include", mode: "cors" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe("include");
+    expect(init.mode).toBe("cors");
+  });
+
+  it("surfaces non-2xx responses on `.error` and sets state to error", async () => {
+    fetchMock.mockImplementationOnce(async () => jsonResponse({ message: "nope" }, 404));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/missing" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const response = ctx.state.get("response") as {
+      data: unknown;
+      error: { status?: number; body?: unknown };
+      status?: number;
+      state: string;
+    };
+    expect(response.state).toBe("error");
+    expect(response.status).toBe(404);
+    expect(response.error).toMatchObject({ status: 404 });
+    expect(response.data).toBeUndefined();
+  });
+
+  it("treats a 204 No Content response as resolved with null data", async () => {
+    fetchMock.mockImplementationOnce(async () => jsonResponse(null, 204));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/todos/1", method: "DELETE" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const response = ctx.state.get("response") as { data: unknown; state: string; status?: number };
+    expect(response.status).toBe(204);
+    expect(response.state).toBe("data");
+    expect(response.data).toBeNull();
+  });
+
+  it("re-issues the request when `.refetch()` is called", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const response = ctx.state.get("response") as { refetch: () => Promise<void> };
+    await response.refetch();
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("`.cancel()` aborts the in-flight request and clears the loading flag", async () => {
+    let abortedSignal: AbortSignal | undefined;
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => {
+      abortedSignal = init.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
+      });
+    });
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      { http },
+    );
+    await Promise.resolve();
+    const response = ctx.state.get("response") as { loading: boolean; cancel: () => void };
+    expect(response.loading).toBe(true);
+    response.cancel();
+    await settle();
+    expect(abortedSignal?.aborted).toBe(true);
+    expect(response.loading).toBe(false);
+  });
+
+  it("a stale in-flight request cannot clobber a newer refetch result", async () => {
+    const deferred: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(
+      () => new Promise<Response>((resolve) => { deferred.push(resolve); }),
+    );
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    await Promise.resolve();
+    const response = ctx.state.get("response") as { data: unknown; refetch: () => Promise<void> };
+    // Start a second request before the first resolves.
+    void response.refetch();
+    await Promise.resolve();
+    expect(deferred.length).toBe(2);
+    // Resolve the NEWER request first, then the stale one.
+    deferred[1]!(jsonResponse({ which: "new" }));
+    await settle();
+    deferred[0]!(jsonResponse({ which: "stale" }));
+    await settle();
+    expect(response.data).toEqual({ which: "new" });
   });
 });
 

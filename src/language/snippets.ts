@@ -155,12 +155,12 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Action",
-    description: "Action declaration that POSTs through the http() builtin.",
+    description: "Action declaration that POSTs through the Http() builtin.",
     template:
       '$${1:items} = []\n\n' +
       'function add(text) {\n' +
       '  $${1:items} = [...$${1:items}, { id: $${1:items}.length + 1, text: text }]\n' +
-      '  $response = http({ url: "/api/save", method: "POST", body: { item: { text: text } } })\n' +
+      '  $response = Http({ url: "https://api.example.com/save", method: "POST", body: { item: { text: text } } })\n' +
       '}',
   },
   {
@@ -261,10 +261,10 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Http",
-    description: "Fire an http() request and bind the reactive resource bag.",
+    description: "Fire an Http() request and bind the reactive resource bag.",
     template:
-      '$${1:response} = http({\n' +
-      '  url: "${2:/api/items}",\n' +
+      '$${1:response} = Http({\n' +
+      '  url: "${2:https://api.example.com/items}",\n' +
       '  method: "${3:GET}",\n' +
       '  headers: { "Content-Type": "application/json" }\n' +
       '})',

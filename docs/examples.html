@@ -58,7 +58,7 @@
       <p>
         Want a focused tour of <code>function name() { ... }</code> blocks? See
         the <a href="actions.html">Actions guide</a> &mdash; it walks through
-        assignment, <code>http({...})</code> mutations, <code>emit()</code>,
+        assignment, <code>Http({...})</code> mutations, <code>emit()</code>,
         programmatic navigation via <code>route.navigate("/path")</code>,
         and inline side effects. For browser API
         access inside an action or effect body, see
@@ -880,7 +880,7 @@ aktion = Card([
 
   function checkout() {
     if ($cart.length == 0) { return }
-    $checkout = http({ url: "/api/checkout", method: "POST", body: { items: $cart } })
+    $checkout = Http({ url: "https://api.example.com/checkout", method: "POST", body: { items: $cart } })
     $cart = []
     route.navigate("/success")
   }

@@ -244,22 +244,32 @@ const MANUAL_HINTS: Array<{
   {
     pattern: /\bQuery\(/,
     hint: () =>
-      `Query(name, args, placeholder) → $response = http({ url, method: "GET", ... }). The reactive bag exposes data / error / loading / status / refetch() / cancel() / lastUpdated / headers.`,
+      `Query(name, args, placeholder) → $response = Http({ url, method: "GET", ... }). The reactive bag exposes data / error / loading / status / refetch() / cancel() / lastUpdated / headers.`,
   },
   {
     pattern: /\bMutation\(/,
     hint: () =>
-      `Mutation(name, args) → $response = http({ url, method: "POST", body, ... }). Trigger via the surrounding action; observe data / error / loading on the resource.`,
+      `Mutation(name, args) → $response = Http({ url, method: "POST", body, ... }). Trigger via the surrounding action; observe data / error / loading on the resource.`,
   },
   {
     pattern: /^\s*(?:query|mutation|subscription)\s+[A-Z]/m,
     hint: () =>
-      `query / mutation / subscription declarations → call site $response = http({ url, method, body, headers, ... }). The single http() builtin returns a reactive bag with data, error, loading, status, lastUpdated, headers, refetch(), cancel().`,
+      `query / mutation / subscription declarations → call site $response = Http({ url, method, body, headers, ... }). The single Http() builtin returns a reactive bag with data, error, loading, status, lastUpdated, headers, refetch(), cancel().`,
   },
   {
     pattern: /\$(?:query|mutation|subscription)\s+[a-zA-Z_]/,
     hint: () =>
-      `$query / $mutation / $subscription bindings → $name = http({ ... }). One reactive resource type for every HTTP method (GET/POST/PUT/PATCH/DELETE) and for streaming responses via headers/SSE.`,
+      `$query / $mutation / $subscription bindings → $name = Http({ ... }). One reactive resource type for every HTTP method (GET/POST/PUT/PATCH/DELETE).`,
+  },
+  {
+    pattern: /=\s*Http\s*\(\s*\{[^}]*\bbaseUrl\b/,
+    hint: () =>
+      `$http = Http({ baseUrl, ... }) host-wide defaults were removed. Pass a full absolute url to each Http({ url, ... }) call instead — there is no Http() defaults setter.`,
+  },
+  {
+    pattern: /(^|[^A-Za-z0-9_$.])http\s*\(\s*\{/,
+    hint: () =>
+      `Lowercase http({...}) was renamed to Http({...}). Use $response = Http({ url, method, query, headers, body, ... }); GET is the default method.`,
   },
   {
     pattern: /@Const\(/,

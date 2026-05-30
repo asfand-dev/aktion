@@ -44,6 +44,7 @@ const NAV_GROUPS = [
     label: "Advanced",
     items: [
       { href: "actions.html", label: "Actions" },
+      { href: "http.html", label: "HTTP" },
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "side-effects.html", label: "Side effects" },
       { href: "routing.html", label: "Routing" },
@@ -68,7 +69,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "actions.html", "javascript-interactions.html", "routing.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -90,6 +91,7 @@ const PAGE_KEYWORDS = {
   "language.html": "syntax expressions state queries mutations builtins",
   "components.html": "props library catalog signatures",
   "actions.html": "action assignment http emit assistant-message navigate route js button click",
+  "http.html": "http fetch request response query headers body refetch cancel async resource crud rest api network",
   "javascript-interactions.html": "script @js useeffect hooks",
   "routing.html": "routes navlink navigate hash router",
   "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",

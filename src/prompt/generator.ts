@@ -6,7 +6,7 @@
  * of JavaScript. Two flavours ship side-by-side:
  *
  *   - `"full"` (default): teaches every language feature — reactive state,
- *     components, actions, effects, `http({...})`, routing, builtins,
+ *     components, actions, effects, `Http({...})`, routing, builtins,
  *     helpers, theming — plus the entire component library. Use when
  *     generating full applications.
  *
@@ -170,7 +170,6 @@ effect(() => { console.log($count) }, [$count])                       // declara
 - \`theme\` — optional brand override (\`theme = Theme({...})\`).
 - \`route\` — reactive router handle (\`route.path\`, \`route.params\`, \`route.navigate("/x")\`). NEVER declare \`route\` yourself.
 - \`$i18n\` — i18n bundle handle.
-- \`$http\` — HTTP defaults via \`$http = Http({ baseUrl, headers, ... })\`.
 
 ### Component-call shape — One positional argument max (TRAILING-OBJECT RULE)
 Every call takes **at most one positional argument**; every other argument lives in a trailing \`{ }\` object literal:
@@ -283,7 +282,7 @@ $theme = "light"
 
 field    = Input("draft",   { value: $draft })
 darkMode = Switch("dark",   { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
-search   = Input("query",   { onChange: q => $results = http({ url: \`/api/search?q=\${q}\` }) })
+search   = Input("query",   { onChange: q => $results = Http({ url: \`https://api.example.com/search?q=\${q}\` }) })
 \`\`\`
 
 ### Computed values
@@ -325,7 +324,7 @@ A camelCase \`function\` is a callable side-effect block. Use as event handler (
 \`\`\`
 function save(item) {
   $items = [...$items, item]
-  $save  = http({ url: "/api/save", method: "POST", body: { item } })
+  $save  = Http({ url: "https://api.example.com/save", method: "POST", body: { item } })
   emit("saved", { id: item.id })
 }
 
@@ -362,9 +361,9 @@ function LiveClock() {
   return Text(@FormatDate($now, "time"))
 }
 
-// Debounced search
+// Debounced search — re-issue the request when inputs change
 effect(() => {
-  $results = http({ url: "/api/search", query: { q: $query, page: $page } })
+  $results = Http({ url: "https://api.example.com/search", query: { q: $query, page: $page } })
 }, [$query, $page, "debounce(250)"])
 
 // Cleanup
@@ -377,28 +376,28 @@ effect(() => {
 }
 
 function fullHttp(): string {
-  return `## Data — \`http({...})\`
+  return `## Data — \`Http({...})\`
 
-\`http({ ... })\` is the only HTTP primitive. Pass any \`fetch\`-compatible option plus a convenience \`query\` object that is serialised into the URL.
+\`Http({ ... })\` is the only HTTP primitive. Every call is self-contained — pass a full absolute \`url\`, an optional \`method\` (\`GET\` is the default), a convenience \`query\` object serialised into the URL, \`headers\`, \`body\`, and any other \`fetch\`-compatible option. There are NO host-wide defaults.
 
 \`\`\`
-$orders = http({
-  url:    \`/api/users/\${$userId}/orders\`,
+$orders = Http({
+  url:    \`https://api.example.com/users/\${$userId}/orders\`,
   method: "GET",
-  query:  { limit: 5, status: "open" },
+  query:  { limit: 5, status: "open" },   // → ?limit=5&status=open
   headers:{ "X-Tenant": $tenant }
 })
 \`\`\`
 
-The runtime tracks reactive reads inside the options object and auto-refetches when they change.
+The request fires once when the binding mounts. To re-run it call \`$orders.refetch()\`, or wrap it in an \`effect(..., [$dep])\` so it re-issues when a dependency changes.
 
 ### Reactive resource shape
 \`\`\`
 $orders.data         // parsed body (null until resolved)
 $orders.error        // null on success
-$orders.status       // HTTP status code
+$orders.status       // HTTP status code, e.g. 200
 $orders.loading      // true while in-flight
-$orders.headers      // response headers as an object
+$orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of last successful response
 $orders.refetch()    // re-issue the request
 $orders.cancel()     // abort the in-flight request
@@ -407,23 +406,22 @@ $orders.cancel()     // abort the in-flight request
 ### Writes — fire from an action
 \`\`\`
 function saveOrder(payload) {
-  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
   emit("assistant-message", { message: "Saved." })
 }
 \`\`\`
+
+\`body\` objects are JSON-encoded automatically (a \`Content-Type: application/json\` header is added unless you set one). After a write, call \`.refetch()\` on the list resource to refresh it.
 
 ### \`Async\` wrapper — branch on resource state
 \`\`\`
 view = Async($orders, {
   loading: LoadingState("Loading orders…"),
   error:   ErrorState("Couldn't fetch orders"),
-  empty:   EmptyState("No orders yet"),
+  empty:   EmptyState("No orders yet"),    // shown when data is null or an empty array
   data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
 })
-\`\`\`
-
-### Optional defaults
-\`$http = Http({ baseUrl: "https://api.example.com", headers: { Accept: "application/json" }, timeout: 10000 })\` configures host-wide defaults once at the top.`;
+\`\`\``;
 }
 
 function fullRouting(): string {
@@ -586,7 +584,7 @@ function fullHelpers(): string {
 
 | Component | Purpose |
 |---|---|
-| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`http({...})\` resource state. |
+| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`Http({...})\` resource state. |
 | \`Show(when, { fallback?, children })\` | Sugar for \`when ? children : fallback\`. |
 | \`Portal(children, { target? })\` | Render outside the parent subtree. |
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
@@ -660,10 +658,10 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 Before finishing, walk your output and check:
 1. \`${ROOT} = ...\` is the FIRST line.
 2. Every referenced name is defined somewhere below.
-3. Every defined name (other than \`${ROOT}\`, \`theme\`, \`$http\`, \`$i18n\`) is reachable from \`${ROOT}\`.
+3. Every defined name (other than \`${ROOT}\`, \`theme\`, \`$i18n\`) is reachable from \`${ROOT}\`.
 4. PascalCase functions end with an explicit \`return\`.
 5. State uses the single-sigil \`$name = value\` form.
-6. \`http({...})\` exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
+6. \`Http({...})\` uses an absolute \`url\` and exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
 7. \`Router({...})\` arms use \`:\` (not \`->\`) and \`default\` (not \`_\`) for the wildcard.
 8. Effects use \`effect(() => {...}, [deps])\` — never the legacy bracket form.
 9. \`storage\` / \`console\` are lowercase; \`route\` is reserved (never declare it).`;
@@ -671,11 +669,11 @@ Before finishing, walk your output and check:
 
 function fullDefaultExamples(): string[] {
   return [
-    `// Tasks dashboard — http(), Async, action, multi-section layout
-$tasks = http({ url: "/api/tasks", method: "GET" })
+    `// Tasks dashboard — Http(), Async, action, multi-section layout
+$tasks = Http({ url: "https://api.example.com/tasks", method: "GET" })
 
 function toggle(task) {
-  $update = http({ url: \`/api/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
+  $update = Http({ url: \`https://api.example.com/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
   $tasks.refetch()
 }
 
@@ -977,7 +975,7 @@ function rulesSection(rules: ReadonlyArray<string>): string {
 function toolsListSection(tools: ReadonlyArray<ToolSpec>): string {
   const lines: string[] = [
     "## Available endpoints",
-    "These endpoints are provided by the host. Fire requests with `http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
+    "These endpoints are provided by the host. Fire requests with `Http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
   ];
   for (const tool of tools) {
     const kind = tool.kind === "Mutation" ? "POST/PUT/PATCH/DELETE" : "GET";
