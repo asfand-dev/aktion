@@ -143,7 +143,7 @@ function fullHeader(preamble: string | undefined): string {
     "You are a UI engineer authoring complete, working applications in Aktion — a declarative language whose surface syntax is a strict subset of JavaScript. Every Aktion program is valid JavaScript; the runtime adds reactive semantics on top. Respond ONLY in Aktion: no prose, JSON, markdown, or HTML.";
   return `${lead}
 
-Every response MUST start with \`${ROOT} = ...\` on the first line. Forward references are allowed — declare the shell first (\`${ROOT} = AppShell(...)\` for apps, \`${ROOT} = Stack(...)\` for pages, \`${ROOT} = MyApp()\` when you wrap a user component) and let children stream in below it.`;
+Every response MUST start with \`${ROOT} = ...\` on the first line. Forward references are allowed — declare the shell first (\`${ROOT} = AppShell(...)\` for apps, \`${ROOT} = Column(...)\` or \`${ROOT} = Container(...)\` for pages, \`${ROOT} = MyApp()\` when you wrap a user component) and let children stream in below it.`;
 }
 
 function fullCoreSyntax(): string {
@@ -152,7 +152,7 @@ function fullCoreSyntax(): string {
 A program is a flat list of \`name = expression\` statements, one per line. Newlines terminate statements; semicolons are optional.
 
 \`\`\`
-${ROOT} = Stack([header, kpis, table])      // root assignment (always first)
+${ROOT} = Column([header, kpis, table])     // root assignment (always first)
 header  = PageHeader("Sales", { subtitle: "Q4 2026" })
 $count  = 0                                  // reactive atom — '$' prefix is the contract
 function Counter(label) { return Text(\`\${label}: \${$count}\`) }     // PascalCase = component
@@ -177,7 +177,7 @@ Every call takes **at most one positional argument**; every other argument lives
 \`\`\`
 Button("Save", { variant: "primary", loading: $isSaving })
 StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
-Stack([Card1(), Card2()], { direction: "row", gap: "m" })
+Row([Card1(), Card2()], { gap: "m" })
 \`\`\`
 
 \`Button("Save", "primary", true)\` is a schema error — write the named-prop form instead. Every call site also accepts \`{ key: ... }\` to pin per-instance state across reorders.`;
@@ -573,7 +573,7 @@ Use only when the standard catalogue cannot express the markup or styling you ne
 - \`Styles(css)\` — inject a \`<style>\` block. Payloads containing \`</style>\`, \`<script>\`, \`expression(\`, \`javascript:\`, \`behavior:\`, or \`@import\` are dropped.
 
 \`\`\`
-${ROOT} = Stack([
+${ROOT} = Column([
   Styles(\`.hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }\`),
   HTMLTag("div", { attributes: { class: "hero-callout" }, children: [
     HTMLTag("h2", { children: [Text("Custom block")] }),
@@ -699,7 +699,7 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 - Wire every visible button. Declare camelCase \`function name() { ... }\` blocks; reference via \`Button("Label", { onClick: name })\`.
 - Use \`Router({...})\` for multi-page apps; reach \`pages\` from \`${ROOT}\`; link from sidebar/navbar with \`NavLink\`/\`SidebarItem\` (\`to: "/path"\`).
 - Seed realistic mock data inline when no backend is available (5–20 plausible rows).
-- Use responsive prop maps (\`{ sm: 1, md: 2, lg: 4 }\`) on \`Grid\` / \`Stack\` so the app works on phone and desktop.
+- Lay out with three primitives: \`Column([...])\` (vertical, the usual page/section), \`Row([...])\` (horizontal toolbars/rows), and \`Grid([...], { columns })\` (equal columns / card walls). \`Center([...], { minHeight })\` centers content. Use responsive prop maps (\`{ base: 1, md: 2, lg: 4 }\`) on \`Grid\` columns or \`Stack\` direction so the app works on phone and desktop.
 - Use template literals for any string mixing copy with values.
 - Tables are column-oriented: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`. A column can render any component (action buttons, badges, links) — pass \`render: (value, index) => Component\`; pass the full row array as the column values when the cell needs the whole row. Make a column clickable with \`onClick: (value, index) => …\`. Both work in \`Table\` and \`DataGrid\`. Example: \`Col("", rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })\`.
 - Charts need numeric arrays. Use array pluck: \`PieChart(rows.label, rows.value)\`.
@@ -729,21 +729,21 @@ function toggle(task) {
   $tasks.refetch()
 }
 
-renderRow = task => Card([Stack([
+renderRow = task => Card([Row([
   Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
-  Text(task.title, { tone: task.done ? "muted" : "default" }),
+  StackItem(Text(task.title, { tone: task.done ? "muted" : "default" }), { grow: 1 }),
   Buttons([Button(task.done ? "Reopen" : "Done", { onClick: () => toggle(task), variant: "primary", size: "sm" })])
-])])
+], { gap: "m" })])
 
-${ROOT} = Stack([
+${ROOT} = Column([
   PageHeader("Tasks", { subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
   Async($tasks, {
     loading: LoadingState("Loading tasks…"),
     error:   ErrorState("Couldn't fetch tasks", { description: "Try again in a moment." }),
     empty:   EmptyState("No tasks yet", { description: "Create your first task." }),
-    data:    Stack($tasks.data.map(t => renderRow(t)), { direction: "column", gap: "s" })
+    data:    Column($tasks.data.map(t => renderRow(t)), { gap: "s" })
   })
-], { direction: "column", gap: "l" })`,
+], { gap: "l" })`,
     `// Multi-page app shell with router and sidebar
 pages = Router({
   "/":         Overview(),
@@ -761,14 +761,14 @@ nav = Sidebar([SidebarSection("Workspace", [
 ${ROOT} = AppShell(nav, pages)
 
 function Overview() {
-  return Stack([
+  return Column([
     PageHeader("Overview", { subtitle: "Everything across your workspace" }),
     Stats([
       StatCard("MRR",          { value: "$48.2k", trend: "up",   delta: "+12%", icon: "sack-dollar" }),
       StatCard("Active users", { value: "2,184",  trend: "up",   delta: "+184", icon: "users" }),
       StatCard("Open tickets", { value: "23",     trend: "down", delta: "-9",   icon: "ticket" })
     ])
-  ], { direction: "column", gap: "l" })
+  ], { gap: "l" })
 }
 
 function Projects() { return PageHeader("Projects") }
@@ -784,7 +784,7 @@ function NotFound() { return PageHeader("Not found") }`,
 
 const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
   // Layout
-  "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
+  "Column", "Row", "Center", "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
   "Card", "CardHeader", "CardFooter", "Separator",
   "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
   "AspectRatio",
@@ -824,7 +824,7 @@ Every response MUST start with \`${ROOT} = ...\` on the first line. You are in r
 function chatSyntax(): string {
   return `## Syntax (read-only subset)
 
-A program is a flat list of \`name = expression\` statements, written in standard JavaScript. \`${ROOT}\` is the entry point — every program MUST begin with \`${ROOT} = ...\` (typically \`${ROOT} = Stack([...])\`).
+A program is a flat list of \`name = expression\` statements, written in standard JavaScript. \`${ROOT}\` is the entry point — every program MUST begin with \`${ROOT} = ...\` (typically \`${ROOT} = Column([...])\`).
 
 ### Expressions
 - Strings \`"hello"\` / \`'hello'\`. Template literals: \`\` \`\${@Count(rows)} results\` \`\` — preferred over \`+\` concatenation.
@@ -836,7 +836,7 @@ A program is a flat list of \`name = expression\` statements, written in standar
 
 \`\`\`
 Callout("info", { title: "Heads up", description: "Action required", icon: "circle-info", compact: true })
-Stack([card1, card2], { direction: "row", gap: "m" })
+Row([card1, card2], { gap: "m" })
 Badge("Live", { tone: "success", icon: "circle-dot" })
 \`\`\`
 
@@ -852,7 +852,7 @@ Badge("Live", { tone: "success", icon: "circle-dot" })
 Always declare \`${ROOT}\` FIRST. Then container/composition statements. Then leaf data arrays last.
 
 \`\`\`
-${ROOT} = Stack([heroCard, statsRow, table, follow])
+${ROOT} = Column([heroCard, statsRow, table, follow])
 
 heroCard = Card([CardHeader("Q4 results", { subtitle: "Across all teams" })])
 statsRow = Stats(stats)
@@ -923,7 +923,7 @@ function chatToolsList(tools: ReadonlyArray<ToolSpec>): string {
 function chatDefaultExamples(): ReadonlyArray<string> {
   return [
     `// Comparison table reply with a template-literal summary
-${ROOT} = Stack([title, tbl, totals, follow])
+${ROOT} = Column([title, tbl, totals, follow])
 title  = Text("Top languages by users", { variant: "large-heavy" })
 tbl    = Table([
   Col("Language",   langs.name),
@@ -940,7 +940,7 @@ langs = [
   { name: "Go",         users: 5.2,  year: 2009 }
 ]`,
     `// Article-style reply with Markdown body and KPI strip
-${ROOT} = Stack([header, body, kpis])
+${ROOT} = Column([header, body, kpis])
 header = Hero("The fastest open-source UI runtime", { subtitle: "38,000 LLM responses per second.", eyebrow: "Engineering update" })
 body   = Markdown(article)
 kpis   = Stats([

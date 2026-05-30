@@ -32,7 +32,7 @@ import {
 } from "../src/library/components/wrappers.js";
 import { SearchBar, MultiSelect, DateRangePicker, Button } from "../src/library/components/forms.js";
 import {
-  Stack, StackItem, Grid, GridItem, Box, resolveSpan,
+  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, resolveSpan,
   AspectRatio, Modal, Tabs, TabItem, Separator,
 } from "../src/library/components/layout.js";
 import { Sparkline, StatCard, Table, Col } from "../src/library/components/data.js";
@@ -95,6 +95,7 @@ describe("registry lookup", () => {
 describe("default library", () => {
   it("registers every documented component group", () => {
     const expected = [
+      "Row", "Column", "Center",
       "Stack", "StackItem", "Grid", "GridItem", "Box", "Card", "CardHeader", "Button", "Input", "Select", "Table", "BarChart",
       "FollowUpBlock", "Avatar", "AvatarGroup", "Progress", "Switch",
       "ToggleGroup", "Tooltip", "HoverCard", "Kbd", "Breadcrumb", "BreadcrumbItem",
@@ -363,6 +364,71 @@ describe("Stack", () => {
     expect(node.getAttribute("data-responsive-align")).toBe("true");
     expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-base:flex-start");
     expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-md:center");
+  });
+});
+
+describe("Row / Column / Center", () => {
+  it("Row renders a horizontal stack, centered, with natural-width children by default", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-stack");
+    expect(node.getAttribute("data-direction")).toBe("row");
+    expect(node.getAttribute("data-align")).toBe("center");
+    expect(node.getAttribute("data-uniform")).toBe("false");
+    expect(node.getAttribute("data-gap")).toBe("m");
+  });
+
+  it("Row grow:true makes children share the row equally (data-uniform=true)", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [], grow: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-uniform")).toBe("true");
+  });
+
+  it("Column renders a vertical stack stretched to full width by default", () => {
+    const node = Column.render(
+      makeNode("Column", [[]]),
+      { children: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-stack");
+    expect(node.getAttribute("data-direction")).toBe("column");
+    expect(node.getAttribute("data-align")).toBe("stretch");
+    expect(node.getAttribute("data-uniform")).toBe("false");
+  });
+
+  it("Row honours justify, gap, and wrap props", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [], justify: "between", gap: "s", wrap: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-justify")).toBe("between");
+    expect(node.getAttribute("data-gap")).toBe("s");
+    expect(node.getAttribute("data-wrap")).toBe("true");
+  });
+
+  it("Center centers on both axes and applies minHeight + axis", () => {
+    const both = Center.render(
+      makeNode("Center", [[]]),
+      { children: [], minHeight: "60vh" },
+      helpers,
+    ) as HTMLElement;
+    expect(both.className).toBe("rui-center");
+    expect(both.getAttribute("data-axis")).toBe("both");
+    expect(both.getAttribute("style") ?? "").toContain("min-height:60vh");
+
+    const horizontal = Center.render(
+      makeNode("Center", [[]]),
+      { children: [], axis: "horizontal" },
+      helpers,
+    ) as HTMLElement;
+    expect(horizontal.getAttribute("data-axis")).toBe("horizontal");
   });
 });
 

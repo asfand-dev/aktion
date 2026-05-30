@@ -218,7 +218,7 @@ Three equivalent ways:
 <script>
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-    aktion = Stack([greeting])
+    aktion = Column([greeting])
     greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
   `);
 </script>
@@ -572,7 +572,7 @@ chart  = LineChart({
   series: [Series("Events", $data.data?.daily?.events ?? [])]
 })
 
-aktion = Stack([CardHeader("Analytics"), filter, kpi, chart])
+aktion = Column([CardHeader("Analytics"), filter, kpi, chart])
 ```
 
 Highlights:
@@ -587,7 +587,7 @@ Highlights:
   plus pluck (`$rows.title` → `[title1, title2, …]`).
 - Responsive prop maps on layout components:
   `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "l" })`.
-- Forward references are allowed — list `aktion = Stack([...])` first
+- Forward references are allowed — list `aktion = Column([...])` first
   and let the children stream in beneath it.
 
 ### Declarative todo app
@@ -707,7 +707,7 @@ production-quality SaaS UI in a single line.
 
 | Group              | Components |
 | ------------------ | ---------- |
-| **Layout**         | `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
+| **Layout**         | `Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
 | **Content**        | `Text`, `Image`, `Icon`, `Badge`, `BadgeList`, `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd` |
 | **Forms**          | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm` |
 | **Data**           | `Table`, `Col`, `DataGrid`, `List`, `ListItem`, `StatCard`, `Stats`, `Sparkline`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList` |
@@ -795,7 +795,7 @@ board = KanbanBoard([
 ])
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
 
-aktion = Stack([dashHeader, kpis, board, follow])
+aktion = Column([dashHeader, kpis, board, follow])
 ```
 
 ### Adding your own components
@@ -886,7 +886,7 @@ theme = Theme({
   radius: { button: "6px", input: "6px" }
 })
 
-aktion = Stack([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
+aktion = Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
 ```
 
 `Theme` expects the **structured** form — top-level groups `colors` /
@@ -965,11 +965,11 @@ pages = Router({
   default:      notFoundPage
 })
 
-nav = Stack([
+nav = Row([
   NavLink("Home",      { to: "/", exact: true }),
   NavLink("Dashboard", { to: "/dashboard" }),
   NavLink("Users",     { to: "/users" })
-], { direction: "row", gap: "s" })
+], { gap: "s" })
 
 aktion = Stack([nav, pages])
 

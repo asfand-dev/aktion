@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Layout · Aktion</title>
+  <meta name="description" content="Build any layout in Aktion with three primitives — Column, Row, and Grid — plus Center, Container, Box, Spacer, and GridItem spans. Recipes for dashboards, sidebars, holy-grail app shells, and centered forms." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
+</head>
+<body data-page="layout">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concepts</span>
+        <h1>Layout.</h1>
+        <p class="lead">
+          Three primitives cover almost every layout you will ever build:
+          <strong><code>Column</code></strong> stacks things top&#8209;to&#8209;bottom,
+          <strong><code>Row</code></strong> lays them out left&#8209;to&#8209;right, and
+          <strong><code>Grid</code></strong> arranges equal columns and card walls.
+          Reach for <code>Center</code>, <code>Container</code>, <code>Box</code>,
+          <code>Spacer</code>, and <code>GridItem</code> spans for the rest. No raw
+          CSS, no flexbox bookkeeping &mdash; just composition.
+        </p>
+      </header>
+
+      <h2 id="mental-model">The mental model</h2>
+      <p>
+        Every layout in Aktion is a tree of containers. Pick the container by the
+        question you are answering:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>You want&hellip;</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td>Things stacked vertically (a page, a card body, a form)</td><td><code>Column([&hellip;])</code></td></tr>
+          <tr><td>Things side by side (a toolbar, a row of buttons, label + value)</td><td><code>Row([&hellip;])</code></td></tr>
+          <tr><td>Equal columns / a reflowing card or KPI grid</td><td><code>Grid([&hellip;], { columns })</code></td></tr>
+          <tr><td>Content centered on both axes (spinner, empty state, hero CTA)</td><td><code>Center([&hellip;], { minHeight })</code></td></tr>
+          <tr><td>A 12&#8209;column dashboard with mixed widths</td><td><code>Grid</code> + <code>GridItem(child, { span })</code></td></tr>
+          <tr><td>A centered, max&#8209;width reading column</td><td><code>Container([&hellip;], { size })</code></td></tr>
+          <tr><td>Direction that flips on mobile vs desktop</td><td><code>Stack([&hellip;], { direction: {base, md} })</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>gap</code> and <code>padding</code> use the spacing scale
+        <code>xs&nbsp;&middot;&nbsp;s&nbsp;&middot;&nbsp;m&nbsp;&middot;&nbsp;l&nbsp;&middot;&nbsp;xl</code>.
+        Wherever you see a value below, it can also be a
+        <strong>responsive map</strong> like <code>{ base: "s", md: "l" }</code>.
+      </p>
+
+      <h2 id="column">Column &mdash; stack vertically</h2>
+      <p>
+        <code>Column</code> is the workhorse: it is the usual page body and the
+        usual card body. Children stretch to the full width; control spacing with
+        <code>gap</code> and horizontal placement with <code>align</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  PageHeader("Project Atlas", { subtitle: "Updated 2 hours ago" }),
+  Card([CardHeader("Overview"), Text("A Column stacks its children top to bottom with an even gap.")]),
+  Card([CardHeader("Activity"), Text("Each card is a child; the Column owns the spacing between them.")])
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="row">Row &mdash; lay out horizontally</h2>
+      <p>
+        <code>Row</code> places children left&#8209;to&#8209;right at their
+        <strong>natural width</strong>, vertically centered &mdash; exactly what
+        you want for toolbars, button groups, and label/value pairs. Push items to
+        opposite edges with a <code>Spacer()</code> or
+        <code>justify: "between"</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Card([Row([
+  Text("Team members", { variant: "large-heavy" }),
+  Spacer(),
+  Button("Invite", { variant: "ghost", icon: "user-plus" }),
+  Button("New", { variant: "primary", icon: "plus" })
+], { gap: "s" })])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Need equal&#8209;width children (e.g. two cards sharing a row)? Pass
+        <code>grow: true</code> &mdash; or, better for true grids, use
+        <code>Grid({ columns })</code>. Need one child to expand while the rest hug
+        their content (a search box beside a button)? Wrap it in
+        <code>StackItem(child, { grow: 1 })</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Row([
+  StackItem(Input("q", { placeholder: "Search the docs…" }), { grow: 1 }),
+  Button("Search", { variant: "primary" })
+], { gap: "s" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3>Distributing children with <code>justify</code></h3>
+      <p>
+        <code>justify</code> controls spacing along the main axis:
+        <code>start</code> (default), <code>center</code>, <code>end</code>,
+        <code>between</code>, <code>around</code>, <code>evenly</code>.
+        <code>align</code> controls the cross axis
+        (<code>start</code>/<code>center</code>/<code>end</code>/<code>stretch</code>).
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "between" })]),
+  Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "center" })]),
+  Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "end" })])
+], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="grid">Grid &mdash; equal columns &amp; card walls</h2>
+      <p><code>Grid</code> has three modes. Pick by intent:</p>
+      <table class="signature-table">
+        <thead><tr><th>Mode</th><th>How</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Auto&#8209;fit</strong> (default)</td><td>omit <code>columns</code></td><td>Card / KPI walls that reflow on their own — wraps as many <code>&ge; minChildWidth</code> columns as fit.</td></tr>
+          <tr><td><strong>Fixed</strong></td><td><code>columns: N</code> (1&ndash;12)</td><td>Exactly N equal columns.</td></tr>
+          <tr><td><strong>Span</strong></td><td><code>GridItem</code> children</td><td>12&#8209;track dashboards & sidebars with mixed widths.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Auto&#8209;fit &mdash; reflows by itself</h3>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Grid([
+  StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%" }),
+  StatCard("Users", { value: "2,184", trend: "up", delta: "+184" }),
+  StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%" }),
+  StatCard("NPS", { value: "62", trend: "up", delta: "+5" })
+], { gap: "m", minChildWidth: "180px" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3>Fixed columns</h3>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Grid([
+  Card([CardHeader("One")]),
+  Card([CardHeader("Two")]),
+  Card([CardHeader("Three")])
+], { columns: 3, gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3 id="griditem">Span mode &mdash; <code>GridItem</code> on a 12&#8209;track grid</h3>
+      <p>
+        Wrap children in <code>GridItem(child, { span })</code> to give them
+        explicit widths on a 12&#8209;column track. <code>span</code> is a number
+        (1&ndash;12) or a fraction (<code>"1/2"</code>, <code>"1/3"</code>,
+        <code>"3/4"</code>). Any <code>GridItem</code> child turns on the 12&#8209;track
+        grid automatically &mdash; this is the canonical sidebar&#8209;plus&#8209;main layout.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Grid([
+  GridItem(Card([CardHeader("Side"), Text("span 1/4")]), { span: "1/4" }),
+  GridItem(Card([CardHeader("Main"), Text("span 3/4")]), { span: "3/4" })
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="center">Center &mdash; both axes at once</h2>
+      <p>
+        <code>Center</code> is the easy way to drop a spinner, empty state, or hero
+        call&#8209;to&#8209;action into the middle of a region. Give it
+        <code>minHeight</code> to reserve vertical space, or <code>axis</code> to
+        center on only one axis.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Card([Center([
+  EmptyState("No messages yet", { description: "Start a conversation to see it here.", icon: "inbox" })
+], { minHeight: "240px" })])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="responsive">Responsive layouts</h2>
+      <p>
+        Any of <code>gap</code>, <code>align</code>, <code>justify</code>,
+        <code>padding</code>, <code>Grid</code>'s <code>columns</code>, and
+        <code>Stack</code>'s <code>direction</code> accept a responsive map keyed by
+        breakpoint: <code>base</code> (mobile&#8209;first),
+        <code>sm</code> 640px, <code>md</code> 768px, <code>lg</code> 1024px,
+        <code>xl</code> 1280px. Use <code>Stack</code> (not <code>Row</code>/<code>Column</code>)
+        when the <em>direction itself</em> must change &mdash; e.g. a sidebar that
+        stacks on mobile and sits beside the content on desktop.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live — resize the window / preview</span>
+<pre><code>aktion = Grid([
+  Card([CardHeader("Tile 1")]), Card([CardHeader("Tile 2")]),
+  Card([CardHeader("Tile 3")]), Card([CardHeader("Tile 4")])
+], { columns: { base: 1, sm: 2, lg: 4 }, gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live — direction flips at md</span>
+<pre><code>aktion = Stack([
+  Card([CardHeader("Nav"), Text("Column on mobile, beside the content on desktop.")]),
+  Card([CardHeader("Content"), Text("Stack is the escape hatch for responsive direction.")])
+], { direction: { base: "column", md: "row" }, gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="spacing-surfaces">Spacing &amp; surfaces</h2>
+      <p>
+        <code>Container([&hellip;], { size })</code> centers a wide page within a
+        comfortable reading width (<code>sm</code>/<code>md</code>/<code>lg</code>/<code>xl</code>/<code>full</code>).
+        <code>Box([&hellip;], { padding, background, border, maxWidth })</code> is a
+        plain spacing/surface wrapper for when a full <code>Card</code> is too heavy.
+        <code>Spacer()</code> flexes to push siblings apart inside a <code>Row</code>;
+        with a <code>size</code> it becomes a fixed gap.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  Box([Text("A subtle inset surface — lighter than a Card.")], { padding: "m", background: "muted", border: "subtle" }),
+  Box([Text("Tinted callout-style box.")], { padding: "m", background: "primary" })
+], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="recipes">Recipes for complex layouts</h2>
+
+      <h3>Dashboard &mdash; header, KPI strip, content grid</h3>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  PageHeader("Sales", { subtitle: "Q4 2026", actions: [Button("Export", { variant: "ghost", icon: "download" })] }),
+  Grid([
+    StatCard("MRR", { value: "$48.2k", trend: "up", delta: "+12%" }),
+    StatCard("Deals", { value: "318", trend: "up", delta: "+24" }),
+    StatCard("Win rate", { value: "31%", trend: "down", delta: "-2%" })
+  ], { gap: "m" }),
+  Grid([
+    GridItem(Card([CardHeader("Pipeline"), Text("Main chart goes here.")]), { span: "2/3" }),
+    GridItem(Card([CardHeader("Tasks"), Text("Side panel.")]), { span: "1/3" })
+  ], { gap: "l" })
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3>Holy&#8209;grail / app shell &mdash; header, sidebar, content</h3>
+      <p>
+        For a real multi&#8209;page app prefer the dedicated
+        <code>AppShell(sidebar, content)</code> pattern. To assemble it by hand,
+        nest a <code>Row</code> inside a <code>Column</code>:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  Card([Row([Text("Acme", { variant: "large-heavy" }), Spacer(), Badge("Pro", { tone: "primary" })])]),
+  Grid([
+    GridItem(Card([CardHeader("Menu"), Text("Sidebar nav")]), { span: "1/4" }),
+    GridItem(Column([
+      Card([CardHeader("Welcome back")]),
+      Card([CardHeader("Recent activity")])
+    ], { gap: "m" }), { span: "3/4" })
+  ], { gap: "l" })
+], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3>Centered auth card</h3>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Center([
+  Box([Column([
+    CardHeader("Sign in", { subtitle: "Welcome back" }),
+    Input("email", { placeholder: "you@example.com" }),
+    Input("password", { placeholder: "Password", type: "password" }),
+    Button("Continue", { variant: "primary" })
+  ], { gap: "m" })], { padding: "l", background: "surface", border: "default", maxWidth: "360px" })
+], { minHeight: "70vh" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="cheatsheet">Cheat sheet</h2>
+      <table class="signature-table demo-cheats">
+        <thead><tr><th>Goal</th><th>Snippet</th></tr></thead>
+        <tbody>
+          <tr><td>Page body</td><td><code>Column([&hellip;], { gap: "l" })</code></td></tr>
+          <tr><td>Toolbar (title left, actions right)</td><td><code>Row([title, Spacer(), &hellip;buttons])</code></td></tr>
+          <tr><td>Even button row</td><td><code>Row([&hellip;], { gap: "s" })</code></td></tr>
+          <tr><td>Equal-width cards in a row</td><td><code>Grid([&hellip;], { columns: 3 })</code></td></tr>
+          <tr><td>Reflowing KPI / card wall</td><td><code>Grid([&hellip;], { minChildWidth: "200px" })</code></td></tr>
+          <tr><td>Sidebar + main</td><td><code>Grid([GridItem(s, { span: "1/4" }), GridItem(m, { span: "3/4" })])</code></td></tr>
+          <tr><td>Expand one child in a row</td><td><code>Row([StackItem(field, { grow: 1 }), button])</code></td></tr>
+          <tr><td>Center on both axes</td><td><code>Center([&hellip;], { minHeight: "60vh" })</code></td></tr>
+          <tr><td>Centered reading column</td><td><code>Container([&hellip;], { size: "md" })</code></td></tr>
+          <tr><td>Stack on mobile, row on desktop</td><td><code>Stack([&hellip;], { direction: { base: "column", md: "row" } })</code></td></tr>
+          <tr><td>Padding / inset surface</td><td><code>Box([&hellip;], { padding: "m", background: "muted" })</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>Every component, prop, and a live preview &mdash; including all the layout primitives.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Paste any snippet above and tweak it live with autocomplete and inspect mode.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>State, expressions, control flow, and the rules behind component calls.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

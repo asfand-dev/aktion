@@ -102,9 +102,10 @@ Internalize these rules and you will write correct, polished programs:
 12. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use
     them for multi-line bodies and `${expression}` interpolation.
-13. **Use `Grid`, not `Stack([...], { direction: "row", wrap: true })`, for
-    uniform tiles.** Use `Stack([...], { direction: "row" })` only when
-    items have different sizes.
+13. **Use `Column`/`Row`/`Grid` — not raw `Stack`.** `Column([...])` stacks
+    vertically, `Row([...])` lays out horizontally (natural widths, centered),
+    `Grid([...], { columns })` makes equal columns. Prefer `Grid` for uniform
+    tiles; use `Row` for toolbars/rows of differing sizes.
 14. **Add status colour everywhere.** `StatCard(..., { trend, delta })`,
     `Badge` variants, `TimelineItem` tone, `Banner` tone,
     `StatusDot(label, { tone })` — colour conveys meaning.
@@ -325,7 +326,8 @@ Before opening a `Stack`/`Card`, scan this checklist:
 | Pull quote (not a full testimonial)         | `Quote(text, { cite, tone })`                                                                                  |
 | Chat-style message (review, transcript)     | `ChatBubble(author, { body, time, avatarSrc, from, status })`                                                  |
 | Centered readable column                    | `Container([content...], { size, maxWidth, padding })`                                                         |
-| Push siblings to opposite edges in a row    | `Spacer()` (inside `Stack([...], { direction: "row" })`)                                                       |
+| Center content on both axes                 | `Center([content...], { minHeight })`                                                                          |
+| Push siblings to opposite edges in a row    | `Row([a, Spacer(), b])` — or `Row([a, b], { justify: "between" })`                                             |
 
 ### Visual hierarchy rules
 
@@ -455,7 +457,8 @@ aktion = Stack([...])
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single `Card([CardHeader, Text])` for a dashboard request                   | Use the **dashboard recipe** in §16 Pattern C                                                |
 | Vertical `Stack` of `StatCard`s                                             | `Stats([StatCard(...), ...])`                                                                |
-| `Stack([...], { direction: "row", wrap: true })` for uniform tiles          | `Grid(items, { columns, gap })`                                                              |
+| Raw `Stack([...], { direction: "row" })` for a toolbar/row                  | `Row([...], { gap, justify })` (clearer; natural widths, centered)                          |
+| `Row`/`Stack` with wrapping for uniform tiles                               | `Grid(items, { columns, gap })`                                                              |
 | Vertical `Stack` of `Text("Label: " + value)` lines on a detail page       | `DescriptionList([DescriptionItem(label, value, { icon })])`                                 |
 | Table with no `Toolbar` above it                                            | Wrap in `Card([SectionHeader(...), Toolbar({...}), Table(...)])`                             |
 | Flat form on the page                                                       | Group `FormControl`s inside Cards opened by `SectionHeader`                                 |
@@ -1529,21 +1532,42 @@ on mobile, 2 on tablet, 4 on desktop. Breakpoints:
 
 ### Layout
 
-`Stack`, `StackItem`, `Grid`, `GridItem`, `Box`, `Container`, `Spacer`,
-`Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`,
-`Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`,
-`ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid`.
+`Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`,
+`Box`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardFooter`,
+`Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`,
+`Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`,
+`ResizablePanels`, `MasonryGrid`.
+
+**Reach for three primitives first — they cover ~90% of layouts:**
+
+- `Column([...], { gap, align })` — stack children top→bottom. The default
+  page body and card body. Children stretch to full width.
+- `Row([...], { gap, align, justify })` — lay children left→right at their
+  natural width, vertically centered. Toolbars, button rows, label+value
+  pairs, nav. Use `justify: "between"` to push items to the edges, or drop a
+  `Spacer()` between them. Set `grow: true` for equal-width children.
+- `Grid([...], { columns, gap })` — equal columns. Omit `columns` for
+  auto-fit (wraps as many ≥`minChildWidth` columns as fit — best for KPI /
+  card walls). Always prefer `Grid` over a wrapping `Row` for uniform tiles.
 
 Notes:
 
-- `aktion` MUST resolve to a top-level container (`Stack`, `AppShell`,
-  `Container`, `Card`, or a user component returning one of those).
+- `aktion` MUST resolve to a top-level container (`Column`, `Container`,
+  `AppShell`, `Card`, or a user component returning one of those).
 - Wrap each major chunk in a `Card` for visual grouping.
-- Prefer `Grid(items, { columns, gap })` over
-  `Stack([...], { direction: "row", wrap: true })` for uniform children.
-- Use `Container(children, { size })` for comfortable max-width.
-- Use `Spacer()` inside `Stack([...], { direction: "row" })` to push
-  items apart.
+- `Center([...], { minHeight })` centers content on both axes — spinners,
+  empty states, hero CTAs. Add `minHeight: "60vh"` to center in a tall area.
+- 12-column / sidebar layouts: `Grid([GridItem(side, { span: "1/4" }),
+  GridItem(main, { span: "3/4" })])`. Any `GridItem` child turns the
+  12-track grid on; fractions `"1/2"`…`"1/12"` (or numbers 1–12) set spans.
+- Make one `Row` child expand with `StackItem(child, { grow: 1 })` (e.g. a
+  search input beside a fixed button).
+- `Stack([...], { direction: {base: "column", md: "row"} })` is the escape
+  hatch ONLY when the direction itself must change across breakpoints.
+- `Container(children, { size })` centers a wide page within a comfortable
+  max-width (sm/md/lg/xl/full).
+- `Box(children, { padding, background, border, maxWidth })` is a plain
+  spacing/surface wrapper when a `Card` is too heavy.
 
 ### Content
 

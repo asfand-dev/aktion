@@ -4,7 +4,7 @@
  * Modal, AspectRatio, ScrollArea.
  */
 
-import type { ComponentSpec } from "../types.js";
+import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength,
   readResponsiveProp, RESPONSIVE_BREAKPOINTS, type Breakpoint, type ResponsiveProp,
@@ -110,9 +110,11 @@ function stackBaseDirection(props: Record<string, unknown>): string {
 export const StackItem: ComponentSpec = {
   name: "StackItem",
   description:
-    "Wraps a single child in a flex item with explicit grow/shrink/basis, " +
-    "alignment, and order. Use inside `Stack` when the default row flex " +
-    "growth would stretch toolbars, chips, or asymmetric layouts.",
+    "Per-child flex control inside a `Row`, `Column`, or `Stack`. Wraps one " +
+    "child so it can `grow` to fill leftover space, `shrink`, set a `basis`, " +
+    "override `alignSelf`, or change visual `order` — the building block for " +
+    "asymmetric rows like `Row([StackItem(searchInput, { grow: 1 }), " +
+    "saveButton])` (input expands, button hugs).",
   props: [
     { name: "child", type: "Node", description: "Child node to wrap" },
     { name: "grow", type: "number", optional: true, description: "flex-grow (0 or 1 typical)" },
@@ -156,93 +158,205 @@ export const StackItem: ComponentSpec = {
   },
 };
 
+/**
+ * Shared flex engine behind `Stack`, `Row`, and `Column`. All three render
+ * the same `.rui-stack` DOM so they share one stylesheet; they differ only
+ * in their *defaults* (direction, cross-axis alignment, whether children
+ * grow to fill the main axis). `directionValue` may be a single token or a
+ * responsive map (`Stack` passes the author's `direction` prop; `Row` /
+ * `Column` pass a fixed `"row"` / `"column"`). `uniform` is the resolved
+ * "children share the main axis equally" flag.
+ */
+function renderFlexContainer(
+  directionValue: unknown,
+  uniform: boolean,
+  alignDefault: string,
+  props: Record<string, unknown>,
+  helpers: RenderHelpers,
+): HTMLElement {
+  const direction = readResponsiveProp<string>(directionValue);
+  const gap = readResponsiveProp<string>(props.gap);
+  const padding = readResponsiveProp<string>(props.padding);
+  const reverse = asBoolean(props.reverse);
+  const attrs: Record<string, string | null> = {
+    class: "rui-stack",
+    "data-wrap": asBoolean(props.wrap) ? "true" : null,
+    "data-reverse": reverse ? "true" : null,
+    "data-uniform": uniform ? "true" : "false",
+    "data-inline": asBoolean(props.inline) ? "true" : null,
+  };
+  const styleParts: string[] = [];
+  if (direction.kind === "single") {
+    const dir = direction.value ? String(direction.value) : "column";
+    attrs["data-direction"] = applyDirectionWithReverse(dir, reverse);
+  } else {
+    attrs["data-direction"] = "responsive";
+    attrs["data-responsive-dir"] = "true";
+    for (const bp of RESPONSIVE_BREAKPOINTS) {
+      const v = direction.values[bp];
+      if (v) styleParts.push(`--rui-stack-dir-${bp}:${applyDirectionWithReverse(String(v), reverse)}`);
+    }
+  }
+  if (gap.kind === "single") {
+    attrs["data-gap"] = gap.value ? String(gap.value) : "m";
+  } else {
+    attrs["data-gap"] = "responsive";
+    attrs["data-responsive-gap"] = "true";
+    emitResponsiveSpacingVars(styleParts, gap, "--rui-stack-gap");
+  }
+  applyResponsiveEnumProp(props.align, styleParts, attrs, {
+    attrName: "data-align",
+    responsiveFlag: "data-responsive-align",
+    cssVarPrefix: "--rui-stack-align",
+    defaultToken: alignDefault,
+    mapper: mapFlexAlign,
+  });
+  applyResponsiveEnumProp(props.justify, styleParts, attrs, {
+    attrName: "data-justify",
+    responsiveFlag: "data-responsive-justify",
+    cssVarPrefix: "--rui-stack-justify",
+    defaultToken: "start",
+    mapper: mapFlexJustify,
+  });
+  const alignContent = asString(props.alignContent);
+  if (alignContent) attrs["data-align-content"] = alignContent;
+  if (padding.kind === "single") {
+    const pad = padding.value ? String(padding.value) : null;
+    if (pad) attrs["data-padding"] = pad;
+  } else {
+    attrs["data-padding"] = "responsive";
+    attrs["data-responsive-padding"] = "true";
+    emitResponsiveSpacingVars(styleParts, padding, "--rui-stack-padding");
+  }
+  if (styleParts.length > 0) attrs.style = styleParts.join(";");
+  const root = el("div", attrs);
+  for (const child of asArray(props.children)) {
+    root.append(helpers.renderNode(child));
+  }
+  return root;
+}
+
+/** Shared prop docs for the flex family (Stack/Row/Column). */
+const FLEX_GAP_PROP = { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between children. May be a responsive map." } as const;
+const FLEX_JUSTIFY_PROP = { name: "justify", type: "string | object", optional: true, enum: ["start", "center", "end", "between", "around", "evenly"], description: "Main-axis distribution. May be a responsive map." } as const;
+const FLEX_WRAP_PROP = { name: "wrap", type: "boolean", optional: true, description: "Wrap children onto multiple lines when they overflow" } as const;
+const FLEX_REVERSE_PROP = { name: "reverse", type: "boolean", optional: true, description: "Reverse the visual order of children" } as const;
+const FLEX_PADDING_PROP = { name: "padding", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding token. May be a responsive map." } as const;
+const FLEX_INLINE_PROP = { name: "inline", type: "boolean", optional: true, description: "Use inline-flex (shrink-to-fit) instead of a full-width block" } as const;
+const FLEX_ALIGN_CONTENT_PROP = { name: "alignContent", type: "string", optional: true, enum: ["start", "center", "end", "between", "around", "stretch"], description: "Alignment of wrapped lines (only when `wrap` is on)" } as const;
+
+export const Row: ComponentSpec = {
+  name: "Row",
+  description:
+    "Lay children out horizontally (left → right) with even spacing. The " +
+    "developer-friendly default: children keep their natural width and are " +
+    "vertically centered. Set `grow=true` to make children share the row " +
+    "equally (for equal-width columns prefer `Grid(columns: N)`); drop a " +
+    "`Spacer()` between children to push them apart; wrap a child in " +
+    "`StackItem` for per-child grow/shrink/alignment. Use `wrap=true` for " +
+    "chips/tags that should flow onto multiple lines.",
+  props: [
+    { name: "children", type: "Node[]", description: "Children laid out left → right" },
+    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Horizontal spacing between children (default `m`). May be a responsive map." },
+    { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Vertical alignment of children (default `center`). May be a responsive map." },
+    { ...FLEX_JUSTIFY_PROP },
+    { name: "grow", type: "boolean", optional: true, description: "Children share the row width equally (replaces the old `uniform`)" },
+    { ...FLEX_WRAP_PROP },
+    { ...FLEX_REVERSE_PROP },
+    { ...FLEX_PADDING_PROP },
+    { ...FLEX_INLINE_PROP },
+    { ...FLEX_ALIGN_CONTENT_PROP },
+  ],
+  render: (_node, props, helpers) =>
+    renderFlexContainer("row", asBoolean(props.grow), "center", props, helpers),
+};
+
+export const Column: ComponentSpec = {
+  name: "Column",
+  description:
+    "Lay children out vertically (top → bottom) with even spacing — the " +
+    "most common page/section layout. Children stretch to the full width by " +
+    "default; set `align` to `start`/`center`/`end` to change that. This is " +
+    "the recommended root container for a page or a card body.",
+  props: [
+    { name: "children", type: "Node[]", description: "Children laid out top → bottom" },
+    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Vertical spacing between children (default `m`). May be a responsive map." },
+    { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Horizontal alignment of children (default `stretch`). May be a responsive map." },
+    { ...FLEX_JUSTIFY_PROP },
+    { ...FLEX_WRAP_PROP },
+    { ...FLEX_REVERSE_PROP },
+    { ...FLEX_PADDING_PROP },
+    { ...FLEX_INLINE_PROP },
+  ],
+  render: (_node, props, helpers) =>
+    renderFlexContainer("column", false, "stretch", props, helpers),
+};
+
 export const Stack: ComponentSpec = {
   name: "Stack",
   description:
-    "Flex container that arranges children in a row or column. " +
-    "`direction`, `gap`, `align`, `justify`, and `padding` accept either a " +
-    "single value OR a responsive map like `{sm: \"column\", md: \"row\"}`. " +
-    "Row stacks grow children uniformly by default (`uniform=true`); set " +
-    "`uniform=false` or wrap children in `StackItem` for toolbars and " +
-    "asymmetric rows. Use `reverse` for chat-style column-reverse timelines.",
+    "Low-level flex container with a configurable, optionally responsive " +
+    "`direction`. Reach for `Row` or `Column` first — they are clearer for " +
+    "fixed-direction layouts. Use `Stack` when the direction itself must " +
+    "change across breakpoints, e.g. `direction: {base: \"column\", md: " +
+    "\"row\"}` for a sidebar that stacks on mobile. `gap`, `align`, " +
+    "`justify`, and `padding` also accept responsive maps. NOTE: a `row` " +
+    "Stack grows its children equally by default (`uniform=true`); set " +
+    "`uniform=false` for natural widths (this is `Row`'s default).",
   props: [
     { name: "children", type: "Node[]", description: "Child components to stack" },
-    { name: "direction", type: "string | object", optional: true, enum: ["column", "row"], description: "Layout direction (default column). May be a responsive map." },
-    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between children. May be a responsive map." },
-    { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Cross-axis alignment. May be a responsive map." },
-    { name: "justify", type: "string | object", optional: true, enum: ["start", "center", "end", "between", "around", "evenly"], description: "Main-axis alignment. May be a responsive map." },
-    { name: "alignContent", type: "string", optional: true, enum: ["start", "center", "end", "between", "around", "stretch"], description: "Multi-line wrap alignment" },
-    { name: "wrap", type: "boolean", optional: true, description: "Allow wrapping" },
-    { name: "reverse", type: "boolean", optional: true, description: "Reverse main-axis order (column-reverse / row-reverse)" },
-    { name: "uniform", type: "boolean", optional: true, description: "Row children share space equally (default true for row stacks)" },
-    { name: "inline", type: "boolean", optional: true, description: "Use inline-flex instead of flex" },
-    { name: "padding", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding token. May be a responsive map." },
+    { name: "direction", type: "string | object", optional: true, enum: ["column", "row"], description: "Layout direction (default column). May be a responsive map like `{base: \"column\", md: \"row\"}`." },
+    { ...FLEX_GAP_PROP },
+    { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Cross-axis alignment (default stretch). May be a responsive map." },
+    { ...FLEX_JUSTIFY_PROP },
+    { ...FLEX_ALIGN_CONTENT_PROP },
+    { ...FLEX_WRAP_PROP },
+    { ...FLEX_REVERSE_PROP },
+    { name: "uniform", type: "boolean", optional: true, description: "Row children share space equally (default true for row stacks; use `Row` for natural widths)" },
+    { ...FLEX_INLINE_PROP },
+    { ...FLEX_PADDING_PROP },
   ],
   render: (_node, props, helpers) => {
-    const direction = readResponsiveProp<string>(props.direction);
-    const gap = readResponsiveProp<string>(props.gap);
-    const padding = readResponsiveProp<string>(props.padding);
-    const reverse = asBoolean(props.reverse);
     const baseDir = stackBaseDirection(props);
     const uniformDefault = baseDir === "row";
     const uniform = props.uniform === undefined
       ? uniformDefault
       : asBoolean(props.uniform, uniformDefault);
+    return renderFlexContainer(props.direction, uniform, "stretch", props, helpers);
+  },
+};
+
+export const Center: ComponentSpec = {
+  name: "Center",
+  description:
+    "Centers its children on both axes — the easy way to drop a spinner, an " +
+    "empty state, a hero call-to-action, or a modal body into the middle of " +
+    "a region. Give it `minHeight` (e.g. `\"60vh\"`) to center vertically " +
+    "inside a tall area, or `axis` to center on only one axis. Multiple " +
+    "children stack in a column and are centered as a group.",
+  props: [
+    { name: "children", type: "Node[]", description: "Content to center" },
+    { name: "axis", type: "string", optional: true, enum: ["both", "horizontal", "vertical"], description: "Which axis to center on (default both)" },
+    { name: "minHeight", type: "string", optional: true, description: "CSS min-height — set to center vertically inside a tall region (e.g. `60vh`, `400px`)" },
+    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between stacked children (default `m`)" },
+    { name: "padding", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding token" },
+    { name: "inline", type: "boolean", optional: true, description: "Shrink to fit content instead of filling the available width" },
+  ],
+  render: (_node, props, helpers) => {
     const attrs: Record<string, string | null> = {
-      class: "rui-stack",
-      "data-wrap": asBoolean(props.wrap) ? "true" : null,
-      "data-reverse": reverse ? "true" : null,
-      "data-uniform": uniform ? "true" : "false",
+      class: "rui-center",
+      "data-axis": asString(props.axis, "both"),
+      "data-gap": asString(props.gap, "m"),
       "data-inline": asBoolean(props.inline) ? "true" : null,
     };
+    const padding = asString(props.padding);
+    if (padding) attrs["data-padding"] = padding;
     const styleParts: string[] = [];
-    if (direction.kind === "single") {
-      const dir = direction.value ? String(direction.value) : "column";
-      attrs["data-direction"] = applyDirectionWithReverse(dir, reverse);
-    } else {
-      attrs["data-direction"] = "responsive";
-      attrs["data-responsive-dir"] = "true";
-      for (const bp of RESPONSIVE_BREAKPOINTS) {
-        const v = direction.values[bp];
-        if (v) styleParts.push(`--rui-stack-dir-${bp}:${applyDirectionWithReverse(String(v), reverse)}`);
-      }
-    }
-    if (gap.kind === "single") {
-      attrs["data-gap"] = gap.value ? String(gap.value) : "m";
-    } else {
-      attrs["data-gap"] = "responsive";
-      attrs["data-responsive-gap"] = "true";
-      emitResponsiveSpacingVars(styleParts, gap, "--rui-stack-gap");
-    }
-    applyResponsiveEnumProp(props.align, styleParts, attrs, {
-      attrName: "data-align",
-      responsiveFlag: "data-responsive-align",
-      cssVarPrefix: "--rui-stack-align",
-      defaultToken: "stretch",
-      mapper: mapFlexAlign,
-    });
-    applyResponsiveEnumProp(props.justify, styleParts, attrs, {
-      attrName: "data-justify",
-      responsiveFlag: "data-responsive-justify",
-      cssVarPrefix: "--rui-stack-justify",
-      defaultToken: "start",
-      mapper: mapFlexJustify,
-    });
-    const alignContent = asString(props.alignContent);
-    if (alignContent) attrs["data-align-content"] = alignContent;
-    if (padding.kind === "single") {
-      const pad = padding.value ? String(padding.value) : null;
-      if (pad) attrs["data-padding"] = pad;
-    } else {
-      attrs["data-padding"] = "responsive";
-      attrs["data-responsive-padding"] = "true";
-      emitResponsiveSpacingVars(styleParts, padding, "--rui-stack-padding");
-    }
+    const minHeight = asString(props.minHeight);
+    if (minHeight) styleParts.push(`min-height:${sanitiseCssLength(minHeight, minHeight)}`);
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
-    for (const child of asArray(props.children)) {
-      root.append(helpers.renderNode(child));
-    }
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
   },
 };
@@ -714,22 +828,25 @@ export const Box: ComponentSpec = {
 export const Grid: ComponentSpec = {
   name: "Grid",
   description:
-    "Responsive CSS grid. Use for KPI strips, feature blocks, card grids, " +
-    "and asymmetric layouts with `GridItem` spans. Set `columns: 12` (or " +
-    "include `GridItem` children) for a 12-column track system with " +
-    "fractional spans like `\"1/3\"`. `columns` and `gap` accept responsive " +
-    "maps like `{sm: 1, md: 2, lg: 4}`.",
+    "Two-dimensional grid with three modes:\n" +
+    "  1. AUTO-FIT (default, no `columns`): wraps as many equal columns as " +
+    "fit, each at least `minChildWidth` wide (default 220px) — perfect for " +
+    "card/KPI grids that should reflow on their own.\n" +
+    "  2. FIXED (`columns: N`, 1–12): exactly N equal columns.\n" +
+    "  3. SPAN (`columns: 12` or any `GridItem` children): a 12-track grid " +
+    "where each `GridItem` sets its own `span` (a number 1–12 or a fraction " +
+    "like `\"1/3\"`) for dashboards and asymmetric layouts.\n" +
+    "`columns` and `gap` accept responsive maps like `{base: 1, md: 2, lg: 4}`.",
   props: [
     { name: "children", type: "Node[]" },
-    { name: "columns", type: "number | object", optional: true, description: "Target column count 1–12 (default auto-fit). `12` enables 12-column mode. May be a responsive map." },
-    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Gap size (both axes). May be a responsive map." },
+    { name: "columns", type: "number | object", optional: true, description: "Fixed column count 1–12. Omit for auto-fit; `12` (or `GridItem` children) enables the 12-track span system. May be a responsive map like `{base: 1, md: 3}`." },
+    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Gap on both axes (default `m`). May be a responsive map." },
     { name: "rowGap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Row gap override. May be a responsive map." },
     { name: "columnGap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Column gap override. May be a responsive map." },
-    { name: "minItemWidth", type: "string", optional: true, description: "CSS min width for auto-fit fallback (alias: minChildWidth)" },
-    { name: "minChildWidth", type: "string", optional: true, description: "CSS min child width; also applies when `columns` is set" },
-    { name: "alignItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Align items inside grid cells" },
-    { name: "justifyItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Justify items inside grid cells" },
-    { name: "dense", type: "boolean", optional: true, description: "Use dense auto-flow packing" },
+    { name: "minChildWidth", type: "string", optional: true, aliases: ["minItemWidth"], description: "Minimum column width for AUTO-FIT mode, e.g. `\"240px\"` (default 220px). Also caps the floor in FIXED mode." },
+    { name: "alignItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Vertical alignment of items within their cells" },
+    { name: "justifyItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Horizontal alignment of items within their cells" },
+    { name: "dense", type: "boolean", optional: true, description: "Dense auto-flow packing — let later items backfill earlier gaps" },
   ],
   render: (_node, props, helpers) => {
     const children = asArray(props.children);

@@ -198,6 +198,32 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-stack-item[data-align-self="end"] { align-self: flex-end; }
 .rui-stack-item[data-align-self="stretch"] { align-self: stretch; }
 
+/* Center — center children on both axes (or one, via data-axis). Pair with
+   a minHeight to center vertically inside a tall region. */
+.rui-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rui-spacing-m);
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+.rui-center[data-inline="true"] { display: inline-flex; width: auto; }
+.rui-center[data-axis="horizontal"] { justify-content: flex-start; }
+.rui-center[data-axis="vertical"] { align-items: stretch; text-align: left; }
+.rui-center[data-gap="xs"] { gap: var(--rui-spacing-xs); }
+.rui-center[data-gap="s"] { gap: var(--rui-spacing-s); }
+.rui-center[data-gap="m"] { gap: var(--rui-spacing-m); }
+.rui-center[data-gap="l"] { gap: var(--rui-spacing-l); }
+.rui-center[data-gap="xl"] { gap: var(--rui-spacing-xl); }
+.rui-center[data-padding="xs"] { padding: var(--rui-spacing-xs); }
+.rui-center[data-padding="s"] { padding: var(--rui-spacing-s); }
+.rui-center[data-padding="m"] { padding: var(--rui-spacing-m); }
+.rui-center[data-padding="l"] { padding: var(--rui-spacing-l); }
+.rui-center[data-padding="xl"] { padding: var(--rui-spacing-xl); }
+
 /* Section */
 .rui-section { display: flex; flex-direction: column; gap: var(--rui-spacing-s); }
 .rui-section-title {

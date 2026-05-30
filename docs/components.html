@@ -324,6 +324,20 @@ el.registerComponents([ProductCard]);</code></pre>
      */
     const SAMPLES = {
       // Layout
+      Column: `aktion = Column([
+  Card([CardHeader("First section")]),
+  Card([CardHeader("Second section")]),
+  Card([CardHeader("Third section")])
+], { gap: "m" })`,
+      Row: `aktion = Row([
+  Text("Inbox", { variant: "large-heavy" }),
+  Spacer(),
+  Button("Filter", { variant: "ghost" }),
+  Button("Compose", { variant: "primary" })
+], { gap: "s" })`,
+      Center: `aktion = Center([
+  EmptyState("No results", { description: "Try a different search term." })
+], { minHeight: "40vh" })`,
       Stack: `aktion = Stack([
   Badge("First",  { tone: "primary" }),
   Badge("Second", { tone: "info" }),
@@ -334,11 +348,11 @@ el.registerComponents([ProductCard]);</code></pre>
   Card([CardHeader("Tile B")]),
   Card([CardHeader("Tile C")])
 ], { columns: 3, gap: "m" })`,
-      StackItem: `aktion = Stack([
-  StackItem(Badge("Fixed", { tone: "info" }), { grow: 0, shrink: 0, alignSelf: "center" }),
-  StackItem(Text("This section grows to fill remaining space."), { grow: 1 }),
-  StackItem(Button("Action", { variant: "primary" }), { grow: 0, shrink: 0, alignSelf: "center" })
-], { direction: "row", gap: "m", align: "center" })`,
+      StackItem: `aktion = Row([
+  Badge("Fixed", { tone: "info" }),
+  StackItem(Input("search", { placeholder: "This input grows to fill the row" }), { grow: 1 }),
+  Button("Action", { variant: "primary" })
+], { gap: "m" })`,
       GridItem: `aktion = Grid([
   GridItem(Card([CardHeader("Sidebar"), Text("1/4 width.")]), { span: "1/4" }),
   GridItem(Card([CardHeader("Main content"), Text("3/4 width.")]), { span: "3/4" })
@@ -350,11 +364,11 @@ el.registerComponents([ProductCard]);</code></pre>
       Container: `aktion = Container([
   Card([CardHeader("Centred content", { subtitle: "Wrapped in Container size=md" })])
 ], { size: "md" })`,
-      Spacer: `aktion = Stack([
+      Spacer: `aktion = Row([
   Text("Left edge"),
   Spacer(),
   Text("Right edge")
-], { direction: "row", gap: "m", align: "center" })`,
+], { gap: "m" })`,
       Card: `aktion = Card([
   CardHeader("Card title", { subtitle: "With a subtitle" }),
   Text("Card body content."),
