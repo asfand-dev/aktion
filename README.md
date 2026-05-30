@@ -487,7 +487,8 @@ aktion = pages
   primitive (absolute `url`; `GET` default; no host-wide defaults).
   Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
-  `.cancel()`.
+  `.cancel()`, and a settable `.onDone` callback that fires each time the
+  request settles (handy for `$todos.refetch()` after a write).
 - `pages = Router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
   reactive surface (`route.path`, `route.params`, `route.query`,
@@ -544,11 +545,12 @@ aktion = pages
 | `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
 | JS stdlib | A curated, side-effect-free slice of the JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
+| timers    | `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` — like their JS counterparts, but tracked by the runtime and cleared automatically on re-plan/disconnect. Use inside an `effect` and clear in `cleanup`. |
 
 Both `storage` and `console` are **lowercase**; the `route` handle is
-**reserved** (never declare a state slot named `route`). Capability-granting
-globals (`fetch`, `eval`, `Function`, `window`, timers) are intentionally
-**not** exposed — use `Http({...})` and `effect(...)` instead.
+**reserved** (never declare a state slot named `route`). The remaining
+capability-granting globals (`fetch`, `eval`, `Function`, `window`) are
+intentionally **not** exposed — use `Http({...})` and `effect(...)` instead.
 
 ### The 60-second pitch
 

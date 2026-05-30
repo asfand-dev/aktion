@@ -235,6 +235,25 @@ function submit(payload) {
 }
 \`\`\`
 
+### Timers — \`setTimeout\` / \`setInterval\`
+\`setTimeout(fn, ms)\`, \`setInterval(fn, ms)\`, \`clearTimeout(id)\`, and \`clearInterval(id)\` are available and behave like their JS counterparts. They return a handle you can later clear. Timers are tracked by the runtime and torn down automatically when the program re-plans, so they never outlive the program — but you should still clear a \`setInterval\` you no longer need. Create them inside an \`effect\` (not at the top level, which would re-create them on every render) and clear them in the effect's \`cleanup\`.
+
+\`\`\`
+// Debounced search — restart a 300ms timer on every keystroke
+function onType(q) {
+  clearTimeout($searchTimer)
+  $searchTimer = setTimeout(() => { $results = Http({ url: \`/search?q=\${q}\` }) }, 300)
+}
+
+// A ticking clock — start on mount, clear on unmount
+effect(() => {
+  let id = setInterval(() => { $now = @Now() }, 1000)
+  cleanup(() => clearInterval(id))
+}, ["mount"])
+\`\`\`
+
+Prefer \`effect(..., ["every(1000)"])\` for a simple repeating effect; reach for \`setInterval\`/\`setTimeout\` when you need an imperative handle to clear, a one-shot delay, or a debounce/restart.
+
 ### Lambdas (arrow functions) — every JS form works
 \`() => expr\`, \`x => expr\`, \`(x, y) => expr\`, \`(x = 0) => x\`, \`(...args) => sum(args)\`, and the multi-statement \`(x) => { ...; return ... }\` form. Long lambdas may continue onto the next line.
 
@@ -401,17 +420,34 @@ $orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of last successful response
 $orders.refetch()    // re-issue the request
 $orders.cancel()     // abort the in-flight request
+$orders.onDone = fn  // callback fired each time the request settles
+\`\`\`
+
+### \`onDone\` — run something when the request settles
+Assign \`onDone\` after creating the resource. It fires once every time the request completes — the initial load and every \`refetch()\`, on both success and error — and receives the resource bag as its argument. It does NOT fire for a request that was superseded or \`cancel()\`led. This is the idiomatic way to refresh a list after a mutation:
+
+\`\`\`
+$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () => {
+  $todos.refetch()
+}
 \`\`\`
 
 ### Writes — fire from an action
 \`\`\`
 function saveOrder(payload) {
   $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $save.onDone = () => { $orders.refetch() }
   emit("assistant-message", { message: "Saved." })
 }
 \`\`\`
 
-\`body\` objects are JSON-encoded automatically (a \`Content-Type: application/json\` header is added unless you set one). After a write, call \`.refetch()\` on the list resource to refresh it.
+\`body\` objects are JSON-encoded automatically (a \`Content-Type: application/json\` header is added unless you set one). After a write, call \`.refetch()\` on the list resource to refresh it — either directly or from the write resource's \`onDone\`.
 
 ### \`Async\` wrapper — branch on resource state
 \`\`\`

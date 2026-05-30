@@ -64,9 +64,11 @@ Internalize these rules and you will write correct, polished programs:
 4. **HTTP is one function.** `Http({ url, method, body, headers, query, ... })`
    is the only network primitive. Pass a full absolute `url`; `GET` is the
    default `method`; there are no host-wide defaults. It returns a reactive
-   bag exposing `.data | .error | .status | .loading | .headers | .lastUpdated`
-   and the callables `.refetch()` / `.cancel()`. Re-run a request via
-   `.refetch()` or by wrapping it in an `effect(..., [$dep])`.
+   bag exposing `.data | .error | .status | .loading | .headers | .lastUpdated`,
+   the callables `.refetch()` / `.cancel()`, and a settable `.onDone`
+   callback. Re-run a request via `.refetch()` or by wrapping it in an
+   `effect(..., [$dep])`; use `.onDone` to refresh another resource after a
+   write.
 5. **Components are PascalCase functions that MUST `return`.**
    `function Name(args) { … return Expression }` — PascalCase name signals
    a component. Always end with an explicit `return`.
@@ -495,13 +497,17 @@ the language doesn't model **is just JavaScript**:
   the functions `parseInt` / `parseFloat` / `isNaN` / `isFinite` /
   `encodeURIComponent` / `decodeURIComponent`. Use them directly
   (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
-  (`new Date(0).getTime()`, `new Map([[k, v]])`). Capability-granting
-  globals (`fetch`, `eval`, `window`, timers) are **not** exposed — use
+  (`new Date(0).getTime()`, `new Map([[k, v]])`). The timer globals
+  `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` are also
+  exposed — they behave like JS but are tracked by the runtime and cleared
+  automatically on re-plan/disconnect. The remaining capability-granting
+  globals (`fetch`, `eval`, `window`) are **not** exposed — use
   `Http({...})` and `effect(...)`.
 - Inside **action bodies, effect callbacks, and lambda bodies**, you
   may also call browser APIs directly — `navigator.clipboard`,
   `window.open`, `document.addEventListener`, `setTimeout`,
-  `crypto.randomUUID`, etc.
+  `crypto.randomUUID`, etc. Prefer the runtime-tracked timer globals for
+  `setTimeout` / `setInterval` so they're torn down with the program.
 - The `@`-functions (§8) and library components (§9) cover the cases
   where pure JS would be verbose — but you are never *forced* to use
   them when a one-liner of JS will do.
@@ -1202,6 +1208,27 @@ $orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of last success
 $orders.refetch()    // re-issue the request
 $orders.cancel()     // abort in-flight request
+$orders.onDone = fn  // callback fired each time the request settles
+```
+
+### `onDone` — react when a request settles
+
+Assign `onDone` after creating a resource. It fires once every time the
+request completes (the initial load and every `refetch()`, on both success
+and error), receives the resource bag as its argument, and never fires for
+a superseded or `cancel()`led request. It's the cleanest way to refresh a
+list after a write:
+
+```javascript
+$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () => {
+  $todos.refetch()
+}
 ```
 
 ### `Async(resource, …)` wrapper

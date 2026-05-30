@@ -293,6 +293,23 @@ effect(() =&gt; {
   ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
 }, ["mount"])</code></pre>
 
+      <h3>Timers &mdash; <code>setTimeout</code> / <code>setInterval</code></h3>
+      <p>
+        The timer globals <code>setTimeout</code>, <code>setInterval</code>,
+        <code>clearTimeout</code>, and <code>clearInterval</code> behave like
+        their JavaScript counterparts and return a handle you can clear. The
+        runtime also tracks every handle and tears it down automatically on
+        re-plan/disconnect, but you should still clear an interval you create
+        in an effect via <code>cleanup</code> so it stops on re-fire. For a
+        plain repeating effect prefer the <code>"every(N)"</code> trigger;
+        reach for <code>setInterval</code>/<code>setTimeout</code> when you
+        need an imperative handle, a one-shot delay, or a debounce.
+      </p>
+<pre><code>effect(() =&gt; {
+  const id = setInterval(() =&gt; { $now = @Now() }, 1000)
+  cleanup(() =&gt; clearInterval(id))
+}, ["mount"])</code></pre>
+
       <h3>WebSocket subscription</h3>
 <pre><code>effect(() =&gt; {
   const socket = new WebSocket("wss://example.com/ticker")

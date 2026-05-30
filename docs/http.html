@@ -86,7 +86,8 @@ $orders.loading      // true while in-flight
 $orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of the last successful response
 $orders.refetch()    // re-issue the request
-$orders.cancel()     // abort the in-flight request</code></pre>
+$orders.cancel()     // abort the in-flight request
+$orders.onDone = fn  // callback fired each time the request settles</code></pre>
       <p>
         A response is treated as successful when its status is in the
         <code>2xx</code> range. A <code>204 No Content</code> resolves with
@@ -94,6 +95,27 @@ $orders.cancel()     // abort the in-flight request</code></pre>
         <code>error</code> (and still set <code>status</code> /
         <code>headers</code>) rather than throwing.
       </p>
+
+      <h2 id="ondone">The <code>onDone</code> callback</h2>
+      <p>
+        Assign <code>onDone</code> after creating a resource to run something
+        every time the request settles. It fires once per completion &mdash;
+        the initial load <em>and</em> every <code>refetch()</code>, on both
+        success and error &mdash; and receives the resource bag as its
+        argument. It never fires for a request that was superseded by a
+        newer <code>refetch()</code> or <code>cancel()</code>led. This is the
+        idiomatic way to refresh a list after a mutation without threading
+        the refresh through every call site:
+      </p>
+<pre><code>$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () =&gt; {
+  $todos.refetch()
+}</code></pre>
 
       <h2 id="async">The <code>Async</code> helper</h2>
       <p>

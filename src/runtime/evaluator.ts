@@ -22,7 +22,7 @@ import type {
 } from "../parser/types.js";
 import type { StateStore } from "./state.js";
 import type { HttpRuntime } from "./http.js";
-import { createHttpResource } from "./http.js";
+import { createHttpResource, isEndpointResource } from "./http.js";
 import type { I18nRuntime } from "./i18n.js";
 import type { ActionDeclRunner } from "./effects.js";
 import { dataBuiltins, type ThemeNode } from "./builtins.js";
@@ -46,8 +46,11 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   // write `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`,
   // `new Date()`, `new Map()`, `Number("5")`, etc. without an import.
   // Intentionally omits capability-granting globals (`fetch`, `eval`,
-  // `Function`, `globalThis`, `window`, timers) — those route through the
-  // host runtime (`Http(...)`, effects) instead.
+  // `Function`, `globalThis`, `window`) — those route through the host
+  // runtime (`Http(...)`, effects) instead. Timers (`setTimeout` /
+  // `setInterval` / `clear*`) ARE supported, but via dedicated handlers in
+  // `evaluateComponentCall` (not here) so each handle is tracked on the
+  // context and cleared on dispose rather than leaking past a replan.
   Math,
   JSON,
   Object,
@@ -413,6 +416,18 @@ export interface EvaluationContext {
    */
   disposers: Array<() => void>;
   /**
+   * Pending timer handles created by the language-level `setTimeout` /
+   * `setInterval` builtins. Tracked per context so every timer is cleared
+   * when the context is disposed (`disposeContext`), which the host runs
+   * before each replan and on disconnect — otherwise a `setInterval` from a
+   * previous program would keep firing against a stale scope forever.
+   * `clearTimeout` / `clearInterval` remove handles from these sets.
+   */
+  timers: {
+    timeouts: Set<ReturnType<typeof setTimeout>>;
+    intervals: Set<ReturnType<typeof setInterval>>;
+  };
+  /**
    * Runtime safety budget — bounds component recursion depth, loop
    * iterations, and array allocations so a partial/recursive program
    * (typed live in the playground, mid-stream LLM token, …) cannot
@@ -455,7 +470,7 @@ export function createContext(
   state: StateStore,
   options: CreateContextOptions = {},
 ): EvaluationContext {
-  return {
+  const ctx: EvaluationContext = {
     state,
     bindings: new Map(),
     expressions: new Map(),
@@ -475,8 +490,19 @@ export function createContext(
     notify: options.notify,
     onEmit: options.onEmit,
     disposers: [],
+    timers: { timeouts: new Set(), intervals: new Set() },
     budget: options.budget === null ? undefined : (options.budget ?? createRuntimeBudget()),
   };
+  // Cancel every outstanding timer when the context is torn down so a
+  // `setInterval` / pending `setTimeout` from this program can't fire after
+  // a replan or disconnect against a scope that no longer exists.
+  ctx.disposers.push(() => {
+    for (const id of ctx.timers.timeouts) clearTimeout(id);
+    for (const id of ctx.timers.intervals) clearInterval(id);
+    ctx.timers.timeouts.clear();
+    ctx.timers.intervals.clear();
+  });
+  return ctx;
 }
 
 /**
@@ -2087,6 +2113,28 @@ function evaluateComponentCall(
     const opts = optsArg ? evaluate(optsArg, ctx) : {};
     return createHttpResource(opts, ctx);
   }
+  // Timer builtins — `setTimeout(fn, ms)`, `setInterval(fn, ms)`,
+  // `clearTimeout(id)`, `clearInterval(id)`. They mirror the host globals
+  // but are routed through the context so every handle is tracked and torn
+  // down on dispose (replan / disconnect). The callback fires with the
+  // author's scope intact (lambdas capture `ctx`) and a `notify()` follows
+  // each tick so state the callback wrote is reflected in the next render.
+  if (callee === "setTimeout" || callee === "setInterval") {
+    return evaluateTimerCall(callee, args, ctx);
+  }
+  if (callee === "clearTimeout" || callee === "clearInterval") {
+    const handle = args[0] ? evaluate(args[0], ctx) : undefined;
+    if (handle != null) {
+      if (callee === "clearTimeout") {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+        ctx.timers.timeouts.delete(handle as ReturnType<typeof setTimeout>);
+      } else {
+        clearInterval(handle as ReturnType<typeof setInterval>);
+        ctx.timers.intervals.delete(handle as ReturnType<typeof setInterval>);
+      }
+    }
+    return undefined;
+  }
   // Local lambda registered into loopVars (e.g. an in-block helper
   // `itemRow = (item) => Card(item.title)` evaluated by `evaluateBlock`).
   const localHelper = ctx.loopVars.get(callee);
@@ -2840,6 +2888,55 @@ function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
 }
 
 /**
+ * Evaluate a `setTimeout(fn, ms, ...args)` / `setInterval(fn, ms, ...args)`
+ * call. The first argument must evaluate to a function (typically a lambda
+ * or a bare action reference); a non-callable first argument is a no-op
+ * that returns `null`. The returned handle is registered on the context so
+ * it is cleared on dispose and can be passed to `clearTimeout` /
+ * `clearInterval`. Each tick runs the callback then calls `notify()` so
+ * any state it wrote is rendered (matching `effect(..., [on:every(N)])`).
+ */
+function evaluateTimerCall(
+  callee: "setTimeout" | "setInterval",
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const callback = args[0] ? evaluate(args[0], ctx) : null;
+  if (typeof callback !== "function") return null;
+  const fn = callback as (...a: unknown[]) => unknown;
+  const delay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const extra: unknown[] = [];
+  for (let i = 2; i < args.length; i += 1) {
+    extra.push(evaluate(args[i]!, ctx));
+  }
+
+  const tick = (): void => {
+    try {
+      fn(...extra);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[aktion] ${callee} callback threw`, err);
+    } finally {
+      ctx.notify?.();
+    }
+  };
+
+  if (callee === "setTimeout") {
+    const id = setTimeout(() => {
+      // A one-shot timer is done once it fires — drop it from the registry
+      // before running so a slow callback can't leave a dead handle behind.
+      ctx.timers.timeouts.delete(id);
+      tick();
+    }, delay);
+    ctx.timers.timeouts.add(id);
+    return id;
+  }
+  const id = setInterval(tick, delay);
+  ctx.timers.intervals.add(id);
+  return id;
+}
+
+/**
  * Evaluate a `__rui_assign__(target, value, op)` synthetic call. The
  * target may be:
  *   - a `StateRef` (write to the state store, alias-aware)
@@ -2870,7 +2967,28 @@ function evaluateSyntheticAssign(
   if (targetExpr.kind === "Member") {
     const extracted = extractStatePath(targetExpr, ctx);
     if (extracted) {
-      const current = readAtPath(ctx.state.get(extracted.name), extracted.path);
+      const rootValue = ctx.state.get(extracted.name);
+      // Live `Http({...})` resource bags are mutated in place — they hold
+      // async continuations that close over the original object, so the
+      // immutable `{...prev}` clone `setPath` performs would detach the
+      // in-flight request from the value the program reads (and `onDone`
+      // would never see the assignment). Write straight onto the bag and
+      // notify instead. Reads stay correct because it's the same reference.
+      if (extracted.path.length >= 1 && isEndpointResource(rootValue)) {
+        let parent: unknown = rootValue;
+        for (let i = 0; i < extracted.path.length - 1; i += 1) {
+          parent = (parent as Record<string, unknown> | null | undefined)?.[extracted.path[i]!];
+        }
+        if (parent && typeof parent === "object") {
+          const key = extracted.path[extracted.path.length - 1]!;
+          const current = (parent as Record<string, unknown>)[key];
+          const next = applyAssignOp(op, current, rhs);
+          (parent as Record<string, unknown>)[key] = next;
+          ctx.notify?.();
+          return next;
+        }
+      }
+      const current = readAtPath(rootValue, extracted.path);
       const next = applyAssignOp(op, current, rhs);
       ctx.state.setPath(extracted.name, extracted.path, next);
       return next;

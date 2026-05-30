@@ -68,6 +68,14 @@ export interface HttpDefaults {
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
 
 /**
+ * Hidden brand stamped on every bag returned by `createHttpResource`.
+ * The evaluator uses `isEndpointResource` to recognise a live resource so
+ * property writes (`$patch.onDone = …`) mutate it in place instead of
+ * cloning it — see the note on `onDone` below.
+ */
+const HTTP_RESOURCE_BRAND = Symbol("aktion.httpResource");
+
+/**
  * Reactive bag returned by `Http({...})`. Fields update in place as
  * the request progresses; the runtime calls `notify()` so the next
  * render observes the new values.
@@ -82,6 +90,33 @@ export interface EndpointResource {
   lastUpdated?: number;
   refetch: () => Promise<void>;
   cancel: () => void;
+  /**
+   * Optional completion callback. Fires once each time a request settles
+   * (success *or* error) — the initial load and every `refetch()`. It does
+   * NOT fire when a request is superseded or `cancel()`led. Authors assign
+   * it after creation:
+   *
+   *   $patch = Http({ url, method: "PATCH", body })
+   *   $patch.onDone = () => { $todos.refetch() }
+   *
+   * The resource bag itself is passed as the sole argument so the callback
+   * can branch on `res.error` / `res.data` without closing over `$patch`.
+   */
+  onDone?: (resource: EndpointResource) => void;
+}
+
+/**
+ * `true` when `value` is a live `Http({...})` resource bag. Used by the
+ * evaluator to mutate property writes in place rather than cloning, which
+ * would detach the running request's async continuations from the value
+ * the program reads.
+ */
+export function isEndpointResource(value: unknown): value is EndpointResource {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[HTTP_RESOURCE_BRAND] === true
+  );
 }
 
 /** Compatibility shim — subscription transports were removed in this version. */
@@ -354,6 +389,14 @@ export function createHttpResource(
     },
   };
 
+  // Brand the bag (non-enumerable so it never leaks into `{...res}` spreads
+  // or JSON) so the evaluator can recognise it as a live resource.
+  Object.defineProperty(resource, HTTP_RESOURCE_BRAND, {
+    value: true,
+    enumerable: false,
+    writable: false,
+  });
+
   let controller: AbortController | null = null;
   let generation = 0;
   const notify = () => ctx.notify?.();
@@ -398,9 +441,20 @@ export function createHttpResource(
       resource.error = err;
       resource.state = "error";
     } finally {
+      // Only the latest run settles the bag — a superseded run (a newer
+      // refetch / cancel bumped `generation`) leaves everything untouched
+      // and, crucially, does not fire `onDone`.
       if (runId === generation) {
         resource.loading = false;
         notify();
+        if (typeof resource.onDone === "function") {
+          try {
+            resource.onDone(resource);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error("[aktion] Http onDone callback threw", err);
+          }
+        }
       }
     }
   };

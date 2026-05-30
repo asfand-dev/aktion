@@ -11,6 +11,7 @@ import {
   StateStore,
   HttpRuntime,
   createContext,
+  disposeContext,
   planProgram,
   evaluate,
 } from "../src/runtime/index.js";
@@ -505,6 +506,176 @@ aktion = Stack()
     deferred[0]!(jsonResponse({ which: "stale" }));
     await settle();
     expect(response.data).toEqual({ which: "new" });
+  });
+
+  it("fires `onDone` once when the request settles, with the resource as argument", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    const calls: Array<{ data: unknown; loading: boolean }> = [];
+    const response = ctx.state.get("response") as {
+      onDone?: (res: { data: unknown; loading: boolean }) => void;
+    };
+    response.onDone = (res) => { calls.push({ data: res.data, loading: res.loading }); };
+    await settle();
+    expect(calls).toHaveLength(1);
+    // The bag has already settled by the time the callback runs.
+    expect(calls[0]).toEqual({ data: { ok: true }, loading: false });
+  });
+
+  it("re-fires `onDone` on every refetch (the `$patch.onDone = () => $todos.refetch()` pattern)", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    let done = 0;
+    const response = ctx.state.get("response") as {
+      onDone?: () => void;
+      refetch: () => Promise<void>;
+    };
+    response.onDone = () => { done += 1; };
+    await settle();
+    expect(done).toBe(1);
+    await response.refetch();
+    await settle();
+    expect(done).toBe(2);
+  });
+
+  it("fires `onDone` even when the request errors", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ message: "nope" }, 500));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/boom" })\naktion = Stack()`,
+      { http },
+    );
+    let sawError = false;
+    const response = ctx.state.get("response") as {
+      onDone?: (res: { error: unknown }) => void;
+    };
+    response.onDone = (res) => { sawError = res.error !== undefined; };
+    await settle();
+    expect(sawError).toBe(true);
+  });
+
+  it("does NOT fire `onDone` for a request superseded by `cancel()`", async () => {
+    const deferred: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(
+      () => new Promise<Response>((resolve) => { deferred.push(resolve); }),
+    );
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      { http },
+    );
+    let done = 0;
+    await Promise.resolve();
+    const response = ctx.state.get("response") as {
+      onDone?: () => void;
+      cancel: () => void;
+    };
+    response.onDone = () => { done += 1; };
+    response.cancel();
+    // Resolving the now-superseded request must not fire onDone.
+    deferred[0]?.(jsonResponse({ ok: true }));
+    await settle();
+    expect(done).toBe(0);
+  });
+
+  it("assigns `$response.onDone` from program source and mutates the live bag in place", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `
+$response = Http({ url: "https://api.example.com/items" })
+$response.onDone = () => { $loaded = true }
+$loaded = false
+aktion = Stack()
+      `,
+      { http },
+    );
+    // The program-level assignment must land on the SAME object the request
+    // mutates — not a clone — so the callback is present when it settles.
+    const response = ctx.state.get("response") as { onDone?: unknown };
+    expect(typeof response.onDone).toBe("function");
+    await settle();
+    expect(ctx.state.get("loaded")).toBe(true);
+  });
+});
+
+describe("timers (setTimeout / setInterval / clearTimeout / clearInterval)", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Parse a single expression statement and evaluate it against `ctx`. */
+  const run = (ctx: ReturnType<typeof buildContext>["ctx"], source: string): unknown => {
+    const program = parse(source);
+    const stmt = program.statements[0]!;
+    if (stmt.kind !== "ExpressionStatement") throw new Error("expected expression statement");
+    return evaluate(stmt.expression, ctx);
+  };
+
+  it("setTimeout runs the callback once after the delay and writes state", () => {
+    const { ctx, state } = buildContext(`$fired = 0`);
+    run(ctx, `setTimeout(() => { $fired = $fired + 1 }, 1000)`);
+    expect(state.get("fired")).toBe(0);
+    vi.advanceTimersByTime(999);
+    expect(state.get("fired")).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(state.get("fired")).toBe(1);
+    // One-shot: no further firing.
+    vi.advanceTimersByTime(5000);
+    expect(state.get("fired")).toBe(1);
+  });
+
+  it("setInterval re-runs the callback every interval", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`);
+    vi.advanceTimersByTime(350);
+    expect(state.get("ticks")).toBe(3);
+  });
+
+  it("clearTimeout cancels a pending timeout before it fires", () => {
+    const { ctx, state } = buildContext(`$fired = false`);
+    const id = run(ctx, `setTimeout(() => { $fired = true }, 1000)`);
+    run(ctx, `clearTimeout(arg)`.replace("arg", String(id)));
+    vi.advanceTimersByTime(2000);
+    expect(state.get("fired")).toBe(false);
+  });
+
+  it("clearInterval stops an interval", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    const id = run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`) as number;
+    vi.advanceTimersByTime(250);
+    expect(state.get("ticks")).toBe(2);
+    run(ctx, `clearInterval(arg)`.replace("arg", String(id)));
+    vi.advanceTimersByTime(1000);
+    expect(state.get("ticks")).toBe(2);
+  });
+
+  it("forwards extra arguments to the callback", () => {
+    const { ctx, state } = buildContext(`$msg = ""`);
+    run(ctx, `setTimeout((a, b) => { $msg = a + b }, 10, "foo", "bar")`);
+    vi.advanceTimersByTime(10);
+    expect(state.get("msg")).toBe("foobar");
+  });
+
+  it("a non-callable first argument is a no-op returning null", () => {
+    const { ctx } = buildContext(`$x = 1`);
+    expect(run(ctx, `setTimeout(42, 100)`)).toBeNull();
+    expect(() => vi.advanceTimersByTime(200)).not.toThrow();
+  });
+
+  it("disposeContext clears every outstanding timer", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`);
+    run(ctx, `setTimeout(() => { $ticks = $ticks + 100 }, 100)`);
+    disposeContext(ctx);
+    vi.advanceTimersByTime(1000);
+    expect(state.get("ticks")).toBe(0);
+    expect(ctx.timers.timeouts.size).toBe(0);
+    expect(ctx.timers.intervals.size).toBe(0);
   });
 });
 
