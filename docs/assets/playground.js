@@ -1239,7 +1239,12 @@ function initPlayground(cm) {
     },
   });
 
-  const highlightStyle = lang.HighlightStyle.define([
+  // Two palettes: the light one is tuned for white surfaces; the dark one
+  // uses brighter, lower-saturation hues that stay legible on `--doc-bg`
+  // in dark mode (where colours like `#0f172a` or `#2563eb` would
+  // disappear into the background). We swap between them via
+  // `themeCompartment` whenever `data-doc-theme` flips.
+  const lightHighlightStyle = lang.HighlightStyle.define([
     { tag: tags.keyword, color: "#7c3aed", fontWeight: "600" },          // @builtins
     { tag: tags.controlKeyword, color: "#c026d3", fontWeight: "700" },   // reserved keywords
     { tag: tags.typeName, color: "#2563eb", fontWeight: "500" },         // Components
@@ -1254,6 +1259,27 @@ function initPlayground(cm) {
     { tag: tags.blockComment, color: "#64748b", fontStyle: "italic" },
     { tag: tags.operator, color: "#64748b" },
   ]);
+
+  const darkHighlightStyle = lang.HighlightStyle.define([
+    { tag: tags.keyword, color: "#c4b5fd", fontWeight: "600" },          // @builtins
+    { tag: tags.controlKeyword, color: "#f0abfc", fontWeight: "700" },   // reserved keywords
+    { tag: tags.typeName, color: "#7dd3fc", fontWeight: "500" },         // Components
+    { tag: tags.special(tags.variableName), color: "#fdba74" },          // $state
+    { tag: tags.local(tags.variableName), color: "#5eead4" },            // loop vars
+    { tag: tags.variableName, color: "#e5e7eb" },
+    { tag: tags.propertyName, color: "#99f6e4" },
+    { tag: tags.string, color: "#86efac" },
+    { tag: tags.number, color: "#fca5a5" },
+    { tag: tags.atom, color: "#d8b4fe" },
+    { tag: tags.lineComment, color: "#94a3b8", fontStyle: "italic" },
+    { tag: tags.blockComment, color: "#94a3b8", fontStyle: "italic" },
+    { tag: tags.operator, color: "#cbd5e1" },
+  ]);
+
+  const isDarkDocTheme = () =>
+    document.documentElement.getAttribute("data-doc-theme") === "dark";
+  const highlightExtFor = (dark) =>
+    lang.syntaxHighlighting(dark ? darkHighlightStyle : lightHighlightStyle);
 
   // ---- Autocomplete sources ----
 
@@ -2396,7 +2422,6 @@ function initPlayground(cm) {
       lang.bracketMatching(),
       lang.foldGutter(),
       lang.indentOnInput(),
-      lang.syntaxHighlighting(highlightStyle),
       streamLanguage,
       autocomplete.autocompletion({
         override: [completions],
@@ -2478,7 +2503,7 @@ function initPlayground(cm) {
         },
         ".cm-selectionBackground, ::selection": { background: "var(--doc-primary-soft) !important" },
       }),
-      themeCompartment.of([]),
+      themeCompartment.of(highlightExtFor(isDarkDocTheme())),
       editableCompartment.of([]),
     ],
   });
@@ -2486,6 +2511,17 @@ function initPlayground(cm) {
   const editorHost = $("pg-editor");
   $("pg-editor-loader").hidden = true;
   editorView = new view.EditorView({ state: startState, parent: editorHost });
+
+  // Keep the CM highlight palette in sync with the docs light/dark theme.
+  const themeObserver = new MutationObserver(() => {
+    editorView.dispatch({
+      effects: themeCompartment.reconfigure(highlightExtFor(isDarkDocTheme())),
+    });
+  });
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-doc-theme"],
+  });
 
   let currentExample = initialCode.example;
 
