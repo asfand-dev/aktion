@@ -1514,7 +1514,9 @@ function addTodo() {
   if (!$draft) { return }
   $create = Http({ url: base + "/todos", method: "POST", body: { title: $draft } })
   $draft  = ""
-  $todos.refetch()
+  $create.onDone = () =&gt; {
+    $todos.refetch()  
+  }
 }
 
 function toggleTodo(todo) {
@@ -1523,7 +1525,9 @@ function toggleTodo(todo) {
     method: "PATCH",
     body:   { isCompleted: !todo.isCompleted }
   })
-  $todos.refetch()
+  $patch.onDone = () =&gt; {
+    $todos.refetch()
+  }
 }
 
 function startEdit(todo) {
@@ -1539,12 +1543,16 @@ function saveEdit(todo) {
   })
   $editingId = null
   $editTitle = ""
-  $todos.refetch()
+  $update.onDone = () =&gt; {
+    $todos.refetch()
+  }
 }
 
 function deleteTodo(todo) {
   $del = Http({ url: base + "/todos/" + todo.id, method: "DELETE" })
-  $todos.refetch()
+  $del.onDone = () =&gt; {
+    $todos.refetch()
+  }
 }
 
 todoRow = todo =&gt; $editingId == todo.id
