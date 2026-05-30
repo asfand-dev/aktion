@@ -906,16 +906,30 @@
           <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Smart autocomplete.</strong> At the top level, tab through
             components, <code>@</code>-builtins, language keywords
-            (<code>if</code>, <code>match</code>, <code>for</code>,
-            <code>function</code>, <code>effect</code>),
-            and snippets (<code>router…</code>, <code>function…</code>,
-            <code>http…</code>). Inside a call like
+            (<code>if</code>, <code>for</code>, <code>function</code>,
+            <code>effect</code>, <code>try</code>…), the runtime globals
+            (<code>Http</code>, <code>setTimeout</code>, <code>setInterval</code>,
+            <code>storage</code>, <code>console</code>, <code>Math</code>,
+            <code>JSON</code>, <code>Object</code>, <code>Array</code>,
+            <code>Date</code>…), and snippets (<code>router…</code>,
+            <code>function…</code>, <code>http…</code>). Inside a call like
             <code>Button("Save", { <em>cursor</em> })</code> the editor surfaces
             <strong>named-arg names</strong> with their types
             (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>…);
             after the colon, enum-typed args (e.g.
             <code>variant: "primary"|"secondary"|…</code>) show their allowed
             values inline so you can pick one with a single tab.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Member completion.</strong> Type a dot after an object to
+            see its members: a <code>$todos</code> assigned from
+            <code>Http({…})</code> completes to <code>.data</code>,
+            <code>.error</code>, <code>.loading</code>, <code>.status</code>,
+            <code>.refetch()</code>, <code>.cancel()</code>, and the settable
+            <code>.onDone</code>; <code>route.</code> lists
+            <code>path</code> / <code>params</code> / <code>query</code> /
+            <code>navigate()</code>; and <code>Math.</code>,
+            <code>JSON.</code>, <code>storage.</code>, … list their methods.
           </p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Cursor-aware param docs.</strong> Hover any identifier,
