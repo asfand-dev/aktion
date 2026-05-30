@@ -1,13 +1,19 @@
 /**
  * HTTP runtime for the language. The language exposes a single
- * `http({...})` function that returns a reactive resource bag with
+ * `Http({...})` function that returns a reactive resource bag with
  * `data`, `error`, `status`, `loading`, `headers`, `lastUpdated`,
  * `refetch()`, and `cancel()`.
  *
- * Configuration (base URL, default headers, retry, interceptors) is
- * captured by an `HttpRuntime` singleton; the host registers it once
- * at element-construction time. Programs may opt in to per-program
- * defaults via `$http = Http({ baseUrl, headers, retry, ... })`.
+ * Every call takes a self-contained config: an absolute `url`, an
+ * optional `method` (defaults to `GET`), a convenience `query` object
+ * serialised into the URL, `headers`, `body`, and any other
+ * `fetch`-compatible option (`credentials`, `mode`, `cache`, …) passed
+ * through verbatim. There are no host-wide defaults — each request
+ * fully describes itself.
+ *
+ * Host integrators may still register cross-cutting interceptors
+ * (`onRequest` / `onResponse` / `onError`) on the `HttpRuntime`
+ * singleton; they fire around every request.
  */
 
 import type { EvaluationContext } from "./evaluator.js";
@@ -31,6 +37,8 @@ export interface HttpRequest {
   headers: Record<string, string>;
   body?: unknown;
   signal?: AbortSignal;
+  /** Extra `fetch`-compatible options passed through verbatim. */
+  init?: Record<string, unknown>;
 }
 
 export interface HttpResponse {
@@ -56,11 +64,19 @@ export interface HttpDefaults {
   credentials?: RequestCredentials;
 }
 
-/** Reactive lifecycle of an `http({...})` resource. */
+/** Reactive lifecycle of an `Http({...})` resource. */
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
 
 /**
- * Reactive bag returned by `http({...})`. Fields update in place as
+ * Hidden brand stamped on every bag returned by `createHttpResource`.
+ * The evaluator uses `isEndpointResource` to recognise a live resource so
+ * property writes (`$patch.onDone = …`) mutate it in place instead of
+ * cloning it — see the note on `onDone` below.
+ */
+const HTTP_RESOURCE_BRAND = Symbol("aktion.httpResource");
+
+/**
+ * Reactive bag returned by `Http({...})`. Fields update in place as
  * the request progresses; the runtime calls `notify()` so the next
  * render observes the new values.
  */
@@ -74,6 +90,33 @@ export interface EndpointResource {
   lastUpdated?: number;
   refetch: () => Promise<void>;
   cancel: () => void;
+  /**
+   * Optional completion callback. Fires once each time a request settles
+   * (success *or* error) — the initial load and every `refetch()`. It does
+   * NOT fire when a request is superseded or `cancel()`led. Authors assign
+   * it after creation:
+   *
+   *   $patch = Http({ url, method: "PATCH", body })
+   *   $patch.onDone = () => { $todos.refetch() }
+   *
+   * The resource bag itself is passed as the sole argument so the callback
+   * can branch on `res.error` / `res.data` without closing over `$patch`.
+   */
+  onDone?: (resource: EndpointResource) => void;
+}
+
+/**
+ * `true` when `value` is a live `Http({...})` resource bag. Used by the
+ * evaluator to mutate property writes in place rather than cloning, which
+ * would detach the running request's async continuations from the value
+ * the program reads.
+ */
+export function isEndpointResource(value: unknown): value is EndpointResource {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[HTTP_RESOURCE_BRAND] === true
+  );
 }
 
 /** Compatibility shim — subscription transports were removed in this version. */
@@ -148,6 +191,7 @@ export class HttpRuntime {
           throw new Error("`fetch` is not available in this environment");
         }
         const init: RequestInit = {
+          ...(req.init as RequestInit | undefined),
           method: req.method,
           headers: req.headers,
           signal: req.signal ?? controller.signal,
@@ -249,14 +293,25 @@ function encodeBody(body: unknown, headers: Record<string, string>): BodyInit {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  http({...}) — reactive resource factory                                   */
+/*  Http({...}) — reactive resource factory                                   */
 /* -------------------------------------------------------------------------- */
+
+/** Keys consumed by the request builder; everything else is passed to `fetch`. */
+const RESERVED_CONFIG_KEYS = new Set([
+  "url",
+  "method",
+  "headers",
+  "body",
+  "query",
+  "signal",
+]);
 
 /**
  * Build an `HttpRequest` from the user-supplied configuration object
- * accepted by `http({...})`. Accepts every standard `fetch` option plus
- * a `query` shorthand whose entries are appended to the URL as a
- * querystring. Anything missing falls back to sane defaults.
+ * accepted by `Http({...})`. Recognises `url`, `method` (default `GET`),
+ * `headers`, `body`, and a `query` shorthand whose entries are appended
+ * to the URL as a querystring. Every other key is forwarded verbatim as
+ * a `fetch` option (`credentials`, `mode`, `cache`, `redirect`, …).
  */
 function buildRequestFromConfig(config: unknown): HttpRequest {
   const cfg = (config && typeof config === "object" && !Array.isArray(config))
@@ -281,23 +336,34 @@ function buildRequestFromConfig(config: unknown): HttpRequest {
     const qs = params.toString();
     if (qs) finalUrl += (finalUrl.includes("?") ? "&" : "?") + qs;
   }
+  const init: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (RESERVED_CONFIG_KEYS.has(k)) continue;
+    init[k] = v;
+  }
   const req: HttpRequest = {
     url: finalUrl,
     method,
     headers,
     body: cfg.body,
   };
+  if (Object.keys(init).length > 0) req.init = init;
   if (cfg.signal instanceof AbortSignal) req.signal = cfg.signal;
   return req;
 }
 
 /**
- * Run a single `http({...})` call and return the reactive resource bag.
+ * Run a single `Http({...})` call and return the reactive resource bag.
  *
  * The bag mutates in place: `data`, `error`, `status`, `loading`,
  * `headers`, `lastUpdated` update during the request lifecycle. The
  * `refetch()` callback re-issues the original request; `cancel()`
  * aborts the in-flight request (no-op when idle).
+ *
+ * A monotonic `generation` token guards every async continuation so a
+ * superseded request (because `refetch()` or `cancel()` ran while it
+ * was in flight) can never clobber the resource with stale data. This
+ * is what makes back-to-back refetches and cancels deterministic.
  */
 export function createHttpResource(
   config: unknown,
@@ -310,18 +376,36 @@ export function createHttpResource(
     loading: true,
     refetch: async () => { await run(); },
     cancel: () => {
+      // Invalidate the in-flight run, abort its fetch, and settle the
+      // bag back to a resting state so the UI stops showing a spinner.
+      generation += 1;
       if (controller) controller.abort();
+      controller = null;
+      if (resource.loading) {
+        resource.loading = false;
+        resource.state = resource.data === undefined ? "idle" : "data";
+        notify();
+      }
     },
   };
 
+  // Brand the bag (non-enumerable so it never leaks into `{...res}` spreads
+  // or JSON) so the evaluator can recognise it as a live resource.
+  Object.defineProperty(resource, HTTP_RESOURCE_BRAND, {
+    value: true,
+    enumerable: false,
+    writable: false,
+  });
+
   let controller: AbortController | null = null;
-  let inFlight = false;
+  let generation = 0;
   const notify = () => ctx.notify?.();
 
   const run = async (): Promise<void> => {
-    if (inFlight && controller) controller.abort();
-    inFlight = true;
+    const runId = (generation += 1);
+    if (controller) controller.abort();
     controller = new AbortController();
+    const localController = controller;
     resource.state = resource.data === undefined ? "loading" : "stale";
     resource.loading = true;
     notify();
@@ -330,15 +414,15 @@ export function createHttpResource(
       resource.error = { message: "http runtime not available" };
       resource.state = "error";
       resource.loading = false;
-      inFlight = false;
       notify();
       return;
     }
     try {
       const req = buildRequestFromConfig(config);
       req.url = ctx.http.resolveUrl(req.url);
-      req.signal = controller.signal;
+      req.signal = localController.signal;
       const response = await ctx.http.request(req);
+      if (runId !== generation) return; // superseded by a newer run / cancel
       const ok = response.status >= 200 && response.status < 300;
       if (ok) {
         resource.data = response.body;
@@ -352,13 +436,26 @@ export function createHttpResource(
       resource.headers = response.headers;
       resource.lastUpdated = Date.now();
     } catch (err) {
+      if (runId !== generation) return; // superseded — swallow late rejection
       if ((err as { name?: string })?.name === "AbortError") return;
       resource.error = err;
       resource.state = "error";
     } finally {
-      inFlight = false;
-      resource.loading = false;
-      notify();
+      // Only the latest run settles the bag — a superseded run (a newer
+      // refetch / cancel bumped `generation`) leaves everything untouched
+      // and, crucially, does not fire `onDone`.
+      if (runId === generation) {
+        resource.loading = false;
+        notify();
+        if (typeof resource.onDone === "function") {
+          try {
+            resource.onDone(resource);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error("[aktion] Http onDone callback threw", err);
+          }
+        }
+      }
     }
   };
 

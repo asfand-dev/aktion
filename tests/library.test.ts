@@ -32,7 +32,7 @@ import {
 } from "../src/library/components/wrappers.js";
 import { SearchBar, MultiSelect, DateRangePicker, Button } from "../src/library/components/forms.js";
 import {
-  Stack, StackItem, Grid, GridItem, Box, resolveSpan,
+  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, resolveSpan,
   AspectRatio, Modal, Tabs, TabItem, Separator,
 } from "../src/library/components/layout.js";
 import { Sparkline, StatCard, Table, Col } from "../src/library/components/data.js";
@@ -95,6 +95,7 @@ describe("registry lookup", () => {
 describe("default library", () => {
   it("registers every documented component group", () => {
     const expected = [
+      "Row", "Column", "Center",
       "Stack", "StackItem", "Grid", "GridItem", "Box", "Card", "CardHeader", "Button", "Input", "Select", "Table", "BarChart",
       "FollowUpBlock", "Avatar", "AvatarGroup", "Progress", "Switch",
       "ToggleGroup", "Tooltip", "HoverCard", "Kbd", "Breadcrumb", "BreadcrumbItem",
@@ -363,6 +364,71 @@ describe("Stack", () => {
     expect(node.getAttribute("data-responsive-align")).toBe("true");
     expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-base:flex-start");
     expect(node.getAttribute("style") ?? "").toContain("--rui-stack-align-md:center");
+  });
+});
+
+describe("Row / Column / Center", () => {
+  it("Row renders a horizontal stack, centered, with natural-width children by default", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-stack");
+    expect(node.getAttribute("data-direction")).toBe("row");
+    expect(node.getAttribute("data-align")).toBe("center");
+    expect(node.getAttribute("data-uniform")).toBe("false");
+    expect(node.getAttribute("data-gap")).toBe("m");
+  });
+
+  it("Row grow:true makes children share the row equally (data-uniform=true)", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [], grow: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-uniform")).toBe("true");
+  });
+
+  it("Column renders a vertical stack stretched to full width by default", () => {
+    const node = Column.render(
+      makeNode("Column", [[]]),
+      { children: [] },
+      helpers,
+    ) as HTMLElement;
+    expect(node.className).toBe("rui-stack");
+    expect(node.getAttribute("data-direction")).toBe("column");
+    expect(node.getAttribute("data-align")).toBe("stretch");
+    expect(node.getAttribute("data-uniform")).toBe("false");
+  });
+
+  it("Row honours justify, gap, and wrap props", () => {
+    const node = Row.render(
+      makeNode("Row", [[]]),
+      { children: [], justify: "between", gap: "s", wrap: true },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("data-justify")).toBe("between");
+    expect(node.getAttribute("data-gap")).toBe("s");
+    expect(node.getAttribute("data-wrap")).toBe("true");
+  });
+
+  it("Center centers on both axes and applies minHeight + axis", () => {
+    const both = Center.render(
+      makeNode("Center", [[]]),
+      { children: [], minHeight: "60vh" },
+      helpers,
+    ) as HTMLElement;
+    expect(both.className).toBe("rui-center");
+    expect(both.getAttribute("data-axis")).toBe("both");
+    expect(both.getAttribute("style") ?? "").toContain("min-height:60vh");
+
+    const horizontal = Center.render(
+      makeNode("Center", [[]]),
+      { children: [], axis: "horizontal" },
+      helpers,
+    ) as HTMLElement;
+    expect(horizontal.getAttribute("data-axis")).toBe("horizontal");
   });
 });
 
@@ -2417,6 +2483,54 @@ describe("new components — phase 1-4 rollout", () => {
     expect(node.querySelector(".rui-table-empty")?.textContent).toBe("No people");
   });
 
+  it("Table renders a component node passed directly as a cell value", () => {
+    const badge = makeNode("Badge", ["Active"]);
+    // Col args: header, values, format, align, sortable, filterable, render, onClick
+    const col = makeNode("Col", ["Status", [badge]]);
+    const node = Table.render(
+      makeNode("Table", [[col]]),
+      { columns: [col] },
+      helpers,
+    ) as HTMLElement;
+    const cellStub = node.querySelector("td .rui-stub");
+    expect(cellStub).not.toBeNull();
+    expect(cellStub?.getAttribute("data-component-name")).toBe("Badge");
+  });
+
+  it("Table Col render() maps each value to a component cell", () => {
+    const rows = [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }];
+    const render = (row: { id: number }) => makeNode("Button", [`Edit ${row.id}`]);
+    const col = makeNode("Col", ["Actions", rows, undefined, undefined, undefined, undefined, render]);
+    const node = Table.render(
+      makeNode("Table", [[col]]),
+      { columns: [col] },
+      helpers,
+    ) as HTMLElement;
+    const stubs = node.querySelectorAll("tbody td .rui-stub");
+    expect(stubs.length).toBe(2);
+    expect(stubs[0]?.getAttribute("data-component-name")).toBe("Button");
+  });
+
+  it("Table Col onClick makes cells clickable and fires with (value, rowIndex)", () => {
+    const calls: Array<{ value: unknown; index: unknown }> = [];
+    const localHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => { calls.push({ value: args[0], index: args[1] }); },
+    };
+    const onClick = noop; // identity placeholder — invoke is intercepted
+    const col = makeNode("Col", ["Name", ["Ada", "Lin"], undefined, undefined, undefined, undefined, undefined, onClick]);
+    const node = Table.render(
+      makeNode("Table", [[col]]),
+      { columns: [col] },
+      localHelpers,
+    ) as HTMLElement;
+    const cells = node.querySelectorAll<HTMLElement>("tbody td[data-clickable='true']");
+    expect(cells.length).toBe(2);
+    expect(cells[1]?.getAttribute("role")).toBe("button");
+    cells[1]!.onclick?.(new MouseEvent("click"));
+    expect(calls).toEqual([{ value: "Lin", index: 1 }]);
+  });
+
   it("Rating(halfStep) emits a half value when clicking the left half of a star", () => {
     let captured: { name: string; value: unknown } | null = null;
     const localHelpers = {
@@ -2914,6 +3028,57 @@ describe("Advanced components render", () => {
       }
     });
   }
+});
+
+describe("DataGrid cell rendering", () => {
+  // Col args: header, values, format, align, sortable, filterable, render, onClick
+  it("renders a component node passed directly as a cell value", () => {
+    const badge = makeNode("Badge", ["VIP"]);
+    const col = makeNode("Col", ["Tag", [badge]]);
+    const node = DataGrid.render(
+      makeNode("DataGrid", [[col]]),
+      { columns: [col] },
+      helpers,
+    ) as HTMLElement;
+    const stub = node.querySelector("tbody td .rui-stub");
+    expect(stub?.getAttribute("data-component-name")).toBe("Badge");
+  });
+
+  it("Col render() maps each row value to a component cell", () => {
+    const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const render = (row: { id: number }) => makeNode("Button", [`Edit ${row.id}`]);
+    const col = makeNode("Col", ["Actions", rows, undefined, undefined, undefined, undefined, render]);
+    const node = DataGrid.render(
+      makeNode("DataGrid", [[col]]),
+      { columns: [col] },
+      helpers,
+    ) as HTMLElement;
+    const stubs = node.querySelectorAll("tbody td .rui-stub[data-component-name='Button']");
+    expect(stubs.length).toBe(3);
+  });
+
+  it("Col onClick fires with (value, rowIndex) and stops row-click propagation", () => {
+    const cellCalls: Array<unknown[]> = [];
+    const localHelpers = {
+      ...helpers,
+      invoke: (_fn: unknown, ...args: unknown[]) => { cellCalls.push(args); },
+    };
+    const col = makeNode("Col", ["Name", ["Ada", "Lin"], undefined, undefined, undefined, undefined, undefined, noop]);
+    const node = DataGrid.render(
+      makeNode("DataGrid", [[col]]),
+      { columns: [col], onRowClick: noop },
+      localHelpers,
+    ) as HTMLElement;
+    const clickable = node.querySelectorAll<HTMLElement>("tbody td[data-clickable='true']");
+    expect(clickable.length).toBe(2);
+    let rowBubbled = false;
+    clickable[0]!.addEventListener("click", () => {}, false);
+    const tr = clickable[0]!.closest("tr")!;
+    tr.addEventListener("click", () => { rowBubbled = true; });
+    clickable[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(cellCalls).toEqual([["Ada", 0]]);
+    expect(rowBubbled).toBe(false); // stopPropagation prevented the row handler
+  });
 });
 
 describe("self-decorating defaults", () => {

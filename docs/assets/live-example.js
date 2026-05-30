@@ -1478,6 +1478,136 @@ const el = document.getElementById("rui-search");
     el.setResponse(document.getElementById("src-search").textContent);
     }
   },
+  "todos-crud": {
+    slug: "todos-crud",
+    docTitle: `Todos CRUD · Aktion`,
+    eyebrow: `Live demo · REST API + Http({...})`,
+    heroTitleHtml: `Full CRUD against a live REST API with one network primitive`,
+    heroDescriptionHtml: `List, create, toggle, edit, and delete todos against a live mock
+        API at <code>mock-api-one-chi.vercel.app</code>. Every request uses
+        the single <code>Http({...})</code> primitive with a full absolute
+        URL; <code>Async</code> renders the loading / error / empty / data
+        states; and each mutation calls <code>$todos.refetch()</code> so the
+        list stays in sync. <strong>This talks to a real network</strong> —
+        the first load may take a moment while the mock API wakes up.`,
+    brandHref: "live-examples.html",
+    brandText: `Aktion · todos`,
+    backHref: "live-examples.html",
+    backText: `← Back to live examples`,
+    cards: [
+    {
+      id: null,
+      heading: `Live preview`,
+      lede: `Add a todo, tick it complete, rename it inline, or delete it —
+        each action fires an <code>Http({...})</code> request and refetches
+        the list. Open your network tab to watch the real GET / POST /
+        PATCH / PUT / DELETE calls.`,
+      codeBlocks: [
+      { codeId: "src-todos", content: `base = "https://mock-api-one-chi.vercel.app/api/mock/todo"
+
+$todos     = Http({ url: base + "/todos" })
+$draft     = ""
+$editingId = null
+$editTitle = ""
+
+function addTodo() {
+  if (!$draft) { return }
+  $create = Http({ url: base + "/todos", method: "POST", body: { title: $draft } })
+  $draft  = ""
+  $create.onDone = () =&gt; {
+    $todos.refetch()  
+  }
+}
+
+function toggleTodo(todo) {
+  $patch = Http({
+    url:    base + "/todos/" + todo.id,
+    method: "PATCH",
+    body:   { isCompleted: !todo.isCompleted }
+  })
+  $patch.onDone = () =&gt; {
+    $todos.refetch()
+  }
+}
+
+function startEdit(todo) {
+  $editingId = todo.id
+  $editTitle = todo.title
+}
+
+function saveEdit(todo) {
+  $update = Http({
+    url:    base + "/todos/" + todo.id,
+    method: "PUT",
+    body:   { title: $editTitle, isCompleted: todo.isCompleted }
+  })
+  $editingId = null
+  $editTitle = ""
+  $update.onDone = () =&gt; {
+    $todos.refetch()
+  }
+}
+
+function deleteTodo(todo) {
+  $del = Http({ url: base + "/todos/" + todo.id, method: "DELETE" })
+  $del.onDone = () =&gt; {
+    $todos.refetch()
+  }
+}
+
+todoRow = todo =&gt; $editingId == todo.id
+  ? Stack([
+      Input("edit-" + todo.id, { value: $editTitle, placeholder: "Todo title" }),
+      Button("Save",   { action: () =&gt; saveEdit(todo), variant: "primary", size: "small", icon: "check" }),
+      Button("Cancel", { action: () =&gt; { $editingId = null }, variant: "ghost", size: "small" })
+    ], { direction: "row", gap: "s", align: "center" })
+  : Stack([
+      Checkbox("done-" + todo.id, { value: todo.isCompleted, onChange: () =&gt; toggleTodo(todo) }),
+      Text(todo.title, { tone: todo.isCompleted ? "muted" : "default" }),
+      Button("Edit",   { action: () =&gt; startEdit(todo),  variant: "ghost", size: "small", icon: "pen" }),
+      Button("Delete", { action: () =&gt; deleteTodo(todo), variant: "ghost", tone: "danger", size: "small", icon: "trash" })
+    ], { direction: "row", gap: "s", align: "center", justify: "between" })
+
+composer = Card([
+  SectionHeader("New todo", { eyebrow: "CREATE" }),
+  Stack([
+    Input("draft", { placeholder: "What needs doing?", value: $draft }),
+    Button("Add", { action: addTodo, variant: "primary", icon: "plus" })
+  ], { direction: "row", gap: "s" })
+])
+
+list = Card([
+  SectionHeader("Todos", {
+    eyebrow: "LIST",
+    subtitle: "Backed by a live REST API",
+    status: Button("Refresh", { action: $todos.refetch, variant: "ghost", size: "small", icon: "rotate" })
+  }),
+  Async($todos, {
+    loading: LoadingState("Loading todos…"),
+    error:   ErrorState("Couldn't load todos", { description: "The mock API may be waking up — hit Refresh." }),
+    empty:   EmptyState("No todos yet", { description: "Add your first todo above.", icon: "list-check" }),
+    data:    Stack($todos.data.map(todoRow), { direction: "column", gap: "s" })
+  })
+])
+
+aktion = Stack([
+  PageHeader("Todos", {
+    subtitle: "Create, toggle, edit and delete — every action is a real Http({...}) call",
+    breadcrumbs: ["Demos", "Todos CRUD"]
+  }),
+  composer,
+  list
+], { direction: "column", gap: "l" })` }
+      ],
+      render: { elId: "rui-todos", theme: "light" },
+      extraHtml: ``,
+    }
+    ],
+    setup(){
+const el = document.getElementById("rui-todos");
+    el.setResponse(document.getElementById("src-todos").textContent);
+    }
+  },
 };
 
 import "../../dist/aktion.js";

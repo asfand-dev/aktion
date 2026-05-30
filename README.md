@@ -81,11 +81,13 @@ Everything you need at runtime ships in a single bundle:
   rule — `Component(positionalArg, { prop: value, … })`. At most one
   positional argument; every other argument goes in a trailing
   `{ }` object literal.
-- **One HTTP primitive.** `http({ url, method, headers, body, query, ... })`
-  is the only network call. It returns a reactive resource bag exposing
+- **One HTTP primitive.** `Http({ url, method, headers, body, query, ... })`
+  is the only network call. Each call is self-contained (pass a full
+  absolute `url`; `GET` is the default; no host-wide defaults). It returns
+  a reactive resource bag exposing
   `data | error | status | loading | headers | lastUpdated`, plus the
-  callables `refetch()` and `cancel()`. Re-runs automatically when any
-  reactive input in the options object changes.
+  callables `refetch()` and `cancel()`. Re-run a request via `refetch()`
+  or by wrapping it in an `effect(..., [$dep])`.
 - **`storage` and `console` globals.** Always in scope, no import,
   lowercase. `storage.set/get` (localStorage by default),
   `storage.session.*`, `storage.cookies.*` with object-literal options,
@@ -216,7 +218,7 @@ Three equivalent ways:
 <script>
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-    aktion = Stack([greeting])
+    aktion = Column([greeting])
     greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
   `);
 </script>
@@ -263,7 +265,7 @@ const prompt = el.getSystemPrompt({
 ```
 
 > Network calls are issued by the LLM-authored code itself via the
-> `http({ url, method, body, ... })` primitive. The host is not involved.
+> `Http({ url, method, body, ... })` primitive. The host is not involved.
 > Install `el.registerHttpInterceptors(...)` if you need to attach auth
 > headers, retry on 401, or log every request.
 
@@ -317,7 +319,7 @@ surfaces from the *generated prompt*, build it via
 | `registerComponents(specs, root?)`                              | Extend the built-in library with your own components.                                                                        |
 | `getSystemPrompt(options?)`                                     | Build a system prompt that matches the current library. Pass `{ mode: "chat" }` for the compact variant.                     |
 | `navigate(path)`                                                | Programmatically navigate. Updates `window.location.hash`.                                                                   |
-| `registerHttpInterceptors({ onRequest?, onResponse?, onError? })` | Install interceptors for the `http({...})` layer. `onResponse` receives a `retry()` one-shot for e.g. 401 refresh flows.       |
+| `registerHttpInterceptors({ onRequest?, onResponse?, onError? })` | Install interceptors for the `Http({...})` layer. `onResponse` receives a `retry()` one-shot for e.g. 401 refresh flows.       |
 | `serializeState()`                                              | Return every reactive atom as a plain JSON-friendly object (for SSR / resumption).                                           |
 | `hydrateState(snapshot)`                                        | Apply a snapshot to the live store and schedule a re-render. Atoms not in the snapshot are untouched.                        |
 | `loadSnapshot({ programText, state })`                          | Atomic program + state load. The next render plans the program with the hydrated state already in place.                     |
@@ -381,15 +383,15 @@ function Counter(label = "Count") {
 }
 
 function loadOrders() {
-  $orders = http({ url: "/api/orders", method: "GET" })
+  $orders = Http({ url: "https://api.example.com/orders", method: "GET" })
 }
 
 effect(() => {
-  $save = http({ url: "/api/draft", method: "PUT", body: $draft })
+  $save = Http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
 }, [$draft, "debounce(500)"])
 
-$orders = http({
-  url:    "/api/users/42/orders",
+$orders = Http({
+  url:    "https://api.example.com/users/42/orders",
   method: "GET",
   query:  { limit: 5 }
 })
@@ -481,10 +483,12 @@ aktion = pages
   start of the next line and the parser keeps building the same
   expression — matches JavaScript's ASI rules. Use this to split long
   method chains, ternaries, and logical expressions across lines.
-- `http({ url, method, headers, body, query, ... })` — the only network
-  primitive. Returns a reactive resource with `.data`, `.error`,
+- `Http({ url, method, headers, body, query, ... })` — the only network
+  primitive (absolute `url`; `GET` default; no host-wide defaults).
+  Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
-  `.cancel()`.
+  `.cancel()`, and a settable `.onDone` callback that fires each time the
+  request settles (handy for `$todos.refetch()` after a write).
 - `pages = Router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
   reactive surface (`route.path`, `route.params`, `route.query`,
@@ -540,18 +544,23 @@ aktion = pages
 | `storage` | Browser persistence — `storage.set/get`, `storage.session.*`, `storage.cookies.*`. |
 | `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
-| JS stdlib | A curated, side-effect-free slice of the JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
+| JS stdlib | The JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
+| timers    | `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` — like their JS counterparts, but tracked by the runtime and cleared automatically on re-plan/disconnect. Use inside an `effect` and clear in `cleanup`. |
+| full JS globals | The **entire** JavaScript global surface is available — dialogs (`alert`, `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`, `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`, `BigInt`, `Reflect`, …), and `window` / `document` themselves. Any `globalThis` member resolves by name. |
 
 Both `storage` and `console` are **lowercase**; the `route` handle is
-**reserved** (never declare a state slot named `route`). Capability-granting
-globals (`fetch`, `eval`, `Function`, `window`, timers) are intentionally
-**not** exposed — use `http({...})` and `effect(...)` instead.
+**reserved** (never declare a state slot named `route`). Author declarations
+and built-in components always win over a same-named global (a library
+`Text` / `Map` component is never shadowed by the DOM `Text` / `Map`), so the
+global passthrough only resolves names you haven't otherwise defined. For
+reactive data prefer `Http({...})` over raw `fetch`, and timers/listeners
+belong inside an `effect(...)` so they're cleaned up on unmount.
 
 ### The 60-second pitch
 
 ```js
 $days = "7"
-$data = http({ url: "/api/metrics", method: "GET", query: { days: $days } })
+$data = Http({ url: "https://api.example.com/metrics", method: "GET", query: { days: $days } })
 
 filter = FormControl("Range", { control: Select("days", {
   items: [SelectItem("7", "7d"), SelectItem("30", "30d")],
@@ -563,7 +572,7 @@ chart  = LineChart({
   series: [Series("Events", $data.data?.daily?.events ?? [])]
 })
 
-aktion = Stack([CardHeader("Analytics"), filter, kpi, chart])
+aktion = Column([CardHeader("Analytics"), filter, kpi, chart])
 ```
 
 Highlights:
@@ -578,7 +587,7 @@ Highlights:
   plus pluck (`$rows.title` → `[title1, title2, …]`).
 - Responsive prop maps on layout components:
   `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "l" })`.
-- Forward references are allowed — list `aktion = Stack([...])` first
+- Forward references are allowed — list `aktion = Column([...])` first
   and let the children stream in beneath it.
 
 ### Declarative todo app
@@ -698,7 +707,7 @@ production-quality SaaS UI in a single line.
 
 | Group              | Components |
 | ------------------ | ---------- |
-| **Layout**         | `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
+| **Layout**         | `Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
 | **Content**        | `Text`, `Image`, `Icon`, `Badge`, `BadgeList`, `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd` |
 | **Forms**          | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm` |
 | **Data**           | `Table`, `Col`, `DataGrid`, `List`, `ListItem`, `StatCard`, `Stats`, `Sparkline`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList` |
@@ -726,7 +735,7 @@ beyond a state write (debounce a search, persist a setting, kick off
 a fetch).
 
 ```js
-Input("query", { onChange: q => $results = http({ url: `/api/search?q=${q}` }) })
+Input("query", { onChange: q => $results = Http({ url: `https://api.example.com/search?q=${q}` }) })
 Slider("vol", { min: 0, max: 100, value: $vol, onChange: v => storage.set("volume", v) })
 Switch("dark", { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
 ```
@@ -767,7 +776,7 @@ live previews is at
 ### Rich pattern composites
 
 ```js
-function export_q3() { $exp = http({ url: "/exports/q3", method: "POST" }) }
+function export_q3() { $exp = Http({ url: "https://api.example.com/exports/q3", method: "POST" }) }
 function new_project() { route.navigate("/projects/new") }
 
 dashHeader  = PageHeader("Engineering Q3", { subtitle: "12 active · 4 at risk", breadcrumbs: ["Workspace", "Engineering"], actions: dashActions, status: Badge("On track", "success") })
@@ -786,7 +795,7 @@ board = KanbanBoard([
 ])
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
 
-aktion = Stack([dashHeader, kpis, board, follow])
+aktion = Column([dashHeader, kpis, board, follow])
 ```
 
 ### Adding your own components
@@ -877,7 +886,7 @@ theme = Theme({
   radius: { button: "6px", input: "6px" }
 })
 
-aktion = Stack([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
+aktion = Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
 ```
 
 `Theme` expects the **structured** form — top-level groups `colors` /
@@ -956,11 +965,11 @@ pages = Router({
   default:      notFoundPage
 })
 
-nav = Stack([
+nav = Row([
   NavLink("Home",      { to: "/", exact: true }),
   NavLink("Dashboard", { to: "/dashboard" }),
   NavLink("Users",     { to: "/users" })
-], { direction: "row", gap: "s" })
+], { gap: "s" })
 
 aktion = Stack([nav, pages])
 
@@ -1135,6 +1144,7 @@ consumes from the CDN.
 | `get-started.html`                  | Step-by-step integration walkthrough.                                                   |
 | `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
 | `language.html`                     | Full Aktion language reference.                                            |
+| `http.html`                         | HTTP guide — the `Http({...})` primitive, config options, the reactive resource bag, `Async`, refetch/cancel patterns, and a full CRUD walkthrough. |
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
 | `side-effects.html`                 | `effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
@@ -1185,7 +1195,7 @@ The full catalog with tag filters lives at
 │   │   ├── evaluator.ts       #     program planner + binding resolver
 │   │   ├── state.ts           #     reactive store — `$name = value`
 │   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner
-│   │   ├── http.ts            #     http({...}) reactive HTTP primitive + interceptors
+│   │   ├── http.ts            #     Http({...}) reactive HTTP primitive + interceptors
 │   │   ├── i18n.ts            #     $i18n runtime + t() / Locale() builtins
 │   │   ├── storage.ts         #     storage.local / .session / .cookies bridge
 │   │   ├── console.ts         #     console.* host bridge
@@ -1277,7 +1287,7 @@ npm test
 ```
 
 The suite covers parser/lexer, runtime evaluator + reactive state +
-`http({...})`, effects / actions, the hash-based router + `NavLink`,
+`Http({...})`, effects / actions, the hash-based router + `NavLink`,
 theme resolution, in-script `Theme(...)` overrides, the component
 library, element-level integration via happy-dom, the system prompt
 generator, storage / console globals, the language-support spec for
@@ -1308,7 +1318,7 @@ Then open <http://localhost:4321/index.html>.
 
 The library treats every LLM-supplied attribute as untrusted and runs
 it through a small set of sanitisers before it lands on the DOM. HTTP
-requests issued by the LLM through `http({...})` flow through your host's
+requests issued by the LLM through `Http({...})` flow through your host's
 `registerHttpInterceptors({ onRequest, onResponse, onError })` chain so
 auth headers, CORS workarounds, and refresh-token retries stay under
 host control.
@@ -1330,7 +1340,7 @@ use `eval`. Effect and action bodies are evaluated with
 `new Function(...)` which requires `'unsafe-eval'` if you want them to
 run arbitrary JavaScript; if you cannot relax CSP, simply avoid emitting
 complex JS expressions from the LLM — declarative constructs (component
-trees, `http()`, `@`-functions) keep working without `unsafe-eval`.
+trees, `Http()`, `@`-functions) keep working without `unsafe-eval`.
 
 ---
 

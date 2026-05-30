@@ -807,15 +807,25 @@ const LANGUAGE_KEYWORDS = [
   { label: "continue",  info: "Skip to the next iteration of a `for`/`while` loop." },
   { label: "for",       info: "Statement-form `for (let x of xs) { … }` / `for (let i = 0; i < n; i += 1) { … }`. Use `xs.map(x => …)` for value-producing iteration." },
   { label: "while",     info: "Statement-form `while (cond) { … }` — inside a function body." },
-  { label: "of",        info: "Used in `for (let x of xs) { ... }`." },
+  { label: "do",        info: "`do { … } while (cond)` — run the body once, then repeat while truthy." },
+  { label: "of",        info: "Used in `for (let x of xs) { ... }` (iterate VALUES)." },
+  { label: "in",        info: "`for (let k in obj) { ... }` (iterate KEYS) or `\"key\" in obj` membership test." },
+  { label: "let",       info: "Block-scoped mutable binding: `let x = …` (supports destructuring)." },
+  { label: "const",     info: "Block-scoped constant binding: `const x = …` (supports destructuring)." },
+  { label: "var",       info: "Function-scoped variable — `let` is preferred." },
   { label: "try",       info: "`try { … } catch (err) { … } finally { … }` — inside a function body." },
+  { label: "catch",     info: "Handle an error thrown in the preceding `try` block: `catch (e) { … }`." },
+  { label: "finally",   info: "Run cleanup after `try` / `catch`, regardless of outcome." },
   { label: "throw",     info: "`throw new Error(\"msg\")` — surfaces as a thrown JS error." },
   { label: "new",       info: "`new Constructor(args)` — invoke a JS constructor (e.g. `new FormData()`, `new Date()`)." },
   { label: "typeof",    info: "`typeof x` — JS type guard returning a string." },
   { label: "instanceof",info: "`x instanceof Ctor` — prototype check." },
+  { label: "delete",    info: "`delete obj.prop` — remove a property from an object." },
+  { label: "void",      info: "`void expr` — evaluate an expression and yield `undefined`." },
   { label: "await",     info: "Wait for an HTTP / promise inside a function body." },
+  { label: "async",     info: "Marks a function as async — accepted as a no-op modifier." },
   { label: "return",    info: "Return from a `function` / `effect` body." },
-  { label: "cleanup",   info: "Register a teardown handler inside an `effect` body." },
+  { label: "cleanup",   info: "Register a teardown handler inside an `effect` body — e.g. `cleanup(() => clearInterval(id))`." },
   { label: "optimistic",info: "Mark a mutating `function` as optimistic: `function save(...) optimistic { ... }`." },
   { label: "emit",      info: "Dispatch a custom event: `emit(\"name\", { detail })`." },
   { label: "default",   info: "Wildcard arm inside `Router({...})`." },
@@ -847,11 +857,6 @@ const SPECIAL_IDENTIFIERS = [
     label: "route",
     info: "Reserved router handle. Read-only reactive surface: `route.path`, `route.params`, `route.query`, `route.pattern`. Call `route.navigate(path)` to navigate imperatively.",
     apply: "route",
-  },
-  {
-    label: "$http",
-    info: "HTTP runtime configuration binding: `$http = Http({ baseUrl, headers, retry, timeout })`.",
-    apply: "$http",
   },
   {
     label: "$i18n",
@@ -900,7 +905,7 @@ const LANGUAGE_SNIPPETS = [
     description: "Callable action — invoked via `{ action: name }` props.",
     template:
       'function ${1:save}(${2:payload}) {\n' +
-      '  $${3:result} = http({ url: "/api/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
+      '  $${3:result} = Http({ url: "https://api.example.com/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
       '}',
   },
   {
@@ -948,16 +953,30 @@ const LANGUAGE_SNIPPETS = [
   },
   {
     name: "http",
-    description: "Reactive HTTP resource.",
+    description: "Reactive HTTP resource + onDone refresh.",
     template:
-      '$${1:data} = http({ url: "${2:/api/items}", method: "${3:GET}" })',
+      '$${1:data} = Http({ url: "${2:https://api.example.com/items}", method: "${3:GET}" })',
+  },
+  {
+    name: "http-write",
+    description: "Mutation that refreshes a list resource via onDone.",
+    template:
+      'function ${1:save}(${2:item}) {\n' +
+      '  $${3:patch} = Http({ url: "${4:https://api.example.com/items}", method: "${5:POST}", body: ${2:item} })\n' +
+      '  $${3:patch}.onDone = () => { $${6:items}.refetch() }\n' +
+      '}',
   },
 ];
 
 /**
  * Built-in namespace globals — surfaced in autocomplete so authors can
- * discover the `storage` / `console` API the same way they discover
- * components and `@`-builtins.
+ * discover the runtime's globals (`storage`, `console`, plus the curated
+ * JS standard library: `Math`, `JSON`, `Object`, `Array`) the same way they
+ * discover components and `@`-builtins. Members are stored in RELATIVE form
+ * (`name`/`apply` are the part AFTER the namespace dot) so they can be
+ * surfaced both flat at the top level (`Math.max`) and after a typed dot
+ * (`Math.` → `max`). Keep in sync with `GLOBAL_NAMESPACES` in
+ * `src/runtime/evaluator.ts`.
  */
 const GLOBAL_NAMESPACES = [
   {
@@ -965,20 +984,20 @@ const GLOBAL_NAMESPACES = [
     signature: "storage.<local|session|cookies>?.<set|get|remove|clear>(...)",
     description: "Browser storage namespace — localStorage (default), sessionStorage, and cookies share a uniform set/get/remove/clear surface.",
     members: [
-      { label: "storage.set",            apply: "storage.set(\"${1:key}\", ${2:value})",                                                                                         info: "Persist a value to localStorage (default namespace)." },
-      { label: "storage.get",            apply: "storage.get(\"${1:key}\")",                                                                                                       info: "Read a value from localStorage. Returns null when missing." },
-      { label: "storage.remove",         apply: "storage.remove(\"${1:key}\")",                                                                                                    info: "Delete a key from localStorage." },
-      { label: "storage.clear",          apply: "storage.clear()",                                                                                                                  info: "Wipe every localStorage entry." },
-      { label: "storage.local.set",      apply: "storage.local.set(\"${1:key}\", ${2:value})",                                                                                     info: "Alias of `storage.set`." },
-      { label: "storage.local.get",      apply: "storage.local.get(\"${1:key}\")",                                                                                                  info: "Alias of `storage.get`." },
-      { label: "storage.session.set",    apply: "storage.session.set(\"${1:key}\", ${2:value})",                                                                                   info: "Per-tab sessionStorage write." },
-      { label: "storage.session.get",    apply: "storage.session.get(\"${1:key}\")",                                                                                                info: "Per-tab sessionStorage read." },
-      { label: "storage.session.remove", apply: "storage.session.remove(\"${1:key}\")",                                                                                             info: "Drop a sessionStorage entry." },
-      { label: "storage.session.clear",  apply: "storage.session.clear()",                                                                                                          info: "Wipe sessionStorage." },
-      { label: "storage.cookies.set",    apply: "storage.cookies.set(\"${1:key}\", ${2:value}, { expires: ${3:7}, path: \"/\" })",                                                  info: "Set a cookie. Options object: expires, maxAge, path, domain, secure, sameSite." },
-      { label: "storage.cookies.get",    apply: "storage.cookies.get(\"${1:key}\")",                                                                                                info: "Read a cookie value." },
-      { label: "storage.cookies.remove", apply: "storage.cookies.remove(\"${1:key}\", { path: \"/\" })",                                                                            info: "Delete a cookie. Path/domain must match the original set call." },
-      { label: "storage.cookies.clear",  apply: "storage.cookies.clear()",                                                                                                          info: "Clear every cookie on this document." },
+      { name: "set",            apply: "set(\"${1:key}\", ${2:value})",                              info: "Persist a value to localStorage (default namespace)." },
+      { name: "get",            apply: "get(\"${1:key}\")",                                          info: "Read a value from localStorage. Returns null when missing." },
+      { name: "remove",         apply: "remove(\"${1:key}\")",                                       info: "Delete a key from localStorage." },
+      { name: "clear",          apply: "clear()",                                                    info: "Wipe every localStorage entry." },
+      { name: "local.set",      apply: "local.set(\"${1:key}\", ${2:value})",                        info: "Alias of `storage.set`." },
+      { name: "local.get",      apply: "local.get(\"${1:key}\")",                                    info: "Alias of `storage.get`." },
+      { name: "session.set",    apply: "session.set(\"${1:key}\", ${2:value})",                      info: "Per-tab sessionStorage write." },
+      { name: "session.get",    apply: "session.get(\"${1:key}\")",                                  info: "Per-tab sessionStorage read." },
+      { name: "session.remove", apply: "session.remove(\"${1:key}\")",                               info: "Drop a sessionStorage entry." },
+      { name: "session.clear",  apply: "session.clear()",                                            info: "Wipe sessionStorage." },
+      { name: "cookies.set",    apply: "cookies.set(\"${1:key}\", ${2:value}, { expires: ${3:7}, path: \"/\" })", info: "Set a cookie. Options object: expires, maxAge, path, domain, secure, sameSite." },
+      { name: "cookies.get",    apply: "cookies.get(\"${1:key}\")",                                  info: "Read a cookie value." },
+      { name: "cookies.remove", apply: "cookies.remove(\"${1:key}\", { path: \"/\" })",              info: "Delete a cookie. Path/domain must match the original set call." },
+      { name: "cookies.clear",  apply: "cookies.clear()",                                            info: "Clear every cookie on this document." },
     ],
   },
   {
@@ -986,13 +1005,171 @@ const GLOBAL_NAMESPACES = [
     signature: "console.<log|error|warn|info|debug>(...)",
     description: "Forwards to the browser console. Useful for stream-time debugging from inside function / effect bodies.",
     members: [
-      { label: "console.log",   apply: "console.log(${1})",   info: "Log a message at the default level." },
-      { label: "console.error", apply: "console.error(${1})", info: "Log an error." },
-      { label: "console.warn",  apply: "console.warn(${1})",  info: "Log a warning." },
-      { label: "console.info",  apply: "console.info(${1})",  info: "Log an informational message." },
-      { label: "console.debug", apply: "console.debug(${1})", info: "Log a verbose debug message." },
+      { name: "log",   apply: "log(${1})",   info: "Log a message at the default level." },
+      { name: "error", apply: "error(${1})", info: "Log an error." },
+      { name: "warn",  apply: "warn(${1})",  info: "Log a warning." },
+      { name: "info",  apply: "info(${1})",  info: "Log an informational message." },
+      { name: "debug", apply: "debug(${1})", info: "Log a verbose debug message." },
     ],
   },
+  {
+    name: "Math",
+    signature: "Math.<max|min|round|floor|ceil|abs|random|pow|sqrt|…>(...)",
+    description: "Standard JS Math namespace. Exposed verbatim — every method and constant works.",
+    members: [
+      { name: "max",    apply: "max(${1:a}, ${2:b})", info: "Largest of the given numbers." },
+      { name: "min",    apply: "min(${1:a}, ${2:b})", info: "Smallest of the given numbers." },
+      { name: "round",  apply: "round(${1})",         info: "Round to the nearest integer." },
+      { name: "floor",  apply: "floor(${1})",         info: "Round down to an integer." },
+      { name: "ceil",   apply: "ceil(${1})",          info: "Round up to an integer." },
+      { name: "abs",    apply: "abs(${1})",           info: "Absolute value." },
+      { name: "random", apply: "random()",            info: "Pseudo-random number in [0, 1)." },
+      { name: "pow",    apply: "pow(${1:base}, ${2:exp})", info: "Exponentiation." },
+      { name: "sqrt",   apply: "sqrt(${1})",          info: "Square root." },
+      { name: "PI",     apply: "PI",                  info: "The constant π." },
+    ],
+  },
+  {
+    name: "JSON",
+    signature: "JSON.<stringify|parse>(...)",
+    description: "Standard JS JSON namespace for serialising and parsing values.",
+    members: [
+      { name: "stringify", apply: "stringify(${1:value})",  info: "Serialise a value to a JSON string." },
+      { name: "parse",     apply: "parse(${1:text})",       info: "Parse a JSON string into a value." },
+    ],
+  },
+  {
+    name: "Object",
+    signature: "Object.<keys|values|entries|assign|fromEntries|freeze>(...)",
+    description: "Standard JS Object namespace — reflection and shaping helpers.",
+    members: [
+      { name: "keys",        apply: "keys(${1:obj})",                    info: "Array of an object's own enumerable keys." },
+      { name: "values",      apply: "values(${1:obj})",                  info: "Array of an object's own enumerable values." },
+      { name: "entries",     apply: "entries(${1:obj})",                 info: "Array of `[key, value]` pairs." },
+      { name: "assign",      apply: "assign(${1:target}, ${2:source})",  info: "Copy enumerable own properties onto a target." },
+      { name: "fromEntries", apply: "fromEntries(${1:pairs})",           info: "Build an object from `[key, value]` pairs." },
+      { name: "freeze",      apply: "freeze(${1:obj})",                  info: "Make an object immutable." },
+    ],
+  },
+  {
+    name: "Array",
+    signature: "Array.<isArray|from|of>(...)",
+    description: "Standard JS Array namespace — construction and type-checking helpers.",
+    members: [
+      { name: "isArray", apply: "isArray(${1:value})", info: "True when the value is an array." },
+      { name: "from",    apply: "from(${1:iterable})", info: "Build an array from an iterable or array-like." },
+      { name: "of",      apply: "of(${1})",            info: "Build an array from the given arguments." },
+    ],
+  },
+];
+
+/**
+ * Synthetic param spec for the `Http({...})` config object. Surfaced as
+ * named-arg completions inside the braces (`Http({ <here> })`) the same way
+ * component props are, so authors discover `url` / `method` / `query` / … .
+ * Mirrors the keys recognised by `buildRequestFromConfig` in
+ * `src/runtime/http.ts` (everything else is forwarded to `fetch`).
+ */
+const HTTP_CONFIG_SPEC = {
+  name: "Http",
+  signature: "Http({ url, method?, query?, headers?, body?, ...fetchOptions })",
+  description: "The reactive network primitive. Returns a resource bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`, `.cancel()`, `.onDone`).",
+  params: [
+    { name: "url",         type: "string", required: true,  description: "Absolute request URL." },
+    { name: "method",      type: "enum",   required: false, enumValues: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], description: "HTTP method. Defaults to GET." },
+    { name: "query",       type: "object", required: false, description: "Object serialised into the URL querystring (`?k=v`)." },
+    { name: "headers",     type: "object", required: false, description: "Request headers as a plain object." },
+    { name: "body",        type: "object", required: false, description: "Request body. Objects are JSON-encoded automatically." },
+    { name: "credentials", type: "enum",   required: false, enumValues: ["omit", "same-origin", "include"], description: "Fetch credentials mode." },
+    { name: "mode",        type: "enum",   required: false, enumValues: ["cors", "no-cors", "same-origin"], description: "Fetch request mode." },
+    { name: "cache",       type: "enum",   required: false, enumValues: ["default", "no-store", "reload", "no-cache", "force-cache"], description: "Fetch cache mode." },
+  ],
+};
+
+/**
+ * The reactive resource bag returned by `Http({...})`. Surfaced as
+ * member completions after a dot on any `$variable` assigned from `Http(`
+ * (e.g. `$todos.` → `data`, `refetch()`, `onDone`, …). Mirrors
+ * `EndpointResource` in `src/runtime/http.ts` — keep the two in sync.
+ */
+const HTTP_RESOURCE_MEMBERS = [
+  { name: "data",        apply: "data",        info: "Parsed response body — `null` until the request resolves." },
+  { name: "error",       apply: "error",       info: "`null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure." },
+  { name: "status",      apply: "status",      info: "HTTP status code of the last response, e.g. `200`." },
+  { name: "loading",     apply: "loading",     info: "`true` while a request is in flight." },
+  { name: "headers",     apply: "headers",     info: "Response headers as a plain object." },
+  { name: "lastUpdated", apply: "lastUpdated", info: "Epoch-ms of the last successful response." },
+  { name: "refetch",     apply: "refetch()",   info: "Re-issue the original request." },
+  { name: "cancel",      apply: "cancel()",    info: "Abort the in-flight request." },
+  { name: "onDone",      apply: "onDone = () => {\n  ${1}\n}", snippet: true, info: "Settable callback fired each time the request settles (initial load + every refetch, on success or error). Not fired for superseded/cancelled requests — e.g. `$patch.onDone = () => $todos.refetch()`." },
+];
+
+/**
+ * Members of the reserved reactive `route` handle — surfaced after `route.`.
+ */
+const ROUTE_MEMBERS = [
+  { name: "path",     apply: "path",                     info: "Current URL path, e.g. `/users/42`." },
+  { name: "params",   apply: "params",                   info: "Captured path segments from the matched route pattern (`route.params.id`)." },
+  { name: "query",    apply: "query",                    info: "Parsed query-string parameters as an object." },
+  { name: "pattern",  apply: "pattern",                  info: "The matched route pattern, or `null`." },
+  { name: "navigate", apply: "navigate(\"${1:/path}\")", info: "Imperatively navigate to a path." },
+];
+
+/**
+ * Plain callable globals and constructors exposed by the runtime — the
+ * network primitive `Http`, the timer family, the curated slice of the JS
+ * standard library, and the most-reached-for browser globals. Surfaced as
+ * bare-identifier completions so authors can discover and insert them. This
+ * is NOT exhaustive: the runtime exposes the FULL JavaScript global surface
+ * (any `window` / `globalThis` member — `document`, `fetch`, `crypto`,
+ * `localStorage`, `Reflect`, `eval`, …) via a host passthrough, so anything
+ * not listed here still works when typed. Keep in sync with the timer
+ * handlers + `GLOBAL_NAMESPACES` + `lookupHostGlobal` in
+ * `src/runtime/evaluator.ts`.
+ */
+const CALLABLE_GLOBALS = [
+  {
+    label: "Http",
+    detail: "network",
+    info: "The only network primitive. Self-contained config: absolute `url`, optional `method` (GET default), `query`, `headers`, `body`, plus any fetch option. Returns a reactive resource bag (`.data`, `.error`, `.loading`, `.status`, `.headers`, `.lastUpdated`, `.refetch()`, `.cancel()`, settable `.onDone`).",
+    apply: 'Http({\n  url:    "${1:https://api.example.com/items}",\n  method: "${2:GET}"\n})',
+    snippet: true,
+  },
+  { label: "setTimeout",    detail: "timer", info: "Run a callback once after `ms`. Returns a handle for `clearTimeout`. Tracked by the runtime and cleared on re-plan/disconnect.", apply: "setTimeout(() => {\n  ${1}\n}, ${2:1000})", snippet: true },
+  { label: "setInterval",   detail: "timer", info: "Run a callback every `ms`. Returns a handle for `clearInterval`. Clear it in an effect `cleanup` when no longer needed.", apply: "setInterval(() => {\n  ${1}\n}, ${2:1000})", snippet: true },
+  { label: "clearTimeout",  detail: "timer", info: "Cancel a pending `setTimeout` by its handle.", apply: "clearTimeout(${1:id})", snippet: true },
+  { label: "clearInterval", detail: "timer", info: "Stop a running `setInterval` by its handle.", apply: "clearInterval(${1:id})", snippet: true },
+  { label: "parseInt",           detail: "global", info: "Parse a string to an integer.", apply: "parseInt(${1})", snippet: true },
+  { label: "parseFloat",         detail: "global", info: "Parse a string to a floating-point number.", apply: "parseFloat(${1})", snippet: true },
+  { label: "isNaN",              detail: "global", info: "True when the value is NaN after numeric coercion.", apply: "isNaN(${1})", snippet: true },
+  { label: "isFinite",           detail: "global", info: "True when the value is a finite number.", apply: "isFinite(${1})", snippet: true },
+  { label: "encodeURIComponent", detail: "global", info: "Percent-encode a URI component.", apply: "encodeURIComponent(${1})", snippet: true },
+  { label: "decodeURIComponent", detail: "global", info: "Decode a percent-encoded URI component.", apply: "decodeURIComponent(${1})", snippet: true },
+  { label: "encodeURI",          detail: "global", info: "Percent-encode a full URI.", apply: "encodeURI(${1})", snippet: true },
+  { label: "decodeURI",          detail: "global", info: "Decode a percent-encoded URI.", apply: "decodeURI(${1})", snippet: true },
+  { label: "structuredClone",    detail: "global", info: "Deep-clone a value.", apply: "structuredClone(${1})", snippet: true },
+  { label: "Number",  detail: "constructor", info: "Coerce a value to a number (`Number(x)`).", apply: "Number(${1})", snippet: true },
+  { label: "String",  detail: "constructor", info: "Coerce a value to a string (`String(x)`).", apply: "String(${1})", snippet: true },
+  { label: "Boolean", detail: "constructor", info: "Coerce a value to a boolean (`Boolean(x)`).", apply: "Boolean(${1})", snippet: true },
+  { label: "Date",    detail: "constructor", info: "Date constructor — `new Date()`, `new Date(ms)`. Also `Date.now()`.", apply: "Date(${1})", snippet: true },
+  { label: "Map",     detail: "constructor", info: "Map constructor — `new Map([[k, v]])`.", apply: "Map(${1})", snippet: true },
+  { label: "Set",     detail: "constructor", info: "Set constructor — `new Set([1, 2, 3])`.", apply: "Set(${1})", snippet: true },
+  { label: "RegExp",  detail: "constructor", info: "RegExp constructor — `new RegExp(\"\\\\d+\")`.", apply: "RegExp(${1})", snippet: true },
+  { label: "Promise", detail: "constructor", info: "Promise constructor — `new Promise((resolve) => …)`.", apply: "Promise(${1})", snippet: true },
+  // Browser dialog + common Web globals (resolved via the host passthrough).
+  { label: "alert",   detail: "dialog", info: "Show a blocking alert dialog: `alert(message)`.", apply: "alert(${1})", snippet: true },
+  { label: "confirm", detail: "dialog", info: "Show a blocking confirm dialog — returns `true`/`false`: `confirm(message)`.", apply: "confirm(${1})", snippet: true },
+  { label: "prompt",  detail: "dialog", info: "Show a blocking prompt dialog — returns the entered string (or null): `prompt(message, default?)`.", apply: "prompt(${1})", snippet: true },
+  { label: "fetch",   detail: "global", info: "Low-level network fetch. Prefer the reactive `Http({…})` primitive for UI data — use `fetch` only for imperative one-off requests inside actions.", apply: "fetch(${1:url})", snippet: true },
+  { label: "URL",            detail: "constructor", info: "URL parser — `new URL(\"https://example.com/path?q=1\")`.", apply: "URL(${1})", snippet: true },
+  { label: "URLSearchParams", detail: "constructor", info: "Query-string helper — `new URLSearchParams(\"a=1&b=2\")`.", apply: "URLSearchParams(${1})", snippet: true },
+  { label: "atob",    detail: "global", info: "Decode a base-64 string.", apply: "atob(${1})", snippet: true },
+  { label: "btoa",    detail: "global", info: "Encode a string to base-64.", apply: "btoa(${1})", snippet: true },
+  { label: "crypto",  detail: "namespace", info: "Web Crypto namespace — e.g. `crypto.randomUUID()`.", apply: "crypto" },
+  { label: "navigator", detail: "namespace", info: "Browser navigator — e.g. `navigator.clipboard.writeText(text)`.", apply: "navigator" },
+  { label: "localStorage",  detail: "namespace", info: "Raw Web Storage. Prefer the `storage` global for a friendlier API.", apply: "localStorage" },
+  { label: "Intl",    detail: "namespace", info: "Internationalization API — `Intl.NumberFormat`, `Intl.DateTimeFormat`.", apply: "Intl" },
+  { label: "BigInt",  detail: "global", info: "Arbitrary-precision integer — `BigInt(123)`.", apply: "BigInt(${1})", snippet: true },
 ];
 
 // Build the inverse mapping (rui-* class → component name) for inspect mode.
@@ -1086,8 +1263,8 @@ function initPlayground(cm) {
    * and the absolute start offset so completion handlers can compute the
    * replace range precisely.
    */
-  function readCurrentArg(text, call, pos) {
-    let i = call.openParen + 1;
+  function readCurrentArg(text, call, pos, baseOpen = call.openParen) {
+    let i = baseOpen + 1;
     let depth = 0;
     let str = null;
     let comment = null;
@@ -1124,9 +1301,9 @@ function initPlayground(cm) {
    * duplicates from the suggestion list. Walks every arg slot bounded by
    * top-level commas; only `name:` shapes count.
    */
-  function collectUsedNamedArgs(text, call) {
+  function collectUsedNamedArgs(text, call, baseOpen = call.openParen) {
     const used = new Set();
-    let i = call.openParen + 1;
+    let i = baseOpen + 1;
     let depth = 0;
     let str = null;
     let comment = null;
@@ -1275,13 +1452,22 @@ function initPlayground(cm) {
     // ---------- Context: enclosing call ----------
     const call = findEnclosingCall(text, pos);
     if (call && call.name) {
+      // Named props are written inside a trailing object literal
+      // (`Button("Save", { variant: … })`, `Http({ url: … })`). When the
+      // cursor sits inside such an object, scan the current arg / used keys
+      // relative to that `{` so key + value completions fire inside braces.
+      const objOpen = enclosingObjectOpen(text, call, pos);
+      const argBase = objOpen != null ? objOpen : call.openParen;
+      const inObject = objOpen != null;
       const ctxKind = call.name.startsWith("@") ? "builtin" : "component";
       const spec = ctxKind === "builtin"
         ? langSpec.builtinsByName[call.name.slice(1)]
-        : langSpec.componentsByName[call.name];
+        : (call.name === "Http" && inObject)
+          ? HTTP_CONFIG_SPEC
+          : langSpec.componentsByName[call.name];
 
       if (spec) {
-        const { argStart, argText } = readCurrentArg(text, call, pos);
+        const { argStart, argText } = readCurrentArg(text, call, pos, argBase);
 
         // CASE 1: cursor sits in a named-arg VALUE position
         //         (`Button("Save", variant: <here>)`). Surface the enum
@@ -1317,7 +1503,7 @@ function initPlayground(cm) {
         //         user can fill them in `name:` form.
         const couldBeNamedArgName = /^\s*[A-Za-z_]?[\w]*$/.test(argText);
         if (couldBeNamedArgName && ctxKind === "component") {
-          const used = collectUsedNamedArgs(text, call);
+          const used = collectUsedNamedArgs(text, call, argBase);
           const remaining = spec.params.filter((p) => !used.has(p.name));
           if (remaining.length > 0) {
             const options = remaining.map((p) => ({
@@ -1336,6 +1522,19 @@ function initPlayground(cm) {
             return { from, options, validFor: /[\w]*/ };
           }
         }
+      }
+    }
+
+    // ---------- Member completions (after a `.`) ----------
+    // `$todos.` → resource bag members, `Math.` → Math methods,
+    // `route.` → router handle, `storage.local.` → nested namespace. We
+    // look at the receiver path immediately before the partial member name.
+    const beforeWord = text.slice(0, word.from);
+    const dotMatch = beforeWord.match(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.\s*$/);
+    if (dotMatch) {
+      const memberOpts = memberCompletionsFor(dotMatch[1], text);
+      if (memberOpts && memberOpts.length > 0) {
+        return { from: word.from, options: memberOpts, validFor: /[\w$]*/ };
       }
     }
 
@@ -1375,7 +1574,8 @@ function initPlayground(cm) {
       }
     }
 
-    // Built-in namespace globals (`storage`, `console`).
+    // Built-in namespace globals (`storage`, `console`, `Math`, `JSON`,
+    // `Object`, `Array`) — the namespace itself plus its flat members.
     if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
       for (const ns of GLOBAL_NAMESPACES) {
         options.push({
@@ -1387,13 +1587,27 @@ function initPlayground(cm) {
         });
         for (const member of ns.members) {
           options.push({
-            label: member.label,
-            type: "method",
+            label: `${ns.name}.${member.name}`,
+            type: member.apply.includes("(") ? "method" : "property",
             detail: ns.name,
             info: member.info,
-            apply: autocomplete.snippet(member.apply),
+            apply: autocomplete.snippet(`${ns.name}.${member.apply}`),
           });
         }
+      }
+    }
+
+    // Callable globals & constructors (`Http`, the timer family,
+    // `parseInt`, `Date`, `Map`, …).
+    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
+      for (const g of CALLABLE_GLOBALS) {
+        options.push({
+          label: g.label,
+          type: g.detail === "constructor" ? "class" : "function",
+          detail: g.detail,
+          info: g.info,
+          apply: g.snippet ? autocomplete.snippet(g.apply) : g.apply,
+        });
       }
     }
 
@@ -1577,6 +1791,64 @@ function initPlayground(cm) {
     return Array.from(out).sort();
   }
 
+  /**
+   * Find every `$name` whose value comes from an `Http({...})` call
+   * (`$todos = Http(`, `$x = await Http(`). Those names carry the reactive
+   * resource bag, so `$name.` should complete to `.data` / `.refetch()` /
+   * `.onDone` / … rather than nothing.
+   */
+  function scanHttpResources(source) {
+    const out = new Set();
+    const re = /\$([A-Za-z_][\w]*)\s*=\s*(?:await\s+)?Http\s*\(/g;
+    let m;
+    while ((m = re.exec(source))) out.add(m[1]);
+    return out;
+  }
+
+  /** Build a single member-completion option from a relative member spec. */
+  function memberOption(member, receiverLabel) {
+    return {
+      label: member.name,
+      type: member.apply.includes("(") || member.snippet ? "method" : "property",
+      detail: receiverLabel,
+      info: member.info,
+      apply: autocomplete.snippet(member.apply),
+    };
+  }
+
+  /**
+   * Resolve member completions for a `receiver.` position. Handles the JS
+   * namespace globals (and their nested sub-namespaces like
+   * `storage.local`), the reserved `route` handle, and any `$variable`
+   * assigned from `Http({...})` (→ the reactive resource bag). Returns
+   * `null` when the receiver isn't a known object so general completions
+   * can take over.
+   */
+  function memberCompletionsFor(receiver, source) {
+    for (const ns of GLOBAL_NAMESPACES) {
+      if (receiver === ns.name) {
+        return ns.members.map((m) => memberOption(m, ns.name));
+      }
+      if (receiver.startsWith(ns.name + ".")) {
+        const sub = receiver.slice(ns.name.length + 1); // e.g. "local"
+        const matched = ns.members
+          .filter((m) => m.name.startsWith(sub + "."))
+          .map((m) => memberOption(
+            { ...m, name: m.name.slice(sub.length + 1), apply: m.apply.slice(sub.length + 1) },
+            receiver,
+          ));
+        if (matched.length > 0) return matched;
+      }
+    }
+    if (receiver === "route") {
+      return ROUTE_MEMBERS.map((m) => memberOption(m, "route"));
+    }
+    if (receiver.startsWith("$") && scanHttpResources(source).has(receiver.slice(1))) {
+      return HTTP_RESOURCE_MEMBERS.map((m) => memberOption(m, receiver));
+    }
+    return null;
+  }
+
   // ---- Spec lookup (hover & signature tooltips share this) ----
   function resolveSpec(rawName) {
     if (!rawName) return null;
@@ -1586,6 +1858,38 @@ function initPlayground(cm) {
     }
     const component = langSpec.componentsByName[rawName];
     if (component) return { kind: "component", spec: component };
+    return null;
+  }
+
+  /**
+   * Return the source index of the innermost object-literal `{` that
+   * encloses `pos` within the call's parentheses, or `null` when the cursor
+   * isn't inside a `{ }`. Used so named-arg completion fires relative to a
+   * trailing props object (`Button("Save", { … })`, `Http({ … })`) rather
+   * than the call's bare `(`. String / comment aware.
+   */
+  function enclosingObjectOpen(text, call, pos) {
+    let i = call.openParen + 1;
+    let str = null;
+    let comment = null;
+    const stack = []; // [{ ch, index }]
+    const top = Math.min(pos, text.length);
+    while (i < top) {
+      const ch = text[i];
+      if (comment === "line") { if (ch === "\n") comment = null; i++; continue; }
+      if (comment === "block") { if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; } i++; continue; }
+      if (str) { if (ch === "\\") { i += 2; continue; } if (ch === str) str = null; i++; continue; }
+      if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
+      if (ch === "#") { comment = "line"; i++; continue; }
+      if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
+      if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") { stack.push({ ch, index: i }); i++; continue; }
+      if (ch === ")" || ch === "]" || ch === "}") { stack.pop(); i++; continue; }
+      i++;
+    }
+    for (let k = stack.length - 1; k >= 0; k -= 1) {
+      if (stack[k].ch === "{") return stack[k].index;
+    }
     return null;
   }
 
@@ -2111,6 +2415,11 @@ function initPlayground(cm) {
         ...autocomplete.completionKeymap,
         ...search.searchKeymap,
         ...lint.lintKeymap,
+        // Accept the highlighted completion with Tab (in addition to Enter).
+        // `acceptCompletion` returns false when no completion popup is open,
+        // so Tab falls through to snippet-field navigation / indentation.
+        // Ordered before `indentWithTab` so an open popup wins over indent.
+        { key: "Tab", run: autocomplete.acceptCompletion },
         commands.indentWithTab,
         {
           key: "Mod-Enter",

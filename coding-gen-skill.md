@@ -31,7 +31,7 @@ description: >-
 - [4. Components and lambdas](#4-components-and-lambdas)
 - [5. Actions](#5-actions)
 - [6. Effects](#6-effects)
-- [7. HTTP — `http({...})`](#7-http--http)
+- [7. HTTP — `Http({...})`](#7-http--http)
 - [8. Built-in `@`-functions](#8-built-in--functions)
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
@@ -61,11 +61,14 @@ Internalize these rules and you will write correct, polished programs:
    kind of atom for every use case. Inside function bodies (actions/components)
    and `effect` callbacks the assignment operators
    `= += -= *= /= ??= ++ --` are allowed.
-4. **HTTP is one function.** `http({ url, method, body, headers, query, ... })`
-   is the only network primitive. It returns a reactive bag exposing
-   `.data | .error | .status | .loading | .headers | .lastUpdated` and the
-   callables `.refetch()` / `.cancel()`. The runtime tracks reactive inputs
-   inside the options object and re-issues the request when they change.
+4. **HTTP is one function.** `Http({ url, method, body, headers, query, ... })`
+   is the only network primitive. Pass a full absolute `url`; `GET` is the
+   default `method`; there are no host-wide defaults. It returns a reactive
+   bag exposing `.data | .error | .status | .loading | .headers | .lastUpdated`,
+   the callables `.refetch()` / `.cancel()`, and a settable `.onDone`
+   callback. Re-run a request via `.refetch()` or by wrapping it in an
+   `effect(..., [$dep])`; use `.onDone` to refresh another resource after a
+   write.
 5. **Components are PascalCase functions that MUST `return`.**
    `function Name(args) { … return Expression }` — PascalCase name signals
    a component. Always end with an explicit `return`.
@@ -99,9 +102,10 @@ Internalize these rules and you will write correct, polished programs:
 12. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use
     them for multi-line bodies and `${expression}` interpolation.
-13. **Use `Grid`, not `Stack([...], { direction: "row", wrap: true })`, for
-    uniform tiles.** Use `Stack([...], { direction: "row" })` only when
-    items have different sizes.
+13. **Use `Column`/`Row`/`Grid` — not raw `Stack`.** `Column([...])` stacks
+    vertically, `Row([...])` lays out horizontally (natural widths, centered),
+    `Grid([...], { columns })` makes equal columns. Prefer `Grid` for uniform
+    tiles; use `Row` for toolbars/rows of differing sizes.
 14. **Add status colour everywhere.** `StatCard(..., { trend, delta })`,
     `Badge` variants, `TimelineItem` tone, `Banner` tone,
     `StatusDot(label, { tone })` — colour conveys meaning.
@@ -138,9 +142,8 @@ Internalize these rules and you will write correct, polished programs:
 20. **Reactive state survives the response, not the page.** The runtime
     only keeps `$name = value` atoms in memory for the lifetime of the
     `<aktion-app>` element. Host pages persist them via
-    `el.serializeState()` / `el.hydrateState()`. Setup bindings
-    (`$http = Http({...})`, `$i18n = i18n({...})`) configure runtime
-    defaults.
+    `el.serializeState()` / `el.hydrateState()`. The `$i18n = i18n({...})`
+    setup binding configures the i18n runtime.
 21. **Prefer ternary `cond ? a : b` and `switch` over nested ternaries.**
     Both evaluate lazily — only the chosen branch renders. Use ternary
     for two-way conditions, `switch` for multi-way dispatch.
@@ -197,19 +200,19 @@ hint         = $hasError ? Banner("Try again", { tone: "danger" }) : null
 
 // Effects — callback + dependency array.
 effect(() => {
-  $save = http({ url: "/api/draft", method: "PUT", body: $draft })
+  $save = Http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
 }, [$draft, "debounce(500)"])
 
 // Actions — camelCase functions. Optional `return`.
 function markShipped(orderId) {
   $orders = $orders.map(o => o.id == orderId ? {...o, status: "shipped"} : o)
-  $ship   = http({ url: "/api/orders/" + orderId + "/ship", method: "POST" })
+  $ship   = Http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
   return orderId
 }
 
 // HTTP — the single primitive. Returns a reactive resource bag.
-$orders = http({
-  url:    "/users/42/orders",
+$orders = Http({
+  url:    "https://api.example.com/users/42/orders",
   method: "GET",
   query:  { limit: 10 }
 })
@@ -260,7 +263,7 @@ function TaskRow(task) {
 language keywords, to keep the core small:
 
 - `Async(resource, { loading, error, empty, data })` — branches on an
-  `http({...})` resource state.
+  `Http({...})` resource state.
 - `Show(when, { fallback, children })` — sugar over ternary.
 - `Portal(children, { target })` — render outside the parent subtree.
 - `Redirect(path)` — router-aware navigate-and-unmount.
@@ -323,7 +326,8 @@ Before opening a `Stack`/`Card`, scan this checklist:
 | Pull quote (not a full testimonial)         | `Quote(text, { cite, tone })`                                                                                  |
 | Chat-style message (review, transcript)     | `ChatBubble(author, { body, time, avatarSrc, from, status })`                                                  |
 | Centered readable column                    | `Container([content...], { size, maxWidth, padding })`                                                         |
-| Push siblings to opposite edges in a row    | `Spacer()` (inside `Stack([...], { direction: "row" })`)                                                       |
+| Center content on both axes                 | `Center([content...], { minHeight })`                                                                          |
+| Push siblings to opposite edges in a row    | `Row([a, Spacer(), b])` — or `Row([a, b], { justify: "between" })`                                             |
 
 ### Visual hierarchy rules
 
@@ -453,7 +457,8 @@ aktion = Stack([...])
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single `Card([CardHeader, Text])` for a dashboard request                   | Use the **dashboard recipe** in §16 Pattern C                                                |
 | Vertical `Stack` of `StatCard`s                                             | `Stats([StatCard(...), ...])`                                                                |
-| `Stack([...], { direction: "row", wrap: true })` for uniform tiles          | `Grid(items, { columns, gap })`                                                              |
+| Raw `Stack([...], { direction: "row" })` for a toolbar/row                  | `Row([...], { gap, justify })` (clearer; natural widths, centered)                          |
+| `Row`/`Stack` with wrapping for uniform tiles                               | `Grid(items, { columns, gap })`                                                              |
 | Vertical `Stack` of `Text("Label: " + value)` lines on a detail page       | `DescriptionList([DescriptionItem(label, value, { icon })])`                                 |
 | Table with no `Toolbar` above it                                            | Wrap in `Card([SectionHeader(...), Toolbar({...}), Table(...)])`                             |
 | Flat form on the page                                                       | Group `FormControl`s inside Cards opened by `SectionHeader`                                 |
@@ -489,19 +494,26 @@ the language doesn't model **is just JavaScript**:
 - **Destructured parameters** in both `function` declarations and
   lambdas: `function Card({ title, tone = "info" })`,
   `function head([first, ...rest])`, `({ a, b }) => a + b`.
-- A **curated, safe slice of the JS standard library** is available
-  everywhere as globals — `Math`, `JSON`, `Object`, `Array`, `Number`,
-  `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, and
-  the functions `parseInt` / `parseFloat` / `isNaN` / `isFinite` /
-  `encodeURIComponent` / `decodeURIComponent`. Use them directly
-  (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
-  (`new Date(0).getTime()`, `new Map([[k, v]])`). Capability-granting
-  globals (`fetch`, `eval`, `window`, timers) are **not** exposed — use
-  `http({...})` and `effect(...)`.
+- The **full JavaScript global surface** is available everywhere. The
+  standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`,
+  `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` /
+  `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … — works
+  directly (`Math.max(a, b)`, `JSON.stringify(x)`) or with `new`
+  (`new Date(0).getTime()`, `new Map([[k, v]])`). The timer globals
+  `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` are
+  runtime-tracked and cleared automatically on re-plan/disconnect. Every
+  other host global also resolves by name — browser dialogs (`alert`,
+  `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`,
+  `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`,
+  `BigInt`, …), and `window` / `document`. Author declarations and built-in
+  components always win over a same-named global. Still prefer `Http({...})`
+  over raw `fetch` for reactive data, and keep timers/listeners inside
+  `effect(...)` so they're torn down on unmount.
 - Inside **action bodies, effect callbacks, and lambda bodies**, you
   may also call browser APIs directly — `navigator.clipboard`,
   `window.open`, `document.addEventListener`, `setTimeout`,
-  `crypto.randomUUID`, etc.
+  `crypto.randomUUID`, etc. Prefer the runtime-tracked timer globals for
+  `setTimeout` / `setInterval` so they're torn down with the program.
 - The `@`-functions (§8) and library components (§9) cover the cases
   where pure JS would be verbose — but you are never *forced* to use
   them when a one-liner of JS will do.
@@ -525,7 +537,6 @@ Three identifier conventions cooperate:
     `route.params`, `route.query`, `route.pattern`,
     `route.navigate("/path")`).
   - `$i18n` (i18n bundle handle).
-  - `$http` (HTTP defaults configured via `Http({...})`).
 
 Two function conventions cooperate at the top level:
 
@@ -542,7 +553,7 @@ Effects are declared via the `effect(callback, deps)` function call:
   `$atom` references or string qualifiers: `"mount"`, `"unmount"`,
   `"every(N)"`, `"debounce(N)"`, `"throttle(N)"`.
 
-Everything else (`http({...})`, `Router({...})`, `Theme({...})`,
+Everything else (`Http({...})`, `Router({...})`, `Theme({...})`,
 `i18n({...})`, `Toast(...)`, `Stack(...)`) is a regular function /
 component call.
 
@@ -565,11 +576,11 @@ component call.
 ┌─────────────────────────────────────────────────────────────────┐
 │ Layer 2 — Reactive state + HTTP                                 │
 │   `$variables` (read/written by humans and by JS) and           │
-│   `http({...})` resource bags. A change to either               │
+│   `Http({...})` resource bags. A change to either               │
 │   schedules a re-render.                                        │
 │                                                                 │
 │       $message = "Hello"                                        │
-│       $data    = http({ url: "/api/metrics", query: { days } }) │
+│       $data    = Http({ url: "https://api.x.dev/metrics" })     │
 └─────────────────────────────────────────────────────────────────┘
                               ▲
                               │ updated by
@@ -635,7 +646,7 @@ chart   = LineChart({ labels: months, series: [series] })
 footer  = Text("Generated by Aktion", { variant: "small", tone: "muted" })
 
 $days   = "90"
-$data   = http({ url: "/api/perf", query: { days: $days } })
+$data   = Http({ url: "https://api.example.com/perf", query: { days: $days } })
 months  = ["Jul", "Aug", "Sep"]
 series  = Series("Revenue", { values: [120000, 145000, 162000] })
 ```
@@ -770,8 +781,6 @@ effect(() => {
 
 ### Setup bindings (reserved)
 
-- `$http = Http({ baseUrl, headers, retry, timeout })` configures
-  HTTP defaults (§7).
 - `$i18n = i18n({ locale, messages, fallback })` configures
   internationalization (§13).
 - `theme = Theme({ colors, radius, font, motion, elevation })` brands
@@ -899,7 +908,7 @@ a component body); invoke from any event-handler prop (`onClick`,
 ```javascript
 function save(item) {
   $items = [...$items, item]
-  $save  = http({ url: "/api/save", method: "POST", body: { item: item } })
+  $save  = Http({ url: "https://api.example.com/save", method: "POST", body: { item: item } })
   emit("saved", { id: item.id })
 }
 
@@ -928,7 +937,7 @@ aktion = Grid(fruits.filter(long).map(Fruit))   // ✅ equivalent to .map(n => F
 Inside an action body the imperative surface is small:
 
 - Assignments: `$x = newValue`, `$x += 1`, `$x = { ...$x, field: v }`.
-- `http({ ... })` — fire a request.
+- `Http({ ... })` — fire a request.
 - `emit("event-name", { detail })` — dispatch a `CustomEvent` on the
   host element.
 - `route.navigate("/path")` — programmatic navigation.
@@ -982,7 +991,7 @@ function remove(id) {
 function shipOrder(orderId) {
   let prev = $orders
   $orders = $orders.map(o => o.id == orderId ? {...o, status: "shipped"} : o)
-  $ship   = http({ url: "/api/orders/" + orderId + "/ship", method: "POST" })
+  $ship   = Http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
 
   effect(() => {
     if ($ship.error) { $orders = prev }
@@ -998,8 +1007,8 @@ $body  = ""
 
 function submit() {
   if (!$title) { return }
-  $create = http({
-    url:    "/api/posts",
+  $create = Http({
+    url:    "https://api.example.com/posts",
     method: "POST",
     body:   { title: $title, body: $body },
     headers: { "Content-Type": "application/json" }
@@ -1054,8 +1063,8 @@ function LiveClock() {
 }
 
 effect(() => {
-  $results = http({
-    url:   "/api/search",
+  $results = Http({
+    url:   "https://api.example.com/search",
     query: { q: $query, page: $page }
   })
 }, [$query, $page, "debounce(250)"])
@@ -1145,29 +1154,51 @@ effect(() => {
 
 ---
 
-## 7. HTTP — `http({...})`
+## 7. HTTP — `Http({...})`
 
-There is exactly one HTTP primitive: the `http({ ... })` function.
+There is exactly one HTTP primitive: the `Http({ ... })` function. Every
+call is **self-contained** — there are NO host-wide defaults, no
+`$http = Http({ baseUrl })` setter. Pass a full absolute `url` to each
+call.
+
+### Config options
+
+| Key | Notes |
+|---|---|
+| `url` | **Required.** Full absolute URL (e.g. `"https://api.example.com/todos"`). |
+| `method` | `"GET"` (default), `"POST"`, `"PUT"`, `"PATCH"`, `"DELETE"`, … |
+| `query` | Object serialised into the URL querystring (`{ limit: 5 }` → `?limit=5`). |
+| `headers` | Plain object of request headers. |
+| `body` | Request body. Objects are JSON-encoded (adds `Content-Type: application/json` unless you set one). |
+| `…rest` | Any other `fetch` option (`credentials`, `mode`, `cache`, `redirect`, …) is forwarded verbatim. |
 
 ### Reads (GET / HEAD / OPTIONS)
 
 ```javascript
-$orders = http({
-  url:    "/api/users/" + $userId + "/orders",
-  method: "GET",
-  query:  { limit: 5, status: "open" },
+$orders = Http({
+  url:    "https://api.example.com/users/" + $userId + "/orders",
+  method: "GET",                          // GET is the default — can be omitted
+  query:  { limit: 5, status: "open" },   // → ?limit=5&status=open
   headers:{ "X-Tenant": $tenant }
 })
 ```
 
-The runtime tracks **every reactive read inside the options object**
-and re-issues the request whenever they change.
+A request fires once when its binding mounts. To re-run it, call
+`$orders.refetch()`, or wrap the call in an `effect(..., [$dep])` so it
+re-issues when a dependency changes:
+
+```javascript
+effect(() => {
+  $results = Http({ url: "https://api.example.com/search", query: { q: $query } })
+}, [$query, "debounce(300)"])
+```
 
 ### Writes (POST / PUT / PATCH / DELETE)
 
 ```javascript
 function saveOrder(payload) {
-  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $orders.refetch()   // refresh the list after a write
   emit("assistant-message", { message: "Saved." })
 }
 ```
@@ -1177,12 +1208,33 @@ function saveOrder(payload) {
 ```javascript
 $orders.data         // parsed response body (null until resolved)
 $orders.error        // null on success
-$orders.status       // HTTP status code
+$orders.status       // HTTP status code, e.g. 200
 $orders.loading      // true while in-flight
-$orders.headers      // response headers
+$orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of last success
 $orders.refetch()    // re-issue the request
 $orders.cancel()     // abort in-flight request
+$orders.onDone = fn  // callback fired each time the request settles
+```
+
+### `onDone` — react when a request settles
+
+Assign `onDone` after creating a resource. It fires once every time the
+request completes (the initial load and every `refetch()`, on both success
+and error), receives the resource bag as its argument, and never fires for
+a superseded or `cancel()`led request. It's the cleanest way to refresh a
+list after a write:
+
+```javascript
+$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () => {
+  $todos.refetch()
+}
 ```
 
 ### `Async(resource, …)` wrapper
@@ -1191,23 +1243,9 @@ $orders.cancel()     // abort in-flight request
 view = Async($orders, {
   loading: LoadingState("Loading orders…"),
   error:   ErrorState("Couldn't fetch orders"),
-  empty:   EmptyState("No orders yet"),
+  empty:   EmptyState("No orders yet"),   // shown when data is null or an empty array
   data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
 })
-```
-
-### Optional `Http({ ... })` defaults
-
-```javascript
-$http = Http({
-  baseUrl: "https://api.example.com",
-  headers: { "Accept": "application/json" },
-  timeout: 10000,
-  retry:   { count: 2, backoff: "exponential" }
-})
-
-// All subsequent http({...}) calls inherit these.
-$orders = http({ url: "/orders" })
 ```
 
 ---
@@ -1359,7 +1397,7 @@ function submit(payload) {
 }
 
 function safeFetch(_) {
-  try   { $resp = http({ url: "/api/data" }) }
+  try   { $resp = Http({ url: "https://api.example.com/data" }) }
   catch (err) { $error = err }
   finally     { $loading = false }
 }
@@ -1459,7 +1497,7 @@ automatically:
 
 ```javascript
 async function loadUser(id) {
-  let user = await http({ url: "/users/" + id }).data
+  let user = await Http({ url: "https://api.example.com/users/" + id }).data
   $current = user
   return user
 }
@@ -1494,21 +1532,42 @@ on mobile, 2 on tablet, 4 on desktop. Breakpoints:
 
 ### Layout
 
-`Stack`, `StackItem`, `Grid`, `GridItem`, `Box`, `Container`, `Spacer`,
-`Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`,
-`Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`,
-`ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid`.
+`Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`,
+`Box`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardFooter`,
+`Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`,
+`Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`,
+`ResizablePanels`, `MasonryGrid`.
+
+**Reach for three primitives first — they cover ~90% of layouts:**
+
+- `Column([...], { gap, align })` — stack children top→bottom. The default
+  page body and card body. Children stretch to full width.
+- `Row([...], { gap, align, justify })` — lay children left→right at their
+  natural width, vertically centered. Toolbars, button rows, label+value
+  pairs, nav. Use `justify: "between"` to push items to the edges, or drop a
+  `Spacer()` between them. Set `grow: true` for equal-width children.
+- `Grid([...], { columns, gap })` — equal columns. Omit `columns` for
+  auto-fit (wraps as many ≥`minChildWidth` columns as fit — best for KPI /
+  card walls). Always prefer `Grid` over a wrapping `Row` for uniform tiles.
 
 Notes:
 
-- `aktion` MUST resolve to a top-level container (`Stack`, `AppShell`,
-  `Container`, `Card`, or a user component returning one of those).
+- `aktion` MUST resolve to a top-level container (`Column`, `Container`,
+  `AppShell`, `Card`, or a user component returning one of those).
 - Wrap each major chunk in a `Card` for visual grouping.
-- Prefer `Grid(items, { columns, gap })` over
-  `Stack([...], { direction: "row", wrap: true })` for uniform children.
-- Use `Container(children, { size })` for comfortable max-width.
-- Use `Spacer()` inside `Stack([...], { direction: "row" })` to push
-  items apart.
+- `Center([...], { minHeight })` centers content on both axes — spinners,
+  empty states, hero CTAs. Add `minHeight: "60vh"` to center in a tall area.
+- 12-column / sidebar layouts: `Grid([GridItem(side, { span: "1/4" }),
+  GridItem(main, { span: "3/4" })])`. Any `GridItem` child turns the
+  12-track grid on; fractions `"1/2"`…`"1/12"` (or numbers 1–12) set spans.
+- Make one `Row` child expand with `StackItem(child, { grow: 1 })` (e.g. a
+  search input beside a fixed button).
+- `Stack([...], { direction: {base: "column", md: "row"} })` is the escape
+  hatch ONLY when the direction itself must change across breakpoints.
+- `Container(children, { size })` centers a wide page within a comfortable
+  max-width (sm/md/lg/xl/full).
+- `Box(children, { padding, background, border, maxWidth })` is a plain
+  spacing/surface wrapper when a `Card` is too heavy.
 
 ### Content
 
@@ -1560,8 +1619,16 @@ Notes:
 Notes:
 
 - Build columns with array pluck: `Col("Title", data.rows.title, { format, align })`.
+- Columns can render **any component** — action buttons, badges, links,
+  avatars — not just text. Pass `render: (value, index) => Component` and
+  give the column the full row array as its values:
+  `Col("", $rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })`.
+  `render` may return a component, a string, or an array of either.
+- Make a whole column clickable (pointer + keyboard) with
+  `onClick: (value, index) => …` — e.g. `Col("Name", $rows.name, { onClick: (name) => open(name) })`.
+- Both `render` and `onClick` work in `Table` and `DataGrid`.
 - `DataGrid` adds sortable headers, filter chips, row selection,
-  pagination.
+  pagination, and an `onRowClick: (index) => …` for whole-row clicks.
 
 ### Charts
 
@@ -1787,7 +1854,7 @@ by the runtime:
 
 The other always-available bindings (also documented in §12 and §11)
 are `storage` (localStorage / sessionStorage / cookies), `console`,
-`route` (the router handle), `$http` / `$i18n` setup bindings, and
+`route` (the router handle), the `$i18n` setup binding, and
 your own reactive `$atom`s.
 
 ### Common recipes
@@ -1833,7 +1900,7 @@ function LiveClock() {
 
 ```javascript
 function loadOrders() {
-  $orders = http({ url: "/api/orders", query: { limit: 10 } })
+  $orders = Http({ url: "https://api.example.com/orders", query: { limit: 10 } })
 }
 ```
 
@@ -1987,7 +2054,7 @@ and inline lambdas.
 
 ```javascript
 $locale = "fr-FR"
-$bundle = http({ url: "/i18n/" + $locale + ".json", method: "GET" })
+$bundle = Http({ url: "https://api.example.com/i18n/" + $locale + ".json", method: "GET" })
 $i18n = i18n({
   locale:   $locale,
   messages: $bundle.data ?? {},
@@ -2158,10 +2225,10 @@ aktion = Grid([
 
 ```javascript
 function refresh() { $orders.refetch() }
-function exportCsv() { $exp = http({ url: "/api/exports/orders.csv", method: "POST" }) }
+function exportCsv() { $exp = Http({ url: "https://api.example.com/exports/orders.csv", method: "POST" }) }
 function newOrder() { route.navigate("/orders/new") }
 
-$orders = http({ url: "/api/orders", method: "GET", query: { range: $range } })
+$orders = Http({ url: "https://api.example.com/orders", method: "GET", query: { range: $range } })
 $range  = "30d"
 
 header = PageHeader("Orders", {
@@ -2242,7 +2309,7 @@ stepLabels = ["Profile", "Account", "Review"]
 function next() { if ($step < 2) { $step = $step + 1 } }
 function prev() { if ($step > 0) { $step = $step - 1 } }
 function submit() {
-  $save = http({ url: "/api/users", method: "POST", body: $data })
+  $save = Http({ url: "https://api.example.com/users", method: "POST", body: $data })
   $step = 0
   $data = { name: "", email: "", role: "" }
 }
@@ -2300,7 +2367,7 @@ $timezone     = "America/Los_Angeles"
 $theme_pref   = "system"
 
 function save() {
-  $save = http({ url: "/api/settings", method: "PUT", body: { profile: $profile, notify: { email: $notify_email, sms: $notify_sms }, timezone: $timezone, theme: $theme_pref } })
+  $save = Http({ url: "https://api.example.com/settings", method: "PUT", body: { profile: $profile, notify: { email: $notify_email, sms: $notify_sms }, timezone: $timezone, theme: $theme_pref } })
 }
 
 general = Card([
@@ -2557,7 +2624,7 @@ $customer = { name: "", email: "", address: "" }
 function next() { $step = "payment" }
 function back() { $step = "details" }
 function place() {
-  $place = http({ url: "/api/checkout", method: "POST", body: { customer: $customer, items: $cart } })
+  $place = Http({ url: "https://api.example.com/checkout", method: "POST", body: { customer: $customer, items: $cart } })
   $step = "confirm"
 }
 
@@ -2919,7 +2986,7 @@ aktion = Stack([
 ### Pattern T — Data explorer
 
 ```javascript
-$rows = http({ url: "/api/events", method: "GET" })
+$rows = Http({ url: "https://api.example.com/events", method: "GET" })
 $sortField = "ts"
 $sortDir   = "desc"
 $selected  = []
@@ -3039,15 +3106,16 @@ Before finishing, walk your output and verify:
 
 1. `aktion = ...` is the FIRST line.
 2. Every referenced name is defined somewhere.
-3. Every defined name (other than `aktion`, `theme`, `$http`, `$i18n`)
+3. Every defined name (other than `aktion`, `theme`, `$i18n`)
    is reachable from `aktion`.
 4. Containers reference their children by name; large data arrays
    live on their own trailing lines.
 5. Components (PascalCase functions) end with an explicit `return`.
 6. Actions (camelCase functions) use `function` keyword.
 7. State uses the single-sigil `$name = value` form.
-8. HTTP uses `http({ url, method, ... })`; the reactive bag exposes
-   `.data` / `.error` / `.loading` / `.status` / `.refetch()` / `.cancel()`.
+8. HTTP uses `Http({ url, method, ... })` with an absolute `url`; the
+   reactive bag exposes `.data` / `.error` / `.loading` / `.status` /
+   `.refetch()` / `.cancel()`.
 9. Router uses `Router({...})` and route surface is `route.*`.
 10. Effects use `effect(() => { ... }, [deps])` syntax.
 11. Named arguments are wrapped in an object: `Button("x", { variant: "primary" })`.
@@ -3076,7 +3144,7 @@ Before finishing, walk your output and verify:
 | Component declarations, lambdas, `key:`                                | §4.                                    |
 | Actions — handlers, optimistic updates, navigation                     | §5.                                    |
 | Effects — triggers, debounce, cleanup                                  | §6.                                    |
-| HTTP — `http({...})`, `Async`, interceptors                            | §7.                                    |
+| HTTP — `Http({...})`, `Async`, interceptors                            | §7.                                    |
 | Built-in `@` functions (aggregation, formatting, dates)                | §8.                                    |
 | Component catalog by group                                             | §9.                                    |
 | JavaScript layer — `emit`, `cleanup`, browser APIs                     | §10.                                   |

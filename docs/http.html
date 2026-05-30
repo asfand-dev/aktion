@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HTTP · Aktion</title>
+  <meta name="description" content="The Aktion HTTP guide — the single Http({...}) network primitive, config options, the reactive resource bag, the Async helper, refetch/cancel patterns, and a full CRUD walkthrough." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="http">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>HTTP.</h1>
+        <p class="lead">
+          Aktion has exactly one network primitive:
+          <code>Http({ url, method, headers, body, query, &hellip; })</code>.
+          Every call is <strong>self-contained</strong> &mdash; it carries
+          a full absolute URL and all of its options, returns a reactive
+          resource bag, and fires the request the moment its binding
+          mounts. There are no host-wide defaults, no base URL, and no
+          hidden configuration.
+        </p>
+      </header>
+
+      <h2 id="basics">The basics</h2>
+      <p>
+        Assign the result of <code>Http({...})</code> to a reactive atom.
+        The request fires once when the binding mounts; the atom holds a
+        reactive bag whose fields update in place as the request resolves.
+      </p>
+<pre><code>$todos = Http({
+  url:    "https://api.example.com/todos",
+  method: "GET"                        // GET is the default — this line is optional
+})</code></pre>
+      <p>
+        Because <code>GET</code> is the default method, a read is often a
+        one-liner:
+      </p>
+<pre><code>$todos = Http({ url: "https://api.example.com/todos" })</code></pre>
+
+      <h2 id="options">Config options</h2>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>url</code></td><td><code>string</code></td><td><strong>Required.</strong> A full absolute URL, e.g. <code>"https://api.example.com/todos"</code>.</td></tr>
+          <tr><td><code>method</code></td><td><code>string</code></td><td><code>"GET"</code> (default), <code>"POST"</code>, <code>"PUT"</code>, <code>"PATCH"</code>, <code>"DELETE"</code>, <code>"HEAD"</code>, <code>"OPTIONS"</code>.</td></tr>
+          <tr><td><code>query</code></td><td><code>object</code></td><td>Serialised into the URL querystring. <code>{ limit: 5, status: "open" }</code> &rarr; <code>?limit=5&amp;status=open</code>. Appended with <code>&amp;</code> if the URL already has a querystring; <code>null</code> / <code>undefined</code> entries are skipped.</td></tr>
+          <tr><td><code>headers</code></td><td><code>object</code></td><td>Plain object of request headers.</td></tr>
+          <tr><td><code>body</code></td><td><code>any</code></td><td>Request body. Plain objects are JSON-encoded automatically and a <code>Content-Type: application/json</code> header is added unless you set one. Strings, <code>FormData</code>, <code>Blob</code>, <code>URLSearchParams</code>, and <code>ArrayBuffer</code> are passed through untouched. Ignored for <code>GET</code> / <code>HEAD</code>.</td></tr>
+          <tr><td><code>&hellip;rest</code></td><td><code>fetch</code> options</td><td>Any other <code>fetch</code> option (<code>credentials</code>, <code>mode</code>, <code>cache</code>, <code>redirect</code>, <code>referrer</code>, &hellip;) is forwarded verbatim to the underlying request.</td></tr>
+        </tbody>
+      </table>
+<pre><code>$orders = Http({
+  url:         "https://api.example.com/users/" + $userId + "/orders",
+  method:      "GET",
+  query:       { limit: 5, status: "open" },   // → ?limit=5&status=open
+  headers:     { "X-Tenant": $tenant },
+  credentials: "include"                        // forwarded straight to fetch
+})</code></pre>
+
+      <h2 id="resource">The reactive resource bag</h2>
+      <p>
+        Every <code>Http({...})</code> call returns the same shape. The
+        fields mutate in place and the runtime re-renders as they change,
+        so you can read them anywhere in your tree.
+      </p>
+<pre><code>$orders.data         // parsed response body (null until resolved)
+$orders.error        // null on success; { status, body } on a non-2xx; the thrown error on network failure
+$orders.status       // HTTP status code, e.g. 200
+$orders.loading      // true while in-flight
+$orders.headers      // response headers as a plain object
+$orders.lastUpdated  // ms-epoch of the last successful response
+$orders.refetch()    // re-issue the request
+$orders.cancel()     // abort the in-flight request
+$orders.onDone = fn  // callback fired each time the request settles</code></pre>
+      <p>
+        A response is treated as successful when its status is in the
+        <code>2xx</code> range. A <code>204 No Content</code> resolves with
+        <code>data === null</code>. Non-2xx responses populate
+        <code>error</code> (and still set <code>status</code> /
+        <code>headers</code>) rather than throwing.
+      </p>
+
+      <h2 id="ondone">The <code>onDone</code> callback</h2>
+      <p>
+        Assign <code>onDone</code> after creating a resource to run something
+        every time the request settles. It fires once per completion &mdash;
+        the initial load <em>and</em> every <code>refetch()</code>, on both
+        success and error &mdash; and receives the resource bag as its
+        argument. It never fires for a request that was superseded by a
+        newer <code>refetch()</code> or <code>cancel()</code>led. This is the
+        idiomatic way to refresh a list after a mutation without threading
+        the refresh through every call site:
+      </p>
+<pre><code>$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () =&gt; {
+  $todos.refetch()
+}</code></pre>
+
+      <h2 id="async">The <code>Async</code> helper</h2>
+      <p>
+        <code>Async(resource, { loading, error, empty, data })</code>
+        renders the right branch based on the resource&rsquo;s state. It is
+        the cleanest way to handle the four states of any request. The
+        <code>empty</code> slot is shown when the resolved data is
+        <code>null</code> or an empty array.
+      </p>
+<pre><code>aktion = Async($todos, {
+  loading: LoadingState("Loading todos…"),
+  error:   ErrorState("Couldn't fetch todos"),
+  empty:   EmptyState("No todos yet"),
+  data:    Table([
+    Col("Item", $todos.data.title),
+    Col("Done", $todos.data.isCompleted)
+  ])
+})</code></pre>
+      <p>
+        Branching order is: <code>loading</code> (while in-flight) &rarr;
+        <code>error</code> (when <code>.error</code> is set) &rarr;
+        <code>empty</code> (when data is <code>null</code> or an empty
+        array) &rarr; <code>data</code>. Any slot you omit simply renders
+        nothing.
+      </p>
+
+      <h2 id="writes">Writes &mdash; POST / PUT / PATCH / DELETE</h2>
+      <p>
+        Mutations are the same function with a non-GET method. Fire them
+        from inside an action body and observe the resulting bag for
+        progress and error states. Refresh a list resource with
+        <code>.refetch()</code> after the write succeeds.
+      </p>
+<pre><code>$todos = Http({ url: "https://api.example.com/todos" })
+$draft = ""
+
+function addTodo() {
+  if (!$draft) { return }
+  $create = Http({
+    url:    "https://api.example.com/todos",
+    method: "POST",
+    body:   { title: $draft, isCompleted: false }
+  })
+  $draft = ""
+  $todos.refetch()
+}</code></pre>
+
+      <h2 id="refetch">Re-running a request</h2>
+      <p>
+        A request fires once when its binding mounts. It does
+        <strong>not</strong> magically re-run when a <code>$atom</code> it
+        reads changes. To re-issue a request you have two tools:
+      </p>
+      <ul>
+        <li><strong>Imperatively</strong> &mdash; call <code>$todos.refetch()</code> (e.g. from a refresh button or after a mutation).</li>
+        <li><strong>Reactively</strong> &mdash; wrap the call in an <code>effect</code> with the dependencies that should trigger a new request.</li>
+      </ul>
+<pre><code>// Re-run the search whenever $query changes, debounced 300ms.
+effect(() =&gt; {
+  $results = Http({ url: "https://api.example.com/search", query: { q: $query } })
+}, [$query, "debounce(300)"])
+
+// Poll an endpoint every 30 seconds.
+effect(() =&gt; {
+  $todos.refetch()
+}, ["every(30000)"])</code></pre>
+
+      <h2 id="cancel">Cancelling</h2>
+      <p>
+        Call <code>.cancel()</code> to abort an in-flight request. The
+        loading flag clears and the resource settles back to its previous
+        resting state. A new <code>refetch()</code> always supersedes an
+        older in-flight request &mdash; a slow earlier response can never
+        clobber a newer result.
+      </p>
+<pre><code>cancelBtn = Button("Cancel", { onClick: () =&gt; $upload.cancel(), variant: "ghost" })</code></pre>
+
+      <h2 id="crud">Full CRUD walkthrough</h2>
+      <p>
+        Putting it together against a small Todo API: list, create,
+        toggle, and delete. Each mutation refetches the list so the UI
+        stays in sync.
+      </p>
+<pre><code>endpoint = "https://api.example.com/todos"
+
+$todos = Http({ url: endpoint })
+$draft = ""
+
+function addTodo() {
+  if (!$draft) { return }
+  $create = Http({ url: endpoint, method: "POST", body: { title: $draft } })
+  $draft  = ""
+  $todos.refetch()
+}
+
+function toggleTodo(todo) {
+  $patch = Http({
+    url:    endpoint + "/" + todo.id,
+    method: "PATCH",
+    body:   { isCompleted: !todo.isCompleted }
+  })
+  $todos.refetch()
+}
+
+function deleteTodo(todo) {
+  $del = Http({ url: endpoint + "/" + todo.id, method: "DELETE" })
+  $todos.refetch()
+}
+
+todoRow = todo =&gt; Stack([
+  Checkbox("done-" + todo.id, { value: todo.isCompleted, onChange: () =&gt; toggleTodo(todo) }),
+  Text(todo.title, { tone: todo.isCompleted ? "muted" : "default" }),
+  Button("Delete", { onClick: () =&gt; deleteTodo(todo), variant: "ghost", tone: "danger", size: "sm" })
+], { direction: "row", gap: "s", align: "center" })
+
+aktion = Stack([
+  PageHeader("Todos", { actions: [Button("Refresh", { onClick: $todos.refetch, variant: "ghost" })] }),
+  Stack([
+    Input("draft", { placeholder: "What needs doing?", value: $draft }),
+    Button("Add", { onClick: addTodo, variant: "primary" })
+  ], { direction: "row", gap: "s" }),
+  Async($todos, {
+    loading: LoadingState("Loading todos…"),
+    error:   ErrorState("Couldn't fetch todos"),
+    empty:   EmptyState("No todos yet"),
+    data:    Stack($todos.data.map(todoRow), { direction: "column", gap: "s" })
+  })
+], { direction: "column", gap: "l" })</code></pre>
+      <p>
+        See this exact pattern running live in the
+        <a href="live-examples.html">Todos CRUD demo</a>.
+      </p>
+
+      <h2 id="interceptors">Host interceptors</h2>
+      <p>
+        The request function is intentionally free of cross-cutting
+        concerns like auth and logging. Host integrators attach those once
+        via <code>el.registerHttpInterceptors(...)</code>; the hooks fire
+        around every <code>Http({...})</code> request issued by the
+        response.
+      </p>
+<pre><code>el.registerHttpInterceptors({
+  onRequest:  req =&gt; ({ ...req, headers: { ...req.headers, Authorization: `Bearer ${token}` } }),
+  onResponse: (res, retry) =&gt; res.status === 401 ? retry() : res,
+  onError:    (err, req) =&gt; console.error("request failed", req.url, err)
+})</code></pre>
+      <p>
+        See the <a href="frameworks.html">Frameworks guide</a> for full
+        host-integration examples.
+      </p>
+
+      <h2 id="rules">Rules of thumb</h2>
+      <ul>
+        <li>Always pass a <strong>full absolute URL</strong>. There is no base URL.</li>
+        <li><code>GET</code> is the default &mdash; omit <code>method</code> for reads.</li>
+        <li>Use <code>query</code> for querystrings; never hand-concatenate <code>?a=1&amp;b=2</code>.</li>
+        <li>Object <code>body</code> is JSON-encoded for you; don&rsquo;t <code>JSON.stringify</code> it yourself.</li>
+        <li>Re-run via <code>.refetch()</code> or an <code>effect</code> &mdash; a request does not auto-refetch when a read changes.</li>
+        <li>Render the four states with <code>Async</code> rather than hand-rolled <code>if</code> chains.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>Fire mutations, snapshot/rollback, and wire handlers to buttons.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Reactivity</span>
+          <h3>Side effects</h3>
+          <p>Re-run requests on a schedule or when a dependency changes.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="live-examples.html">
+          <span class="demo-tag">Showcase</span>
+          <h3>Live demos</h3>
+          <p>See the Todos CRUD app and other examples running in the browser.</p>
+          <span class="demo-arrow">Browse demos &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

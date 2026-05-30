@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Framework integration · Aktion</title>
-  <meta name="description" content="Drop-in setup for React, Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain HTML." />
+  <title>Frameworks · Aktion</title>
+  <meta name="description" content="Drop the framework-agnostic <aktion-app> web component into React, Vue, Svelte, Angular, or plain HTML. Register the bundle once, feed it a program string, and listen to its assistant-message, route-change, and error events." />
   <script>
     (function () {
       try {
@@ -16,51 +16,45 @@
     })();
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
-  <style>
-    .framework-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin: 18px 0 28px;
-    }
-    .framework-chip {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 14px 16px;
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius);
-      background: var(--doc-surface);
-      text-decoration: none;
-      color: inherit;
-      transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
-    }
-    .framework-chip:hover {
-      transform: translateY(-2px);
-      border-color: rgba(99, 102, 241, 0.40);
-      box-shadow: var(--doc-shadow-lg);
-    }
-    .framework-chip-name { font-weight: 700; font-size: 14px; color: var(--doc-text); }
-    .framework-chip-stack { font-size: 12px; color: var(--doc-text-muted); }
-    .framework-section { scroll-margin-top: 84px; }
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-    .pill-row span {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--doc-primary-hover);
-      background: rgba(99, 102, 241, 0.10);
-      padding: 3px 10px;
-      border-radius: 999px;
-    }
-  </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
 <body data-page="frameworks">
   <div class="layout">
@@ -69,347 +63,267 @@
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Integration</span>
-        <h1>Drop-in setup for every framework.</h1>
+        <h1>Frameworks.</h1>
         <p class="lead">
-          <code>&lt;aktion-app&gt;</code> is a standard
-          <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Element</a>,
-          so it works in every framework that renders HTML &mdash; React,
-          Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain
-          HTML.
+          <strong><code>&lt;aktion-app&gt;</code></strong> is a
+          framework&#8209;agnostic
+          <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">web component</a>
+          &mdash; drop it into any app, feed it a program string, and listen to
+          its events. There is no framework&#8209;specific build of Aktion:
+          it is one custom element that renders the same way inside React,
+          Vue, Svelte, Angular, or a bare HTML page.
         </p>
       </header>
 
-      <div class="callout">
-        <h4>Universal pattern</h4>
-        <p>Three things matter no matter which framework you use:</p>
-        <ol>
-          <li>Import the bundle <em>once</em> in client-side code so it registers the custom element.</li>
-          <li>Render <code>&lt;aktion-app&gt;</code> wherever you want the LLM output to appear.</li>
-          <li>Get a reference to the element and call <code>setResponse()</code>, <code>appendChunk()</code>, or set <code>theme</code>.</li>
-        </ol>
+      <h2 id="live">What it renders</h2>
+      <p>
+        Whatever framework you wire it into, the element does one thing: it
+        takes a program string and renders the live UI inside its shadow DOM.
+        Here is a complete program and its output &mdash; this is exactly what
+        appears wherever you place <code>&lt;aktion-app&gt;</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  Card([
+    CardHeader("Welcome to Aktion", { subtitle: "One web component, every framework" }),
+    Text("Feed this element a program string and it renders the UI for you."),
+    Row([
+      Badge("Framework-agnostic", { tone: "primary" }),
+      Spacer(),
+      Button("Get started", { variant: "primary", icon: "arrow-right" })
+    ], { gap: "s" })
+  ])
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
       </div>
 
-      <h2>Pick your stack</h2>
-      <div class="framework-grid">
-        <a class="framework-chip" href="#react">
-          <span class="framework-chip-name">React</span>
-          <span class="framework-chip-stack">react 18+, Vite/CRA</span>
-        </a>
-        <a class="framework-chip" href="#nextjs">
-          <span class="framework-chip-name">Next.js</span>
-          <span class="framework-chip-stack">app or pages router</span>
-        </a>
-        <a class="framework-chip" href="#vue">
-          <span class="framework-chip-name">Vue 3</span>
-          <span class="framework-chip-stack">composition API</span>
-        </a>
-        <a class="framework-chip" href="#nuxt">
-          <span class="framework-chip-name">Nuxt 3</span>
-          <span class="framework-chip-stack">SSR-aware</span>
-        </a>
-        <a class="framework-chip" href="#angular">
-          <span class="framework-chip-name">Angular</span>
-          <span class="framework-chip-stack">17+ standalone</span>
-        </a>
-        <a class="framework-chip" href="#svelte">
-          <span class="framework-chip-name">Svelte / SvelteKit</span>
-          <span class="framework-chip-stack">5+</span>
-        </a>
-        <a class="framework-chip" href="#solid">
-          <span class="framework-chip-name">SolidJS</span>
-          <span class="framework-chip-stack">1.x</span>
-        </a>
-        <a class="framework-chip" href="#astro">
-          <span class="framework-chip-name">Astro</span>
-          <span class="framework-chip-stack">client:load</span>
-        </a>
-        <a class="framework-chip" href="#html">
-          <span class="framework-chip-name">Plain HTML</span>
-          <span class="framework-chip-stack">no build step</span>
-        </a>
-      </div>
+      <h2 id="contract">The contract</h2>
+      <p>
+        Every integration comes down to the same three steps, regardless of
+        framework:
+      </p>
+      <ol>
+        <li>
+          <strong>Register the element</strong> by importing the bundle
+          <em>once</em> in client&#8209;side code &mdash;
+          <code>import "aktion-runtime";</code> defines the
+          <code>&lt;aktion-app&gt;</code> custom element on the page.
+        </li>
+        <li>
+          <strong>Give it a program.</strong> Either set the
+          <code>response</code> attribute (<code>response="aktion = &hellip;"</code>)
+          or call <code>setResponse(text)</code> on the element. To stream
+          tokens from an LLM, set the <code>streaming</code> attribute and call
+          <code>appendChunk(text)</code> as chunks arrive, then drop
+          <code>streaming</code> when the stream ends.
+        </li>
+        <li>
+          <strong>Listen for events.</strong> The element emits standard
+          bubbling, composed <code>CustomEvent</code>s:
+          <code>assistant-message</code> (a follow&#8209;up message, on
+          <code>event.detail.message</code>), <code>route-change</code> (hash
+          route changed, on <code>event.detail</code>), and <code>error</code>
+          (parse failures, on <code>event.detail.errors</code>).
+        </li>
+      </ol>
+      <p>
+        Other useful methods on the element: <code>setTheme(name | tokens)</code>,
+        <code>registerComponents([&hellip;])</code> to extend the library, and
+        <code>getSystemPrompt()</code> to build the LLM system prompt for the
+        active component set. The four observed attributes are
+        <code>response</code>, <code>theme</code>, <code>streaming</code>, and
+        <code>showerrors</code>.
+      </p>
 
-      <h2>Installation</h2>
-      <p>Pick whichever channel suits your project:</p>
-<pre><code>// From npm — works for any bundler
+      <h2 id="install">Installing the bundle</h2>
+      <p>The package is published to npm as <code>aktion-runtime</code>; the same bundle is served from the docs CDN for no&#8209;build pages:</p>
+<pre><code># npm (works with any bundler)
 npm install aktion-runtime
-// yarn add aktion-runtime
-// pnpm add aktion-runtime
 
-// Then, somewhere in your client-side entry point:
+# Then, once in your client-side entry point:
 import "aktion-runtime";
 
-// Or load from CDN — no build step required
-&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;</code></pre>
-
-      <p>
-        The package is published as
-        <a href="https://www.npmjs.com/package/aktion-runtime" target="_blank" rel="noreferrer"><code>aktion-runtime</code></a>.
-        The bundle is self-contained: it includes the parser, runtime, the
-        complete component library, the seven built-in themes, and an optional
-        Font Awesome loader (only injected when your script uses icons). You
-        only ever need a single import.
-      </p>
+# Or load from the CDN with no build step:
+# &lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;</code></pre>
 
       <hr />
 
-      <h2 id="react" class="framework-section">React</h2>
-      <div class="pill-row"><span>React 18+</span><span>Vite / CRA / Parcel</span></div>
+      <h2 id="react">React</h2>
       <p>
-        React (&lt; 19) doesn&rsquo;t natively understand custom-element props
-        or events, but it does pass attributes through and accepts a
-        <code>ref</code>. The pattern below uses a ref to call methods and a
-        <code>useEffect</code> hook to wire events.
+        In JSX you write the custom element tag directly:
+        <code>&lt;aktion-app /&gt;</code>. Import the bundle once (anywhere in
+        client code) so the element is registered, then use a
+        <code>ref</code> plus a <code>useEffect</code> to push the program in
+        with <code>setResponse</code> and to subscribe to events.
       </p>
-<pre><code>// LLMResponse.tsx
+<pre><code>// AktionView.tsx
 import { useEffect, useRef } from "react";
-import "aktion-runtime";
+import "aktion-runtime"; // registers &lt;aktion-app&gt; once
 
-interface Props {
-  response: string;
-  theme?: "light" | "dark" | "neon" | "pastel" | "glass" | "brutalist" | "skyline";
-  onAssistantMessage?: (text: string) =&gt; void;
-}
+type AktionEl = HTMLElement &amp; {
+  setResponse(text: string): void;
+};
 
-export function LLMResponse({ response, theme = "light", onAssistantMessage }: Props) {
-  const ref = useRef&lt;HTMLElement &amp; { setResponse: (t: string) =&gt; void }&gt;(null);
+export function AktionView({ program }: { program: string }) {
+  const ref = useRef&lt;AktionEl | null&gt;(null);
 
+  // Push the program in whenever it changes.
   useEffect(() =&gt; {
-    ref.current?.setResponse(response);
-  }, [response]);
+    ref.current?.setResponse(program);
+  }, [program]);
 
+  // Listen for the element's CustomEvents.
   useEffect(() =&gt; {
     const el = ref.current;
-    if (!el || !onAssistantMessage) return;
-    const handler = (e: Event) =&gt; onAssistantMessage((e as CustomEvent).detail.message);
-    el.addEventListener("assistant-message", handler);
-    return () =&gt; el.removeEventListener("assistant-message", handler);
-  }, [onAssistantMessage]);
+    if (!el) return;
+    const onMessage = (e: Event) =&gt; {
+      console.log("follow-up:", (e as CustomEvent).detail.message);
+    };
+    el.addEventListener("assistant-message", onMessage);
+    return () =&gt; el.removeEventListener("assistant-message", onMessage);
+  }, []);
 
-  return &lt;aktion-app ref={ref} theme={theme} /&gt;;
+  return &lt;aktion-app ref={ref} theme="light" /&gt;;
 }</code></pre>
-
-      <p>Add the JSX intrinsic element type once so TypeScript stops complaining:</p>
-<pre><code>// types/aktion.d.ts
+      <p>Add the JSX intrinsic type once so TypeScript accepts the tag:</p>
+<pre><code>// aktion.d.ts
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 declare global {
   namespace JSX {
     interface IntrinsicElements {
       "aktion-app": DetailedHTMLProps&lt;
-        HTMLAttributes&lt;HTMLElement&gt; &amp; {
-          theme?: string;
-          streaming?: boolean;
-          showerrors?: boolean;
-        },
+        HTMLAttributes&lt;HTMLElement&gt; &amp; { theme?: string; response?: string; streaming?: boolean },
         HTMLElement
       &gt;;
     }
   }
 }</code></pre>
 
-      <p>For React 19+ you can pass props directly as element properties &mdash; no ref needed for the simple read-only case:</p>
-<pre><code>&lt;aktion-app theme="dark" response={text} /&gt;</code></pre>
-
       <hr />
 
-      <h2 id="nextjs" class="framework-section">Next.js (app router)</h2>
-      <div class="pill-row"><span>Next 13+</span><span>app router</span><span>Client component</span></div>
+      <h2 id="vue">Vue 3</h2>
       <p>
-        Custom elements only work in the browser, so the wrapper must be a
-        client component (the import statement registers the element on
-        <code>HTMLElement</code> globals). Mark the file with
-        <code>"use client"</code> at the top.
+        Tell the Vue compiler that <code>aktion-app</code> is a custom element
+        so it stops trying to resolve it as a Vue component &mdash; set
+        <code>app.config.compilerOptions.isCustomElement</code> (or the
+        equivalent option in your build tool's Vue plugin). Then bind the
+        program with <code>:response</code>, or grab a <code>ref</code> and call
+        <code>setResponse</code>.
       </p>
-<pre><code>// app/components/LLMResponse.tsx
-"use client";
+<pre><code>// main.ts
+import { createApp } from "vue";
+import App from "./App.vue";
+import "aktion-runtime"; // registers &lt;aktion-app&gt; once
 
-import { useEffect, useRef } from "react";
-import "aktion-runtime";
-
-export function LLMResponse({ response, theme = "light" }: { response: string; theme?: string }) {
-  const ref = useRef&lt;any&gt;(null);
-  useEffect(() =&gt; { ref.current?.setResponse(response); }, [response]);
-  return &lt;aktion-app ref={ref} theme={theme} /&gt;;
-}
-
-// app/page.tsx — server component
-import { LLMResponse } from "./components/LLMResponse";
-
-export default function Page() {
-  const program = `aktion = Stack([greeting])
-greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in Next.js" })])`;
-  return &lt;LLMResponse response={program} theme="light" /&gt;;
-}</code></pre>
-
-      <p>For SSR-only pages you can skip the wrapper and import via a <code>next/dynamic</code> call with <code>ssr: false</code>:</p>
-<pre><code>const LLMResponse = dynamic(() =&gt; import("./components/LLMResponse").then(m =&gt; m.LLMResponse), {
-  ssr: false,
-});</code></pre>
-
-      <hr />
-
-      <h2 id="vue" class="framework-section">Vue 3</h2>
-      <div class="pill-row"><span>Vue 3</span><span>Vite</span><span>composition API</span></div>
-      <p>
-        Tell Vue to skip its component resolver for any tag matching the custom
-        element. In <code>vite.config.ts</code> (or wherever the Vue plugin is
-        configured):
-      </p>
-<pre><code>// vite.config.ts
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-
-export default defineConfig({
-  plugins: [
-    vue({
-      template: { compilerOptions: { isCustomElement: (tag) =&gt; tag === "aktion-app" } },
-    }),
-  ],
-});</code></pre>
-
-      <p>Then use it like any other element:</p>
-<pre><code>&lt;script setup lang="ts"&gt;
+const app = createApp(App);
+// Treat any &lt;aktion-app&gt; tag as a native custom element.
+app.config.compilerOptions.isCustomElement = (tag) =&gt; tag === "aktion-app";
+app.mount("#app");</code></pre>
+<pre><code>&lt;!-- App.vue --&gt;
+&lt;script setup lang="ts"&gt;
 import { ref, onMounted, watch } from "vue";
-import "aktion-runtime";
 
-const target = ref&lt;HTMLElement | null&gt;(null);
-const response = ref(`aktion = Stack([Card([CardHeader("Hello from Vue")])])`);
-const theme = ref("light");
+const program = ref(`aktion = Card([CardHeader("Hello from Vue")])`);
 
-onMounted(() =&gt; (target.value as any)?.setResponse(response.value));
-watch(response, (next) =&gt; (target.value as any)?.setResponse(next));
+// Simplest case: bind the attribute directly.
+// &lt;aktion-app :response="program" theme="light" /&gt;
+
+// Or use a ref for the imperative API + events:
+const el = ref&lt;(HTMLElement &amp; { setResponse(t: string): void }) | null&gt;(null);
+onMounted(() =&gt; {
+  el.value?.setResponse(program.value);
+  el.value?.addEventListener("route-change", (e) =&gt;
+    console.log((e as CustomEvent).detail),
+  );
+});
+watch(program, (next) =&gt; el.value?.setResponse(next));
 &lt;/script&gt;
 
 &lt;template&gt;
-  &lt;aktion-app ref="target" :theme="theme" /&gt;
+  &lt;aktion-app ref="el" theme="light" /&gt;
 &lt;/template&gt;</code></pre>
 
       <hr />
 
-      <h2 id="nuxt" class="framework-section">Nuxt 3</h2>
-      <div class="pill-row"><span>Nuxt 3</span><span>SSR</span></div>
+      <h2 id="svelte">Svelte</h2>
       <p>
-        Nuxt renders on the server by default, so the import has to be deferred
-        until the client. Use a <code>&lt;ClientOnly&gt;</code> wrapper and
-        register the element type in <code>nuxt.config.ts</code>:
+        Svelte supports custom elements natively, so there is no configuration
+        step &mdash; just import the bundle and use the tag. Pass the program
+        with the <code>response</code> attribute and subscribe to events with
+        Svelte's <code>on:</code> directive (it maps straight to
+        <code>addEventListener</code>).
       </p>
-<pre><code>// nuxt.config.ts
-export default defineNuxtConfig({
-  vue: {
-    compilerOptions: { isCustomElement: (tag) =&gt; tag === "aktion-app" },
-  },
-});
+<pre><code>&lt;!-- AktionView.svelte --&gt;
+&lt;script lang="ts"&gt;
+  import "aktion-runtime"; // registers &lt;aktion-app&gt; once
 
-// plugins/aktion.client.ts
-import "aktion-runtime";
-export default defineNuxtPlugin(() =&gt; {});</code></pre>
+  export let program: string = `aktion = Card([CardHeader("Hello from Svelte")])`;
 
-<pre><code>&lt;!-- pages/index.vue --&gt;
-&lt;template&gt;
-  &lt;ClientOnly&gt;
-    &lt;aktion-app theme="light" ref="renderer" /&gt;
-  &lt;/ClientOnly&gt;
-&lt;/template&gt;</code></pre>
+  function onAssistantMessage(e: CustomEvent) {
+    console.log("follow-up:", e.detail.message);
+  }
+&lt;/script&gt;
+
+&lt;aktion-app
+  response={program}
+  theme="light"
+  on:assistant-message={onAssistantMessage}
+  on:route-change={(e) =&gt; console.log(e.detail)}
+/&gt;</code></pre>
+      <p>
+        For server&#8209;rendered routes (SvelteKit), guard the import so it
+        only runs in the browser, e.g.
+        <code>if (browser) await import("aktion-runtime");</code>.
+      </p>
 
       <hr />
 
-      <h2 id="angular" class="framework-section">Angular</h2>
-      <div class="pill-row"><span>Angular 17+</span><span>standalone components</span></div>
+      <h2 id="angular">Angular</h2>
       <p>
         Add <code>CUSTOM_ELEMENTS_SCHEMA</code> to the component (or module) so
-        the template compiler accepts the unknown tag, then import the bundle
-        once in <code>main.ts</code>:
+        Angular's template compiler accepts the unknown tag, import the bundle
+        once, and bind the program with the <code>[attr.response]</code>
+        attribute binding.
       </p>
 <pre><code>// main.ts
-import "aktion-runtime";
+import "aktion-runtime"; // registers &lt;aktion-app&gt; once
 import { bootstrapApplication } from "@angular/platform-browser";
 import { AppComponent } from "./app/app.component";
 
 bootstrapApplication(AppComponent);
 
 // app.component.ts
-import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, ViewChild, AfterViewInit } from "@angular/core";
+import { Component, CUSTOM_ELEMENTS_SCHEMA } from "@angular/core";
 
 @Component({
   standalone: true,
   selector: "app-root",
-  template: `&lt;aktion-app #renderer theme="light"&gt;&lt;/aktion-app&gt;`,
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  template: `
+    &lt;aktion-app
+      [attr.response]="program"
+      [attr.theme]="'light'"
+      (assistant-message)="onMessage($event)"&gt;
+    &lt;/aktion-app&gt;
+  `,
 })
-export class AppComponent implements AfterViewInit {
-  @ViewChild("renderer") renderer!: ElementRef&lt;HTMLElement &amp; { setResponse(t: string): void }&gt;;
+export class AppComponent {
+  program = `aktion = Card([CardHeader("Hello, Angular")])`;
 
-  ngAfterViewInit() {
-    this.renderer.nativeElement.setResponse(`aktion = Stack([Card([CardHeader("Hello, Angular")])])`);
+  onMessage(event: Event) {
+    console.log("follow-up:", (event as CustomEvent).detail.message);
   }
 }</code></pre>
 
       <hr />
 
-      <h2 id="svelte" class="framework-section">Svelte / SvelteKit</h2>
-      <div class="pill-row"><span>Svelte 4 / 5</span><span>SvelteKit</span></div>
+      <h2 id="html">Vanilla HTML</h2>
       <p>
-        Svelte already understands custom elements. Import the bundle (in a
-        client-side <code>+page.ts</code> hook or directly in the component)
-        and you&rsquo;re done.
+        No build step required. A single module&#8209;type script tag imports
+        the bundle (registering the element); then place the
+        <code>&lt;aktion-app&gt;</code> tag and call <code>setResponse</code>.
       </p>
-<pre><code>&lt;!-- routes/+page.svelte --&gt;
-&lt;script lang="ts"&gt;
-  import { onMount } from "svelte";
-  import "aktion-runtime";
-
-  let renderer: any;
-  const program = `aktion = Stack([Card([CardHeader("Hello from Svelte")])])`;
-  onMount(() =&gt; renderer?.setResponse(program));
-&lt;/script&gt;
-
-&lt;aktion-app bind:this={renderer} theme="light" /&gt;</code></pre>
-
-      <p>
-        For server-rendered routes wrap the import in
-        <code>browser</code>-guarded code (e.g.
-        <code>if (browser) await import("aktion-runtime");</code>) so it
-        only runs in the client bundle.
-      </p>
-
-      <hr />
-
-      <h2 id="solid" class="framework-section">SolidJS</h2>
-      <div class="pill-row"><span>SolidJS 1.x</span></div>
-<pre><code>// App.tsx
-import { onMount } from "solid-js";
-import "aktion-runtime";
-
-export default function App() {
-  let renderer: any;
-  onMount(() =&gt; renderer?.setResponse(`aktion = Stack([Card([CardHeader("Hello, Solid")])])`));
-  return &lt;aktion-app ref={renderer} theme="light" /&gt;;
-}</code></pre>
-
-      <hr />
-
-      <h2 id="astro" class="framework-section">Astro</h2>
-      <div class="pill-row"><span>Astro 4+</span></div>
-      <p>
-        Astro can ship the element either as a hydrated island or as a static
-        tag with a small inline script. Both approaches are valid:
-      </p>
-<pre><code>---
-// src/pages/index.astro
----
-&lt;aktion-app id="response" theme="light"&gt;&lt;/aktion-app&gt;
-
-&lt;script&gt;
-  import "aktion-runtime";
-  const el = document.getElementById("response") as any;
-  el.setResponse(`aktion = Stack([Card([CardHeader("Hello, Astro")])])`);
-&lt;/script&gt;</code></pre>
-
-      <hr />
-
-      <h2 id="html" class="framework-section">Plain HTML</h2>
-      <div class="pill-row"><span>No build step</span><span>Works offline</span></div>
-      <p>The CDN build is the smallest possible footprint &mdash; no bundler, no framework, just one script tag.</p>
 <pre><code>&lt;!doctype html&gt;
 &lt;html&gt;
   &lt;body&gt;
@@ -417,104 +331,76 @@ export default function App() {
 
     &lt;script type="module"&gt;
       import "https://asfand-dev.github.io/aktion/dist/aktion.js";
+
       const el = document.querySelector("aktion-app");
-      el.setResponse(`aktion = Stack([Card([CardHeader("Hello, world")])])`);
+      el.setResponse(`aktion = Card([CardHeader("Hello, world")])`);
+
+      el.addEventListener("assistant-message", (e) =&gt; {
+        console.log("follow-up:", e.detail.message);
+      });
     &lt;/script&gt;
   &lt;/body&gt;
 &lt;/html&gt;</code></pre>
+      <p>
+        You can also set the program declaratively with the
+        <code>response</code> attribute &mdash;
+        <code>&lt;aktion-app response="aktion = Text(&amp;quot;Hi&amp;quot;)"&gt;&lt;/aktion-app&gt;</code>
+        &mdash; though the imperative <code>setResponse</code> is easier for
+        anything longer than a line.
+      </p>
 
       <hr />
 
-      <h2>Common patterns across frameworks</h2>
-
-      <h3>Streaming an LLM response</h3>
-      <p>
-        Set <code>streaming = true</code> while you append tokens, then flip it
-        back when the stream ends. Internally the renderer suppresses transient
-        parse errors while the flag is on.
-      </p>
-<pre><code>el.streaming = true;
-el.clear();
-for await (const chunk of stream) el.appendChunk(chunk);
-el.streaming = false;</code></pre>
-
-      <h3>Reacting to follow-up clicks</h3>
-      <p>
-        Buttons without an explicit <code>action:</code> automatically dispatch
-        an <code>assistant-message</code> event whose
-        <code>event.detail.message</code> is the button label (or the
-        <code>message:</code> prop, when supplied). Hook it into your chat
-        input.
-      </p>
-<pre><code>el.addEventListener("assistant-message", (event) =&gt; {
-  sendToLLM(event.detail.message);
-});</code></pre>
-
-      <h3>Exposing tools to the script</h3>
-      <p>
-        Tools are async functions registered on the host. They&rsquo;re
-        available inside action and effect bodies as
-        <code>ctx.tools.&lt;name&gt;(args)</code>.
-      </p>
-<pre><code>el.setTools({
-  list_orders: async ({ limit }) =&gt; (await fetch(`/api/orders?limit=${limit}`)).json(),
-  update_order: async ({ id, status }) =&gt; {
-    await fetch(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-    return { ok: true };
-  },
-});</code></pre>
-
-      <h3>HTTP interceptors</h3>
-      <p>
-        Hook every <code>http({ ... })</code> call inside the script &mdash;
-        attach auth headers, log requests, fix base URLs.
-      </p>
-<pre><code>el.registerHttpInterceptors({
-  onRequest: (req) =&gt; ({ ...req, headers: { ...req.headers, Authorization: `Bearer ${token}` } }),
-  onResponse: (res) =&gt; res,
-  onError:    (err) =&gt; err,
-});</code></pre>
-
-      <h3>Reacting to navigation</h3>
-      <p>
-        Every router transition fires a <code>route-change</code> event with
-        the new path, the previous path, and the navigation source
-        (<code>"init"</code>, <code>"hashchange"</code>,
-        <code>"navigate"</code>, or <code>"external"</code>) &mdash; useful for
-        syncing analytics or your own sidebar.
-      </p>
-<pre><code>el.addEventListener("route-change", (event) =&gt; {
-  analytics.track("page-view", event.detail);
-  // event.detail = { path, previousPath, source }
-});</code></pre>
-
-      <h3>Generating the system prompt</h3>
-      <p>Either fetch the bundled file or build it programmatically &mdash; both return identical text:</p>
-<pre><code>// 1. Fetch the canned prompt (full reference)
-const promptText = await fetch("https://asfand-dev.github.io/aktion/dist/system_prompt.txt").then(r =&gt; r.text());
-
-// Or fetch the compact chat-focused variant
-const chatPromptText = await fetch("https://asfand-dev.github.io/aktion/dist/system_prompt_chat.txt").then(r =&gt; r.text());
-
-// 2. Generate at runtime (lets you add custom rules or component metadata)
-import { SYSTEM_PROMPT_TEXT, generatePrompt, defaultLibrary } from "aktion-runtime";
-const same   = SYSTEM_PROMPT_TEXT;
-const custom = generatePrompt(defaultLibrary, {
-  preamble: "You are an analytics assistant.",
-  additionalRules: ["Always end with a FollowUpBlock."],
-});</code></pre>
-
-      <div class="callout">
-        <h4>Need a different framework?</h4>
-        <p>
-          The element relies only on the
-          <a href="https://developer.mozilla.org/docs/Web/API/Web_components" target="_blank" rel="noreferrer">Custom Elements v1</a>
-          API and ES2020 features. Anywhere you can render HTML and run
-          JavaScript in a modern browser, the bundle just works.
-        </p>
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="get-started.html">
+          <span class="demo-tag">Start here</span>
+          <h3>Get started</h3>
+          <p>Install the bundle, render your first program, and wire up streaming end to end.</p>
+          <span class="demo-arrow">Get started &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>State, expressions, control flow, and the rules behind component calls.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>Every component, prop, and a live preview &mdash; the building blocks for your programs.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

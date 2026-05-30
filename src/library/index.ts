@@ -8,7 +8,7 @@
 import { assertOnePositionalMax } from "./types.js";
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
 import {
-  Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
@@ -91,7 +91,7 @@ export * from "./registry.js";
 export { validateProgramSchema, validateProgram } from "./validate.js";
 
 const components: ComponentSpec[] = [
-  Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Row, Column, Center, Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea, Container, Spacer,
   Text, TextContent, Image, Link, Badge, BadgeList,
@@ -146,25 +146,26 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Layout",
     components: [
-      "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
+      "Column", "Row", "Center", "Stack", "StackItem", "Grid", "GridItem",
+      "Box", "Container", "Spacer",
       "Card", "CardHeader", "CardFooter", "Separator", "Tabs", "TabItem",
       "Accordion", "AccordionItem", "Modal", "Drawer", "Steps",
       "AspectRatio", "ScrollArea", "Sticky", "ResizablePanels", "MasonryGrid",
     ],
     notes: [
-      "- `root` MUST be `Stack(...)` and contain at least one child.",
-      "- Wrap each major chunk of content in a `Card(...)` for visual grouping.",
-      "- Prefer `Grid(...)` over `Stack` with `direction=\"row\" wrap=true` when children should size uniformly (KPIs, feature tiles, card grids).",
-      "- Use `Container(children, size?)` to centre a wide page within a comfortable max-width (landing pages, articles, marketing sections).",
-      "- Use `Spacer()` inside `Stack(direction=\"row\")` to push the next item to the far edge; pass a `size` for an explicit fixed gap.",
-      "- Use `Separator(orientation?, label?)` between sections to add visual breaks. Pass a `label` for a centered \"OR\"-style separator.",
-      "- Use `Drawer` for side-panel detail views, `Modal` for centered dialogs.",
-      "- Use `Sticky(children, side?, offset?)` to pin a toolbar/banner while the surrounding content scrolls.",
-      "- Use `ResizablePanels(primary, secondary, initialPrimaryWidth?)` for user-resizable two-pane layouts (code editors, file browsers).",
-      "- Use `MasonryGrid([...])` for Pinterest-style mixed-height card walls — prefer `Grid` when rows should share a height.",
-      "- Use `StackItem(child, grow?, shrink?, basis?, alignSelf?)` inside `Stack(direction=\"row\", uniform=false)` for toolbars.",
-      "- Use `Grid(columns: 12, [GridItem(child, span: \"1/4\"), GridItem(main, span: \"3/4\")])` for sidebar layouts; fractional spans `\"1/2\"`…`\"1/12\"` resolve on a 12-column track.",
-      "- Use `Box(children, padding?, margin?, border?, background?)` for spacing and surfaces without raw CSS.",
+      "- THREE primitives cover almost everything: `Column` (stack top→bottom), `Row` (left→right), and `Grid` (equal columns / card walls). Reach for these first.",
+      "- `root` is normally a `Column([...])` (or `Container([...])` for a centered page). A `Column` is the page body; put each major chunk in a `Card(...)`.",
+      "- `Row([...])` keeps children at their natural width and vertically centered — ideal for toolbars, button rows, label+value pairs, nav bars. Use `justify` to distribute (`between`, `center`, `end`) and `gap` for spacing.",
+      "- `Grid([...], { columns: N })` = N equal columns. Omit `columns` for auto-fit (wraps as many ≥`minChildWidth` columns as fit — best for KPI/card grids). Prefer `Grid` over a wrapping `Row` whenever cells should share a width.",
+      "- For a 12-column dashboard / sidebar layout use `GridItem` spans: `Grid([GridItem(side, { span: \"1/4\" }), GridItem(main, { span: \"3/4\" })])`. Fractions `\"1/2\"`…`\"1/12\"` (or numbers 1–12) resolve on a 12-track grid; any `GridItem` child turns the grid on automatically.",
+      "- `Center([...], { minHeight })` centers content on both axes — spinners, empty states, hero CTAs, modal bodies. Add `minHeight: \"60vh\"` to center vertically in a region.",
+      "- `Stack` is the responsive escape hatch: use it ONLY when the direction itself must change across breakpoints, e.g. `Stack([...], { direction: {base: \"column\", md: \"row\"} })`.",
+      "- Make one child in a `Row` expand with `StackItem(child, { grow: 1 })` (e.g. a search input beside a fixed button), or push items apart with a bare `Spacer()` between them.",
+      "- `Container([...], { size })` centers a wide page within a comfortable max-width (sm/md/lg/xl/full) — landing pages, articles, marketing sections.",
+      "- `Box([...], { padding?, margin?, border?, background?, maxWidth? })` is a plain spacing/surface wrapper for when a `Card` is too heavy.",
+      "- `Separator(orientation?, label?)` adds a visual break between sections; pass a `label` for a centered \"OR\"-style divider.",
+      "- `gap`/`padding` spacing tokens are `xs|s|m|l|xl`; `align`/`justify`/`columns`/`direction`/`gap` all accept responsive maps like `{base: …, md: …, lg: …}`.",
+      "- Use `Drawer` for side-panel detail views and `Modal` for centered dialogs. `Sticky(children, side?, offset?)` pins a toolbar/banner while content scrolls. `ResizablePanels(primary, secondary)` gives a user-resizable two-pane split. `MasonryGrid([...])` is for Pinterest-style mixed-height walls.",
     ],
   },
   {
@@ -409,7 +410,7 @@ const componentGroups: ComponentGroup[] = [
     name: "Helpers",
     components: ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary"],
     notes: [
-      "- `Async(resource, { loading:, error:, empty:, data: })` switches a `$query` / `$mutation` / `$subscription` resource on its `state` field.",
+      "- `Async(resource, { loading:, error:, empty:, data: })` switches an `Http({...})` resource on its `state` field (`empty` shows for `null`/empty-array data).",
       "- `Show(when, { fallback?, children })` is sugar over `if (expr) { children } else { fallback }`.",
       "- `Portal(target?, children)` renders into a different DOM subtree (defaults to `document.body`).",
       "- `Redirect(path)` is a router-aware component — see Routing.",
@@ -450,7 +451,7 @@ const componentGroups: ComponentGroup[] = [
 assertOnePositionalMax(components);
 
 export const defaultLibrary: ComponentLibrary = {
-  root: "Stack",
+  root: "Column",
   components,
   componentGroups,
 };

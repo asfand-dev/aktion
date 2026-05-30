@@ -22,7 +22,7 @@ import type {
 } from "../parser/types.js";
 import type { StateStore } from "./state.js";
 import type { HttpRuntime } from "./http.js";
-import { createHttpResource } from "./http.js";
+import { createHttpResource, isEndpointResource } from "./http.js";
 import type { I18nRuntime } from "./i18n.js";
 import type { ActionDeclRunner } from "./effects.js";
 import { dataBuiltins, type ThemeNode } from "./builtins.js";
@@ -42,12 +42,18 @@ import { consoleNs as consoleGlobal } from "./console.js";
 const GLOBAL_NAMESPACES: Record<string, unknown> = {
   storage: storageGlobal,
   console: consoleGlobal,
-  // Curated, side-effect-free JS standard library. Exposed so authors can
-  // write `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`,
-  // `new Date()`, `new Map()`, `Number("5")`, etc. without an import.
-  // Intentionally omits capability-granting globals (`fetch`, `eval`,
-  // `Function`, `globalThis`, `window`, timers) — those route through the
-  // host runtime (`http(...)`, effects) instead.
+  // Curated fast-path for the most-used JS standard library globals, so
+  // `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`, `new Date()`,
+  // `new Map()`, `Number("5")`, etc. resolve without an import and without
+  // touching the host realm. This is NOT the full set: every *other* JS
+  // global (`window`, `document`, `URL`, `Blob`, `FormData`, `crypto`,
+  // `Intl`, `BigInt`, `Reflect`, `fetch`, `alert`, `confirm`, `prompt`,
+  // `atob`/`btoa`, `eval`, `Function`, …) resolves through the
+  // `lookupHostGlobal` passthrough below — see that helper. Timers
+  // (`setTimeout` / `setInterval` / `clear*`) ARE supported, but via
+  // dedicated handlers in `evaluateComponentCall` (not here) so each handle
+  // is tracked on the context and cleared on dispose rather than leaking
+  // past a replan.
   Math,
   JSON,
   Object,
@@ -79,6 +85,39 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   decodeURI,
   structuredClone: typeof structuredClone === "function" ? structuredClone : undefined,
 };
+
+/**
+ * Resolve any host JavaScript global by name (`window`, `document`, `URL`,
+ * `Blob`, `FormData`, `crypto`, `navigator`, `localStorage`, `Intl`,
+ * `BigInt`, `Reflect`, `Proxy`, `fetch`, `alert`, `confirm`, `prompt`,
+ * `atob`/`btoa`, `requestAnimationFrame`, `queueMicrotask`, `eval`,
+ * `Function`, …) as the FINAL fallback in identifier / call resolution.
+ *
+ * This is what makes the language expose the *full* JavaScript global
+ * surface rather than only the curated `GLOBAL_NAMESPACES` set above. It is
+ * always tried LAST — after user state, bindings, actions, user components,
+ * the curated globals, and the component library — so it can never shadow
+ * an author declaration or a built-in component (a library `Text` / `Map`
+ * component still wins over the DOM `Text` / `Map` constructor).
+ *
+ * Lookup is prototype-aware (`name in globalThis`) so browser accessor
+ * globals that live on `Window.prototype` (e.g. `location`, `navigator`)
+ * resolve too, but names inherited *only* from `Object.prototype`
+ * (`toString`, `constructor`, `hasOwnProperty`, …) are skipped so a bare
+ * undeclared identifier can't accidentally resolve to prototype noise.
+ *
+ * Security note: this is a deliberate full passthrough to the embedding
+ * realm. The runtime already executes author-supplied code through this
+ * evaluator, so surfacing capability-granting globals does not widen the
+ * trust boundary beyond what the host page already grants the script.
+ */
+function lookupHostGlobal(name: string): { found: boolean; value: unknown } {
+  if (typeof globalThis === "undefined") return { found: false, value: undefined };
+  if (name in Object.prototype) return { found: false, value: undefined };
+  const g = globalThis as Record<string, unknown>;
+  if (name in g) return { found: true, value: g[name] };
+  return { found: false, value: undefined };
+}
 
 /**
  * Runtime safety budget — bounds the work a single render can perform
@@ -393,7 +432,7 @@ export interface EvaluationContext {
   componentEffectStack: ScopedEffectDecl[][];
   /** Action declarations (`function foo() { ... }` — camelCase). */
   actionDecls: Map<string, ActionDeclaration>;
-  /** HTTP runtime (`http({...})` calls + interceptor configuration). */
+  /** HTTP runtime (`Http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
   /** Aktion 0.5 i18n runtime (`$i18n = i18n({...})` declaration + `t()` builtin). */
   i18n?: I18nRuntime;
@@ -412,6 +451,18 @@ export interface EvaluationContext {
    * creating a fresh context so subscribers don't leak across replans.
    */
   disposers: Array<() => void>;
+  /**
+   * Pending timer handles created by the language-level `setTimeout` /
+   * `setInterval` builtins. Tracked per context so every timer is cleared
+   * when the context is disposed (`disposeContext`), which the host runs
+   * before each replan and on disconnect — otherwise a `setInterval` from a
+   * previous program would keep firing against a stale scope forever.
+   * `clearTimeout` / `clearInterval` remove handles from these sets.
+   */
+  timers: {
+    timeouts: Set<ReturnType<typeof setTimeout>>;
+    intervals: Set<ReturnType<typeof setInterval>>;
+  };
   /**
    * Runtime safety budget — bounds component recursion depth, loop
    * iterations, and array allocations so a partial/recursive program
@@ -455,7 +506,7 @@ export function createContext(
   state: StateStore,
   options: CreateContextOptions = {},
 ): EvaluationContext {
-  return {
+  const ctx: EvaluationContext = {
     state,
     bindings: new Map(),
     expressions: new Map(),
@@ -475,8 +526,19 @@ export function createContext(
     notify: options.notify,
     onEmit: options.onEmit,
     disposers: [],
+    timers: { timeouts: new Set(), intervals: new Set() },
     budget: options.budget === null ? undefined : (options.budget ?? createRuntimeBudget()),
   };
+  // Cancel every outstanding timer when the context is torn down so a
+  // `setInterval` / pending `setTimeout` from this program can't fire after
+  // a replan or disconnect against a scope that no longer exists.
+  ctx.disposers.push(() => {
+    for (const id of ctx.timers.timeouts) clearTimeout(id);
+    for (const id of ctx.timers.intervals) clearInterval(id);
+    ctx.timers.timeouts.clear();
+    ctx.timers.intervals.clear();
+  });
+  return ctx;
 }
 
 /**
@@ -597,28 +659,12 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
       ctx.state.declare(stmt.identifier, initial);
     }
   }
-  // 1.25 pass: state declarations whose RHS is a `http({...})` call need
-  // their resource bag created eagerly so the request fires at program
-  // mount. We re-run those initializers through the full evaluator now
-  // that every state slot has at least a literal default.
-  for (const stmt of program.statements) {
-    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
-    if (stmt.expression.kind !== "Call") continue;
-    if (stmt.expression.callee !== "http") continue;
-    const value = evaluate(stmt.expression, ctx);
-    ctx.state.set(stmt.identifier, value);
-  }
-
-  // 1.5 pass: resolve `Http({...})` / `i18n({...})` setup helpers so any
-  // subsequent http() calls observe the configured defaults.
+  // 1.5 pass: resolve `i18n({...})` setup helper so subsequent reads of
+  // `$i18n` observe the configured locale/messages.
   for (const stmt of program.statements) {
     if (stmt.kind !== "Assignment") continue;
     const expr = stmt.expression;
     if (expr.kind !== "Call") continue;
-    if ((stmt.identifier === "http" || stmt.identifier === "$http") && expr.callee === "Http") {
-      evaluate(expr, ctx);
-      continue;
-    }
     if ((stmt.identifier === "i18n" || stmt.identifier === "$i18n") && expr.callee === "i18n") {
       evaluate(expr, ctx);
       continue;
@@ -637,6 +683,19 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   // if `greet` happened to be declared later in source order.
   for (const stmt of program.statements) {
     installStatementBinding(stmt, ctx);
+  }
+
+  // 1.55 pass: state declarations whose RHS is a `Http({...})` call need
+  // their resource bag created eagerly so the request fires at program
+  // mount. We run this *after* bindings are installed so the request
+  // config can reference forward-declared plain bindings, components, and
+  // state (e.g. `base = "https://api…"` then `$todos = Http({ url: base + "/todos" })`).
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment" || !stmt.isState) continue;
+    if (stmt.expression.kind !== "Call") continue;
+    if (stmt.expression.callee !== "Http") continue;
+    const value = evaluate(stmt.expression, ctx);
+    ctx.state.set(stmt.identifier, value);
   }
 
   // 1.6 pass: run any top-level *imperative* statements once per plan —
@@ -702,7 +761,7 @@ function installComputedStateDerivations(
     if (stmt.kind !== "Assignment" || !stmt.isState) continue;
     if (isPureLiteralExpression(stmt.expression)) continue;
     if (isHttpResourceCall(stmt.expression)) continue; // already handled in 1.25 pass
-    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // Http()/i18n()
+    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // i18n()
 
     const entry: ComputedDerivation = {
       name: stmt.identifier,
@@ -780,17 +839,14 @@ function isPureLiteralExpression(expr: Expression): boolean {
   }
 }
 
-/** `true` for `http({...})` resource declarations (handled in 1.25 pass). */
+/** `true` for `Http({...})` resource declarations (handled in 1.25 pass). */
 function isHttpResourceCall(expr: Expression): boolean {
-  return expr.kind === "Call" && expr.callee === "http";
+  return expr.kind === "Call" && expr.callee === "Http";
 }
 
-/** `true` for `$http = Http({...})` / `$i18n = i18n({...})` setups (handled in 1.5 pass). */
+/** `true` for `$i18n = i18n({...})` setups (handled in 1.5 pass). */
 function isRuntimeSetupCall(identifier: string, expr: Expression): boolean {
   if (expr.kind !== "Call") return false;
-  if (expr.callee === "Http" && (identifier === "http" || identifier === "$http")) {
-    return true;
-  }
   if (expr.callee === "i18n" && (identifier === "i18n" || identifier === "$i18n")) {
     return true;
   }
@@ -1057,6 +1113,14 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       if (ctx.library && findComponent(ctx.library, expr.name)) {
         return makeLibraryComponentCallable(expr.name, ctx);
       }
+      // Full JavaScript global surface — any host global (`window`,
+      // `document`, `URL`, `crypto`, `navigator`, `Intl`, `alert`, `fetch`,
+      // …) not shadowed by an author declaration or library component above.
+      // This also powers `new URL(...)`, `crypto.randomUUID()`, and bare
+      // references like `onClick: alert`, because `New` / `MethodCall`
+      // resolve their callee / object through this identifier path.
+      const hostGlobal = lookupHostGlobal(expr.name);
+      if (hostGlobal.found) return hostGlobal.value;
       // Unknown identifier — render as null so the parser is forgiving.
       return null;
     }
@@ -2084,13 +2148,36 @@ function evaluateComponentCall(
     const evaluated = args.map((a) => evaluate(a, ctx));
     return runActionDeclSync(actionDecl, evaluated, ctx);
   }
-  // `http({ url, method, body, headers, ... })` builtin — returns a
-  // reactive `EndpointResource` bag with `data`, `error`, `loading`,
-  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`.
-  if (callee === "http") {
+  // `Http({ url, method, body, headers, query, ... })` builtin — returns
+  // a reactive `EndpointResource` bag with `data`, `error`, `loading`,
+  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`. Each
+  // call is fully self-contained; there are no host-wide defaults.
+  if (callee === "Http") {
     const optsArg = args[0];
     const opts = optsArg ? evaluate(optsArg, ctx) : {};
     return createHttpResource(opts, ctx);
+  }
+  // Timer builtins — `setTimeout(fn, ms)`, `setInterval(fn, ms)`,
+  // `clearTimeout(id)`, `clearInterval(id)`. They mirror the host globals
+  // but are routed through the context so every handle is tracked and torn
+  // down on dispose (replan / disconnect). The callback fires with the
+  // author's scope intact (lambdas capture `ctx`) and a `notify()` follows
+  // each tick so state the callback wrote is reflected in the next render.
+  if (callee === "setTimeout" || callee === "setInterval") {
+    return evaluateTimerCall(callee, args, ctx);
+  }
+  if (callee === "clearTimeout" || callee === "clearInterval") {
+    const handle = args[0] ? evaluate(args[0], ctx) : undefined;
+    if (handle != null) {
+      if (callee === "clearTimeout") {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+        ctx.timers.timeouts.delete(handle as ReturnType<typeof setTimeout>);
+      } else {
+        clearInterval(handle as ReturnType<typeof setInterval>);
+        ctx.timers.intervals.delete(handle as ReturnType<typeof setInterval>);
+      }
+    }
+    return undefined;
   }
   // Local lambda registered into loopVars (e.g. an in-block helper
   // `itemRow = (item) => Card(item.title)` evaluated by `evaluateBlock`).
@@ -2151,39 +2238,6 @@ function evaluateComponentCall(
     const node: ThemeNode = { kind: "Theme", tokens };
     return node;
   }
-  if (callee === "Http") {
-    // `Http({ baseUrl, headers, retry, ... })` — pushes config into the
-    // host runtime and returns a marker so callers can `$http = Http({...})`
-    // without crashing the evaluator. The marker has a stable shape so
-    // host code introspecting `$http` sees the configured defaults.
-    const configArg = args[0];
-    const config = configArg ? evaluate(configArg, ctx) : null;
-    if (config && typeof config === "object" && !Array.isArray(config) && ctx.http) {
-      const cfg = config as Record<string, unknown>;
-      ctx.http.setDefaults({
-        baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl : undefined,
-        headers: cfg.headers && typeof cfg.headers === "object" && !Array.isArray(cfg.headers)
-          ? Object.fromEntries(
-              Object.entries(cfg.headers as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "")]),
-            )
-          : undefined,
-        timeoutMs: typeof cfg.timeout === "number" ? cfg.timeout : undefined,
-        retry: cfg.retry && typeof cfg.retry === "object" && !Array.isArray(cfg.retry)
-          ? {
-              count: Number((cfg.retry as Record<string, unknown>).count ?? 0) || 0,
-              backoff: (cfg.retry as Record<string, unknown>).backoff === "linear"
-                ? "linear"
-                : "exponential",
-            }
-          : undefined,
-        credentials:
-          cfg.credentials === "omit" || cfg.credentials === "same-origin" || cfg.credentials === "include"
-            ? cfg.credentials
-            : undefined,
-      });
-    }
-    return { __kind: "Http", config };
-  }
   if (callee === "i18n") {
     // `i18n({ locale, messages, fallback })` — push into the host runtime.
     const configArg = args[0];
@@ -2215,6 +2269,30 @@ function evaluateComponentCall(
   // `[unknown component: App]` into the DOM, the user sees a Skeleton
   // until the next render pass resolves the declaration.
   if (ctx.library && !findComponent(ctx.library, callee)) {
+    // Full JavaScript global surface — a direct call to any host global
+    // function not shadowed by a user/curated/library name: `alert("hi")`,
+    // `confirm("ok?")`, `prompt("name")`, `fetch(url)`, `btoa(s)`, … Tried
+    // here (after the library check) so a library component always wins.
+    const hostGlobal = lookupHostGlobal(callee);
+    if (hostGlobal.found && typeof hostGlobal.value === "function") {
+      const fn = hostGlobal.value as (...a: unknown[]) => unknown;
+      const evaluated: unknown[] = [];
+      for (const arg of args) {
+        if (arg.kind === "Spread") {
+          const value = evaluate(arg.argument, ctx);
+          if (Array.isArray(value)) for (const item of value) evaluated.push(item);
+          continue;
+        }
+        evaluated.push(evaluate(arg, ctx));
+      }
+      try {
+        return fn(...evaluated);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[aktion] global "${callee}" threw`, err);
+        return null;
+      }
+    }
     if (findComponent(ctx.library, "Skeleton")) {
       const skeleton: ComponentNode = {
         __kind: "Component",
@@ -2878,6 +2956,55 @@ function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
 }
 
 /**
+ * Evaluate a `setTimeout(fn, ms, ...args)` / `setInterval(fn, ms, ...args)`
+ * call. The first argument must evaluate to a function (typically a lambda
+ * or a bare action reference); a non-callable first argument is a no-op
+ * that returns `null`. The returned handle is registered on the context so
+ * it is cleared on dispose and can be passed to `clearTimeout` /
+ * `clearInterval`. Each tick runs the callback then calls `notify()` so
+ * any state it wrote is rendered (matching `effect(..., [on:every(N)])`).
+ */
+function evaluateTimerCall(
+  callee: "setTimeout" | "setInterval",
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const callback = args[0] ? evaluate(args[0], ctx) : null;
+  if (typeof callback !== "function") return null;
+  const fn = callback as (...a: unknown[]) => unknown;
+  const delay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const extra: unknown[] = [];
+  for (let i = 2; i < args.length; i += 1) {
+    extra.push(evaluate(args[i]!, ctx));
+  }
+
+  const tick = (): void => {
+    try {
+      fn(...extra);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[aktion] ${callee} callback threw`, err);
+    } finally {
+      ctx.notify?.();
+    }
+  };
+
+  if (callee === "setTimeout") {
+    const id = setTimeout(() => {
+      // A one-shot timer is done once it fires — drop it from the registry
+      // before running so a slow callback can't leave a dead handle behind.
+      ctx.timers.timeouts.delete(id);
+      tick();
+    }, delay);
+    ctx.timers.timeouts.add(id);
+    return id;
+  }
+  const id = setInterval(tick, delay);
+  ctx.timers.intervals.add(id);
+  return id;
+}
+
+/**
  * Evaluate a `__rui_assign__(target, value, op)` synthetic call. The
  * target may be:
  *   - a `StateRef` (write to the state store, alias-aware)
@@ -2908,7 +3035,28 @@ function evaluateSyntheticAssign(
   if (targetExpr.kind === "Member") {
     const extracted = extractStatePath(targetExpr, ctx);
     if (extracted) {
-      const current = readAtPath(ctx.state.get(extracted.name), extracted.path);
+      const rootValue = ctx.state.get(extracted.name);
+      // Live `Http({...})` resource bags are mutated in place — they hold
+      // async continuations that close over the original object, so the
+      // immutable `{...prev}` clone `setPath` performs would detach the
+      // in-flight request from the value the program reads (and `onDone`
+      // would never see the assignment). Write straight onto the bag and
+      // notify instead. Reads stay correct because it's the same reference.
+      if (extracted.path.length >= 1 && isEndpointResource(rootValue)) {
+        let parent: unknown = rootValue;
+        for (let i = 0; i < extracted.path.length - 1; i += 1) {
+          parent = (parent as Record<string, unknown> | null | undefined)?.[extracted.path[i]!];
+        }
+        if (parent && typeof parent === "object") {
+          const key = extracted.path[extracted.path.length - 1]!;
+          const current = (parent as Record<string, unknown>)[key];
+          const next = applyAssignOp(op, current, rhs);
+          (parent as Record<string, unknown>)[key] = next;
+          ctx.notify?.();
+          return next;
+        }
+      }
+      const current = readAtPath(rootValue, extracted.path);
       const next = applyAssignOp(op, current, rhs);
       ctx.state.setPath(extracted.name, extracted.path, next);
       return next;

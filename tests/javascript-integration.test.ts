@@ -390,7 +390,7 @@ describe("HTTP interceptors (replacement for setTools)", () => {
     expect(() => el.registerHttpInterceptors({ onResponse })).not.toThrow();
   });
 
-  it("interceptors fire around HTTP requests issued by http({...}) calls", async () => {
+  it("interceptors fire around HTTP requests issued by Http({...}) calls", async () => {
     const phases: Array<"request" | "response"> = [];
     const requestedUrls: string[] = [];
     const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
@@ -412,7 +412,7 @@ describe("HTTP interceptors (replacement for setTools)", () => {
           return res;
         },
       });
-      el.setResponse(`$items = http({ url: "/items", method: "GET" })
+      el.setResponse(`$items = Http({ url: "https://api.example.com/items", method: "GET" })
 aktion = Stack([])`);
       await waitForRenders(30);
       expect(phases).toContain("request");

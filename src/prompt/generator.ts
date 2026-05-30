@@ -6,7 +6,7 @@
  * of JavaScript. Two flavours ship side-by-side:
  *
  *   - `"full"` (default): teaches every language feature — reactive state,
- *     components, actions, effects, `http({...})`, routing, builtins,
+ *     components, actions, effects, `Http({...})`, routing, builtins,
  *     helpers, theming — plus the entire component library. Use when
  *     generating full applications.
  *
@@ -143,7 +143,7 @@ function fullHeader(preamble: string | undefined): string {
     "You are a UI engineer authoring complete, working applications in Aktion — a declarative language whose surface syntax is a strict subset of JavaScript. Every Aktion program is valid JavaScript; the runtime adds reactive semantics on top. Respond ONLY in Aktion: no prose, JSON, markdown, or HTML.";
   return `${lead}
 
-Every response MUST start with \`${ROOT} = ...\` on the first line. Forward references are allowed — declare the shell first (\`${ROOT} = AppShell(...)\` for apps, \`${ROOT} = Stack(...)\` for pages, \`${ROOT} = MyApp()\` when you wrap a user component) and let children stream in below it.`;
+Every response MUST start with \`${ROOT} = ...\` on the first line. Forward references are allowed — declare the shell first (\`${ROOT} = AppShell(...)\` for apps, \`${ROOT} = Column(...)\` or \`${ROOT} = Container(...)\` for pages, \`${ROOT} = MyApp()\` when you wrap a user component) and let children stream in below it.`;
 }
 
 function fullCoreSyntax(): string {
@@ -152,7 +152,7 @@ function fullCoreSyntax(): string {
 A program is a flat list of \`name = expression\` statements, one per line. Newlines terminate statements; semicolons are optional.
 
 \`\`\`
-${ROOT} = Stack([header, kpis, table])      // root assignment (always first)
+${ROOT} = Column([header, kpis, table])     // root assignment (always first)
 header  = PageHeader("Sales", { subtitle: "Q4 2026" })
 $count  = 0                                  // reactive atom — '$' prefix is the contract
 function Counter(label) { return Text(\`\${label}: \${$count}\`) }     // PascalCase = component
@@ -170,7 +170,6 @@ effect(() => { console.log($count) }, [$count])                       // declara
 - \`theme\` — optional brand override (\`theme = Theme({...})\`).
 - \`route\` — reactive router handle (\`route.path\`, \`route.params\`, \`route.navigate("/x")\`). NEVER declare \`route\` yourself.
 - \`$i18n\` — i18n bundle handle.
-- \`$http\` — HTTP defaults via \`$http = Http({ baseUrl, headers, ... })\`.
 
 ### Component-call shape — One positional argument max (TRAILING-OBJECT RULE)
 Every call takes **at most one positional argument**; every other argument lives in a trailing \`{ }\` object literal:
@@ -178,7 +177,7 @@ Every call takes **at most one positional argument**; every other argument lives
 \`\`\`
 Button("Save", { variant: "primary", loading: $isSaving })
 StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
-Stack([Card1(), Card2()], { direction: "row", gap: "m" })
+Row([Card1(), Card2()], { gap: "m" })
 \`\`\`
 
 \`Button("Save", "primary", true)\` is a schema error — write the named-prop form instead. Every call site also accepts \`{ key: ... }\` to pin per-instance state across reorders.`;
@@ -236,6 +235,25 @@ function submit(payload) {
 }
 \`\`\`
 
+### Timers — \`setTimeout\` / \`setInterval\`
+\`setTimeout(fn, ms)\`, \`setInterval(fn, ms)\`, \`clearTimeout(id)\`, and \`clearInterval(id)\` are available and behave like their JS counterparts. They return a handle you can later clear. Timers are tracked by the runtime and torn down automatically when the program re-plans, so they never outlive the program — but you should still clear a \`setInterval\` you no longer need. Create them inside an \`effect\` (not at the top level, which would re-create them on every render) and clear them in the effect's \`cleanup\`.
+
+\`\`\`
+// Debounced search — restart a 300ms timer on every keystroke
+function onType(q) {
+  clearTimeout($searchTimer)
+  $searchTimer = setTimeout(() => { $results = Http({ url: \`/search?q=\${q}\` }) }, 300)
+}
+
+// A ticking clock — start on mount, clear on unmount
+effect(() => {
+  let id = setInterval(() => { $now = @Now() }, 1000)
+  cleanup(() => clearInterval(id))
+}, ["mount"])
+\`\`\`
+
+Prefer \`effect(..., ["every(1000)"])\` for a simple repeating effect; reach for \`setInterval\`/\`setTimeout\` when you need an imperative handle to clear, a one-shot delay, or a debounce/restart.
+
 ### Lambdas (arrow functions) — every JS form works
 \`() => expr\`, \`x => expr\`, \`(x, y) => expr\`, \`(x = 0) => x\`, \`(...args) => sum(args)\`, and the multi-statement \`(x) => { ...; return ... }\` form. Long lambdas may continue onto the next line.
 
@@ -283,7 +301,7 @@ $theme = "light"
 
 field    = Input("draft",   { value: $draft })
 darkMode = Switch("dark",   { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
-search   = Input("query",   { onChange: q => $results = http({ url: \`/api/search?q=\${q}\` }) })
+search   = Input("query",   { onChange: q => $results = Http({ url: \`https://api.example.com/search?q=\${q}\` }) })
 \`\`\`
 
 ### Computed values
@@ -325,7 +343,7 @@ A camelCase \`function\` is a callable side-effect block. Use as event handler (
 \`\`\`
 function save(item) {
   $items = [...$items, item]
-  $save  = http({ url: "/api/save", method: "POST", body: { item } })
+  $save  = Http({ url: "https://api.example.com/save", method: "POST", body: { item } })
   emit("saved", { id: item.id })
 }
 
@@ -362,9 +380,9 @@ function LiveClock() {
   return Text(@FormatDate($now, "time"))
 }
 
-// Debounced search
+// Debounced search — re-issue the request when inputs change
 effect(() => {
-  $results = http({ url: "/api/search", query: { q: $query, page: $page } })
+  $results = Http({ url: "https://api.example.com/search", query: { q: $query, page: $page } })
 }, [$query, $page, "debounce(250)"])
 
 // Cleanup
@@ -377,53 +395,69 @@ effect(() => {
 }
 
 function fullHttp(): string {
-  return `## Data — \`http({...})\`
+  return `## Data — \`Http({...})\`
 
-\`http({ ... })\` is the only HTTP primitive. Pass any \`fetch\`-compatible option plus a convenience \`query\` object that is serialised into the URL.
+\`Http({ ... })\` is the only HTTP primitive. Every call is self-contained — pass a full absolute \`url\`, an optional \`method\` (\`GET\` is the default), a convenience \`query\` object serialised into the URL, \`headers\`, \`body\`, and any other \`fetch\`-compatible option. There are NO host-wide defaults.
 
 \`\`\`
-$orders = http({
-  url:    \`/api/users/\${$userId}/orders\`,
+$orders = Http({
+  url:    \`https://api.example.com/users/\${$userId}/orders\`,
   method: "GET",
-  query:  { limit: 5, status: "open" },
+  query:  { limit: 5, status: "open" },   // → ?limit=5&status=open
   headers:{ "X-Tenant": $tenant }
 })
 \`\`\`
 
-The runtime tracks reactive reads inside the options object and auto-refetches when they change.
+The request fires once when the binding mounts. To re-run it call \`$orders.refetch()\`, or wrap it in an \`effect(..., [$dep])\` so it re-issues when a dependency changes.
 
 ### Reactive resource shape
 \`\`\`
 $orders.data         // parsed body (null until resolved)
 $orders.error        // null on success
-$orders.status       // HTTP status code
+$orders.status       // HTTP status code, e.g. 200
 $orders.loading      // true while in-flight
-$orders.headers      // response headers as an object
+$orders.headers      // response headers as a plain object
 $orders.lastUpdated  // ms-epoch of last successful response
 $orders.refetch()    // re-issue the request
 $orders.cancel()     // abort the in-flight request
+$orders.onDone = fn  // callback fired each time the request settles
+\`\`\`
+
+### \`onDone\` — run something when the request settles
+Assign \`onDone\` after creating the resource. It fires once every time the request completes — the initial load and every \`refetch()\`, on both success and error — and receives the resource bag as its argument. It does NOT fire for a request that was superseded or \`cancel()\`led. This is the idiomatic way to refresh a list after a mutation:
+
+\`\`\`
+$patch = Http({
+  url:    endpoint + "/" + todo.id,
+  method: "PATCH",
+  body:   { isCompleted: !todo.isCompleted }
+})
+
+$patch.onDone = () => {
+  $todos.refetch()
+}
 \`\`\`
 
 ### Writes — fire from an action
 \`\`\`
 function saveOrder(payload) {
-  $save = http({ url: "/api/orders", method: "POST", body: payload })
+  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $save.onDone = () => { $orders.refetch() }
   emit("assistant-message", { message: "Saved." })
 }
 \`\`\`
+
+\`body\` objects are JSON-encoded automatically (a \`Content-Type: application/json\` header is added unless you set one). After a write, call \`.refetch()\` on the list resource to refresh it — either directly or from the write resource's \`onDone\`.
 
 ### \`Async\` wrapper — branch on resource state
 \`\`\`
 view = Async($orders, {
   loading: LoadingState("Loading orders…"),
   error:   ErrorState("Couldn't fetch orders"),
-  empty:   EmptyState("No orders yet"),
+  empty:   EmptyState("No orders yet"),    // shown when data is null or an empty array
   data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
 })
-\`\`\`
-
-### Optional defaults
-\`$http = Http({ baseUrl: "https://api.example.com", headers: { Accept: "application/json" }, timeout: 10000 })\` configures host-wide defaults once at the top.`;
+\`\`\``;
 }
 
 function fullRouting(): string {
@@ -474,7 +508,23 @@ console.log("Hello", $user)
 console.error("Failed", $error)
 \`\`\`
 
-Non-string values JSON-roundtrip; missing keys return \`null\`. Cookie options: \`expires\` (days/Date/ISO), \`maxAge\` (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`. Failures (quota, disabled storage) are swallowed silently.`;
+Non-string values JSON-roundtrip; missing keys return \`null\`. Cookie options: \`expires\` (days/Date/ISO), \`maxAge\` (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`. Failures (quota, disabled storage) are swallowed silently.
+
+### The full JavaScript global surface
+Beyond \`storage\` and \`console\`, **every** JavaScript global resolves by name — the standard library (\`Math\`, \`JSON\`, \`Object\`, \`Date\`, \`Map\`, …), browser dialogs (\`alert\`, \`confirm\`, \`prompt\`), and Web APIs (\`fetch\`, \`URL\`, \`URLSearchParams\`, \`Blob\`, \`FormData\`, \`crypto\`, \`navigator\`, \`localStorage\`, \`atob\`/\`btoa\`, \`Intl\`, \`BigInt\`, …), plus \`window\` / \`document\`.
+
+\`\`\`
+function copyLink() {
+  navigator.clipboard.writeText(window.location.href)
+  $toast = "Link copied"
+}
+function remove(id) {
+  if (confirm("Delete this item?")) { $items = $items.filter(x => x.id != id) }
+}
+id = crypto.randomUUID()
+\`\`\`
+
+Author declarations and built-in components always win over a same-named global, so the passthrough only fills in names you haven't defined. Prefer the reactive \`Http({...})\` over raw \`fetch\` for data that drives the UI, and keep timers/listeners inside \`effect(...)\` so they're cleaned up.`;
 }
 
 
@@ -523,7 +573,7 @@ Use only when the standard catalogue cannot express the markup or styling you ne
 - \`Styles(css)\` — inject a \`<style>\` block. Payloads containing \`</style>\`, \`<script>\`, \`expression(\`, \`javascript:\`, \`behavior:\`, or \`@import\` are dropped.
 
 \`\`\`
-${ROOT} = Stack([
+${ROOT} = Column([
   Styles(\`.hero-callout { background: linear-gradient(135deg, #6366f1, #10b981); color: white; padding: 24px; border-radius: 12px; }\`),
   HTMLTag("div", { attributes: { class: "hero-callout" }, children: [
     HTMLTag("h2", { children: [Text("Custom block")] }),
@@ -586,7 +636,7 @@ function fullHelpers(): string {
 
 | Component | Purpose |
 |---|---|
-| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`http({...})\` resource state. |
+| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`Http({...})\` resource state. |
 | \`Show(when, { fallback?, children })\` | Sugar for \`when ? children : fallback\`. |
 | \`Portal(children, { target? })\` | Render outside the parent subtree. |
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
@@ -649,9 +699,9 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 - Wire every visible button. Declare camelCase \`function name() { ... }\` blocks; reference via \`Button("Label", { onClick: name })\`.
 - Use \`Router({...})\` for multi-page apps; reach \`pages\` from \`${ROOT}\`; link from sidebar/navbar with \`NavLink\`/\`SidebarItem\` (\`to: "/path"\`).
 - Seed realistic mock data inline when no backend is available (5–20 plausible rows).
-- Use responsive prop maps (\`{ sm: 1, md: 2, lg: 4 }\`) on \`Grid\` / \`Stack\` so the app works on phone and desktop.
+- Lay out with three primitives: \`Column([...])\` (vertical, the usual page/section), \`Row([...])\` (horizontal toolbars/rows), and \`Grid([...], { columns })\` (equal columns / card walls). \`Center([...], { minHeight })\` centers content. Use responsive prop maps (\`{ base: 1, md: 2, lg: 4 }\`) on \`Grid\` columns or \`Stack\` direction so the app works on phone and desktop.
 - Use template literals for any string mixing copy with values.
-- Tables are column-oriented: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`.
+- Tables are column-oriented: \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`. A column can render any component (action buttons, badges, links) — pass \`render: (value, index) => Component\`; pass the full row array as the column values when the cell needs the whole row. Make a column clickable with \`onClick: (value, index) => …\`. Both work in \`Table\` and \`DataGrid\`. Example: \`Col("", rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })\`.
 - Charts need numeric arrays. Use array pluck: \`PieChart(rows.label, rows.value)\`.
 - Icons are Font Awesome names (no \`fa-\` prefix, no emoji).
 - Named arguments use a trailing \`{ prop: value }\` object — never bare \`prop: value\` in a call.
@@ -660,10 +710,10 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 Before finishing, walk your output and check:
 1. \`${ROOT} = ...\` is the FIRST line.
 2. Every referenced name is defined somewhere below.
-3. Every defined name (other than \`${ROOT}\`, \`theme\`, \`$http\`, \`$i18n\`) is reachable from \`${ROOT}\`.
+3. Every defined name (other than \`${ROOT}\`, \`theme\`, \`$i18n\`) is reachable from \`${ROOT}\`.
 4. PascalCase functions end with an explicit \`return\`.
 5. State uses the single-sigil \`$name = value\` form.
-6. \`http({...})\` exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
+6. \`Http({...})\` uses an absolute \`url\` and exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
 7. \`Router({...})\` arms use \`:\` (not \`->\`) and \`default\` (not \`_\`) for the wildcard.
 8. Effects use \`effect(() => {...}, [deps])\` — never the legacy bracket form.
 9. \`storage\` / \`console\` are lowercase; \`route\` is reserved (never declare it).`;
@@ -671,29 +721,29 @@ Before finishing, walk your output and check:
 
 function fullDefaultExamples(): string[] {
   return [
-    `// Tasks dashboard — http(), Async, action, multi-section layout
-$tasks = http({ url: "/api/tasks", method: "GET" })
+    `// Tasks dashboard — Http(), Async, action, multi-section layout
+$tasks = Http({ url: "https://api.example.com/tasks", method: "GET" })
 
 function toggle(task) {
-  $update = http({ url: \`/api/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
+  $update = Http({ url: \`https://api.example.com/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
   $tasks.refetch()
 }
 
-renderRow = task => Card([Stack([
+renderRow = task => Card([Row([
   Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
-  Text(task.title, { tone: task.done ? "muted" : "default" }),
+  StackItem(Text(task.title, { tone: task.done ? "muted" : "default" }), { grow: 1 }),
   Buttons([Button(task.done ? "Reopen" : "Done", { onClick: () => toggle(task), variant: "primary", size: "sm" })])
-])])
+], { gap: "m" })])
 
-${ROOT} = Stack([
+${ROOT} = Column([
   PageHeader("Tasks", { subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
   Async($tasks, {
     loading: LoadingState("Loading tasks…"),
     error:   ErrorState("Couldn't fetch tasks", { description: "Try again in a moment." }),
     empty:   EmptyState("No tasks yet", { description: "Create your first task." }),
-    data:    Stack($tasks.data.map(t => renderRow(t)), { direction: "column", gap: "s" })
+    data:    Column($tasks.data.map(t => renderRow(t)), { gap: "s" })
   })
-], { direction: "column", gap: "l" })`,
+], { gap: "l" })`,
     `// Multi-page app shell with router and sidebar
 pages = Router({
   "/":         Overview(),
@@ -711,14 +761,14 @@ nav = Sidebar([SidebarSection("Workspace", [
 ${ROOT} = AppShell(nav, pages)
 
 function Overview() {
-  return Stack([
+  return Column([
     PageHeader("Overview", { subtitle: "Everything across your workspace" }),
     Stats([
       StatCard("MRR",          { value: "$48.2k", trend: "up",   delta: "+12%", icon: "sack-dollar" }),
       StatCard("Active users", { value: "2,184",  trend: "up",   delta: "+184", icon: "users" }),
       StatCard("Open tickets", { value: "23",     trend: "down", delta: "-9",   icon: "ticket" })
     ])
-  ], { direction: "column", gap: "l" })
+  ], { gap: "l" })
 }
 
 function Projects() { return PageHeader("Projects") }
@@ -734,7 +784,7 @@ function NotFound() { return PageHeader("Not found") }`,
 
 const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
   // Layout
-  "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
+  "Column", "Row", "Center", "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
   "Card", "CardHeader", "CardFooter", "Separator",
   "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
   "AspectRatio",
@@ -774,7 +824,7 @@ Every response MUST start with \`${ROOT} = ...\` on the first line. You are in r
 function chatSyntax(): string {
   return `## Syntax (read-only subset)
 
-A program is a flat list of \`name = expression\` statements, written in standard JavaScript. \`${ROOT}\` is the entry point — every program MUST begin with \`${ROOT} = ...\` (typically \`${ROOT} = Stack([...])\`).
+A program is a flat list of \`name = expression\` statements, written in standard JavaScript. \`${ROOT}\` is the entry point — every program MUST begin with \`${ROOT} = ...\` (typically \`${ROOT} = Column([...])\`).
 
 ### Expressions
 - Strings \`"hello"\` / \`'hello'\`. Template literals: \`\` \`\${@Count(rows)} results\` \`\` — preferred over \`+\` concatenation.
@@ -786,7 +836,7 @@ A program is a flat list of \`name = expression\` statements, written in standar
 
 \`\`\`
 Callout("info", { title: "Heads up", description: "Action required", icon: "circle-info", compact: true })
-Stack([card1, card2], { direction: "row", gap: "m" })
+Row([card1, card2], { gap: "m" })
 Badge("Live", { tone: "success", icon: "circle-dot" })
 \`\`\`
 
@@ -802,7 +852,7 @@ Badge("Live", { tone: "success", icon: "circle-dot" })
 Always declare \`${ROOT}\` FIRST. Then container/composition statements. Then leaf data arrays last.
 
 \`\`\`
-${ROOT} = Stack([heroCard, statsRow, table, follow])
+${ROOT} = Column([heroCard, statsRow, table, follow])
 
 heroCard = Card([CardHeader("Q4 results", { subtitle: "Across all teams" })])
 statsRow = Stats(stats)
@@ -873,7 +923,7 @@ function chatToolsList(tools: ReadonlyArray<ToolSpec>): string {
 function chatDefaultExamples(): ReadonlyArray<string> {
   return [
     `// Comparison table reply with a template-literal summary
-${ROOT} = Stack([title, tbl, totals, follow])
+${ROOT} = Column([title, tbl, totals, follow])
 title  = Text("Top languages by users", { variant: "large-heavy" })
 tbl    = Table([
   Col("Language",   langs.name),
@@ -890,7 +940,7 @@ langs = [
   { name: "Go",         users: 5.2,  year: 2009 }
 ]`,
     `// Article-style reply with Markdown body and KPI strip
-${ROOT} = Stack([header, body, kpis])
+${ROOT} = Column([header, body, kpis])
 header = Hero("The fastest open-source UI runtime", { subtitle: "38,000 LLM responses per second.", eyebrow: "Engineering update" })
 body   = Markdown(article)
 kpis   = Stats([
@@ -909,7 +959,7 @@ function chatImportantRules(): string {
 - **Pick the right component for the content.** Tables for comparisons, charts for trends, \`Callout\`/\`Banner\` for highlights, \`Markdown\` for paragraph prose, \`Hero\`/\`PageHeader\` for top titles, \`Stats\` for KPI strips.
 - **Lead with a clear title.** \`Text(text, { variant: "large-heavy" })\`, \`SectionHeader(...)\`, \`PageHeader(...)\`, or \`Hero(...)\`.
 - **Realistic data** — believable names, numbers, and dates. Never Lorem Ipsum.
-- **Tables are column-oriented:** \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`.
+- **Tables are column-oriented:** \`Table([Col("Label", arr1), Col("Count", arr2, { format: "number" })])\`. Columns can hold components via \`Col("", rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id) }) })\`, and a whole column can be clickable with \`onClick: (value, index) => …\`.
 - **Charts need numeric arrays** — use array pluck (\`PieChart(rows.label, rows.value)\`).
 - **End conversational replies with \`FollowUpBlock([...])\`** — 2–4 short next-prompt suggestions.
 - **\`Markdown\`** for rich paragraph prose; **\`Text\`** for short labels.
@@ -977,7 +1027,7 @@ function rulesSection(rules: ReadonlyArray<string>): string {
 function toolsListSection(tools: ReadonlyArray<ToolSpec>): string {
   const lines: string[] = [
     "## Available endpoints",
-    "These endpoints are provided by the host. Fire requests with `http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
+    "These endpoints are provided by the host. Fire requests with `Http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
   ];
   for (const tool of tools) {
     const kind = tool.kind === "Mutation" ? "POST/PUT/PATCH/DELETE" : "GET";

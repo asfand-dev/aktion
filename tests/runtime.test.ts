@@ -11,6 +11,7 @@ import {
   StateStore,
   HttpRuntime,
   createContext,
+  disposeContext,
   planProgram,
   evaluate,
 } from "../src/runtime/index.js";
@@ -265,16 +266,24 @@ describe("for...of loop variable scoping", () => {
   });
 });
 
-describe("http({...}) reactive resource", () => {
+describe("Http({...}) reactive resource", () => {
   let originalFetch: typeof fetch | undefined;
   let fetchMock: ReturnType<typeof vi.fn>;
 
+  /** Flush enough microtasks for an `Http({...})` lifecycle to settle. */
+  const settle = async (turns = 12): Promise<void> => {
+    for (let i = 0; i < turns; i += 1) await Promise.resolve();
+  };
+
+  const jsonResponse = (body: unknown, status = 200): Response =>
+    new Response(status === 204 ? null : JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
   beforeEach(() => {
     originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
-    fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
+    fetchMock = vi.fn(async () => jsonResponse({ ok: true }));
     (globalThis as { fetch?: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
   });
 
@@ -289,8 +298,8 @@ describe("http({...}) reactive resource", () => {
     buildContext(
       `
 $id = 5
-$response = http({
-  url: "/api/items",
+$response = Http({
+  url: "https://api.example.com/items",
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: { id: $id }
@@ -299,29 +308,54 @@ aktion = Stack()
       `,
       { http },
     );
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     expect(fetchMock).toHaveBeenCalled();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/items");
+    expect(url).toBe("https://api.example.com/items");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     expect(init.body).toBe(JSON.stringify({ id: 5 }));
   });
 
-  it("exposes the reactive resource bag with data / status / refetch / cancel", async () => {
+  it("defaults the method to GET when omitted", async () => {
     const http = new HttpRuntime();
-    const { ctx } = buildContext(
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/todos" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("GET");
+  });
+
+  it("resolves a forward-declared plain binding in the request url (hoisting)", async () => {
+    const http = new HttpRuntime();
+    buildContext(
       `
-$response = http({ url: "/api/items", method: "GET" })
+$todos = Http({ url: base + "/todos" })
+base = "https://api.example.com"
 aktion = Stack()
       `,
       { http },
     );
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    await settle();
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toBe("https://api.example.com/todos");
+  });
+
+  it("exposes the reactive resource bag with data / status / headers / lastUpdated / refetch / cancel", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `
+$response = Http({ url: "https://api.example.com/items", method: "GET" })
+aktion = Stack()
+      `,
+      { http },
+    );
+    await settle();
     const response = ctx.state.get("response") as {
       data: unknown;
+      error: unknown;
       loading: boolean;
       status?: number;
       refetch: () => Promise<void>;
@@ -331,7 +365,11 @@ aktion = Stack()
     };
     expect(response).toBeDefined();
     expect(response.data).toEqual({ ok: true });
+    expect(response.error).toBeUndefined();
+    expect(response.loading).toBe(false);
     expect(response.status).toBe(200);
+    expect(response.headers?.["content-type"]).toContain("application/json");
+    expect(typeof response.lastUpdated).toBe("number");
     expect(typeof response.refetch).toBe("function");
     expect(typeof response.cancel).toBe("function");
   });
@@ -340,17 +378,379 @@ aktion = Stack()
     const http = new HttpRuntime();
     buildContext(
       `
-$response = http({ url: "/api/users", method: "GET", query: { limit: 5, slug: "abc" } })
+$response = Http({ url: "https://api.example.com/users", method: "GET", query: { limit: 5, slug: "abc" } })
 aktion = Stack()
       `,
       { http },
     );
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
     const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("limit=5");
     expect(url).toContain("slug=abc");
+  });
+
+  it("appends query params with `&` when the url already has a querystring", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/users?team=core", query: { limit: 5 } })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toBe("https://api.example.com/users?team=core&limit=5");
+  });
+
+  it("forwards unknown options verbatim as fetch init (`...rest`)", async () => {
+    const http = new HttpRuntime();
+    buildContext(
+      `$response = Http({ url: "https://api.example.com/me", credentials: "include", mode: "cors" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe("include");
+    expect(init.mode).toBe("cors");
+  });
+
+  it("surfaces non-2xx responses on `.error` and sets state to error", async () => {
+    fetchMock.mockImplementationOnce(async () => jsonResponse({ message: "nope" }, 404));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/missing" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const response = ctx.state.get("response") as {
+      data: unknown;
+      error: { status?: number; body?: unknown };
+      status?: number;
+      state: string;
+    };
+    expect(response.state).toBe("error");
+    expect(response.status).toBe(404);
+    expect(response.error).toMatchObject({ status: 404 });
+    expect(response.data).toBeUndefined();
+  });
+
+  it("treats a 204 No Content response as resolved with null data", async () => {
+    fetchMock.mockImplementationOnce(async () => jsonResponse(null, 204));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/todos/1", method: "DELETE" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    const response = ctx.state.get("response") as { data: unknown; state: string; status?: number };
+    expect(response.status).toBe(204);
+    expect(response.state).toBe("data");
+    expect(response.data).toBeNull();
+  });
+
+  it("re-issues the request when `.refetch()` is called", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const response = ctx.state.get("response") as { refetch: () => Promise<void> };
+    await response.refetch();
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("`.cancel()` aborts the in-flight request and clears the loading flag", async () => {
+    let abortedSignal: AbortSignal | undefined;
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => {
+      abortedSignal = init.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
+      });
+    });
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      { http },
+    );
+    await Promise.resolve();
+    const response = ctx.state.get("response") as { loading: boolean; cancel: () => void };
+    expect(response.loading).toBe(true);
+    response.cancel();
+    await settle();
+    expect(abortedSignal?.aborted).toBe(true);
+    expect(response.loading).toBe(false);
+  });
+
+  it("a stale in-flight request cannot clobber a newer refetch result", async () => {
+    const deferred: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(
+      () => new Promise<Response>((resolve) => { deferred.push(resolve); }),
+    );
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    await Promise.resolve();
+    const response = ctx.state.get("response") as { data: unknown; refetch: () => Promise<void> };
+    // Start a second request before the first resolves.
+    void response.refetch();
+    await Promise.resolve();
+    expect(deferred.length).toBe(2);
+    // Resolve the NEWER request first, then the stale one.
+    deferred[1]!(jsonResponse({ which: "new" }));
+    await settle();
+    deferred[0]!(jsonResponse({ which: "stale" }));
+    await settle();
+    expect(response.data).toEqual({ which: "new" });
+  });
+
+  it("fires `onDone` once when the request settles, with the resource as argument", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    const calls: Array<{ data: unknown; loading: boolean }> = [];
+    const response = ctx.state.get("response") as {
+      onDone?: (res: { data: unknown; loading: boolean }) => void;
+    };
+    response.onDone = (res) => { calls.push({ data: res.data, loading: res.loading }); };
+    await settle();
+    expect(calls).toHaveLength(1);
+    // The bag has already settled by the time the callback runs.
+    expect(calls[0]).toEqual({ data: { ok: true }, loading: false });
+  });
+
+  it("re-fires `onDone` on every refetch (the `$patch.onDone = () => $todos.refetch()` pattern)", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      { http },
+    );
+    let done = 0;
+    const response = ctx.state.get("response") as {
+      onDone?: () => void;
+      refetch: () => Promise<void>;
+    };
+    response.onDone = () => { done += 1; };
+    await settle();
+    expect(done).toBe(1);
+    await response.refetch();
+    await settle();
+    expect(done).toBe(2);
+  });
+
+  it("fires `onDone` even when the request errors", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ message: "nope" }, 500));
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/boom" })\naktion = Stack()`,
+      { http },
+    );
+    let sawError = false;
+    const response = ctx.state.get("response") as {
+      onDone?: (res: { error: unknown }) => void;
+    };
+    response.onDone = (res) => { sawError = res.error !== undefined; };
+    await settle();
+    expect(sawError).toBe(true);
+  });
+
+  it("does NOT fire `onDone` for a request superseded by `cancel()`", async () => {
+    const deferred: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(
+      () => new Promise<Response>((resolve) => { deferred.push(resolve); }),
+    );
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      { http },
+    );
+    let done = 0;
+    await Promise.resolve();
+    const response = ctx.state.get("response") as {
+      onDone?: () => void;
+      cancel: () => void;
+    };
+    response.onDone = () => { done += 1; };
+    response.cancel();
+    // Resolving the now-superseded request must not fire onDone.
+    deferred[0]?.(jsonResponse({ ok: true }));
+    await settle();
+    expect(done).toBe(0);
+  });
+
+  it("assigns `$response.onDone` from program source and mutates the live bag in place", async () => {
+    const http = new HttpRuntime();
+    const { ctx } = buildContext(
+      `
+$response = Http({ url: "https://api.example.com/items" })
+$response.onDone = () => { $loaded = true }
+$loaded = false
+aktion = Stack()
+      `,
+      { http },
+    );
+    // The program-level assignment must land on the SAME object the request
+    // mutates — not a clone — so the callback is present when it settles.
+    const response = ctx.state.get("response") as { onDone?: unknown };
+    expect(typeof response.onDone).toBe("function");
+    await settle();
+    expect(ctx.state.get("loaded")).toBe(true);
+  });
+});
+
+describe("timers (setTimeout / setInterval / clearTimeout / clearInterval)", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Parse a single expression statement and evaluate it against `ctx`. */
+  const run = (ctx: ReturnType<typeof buildContext>["ctx"], source: string): unknown => {
+    const program = parse(source);
+    const stmt = program.statements[0]!;
+    if (stmt.kind !== "ExpressionStatement") throw new Error("expected expression statement");
+    return evaluate(stmt.expression, ctx);
+  };
+
+  it("setTimeout runs the callback once after the delay and writes state", () => {
+    const { ctx, state } = buildContext(`$fired = 0`);
+    run(ctx, `setTimeout(() => { $fired = $fired + 1 }, 1000)`);
+    expect(state.get("fired")).toBe(0);
+    vi.advanceTimersByTime(999);
+    expect(state.get("fired")).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(state.get("fired")).toBe(1);
+    // One-shot: no further firing.
+    vi.advanceTimersByTime(5000);
+    expect(state.get("fired")).toBe(1);
+  });
+
+  it("setInterval re-runs the callback every interval", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`);
+    vi.advanceTimersByTime(350);
+    expect(state.get("ticks")).toBe(3);
+  });
+
+  it("clearTimeout cancels a pending timeout before it fires", () => {
+    const { ctx, state } = buildContext(`$fired = false`);
+    const id = run(ctx, `setTimeout(() => { $fired = true }, 1000)`);
+    run(ctx, `clearTimeout(arg)`.replace("arg", String(id)));
+    vi.advanceTimersByTime(2000);
+    expect(state.get("fired")).toBe(false);
+  });
+
+  it("clearInterval stops an interval", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    const id = run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`) as number;
+    vi.advanceTimersByTime(250);
+    expect(state.get("ticks")).toBe(2);
+    run(ctx, `clearInterval(arg)`.replace("arg", String(id)));
+    vi.advanceTimersByTime(1000);
+    expect(state.get("ticks")).toBe(2);
+  });
+
+  it("forwards extra arguments to the callback", () => {
+    const { ctx, state } = buildContext(`$msg = ""`);
+    run(ctx, `setTimeout((a, b) => { $msg = a + b }, 10, "foo", "bar")`);
+    vi.advanceTimersByTime(10);
+    expect(state.get("msg")).toBe("foobar");
+  });
+
+  it("a non-callable first argument is a no-op returning null", () => {
+    const { ctx } = buildContext(`$x = 1`);
+    expect(run(ctx, `setTimeout(42, 100)`)).toBeNull();
+    expect(() => vi.advanceTimersByTime(200)).not.toThrow();
+  });
+
+  it("disposeContext clears every outstanding timer", () => {
+    const { ctx, state } = buildContext(`$ticks = 0`);
+    run(ctx, `setInterval(() => { $ticks = $ticks + 1 }, 100)`);
+    run(ctx, `setTimeout(() => { $ticks = $ticks + 100 }, 100)`);
+    disposeContext(ctx);
+    vi.advanceTimersByTime(1000);
+    expect(state.get("ticks")).toBe(0);
+    expect(ctx.timers.timeouts.size).toBe(0);
+    expect(ctx.timers.intervals.size).toBe(0);
+  });
+});
+
+describe("full JavaScript global surface", () => {
+  const g = globalThis as Record<string, unknown>;
+
+  it("calls an arbitrary host global function (call fallback)", () => {
+    g.__aktTestFn = (a: number, b: number) => a + b;
+    try {
+      const { ctx } = buildContext('sum = __aktTestFn(2, 3)');
+      expect(ctx.bindings.get("sum")?.()).toBe(5);
+    } finally {
+      delete g.__aktTestFn;
+    }
+  });
+
+  it("reads an arbitrary host global value by bare identifier", () => {
+    g.__aktTestVal = 42;
+    try {
+      const { ctx } = buildContext('v = __aktTestVal');
+      expect(ctx.bindings.get("v")?.()).toBe(42);
+    } finally {
+      delete g.__aktTestVal;
+    }
+  });
+
+  it("supports alert / confirm / prompt", () => {
+    const orig = { alert: g.alert, confirm: g.confirm, prompt: g.prompt };
+    const seen: string[] = [];
+    g.alert = (msg: unknown) => { seen.push(`alert:${msg}`); };
+    g.confirm = () => true;
+    g.prompt = () => "Ada";
+    try {
+      const { ctx } = buildContext('a = alert("hi")\nc = confirm("ok?")\np = prompt("name?")');
+      ctx.bindings.get("a")?.();
+      expect(seen).toContain("alert:hi");
+      expect(ctx.bindings.get("c")?.()).toBe(true);
+      expect(ctx.bindings.get("p")?.()).toBe("Ada");
+    } finally {
+      g.alert = orig.alert; g.confirm = orig.confirm; g.prompt = orig.prompt;
+    }
+  });
+
+  it("constructs host globals via `new` (URL) and reads namespaces (Intl, JSON)", () => {
+    const { ctx } = buildContext(
+      'path = new URL("https://example.com/a/b?x=1").pathname\n' +
+      'kind = typeof Intl',
+    );
+    expect(ctx.bindings.get("path")?.()).toBe("/a/b");
+    expect(ctx.bindings.get("kind")?.()).toBe("object");
+  });
+
+  it("exposes eval / Function (full passthrough)", () => {
+    const { ctx } = buildContext('r = eval("1 + 2")');
+    expect(ctx.bindings.get("r")?.()).toBe(3);
+  });
+
+  it("a library component wins over a same-named DOM global (Text)", () => {
+    const { ctx } = buildContext('node = Text("hi")');
+    expect(ctx.bindings.get("node")?.()).toMatchObject({ __kind: "Component", name: "Text" });
+  });
+
+  it("a user binding wins over a host global of the same name", () => {
+    g.__aktShadowed = "from-global";
+    try {
+      const { ctx } = buildContext('__aktShadowed = "from-user"\nv = __aktShadowed');
+      expect(ctx.bindings.get("v")?.()).toBe("from-user");
+    } finally {
+      delete g.__aktShadowed;
+    }
+  });
+
+  it("a curated global (Math) is unaffected by the passthrough", () => {
+    const { ctx } = buildContext('m = Math.max(3, 9, 1)');
+    expect(ctx.bindings.get("m")?.()).toBe(9);
   });
 });
 

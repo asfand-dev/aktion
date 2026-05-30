@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Side effects · Aktion</title>
-  <meta name="description" content="The effect() call — anonymous, declarative side effects with a dependency array mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers." />
+  <meta name="description" content="The effect() call — anonymous, declarative side effects with a dependency array mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers. Plus first-class timers, data refetching, and DOM listeners with cleanup." />
   <script>
     (function () {
       try {
@@ -17,6 +17,44 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
 <body data-page="side-effects">
   <div class="layout">
@@ -27,35 +65,33 @@
         <span class="hero-eyebrow">Behaviour</span>
         <h1>Side effects.</h1>
         <p class="lead">
-          <code>effect(() =&gt; { &hellip; }, [...deps])</code> calls attach
-          declarative, anonymous side effects to the program or to a
-          single component instance. Use them for polling, hydration,
-          analytics, keyboard listeners, autosave &mdash; anything that
-          should run when dependencies change rather than when a user
-          clicks a button.
+          <code>effect(() =&gt; { &hellip; }, [...deps])</code> runs declarative
+          side effects when its dependencies change &mdash; polling, clocks,
+          hydration, analytics, keyboard listeners &mdash; rather than when a
+          user clicks. The body is anonymous; the optional dependency array
+          decides <em>when</em> it fires.
         </p>
       </header>
 
-      <h2 id="anatomy">Anatomy of an effect</h2>
-      <p>An effect declaration has three parts:</p>
+      <h2 id="anatomy">Anatomy</h2>
+      <p>An effect declaration has two parts: a body and an optional dependency array.</p>
 <pre><code>effect(() =&gt; {
-  // body
+  // body — side effects: state writes, Http(…), emit(…), cleanup(…)
 }, [...dependencies])</code></pre>
       <ul>
-        <li>The <code>effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name.</li>
-        <li>An arrow-function body that performs the side effect &mdash; HTTP calls, state writes, <code>emit(&hellip;)</code>, <code>cleanup(&hellip;)</code>, &hellip;</li>
+        <li>The <code>effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name and no return value. The runtime keys on the source location.</li>
+        <li>An arrow-function body that performs the side effect.</li>
         <li>An optional second argument &mdash; a <strong>dependency array</strong> &mdash; that controls when the body runs.</li>
       </ul>
-
       <p>
-        <code>effect(() =&gt; { &hellip; })</code> with no dependency array is
-        equivalent to <code>effect(() =&gt; { &hellip; }, ["mount"])</code>
-        &mdash; both run the body once when the surrounding scope mounts.
+        <strong>No array runs once on mount.</strong>
+        <code>effect(() =&gt; { &hellip; })</code> is exactly equivalent to
+        <code>effect(() =&gt; { &hellip; }, ["mount"])</code> &mdash; both run the
+        body a single time when the surrounding scope mounts.
       </p>
 
       <h2 id="dependencies">Dependency entries</h2>
       <p>Each entry in the dependency array is one of the following:</p>
-
       <table class="signature-table">
         <thead><tr><th>Entry</th><th>Meaning</th></tr></thead>
         <tbody>
@@ -73,7 +109,7 @@
           </tr>
           <tr>
             <td><code>"every(N)"</code></td>
-            <td>Re-run the body every <code>N</code> milliseconds. Driven by <code>setInterval</code>; cleared automatically on unmount.</td>
+            <td>Re-run the body every <code>N</code> milliseconds. Driven by an interval; cleared automatically on unmount.</td>
           </tr>
           <tr>
             <td><code>"debounce(N)"</code></td>
@@ -85,28 +121,22 @@
           </tr>
         </tbody>
       </table>
-
       <p>
-        Order inside the array does not matter. Only one rate-limit
-        modifier (<code>"debounce"</code> or <code>"throttle"</code>) takes
-        effect per declaration.
+        Order inside the array does not matter. Only one rate-limit modifier
+        (<code>"debounce"</code> or <code>"throttle"</code>) takes effect per
+        declaration. A pure state-driven effect also runs once on mount, so it
+        observes the initial state.
       </p>
 
-      <h2 id="scope">Scope: top-level vs. component-local</h2>
+      <h3>Scope: top-level vs. component-local</h3>
       <p>
         An <code>effect</code> can live at the <strong>program top level</strong>
         or <strong>inside a component body</strong>. The dependency-array
         syntax is identical; only the lifecycle differs.
       </p>
-
       <table class="signature-table">
         <thead><tr><th></th><th>Top-level effect</th><th>Component-local effect</th></tr></thead>
         <tbody>
-          <tr>
-            <td>Location</td>
-            <td>Declared next to other top-level bindings.</td>
-            <td>Declared inside a <code>function Name() { &hellip; }</code> body.</td>
-          </tr>
           <tr>
             <td>Mounted</td>
             <td>Once, when the program first runs.</td>
@@ -126,119 +156,92 @@
         </tbody>
       </table>
 
-      <h3>Top-level effect</h3>
+      <h2 id="cleanup">Cleanup</h2>
       <p>
-        Declared next to the rest of the program. It mounts as soon as the
-        program is parsed and lives until <code>setResponse</code> /
-        <code>clear()</code> swaps the program.
+        Long-running listeners (timers, observers, event handlers, network
+        subscriptions) MUST be torn down so they don&rsquo;t leak across
+        re-runs or unmount. Register a teardown with <code>cleanup(fn)</code>
+        from inside the body. A <code>cleanup</code> runs <strong>before each
+        re-run AND on unmount</strong> &mdash; this is where you clear timers,
+        remove listeners, and drop subscriptions.
       </p>
-<pre><code>aktion = App()
-$value = 10
-
-effect(() =&gt; {
-  $value = $value + 1
-}, ["every(1000)"])
-
-function App() {
-  return Box([
-    Text("Value: " + $value)
-  ])
-}</code></pre>
-
-      <h3>Component-local effect</h3>
-      <p>
-        Declare the same effect inside the component body and the runtime
-        scopes it to that <em>instance</em>: the interval starts when the
-        component mounts and is cleared as soon as it leaves the tree.
-        Two <code>App()</code> calls give you two independent intervals.
-      </p>
-<pre><code>aktion = App()
-$value = 10
-
-function App() {
-  effect(() =&gt; {
-    $value = $value + 1
-  }, ["every(1000)"])
-  return Box([
-    Text("Value: " + $value)
-  ])
-}</code></pre>
-
-      <h3>Conditional component &mdash; effect tears down with the instance</h3>
-      <p>
-        Component-local effects are the cleanest way to scope background
-        work to a piece of UI that is conditionally mounted. When
-        <code>$showWidget</code> flips to <code>false</code> the
-        <code>Widget()</code> instance is removed from the tree, and the
-        runtime tears down its <code>"every"</code> interval, its
-        <code>cleanup(&hellip;)</code> handlers, and any state
-        subscriptions it registered.
-      </p>
-<pre><code>aktion = Stack([
-  Toggle("Show widget", { value: $showWidget, onChange: () =&gt; { $showWidget = !$showWidget } }),
-  if ($showWidget) { Widget() } else { null }
-])
-$showWidget = true
-$ticks = 0
-
-function Widget() {
-  effect(() =&gt; {
-    $ticks = $ticks + 1
-  }, ["every(500)"])
-  return Card([CardHeader("Widget"), Text("Ticks: " + $ticks)])
-}</code></pre>
-
-      <h3>Per-instance polling</h3>
-      <p>
-        Each rendered <code>UserCard</code> mounts its own poll &mdash;
-        rendering five of them produces five independent intervals, and
-        removing one stops only that one.
-      </p>
-<pre><code>aktion = Stack([
-  UserCard("alice"),
-  UserCard("bob"),
-  UserCard("carol")
-])
-
-function UserCard(username) {
-  $status = "loading"
-  effect(() =&gt; {
-    $status = http({ url: "/api/users/" + username + "/status", method: "GET" }).data
-  }, ["every(5000)"])
-  return Card([
-    CardHeader(username),
-    Text("Status: " + $status)
-  ])
-}</code></pre>
-
-      <h2 id="examples">Examples</h2>
-
-      <h3>Once on mount</h3>
 <pre><code>effect(() =&gt; {
-  $session = http({ url: "/api/session", method: "GET" })
-}, ["mount"])
-
-// Empty deps array is equivalent
-effect(() =&gt; {
-  console.log("App mounted")
-})</code></pre>
-
-      <h3>React to a single atom</h3>
-<pre><code>$selectedId = null
-
-effect(() =&gt; {
-  if ($selectedId) {
-    $detail = http({ url: "/api/items/" + $selectedId, method: "GET" })
+  const onKey = (e) =&gt; {
+    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      $paletteOpen = !$paletteOpen
+    }
   }
-}, [$selectedId])</code></pre>
+  document.addEventListener("keydown", onKey)
+  cleanup(() =&gt; document.removeEventListener("keydown", onKey))
+}, ["mount"])</code></pre>
 
-      <h3>React to multiple atoms with debouncing</h3>
+      <h2 id="timers">Timers</h2>
+      <p>
+        <code>setTimeout</code>, <code>setInterval</code>,
+        <code>clearTimeout</code>, and <code>clearInterval</code> are
+        <strong>first-class globals</strong> that behave like their JavaScript
+        counterparts and return a handle you can clear. Every handle is
+        runtime-tracked and torn down automatically on re-plan or unmount, so a
+        timer never outlives the program. Best practice: create timers
+        <strong>inside an <code>effect</code></strong> (not at the top level,
+        where every render would re-create them) and clear them from the
+        effect&rsquo;s <code>cleanup</code>.
+      </p>
+      <p>
+        For a simple repeating effect, prefer the <code>"every(N)"</code>
+        trigger. Reach for <code>setInterval</code> /
+        <code>setTimeout</code> when you need an imperative handle &mdash; a
+        debounced restart, or a one-shot delay.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$now = 0
+effect(() =&gt; {
+  let id = setInterval(() =&gt; { $now = @Now() }, 1000)
+  cleanup(() =&gt; clearInterval(id))
+}, ["mount"])
+aktion = Column([ Text(`Ticks: ${$now}`) ])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="fetching">Fetching data in an effect</h2>
+      <p>
+        Re-run an <code>Http({&hellip;})</code> request when a watched atom
+        changes &mdash; the canonical search-as-you-type pattern. List the
+        atoms you watch plus a <code>"debounce(N)"</code> so keystrokes
+        don&rsquo;t flood the network:
+      </p>
+<pre><code>$query = ""
+
+effect(() =&gt; {
+  $results = Http({
+    url:   "https://api.example.com/search",
+    query: { q: $query }
+  })
+}, [$query, "debounce(300)"])</code></pre>
+      <p>
+        You do <strong>not</strong> need an effect for a one-shot fetch &mdash; a
+        top-level <code>$results = Http({ &hellip; })</code> already fires once
+        on mount. For the &ldquo;refresh a list after a write&rdquo; case, prefer
+        the resource&rsquo;s <code>.onDone</code> callback over an effect: it
+        fires every time the request settles, so you can refetch the list from
+        the write resource directly.
+      </p>
+<pre><code>$orders = Http({ url: "https://api.example.com/orders" })
+
+$create = Http({ url: "https://api.example.com/orders", method: "POST", body: { name: $name } })
+$create.onDone = () =&gt; { $orders.refetch() }</code></pre>
+
+      <h2 id="recipes">Recipes</h2>
+
+      <h3>React to multiple atoms</h3>
 <pre><code>$query = ""
 $page  = 1
 
 effect(() =&gt; {
-  $results = http({
-    url:   "/api/search",
+  $results = Http({
+    url:   "https://api.example.com/search",
     query: { q: $query, page: $page }
   })
 }, [$query, $page, "debounce(250)"])</code></pre>
@@ -246,60 +249,29 @@ effect(() =&gt; {
       <h3>Polling on an interval</h3>
 <pre><code>effect(() =&gt; {
   $orders.refetch()
-}, ["every(30000)"])
+}, ["every(30000)"])</code></pre>
 
-// Throttled interval — fire at most once per 500ms
-effect(() =&gt; {
-  $now = @Now()
-}, ["every(1000)", "throttle(500)"])</code></pre>
-
-      <h3>Autosave with debounce</h3>
+      <h3>Autosave a draft</h3>
 <pre><code>$draft = ""
 
 effect(() =&gt; {
-  $save = http({
-    url:    "/api/draft",
+  $save = Http({
+    url:    "https://api.example.com/draft",
     method: "PUT",
     body:   { draft: $draft }
   })
 }, [$draft, "debounce(500)"])</code></pre>
 
-      <h3>Sync to <code>storage</code></h3>
-<pre><code>effect(() =&gt; {
-  storage.set("draft", $draft)
-}, [$draft, "debounce(500)"])
-
-effect(() =&gt; {
-  $draft = storage.get("draft") ?? ""
-}, ["mount"])</code></pre>
-
-      <h2 id="cleanup">Cleanup</h2>
-      <p>
-        Long-running listeners (timers, observers, event handlers, network
-        subscriptions) MUST be torn down so they don&rsquo;t leak across
-        re-runs or unmount. Register a teardown with
-        <code>cleanup(fn)</code> or <code>ctx.cleanup(fn)</code> from inside
-        the body. Cleanups run before the next re-fire AND on unmount.
-      </p>
-
+      <h3>Keyboard-shortcut listener</h3>
 <pre><code>effect(() =&gt; {
   const onKey = (e) =&gt; {
-    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
+    if (e.key === "/" &amp;&amp; !e.metaKey &amp;&amp; !e.ctrlKey) {
       e.preventDefault()
-      ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true }))
+      $searchOpen = true
     }
   }
   document.addEventListener("keydown", onKey)
-  ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
-}, ["mount"])</code></pre>
-
-      <h3>WebSocket subscription</h3>
-<pre><code>effect(() =&gt; {
-  const socket = new WebSocket("wss://example.com/ticker")
-  socket.addEventListener("message", (event) =&gt; {
-    ctx.state.set("ticker", JSON.parse(event.data))
-  })
-  ctx.cleanup(() =&gt; socket.close())
+  cleanup(() =&gt; document.removeEventListener("keydown", onKey))
 }, ["mount"])</code></pre>
 
       <h3>IntersectionObserver for infinite scroll</h3>
@@ -308,41 +280,45 @@ effect(() =&gt; {
   if (!sentinel) return
   const observer = new IntersectionObserver((entries) =&gt; {
     if (entries.some((e) =&gt; e.isIntersecting)) {
-      const page = ctx.state.get("page") || 1
-      ctx.state.set("page", page + 1)
+      $page = $page + 1
     }
   })
   observer.observe(sentinel)
-  ctx.cleanup(() =&gt; observer.disconnect())
+  cleanup(() =&gt; observer.disconnect())
 }, ["mount"])</code></pre>
 
-      <h2 id="use-cases">When to reach for an effect</h2>
-      <ul>
-        <li><strong>Background data refresh</strong> &mdash; interval polling, retry-on-focus, periodic stat updates.</li>
-        <li><strong>Lifecycle setup &amp; teardown</strong> &mdash; one-time hydration on mount, listener teardown on unmount.</li>
-        <li><strong>Reactive autosave</strong> &mdash; persist a form / draft when a watched atom changes, debounced so you don&rsquo;t flood the network.</li>
-        <li><strong>Derived async work</strong> &mdash; refetch search results when filters change, fetch detail data when a selection is made.</li>
-        <li><strong>Analytics &amp; logging</strong> &mdash; track page views, log state transitions, instrument feature usage.</li>
-        <li><strong>Browser APIs</strong> &mdash; clipboard listeners, keyboard shortcuts, <code>IntersectionObserver</code>, <code>MutationObserver</code>, <code>matchMedia</code> &mdash; use the <code>ctx</code> bridge for DOM access.</li>
-      </ul>
+      <h3>WebSocket subscription</h3>
+<pre><code>effect(() =&gt; {
+  const socket = new WebSocket("wss://example.com/ticker")
+  socket.addEventListener("message", (event) =&gt; {
+    $ticker = JSON.parse(event.data)
+  })
+  cleanup(() =&gt; socket.close())
+}, ["mount"])</code></pre>
 
-      <h2 id="when-not">When NOT to use an effect</h2>
-      <ul>
-        <li><strong>User-driven side effects</strong> &mdash; declare a function and wire it to a button instead.</li>
-        <li><strong>HTTP that already depends on a reactive atom</strong> &mdash; <code>$results = http({ query: { q: $query } })</code> already re-issues when <code>$query</code> changes; no effect is needed.</li>
-        <li><strong>Pure computations</strong> &mdash; a plain binding (<code>total = @Sum($cart.price)</code>) is reactive and re-derives automatically.</li>
-        <li><strong>Per-element listeners</strong> &mdash; component event props (<code>onClick</code>, <code>onChange</code>, <code>onSubmit</code>) are simpler and don&rsquo;t need cleanup.</li>
-      </ul>
+      <h3>Debounced restart with an imperative timer</h3>
+<pre><code>$searchTimer = null
+
+function onType(q) {
+  clearTimeout($searchTimer)
+  $searchTimer = setTimeout(() =&gt; {
+    $results = Http({ url: `https://api.example.com/search?q=${q}` })
+  }, 300)
+}</code></pre>
 
       <h2 id="effect-vs-action">Effect vs. Action</h2>
+      <p>
+        An <strong>effect</strong> is dependency-triggered and returns nothing.
+        An <a href="actions.html"><strong>action</strong></a> is a named
+        <code>function</code> triggered explicitly by the user.
+      </p>
       <table class="signature-table">
-        <thead><tr><th></th><th><code>effect(() =&gt; { &hellip; }, [&hellip;])</code></th><th><code>function Name(args) { &hellip; }</code></th></tr></thead>
+        <thead><tr><th></th><th><code>effect(() =&gt; { &hellip; }, [&hellip;])</code></th><th><code>function name(args) { &hellip; }</code></th></tr></thead>
         <tbody>
-          <tr><td>Trigger</td><td>Mount, unmount, interval, watched atoms.</td><td>Explicit call from a handler or expression.</td></tr>
-          <tr><td>Identity</td><td>Anonymous &mdash; the runtime keys on the source location.</td><td>Named &mdash; referenced by identifier from <code>onClick</code> / expressions.</td></tr>
+          <tr><td>Trigger</td><td>Mount, unmount, interval, watched atoms.</td><td>Explicit call from a handler (<code>onClick</code>) or expression.</td></tr>
+          <tr><td>Identity</td><td>Anonymous &mdash; keyed on source location.</td><td>Named &mdash; referenced by identifier.</td></tr>
           <tr><td>Arguments</td><td>None.</td><td>Positional / named params bound inside the body.</td></tr>
           <tr><td>Return value</td><td>None.</td><td>Optional &mdash; observable when called as <code>$x = name(args)</code>.</td></tr>
-          <tr><td>Lifecycle</td><td>Mounted / re-fired / torn down by the runtime &mdash; at program level or per component instance.</td><td>Runs once per call.</td></tr>
           <tr><td>Cleanup</td><td>Registered with <code>cleanup(fn)</code>; fires on re-run + unmount.</td><td>Not applicable.</td></tr>
         </tbody>
       </table>
@@ -361,15 +337,42 @@ effect(() =&gt; {
           <p>Inline JavaScript &mdash; browser APIs, the <code>ctx</code> bridge, host tools.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
-        <a class="demo-card" href="language.html">
-          <span class="demo-tag">Reference</span>
-          <h3>Language reference</h3>
-          <p>Reactive state, effects, control flow, built-in <code>@</code>-functions.</p>
-          <span class="demo-arrow">View reference &rarr;</span>
+        <a class="demo-card" href="http.html">
+          <span class="demo-tag">Data</span>
+          <h3>HTTP &amp; resources</h3>
+          <p>The <code>Http({…})</code> resource bag, <code>refetch()</code>, and the <code>onDone</code> callback.</p>
+          <span class="demo-arrow">View the guide &rarr;</span>
         </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

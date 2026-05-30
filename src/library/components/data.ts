@@ -4,7 +4,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, renderIcon, fillTableCell } from "../utils.js";
 import { renderInlineSparkline } from "./patterns.js";
 import { pickIconForLabel } from "./_internal.js";
 
@@ -15,15 +15,21 @@ export const Col: ComponentSpec = {
   description:
     "Single column inside a Table or DataGrid. Use `align` for per-column " +
     "text alignment, `format` for cell rendering " +
-    "(`text|number|currency|date`). `sortable` and `filterable` only " +
-    "take effect inside `DataGrid` (Table ignores them).",
+    "(`text|number|currency|date`). Pass `render: (value, index) => …` to " +
+    "render arbitrary components in the cells (action Buttons, Badges, " +
+    "links — return a component, string, or array). Pass `onClick: " +
+    "(value, index) => …` to make the whole cell clickable (pointer + " +
+    "keyboard). `sortable` and `filterable` only take effect inside " +
+    "`DataGrid` (Table ignores them).",
   props: [
     { name: "header", type: "string" },
-    { name: "values", type: "any[]", description: "Column values (use array pluck like data.rows.title)" },
+    { name: "values", type: "any[]", description: "Column values. Use an array pluck like `data.rows.title`, or pass the full row array and map each cell with `render`." },
     { name: "format", type: "string", optional: true, enum: ["text", "number", "currency", "date"] },
     { name: "align", type: "string", optional: true, enum: COL_ALIGN, description: "Per-column horizontal alignment" },
     { name: "sortable", type: "boolean", optional: true, description: "DataGrid: enable click-to-sort on this column" },
     { name: "filterable", type: "boolean", optional: true, description: "DataGrid: enable a per-column filter chip" },
+    { name: "render", type: "callable", optional: true, aliases: ["cell"], description: "`(value, index) => Component | string | array` — map each cell to arbitrary content (buttons, badges, links)." },
+    { name: "onClick", type: "callable", optional: true, aliases: ["onclick", "cellClick"], description: "`(value, index) => void` — fired when a cell in this column is clicked or activated via keyboard." },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -86,20 +92,24 @@ export const Table: ComponentSpec = {
     const tbody = el("tbody");
     const columnValues = cols.map((col) => asArray(col.args?.[1]));
     const formats = cols.map((col) => asString(col.args?.[2], "text"));
+    const renders = cols.map((col) => col.args?.[6]);
+    const clicks = cols.map((col) => col.args?.[7]);
     const rowCount = Math.max(0, ...columnValues.map((c) => c.length));
 
     for (let r = 0; r < rowCount; r += 1) {
       const tr = el("tr");
       columnValues.forEach((values, c) => {
-        const cell = values[r];
         const format = formats[c] ?? "text";
         const align = aligns[c];
         const td = el("td", { "data-format": format, "data-align": align || null });
-        if (cell !== null && typeof cell === "object" && (cell as { __kind?: string }).__kind === "Component") {
-          td.append(helpers.renderNode(cell));
-        } else {
-          td.textContent = formatCell(cell, format);
-        }
+        fillTableCell(
+          td,
+          { format, render: renders[c], onClick: clicks[c] },
+          values[r],
+          r,
+          helpers,
+          formatCell,
+        );
         tr.append(td);
       });
       tbody.append(tr);

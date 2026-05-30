@@ -20,7 +20,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     name: "App",
     description: "Top-level `aktion` binding — every program needs one.",
     template:
-      'aktion = Stack([\n' +
+      'aktion = Column([\n' +
       '  ${1:Card([CardHeader("${2:Hello}")])}\n' +
       '])',
   },
@@ -30,10 +30,28 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'card${1} = Card([\n' +
       '  CardHeader("${2:Title}", { subtitle: "${3:Subtitle}" }),\n' +
-      '  Stack([\n' +
+      '  Column([\n' +
       '    Text("${4:Body copy goes here.}")\n' +
       '  ])\n' +
       '])',
+  },
+  {
+    name: "Row",
+    description: "Horizontal toolbar — label on the left, actions pushed to the right.",
+    template:
+      'toolbar${1} = Row([\n' +
+      '  Text("${2:Section title}", { variant: "large-heavy" }),\n' +
+      '  Spacer(),\n' +
+      '  Button("${3:Action}", { variant: "primary" })\n' +
+      '], { gap: "m" })',
+  },
+  {
+    name: "Center",
+    description: "Center content on both axes inside a tall region.",
+    template:
+      'empty${1} = Center([\n' +
+      '  EmptyState("${2:Nothing here yet}", { description: "${3:Create your first item to get started.}" })\n' +
+      '], { minHeight: "${4:50vh}" })',
   },
   {
     name: "Hero",
@@ -136,11 +154,11 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       'function NotFoundPage() {\n' +
       '  return Callout("Not found", { variant: "warning", description: `We couldn\'t find ${route.path}.` })\n' +
       '}\n\n' +
-      'nav${1} = Stack([\n' +
+      'nav${1} = Row([\n' +
       '  NavLink("Home",      { to: "/",          variant: "ghost", exact: true }),\n' +
       '  NavLink("Dashboard", { to: "/dashboard", variant: "ghost" }),\n' +
       '  NavLink("Users",     { to: "/users",     variant: "ghost" })\n' +
-      '], { direction: "row", gap: "s" })',
+      '], { gap: "s" })',
   },
   {
     name: "Effect",
@@ -155,12 +173,12 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Action",
-    description: "Action declaration that POSTs through the http() builtin.",
+    description: "Action declaration that POSTs through the Http() builtin.",
     template:
       '$${1:items} = []\n\n' +
       'function add(text) {\n' +
       '  $${1:items} = [...$${1:items}, { id: $${1:items}.length + 1, text: text }]\n' +
-      '  $response = http({ url: "/api/save", method: "POST", body: { item: { text: text } } })\n' +
+      '  $response = Http({ url: "https://api.example.com/save", method: "POST", body: { item: { text: text } } })\n' +
       '}',
   },
   {
@@ -178,7 +196,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  for (let item of $items) {\n' +
       '    out.push(Card([Text(item.${2:name})]))\n' +
       '  }\n' +
-      '  return Stack(out)\n' +
+      '  return Column(out)\n' +
       '}',
   },
   {
@@ -191,7 +209,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  $items = [...$items, { id: $items.length + 1, text: $draft }]\n' +
       '  $draft = ""\n' +
       '}\n\n' +
-      'form${1} = Stack([\n' +
+      'form${1} = Column([\n' +
       '  Input("${2:draft}", { placeholder: "What needs doing?", type: "text", value: $draft }),\n' +
       '  Button("Add", { action: add, variant: "primary" })\n' +
       '])',
@@ -261,10 +279,10 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Http",
-    description: "Fire an http() request and bind the reactive resource bag.",
+    description: "Fire an Http() request and bind the reactive resource bag.",
     template:
-      '$${1:response} = http({\n' +
-      '  url: "${2:/api/items}",\n' +
+      '$${1:response} = Http({\n' +
+      '  url: "${2:https://api.example.com/items}",\n' +
       '  method: "${3:GET}",\n' +
       '  headers: { "Content-Type": "application/json" }\n' +
       '})',
