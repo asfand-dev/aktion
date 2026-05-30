@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Actions · Aktion</title>
-  <meta name="description" content="Wire button clicks, form submits, and follow-ups to reactive state, HTTP, navigation, and JavaScript with action functions." />
+  <meta name="description" content="Actions are camelCase function declarations that run when the user clicks, types, or submits — the imperative counterpart to reactive bindings. Wire them to onClick / onChange / onSubmit, read and write state, call Http, navigate, and emit events." />
   <script>
     (function () {
       try {
@@ -17,6 +17,44 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
 <body data-page="actions">
   <div class="layout">
@@ -25,328 +63,251 @@
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Behaviour</span>
-        <h1>Actions: wire every visible button.</h1>
+        <h1>Actions.</h1>
         <p class="lead">
-          Actions are imperative functions invoked by events &mdash; a button
-          click, a form submit, a follow-up tap. They&rsquo;re the only place
-          a script mutates state, calls HTTP, navigates, or emits to the host.
+          Actions are camelCase <code>function</code> declarations that run when
+          the user <em>does</em> something &mdash; clicks a button, types in a
+          field, submits a form. They are the imperative counterpart to reactive
+          bindings: where a binding describes a value, an action describes what
+          happens next.
         </p>
       </header>
 
-      <h2 id="hello">Hello, action</h2>
-      <p>Declare a function at the top level; reference it from an event-handler prop:</p>
-<pre><code>$count = 0
-
-aktion = Card([
-  CardHeader("Counter", { subtitle: "Reactive state via action" }),
-  Text(`Count: ${$count}`),
-  Button("Increment", { action: increment })
-])
-
-function increment() {
-  $count = $count + 1
-}</code></pre>
-
+      <h2 id="anatomy">Anatomy</h2>
       <p>
-        That&rsquo;s the entire model: <em>name a function, reference the name</em>.
-        When the button is clicked, the runtime invokes the function, applies
-        every state write atomically, then re-renders.
+        An action is an ordinary function declaration: <code>function name(args) { &hellip; }</code>.
+        The capitalisation of the name is the whole convention &mdash;
+        <strong>PascalCase</strong> means a <em>component</em> (it returns UI),
+        <strong>camelCase</strong> means an <em>action</em> (it does something and
+        usually returns nothing). You never call an action yourself; you hand its
+        name to an event-handler prop and the runtime invokes it for you.
       </p>
-
-      <h2 id="signatures">Signatures &amp; invocations</h2>
-
-      <h3>Positional arguments</h3>
-<pre><code>function addItem(title, price) {
-  $items = [...$items, { id: $items.length + 1, title: title, price: price }]
-}
-
-// Invoke via a lambda that forwards the arguments
-Button("Add coffee", { action: () =&gt; addItem("Coffee", 3.5) })</code></pre>
-
-      <h3>Per-row handlers</h3>
-<pre><code>rows = $tasks.map(task =&gt; Stack([
-  Text(task.title),
-  Button("Toggle", { action: () =&gt; toggleDone(task.id) }),
-  Button("Delete", { action: () =&gt; deleteTask(task.id) })
-]))</code></pre>
-
-      <h3>Inline lambdas</h3>
-      <p>For one-shot handlers, skip the named declaration:</p>
-<pre><code>Button("Reset", { action: () =&gt; {
-  $count = 0
-  $error = null
-}})
-
-Button("+", { action: () =&gt; $count = $count + 1 })</code></pre>
-
-      <h3>Return values</h3>
-      <p>
-        Actions MAY include a <code>return</code> statement. The result is
-        observable from <code>$x = myAction(...)</code> expressions:
-      </p>
-<pre><code>function greet(name) {
-  return "Hello, " + name
-}
-
-$hello = greet("Ada")             // re-runs whenever the function call's args change</code></pre>
-
-      <h2 id="step-menu">Body grammar</h2>
-      <p>Inside a function body the imperative surface is small:</p>
-
       <table class="signature-table">
-        <thead><tr><th>Step</th><th>Purpose</th></tr></thead>
+        <thead><tr><th>Wire it to&hellip;</th><th>Prop</th></tr></thead>
         <tbody>
-          <tr><td><code>$atom = expr</code></td><td>Write to reactive state. <code>+= -= *= /= ??= ++ --</code> are also allowed.</td></tr>
-          <tr><td><code>name = expr</code></td><td>Local binding for use inside this function body (transient, not reactive).</td></tr>
-          <tr><td><code>$bag = Http({ &hellip; })</code></td><td>Fire an HTTP request. Result is reactive: <code>.data</code>, <code>.loading</code>, <code>.error</code>, <code>.status</code>, <code>.refetch()</code>, <code>.cancel()</code>.</td></tr>
-          <tr><td><code>route.navigate("/path")</code></td><td>Router transition. Updates the URL hash, fires <code>route-change</code>.</td></tr>
-          <tr><td><code>emit("event-name", { &hellip; })</code></td><td>Dispatch a <code>CustomEvent</code> on the host element.</td></tr>
-          <tr><td><code>storage.set("key", value)</code></td><td>Read or write <code>localStorage</code> / <code>sessionStorage</code> / <code>cookies</code> (see <a href="language.html#globals">globals</a>).</td></tr>
-          <tr><td><code>console.log("...")</code></td><td>Log to the browser console.</td></tr>
-          <tr><td><code>otherFn(args)</code></td><td>Invoke another function declared elsewhere in the program.</td></tr>
-          <tr><td><code>if</code> / <code>switch</code> / <code>for</code> / <code>while</code> / <code>try</code></td><td>Standard JS statement-form control flow (with <code>break</code> / <code>continue</code> / <code>throw</code>). Use a ternary on the RHS of an assignment to pick a value.</td></tr>
-          <tr><td><code>return expr</code></td><td>Optional return value.</td></tr>
+          <tr><td>A button press</td><td><code>Button("Save", { onClick: save })</code></td></tr>
+          <tr><td>Typing / value changes</td><td><code>Input("q", { onChange: (v) =&gt; $q = v })</code></td></tr>
+          <tr><td>A form submit</td><td><code>Form("login", { onSubmit: submit, fields: [&hellip;] })</code></td></tr>
         </tbody>
       </table>
-
       <p>
-        JavaScript code is written directly in the function body &mdash; no
-        wrapper is needed. Use the <code>ctx</code> bridge for host access,
-        state reads/writes from JS, and cleanup registration.
+        When the event fires the runtime runs the function, applies every state
+        write atomically, then re-renders once. Pass the <em>name</em>
+        (<code>onClick: save</code>) when the handler takes no arguments, or a thin
+        lambda (<code>onClick: () =&gt; remove(id)</code>) when you need to forward
+        something.
       </p>
 
-      <h2 id="state-writes">State writes &mdash; immutable patterns</h2>
+      <h2 id="state">Reading &amp; writing state</h2>
       <p>
-        Nested writes require whole-object replacement &mdash; direct mutation
-        of object fields (<code>$user.name = "Alex"</code>) is rejected. Use
-        spread and built-in filters instead:
+        The only place a script mutates state is inside an action (or an effect /
+        lambda body). Writing <code>$name = value</code> is reactive &mdash; every
+        binding that reads <code>$name</code> re-renders. The compound assignment
+        operators <code>+= -= *= /= ??=</code> and <code>++ -- </code> all work, and
+        member writes like <code>$user.name = "Alex"</code> rebuild the root object
+        immutably so subscribers see a fresh reference.
       </p>
-<pre><code>function toggleDone(taskId) {
-  $tasks = $tasks.map(task =&gt;
-    task.id == taskId ? { ...task, done: !task.done } : task
-  )
-}
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$count = 0
+function inc() { $count = $count + 1 }
+function dec() { $count -= 1 }
+aktion = Card([Column([
+  Text(`Count: ${$count}`, { variant: "large-heavy" }),
+  Row([
+    Button("−", { onClick: dec, variant: "ghost" }),
+    Button("Increment", { onClick: inc, variant: "primary" })
+  ], { gap: "s" })
+], { gap: "m" })])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
-function removeTask(taskId) {
-  $tasks = @Filter($tasks, "id", "!=", taskId)
-}
-
-function updateUserName(newName) {
-  $user = { ...$user, name: newName }
-}
-
-function appendTodo(item) {
-  $todos = [...$todos, item]
-}</code></pre>
-
+      <h2 id="inline-vs-named">Event handlers: inline vs named</h2>
       <p>
-        Multiple writes inside one function are batched: the renderer only fires
-        once, no matter how many atoms change.
+        For a one-liner, an inline lambda right on the prop is the cleanest thing:
+        <code>onClick: () =&gt; $open = true</code>. Reach for a named
+        <code>function</code> when the body grows past a statement or two, when you
+        want to reuse it across several controls, or when it simply reads better
+        with a name.
       </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$open = false
+function close() { $open = false }
+aktion = Column([
+  Button("Open", { onClick: () =&gt; $open = true, variant: "primary" }),
+  $open ? Callout("info", { title: "Now open", description: "Inline lambda opened me; a named action closes me." }) : Text("Closed."),
+  $open ? Button("Close", { onClick: close, variant: "ghost" }) : Spacer()
+], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
-      <h2 id="http">HTTP from actions</h2>
+      <h2 id="arguments">Passing arguments</h2>
       <p>
-        Mutations are just <code>Http({...})</code> calls with a non-GET
-        method. Bind the resource bag to an atom so the UI can show loading
-        and error states:
+        When a handler needs to know <em>which</em> item it is acting on, wrap the
+        call in a lambda that forwards the id. This is the standard shape for
+        per-row buttons built with <code>.map</code>:
       </p>
-<pre><code>function saveTask() {
-  $save = Http({
-    url:    "https://api.example.com/tasks",
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$items = [{ id: 1, name: "Apples" }, { id: 2, name: "Pears" }, { id: 3, name: "Plums" }]
+function remove(id) { $items = $items.filter(x =&gt; x.id != id) }
+aktion = Card([Column($items.map(item =&gt; Row([
+  Text(item.name),
+  Spacer(),
+  Button("Remove", { onClick: () =&gt; remove(item.id), variant: "ghost", size: "sm" })
+], { gap: "s" })), { gap: "s" })])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="server">Talking to the server</h2>
+      <p>
+        A write to the server is just an <code>Http({...})</code> call with a
+        non-GET method, fired from inside an action. <code>Http(...)</code> returns
+        a reactive <strong>resource</strong> &mdash; bind it to an atom and you get
+        <code>.data</code>, <code>.error</code>, <code>.loading</code>,
+        <code>.refetch()</code>, and <code>.cancel()</code>.
+      </p>
+      <p>
+        The clean way to refresh a list after a write is the settable
+        <code>.onDone</code> callback. Assign it after creating the resource; it
+        fires once <em>every time</em> the request settles &mdash; on the initial
+        load and every <code>refetch()</code>, on both success and error. It does
+        not fire for a request that was superseded or <code>cancel()</code>led.
+      </p>
+<pre><code>$todos = Http({ url: "https://api.example.com/todos" })
+
+function save() {
+  $res = Http({
+    url:    "https://api.example.com/todos",
     method: "POST",
-    body:   { title: $newTaskTitle, done: false }
+    body:   { title: $draft, done: false }
   })
-  $newTaskTitle = ""
+  $res.onDone = () =&gt; { $todos.refetch() }   // re-pull the list once the write settles
+  $draft = ""
 }
 
-// Show progress / error state in the UI
-status = Async($save, {
-  loading: LoadingState("Saving…"),
-  error:   ErrorState("Couldn't save", { description: $save.error }),
-  data:    Callout("success", { title: "Saved" })
-})</code></pre>
-
-      <h2 id="navigate">Navigation</h2>
+addBtn = Button("Add", { onClick: save, variant: "primary" })</code></pre>
       <p>
-        <code>route</code> is the reactive router handle. Call its
-        <code>navigate(path)</code> method to transition the URL:
+        Render the resource's states with <code>Async($res, { loading, error, data })</code>,
+        and see the <a href="http.html">Http guide</a> for the full resource API.
+      </p>
+
+      <h2 id="confirm">Confirming destructive actions</h2>
+      <p>
+        The full JavaScript global surface is available inside an action body, so
+        the browser dialogs &mdash; <code>confirm(...)</code>, <code>alert(...)</code>,
+        <code>prompt(...)</code> &mdash; work directly. Guard a destructive write
+        with <code>confirm</code> and bail early when the user cancels:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$items = [{ id: 1, name: "Draft.txt" }, { id: 2, name: "Notes.md" }, { id: 3, name: "Plan.pdf" }]
+function del(id) {
+  if (!confirm("Delete this item?")) { return }
+  $items = $items.filter(x =&gt; x.id != id)
+}
+aktion = Card([Column($items.map(f =&gt; Row([
+  Text(f.name),
+  Spacer(),
+  Button("Delete", { onClick: () =&gt; del(f.id), variant: "danger", size: "sm" })
+], { gap: "s" })), { gap: "s" })])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="navigate">Navigating</h2>
+      <p>
+        <code>route</code> is the reactive router handle &mdash; never declare it
+        yourself. Call <code>route.navigate("/path")</code> from inside an action to
+        change the URL and transition the matched view:
       </p>
 <pre><code>function openOrder(id) {
   route.navigate("/orders/" + id)
-}</code></pre>
+}
 
-      <p>For more on routing &mdash; matching, params, queries &mdash; see the <a href="routing.html">Routing guide</a>.</p>
+row = Button("View", { onClick: () =&gt; openOrder(order.id), variant: "ghost" })</code></pre>
+      <p>For matching, params, and query strings, see the <a href="routing.html">Routing guide</a>.</p>
 
-      <h2 id="emit">Emit custom events</h2>
+      <h2 id="emit">Emitting events to the host</h2>
       <p>
-        Use <code>emit()</code> to dispatch a <code>CustomEvent</code> on the
-        host element. The host listens with <code>addEventListener</code>.
+        Inside any action, <code>emit("name", detail)</code> dispatches an outbound
+        <code>CustomEvent</code> on the <code>&lt;aktion-app&gt;</code> host element.
+        The page embedding the app listens with <code>addEventListener</code>. Pick
+        stable names; <code>assistant-message</code>, <code>error</code>, and
+        <code>route-change</code> are reserved.
       </p>
 <pre><code>function submit() {
-  emit("form-submitted", { values: { email: $email, name: $name } })
-}
-
-// Host:
+  emit("form-submitted", { email: $email, name: $name })
+}</code></pre>
+<pre><code>// Host page:
 el.addEventListener("form-submitted", (event) =&gt; {
-  console.log(event.detail.values);
+  console.log(event.detail.email);
 });</code></pre>
 
-      <h2 id="assistant-message">Follow-up clicks &mdash; <code>assistant-message</code></h2>
+      <h2 id="vs">Action vs effect vs binding</h2>
       <p>
-        Several chat-oriented helpers (<code>FollowUpBlock</code>,
-        <code>FollowUpItem</code>, <code>ActionLink</code>, and any
-        <code>Button</code> whose <code>action</code> calls
-        <code>helpers.sendToAssistant("...")</code> in custom components)
-        dispatch an <code>assistant-message</code> event with the user's
-        intent. Wire it into your chat composer:
+        Three tools cover every "something should happen" case. Pick by what
+        <em>triggers</em> it:
       </p>
-<pre><code>aktion = Stack([
-  Markdown("Want to dig deeper? Try one of these:"),
-  FollowUpBlock([
-    "Show daily breakdown",
-    "Compare with last week",
-    "Export CSV"
-  ])
-])
-
-// Host:
-el.addEventListener("assistant-message", (event) =&gt; {
-  sendToLLM(event.detail.message);
-});</code></pre>
-
-      <h2 id="js-escape">Inline JavaScript</h2>
-      <p>
-        JavaScript code is written directly in function and effect bodies &mdash;
-        no wrapper or escape hatch is needed. The body runs as an async function
-        with access to a <code>ctx</code> bridge: state reads/writes,
-        host-registered tools, the host element, cleanup registration, and the
-        function&rsquo;s arguments.
-      </p>
-<pre><code>function copyShareLink() {
-  await navigator.clipboard.writeText(window.location.href)
-  ctx.state.set("copied", true)
-}</code></pre>
-
-      <p>See the <a href="javascript-interactions.html">JavaScript interactions guide</a> for the full <code>ctx</code> surface.</p>
-
-      <h2 id="hosts">Talking to the host &mdash; tools</h2>
-      <p>
-        Host-registered tools are async functions accessible as
-        <code>ctx.tools.&lt;name&gt;(args)</code> in function and effect
-        bodies. The host registers them with <code>el.setTools({...})</code>:
-      </p>
-<pre><code>// Host
-el.setTools({
-  uploadFile: async ({ file }) =&gt; {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: formData });
-    return res.json();
-  }
-});
-
-// Script
-function upload(file) {
-  const result = await ctx.tools.uploadFile({ file: ctx.args.file })
-  ctx.state.set("uploadUrl", result.url)
-}</code></pre>
-
-      <h2 id="patterns">Common patterns</h2>
-
-      <h3>Form submit + reset</h3>
-<pre><code>$name = ""
-$email = ""
-$message = ""
-
-function submit() {
-  if (!$name || !$email) { return }
-  $post = Http({
-    url:    "https://api.example.com/contact",
-    method: "POST",
-    body:   { name: $name, email: $email, message: $message }
-  })
-}
-
-function resetForm() {
-  $name = ""
-  $email = ""
-  $message = ""
-}
-
-btns = Buttons([
-  Button("Send",  { action: submit,    variant: "primary", icon: "paper-plane" }),
-  Button("Reset", { action: resetForm, variant: "ghost" })
-])
-
-aktion = Form("contact", { buttons: btns, fields: [
-  FormControl("Name",    { control: Input("name",    { placeholder: "Your name",       value: $name }) }),
-  FormControl("Email",   { control: Input("email",   { placeholder: "you@example.com", type: "email", value: $email }) }),
-  FormControl("Message", { control: TextArea("message", { rows: 4, value: $message }) })
-]})</code></pre>
-
-      <h3>Per-row actions in a table</h3>
-<pre><code>rows = $tasks.map(task =&gt; Stack([
-  Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
-  Text(task.title),
-  Buttons([
-    Button(task.done ? "Reopen" : "Done", { action: () =&gt; toggleDone(task.id), variant: "primary", size: "sm" }),
-    Button("Delete",                       { action: () =&gt; deleteTask(task.id), variant: "ghost",   size: "sm" })
-  ])
-]))
-
-function toggleDone(id) {
-  $tasks = $tasks.map(t =&gt; t.id == id ? { ...t, done: !t.done } : t)
-}
-
-function deleteTask(id) {
-  $tasks = @Filter($tasks, "id", "!=", id)
-  $remove = Http({ url: "https://api.example.com/tasks/" + id, method: "DELETE" })
-}</code></pre>
-
-      <h3>Confirm before destructive action</h3>
-<pre><code>$pendingDelete = null
-
-function requestDelete(id) { $pendingDelete = id }
-function cancelDelete()    { $pendingDelete = null }
-function confirmDelete() {
-  $tasks = @Filter($tasks, "id", "!=", $pendingDelete)
-  $pendingDelete = null
-}
-
-dialog = Modal("Delete this task?", {
-  open: $pendingDelete != null,
-  footer: [
-    Button("Cancel", { action: cancelDelete, variant: "ghost" }),
-    Button("Delete", { action: confirmDelete, variant: "danger" })
-  ],
-  children: [Text("This cannot be undone.")]
-})
-
-aktion = Stack([TaskTable({ rows: $tasks, onDelete: requestDelete }), dialog])</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Tool</th><th>Triggered by</th><th>Use for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Action</strong> &mdash; <code>function save() { &hellip; }</code></td><td>A user event (click, change, submit)</td><td>Mutations the user initiates: writes, server calls, navigation.</td></tr>
+          <tr><td><strong>Effect</strong> &mdash; <code>effect(() =&gt; { &hellip; }, [$dep])</code></td><td>A dependency changing (or mount / interval)</td><td>Reactive side effects: debounced search, timers, subscriptions &mdash; see <a href="side-effects.html">Side effects</a>.</td></tr>
+          <tr><td><strong>Binding</strong> &mdash; <code>$total = sum($items)</code></td><td>Any read it depends on changing</td><td>Pure, derived reactive values. No side effects.</td></tr>
+        </tbody>
+      </table>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Reactive</span>
+          <h3>Side effects</h3>
+          <p><code>effect(...)</code> for dependency-triggered work: timers, debounced search, cleanup.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p>Browser APIs, tools, the <code>ctx</code> bridge in function and effect bodies.</p>
+          <p>The full JS global surface, browser APIs, and the <code>ctx</code> bridge in action bodies.</p>
           <span class="demo-arrow">Learn more &rarr;</span>
         </a>
-        <a class="demo-card" href="routing.html">
-          <span class="demo-tag">Navigation</span>
-          <h3>Routing</h3>
-          <p><code>route.navigate(...)</code>, params, query strings, deep links.</p>
-          <span class="demo-arrow">Read the guide &rarr;</span>
-        </a>
-        <a class="demo-card" href="examples.html">
-          <span class="demo-tag">Recipes</span>
-          <h3>Examples</h3>
-          <p>Forms, dashboards, chat &mdash; full Aktion snippets you can copy.</p>
-          <span class="demo-arrow">Browse examples &rarr;</span>
+        <a class="demo-card" href="http.html">
+          <span class="demo-tag">Data</span>
+          <h3>Http</h3>
+          <p>The reactive resource: <code>.data .error .loading .refetch() .cancel() .onDone</code>.</p>
+          <span class="demo-arrow">View reference &rarr;</span>
         </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

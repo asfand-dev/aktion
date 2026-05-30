@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JavaScript interactions · Aktion</title>
-  <meta name="description" content="Inline JavaScript — write browser API code directly in function and effect bodies with access to the ctx bridge for state, tools, and the host element." />
+  <meta name="description" content="Aktion is a strict subset of JavaScript — inside action, effect, and lambda bodies you get the full JavaScript language and the entire browser global surface: dialogs, fetch, crypto, Intl, timers, window, and document, with no imports." />
   <script>
     (function () {
       try {
@@ -17,6 +17,44 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
 <body data-page="javascript-interactions">
   <div class="layout">
@@ -25,233 +63,309 @@
     <main>
       <header class="hero">
         <span class="hero-eyebrow">Advanced</span>
-        <h1>Inline JavaScript.</h1>
+        <h1>JavaScript interactions.</h1>
         <p class="lead">
-          When you need browser APIs the declarative surface doesn&rsquo;t
-          cover &mdash; clipboard writes, IntersectionObserver, third-party
-          SDKs &mdash; write JavaScript directly in your function or effect
-          bodies. You get full async access to state, host tools, and the
-          host element via the <code>ctx</code> bridge.
+          Aktion is a strict subset of JavaScript, and inside
+          <code>function</code>, <code>effect</code>, and lambda bodies you
+          have the <strong>full JavaScript language</strong> and the
+          <strong>entire browser global surface</strong> &mdash; dialogs,
+          <code>fetch</code>, <code>crypto</code>, <code>Intl</code>, timers,
+          <code>window</code>, and <code>document</code>. No imports, no
+          wrappers: every global resolves by name.
         </p>
       </header>
 
       <h2 id="where">Where you can use it</h2>
-      <p>JavaScript code &mdash; including <code>ctx</code> bridge calls &mdash; is valid in any imperative body:</p>
+      <p>
+        Aktion programs are declarative at the top level &mdash; you assign
+        reactive state with <code>$name</code> and build the tree by
+        composing components. Imperative JavaScript lives in three places, and
+        in each of them the whole language is fair game:
+      </p>
       <ul>
-        <li>Inside a <code>function</code> body (action handler).</li>
-        <li>Inside an <code>effect</code> body.</li>
-        <li>Inside a multi-statement lambda body (rare; prefer named functions).</li>
+        <li>Inside a <code>function</code> body (an action / event handler).</li>
+        <li>Inside an <code>effect</code> body (a declarative side effect).</li>
+        <li>Inside a lambda &mdash; including the multi-statement
+          <code>(x) =&gt; { &hellip;; return &hellip; }</code> form.</li>
       </ul>
-      <p>No wrapper syntax is needed &mdash; JS code goes directly in the body:</p>
+      <p>
+        State is read and written with the bare <code>$</code> sigil &mdash;
+        no bridge object, no getter/setter calls. Writing a <code>$atom</code>
+        triggers a re-render:
+      </p>
 
-<pre><code>function copyShareLink() {
+<pre><code>$copied = false
+
+function copyShareLink() {
   await navigator.clipboard.writeText(window.location.href)
-  ctx.state.set("copied", true)
+  $copied = true
 }
 
 effect(() =&gt; {
-  const onScroll = () =&gt; ctx.state.set("scrollY", window.scrollY)
+  const onScroll = () =&gt; { $scrollY = window.scrollY }
   window.addEventListener("scroll", onScroll, { passive: true })
-  ctx.cleanup(() =&gt; window.removeEventListener("scroll", onScroll))
+  cleanup(() =&gt; window.removeEventListener("scroll", onScroll))
 }, ["mount"])</code></pre>
 
-      <h2 id="ctx">The <code>ctx</code> bridge</h2>
       <p>
-        Function and effect bodies run as <code>async</code> functions with
-        access to a <code>ctx</code> bridge. The body can <code>await</code>
-        anywhere. The surface is intentionally narrow &mdash; just enough to
-        bridge the script and the host without leaking the entire runtime.
+        Bodies run as <code>async</code> functions, so you can
+        <code>await</code> anywhere inside a <code>function</code> or
+        <code>effect</code>.
       </p>
 
+      <h2 id="surface">The full global surface</h2>
+      <p>
+        Beyond the curated standard library, <strong>every</strong> JavaScript
+        global resolves by name as the final fallback in identifier
+        resolution. You never import anything &mdash; just use the name.
+      </p>
       <table class="signature-table">
-        <thead><tr><th>Property</th><th>Type</th><th>Purpose</th></tr></thead>
+        <thead><tr><th>Group</th><th>Globals</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td><code>ctx.state.get(name)</code></td><td><code>(name: string) =&gt; unknown</code></td><td>Read a reactive atom. Pass the bare name without <code>$</code> &mdash; e.g. <code>ctx.state.get("count")</code> reads <code>$count</code>.</td></tr>
-          <tr><td><code>ctx.state.set(name, value)</code></td><td><code>(name: string, value: unknown) =&gt; void</code></td><td>Write to a reactive atom. Triggers a re-render.</td></tr>
-          <tr><td><code>ctx.cleanup(fn)</code></td><td><code>(fn: () =&gt; void) =&gt; void</code></td><td>Register a cleanup callback (effect bodies only). Runs when the effect re-fires or unmounts.</td></tr>
-          <tr><td><code>ctx.host</code></td><td><code>HTMLElement</code></td><td>The host <code>&lt;aktion-app&gt;</code> element &mdash; useful for <code>dispatchEvent</code>, attribute reads, or accessing the shadow root.</td></tr>
-          <tr><td><code>ctx.tools</code></td><td><code>Record&lt;string, fn&gt;</code></td><td>Host-registered async tools (set via <code>el.setTools(...)</code>).</td></tr>
-          <tr><td><code>ctx.args</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td>Function/lambda parameters by name &mdash; e.g. <code>ctx.args.taskId</code>.</td></tr>
+          <tr>
+            <td>Dialogs</td>
+            <td><code>alert</code>, <code>confirm</code>, <code>prompt</code></td>
+            <td>Synchronous and blocking &mdash; fine for quick confirmations; prefer a <code>Modal</code> for rich UX.</td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td><code>fetch</code>, <code>URL</code>, <code>URLSearchParams</code>, <code>Blob</code>, <code>FormData</code></td>
+            <td>For UI data prefer <code>Http({&hellip;})</code> &mdash; it is reactive and re-fetchable. Reach for raw <code>fetch</code> only for one-off, non-rendering calls.</td>
+          </tr>
+          <tr>
+            <td>Crypto / IDs</td>
+            <td><code>crypto.randomUUID()</code>, <code>crypto.getRandomValues()</code></td>
+            <td>Generate stable client-side ids and random values.</td>
+          </tr>
+          <tr>
+            <td>Locale</td>
+            <td><code>Intl.NumberFormat</code>, <code>Intl.DateTimeFormat</code></td>
+            <td>Locale-aware number, currency, and date formatting.</td>
+          </tr>
+          <tr>
+            <td>Storage</td>
+            <td><code>localStorage</code>, <code>sessionStorage</code></td>
+            <td>Prefer the friendlier <code>storage</code> global (<code>storage.set</code>, <code>storage.cookies.set</code>) &mdash; it JSON-roundtrips and swallows quota errors.</td>
+          </tr>
+          <tr>
+            <td>Encoding</td>
+            <td><code>atob</code>, <code>btoa</code>, <code>encodeURIComponent</code>, <code>decodeURIComponent</code></td>
+            <td>Base64 and URI escaping.</td>
+          </tr>
+          <tr>
+            <td>Stdlib</td>
+            <td><code>Math</code>, <code>JSON</code>, <code>Object</code>, <code>Array</code>, <code>Number</code>, <code>String</code>, <code>Date</code>, <code>Map</code>, <code>Set</code>, <code>RegExp</code>, <code>Promise</code>, <code>BigInt</code>, <code>Reflect</code>, <code>parseInt</code>&hellip;</td>
+            <td>The everyday toolbox &mdash; no import needed.</td>
+          </tr>
+          <tr>
+            <td>DOM roots</td>
+            <td><code>window</code>, <code>document</code>, <code>navigator</code></td>
+            <td>For DOM APIs with no declarative equivalent (clipboard, observers, listeners).</td>
+          </tr>
+          <tr>
+            <td>Timers</td>
+            <td><code>setTimeout</code>, <code>setInterval</code>, <code>clearTimeout</code>, <code>clearInterval</code></td>
+            <td>Runtime-tracked &mdash; see <a href="#timers">Timers</a> below.</td>
+          </tr>
         </tbody>
       </table>
-
       <div class="callout">
-        <h4>State naming</h4>
+        <h4>Prefer the declarative primitive when there is one</h4>
         <p>
-          When reading and writing through <code>ctx.state</code>, drop the
-          sigil: use <code>ctx.state.get("count")</code> to read the
-          <code>$count</code> atom and <code>ctx.state.set("count", 1)</code>
-          to write it.
+          The passthrough exists for APIs the declarative surface doesn&rsquo;t
+          cover. For reactive UI data use <code>Http({&hellip;})</code> rather
+          than raw <code>fetch</code>; for persistence use the
+          <code>storage</code> global rather than raw <code>localStorage</code>.
+          Reach for a bare global only when there is no declarative equivalent.
         </p>
       </div>
 
-      <h2 id="recipes">Common recipes</h2>
-
-      <h3>Browser dialogs &mdash; <code>alert</code> / <code>confirm</code> / <code>prompt</code></h3>
+      <h2 id="dialogs">Browser dialogs</h2>
       <p>
-        The dialog globals work like plain JavaScript. They are most useful
-        for quick confirmations from an action handler; for richer UX prefer a
-        <code>Modal</code> / <code>Drawer</code> component bound to state.
+        <code>alert</code>, <code>confirm</code>, and <code>prompt</code> work
+        exactly like plain JavaScript and are handy for a quick yes/no from an
+        action handler. They <strong>block the thread</strong> while open, so
+        for anything richer than a confirmation prefer a
+        <code>Modal</code> or <code>Drawer</code> component bound to state
+        (see the <a href="components.html">component catalog</a>).
       </p>
-<pre><code>function deleteItem(id) {
-  if (!confirm("Delete this item? This cannot be undone.")) { return }
-  $items = $items.filter(x =&gt; x.id != ctx.args.id)
-  alert("Item deleted.")
-}
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live — opens a real browser dialog</span>
+<pre><code>$msg = "—"
+function ask() { $msg = confirm("Proceed?") ? "confirmed" : "cancelled" }
+function rename() { let n = prompt("New name?", "Atlas"); if (n) { $msg = "renamed to " + n } }
+aktion = Column([
+  Text($msg, { variant: "large-heavy" }),
+  Row([
+    Button("Confirm", { onClick: ask }),
+    Button("Rename", { variant: "ghost", onClick: rename })
+  ], { gap: "s" })
+], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
-function rename(id) {
-  const name = prompt("New name?", "")
-  if (name) { $items = $items.map(x =&gt; x.id == ctx.args.id ? { ...x, name } : x) }
+      <h2 id="timers">Timers</h2>
+      <p>
+        <code>setTimeout</code>, <code>setInterval</code>,
+        <code>clearTimeout</code>, and <code>clearInterval</code> behave like
+        their JavaScript counterparts and return a handle you can later clear.
+        The difference: <strong>the runtime tracks every timer</strong> and
+        tears it down automatically when the program re-plans or the surrounding
+        scope unmounts, so a stray <code>setInterval</code> can never outlive
+        the program. You should still clear an interval you no longer need.
+      </p>
+      <p>
+        The canonical pattern is to create the timer inside an
+        <code>effect</code> (not at the top level, which would re-create it on
+        every render) and clear it in the effect&rsquo;s <code>cleanup</code>:
+      </p>
+<pre><code>$now = @Now()
+
+effect(() =&gt; {
+  let id = setInterval(() =&gt; { $now = @Now() }, 1000)
+  cleanup(() =&gt; clearInterval(id))
+}, ["mount"])
+
+clock = Text(@FormatDate($now, "time"))</code></pre>
+      <p>
+        For a debounce, clear and restart a <code>setTimeout</code> on each
+        keystroke:
+      </p>
+<pre><code>function onType(q) {
+  clearTimeout($searchTimer)
+  $searchTimer = setTimeout(() =&gt; { $query = q }, 300)
 }</code></pre>
+      <p>
+        For a plain repeating effect, prefer the declarative
+        <code>effect(&hellip;, ["every(1000)"])</code> trigger &mdash; reach for
+        raw timers when you need an imperative handle, a one-shot delay, or a
+        debounce/restart. See <a href="side-effects.html">side effects</a> for
+        the full effect trigger grammar.
+      </p>
 
-      <h3>Clipboard</h3>
+      <h2 id="recipes">Recipes</h2>
+
+      <h3>Copy to clipboard</h3>
 <pre><code>function copyToClipboard(text) {
   try {
-    await navigator.clipboard.writeText(ctx.args.text)
-    ctx.state.set("toast", { kind: "success", message: "Copied" })
+    await navigator.clipboard.writeText(text)
+    $toast = { kind: "success", message: "Copied" }
   } catch (err) {
-    ctx.state.set("toast", { kind: "error", message: err.message })
+    $toast = { kind: "error", message: err.message }
   }
 }</code></pre>
 
-      <h3>File input &mdash; read as data URL</h3>
+      <h3>Generate an id</h3>
+<pre><code>function addRow() {
+  $rows = [...$rows, { id: crypto.randomUUID(), label: "New row" }]
+}</code></pre>
+
+      <h3>Format a number</h3>
+<pre><code>function formatTotal(n) {
+  $total = Intl.NumberFormat("en-US").format(n)
+}</code></pre>
+
+      <h3>Read a file as a data URL</h3>
 <pre><code>function pickAvatar(file) {
   const reader = new FileReader()
-  reader.onload = () =&gt; ctx.state.set("avatarPreview", reader.result)
-  reader.readAsDataURL(ctx.args.file)
+  reader.onload = () =&gt; { $avatarPreview = reader.result }
+  reader.readAsDataURL(file)
 }</code></pre>
 
-      <h3>IntersectionObserver for infinite scroll</h3>
-<pre><code>effect(() =&gt; {
-  const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
-  if (!sentinel) return
-  const observer = new IntersectionObserver((entries) =&gt; {
-    if (entries.some((e) =&gt; e.isIntersecting)) {
-      const page = ctx.state.get("page") || 1
-      ctx.state.set("page", page + 1)
-    }
-  })
-  observer.observe(sentinel)
-  ctx.cleanup(() =&gt; observer.disconnect())
-}, ["mount"])</code></pre>
+      <h3>Encode to Base64</h3>
+<pre><code>function encode(text) {
+  $encoded = btoa(text)
+}</code></pre>
 
-      <h3>WebSocket subscription</h3>
-<pre><code>effect(() =&gt; {
-  const socket = new WebSocket("wss://example.com/stocks")
-  socket.addEventListener("message", (event) =&gt; {
-    ctx.state.set("ticker", JSON.parse(event.data))
-  })
-  ctx.cleanup(() =&gt; socket.close())
-}, ["mount"])</code></pre>
-
-      <h3>Keyboard shortcut listener</h3>
-<pre><code>effect(() =&gt; {
-  const onKey = (e) =&gt; {
-    if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      ctx.host.dispatchEvent(new CustomEvent("toggle-palette", { bubbles: true, composed: true }))
-    }
-  }
-  document.addEventListener("keydown", onKey)
-  ctx.cleanup(() =&gt; document.removeEventListener("keydown", onKey))
-}, ["mount"])</code></pre>
-
-      <h3>Browser navigation guard</h3>
-<pre><code>effect(() =&gt; {
-  const onBeforeUnload = (event) =&gt; {
-    if (ctx.state.get("isDirty")) {
-      event.preventDefault()
-      event.returnValue = ""
-    }
-  }
-  window.addEventListener("beforeunload", onBeforeUnload)
-  ctx.cleanup(() =&gt; window.removeEventListener("beforeunload", onBeforeUnload))
-}, ["mount"])</code></pre>
-
-      <h3>Reading function arguments</h3>
       <p>
-        When a function receives arguments, they land in <code>ctx.args</code>
-        by name. This is handy for per-row action handlers.
+        The synchronous helpers &mdash; <code>crypto.randomUUID()</code>,
+        <code>Intl.NumberFormat</code>, and <code>btoa</code> &mdash; work
+        directly in the preview, so this demo renders their results without any
+        network access:
       </p>
-<pre><code>function deleteTask(taskId) {
-  const id = ctx.args.taskId
-  const remaining = (ctx.state.get("tasks") || []).filter(t =&gt; t.id !== id)
-  ctx.state.set("tasks", remaining)
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$id = "—"
+$money = "—"
+$b64 = "—"
+function run() {
+  $id = crypto.randomUUID()
+  $money = Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(1234567)
+  $b64 = btoa("hello aktion")
 }
+aktion = Column([
+  Button("Run", { variant: "primary", onClick: run }),
+  Text("id: " + $id),
+  Text("money: " + $money),
+  Text("base64: " + $b64)
+], { gap: "s" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
-// In the UI:
-Button("Delete", { action: () =&gt; deleteTask(task.id) })</code></pre>
-
-      <h3>Talking to a host-registered tool</h3>
+      <h2 id="precedence">Precedence &amp; safety</h2>
       <p>
-        Tools are the right primitive when the host has secrets, signed
-        URLs, or framework-specific APIs the script shouldn&rsquo;t touch
-        directly. Register them once on the host:
+        The global passthrough is always tried <strong>last</strong> &mdash;
+        after your state, bindings, actions, user-defined components, the
+        curated standard library, and the component catalog. Author
+        declarations and built-in components therefore always win over a
+        same-named global: a library <code>Text</code> or <code>Map</code>
+        component still beats the DOM <code>Text</code> node or the
+        <code>Map</code> constructor, and your own <code>$crypto</code> shadows
+        the host <code>crypto</code>. The passthrough only fills in names you
+        haven&rsquo;t defined, so it can never silently change the meaning of a
+        name you control.
       </p>
-<pre><code>// Host
-el.setTools({
-  uploadFile: async ({ file }) =&gt; {
-    const body = new FormData();
-    body.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body });
-    return res.json();
-  },
-  fetchOrder: async ({ id }) =&gt; (await fetch(`/api/orders/${id}`)).json(),
-});</code></pre>
-
-      <p>Then call them from the script via <code>ctx.tools</code>:</p>
-<pre><code>function uploadAvatar(file) {
-  const result = await ctx.tools.uploadFile({ file: ctx.args.file })
-  ctx.state.set("avatarUrl", result.url)
-}</code></pre>
-
-      <h2 id="when-not">When to use declarative features instead</h2>
-      <p>The declarative surface already covers most needs &mdash; prefer it whenever possible:</p>
-      <ul>
-        <li><strong>Fetching data</strong> &mdash; use <code>Http({...})</code>, never <code>fetch()</code>.</li>
-        <li><strong>Navigation</strong> &mdash; use <code>route.navigate(path)</code>, never <code>window.location</code>.</li>
-        <li><strong>Persistence</strong> &mdash; use the <code>storage</code> global directly (<code>storage.set</code>, <code>storage.cookies.set</code>, &hellip;).</li>
-        <li><strong>Logging</strong> &mdash; use <code>console.log(...)</code> directly &mdash; it&rsquo;s an Aktion global.</li>
-        <li><strong>Dispatching events</strong> &mdash; use <code>emit("name", { detail })</code> from a function/effect body.</li>
-        <li><strong>Side-effect chaining</strong> &mdash; use multiple function calls or an <code>effect</code> with a state trigger.</li>
-      </ul>
-      <p>
-        Reach for the <code>ctx</code> bridge and raw browser APIs only when
-        you need a DOM API, a third-party SDK, or a host integration that has
-        no declarative equivalent.
-      </p>
-
-      <h2 id="security">Security notes</h2>
-      <ul>
-        <li>JavaScript in function/effect bodies is executed with <code>new Function(...)</code>. It runs in the host page&rsquo;s realm, with full access to the page&rsquo;s globals and DOM.</li>
-        <li><strong>Only feed scripts from trusted sources.</strong> If you accept Aktion from arbitrary users, strip or refuse JavaScript code before passing the text to the element.</li>
-        <li>Strict CSP environments may need <code>'unsafe-eval'</code> for function bodies that use browser APIs to execute. The rest of the runtime works without it.</li>
-        <li>Errors thrown inside function/effect bodies are caught and logged; they never crash the surrounding program.</li>
-      </ul>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Side effects</h3>
+          <p>The <code>effect</code> trigger grammar, cleanup, timers, and watched atoms.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
         <a class="demo-card" href="actions.html">
           <span class="demo-tag">Behaviour</span>
           <h3>Actions</h3>
-          <p>The full body grammar &mdash; state, HTTP, navigate, emit, return values.</p>
+          <p>The full function body grammar &mdash; state, HTTP, navigate, emit, return values.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="language.html">
           <span class="demo-tag">Reference</span>
           <h3>Language reference</h3>
-          <p>Reactive state, effects, control flow, built-in <code>@</code>-functions.</p>
+          <p>Reactive state, expressions, control flow, and the built-in <code>@</code>-functions.</p>
           <span class="demo-arrow">View reference &rarr;</span>
-        </a>
-        <a class="demo-card" href="frameworks.html">
-          <span class="demo-tag">Integration</span>
-          <h3>Framework integration</h3>
-          <p>Register tools and wire events from React, Vue, Angular, Svelte, and plain HTML.</p>
-          <span class="demo-arrow">See recipes &rarr;</span>
         </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

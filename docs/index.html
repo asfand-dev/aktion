@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aktion · Generative UI for any framework</title>
-  <meta name="description" content="A single web component that renders LLM-generated UI from a compact streaming language. Drop-in install, framework-agnostic, theme-aware, batteries included." />
+  <title>Introduction · Aktion</title>
+  <meta name="description" content="Aktion is a compact declarative language — a strict subset of JavaScript — for LLM-generated and hand-written rich UIs, rendered live and streaming-friendly by the <aktion-app> web component. Around 130 components, reactive $state, layout primitives, and the full JavaScript global surface." />
   <script>
     (function () {
       try {
@@ -17,214 +17,248 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
-<body data-page="introduction">
+<body data-page="index">
   <div class="layout">
     <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
-        <span class="hero-eyebrow">Generative UI · One web component</span>
-        <h1>Render LLM-generated UI in any framework.</h1>
+        <span class="hero-eyebrow">Introduction</span>
+        <h1>Aktion.</h1>
         <p class="lead">
-          <code>&lt;aktion-app&gt;</code> is a single web component that
-          turns a compact, streaming-first DSL into a rich, interactive UI
-          inside its shadow DOM. Works in React, Vue, Angular, Svelte, plain
-          HTML &mdash; or no framework at all.
+          Aktion is a compact <strong>declarative language</strong> &mdash; a strict
+          subset of JavaScript &mdash; for building rich UIs, whether an LLM writes
+          them token&#8209;by&#8209;token or you write them by hand. A program is a
+          handful of bindings ending in <code>aktion = &hellip;</code>; the
+          <code>&lt;aktion-app&gt;</code> web component renders it live, in its own
+          shadow DOM, the moment it streams in. No build step, no JSX, no flexbox
+          bookkeeping &mdash; just composition that runs anywhere HTML runs.
         </p>
         <div class="hero-cta">
           <a class="btn" href="get-started.html">Get started &rarr;</a>
-          <a class="btn btn-ghost" href="live-examples.html">Browse live demos</a>
+          <a class="btn btn-ghost" href="playground.html">Open the playground</a>
         </div>
       </header>
 
-      <h2 id="install">Drop-in CDN install</h2>
-      <p>One script tag and one custom element &mdash; that&rsquo;s the whole integration.</p>
-<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
-&lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
-&lt;script&gt;
-  const el = document.querySelector("aktion-app");
-  el.setResponse(`
-      aktion = Stack([greeting])
-      greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
-  `);
-&lt;/script&gt;</code></pre>
-
-      <h2 id="features">Why Aktion?</h2>
-      <div class="feature-grid">
-        <div class="feature">
-          <h3>Framework-agnostic</h3>
-          <p>Built on the standard Custom Elements API &mdash; works wherever HTML works. Shadow DOM keeps styles isolated.</p>
-        </div>
-        <div class="feature">
-          <h3>Streaming-first language</h3>
-          <p>Parser, evaluator, reactive state, HTTP primitive, and 30+ <code>@</code> builtins ship in one bundle.</p>
-        </div>
-        <div class="feature">
-          <h3>Renders progressively</h3>
-          <p>Feed LLM tokens via <code>appendChunk()</code> &mdash; the UI renders top-down as the response streams.</p>
-        </div>
-        <div class="feature">
-          <h3>130+ components</h3>
-          <p>Layout, forms, charts, data, patterns (Hero, KanbanBoard, PricingTable&hellip;), app shell, and editors.</p>
-        </div>
-        <div class="feature">
-          <h3>Seven themes built in</h3>
-          <p>Switch via the <code>theme</code> attribute or pass a custom JSON token map. In-script <code>Theme({...})</code> for brand overrides.</p>
-        </div>
-        <div class="feature">
-          <h3>System prompt included</h3>
-          <p>Full <code>system_prompt.txt</code> and compact <code>system_prompt_chat.txt</code> stay in lock-step with the library.</p>
-        </div>
-        <div class="feature">
-          <h3>Hash-based routing</h3>
-          <p>Multi-page UIs via <code>pages = Router({ "/": Page() })</code> + <code>NavLink</code>. Always on, deep links and back/forward just work.</p>
-        </div>
-        <div class="feature">
-          <h3>JavaScript escape hatch</h3>
-          <p>Inline JavaScript in <code>effect</code> / <code>function</code> bodies for the rare cases the declarative surface doesn&rsquo;t cover.</p>
-        </div>
-      </div>
-
-      <h2 id="live-demo">Live demo</h2>
+      <h2 id="hello">Hello, Aktion</h2>
       <p>
-        The component below was rendered from a few lines of Aktion.
-        Use the theme picker to swap palettes &mdash; the preview updates instantly.
+        Here is a whole program. Each line is a plain&#8209;data component call; the
+        final <code>aktion = &hellip;</code> is what gets rendered. The preview on the
+        right is a real <code>&lt;aktion-app&gt;</code> &mdash; not a screenshot.
       </p>
-
-      <div class="theme-picker" style="margin-bottom:14px;">
-        <label for="theme-picker">Theme</label>
-        <select id="theme-picker">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="neon">Neon</option>
-          <option value="pastel">Pastel</option>
-          <option value="glass">Glass</option>
-          <option value="brutalist">Brutalist</option>
-          <option value="skyline">Skyline</option>
-        </select>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  PageHeader("Project Atlas", { subtitle: "12 active · 4 at risk", badge: Badge("On track", { tone: "success" }) }),
+  Grid([
+    StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12% vs Q2", icon: "sack-dollar" }),
+    StatCard("Users", { value: "12,540", trend: "up", delta: "+184" }),
+    StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%" })
+  ], { gap: "m", minChildWidth: "180px" }),
+  Card([CardHeader("Welcome back"), Text("This dashboard streamed in as plain text and rendered as a live UI.")])
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
       </div>
 
-      <div class="example">
-        <div class="example-header">
-          <h3>Welcome card with KPIs & chart</h3>
-          <div class="example-tabs" role="tablist">
-            <button class="example-tab" data-target="preview" aria-selected="true">Preview</button>
-            <button class="example-tab" data-target="source" aria-selected="false">Source</button>
-          </div>
-        </div>
-        <div class="example-panel" data-key="preview" data-active="true">
-          <div class="example-output">
-            <aktion-app theme="light"></aktion-app>
-          </div>
-        </div>
-        <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Stack([welcome, kpis, chart])
-welcome = Card([
-  CardHeader("Hello there", { subtitle: "Generative UI rendered from Aktion" }),
-  Markdown("This card was streamed in **plain text** and rendered as a real UI.")
-])
-kpis = Stats([
-  StatCard("Active users", { value: "12,540", trend: "up", delta: "+18% vs last week" }),
-  StatCard("Revenue", { value: "$48.2k", trend: "flat", delta: "0% vs last week" }),
-  StatCard("Errors", { value: "12", trend: "down", delta: "-32% vs last week" })
-], { layout: "grid" })
-chart = Card([
-  CardHeader("Daily traffic"),
-  LineChart({ labels: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], series: [
-    Series("Visits", { values: [120,180,160,210,250,200,230] }),
-    Series("Signups", { values: [12,18,15,22,28,21,24] })
-  ] })
-])
-</code></pre>
-        </div>
-      </div>
+      <h2 id="why">Why Aktion</h2>
+      <ul>
+        <li><strong>Declarative.</strong> Describe the UI as a tree of data; the runtime handles the DOM, layout, and updates.</li>
+        <li><strong>Batteries included.</strong> Around <strong>130 components</strong> &mdash; layout, forms, charts, tables, and full patterns like dashboards and app shells.</li>
+        <li><strong>Reactive.</strong> One sigil, <code>$state</code>. Read it in your tree, write it in a <code>function</code>, and the UI re&#8209;renders itself.</li>
+        <li><strong>Streaming&#8209;friendly.</strong> The language is line&#8209;oriented and error&#8209;tolerant, so an LLM&rsquo;s tokens render top&#8209;down as they arrive.</li>
+        <li><strong>Themeable.</strong> Switch palettes with the <code>theme</code> attribute or override tokens in&#8209;script with <code>Theme({&hellip;})</code>.</li>
+        <li><strong>Runs anywhere.</strong> A standard custom element &mdash; drop it into React, Vue, Angular, Svelte, or plain HTML.</li>
+      </ul>
 
-      <h2 id="how-it-works">How it works</h2>
+      <h2 id="taste">A taste of the language</h2>
       <p>
-        Aktion is line-oriented and error-tolerant. Each statement
-        commits to the DOM as soon as it streams in. Three layers cooperate:
+        State is the one piece of magic. Declare a reactive value with the
+        <code>$</code> sigil, read it anywhere in your tree, and mutate it inside a
+        camelCase <code>function</code> &mdash; the UI updates on its own. Click the
+        button:
       </p>
-      <div class="feature-grid">
-        <div class="feature">
-          <h3>1. Declarative tree</h3>
-          <p>Pure-data composition of components: <code>aktion = Stack([header, body])</code>. Re-computed on every render.</p>
-        </div>
-        <div class="feature">
-          <h3>2. Reactive state &amp; HTTP</h3>
-          <p>One sigil: <code>$name = value</code>. One network primitive: <code>Http({ url, method, &hellip; })</code>. Changes schedule a re-render automatically.</p>
-        </div>
-        <div class="feature">
-          <h3>3. Actions &amp; effects</h3>
-          <p><code>function name() { &hellip; }</code> for click-driven mutations, <code>effect(() =&gt; { &hellip; }, [...deps])</code> for declarative background work.</p>
-        </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$count = 0
+function inc() { $count = $count + 1 }
+aktion = Card([
+  CardHeader("Reactive counter"),
+  Text(`You clicked ${$count} times.`, { variant: "large-heavy" }),
+  Button("Increment", { variant: "primary", icon: "plus", onClick: inc })
+])</code></pre>
+        <div class="lay-demo-preview"></div>
       </div>
 
-      <h2 id="next">Where to next?</h2>
+      <p>
+        Layout is composition. <code>Column</code> stacks vertically (the usual page
+        root), <code>Row</code> lays out left&#8209;to&#8209;right at natural widths,
+        and <code>Grid</code> builds equal columns and reflowing card walls &mdash; no
+        CSS required.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  Row([Text("Inbox", { variant: "large-heavy" }), Spacer(), Button("Compose", { variant: "primary", icon: "plus" })], { gap: "s" }),
+  Grid([
+    Card([CardHeader("Tile A")]),
+    Card([CardHeader("Tile B")]),
+    Card([CardHeader("Tile C")])
+  ], { columns: 3, gap: "m" })
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <p>
+        Data comes from <code>Http({ url, &hellip; })</code> &mdash; a reactive
+        resource with <code>.data</code>, <code>.error</code>, <code>.loading</code>,
+        and <code>.refetch()</code>. Pair it with <code>Async(resource, { loading,
+        error, empty, data })</code> to branch on its state &mdash; one of the four
+        slots renders depending on whether the request is loading, failed, empty, or
+        done. Here we hand it a resolved resource so the <code>data</code> branch shows:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$users = [{ name: "Ada Lovelace" }, { name: "Alan Turing" }, { name: "Grace Hopper" }]
+aktion = Card([
+  CardHeader("Users"),
+  Async({ state: "data", data: $users, loading: false }, {
+    loading: Skeleton("paragraph", { count: 3 }),
+    error: Callout("danger", { title: "Load failed" }),
+    empty: EmptyState("No users yet"),
+    data: Column($users.map(u =&gt; Text(u.name)))
+  })
+])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="whats-new">What&rsquo;s new</h2>
+      <ul>
+        <li>
+          <strong>Layout primitives.</strong> <code>Column</code> / <code>Row</code> /
+          <code>Center</code> plus <code>Grid</code> with <code>GridItem</code> 12&#8209;track
+          spans replace hand&#8209;rolled flexbox. <a href="layout.html">Read the layout guide &rarr;</a>
+        </li>
+        <li>
+          <strong>Timers.</strong> <code>setTimeout</code> / <code>setInterval</code>
+          (and their <code>clear&hellip;</code> partners) work just like in the browser
+          and are torn down with the program. <a href="javascript-interactions.html">JavaScript interactions &rarr;</a>
+        </li>
+        <li>
+          <strong><code>Http(&hellip;).onDone</code>.</strong> Fire a callback when a
+          request settles &mdash; ideal for refetching a list after a save.
+          <a href="actions.html">See actions &rarr;</a>
+        </li>
+        <li>
+          <strong>Full JavaScript global surface.</strong> <code>alert</code>,
+          <code>confirm</code>, <code>prompt</code>, <code>fetch</code>,
+          <code>crypto</code>, <code>navigator</code>, <code>Intl</code>,
+          <code>JSON</code>, <code>Math</code>, and friends are all available inside
+          action and effect bodies. <a href="javascript-interactions.html">Learn more &rarr;</a>
+        </li>
+        <li>
+          <strong>Render&#8209;anything table cells.</strong> <code>Table</code> and
+          <code>DataGrid</code> columns take a <code>render</code> prop to drop any
+          component &mdash; a <code>Badge</code>, a <code>Button</code> &mdash; into a
+          cell, or an <code>onClick</code> to make a whole column clickable.
+          <a href="components.html">Browse components &rarr;</a>
+        </li>
+      </ul>
+
+      <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="get-started.html">
           <span class="demo-tag">Setup</span>
-          <h3>Get started</h3>
-          <p>The 30-second integration guide &mdash; load the bundle, mount the tag, stream a response.</p>
+          <h3>Installation</h3>
+          <p>The 30&#8209;second integration &mdash; load the bundle, mount the tag, stream a response.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
-        <a class="demo-card" href="frameworks.html">
-          <span class="demo-tag">Frameworks</span>
-          <h3>Framework integration</h3>
-          <p>Drop-in setup for React, Next.js, Vue, Angular, Svelte, and plain HTML.</p>
-          <span class="demo-arrow">See recipes &rarr;</span>
-        </a>
-        <a class="demo-card" href="language.html">
-          <span class="demo-tag">Language</span>
-          <h3>Language reference</h3>
-          <p>Full syntax for Aktion &mdash; statements, expressions, state, built-ins.</p>
-          <span class="demo-arrow">View reference &rarr;</span>
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Column, Row, and Grid &mdash; plus Center, Container, Box, and GridItem spans.</p>
+          <span class="demo-arrow">Learn layout &rarr;</span>
         </a>
         <a class="demo-card" href="components.html">
-          <span class="demo-tag">Library</span>
-          <h3>Component reference</h3>
-          <p>Every built-in component, prop, and enum the LLM can reach for.</p>
-          <span class="demo-arrow">Browse library &rarr;</span>
-        </a>
-        <a class="demo-card" href="actions.html">
-          <span class="demo-tag">Behaviour</span>
-          <h3>Actions</h3>
-          <p>Wire button clicks, form submits, and follow-ups to reactive state, HTTP, navigation, and JS.</p>
-          <span class="demo-arrow">Read the guide &rarr;</span>
-        </a>
-        <a class="demo-card" href="javascript-interactions.html">
-          <span class="demo-tag">Advanced</span>
-          <h3>JavaScript interactions</h3>
-          <p><code>effect</code> &amp; <code>function</code> blocks with inline JavaScript for the rare cases the declarative surface doesn&rsquo;t cover.</p>
-          <span class="demo-arrow">Learn more &rarr;</span>
-        </a>
-        <a class="demo-card" href="routing.html">
-          <span class="demo-tag">Navigation</span>
-          <h3>Routing</h3>
-          <p>Hash-based multi-page UIs via <code>pages = Router({ &hellip; })</code> and <code>NavLink</code>.</p>
-          <span class="demo-arrow">Read the guide &rarr;</span>
-        </a>
-        <a class="demo-card" href="themes.html">
-          <span class="demo-tag">Theming</span>
-          <h3>Themes</h3>
-          <p>Seven built-in themes plus a live customization studio.</p>
-          <span class="demo-arrow">Explore themes &rarr;</span>
+          <span class="demo-tag">Reference</span>
+          <h3>Components</h3>
+          <p>Every component, prop, and a live preview &mdash; around 130 in all.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
         </a>
         <a class="demo-card" href="playground.html">
           <span class="demo-tag">Try it</span>
           <h3>Playground</h3>
-          <p>Edit Aktion live &mdash; the preview re-renders on every keystroke.</p>
-          <span class="demo-arrow">Open playground &rarr;</span>
-        </a>
-        <a class="demo-card" href="live-examples.html">
-          <span class="demo-tag">Showcase</span>
-          <h3>Live examples</h3>
-          <p>Chat, dashboards, commerce, routing, data explorers &mdash; every demo, with source.</p>
-          <span class="demo-arrow">Browse demos &rarr;</span>
+          <p>Paste any snippet above and tweak it live with autocomplete and inspect mode.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
         </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

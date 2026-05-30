@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Get started · Aktion</title>
-  <meta name="description" content="Load the bundle, mount the tag, stream Aktion — your LLM is now driving a real, interactive UI." />
+  <meta name="description" content="Get Aktion rendering in under a minute — drop in a CDN script tag or install from npm, mount the &lt;aktion-app&gt; element, and feed it an aktion = Column([...]) program." />
   <script>
     (function () {
       try {
@@ -17,197 +17,260 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
 </head>
-<body data-page="installation">
+<body data-page="get-started">
   <div class="layout">
     <aside class="sidebar"></aside>
 
     <main>
       <header class="hero">
-        <span class="hero-eyebrow">Installation</span>
-        <h1>Get started in 30 seconds.</h1>
+        <span class="hero-eyebrow">Getting started</span>
+        <h1>Install.</h1>
         <p class="lead">
-          Three steps: load the bundle, mount the tag, and feed it Aktion
-          text. Everything else &mdash; parsing, rendering, state,
-          theming, routing, even Font Awesome &mdash; is handled inside the
-          shadow DOM.
+          Get Aktion rendering in under a minute. There are two ways in &mdash; drop
+          a <strong>CDN <code>&lt;script&gt;</code> tag</strong> into any HTML page, or
+          <strong>install from npm</strong> and import it in your app. Either way you
+          end up with one custom element, <code>&lt;aktion-app&gt;</code>, that turns a
+          compact <code>aktion = Column([&hellip;])</code> program into a real,
+          interactive UI inside its shadow DOM.
         </p>
       </header>
 
-      <h2 id="step-1">1. Load the bundle</h2>
-      <p>Use the CDN build for zero setup:</p>
-<pre><code>&lt;script type="module"
-  src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;
-&lt;/script&gt;</code></pre>
+      <h2 id="cdn">Drop in a script tag (CDN)</h2>
+      <p>
+        Zero build, zero bundler. Load the ES module bundle from the CDN &mdash; it
+        registers the <code>&lt;aktion-app&gt;</code> element &mdash; then mount the
+        tag and hand it a program through the <code>response</code> attribute:
+      </p>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
 
-      <p>Or install from npm if you bundle your own assets:</p>
-<pre><code>npm install aktion-runtime
-&nbsp;
-// then, somewhere in your app entry:
-import "aktion-runtime";</code></pre>
+&lt;aktion-app response="aktion = Column([
+  PageHeader('Hello', { subtitle: 'Generative UI in plain HTML' }),
+  Card([CardHeader('It works'), Text('No build step required.')])
+])"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        That single bundle ships the parser, the reactive runtime, every built-in
+        component, the themes, and an optional Font Awesome loader. Nothing else to
+        wire up.
+      </p>
 
-      <p>The bundle is a single ES module (~110 KB minified, ~30 KB gzipped). It registers exactly one custom element &mdash; <code>&lt;aktion-app&gt;</code> &mdash; and ships:</p>
-      <ul>
-        <li>The parser, evaluator, reactive runtime, and reconciler.</li>
-        <li>All 130+ built-in components (layout, forms, charts, data, patterns).</li>
-        <li>The hash-based router and seven built-in themes.</li>
-        <li>An <em>optional</em> Font Awesome 6.7.2 loader (only injected if your script uses icons).</li>
-      </ul>
+      <h2 id="npm">Install from npm</h2>
+      <p>If you bundle your own assets, install the package:</p>
+<pre><code>npm i aktion-runtime</code></pre>
+      <p>
+        Then import it once, anywhere in your app entry. The import has a side effect:
+        it registers the <code>&lt;aktion-app&gt;</code> custom element. After that the
+        tag works in any framework or in plain HTML.
+      </p>
+<pre><code>import "aktion-runtime"; // registers &lt;aktion-app&gt;
 
-      <h2 id="step-2">2. Mount the element</h2>
-      <p>Drop the tag anywhere in your HTML:</p>
-<pre><code>&lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;</code></pre>
-      <p>Optional attributes:</p>
-      <ul>
-        <li><code>theme</code> &mdash; <code>light</code> (default), <code>dark</code>, <code>neon</code>, <code>pastel</code>, <code>glass</code>, <code>brutalist</code>, <code>skyline</code>.</li>
-        <li><code>response</code> &mdash; static script text. Updates re-render immediately.</li>
-        <li><code>streaming</code> &mdash; boolean. Suppresses transient parse errors while a stream is in flight.</li>
-        <li><code>showerrors</code> &mdash; boolean. Enables the developer error banner inside the shadow DOM.</li>
-      </ul>
-      <p>You can also drop the script text directly as the element&rsquo;s text content &mdash; the runtime reads <code>textContent</code> on connect if no <code>response</code> attribute is set.</p>
+// then render the element however your framework does it:
+// &lt;aktion-app response="aktion = Column([ Text('Hi from npm') ])"&gt;&lt;/aktion-app&gt;</code></pre>
 
-      <h2 id="step-3">3. Send it Aktion</h2>
-      <p>For static UI, set the <code>response</code> attribute (or the matching property):</p>
-<pre><code>&lt;aktion-app&gt;&lt;/aktion-app&gt;
-&lt;script&gt;
-  const el = document.querySelector("aktion-app");
-  el.setResponse(`
-    aktion = Stack([greeting])
-    greeting = Card([
-      CardHeader("Hello", { subtitle: "Generative UI in plain HTML" }),
-      Markdown("Set this script via **setResponse()** or stream it via **appendChunk()**.")
-    ])
-  `);
-&lt;/script&gt;</code></pre>
+      <h2 id="first-program">Your first program</h2>
+      <p>
+        Here is a complete program. The live preview on the right is the same bundle
+        you just installed, rendering this exact source:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>aktion = Column([
+  PageHeader("Project Atlas", { subtitle: "Updated 2 hours ago" }),
+  Card([
+    CardHeader("Overview"),
+    Text("Every Aktion program is a tree of components.")
+  ]),
+  Button("Get started", { variant: "primary", icon: "rocket" })
+], { gap: "l" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Every program starts with the <strong><code>aktion = &hellip;</code></strong>
+        entry binding &mdash; that expression is the root the element renders. The root
+        is normally a <strong><code>Column([&hellip;])</code></strong>, the recommended
+        layout primitive that stacks children top to bottom; its siblings are
+        <code>Row</code>, <code>Center</code>, and <code>Grid</code>. Everything else
+        is just components nested inside, each a function call with an optional props
+        object.
+      </p>
 
-      <p>For streaming responses (e.g. SSE from an LLM), set <code>streaming = true</code> while you append chunks. The UI commits each line as soon as the parser can &mdash; setting <code>streaming</code> just tells the error banner not to flash for transient mid-line parse errors.</p>
-<pre><code>const el = document.querySelector("aktion-app");
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
+      <h2 id="from-javascript">Driving the element from JavaScript</h2>
+      <p>
+        For static UI the <code>response</code> attribute is enough. To swap the
+        program at runtime, grab the element and call <code>setResponse()</code>
+        (the <code>response</code> property does the same thing):
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
 
-el.clear();
-el.streaming = true;
-while (true) {
-  const { value, done } = await reader.read();
-  if (done) break;
-  el.appendChunk(decoder.decode(value, { stream: true }));
+app.setResponse(`
+  aktion = Column([
+    CardHeader("Loaded from JavaScript"),
+    Text("Call setResponse() to replace the whole program.")
+  ])
+`);</code></pre>
+      <p>
+        For a streaming source (e.g. an LLM responding token by token), turn on the
+        <code>streaming</code> attribute and push text with
+        <code>appendChunk()</code>. The UI commits each line as soon as the parser can;
+        <code>streaming</code> simply tells the error banner not to flash on transient
+        mid-line parse errors. Clear it when the stream ends.
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.setAttribute("streaming", "true");
+
+for await (const chunk of stream) {
+  app.appendChunk(chunk);
 }
-el.streaming = false;</code></pre>
 
-      <h2 id="public-api">Public API at a glance</h2>
-      <p>The element is the entire integration surface:</p>
-<pre><code>// Attributes (set in HTML)
-&lt;aktion-app
-  theme="dark"
-  showerrors
-  response="..."&gt;
-&lt;/aktion-app&gt;
-
-// Properties (set in JS)
-el.response   = "aktion = ..."   // same as setResponse(text)
-el.streaming  = true            // toggle streaming mode
-el.showErrors = true            // toggle the developer error banner
-
-// Methods
-el.setResponse(text)            // replace the entire script
-el.appendChunk(chunk)           // append a streaming chunk
-el.clear()                      // wipe state and program text
-el.setTheme(theme)              // built-in name, or a Theme token map
-el.registerComponents(specs)    // extend the component library at runtime
-el.setTools({ name: fn })       // expose async tools to action/effect bodies
-el.registerHttpInterceptors(...) // hook every Http() call
-el.navigate(path)               // programmatic router navigation
-el.getSystemPrompt()            // build the LLM system prompt
-el.applyDelta(ops)              // Delta Protocol structural patches
-el.serializeState() / hydrateState(snap) / loadSnapshot({...}) // persistence
-
-// Events (CustomEvent on the element)
-"assistant-message"             // detail: { message }   — Button without action:
-"route-change"                  // detail: { path, previousPath, source }
-"error"                         // detail: { kind, errors }
-// + any user-emitted event from an action/effect via `emit`</code></pre>
-
-      <h2 id="hello-world">Hello, world</h2>
-      <p>Try it in a single file. Save the snippet below as <code>index.html</code> and open it &mdash; no build, no bundler.</p>
-<pre><code>&lt;!doctype html&gt;
-&lt;html lang="en"&gt;
-  &lt;body&gt;
-    &lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
-    &lt;script type="module"&gt;
-      import "https://asfand-dev.github.io/aktion/dist/aktion.js";
-
-      const el = document.querySelector("aktion-app");
-      el.setResponse(`
-        $count = 0
-        aktion = Card([
-          CardHeader("Counter demo", { subtitle: "Reactive state in 5 lines" }),
-          Text("Count: " + $count),
-          Button("Increment", { action: increment })
-        ])
-        function increment() { $count = $count + 1 }
-      `);
-    &lt;/script&gt;
-  &lt;/body&gt;
-&lt;/html&gt;</code></pre>
-
-      <h2 id="error-panel">Developer error banner</h2>
-      <p>While iterating, enable the in-shadow error banner:</p>
-<pre><code>&lt;aktion-app showerrors&gt;&lt;/aktion-app&gt;</code></pre>
+app.removeAttribute("streaming");</code></pre>
       <p>
-        When enabled, parse and evaluation errors render as a compact banner
-        above your UI. The banner is automatically suppressed while
-        <code>streaming = true</code> so partial mid-line content doesn&rsquo;t
-        flash transient errors. Listen for the <code>error</code> event to
-        forward diagnostics to your own logger or DevTools.
+        Two more attributes are worth knowing up front: <code>theme</code> selects a
+        built-in theme (see below), and <code>showerrors</code> renders a developer
+        error banner inside the shadow DOM while you iterate. Other methods on the
+        element include <code>setTheme()</code>, <code>registerComponents()</code> to
+        extend the library at runtime, and <code>getSystemPrompt()</code> to build the
+        prompt that teaches an LLM to emit Aktion.
       </p>
-<pre><code>el.addEventListener("error", (event) =&gt; {
-  console.warn("Aktion:", event.detail);
-});</code></pre>
 
-      <h2 id="system-prompt">System prompt</h2>
+      <h2 id="reactivity">Add reactivity</h2>
       <p>
-        To make an LLM emit valid Aktion, prepend the bundled
-        system prompt to your conversation. Two flavors ship in <code>dist/</code>:
+        State lives in <code>$</code>-prefixed bindings. Reassign one and every part of
+        the UI that reads it re-renders &mdash; no hooks, no setState. Wire a
+        <code>Button</code> to a function with <code>onClick</code>:
       </p>
-      <ul>
-        <li><code>dist/system_prompt.txt</code> &mdash; full reference (~30k tokens), best for capable models.</li>
-        <li><code>dist/system_prompt_chat.txt</code> &mdash; compact chat-mode prompt, optimized for smaller models.</li>
-      </ul>
-<pre><code>const SYSTEM_PROMPT = await fetch("/dist/system_prompt.txt").then(r =&gt; r.text());
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$count = 0
+function inc() { $count = $count + 1 }
+aktion = Card([
+  CardHeader("Counter", { subtitle: "Reactive state in a few lines" }),
+  Text("Count: " + $count),
+  Button("+1", { onClick: inc, variant: "primary" })
+])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Action bodies are real JavaScript: the full global surface is available
+        (<code>alert</code>, <code>fetch</code>, <code>Math</code>, &hellip;), as are
+        timers like <code>setTimeout</code> and <code>setInterval</code>. For data,
+        reach for the built-in <code>Http(&hellip;)</code> resource &mdash; it tracks
+        loading and error state and exposes an <code>.onDone</code> callback for when a
+        request settles.
+      </p>
 
-const messages = [
-  { role: "system",  content: SYSTEM_PROMPT },
-  { role: "user",    content: "Show me a pricing page for a SaaS product." },
-];
+      <h2 id="theming">Theming in one line</h2>
+      <p>
+        Switch the entire look with a single attribute &mdash;
+        <code>&lt;aktion-app theme="dark"&gt;</code>. Built-in themes include
+        <code>light</code>, <code>dark</code>, <code>neon</code>, <code>pastel</code>,
+        <code>glass</code>, <code>brutalist</code>, and <code>skyline</code>; you can
+        also pass a token map to <code>setTheme()</code>. See
+        <a href="themes.html">Themes</a> for the full list and custom tokens.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live — this demo follows the page theme</span>
+<pre><code>aktion = Card([
+  CardHeader("Themed surface", { subtitle: "One attribute restyles everything" }),
+  Text("Try toggling the doc theme in the top bar."),
+  Button("Action", { variant: "primary" })
+])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
-// Stream the response and forward chunks to the component.
-streamLlmResponse(messages, (chunk) =&gt; el.appendChunk(chunk));</code></pre>
-
-      <p>Both files are regenerated from <code>src/prompt/generator.ts</code> at build time, so they always match the components, themes, and builtins shipped in the same release.</p>
-
-      <h2 id="next">Where to next?</h2>
+      <h2 id="next">Next</h2>
       <div class="demo-grid">
-        <a class="demo-card" href="frameworks.html">
-          <span class="demo-tag">Frameworks</span>
-          <h3>Framework integration</h3>
-          <p>Drop-in setup for React, Next.js, Vue, Nuxt, Angular, Svelte, Solid, Astro, Remix, and plain HTML.</p>
-          <span class="demo-arrow">See recipes &rarr;</span>
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Column, Row, Grid, and Center &mdash; every layout from three primitives.</p>
+          <span class="demo-arrow">Learn layout &rarr;</span>
         </a>
         <a class="demo-card" href="language.html">
-          <span class="demo-tag">Language</span>
-          <h3>Language reference</h3>
-          <p>Statements, expressions, reactive state, HTTP, actions, effects, control flow.</p>
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>State, expressions, actions, effects, HTTP, and the rules behind component calls.</p>
           <span class="demo-arrow">View reference &rarr;</span>
         </a>
-        <a class="demo-card" href="playground.html">
-          <span class="demo-tag">Try it</span>
-          <h3>Playground</h3>
-          <p>Live editor + preview. Tweak Aktion and watch the UI re-render on every keystroke.</p>
-          <span class="demo-arrow">Open playground &rarr;</span>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Components</h3>
+          <p>Every built-in component, its props, and a live preview you can copy from.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Frameworks</span>
+          <h3>Frameworks</h3>
+          <p>Drop-in setup for React, Vue, Angular, Svelte, Next.js, and plain HTML.</p>
+          <span class="demo-arrow">See recipes &rarr;</span>
         </a>
       </div>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[get-started demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>
