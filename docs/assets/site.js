@@ -31,6 +31,7 @@ const NAV_GROUPS = [
       { href: "index.html", label: "Introduction" },
       { href: "get-started.html", label: "Installation" },
       { href: "frameworks.html", label: "Frameworks" },
+      { href: "migration-guide.html", label: "Migration guide", badge: "New" },
     ],
   },
   {
@@ -70,7 +71,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "language.html", "layout.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "layout.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -89,6 +90,7 @@ const PAGE_KEYWORDS = {
   "index.html": "overview introduction",
   "get-started.html": "install cdn quickstart setup",
   "frameworks.html": "react vue angular svelte nextjs html",
+  "migration-guide.html": "migrate react vue angular svelte solid preact nextjs jsx tsx hooks composition api signals stores props state",
   "language.html": "syntax expressions state queries mutations builtins",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
   "components.html": "props library catalog signatures",
