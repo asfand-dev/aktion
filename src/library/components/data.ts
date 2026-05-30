@@ -15,15 +15,18 @@ export const Col: ComponentSpec = {
   description:
     "Single column inside a Table or DataGrid. Use `align` for per-column " +
     "text alignment, `format` for cell rendering " +
-    "(`text|number|currency|date`). Pass `render: (value, index) => …` to " +
-    "render arbitrary components in the cells (action Buttons, Badges, " +
-    "links — return a component, string, or array). Pass `onClick: " +
-    "(value, index) => …` to make the whole cell clickable (pointer + " +
-    "keyboard). `sortable` and `filterable` only take effect inside " +
-    "`DataGrid` (Table ignores them).",
+    "(`text|number|currency|date`). `values` may be plain values OR an " +
+    "array of component nodes — e.g. `Col(\"Status\", rows.map(r => " +
+    "Badge(r.status)))` or `Col(\"Actions\", rows.map(r => Button(\"Edit\")))` " +
+    "— each component renders directly in its cell. Pass " +
+    "`render: (value, index) => …` for the same effect when you prefer to " +
+    "keep `values` as the raw row data (return a component, string, or " +
+    "array). Pass `onClick: (value, index) => …` to make the whole cell " +
+    "clickable (pointer + keyboard). `sortable` and `filterable` only take " +
+    "effect inside `DataGrid` (Table ignores them).",
   props: [
     { name: "header", type: "string" },
-    { name: "values", type: "any[]", description: "Column values. Use an array pluck like `data.rows.title`, or pass the full row array and map each cell with `render`." },
+    { name: "values", type: "any[]", description: "Column values. Plain values are formatted as text; component nodes (e.g. `rows.map(r => Badge(r.status))`) render directly. You can also pass the full row array and map each cell with `render`." },
     { name: "format", type: "string", optional: true, enum: ["text", "number", "currency", "date"] },
     { name: "align", type: "string", optional: true, enum: COL_ALIGN, description: "Per-column horizontal alignment" },
     { name: "sortable", type: "boolean", optional: true, description: "DataGrid: enable click-to-sort on this column" },

@@ -1620,10 +1620,23 @@ Notes:
 
 - Build columns with array pluck: `Col("Title", data.rows.title, { format, align })`.
 - Columns can render **any component** — action buttons, badges, links,
-  avatars — not just text. Pass `render: (value, index) => Component` and
-  give the column the full row array as its values:
-  `Col("", $rows, { render: (r) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })`.
-  `render` may return a component, a string, or an array of either.
+  avatars — not just text. The simplest form is to map each value to a
+  component directly in the `values` array — `render` is not required:
+
+  ```text
+  Table([
+    Col("Order ID",  orders.id),
+    Col("Customer", orders.customer),
+    Col("Status",   orders.map(o => Badge(o.status))),
+    Col("Actions",  orders.map(o => Button("View", { onClick: () => open(o.id), size: "sm" })))
+  ], { sticky: true })
+  ```
+
+  Equivalent long form using `render` (handy when you need the row index
+  or want to keep `values` as raw rows):
+  `Col("", $rows, { render: (r, i) => Button("Edit", { onClick: () => edit(r.id), size: "sm" }) })`.
+  Both `values`-as-components and `render` may return a component, a
+  string, or an array of either.
 - Make a whole column clickable (pointer + keyboard) with
   `onClick: (value, index) => …` — e.g. `Col("Name", $rows.name, { onClick: (name) => open(name) })`.
 - Both `render` and `onClick` work in `Table` and `DataGrid`.

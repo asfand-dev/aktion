@@ -242,11 +242,9 @@ export function sanitiseImageSrc(raw: unknown): string {
 
 /** `true` when a value is a renderable component node produced by the runtime. */
 export function isComponentNode(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value as { __kind?: string }).__kind === "Component"
-  );
+  if (value === null || typeof value !== "object") return false;
+  const kind = (value as { __kind?: string }).__kind;
+  return kind === "Component" || kind === "UserComponent";
 }
 
 /** Subset of `RenderHelpers` the table cell builder needs. */
