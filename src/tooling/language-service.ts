@@ -72,7 +72,7 @@ export interface HoverInfo {
 }
 
 const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
-  { label: "function",     detail: "Declare a component (PascalCase) or action (camelCase)" },
+  { label: "function",     detail: "Declare a component or action — either case works" },
   { label: "effect",       detail: "Reactive side-effect: effect(() => { ... }, [deps])" },
   { label: "Router",       detail: "pages = Router({ '/': Home(), default: NotFound() })" },
   { label: "switch",       detail: "switch (value) { case …: …; break; default: … }" },

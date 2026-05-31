@@ -187,4 +187,30 @@ describe("parser", () => {
     const expr = program.statements[0]?.expression;
     expect(expr).toMatchObject({ kind: "Literal", value: -3 });
   });
+
+  it("parses anonymous `function(e) { … }` as a function expression (Lambda)", () => {
+    const program = parse(
+      `aktion = ["apple", "banana"].map(function (e) {\n  return Button(e)\n})`,
+    );
+    expect(program.errors).toEqual([]);
+    expect(program.statements).toHaveLength(1);
+    const stmt = program.statements[0]!;
+    expect(stmt.kind).toBe("Assignment");
+    // Walk: Assignment → MethodCall .map(…) whose first arg is a Lambda.
+    const callExpr = stmt.expression as { kind: string; arguments?: Array<{ kind: string }> };
+    expect(callExpr.kind).toBe("MethodCall");
+    expect(callExpr.arguments?.[0]?.kind).toBe("Lambda");
+  });
+
+  it("accepts a PascalCase `function` without an explicit `return`", () => {
+    const program = parse(`function Save() { send("/api") }\naktion = Button("Save", { onClick: Save })`);
+    expect(program.errors).toEqual([]);
+    expect(program.statements[0]?.kind).toBe("ComponentDeclaration");
+  });
+
+  it("parses a lowercase-first function declaration as an action", () => {
+    const program = parse(`function display() { return Card([]) }\naktion = display()`);
+    expect(program.errors).toEqual([]);
+    expect(program.statements[0]?.kind).toBe("ActionDeclaration");
+  });
 });

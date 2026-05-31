@@ -153,19 +153,18 @@ A program is a flat list of \`name = expression\` statements, one per line. Newl
 ${ROOT} = Column([header, kpis, table])     // root assignment (always first)
 header  = PageHeader("Sales", { subtitle: "Q4 2026" })
 $count  = 0                                  // reactive atom — '$' prefix is the contract
-function Counter(label) { return Text(\`\${label}: \${$count}\`) }     // PascalCase = component
-function inc() { $count = $count + 1 }       // camelCase   = action (event handler)
+function Counter(label) { return Text(\`\${label}: \${$count}\`) }     // component (returns a render tree)
+function inc() { $count = $count + 1 }       // action (no return — runs for side effects)
 effect(() => { console.log($count) }, [$count])                       // declarative side effect
 \`\`\`
 
 ### Three name conventions
 - \`name = value\` — plain binding (not reactive). Captured once.
 - \`$name = value\` — reactive atom. Reading subscribes; writing notifies.
-- \`function Name(...)\` PascalCase = **component** (must \`return\`); \`function name(...)\` camelCase = **action**.
+- \`function name(...)\` — declares a component AND an action with that name. The same declaration works in both render position (its return value renders) and event-handler position (its body runs). First-letter case is NOT significant: \`function Card(...)\`, \`function card(...)\`, \`function SaveOrder(...)\`, and \`function saveOrder(...)\` are all valid.
 
-### Two hard rules — broken constantly, ALWAYS check
-1. **Components MUST be PascalCase.** The first character of a component's name MUST be an uppercase letter (A–Z) — \`UserCard\`, \`OrderRow\`, \`MyApp\`. A lowercase-first name (\`userCard\`, \`orderRow\`, \`myApp\`) defines an *action*, NOT a component, and the renderer will refuse to mount its return value. There is no auto-capitalisation: \`function todoList(...) { return Card(...) }\` is wrong — write \`function TodoList(...) { return Card(...) }\`.
-2. **Always invoke components with parentheses.** A component is a function — to render it you MUST call it. The bare identifier \`MyApp\` is a *reference to the function*; the rendered element is \`MyApp()\`. Even with no arguments, write \`MyApp()\`. So \`${ROOT} = MyApp\` is wrong — write \`${ROOT} = MyApp()\`. Inside arrays the same applies: \`Column([Header(), Body(), Footer()])\`, never \`Column([Header, Body, Footer])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
+### One hard rule — broken constantly, ALWAYS check
+1. **Always invoke components with parentheses.** A component is a function — to render it you MUST call it. The bare identifier \`MyApp\` is a *reference to the function*; the rendered element is \`MyApp()\`. Even with no arguments, write \`MyApp()\`. So \`${ROOT} = MyApp\` is wrong — write \`${ROOT} = MyApp()\`. Inside arrays the same applies: \`Column([Header(), Body(), Footer()])\`, never \`Column([Header, Body, Footer])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
 
 ### Reserved top-level names
 - \`${ROOT}\` — the UI root (REQUIRED, first line).
@@ -291,7 +290,7 @@ $todos = []
 - Write \`$name = ...\` only inside an action body, effect callback, or lambda body. \`+=\`, \`-=\`, \`*=\`, \`/=\`, \`??=\`, \`++\`, \`--\` work too. Member writes (\`$user.name = "Alex"\`) rebuild the root immutably so subscribers see a fresh reference.
 
 ### Per-instance state
-\`$name = value\` inside a PascalCase function body is per-instance. Two \`Counter()\` siblings each hold their own \`$count\`. Add \`{ key: id }\` at the call site to keep state attached when siblings reorder.
+\`$name = value\` inside a function body is per-instance when the function is used as a component. Two \`Counter()\` siblings each hold their own \`$count\`. Add \`{ key: id }\` at the call site to keep state attached when siblings reorder.
 
 ### Two-way binding (implicit)
 Pass a \`$variable\` (or a member chain rooted at one — \`value: $form.email\`) as a value prop on any input/select/checkbox/switch/slider/picker and the runtime wires the change handler automatically. Add \`onChange: v => ...\` when you also need a side effect (debounced search, persistence, etc.).
@@ -317,20 +316,17 @@ $total = Util.sum($cart.price)
 function fullComponentsAndActions(): string {
   return `## Components & Actions
 
-Naming alone selects between component and action — the runtime inspects the first character of the function name.
+A \`function\` declaration creates BOTH a component (callable in render position; its return value is rendered) and an action (callable from an event handler; its body runs for side effects). The first-letter case of the name is NOT significant — \`function Card(...)\`, \`function card(...)\`, \`function SaveOrder(...)\`, and \`function saveOrder(...)\` are all valid. A function with no \`return\` simply renders nothing when invoked in a render position. The same applies to arrow-function bindings (\`Display = () => Card(...)\` and \`display = () => Card(...)\` both work).
 
-### Components — PascalCase (MUST start with an uppercase letter)
-A PascalCase \`function\` is a reusable UI component. The first character of the name MUST be uppercase (A–Z) — \`UserCard\`, \`OrderRow\`, \`Sidebar\`. A lowercase-first name (\`userCard\`, \`orderRow\`) defines an *action*, not a component, and the renderer will not mount its return value. Every component MUST end with an explicit \`return\`. Parameters use standard JS defaults; destructured options are canonical.
-
-To render a component you MUST call it with parentheses — even when it takes no arguments. The bare identifier is just the function value.
+### Components
+A function used as a component returns a render tree. Parameters use standard JS defaults; destructured options are canonical. To render a component you MUST call it with parentheses — even when it takes no arguments. The bare identifier is just the function value.
 
 \`\`\`
-// WRONG — userCard is an action (camelCase); UserCard is referenced without ()
-${ROOT} = Column([userCard, UserCard])
-
-// RIGHT — PascalCase declaration, invoked with parentheses
+// Both forms work — case is not significant
 function UserCard(user) { return Card([Text(user.name)]) }
-${ROOT} = Column([UserCard($currentUser), UserCard($otherUser)])
+function userCard(user) { return Card([Text(user.name)]) }
+Display = () => ["apple", "banana"].map(function (e) { return Button(e) })
+${ROOT} = Column([UserCard($currentUser), userCard($otherUser), Display()])
 \`\`\`
 
 \`\`\`
@@ -348,9 +344,10 @@ function UserCard(user, { tone = "default" } = {}) {
 - \`children\` parameter is the implicit slot — the call site's positional argument is delivered into it.
 - User-declared components shadow built-ins by name, so you can wrap library components with telemetry / per-app styling.
 - Lambdas (\`row = item => Row(item)\`) are the right tool for one-off helpers that don't need their own component.
+- A function that does not \`return\` anything simply renders nothing when called in a render position — the runtime treats the missing/undefined value as an empty fragment.
 
-### Actions — camelCase
-A camelCase \`function\` is a callable side-effect block. Use as event handler (\`onClick: save\`) or as a value-producing expression (\`$result = greet("Ada")\`).
+### Actions
+A \`function\` whose body runs for side effects (rather than returning a render tree) acts as an action. Use as event handler (\`onClick: save\`) or as a value-producing expression (\`$result = greet("Ada")\`). The first-letter case of the name does not matter — \`save\` and \`Save\` are both valid.
 
 \`\`\`
 function save(item) {
@@ -743,7 +740,7 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 ### Output rules
 - Output ONLY Aktion (or a fenced \`\`\`aktion\`\`\` block when inline mode is enabled).
 - Build a complete, navigable surface — \`PageHeader\`, multi-section layouts, working buttons. Don't reply with a single Card.
-- Wire every visible button. Declare camelCase \`function name() { ... }\` blocks; reference via \`Button("Label", { onClick: name })\`.
+- Wire every visible button. Declare \`function name() { ... }\` blocks (any case for the name); reference via \`Button("Label", { onClick: name })\`.
 - Use \`Router({...})\` for multi-page apps; reach \`pages\` from \`${ROOT}\`; link from sidebar/navbar with \`NavLink\`/\`SidebarItem\` (\`to: "/path"\`).
 - Seed realistic mock data inline when no backend is available (5–20 plausible rows).
 - Lay out with three primitives: \`Column([...])\` (vertical, the usual page/section), \`Row([...])\` (horizontal toolbars/rows), and \`Grid([...], { columns })\` (equal columns / card walls). \`Center([...], { minHeight })\` centers content. Use responsive prop maps (\`{ base: 1, md: 2, lg: 4 }\`) on \`Grid\` columns or \`Stack\` direction so the app works on phone and desktop.
@@ -758,9 +755,9 @@ Before finishing, walk your output and check:
 1. \`${ROOT} = ...\` is the FIRST line.
 2. Every referenced name is defined somewhere below.
 3. Every defined name (other than \`${ROOT}\`, \`theme\`) is reachable from \`${ROOT}\`.
-4. **Every component name starts with an UPPERCASE letter (A–Z).** Scan every \`function name(...)\` that returns a UI node — rename \`todoList\` → \`TodoList\`, \`myApp\` → \`MyApp\`, \`header\` → \`Header\`. Lowercase-first names define actions, not components, and the renderer will not mount their return value.
-5. **Every component reference is invoked with parentheses.** Scan for bare PascalCase identifiers used as values (root assignment, array elements, prop values) — wrap each in \`()\`. \`${ROOT} = MyApp\` → \`${ROOT} = MyApp()\`; \`Column([Hero, Body])\` → \`Column([Hero(), Body()])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
-6. PascalCase functions end with an explicit \`return\`.
+4. **Function name case is NOT significant.** \`function Card(...)\` and \`function card(...)\` both declare a component-and-action; the same applies to arrow bindings.
+5. **Every component reference is invoked with parentheses.** Scan for bare component identifiers used as values (root assignment, array elements, prop values) — wrap each in \`()\`. \`${ROOT} = MyApp\` → \`${ROOT} = MyApp()\`; \`Column([Hero, Body])\` → \`Column([Hero(), Body()])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
+6. A function with no \`return\` simply renders nothing when called in a render position.
 7. State uses the single-sigil \`$name = value\` form.
 8. \`Http({...})\` uses an absolute \`url\` and exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
 9. \`Router({...})\` arms use \`:\` (not \`->\`) and \`default\` (not \`_\`) for the wildcard.
@@ -881,7 +878,7 @@ A program is a flat list of \`name = expression\` statements, written in standar
 - Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || !\`, ternary \`cond ? a : b\`, nullish \`a ?? b\`, spread \`[...a, ...b]\`, member access \`obj.field\`, optional chaining \`obj?.field\`.
 
 ### Component calls — two hard rules
-1. **PascalCase, always.** Component names MUST start with an uppercase letter — \`Card\`, \`Text\`, \`Hero\`. Lowercase-first names (\`card\`, \`text\`, \`hero\`) are not components and will not render.
+1. **Any case works.** Component names may start with either an uppercase or lowercase letter — \`Card\`, \`card\`, \`Hero\`, \`hero\` are all valid declarations.
 2. **Always invoke with parentheses.** A bare identifier (\`Hero\`) is a function reference; the rendered element is \`Hero()\`. Even with no arguments, write \`Hero()\`. In arrays: \`Column([Header(), Body(), Footer()])\`, never \`Column([Header, Body, Footer])\`.
 
 ### Trailing-object rule
@@ -1027,7 +1024,7 @@ Before finishing, walk your output and verify:
 1. \`${ROOT} = ...\` is the FIRST line.
 2. Every referenced name is defined somewhere below.
 3. Every defined name (other than \`${ROOT}\`) is reachable from \`${ROOT}\`.
-4. Every component name starts with an UPPERCASE letter (PascalCase) and every component reference is invoked with parentheses — \`Hero()\`, never bare \`Hero\`.
+4. Component name case is not significant, but every component reference is invoked with parentheses — \`Hero()\`, never bare \`Hero\`.
 5. Only the read-only components above are used — no forms, clickable buttons, modals, app shells, reactive-state writes, action functions, effect calls, HTTP calls, or routing primitives.
 6. No statement is split across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.
 7. Tables are column-oriented; charts use numeric arrays (use array pluck like \`rows.value\` when needed).

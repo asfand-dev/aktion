@@ -309,7 +309,7 @@ function inc() {
   $count = $count + 1
 }
 label = Text("" + $count, "large-heavy")
-btn = Button("Inc", inc())
+btn = Button("Inc", { onClick: inc })
 aktion = Stack([label, btn])`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;
@@ -329,7 +329,7 @@ function add() {
   $todos = [...$todos, {id: $todos.length + 1, text: $draft}]
   $draft = ""
 }
-addBtn = Button("Add", add())
+addBtn = Button("Add", { onClick: add })
 aktion = Stack([addBtn])`);
     await waitForRenders();
     el.state.set("draft", "first task");
@@ -363,7 +363,7 @@ aktion = Button("Click Me", () => { $hits = $hits + 1 })`);
 function next() {
   $count = $count + 1
 }
-btn = Button("Next", next())
+btn = Button("Next", { onClick: next })
 aktion = Stack([btn])`);
     await waitForRenders();
     const button = el.shadowRoot!.querySelector("button") as HTMLButtonElement;

@@ -819,6 +819,31 @@ describe("lambda expressions", () => {
     `);
     expect(ctx.bindings.get("result")?.()).toBe(14);
   });
+
+  it("supports an anonymous `function (e) { … }` expression as a `.map` callback", () => {
+    const { ctx } = buildContext(`
+      pairs = ["apple", "banana"].map(function (e) { return e })
+    `);
+    expect(ctx.bindings.get("pairs")?.()).toEqual(["apple", "banana"]);
+  });
+
+  it("an arrow-bound PascalCase helper composes with anonymous function expressions", () => {
+    const { ctx } = buildContext(`
+      Display = () => ["a", "b"].map(function (e) { return e })
+      aktion = Display()
+    `);
+    expect(ctx.bindings.get("aktion")?.()).toEqual(["a", "b"]);
+  });
+
+  it("a zero-arg call on a lowercase function declaration invokes the body", () => {
+    const { ctx } = buildContext(`
+      aktion = display()
+      function display() {
+        return ["apple", "banana"]
+      }
+    `);
+    expect(ctx.bindings.get("aktion")?.()).toEqual(["apple", "banana"]);
+  });
 });
 
 describe("parser source locations", () => {

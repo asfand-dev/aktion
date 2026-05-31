@@ -174,8 +174,14 @@ function isAssignableTarget(expr: Expression): boolean {
 }
 
 /**
- * Parse `function Name(params) { body }`.
- * PascalCase names → ComponentDeclaration, camelCase → ActionDeclaration.
+ * Parse `function name(params) { body }`.
+ *
+ * Name-case selects the default classification — a PascalCase name
+ * declares a component, a lowercase-first name declares an action. The
+ * runtime registers every component as an action too (so it works in
+ * event-handler position), and every action remains usable as a value-
+ * returning helper. The "component must `return`" requirement has been
+ * dropped: a component with no `return` simply renders nothing.
  */
 function parseFunctionDecl(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "function");
@@ -184,19 +190,10 @@ function parseFunctionDecl(ctx: ParserContext): Statement {
   const body = parseBlock(ctx);
   skipTerminator(ctx);
 
-  const isPascalCase = nameTok.value.length > 0 && nameTok.value[0]! >= "A" && nameTok.value[0]! <= "Z";
+  const isPascalCase =
+    nameTok.value.length > 0 && nameTok.value[0]! >= "A" && nameTok.value[0]! <= "Z";
 
   if (isPascalCase) {
-    const hasReturn = body.body.some((s) => s.kind === "Return");
-    if (!hasReturn) {
-      const err: ParseError & { __definitive?: boolean } = {
-        message: `function "${nameTok.value}" (component) must end with an explicit \`return\` statement.`,
-        line: start.line,
-        column: start.column,
-      };
-      err.__definitive = true;
-      throw err;
-    }
     return {
       kind: "ComponentDeclaration",
       name: nameTok.value,
@@ -1204,6 +1201,33 @@ function parsePrimary(ctx: ParserContext): Expression {
   }
 
   if (tok.type === "Keyword") {
+    // Anonymous function expression: `function (params) { body }` or
+    // `function name(params) { body }`. JS allows these as values
+    // (e.g. `arr.map(function (e) { return Button(e) })`) so we parse
+    // them into a `Lambda` node sharing the same params/body shape as
+    // an arrow function — `name`, if present, is currently discarded
+    // (function expressions are rarely referenced by their own name in
+    // this subset).
+    if (tok.value === "function") {
+      const lookahead = ctx.peek(1);
+      const lookahead2 = ctx.peek(2);
+      const looksLikeFunctionExpr =
+        (lookahead.type === "Punctuation" && lookahead.value === "(") ||
+        (lookahead.type === "Identifier" && lookahead2.type === "Punctuation" && lookahead2.value === "(");
+      if (looksLikeFunctionExpr) {
+        const start = tok;
+        ctx.consume(); // function
+        if (ctx.peek().type === "Identifier") ctx.consume(); // optional name
+        const params = parseFunctionParams(ctx);
+        const body = parseBlock(ctx);
+        return {
+          kind: "Lambda",
+          params,
+          body: body as never,
+          loc: { line: start.line, column: start.column },
+        };
+      }
+    }
     // Keywords that are also valid identifier names in expressions.
     if (
       tok.value === "function" || tok.value === "effect" ||

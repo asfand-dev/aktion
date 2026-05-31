@@ -133,8 +133,8 @@ export const keywordDocs: Record<string, KeywordDoc> = {
     example: 'Button("Save", () => emit("saved", { id: $id }))',
   },
   function: {
-    summary: "Declare a component (PascalCase) or action/helper (camelCase).",
-    syntax: "function Name(params) { return ... }",
+    summary: "Declare a component or action — first-letter case does not matter.",
+    syntax: "function name(params) { ... }",
     example: 'function Greeting(name) {\n  return Text(`Hello ${name}`)\n}',
   },
   effect: {

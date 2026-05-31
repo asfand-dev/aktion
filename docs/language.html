@@ -113,8 +113,7 @@ body = Card([
         <tbody>
           <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
           <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
-          <tr><td><code>function Name()</code></td><td><strong>Component</strong> (PascalCase) &mdash; returns UI, must end with an explicit <code>return</code>.</td></tr>
-          <tr><td><code>function name()</code></td><td><strong>Action</strong> (camelCase) &mdash; an imperative event handler; <code>return</code> is optional.</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant.</td></tr>
         </tbody>
       </table>
       <p>

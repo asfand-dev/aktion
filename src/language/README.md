@@ -32,11 +32,14 @@ will automatically include any components your host has registered via
 Aktion uses a JS-aligned syntax:
 
 ```
-// Declarations
-function MyComponent(data) {       // PascalCase = component
+// Declarations — first-letter case does NOT matter.
+// A function used as a component renders its return value; a function
+// used as an action runs its body for side effects. A function with no
+// `return` renders nothing when called in a render position.
+function MyComponent(data) {
   return Card([Text(data.name)])
 }
-function handleClick() {           // camelCase = action
+function handleClick() {
   $count = $count + 1
 }
 

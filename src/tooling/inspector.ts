@@ -238,10 +238,9 @@ function scanDraftingNames(
     const funcMatch = /^function\s+([A-Za-z_]\w*)/.exec(line);
     if (funcMatch) {
       const name = funcMatch[1]!;
-      const isPascal = name.length > 0 && name[0]! >= "A" && name[0]! <= "Z";
       bindings.push({
         name,
-        kind: isPascal ? "component" : "action",
+        kind: "component",
         line: lineOffset + i + 1,
         column: 1,
       });

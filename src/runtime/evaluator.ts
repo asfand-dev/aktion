@@ -822,9 +822,25 @@ function isHttpResourceCall(expr: Expression): boolean {
 
 function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {
   switch (stmt.kind) {
-    case "ComponentDeclaration":
+    case "ComponentDeclaration": {
+      // A PascalCase `function Name(...)` declaration is registered as
+      // BOTH a component (so `Name()` in render position produces a
+      // node) AND an action (so `onClick: Name` resolves to a callable
+      // that runs the body for its side effects). This lets a PascalCase
+      // declaration be used in either position regardless of whether it
+      // returns a value — a component with no `return` simply renders
+      // nothing.
       ctx.componentDecls.set(stmt.name, stmt);
+      ctx.actionDecls.set(stmt.name, {
+        kind: "ActionDeclaration",
+        name: stmt.name,
+        params: stmt.params,
+        optimistic: false,
+        body: stmt.body,
+        loc: stmt.loc,
+      });
       return;
+    }
     case "EffectDeclaration":
       ctx.effectDecls.set(stmt.name, stmt);
       return;
@@ -2114,9 +2130,6 @@ function evaluateComponentCall(
   // makes actions composable with array helpers (`.map(save)`, etc.).
   const actionDecl = ctx.actionDecls.get(callee);
   if (actionDecl) {
-    if (args.length === 0) {
-      return makeSyncActionCallable(actionDecl, ctx);
-    }
     const evaluated = args.map((a) => evaluate(a, ctx));
     return runActionDeclSync(actionDecl, evaluated, ctx);
   }

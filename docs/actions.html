@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Actions · Aktion</title>
-  <meta name="description" content="Actions are camelCase function declarations that run when the user clicks, types, or submits — the imperative counterpart to reactive bindings. Wire them to onClick / onChange / onSubmit, read and write state, call Http, navigate, and emit events." />
+  <meta name="description" content="Actions are function declarations that run when the user clicks, types, or submits — the imperative counterpart to reactive bindings. Wire them to onClick / onChange / onSubmit, read and write state, call Http, navigate, and emit events." />
   <script>
     (function () {
       try {
@@ -65,7 +65,7 @@
         <span class="hero-eyebrow">Behaviour</span>
         <h1>Actions.</h1>
         <p class="lead">
-          Actions are camelCase <code>function</code> declarations that run when
+          Actions are <code>function</code> declarations that run when
           the user <em>does</em> something &mdash; clicks a button, types in a
           field, submits a form. They are the imperative counterpart to reactive
           bindings: where a binding describes a value, an action describes what
@@ -76,11 +76,12 @@
       <h2 id="anatomy">Anatomy</h2>
       <p>
         An action is an ordinary function declaration: <code>function name(args) { &hellip; }</code>.
-        The capitalisation of the name is the whole convention &mdash;
-        <strong>PascalCase</strong> means a <em>component</em> (it returns UI),
-        <strong>camelCase</strong> means an <em>action</em> (it does something and
-        usually returns nothing). You never call an action yourself; you hand its
-        name to an event-handler prop and the runtime invokes it for you.
+        Every <code>function</code> declaration creates both a component and an
+        action with the same name &mdash; if it returns a value, that value is
+        rendered when called in a render position; if it runs for side effects,
+        the same name can be referenced from an event handler. The first-letter
+        case of the name is <em>not</em> significant: <code>save</code> and
+        <code>Save</code> are equally valid.
       </p>
       <table class="signature-table">
         <thead><tr><th>Wire it to&hellip;</th><th>Prop</th></tr></thead>
