@@ -686,7 +686,7 @@ export class AktionElement extends HTMLElement {
     // allowance. Counters persist across the entire render (component
     // recursion, loop iterations) and trip an early abort when the
     // program is accidentally divergent — a recursive `function Foo()
-    // { Foo() }`, a stray `for x in @Range(0, 1e9)`, etc. Without this
+    // { Foo() }`, a stray `for x of Util.range(0, 1e9)`, etc. Without this
     // every tab tab on the playground while the user is mid-keystroke
     // could otherwise freeze the whole browser.
     if (this.context.budget) resetRuntimeBudget(this.context.budget);

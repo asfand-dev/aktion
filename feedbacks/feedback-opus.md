@@ -56,7 +56,7 @@ know whether `setResponse` resets `$atom` state.
 
 ### 1.3 `@`-builtins are a third dialect on top of JS + components
 Authors learn JS (`Array.prototype.filter`), then `$rows.filter(...)`, then
-*also* `@Filter($rows, "id", "!=", 7)`. They overlap in coverage but not in
+*also* `Util.filter($rows, "id", "!=", 7)`. They overlap in coverage but not in
 ergonomics. The string-DSL form (`"id", "!=", 7`) is appealing for an LLM
 to emit but a human reviewer has to keep flipping to the docs to know whether
 the third arg is a value or another column name. Pick one canonical style

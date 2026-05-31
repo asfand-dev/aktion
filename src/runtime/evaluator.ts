@@ -26,6 +26,7 @@ import { createHttpResource, isEndpointResource } from "./http.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import type { ActionDeclRunner } from "./effects.js";
 import { dataBuiltins, type ThemeNode } from "./builtins.js";
+import { Util } from "./util.js";
 import { matchRoute, type Router } from "./router.js";
 import { findComponent } from "../library/registry.js";
 import { findPositionalIndex } from "../library/types.js";
@@ -42,6 +43,10 @@ import { consoleNs as consoleGlobal } from "./console.js";
 const GLOBAL_NAMESPACES: Record<string, unknown> = {
   storage: storageGlobal,
   console: consoleGlobal,
+  // Curated namespace of pure data / formatting helpers — the
+  // replacement for the removed `@`-builtin catalog. See
+  // `src/runtime/util.ts` for the full method list.
+  Util,
   // Curated fast-path for the most-used JS standard library globals, so
   // `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`, `new Date()`,
   // `new Map()`, `Number("5")`, etc. resolve without an import and without
@@ -136,7 +141,7 @@ function lookupHostGlobal(name: string): { found: boolean; value: unknown } {
  *     whole render (not per-loop) so a thousand tiny loops still get
  *     caught before they pile up into seconds of work.
  *   - `arrayLengthLimit` — pre-flight cap on `@Range` / `@Repeat`
- *     allocations. A bare `@Range(0, 1e9)` would otherwise call
+ *     allocations. A bare `Util.range(0, 1e9)` would otherwise call
  *     `Array.push` a billion times and OOM the renderer process.
  *
  * Limits are deliberately generous (anything a real app needs fits
@@ -225,18 +230,6 @@ function tickIterations(budget: RuntimeBudget | undefined, n: number, source: st
   budget.iterations += n;
   if (budget.iterations > budget.iterationLimit) {
     throw new RuntimeBudgetError("iterations", budget.iterationLimit, source);
-  }
-}
-
-/** Assert a planned allocation fits the array-length budget. */
-function enforceArrayLength(
-  budget: RuntimeBudget | undefined,
-  size: number,
-  source: string,
-): void {
-  if (!budget) return;
-  if (!Number.isFinite(size) || size > budget.arrayLengthLimit) {
-    throw new RuntimeBudgetError("array-length", budget.arrayLengthLimit, source);
   }
 }
 
@@ -695,8 +688,8 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   // literal. The literal pass above seeded these slots with `null`
   // because `evaluateLiteral` is intentionally conservative; without
   // this follow-up pass the user-visible value would stay `null` for
-  // every program that uses derived state (`$total = @Sum($cart.price)`,
-  // `$subtotal = @Sum($lines)`, `$shipping = if … else …`, …) — exactly
+  // every program that uses derived state (`$total = Util.sum($cart.price)`,
+  // `$subtotal = Util.sum($lines)`, `$shipping = if … else …`, …) — exactly
   // the pattern the language spec advertises as "computed values".
   //
   // We also wire each derivation up to the state store so the value
@@ -2068,6 +2061,10 @@ function evaluateMethodCall(
   try {
     return (fn as (...a: unknown[]) => unknown).apply(target, callArgs);
   } catch (err) {
+    // Re-throw programming errors that authors must see (out-of-bounds
+    // allocations, budget violations) instead of silently coercing them
+    // to `null`.
+    if (err instanceof RangeError || err instanceof RuntimeBudgetError) throw err;
     // Don't crash the render — surface the failure via the host console
     // so authors can still see what went wrong.
     // eslint-disable-next-line no-console
@@ -2646,7 +2643,7 @@ export function evaluateUserComponent(
   // computed here — `evaluateBlock` lazily evaluates the initializer
   // expression the first time it sees the statement (when the slot has
   // not yet been declared) so non-literal initializers like
-  // `$now = @Now()` or `$n = initial` work the same way literals do.
+  // `$now = Util.now()` or `$n = initial` work the same way literals do.
   // On every subsequent render the alias frame is rebuilt with the same
   // mappings and the block walk skips the initializer because the slot
   // already exists in the state store — preserving the user's mutations.
@@ -2828,32 +2825,7 @@ function evaluateBuiltinCall(
   const fn = dataBuiltins[name];
   if (!fn) return null;
   const evaluated = args.map((a) => evaluate(a, ctx));
-  // Pre-flight allocation checks. Both builtins materialise an array
-  // proportional to a user-supplied number; without bounds, a stray
-  // `@Range(0, 1e9)` would push a billion entries before throwing JS-
-  // level errors. We compute the expected size cheaply and reject up
-  // front so the renderer never starts allocating.
-  if (name === "Range") {
-    enforceArrayLength(ctx.budget, expectedRangeSize(evaluated), "@Range");
-  } else if (name === "Repeat") {
-    enforceArrayLength(ctx.budget, Math.max(0, toNumber(evaluated[1])), "@Repeat");
-  }
   return fn(evaluated);
-}
-
-/**
- * Compute how many entries `@Range(start, end, step?)` would emit
- * *without* actually allocating the array. Matches the inclusive
- * semantics of the `Range` builtin in `runtime/builtins.ts`.
- */
-function expectedRangeSize(evaluated: unknown[]): number {
-  const start = toNumber(evaluated[0]);
-  const end = toNumber(evaluated[1]);
-  const stepArg = evaluated[2];
-  const step = stepArg === undefined ? (end >= start ? 1 : -1) : toNumber(stepArg);
-  if (step === 0) return 1;
-  const span = Math.abs(end - start);
-  return Math.floor(span / Math.abs(step)) + 1;
 }
 
 /**

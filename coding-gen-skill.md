@@ -32,7 +32,7 @@ description: >-
 - [5. Actions](#5-actions)
 - [6. Effects](#6-effects)
 - [7. HTTP — `Http({...})`](#7-http--http)
-- [8. Built-in `@`-functions](#8-built-in--functions)
+- [8. `Util` — runtime helper namespace](#8-util--runtime-helper-namespace)
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
 - [11. Routing](#11-routing)
@@ -96,9 +96,10 @@ Internalize these rules and you will write correct, polished programs:
     action functions use ordinary JS parameter binding —
     `(id, status) => …` and `function update(id, status) { … }` read
     their arguments by name. There is no `ctx.args` indirection.
-11. **Prefer declarative builtins** (`[...spread]`, `@Filter`, `@Sort`,
+11. **Prefer declarative helpers** (`[...spread]`, `Util.filter`, `Util.sort`,
     `.map()`, ternary) over imperative DOM code. Reach for raw
-    JavaScript only when no builtin captures the change.
+    JavaScript only when neither a `Util` helper nor a native JS
+    feature is a clearer fit.
 12. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use
     them for multi-line bodies and `${expression}` interpolation.
@@ -183,7 +184,7 @@ Everything an LLM might reach for first:
 $count = 0
 $theme = "dark"
 $cart  = []
-$total = @Sum($cart.price)
+$total = Util.sum($cart.price)
 
 // Components are PascalCase functions that MUST return.
 function UserCard(user, { tone = "default" } = {}) {
@@ -742,8 +743,8 @@ There is no dedicated `$computed` keyword. Just compute:
 
 ```javascript
 $cart  = []
-$total = @Sum($cart.price)
-$open  = @Filter($todos, "done", "==", false)
+$total = Util.sum($cart.price)
+$open  = Util.filter($todos, "done", "==", false)
 ```
 
 ### URL-synced state
@@ -982,7 +983,7 @@ function toggle(id) {
 }
 
 function remove(id) {
-  $todos = @Filter($todos, "id", "!=", id)
+  $todos = Util.filter($todos, "id", "!=", id)
 }
 ```
 
@@ -1058,9 +1059,9 @@ Dependencies can be combined freely:
 
 ```javascript
 function LiveClock() {
-  $now = @Now()
-  effect(() => { $now = @Now() }, ["every(1000)"])
-  return Text(@FormatDate($now, "time"))
+  $now = Util.now()
+  effect(() => { $now = Util.now() }, ["every(1000)"])
+  return Text(Util.formatDate($now, "time"))
 }
 
 effect(() => {
@@ -1251,80 +1252,86 @@ view = Async($orders, {
 
 ---
 
-## 8. Built-in `@`-functions
+## 8. `Util` — runtime helper namespace
 
-All built-ins use the `@` prefix and may appear anywhere in an
-expression. They are **pure** — no side effects, no I/O.
+Aktion exposes a single global `Util` object whose methods may appear
+anywhere in an expression. Every method is **pure** — no side effects,
+no I/O — and the namespace is extensible: new helpers can be added to
+`Util` over time without changing the language. Many helpers overlap
+with native JavaScript (`arr.length`, `arr.filter(…)`,
+`Math.round(…)`); prefer the native form when it reads cleanly and
+reach for `Util` for field-based comparators, locale-aware
+formatting, or skeleton ranges.
 
 ### Aggregation
 
 | Function           | Purpose                                |
 | ------------------ | -------------------------------------- |
-| `@Count(arr)`      | Number of items.                       |
-| `@Sum(arr)`        | Sum of numeric items.                  |
-| `@Avg(arr)`        | Mean of numeric items.                 |
-| `@Min(arr)`        | Smallest numeric value.                |
-| `@Max(arr)`        | Largest numeric value.                 |
-| `@First(arr)`      | First item or `null`.                  |
-| `@Last(arr)`       | Last item or `null`.                   |
+| `Util.count(arr)`      | Number of items.                       |
+| `Util.sum(arr)`        | Sum of numeric items.                  |
+| `Util.avg(arr)`        | Mean of numeric items.                 |
+| `Util.min(arr)`        | Smallest numeric value.                |
+| `Util.max(arr)`        | Largest numeric value.                 |
+| `Util.first(arr)`      | First item or `null`.                  |
+| `Util.last(arr)`       | Last item or `null`.                   |
 
 ### Numeric
 
 | Function                          | Purpose                                |
 | --------------------------------- | -------------------------------------- |
-| `@Round(n, decimals?)`            | Round to N decimal places.             |
-| `@Abs(n)` / `@Floor(n)` / `@Ceil(n)` | Standard math.                     |
-| `@Clamp(n, min, max)`             | Constrain into a range.                |
-| `@Pow(base, exp)` / `@Sqrt(n)` / `@Log(n)` | Standard math.               |
-| `@Random()`                       | Random number in `[0, 1)`.             |
+| `Util.round(n, decimals?)`            | Round to N decimal places.             |
+| `Util.abs(n)` / `Util.floor(n)` / `Util.ceil(n)` | Standard math.                     |
+| `Util.clamp(n, min, max)`             | Constrain into a range.                |
+| `Util.pow(base, exp)` / `Util.sqrt(n)` / `Util.log(n)` | Standard math.               |
+| `Util.random()`                       | Random number in `[0, 1)`.             |
 
 ### Array shape
 
 | Function                                    | Purpose                                                         |
 | ------------------------------------------- | --------------------------------------------------------------- |
-| `@Filter(arr, "field", "op", value)`        | Keep items matching a comparator.                               |
-| `@Sort(arr, "field", "asc" \| "desc")`      | Stable sort by field.                                           |
-| `@Find(arr, "field", "op", value)`          | First match (or `null`).                                        |
-| `@GroupBy(arr, "field")`                    | `{ groupKey: [items…] }`.                                       |
-| `@Slice(arr, start?, end?)`                 | Standard slice.                                                 |
-| `@Reverse(arr)`                             | Reversed copy.                                                  |
-| `@Unique(arr, "field"?)`                    | Deduplicate.                                                    |
-| `@Range(start, end, step?)`                 | Inclusive integer range.                                        |
-| `@Repeat(value, n)`                         | Repeat a value N times.                                         |
-| `@Pick(obj, ["a", "b"])`                    | Keep only the listed keys.                                      |
+| `Util.filter(arr, "field", "op", value)`        | Keep items matching a comparator.                               |
+| `Util.sort(arr, "field", "asc" \| "desc")`      | Stable sort by field.                                           |
+| `Util.find(arr, "field", "op", value)`          | First match (or `null`).                                        |
+| `Util.groupBy(arr, "field")`                    | `{ groupKey: [items…] }`.                                       |
+| `Util.slice(arr, start?, end?)`                 | Standard slice.                                                 |
+| `Util.reverse(arr)`                             | Reversed copy.                                                  |
+| `Util.unique(arr, "field"?)`                    | Deduplicate.                                                    |
+| `Util.range(start, end, step?)`                 | Inclusive integer range.                                        |
+| `Util.repeat(value, n)`                         | Repeat a value N times.                                         |
+| `Util.pick(obj, ["a", "b"])`                    | Keep only the listed keys.                                      |
 
 ### Formatting
 
 | Function                                                            | Purpose                                                                    |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `@Format(value, mode?, options?)`                                   | Locale-aware number formatter. Modes: `"number"`, `"currency"`, `"percent"`, `"compact"`. |
-| `@FormatDate(value, format?)`                                       | Formats a date. Named modes: `"relative"`, `"date"`, `"time"`, `"datetime"`, `"iso"`. |
-| `@Plural(n, "singular", "plural"?)`                                 | Returns `"1 order"` / `"2 orders"`.                                        |
+| `Util.format(value, mode?, options?)`                                   | Locale-aware number formatter. Modes: `"number"`, `"currency"`, `"percent"`, `"compact"`. |
+| `Util.formatDate(value, format?)`                                       | Formats a date. Named modes: `"relative"`, `"date"`, `"time"`, `"datetime"`, `"iso"`. |
+| `Util.plural(n, "singular", "plural"?)`                                 | Returns `"1 order"` / `"2 orders"`.                                        |
 
 ### Date / time
 
 | Function                       | Purpose                                    |
 | ------------------------------ | ------------------------------------------ |
-| `@Now()`                       | Current moment as epoch ms.                |
-| `@Today()`                     | Today's date at midnight, ISO string.      |
-| `@AddDays(date, n)`            | Shift a date by N days.                    |
-| `@AddHours(date, n)`           | Shift a date by N hours.                   |
-| `@DiffDays(start, end)`        | Whole-day difference.                      |
-| `@StartOfWeek(date)`           | UTC Sunday 00:00:00 for the week.          |
-| `@EndOfMonth(date)`            | Last moment of the calendar month.         |
+| `Util.now()`                       | Current moment as epoch ms.                |
+| `Util.today()`                     | Today's date at midnight, ISO string.      |
+| `Util.addDays(date, n)`            | Shift a date by N days.                    |
+| `Util.addHours(date, n)`           | Shift a date by N hours.                   |
+| `Util.diffDays(start, end)`        | Whole-day difference.                      |
+| `Util.startOfWeek(date)`           | UTC Sunday 00:00:00 for the week.          |
+| `Util.endOfMonth(date)`            | Last moment of the calendar month.         |
 
 ### String
 
 | Function                                                                     | Purpose                              |
 | ---------------------------------------------------------------------------- | ------------------------------------ |
-| `@Capitalize(s)` / `@Lowercase(s)` / `@Uppercase(s)` / `@Titlecase(s)`      | Standard case operations.            |
-| `@Case(value, "camel" \| "snake" \| "kebab" \| "pascal")`                    | Re-case a value.                     |
-| `@Join(arr, sep?)`                                                           | Join with separator.                 |
-| `@Split(s, sep?)`                                                            | Split on separator.                  |
-| `@Trim(s)` / `@StartsWith(s, p)` / `@EndsWith(s, p)` / `@Contains(s, p)`   | Standard string ops.                 |
-| `@Replace(s, search, replacement?)`                                          | Replace all occurrences.             |
-| `@Substring(s, start, end?)`                                                 | Standard substring.                  |
-| `@Match(s, pattern)`                                                         | Boolean regex match.                 |
+| `Util.capitalize(s)` / `Util.lowercase(s)` / `Util.uppercase(s)` / `Util.titlecase(s)`      | Standard case operations.            |
+| `Util.case(value, "camel" \| "snake" \| "kebab" \| "pascal")`                    | Re-case a value.                     |
+| `Util.join(arr, sep?)`                                                           | Join with separator.                 |
+| `Util.split(s, sep?)`                                                            | Split on separator.                  |
+| `Util.trim(s)` / `Util.startsWith(s, p)` / `Util.endsWith(s, p)` / `Util.contains(s, p)`   | Standard string ops.                 |
+| `Util.replace(s, search, replacement?)`                                          | Replace all occurrences.             |
+| `Util.substring(s, start, end?)`                                                 | Standard substring.                  |
+| `Util.match(s, pattern)`                                                         | Boolean regex match.                 |
 
 ### Array shortcuts (not functions)
 
@@ -1425,7 +1432,7 @@ filteredTodos = $todos
   .filter(t => t.title.includes($searchQuery))
 
 // Ternary split across lines.
-tabUI = @Count(filteredTodos) == 0
+tabUI = Util.count(filteredTodos) == 0
   ? EmptyState()
   : Stack(filteredTodos.map(TodoRow))
 
@@ -1900,12 +1907,12 @@ effect(() => {
 
 ```javascript
 function LiveClock() {
-  $now = @Now()
+  $now = Util.now()
   effect(() => {
     const id = setInterval(() => { $now = Date.now() }, 1000)
     cleanup(() => clearInterval(id))
   }, ["mount"])
-  return Text(@FormatDate($now, "time"))
+  return Text(Util.formatDate($now, "time"))
 }
 ```
 
@@ -2208,7 +2215,7 @@ function toggle(id) {
 }
 
 function remove(id) {
-  $todos = @Filter($todos, "id", "!=", id)
+  $todos = Util.filter($todos, "id", "!=", id)
 }
 
 row = (t) => Card([Stack([
@@ -2219,12 +2226,12 @@ row = (t) => Card([Stack([
 list = $todos.map(t => row(t))
 
 aktion = Stack([
-  PageHeader("Todos", { subtitle: `${@Count($todos)} items`, actions: [Button("Clear all", { onClick: () => $todos = [], variant: "ghost" })] }),
+  PageHeader("Todos", { subtitle: `${Util.count($todos)} items`, actions: [Button("Clear all", { onClick: () => $todos = [], variant: "ghost" })] }),
   Card([Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft, onEnter: add }),
     Button("Add", { onClick: add, variant: "primary" })
   ], { direction: "row", gap: "s" })]),
-  @Count($todos) == 0
+  Util.count($todos) == 0
     ? EmptyState("No todos yet", { description: "Add your first task above.", icon: "list-check" })
     : Stack(list, { gap: "s" })
 ], { gap: "l" })
@@ -2318,9 +2325,9 @@ ordersTable = Card([
 activity = Card([
   SectionHeader("Recent activity"),
   ActivityLog([
-    { actor: "Asha", title: "Approved refund for #4821", time: @FormatDate(@Now() - 600000, "relative"), icon: "circle-check", tone: "success" },
-    { actor: "Wren", title: "Flagged order #4798 for review", time: @FormatDate(@Now() - 3600000, "relative"), icon: "flag", tone: "warning" },
-    { actor: "Mira", title: "Updated shipping rules", time: @FormatDate(@Now() - 7200000, "relative"), icon: "truck" }
+    { actor: "Asha", title: "Approved refund for #4821", time: Util.formatDate(Util.now() - 600000, "relative"), icon: "circle-check", tone: "success" },
+    { actor: "Wren", title: "Flagged order #4798 for review", time: Util.formatDate(Util.now() - 3600000, "relative"), icon: "flag", tone: "warning" },
+    { actor: "Mira", title: "Updated shipping rules", time: Util.formatDate(Util.now() - 7200000, "relative"), icon: "truck" }
   ])
 ])
 
@@ -2452,7 +2459,7 @@ $draft = ""
 
 function send() {
   if (!$draft) { return }
-  $thread = [...$thread, { id: $thread.length + 1, from: "me", body: $draft, time: @FormatDate(@Now(), "time") }]
+  $thread = [...$thread, { id: $thread.length + 1, from: "me", body: $draft, time: Util.formatDate(Util.now(), "time") }]
   $draft  = ""
   emit("assistant-message", { message: "User said: " + $draft })
 }
@@ -2582,8 +2589,8 @@ list = Stack($services.map(s =>
 timeline = Card([
   SectionHeader("Recent incidents"),
   Timeline([
-    TimelineItem("Database latency",   { time: @FormatDate(@Now() - 1800000, "relative"), description: "p99 latency above 500ms.", icon: "database", tone: "warning" }),
-    TimelineItem("Resolved: queue",    { time: @FormatDate(@Now() - 86400000, "relative"), description: "Queue throughput restored.", icon: "circle-check", tone: "success" })
+    TimelineItem("Database latency",   { time: Util.formatDate(Util.now() - 1800000, "relative"), description: "p99 latency above 500ms.", icon: "database", tone: "warning" }),
+    TimelineItem("Resolved: queue",    { time: Util.formatDate(Util.now() - 86400000, "relative"), description: "Queue throughput restored.", icon: "circle-check", tone: "success" })
   ])
 ])
 
@@ -2649,7 +2656,7 @@ $cart  = [
   { id: 2, title: "Notebook",     qty: 1, price: 18.0 },
   { id: 3, title: "Sticker pack", qty: 3, price: 4.5 }
 ]
-$total = @Sum($cart.map(it => it.qty * it.price))
+$total = Util.sum($cart.map(it => it.qty * it.price))
 $customer = { name: "", email: "", address: "" }
 
 function next() { $step = "payment" }
@@ -2666,11 +2673,11 @@ orderSummary = Card([
   Stack($cart.map(it =>
     Stack([
       Text(`${it.qty} × ${it.title}`),
-      Text(@Format(it.qty * it.price, "currency"))
+      Text(Util.format(it.qty * it.price, "currency"))
     ], { direction: "row", justify: "between" })
   ), { gap: "s" }),
   Separator(),
-  Stack([Text("Total", { variant: "large-heavy" }), Text(@Format($total, "currency"), { variant: "large-heavy" })], { direction: "row", justify: "between" })
+  Stack([Text("Total", { variant: "large-heavy" }), Text(Util.format($total, "currency"), { variant: "large-heavy" })], { direction: "row", justify: "between" })
 ])
 
 detailsForm = Card([
@@ -2688,7 +2695,7 @@ paymentForm = Card([
   Callout("This demo doesn't process real payments.", { variant: "info", icon: "circle-info" }),
   Buttons([
     Button("Back", { onClick: back, variant: "ghost", icon: "arrow-left" }),
-    Button(`Pay ${@Format($total, "currency", "USD")}`, { onClick: place, variant: "primary" })
+    Button(`Pay ${Util.format($total, "currency", "USD")}`, { onClick: place, variant: "primary" })
   ])
 ])
 
@@ -2724,7 +2731,7 @@ function open(node) {
 }
 
 function back() {
-  if ($path.length > 1) { $path = @Slice($path, 0, $path.length - 1) }
+  if ($path.length > 1) { $path = Util.slice($path, 0, $path.length - 1) }
 }
 
 breadcrumb = Breadcrumb($path)
@@ -2766,14 +2773,14 @@ aktion = Stack([
 ### Pattern L — Calendar / scheduler
 
 ```javascript
-$selected = @Today()
+$selected = Util.today()
 $events   = [
-  { date: @Today(),              title: "Team standup",     time: "9:00",  tone: "primary" },
-  { date: @AddDays(@Today(), 1), title: "Customer call",   time: "14:00", tone: "info" },
-  { date: @AddDays(@Today(), 3), title: "1:1 with manager", time: "11:00", tone: "warning" }
+  { date: Util.today(),              title: "Team standup",     time: "9:00",  tone: "primary" },
+  { date: Util.addDays(Util.today(), 1), title: "Customer call",   time: "14:00", tone: "info" },
+  { date: Util.addDays(Util.today(), 3), title: "1:1 with manager", time: "11:00", tone: "warning" }
 ]
 
-dayEvents = @Filter($events, "date", "==", $selected)
+dayEvents = Util.filter($events, "date", "==", $selected)
 
 calendar = Card([
   SectionHeader("Schedule", { actions: [Button("Add event", { icon: "plus", variant: "primary" })] }),
@@ -2781,8 +2788,8 @@ calendar = Card([
 ])
 
 list = Card([
-  SectionHeader(`Events for ${@FormatDate($selected, "MMM D")}`),
-  @Count(dayEvents) == 0
+  SectionHeader(`Events for ${Util.formatDate($selected, "MMM D")}`),
+  Util.count(dayEvents) == 0
     ? EmptyState("Nothing scheduled", { description: "Pick a different day or add an event.", icon: "calendar-plus" })
     : Stack(dayEvents.map(e =>
         Stack([Badge(e.time, { variant: e.tone }), Text(e.title)], { direction: "row", gap: "m", align: "center" })
@@ -2866,8 +2873,8 @@ $people = [
   { name: "Mira Patel",  role: "Engineer", team: "Mobile",    status: "online" }
 ]
 
-filtered = @Filter(
-  $role == "all" ? $people : @Filter($people, "role", "==", $role),
+filtered = Util.filter(
+  $role == "all" ? $people : Util.filter($people, "role", "==", $role),
   "name", "contains", $query
 )
 
@@ -2888,9 +2895,9 @@ cards = Grid(filtered.map(p =>
 ), { columns: { sm: 1, md: 2, lg: 3 }, gap: "l" })
 
 aktion = Stack([
-  PageHeader("Directory", { subtitle: `${@Count(filtered)} people` }),
+  PageHeader("Directory", { subtitle: `${Util.count(filtered)} people` }),
   toolbar,
-  @Count(filtered) == 0
+  Util.count(filtered) == 0
     ? EmptyState("No matches", { description: "Try a different search term.", icon: "magnifying-glass" })
     : cards
 ], { gap: "l" })
@@ -2942,10 +2949,10 @@ columns = [
   { id: "done",   title: "Done" }
 ]
 
-cardsFor = (colId) => @Filter($cards, "col", "==", colId)
+cardsFor = (colId) => Util.filter($cards, "col", "==", colId)
 
 aktion = Stack([
-  PageHeader("Sprint board", { subtitle: `${@Count($cards)} cards across ${@Count(columns)} columns` }),
+  PageHeader("Sprint board", { subtitle: `${Util.count($cards)} cards across ${Util.count(columns)} columns` }),
   KanbanBoard(columns.map(c =>
     KanbanColumn(c.title, { items: cardsFor(c.id).map(card =>
       KanbanCard(card.title, { description: card.title, tags: card.tags, assignee: card.assignee, tone: card.tone })
@@ -2971,7 +2978,7 @@ list = InboxPanel($threads.map(t => ({ ...t, onClick: () => open(t.id) })), { ti
 thread = $active
   ? Card([
       SectionHeader($threads.first.title),
-      Stack(@Range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "s" }),
+      Stack(Util.range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "s" }),
       TextArea("reply", { placeholder: "Reply…" }),
       Buttons([Button("Send", { variant: "primary", icon: "paper-plane" })])
     ])
@@ -3027,9 +3034,9 @@ function sortBy(field) {
   else { $sortField = field; $sortDir = "asc" }
 }
 
-bulk = @Count($selected) > 0
+bulk = Util.count($selected) > 0
   ? Card([Stack([
-      Text(`${@Count($selected)} selected`),
+      Text(`${Util.count($selected)} selected`),
       Buttons([
         Button("Mark resolved", { variant: "primary" }),
         Button("Clear", { onClick: () => $selected = [], variant: "ghost" })
@@ -3045,7 +3052,7 @@ table = DataGrid([
 ], { rowIds: $rows.data.id, selectedIds: $selected, selectable: true, sort: { field: $sortField, direction: $sortDir } })
 
 aktion = Stack([
-  PageHeader("Events", { subtitle: `${@Count($rows.data)} events` }),
+  PageHeader("Events", { subtitle: `${Util.count($rows.data)} events` }),
   bulk,
   Async($rows, {
     loading: LoadingState("Loading events…"),
@@ -3084,20 +3091,20 @@ aktion = Stack([
 $messages = []
 
 effect(() => {
-  $messages = [{ id: @Now(), body: "Server tick at " + @FormatDate(@Now(), "time"), tone: "info" }, ...$messages]
-  if ($messages.length > 20) { $messages = @Slice($messages, 0, 20) }
+  $messages = [{ id: Util.now(), body: "Server tick at " + Util.formatDate(Util.now(), "time"), tone: "info" }, ...$messages]
+  if ($messages.length > 20) { $messages = Util.slice($messages, 0, 20) }
 }, ["every(2000)"])
 
 feed = Stack($messages.map(m =>
   Card([Stack([
-    Badge(@FormatDate(m.id, "time"), { variant: m.tone }),
+    Badge(Util.formatDate(m.id, "time"), { variant: m.tone }),
     Text(m.body)
   ], { direction: "row", gap: "m" })])
 ), { gap: "s" })
 
 aktion = Stack([
   PageHeader("Live feed", { subtitle: "Auto-updating every 2s" }),
-  @Count($messages) == 0
+  Util.count($messages) == 0
     ? EmptyState("Waiting for events…", { icon: "satellite-dish" })
     : feed
 ], { gap: "l" })
@@ -3176,7 +3183,7 @@ Before finishing, walk your output and verify:
 | Actions — handlers, optimistic updates, navigation                     | §5.                                    |
 | Effects — triggers, debounce, cleanup                                  | §6.                                    |
 | HTTP — `Http({...})`, `Async`, interceptors                            | §7.                                    |
-| Built-in `@` functions (aggregation, formatting, dates)                | §8.                                    |
+| `Util` runtime helpers (aggregation, formatting, dates)               | §8.                                    |
 | Component catalog by group                                             | §9.                                    |
 | JavaScript layer — `emit`, `cleanup`, browser APIs                     | §10.                                   |
 | Routing — `Router`, `params`, `route`                                  | §11.                                   |

@@ -78,8 +78,8 @@ greeting = Card([
 sample = Card([
   CardHeader("Sample stats"),
   Stats([
-    StatCard("Active users", { value: \`\${@Format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users" }),
-    StatCard("Revenue",      { value: \`\${@Format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar" }),
+    StatCard("Active users", { value: \`\${Util.format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users" }),
+    StatCard("Revenue",      { value: \`\${Util.format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar" }),
     StatCard("Errors",       { value: "12", trend: "down", delta: "-32%", icon: "triangle-exclamation" })
   ])
 ])
@@ -100,7 +100,7 @@ projects = [
   {title: "Activity timeline", description: "Shipped to everyone.",    tags: ["shipped"],  assignee: "Mira", tone: "success", icon: "circle-check",        stage: "done"}
 ]
 
-$atRisk = @Filter(projects, "tone", "==", "warning")
+$atRisk = Util.filter(projects, "tone", "==", "warning")
 
 function Card2(p) {
   return KanbanCard(p.title, { description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon })
@@ -110,22 +110,22 @@ aktion = Stack([
   PageHeader(
     "Engineering Q3",
     {
-      subtitle: \`\${@Count(projects)} active · \${@Count($atRisk)} at risk\`,
+      subtitle: \`\${Util.count(projects)} active · \${Util.count($atRisk)} at risk\`,
       breadcrumbs: ["Workspace", "Engineering"],
       status: Badge("On track", { tone: "success" })
     }
   ),
   Stats([
-    StatCard("Active",  { value: \`\${@Count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder" }),
-    StatCard("At risk", { value: \`\${@Count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation" }),
+    StatCard("Active",  { value: \`\${Util.count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder" }),
+    StatCard("At risk", { value: \`\${Util.count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation" }),
     StatCard("Shipped", { value: "8",                       trend: "up",   delta: "+3 vs last week",                         icon: "rocket" }),
     StatCard("On-time", { value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock" })
   ]),
   KanbanBoard([
-    KanbanColumn("To do",  { items: @Filter(projects, "stage", "==", "todo").map(p => Card2(p)) }),
-    KanbanColumn("Doing",  { items: @Filter(projects, "stage", "==", "doing").map(p => Card2(p)), tone: "primary" }),
-    KanbanColumn("Review", { items: @Filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
-    KanbanColumn("Done",   { items: @Filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
+    KanbanColumn("To do",  { items: Util.filter(projects, "stage", "==", "todo").map(p => Card2(p)) }),
+    KanbanColumn("Doing",  { items: Util.filter(projects, "stage", "==", "doing").map(p => Card2(p)), tone: "primary" }),
+    KanbanColumn("Review", { items: Util.filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
+    KanbanColumn("Done",   { items: Util.filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
   ])
 ])`,
   },
@@ -143,7 +143,7 @@ function addTodo() {
 function Row(t) {
   return Card([Stack([
     Text(t.text),
-    Button("Delete", { action: () => { $todos = @Filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
+    Button("Delete", { action: () => { $todos = Util.filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
   ], { direction: "row", gap: "s", align: "center", justify: "between" })])
 }
 
@@ -153,7 +153,7 @@ body = $todos.length > 0
   : EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
 
 aktion = Stack([
-  Card([CardHeader("Todo list", { subtitle: \`\${@Count($todos)} \${@Plural(@Count($todos), "task", "tasks")} · persisted across reloads\` })]),
+  Card([CardHeader("Todo list", { subtitle: \`\${Util.count($todos)} \${Util.plural(Util.count($todos), "task", "tasks")} · persisted across reloads\` })]),
   Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
   Button("Add", { action: addTodo, variant: "primary" }),
   body
@@ -170,11 +170,11 @@ $events = [
 ]
 
 function removeItem(name) {
-  $events = @Filter($events, "title", "!=", name)
+  $events = Util.filter($events, "title", "!=", name)
 }
 
 function addEvent() {
-  $events = [...$events, { title: \`New Event \${@Now()}\` }]
+  $events = [...$events, { title: \`New Event \${Util.now()}\` }]
 }
 
 function Item(name) {
@@ -224,7 +224,7 @@ function reset() { $count = 0 }
 aktion = Card([
   CardHeader("JS counter", { subtitle: "Three actions, one $atom." }),
   Stack([
-    Text(\`Current: \${@Clamp($count, -99, 99)}\`),
+    Text(\`Current: \${Util.clamp($count, -99, 99)}\`),
     Stack([
       Button("-",     { action: dec }),
       Button("Reset", { action: reset, variant: "ghost" }),
@@ -243,7 +243,7 @@ lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]
 aktion = Stack([
   PageHeader("Analytics", { subtitle: \`Daily traffic last \${$range} days\` }),
   Stats([
-    StatCard("Sessions",     { value: \`\${@Format(@Sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${@Round((@Sum(thisWk) / @Sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
+    StatCard("Sessions",     { value: \`\${Util.format(Util.sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${Util.round((Util.sum(thisWk) / Util.sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
     StatCard("Avg duration", { value: "3m 12s",                              trend: "flat", delta: "stable",                                                     icon: "clock" }),
     StatCard("Bounce rate",  { value: "32%",                                 trend: "down", delta: "-2%",                                                        icon: "arrow-trend-down" })
   ]),
@@ -278,10 +278,10 @@ people = [
   {id: "u08", name: "Barbara Liskov",    team: "Compilers",   score: 89, commits: 272}
 ]
 
-bulkBar = @Count($selectedIds) > 0
+bulkBar = Util.count($selectedIds) > 0
   ? Toolbar(
       {
-        left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+        left: [Badge(\`\${Util.count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
         right: [
           Button("Email",  { variant: "ghost",     size: "small", icon: "envelope" }),
           Button("Export", { variant: "secondary", size: "small", icon: "file-csv" }),
@@ -295,7 +295,7 @@ aktion = Stack([
   PageHeader(
     "Top contributors",
     {
-      subtitle: \`\${@Count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+      subtitle: \`\${Util.count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
       breadcrumbs: ["Workspace", "Engineering"]
     }
   ),
@@ -332,7 +332,7 @@ events = [
 ]
 
 aktion = Stack([
-  PageHeader("May 2026", { subtitle: \`\${@Count(events)} events · \${$obDone}/3 onboarding\` }),
+  PageHeader("May 2026", { subtitle: \`\${Util.count(events)} events · \${$obDone}/3 onboarding\` }),
   Grid([
     Card([
       SectionHeader("Calendar", { subtitle: "Focus a day to see details", eyebrow: "PLANNER" }),
@@ -432,12 +432,12 @@ $tags = ["release", "ui", "v3"]
 $brand = "#6366f1"
 $pin = ""
 
-$errors = @Filter([
+$errors = Util.filter([
   $title == "" ? {label: "title", message: "Title is required."} : null,
   $pin.length != 4 ? {label: "pin",   message: "PIN must be 4 digits."} : null
 ], "label", "!=", null)
 
-publishGate = @Count($errors) > 0
+publishGate = Util.count($errors) > 0
   ? Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
   : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
 

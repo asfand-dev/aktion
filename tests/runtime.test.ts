@@ -16,6 +16,7 @@ import {
   evaluate,
 } from "../src/runtime/index.js";
 import { dataBuiltins } from "../src/runtime/builtins.js";
+import { Util } from "../src/runtime/util.js";
 import { defaultLibrary } from "../src/library/index.js";
 
 function buildContext(source: string, opts: { http?: HttpRuntime } = {}) {
@@ -63,16 +64,20 @@ card = Card([CardHeader("Hi", "There")])
   });
 });
 
-describe("data builtins", () => {
+describe("Util namespace", () => {
+  it("the legacy @-builtin registry is empty", () => {
+    expect(Object.keys(dataBuiltins)).toEqual([]);
+  });
+
   it("counts, sums, and averages", () => {
-    expect(dataBuiltins.Count!([[1, 2, 3]])).toBe(3);
-    expect(dataBuiltins.Sum!([[1, 2, 3]])).toBe(6);
-    expect(dataBuiltins.Avg!([[2, 4, 6]])).toBe(4);
+    expect(Util.count([1, 2, 3])).toBe(3);
+    expect(Util.sum([1, 2, 3])).toBe(6);
+    expect(Util.avg([2, 4, 6])).toBe(4);
   });
 
   it("filters arrays of objects", () => {
     const rows = [{ name: "alpha" }, { name: "beta" }, { name: "alphabet" }];
-    expect(dataBuiltins.Filter!([rows, "name", "contains", "alpha"])).toEqual([
+    expect(Util.filter(rows, "name", "contains", "alpha")).toEqual([
       { name: "alpha" },
       { name: "alphabet" },
     ]);
@@ -80,31 +85,31 @@ describe("data builtins", () => {
 
   it("sorts ascending and descending", () => {
     const rows = [{ x: 3 }, { x: 1 }, { x: 2 }];
-    expect(dataBuiltins.Sort!([rows, "x", "asc"])).toEqual([{ x: 1 }, { x: 2 }, { x: 3 }]);
-    expect(dataBuiltins.Sort!([rows, "x", "desc"])).toEqual([{ x: 3 }, { x: 2 }, { x: 1 }]);
+    expect(Util.sort(rows, "x", "asc")).toEqual([{ x: 1 }, { x: 2 }, { x: 3 }]);
+    expect(Util.sort(rows, "x", "desc")).toEqual([{ x: 3 }, { x: 2 }, { x: 1 }]);
   });
 
-  it("@Join concatenates array values", () => {
-    expect(dataBuiltins.Join!([[1, 2, 3]])).toBe("1,2,3");
-    expect(dataBuiltins.Join!([["a", "b"], "-"])).toBe("a-b");
+  it("Util.join concatenates array values", () => {
+    expect(Util.join([1, 2, 3])).toBe("1,2,3");
+    expect(Util.join(["a", "b"], "-")).toBe("a-b");
   });
 
-  it("@Format accepts an options object", () => {
-    const usd = dataBuiltins.Format!([1234.5, "currency", { currency: "USD", locale: "en-US" }]);
+  it("Util.format accepts an options object", () => {
+    const usd = Util.format(1234.5, "currency", { currency: "USD", locale: "en-US" });
     expect(String(usd)).toContain("$");
     expect(String(usd)).toMatch(/1,234/);
-    const eur = dataBuiltins.Format!([1234.5, "currency", { currency: "EUR", locale: "en-US" }]);
+    const eur = Util.format(1234.5, "currency", { currency: "EUR", locale: "en-US" });
     expect(String(eur)).toContain("€");
-    const pct = dataBuiltins.Format!([0.42, "percent", { decimals: 1 }]);
+    const pct = Util.format(0.42, "percent", { decimals: 1 });
     expect(String(pct)).toBe("42.0%");
-    const compact = dataBuiltins.Format!([1_500_000, "compact", { locale: "en-US" }]);
+    const compact = Util.format(1_500_000, "compact", { locale: "en-US" });
     expect(String(compact)).toMatch(/1\.5M/);
   });
 
-  it("@Format keeps the legacy positional shape working", () => {
-    const legacy = dataBuiltins.Format!([1000, "currency", "EUR", "en-US"]);
+  it("Util.format keeps the legacy positional shape working", () => {
+    const legacy = Util.format(1000, "currency", "EUR", "en-US");
     expect(String(legacy)).toContain("€");
-    const number = dataBuiltins.Format!([1000, "number", "en-US"]);
+    const number = Util.format(1000, "number", "en-US");
     expect(String(number)).toBe("1,000");
   });
 });
@@ -801,7 +806,7 @@ describe("StateStore behaviour", () => {
   });
 
   it("non-literal state initializers are computed against the current store", () => {
-    const { state } = buildContext(`$total = @Count($rows)\n$rows = [1, 2]`);
+    const { state } = buildContext(`$total = Util.count($rows)\n$rows = [1, 2]`);
     expect(state.get("total")).toBe(2);
   });
 });

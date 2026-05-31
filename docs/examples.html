@@ -532,7 +532,7 @@ aktion = Stack([
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">aktion = Stats([
   StatCard("Teams", { value: "1,240+", icon: "people-group" }),
-  StatCard("Daily messages", { value: @Format(184000, "number"), icon: "comments" }),
+  StatCard("Daily messages", { value: Util.format(184000, "number"), icon: "comments" }),
   StatCard("Uptime", { value: "99.99%", icon: "shield-halved" }),
   StatCard("Regions", { value: "12", icon: "globe" })
 ], { align: "center" })</code></pre>
@@ -887,7 +887,7 @@ aktion = Card([
 
   // --- Components ---
   function CatalogPage() {
-    $visible = $category == "all" ? products : @Filter(products, "category", "==", $category)
+    $visible = $category == "all" ? products : Util.filter(products, "category", "==", $category)
 
     header = PageHeader("Product Catalog", {
       subtitle: "Explore our latest arrivals and essentials",
@@ -914,7 +914,7 @@ aktion = Card([
 
     cards = Grid($visible.map(p =&gt; MediaCard(p.name, {
       imageSrc: p.img,
-      description: @Format(p.price, "currency", "USD"),
+      description: Util.format(p.price, "currency", "USD"),
       badge: Badge(p.category, { tone: "info" }),
       actions: [
         Button("Add to cart", {
@@ -934,12 +934,12 @@ aktion = Card([
     $cart.length == 0
       ? EmptyState("Your cart is empty", { icon: "cart-shopping" })
       : Stack([
-          ...$cart.map(item =&gt; PersonChip(item.name, { role: @Format(item.price, "currency", "USD"), avatarSrc: item.img })),
+          ...$cart.map(item =&gt; PersonChip(item.name, { role: Util.format(item.price, "currency", "USD"), avatarSrc: item.img })),
           Separator(),
           Stack([
             Text("Total", { variant: "body-heavy" }),
             Spacer(),
-            Text(@Format(@Sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
+            Text(Util.format(Util.sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
           ], { direction: "row" }),
           Button("Checkout", { onClick: checkout, variant: "primary", fullWidth: true })
         ], { gap: "s" })
@@ -1017,22 +1017,22 @@ function checkout() {
 }
 
 $lines = $cart.map(item =&gt; item.qty * item.price)
-$subtotal = @Sum($lines)
+$subtotal = Util.sum($lines)
 $shipping = $subtotal &gt;= 100 ? 0 : 9
 $total = $subtotal + $shipping
 
 items = $cart.map(item =&gt;
   ListItem(item.name, {
-    meta: `${item.qty} × ${@Format(item.price, "currency", "USD")}`,
+    meta: `${item.qty} × ${Util.format(item.price, "currency", "USD")}`,
     icon: "box" })
 )
 
 summary = Card([
   SectionHeader("Order summary"),
   DescriptionList([
-    DescriptionItem("Subtotal", { value: @Format($subtotal, "currency", "USD") }),
-    DescriptionItem("Shipping", { value: if ($shipping == 0) { "Free" } else { @Format($shipping, "currency", "USD") } }),
-    DescriptionItem("Total", { value: @Format($total, "currency", "USD"), icon: "sack-dollar" })
+    DescriptionItem("Subtotal", { value: Util.format($subtotal, "currency", "USD") }),
+    DescriptionItem("Shipping", { value: if ($shipping == 0) { "Free" } else { Util.format($shipping, "currency", "USD") } }),
+    DescriptionItem("Total", { value: Util.format($total, "currency", "USD"), icon: "sack-dollar" })
   ]),
   Button("Checkout", { action: checkout, variant: "primary" })
 ])

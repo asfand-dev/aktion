@@ -58,11 +58,11 @@ aktion = Counter()
 But core documented examples use `@` builtins:
 
 ```js
-total = @Sum($prices)
-label = @Plural(count, "item", "items")
+total = Util.sum($prices)
+label = Util.plural(count, "item", "items")
 ```
 
-`@Sum(...)` is not normal JavaScript expression syntax. It is Aktion-specific syntax. A developer will eventually discover this, but it weakens trust in the “strict subset” language.
+`Util.sum(...)` is not normal JavaScript expression syntax. It is Aktion-specific syntax. A developer will eventually discover this, but it weakens trust in the “strict subset” language.
 
 **Suggestion:** describe Aktion as a “JavaScript-shaped DSL with a small number of explicit extensions: `$` reactive atoms and `@` builtins.” That is clearer and still compelling.
 
@@ -627,7 +627,7 @@ Aktion has enough layout, form, table, HTTP, async, and chart components to buil
 $tickets = Http({ url: "https://api.example.com/tickets" })
 $status = "open"
 
-visible = @Filter($tickets.data ?? [], "status", "==", $status)
+visible = Util.filter($tickets.data ?? [], "status", "==", $status)
 
 aktion = Column([
   PageHeader("Support queue"),

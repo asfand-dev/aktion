@@ -39,9 +39,9 @@ cols = [
   Col("Commits", { values: contributors.commits, format: "number", align: "right", sortable: true,  filterable: false })
 ]
 
-bulkToolbar = @Count($selectedIds) > 0
+bulkToolbar = Util.count($selectedIds) > 0
   ? Toolbar({
-      left: [Badge(\`\${@Count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+      left: [Badge(\`\${Util.count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
       right: [Button("Email selected", { variant: "ghost", size: "small", icon: "envelope" }),
        Button("Export CSV", { variant: "secondary", size: "small", icon: "file-csv" }),
        Button("Clear", { action: () => { $selectedIds = "" }, variant: "ghost", size: "small" })]
@@ -49,7 +49,7 @@ bulkToolbar = @Count($selectedIds) > 0
   : null
 
 leaderboard = Card([
-  SectionHeader("Top contributors", { subtitle: \`\${@Count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+  SectionHeader("Top contributors", { subtitle: \`\${Util.count(contributors)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
     eyebrow: "DATAGRID",
     status: Badge("Live", { tone: "success", icon: "circle", size: "sm" }),
     actions: [Button("Search", { variant: "ghost", size: "small", icon: "magnifying-glass" }),
@@ -147,14 +147,14 @@ auditCard = Card([
 bottomGrid = Grid([activityCard, auditCard], { columns: {sm: 1, md: 2}, gap: "l" })
 
 kpiStrip = Stats([
-  StatCard("Contributors", { value: \`\${@Count(contributors)}\`,                      trend: "up",   delta: "+2 this week", icon: "users" }),
-  StatCard("Commits",      { value: \`\${@Format(@Sum(contributors.commits, "number"))}\`, trend: "up",   delta: "+184 today",   icon: "code-commit" }),
-  StatCard("Avg latency",  { value: \`\${@Round(@Avg(contributors.latencyMs), 0)}ms\`, trend: "down", delta: "-12 ms",       icon: "gauge-high" }),
-  StatCard("Top score",    { value: \`\${@Max(contributors.score)}\`,                  trend: "flat", delta: "Ada Lovelace", icon: "trophy" })
+  StatCard("Contributors", { value: \`\${Util.count(contributors)}\`,                      trend: "up",   delta: "+2 this week", icon: "users" }),
+  StatCard("Commits",      { value: \`\${Util.format(Util.sum(contributors.commits, "number"))}\`, trend: "up",   delta: "+184 today",   icon: "code-commit" }),
+  StatCard("Avg latency",  { value: \`\${Util.round(Util.avg(contributors.latencyMs), 0)}ms\`, trend: "down", delta: "-12 ms",       icon: "gauge-high" }),
+  StatCard("Top score",    { value: \`\${Util.max(contributors.score)}\`,                  trend: "flat", delta: "Ada Lovelace", icon: "trophy" })
 ])
 
 pageHeader = PageHeader("Engineering analytics", {
-  subtitle: \`\${@Count(contributors)} contributors · \${@Sum(contributors.commits)} commits this month\`,
+  subtitle: \`\${Util.count(contributors)} contributors · \${Util.sum(contributors.commits)} commits this month\`,
   breadcrumbs: ["Workspace", "Engineering", "Analytics"],
   actions: [Button("Export PDF", { variant: "secondary" }),
    Button("Share view", { variant: "primary" })],
@@ -237,7 +237,7 @@ mapCard = Card([
 ])
 
 kpis = Stats([
-  StatCard("Photos",    { value: \`\${@Count(photos)}\`, trend: "flat", delta: "Curated",           icon: "image" }),
+  StatCard("Photos",    { value: \`\${Util.count(photos)}\`, trend: "flat", delta: "Curated",           icon: "image" }),
   StatCard("Duration",  { value: "8 days",            trend: "flat", delta: "Round-trip",         icon: "calendar-days" }),
   StatCard("Locations", { value: "6 stops",           trend: "up",   delta: "+2 vs last tour",   icon: "location-dot" }),
   StatCard("Group size",{ value: "12 max",            trend: "flat", delta: "Small-group format", icon: "people-group" })
@@ -257,7 +257,7 @@ hero = Hero("Aurora Expedition", {
 
 galleryBlock = Card([
   SectionHeader("Photo gallery", { subtitle: "Tap any tile to view full size", eyebrow: "PHOTOS",
-    status: Badge(\`\${@Count(photos)} photos\`, { tone: "primary", icon: "image", size: "sm" }) }),
+    status: Badge(\`\${Util.count(photos)} photos\`, { tone: "primary", icon: "image", size: "sm" }) }),
   galleryGrid
 ])
 
@@ -328,7 +328,7 @@ homePage = Card([
 dashboardPage = Card([
   CardHeader("Dashboard", { subtitle: "Reactive across routes" }),
   Stack([
-    StatCard("Users",     { value: \`\${@Count($users)}\`, trend: "up", delta: "+2 this month" }),
+    StatCard("Users",     { value: \`\${Util.count($users)}\`, trend: "up", delta: "+2 this month" }),
     StatCard("Visits",    { value: \`\${$visits}\`,        trend: "up", delta: "this session" }),
     StatCard("Last edit", { value: $lastEdited })
   ], { direction: "row", gap: "m", align: "stretch", justify: "start", wrap: true }),
@@ -618,7 +618,7 @@ effect(() => {
   $events = [...$events, {ts: \`\${new Date().getHours()}:\${String(new Date().getMinutes()).padStart(2, "0")}\`, value: Math.floor(Math.random() * 80 + 10), source: Math.random() > 0.5 ? "web" : "api"}]
 }, ["every(2000)"])
 
-totalValue = @Sum($events.value)
+totalValue = Util.sum($events.value)
 webEvents = $events.filter((e) => e.source == "web")
 apiEvents = $events.filter((e) => e.source == "api")
 
@@ -756,7 +756,7 @@ function removeExpense(id) {
   $expenses = $expenses.filter((e) => e.id != id)
 }
 
-spent = @Sum($expenses.amount)
+spent = Util.sum($expenses.amount)
 remaining = $budget - spent
 
 kpis = Stats([
@@ -780,10 +780,10 @@ chartView = Card([
   SectionHeader("Spending by category", { eyebrow: "CHART" }),
   BarChart(["food", "entertainment", "transport", "health"], {
     series: [Series("Amount", { values: [
-      @Sum($expenses.filter((e) => e.category == "food").amount),
-      @Sum($expenses.filter((e) => e.category == "entertainment").amount),
-      @Sum($expenses.filter((e) => e.category == "transport").amount),
-      @Sum($expenses.filter((e) => e.category == "health").amount)
+      Util.sum($expenses.filter((e) => e.category == "food").amount),
+      Util.sum($expenses.filter((e) => e.category == "entertainment").amount),
+      Util.sum($expenses.filter((e) => e.category == "transport").amount),
+      Util.sum($expenses.filter((e) => e.category == "health").amount)
     ] })]
   })
 ])

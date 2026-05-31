@@ -170,7 +170,8 @@ function walkExpression(
       return;
     }
     case "BuiltinCall": {
-      validateBuiltinCall(expr, out);
+      // Synthetic `__rui_*` nodes only — user-facing `Util.name(...)` syntax
+      // was removed. Just walk arguments.
       for (const arg of expr.arguments) walkExpression(arg, library, out);
       return;
     }
@@ -410,69 +411,6 @@ function validateThemeCall(
       : `Theme({${prop.key}: ...}) — legacy flat-shape token is removed in Aktion 0.5. Use ${suggestion}.`;
     out.push({
       message,
-      line: expr.loc?.line ?? 0,
-      column: expr.loc?.column ?? 0,
-    });
-  }
-}
-
-/**
- * Appendix-A legacy `@`-builtins. Each entry is a v1 helper that the
- * 0.5 surface explicitly removed. The parser accepts the *syntax*
- * (a `BuiltinCall` is just `@<Name>(args)`), so without an explicit
- * guard here a v1 program with e.g. `@Const(...)` would silently
- * evaluate to `null`. The error message points at the canonical 0.5
- * replacement.
- */
-const LEGACY_V1_BUILTINS: Record<string, string> = {
-  Set:
-    `@Set($x, value) is removed. Inside a \`function name() { … }\` body, assign directly: \`$x = value\`.`,
-  Reset:
-    `@Reset($x) is removed. Inside a \`function name() { … }\` body, assign the default explicitly: \`$x = defaultValue\`.`,
-  Run:
-    `@Run(name) is removed. Inside a \`function name() { … }\` body, call the mutation directly.`,
-  ToAssistant:
-    `@ToAssistant("text") is removed. Use \`emit("assistant-message", { message: "..." })\` inside a function body.`,
-  OpenUrl:
-    `@OpenUrl("https://…") is removed. Inside a function body, call \`window.open(url, "_blank", "noopener,noreferrer")\`.`,
-  Navigate:
-    `@Navigate("/path") is removed. Use \`pages = Router({ … })\` and navigate via the host (\`el.navigate("/path")\`), \`route.navigate("/path")\` from inside an action, or by linking to the path with \`NavLink(label, { to: "/path" })\`.`,
-  Js:
-    `@Js(body, args?) is removed. Use \`effect(() => { … }, [deps])\` or \`function name() { … }\`.`,
-  Const:
-    `@Const(expr) is removed. Use \`$name = expr\` (reactive binding with $ prefix).`,
-  Memo:
-    `@Memo(expr) is removed. Use \`$name = expr\` (reactive binding with $ prefix).`,
-  // Array helpers (subsumed by spread + builtins).
-  Push:
-    `@Push(arr, value) is removed in 0.5. Use spread: \`[...arr, value]\`.`,
-  Concat:
-    `@Concat(a, b) is removed in 0.5. Use spread: \`[...a, ...b]\`.`,
-  Map:
-    `@Map(arr, "field") is removed in 0.5. Use array pluck shorthand: \`arr.field\` (yields \`[arr[0].field, arr[1].field, …]\`).`,
-  Take:
-    `@Take(arr, n) is removed in 0.5. Use @Slice(arr, 0, n) or array shortcuts like \`arr.first\` / \`arr.last\`.`,
-  // Formatters (subsumed by @Format(value, mode, {currency?, locale?, decimals?})).
-  FormatCurrency:
-    `@FormatCurrency(value, opts?) is removed in 0.5. Use \`@Format(value, "currency", {currency: "USD"})\`.`,
-  FormatNumber:
-    `@FormatNumber(value, opts?) is removed in 0.5. Use \`@Format(value, "number", {locale: "en-US"})\`.`,
-  Each:
-    `the Each(items, "x", template) builtin is removed in 0.5. Use: \`for (let x of items) { template }\` (see §8.3).`,
-  If:
-    `the If(cond, then, else?) builtin is removed in 0.5. Use: \`if (cond) { then } else { else }\` (see §8.1).`,
-  Switch:
-    `the Switch(value, cases, default?) builtin is removed in 0.5. Use: \`switch (value) { case "a": A(); break; default: Default() }\` (see §8.2).`,
-};
-
-function validateBuiltinCall(
-  expr: Extract<Expression, { kind: "BuiltinCall" }>,
-  out: ParseError[],
-): void {
-  const legacy = LEGACY_V1_BUILTINS[expr.name];
-  if (legacy) {
-    out.push({
-      message: `@${expr.name}(...) — ${legacy}`,
       line: expr.loc?.line ?? 0,
       column: expr.loc?.column ?? 0,
     });

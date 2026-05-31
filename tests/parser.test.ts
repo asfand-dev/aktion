@@ -98,8 +98,8 @@ describe("parser", () => {
     expect(ids).toContain("b");
   });
 
-  it("supports builtin calls and ternary", () => {
-    const program = parse(`view = @Count(rows) > 0 ? table : empty`);
+  it("supports Util namespace calls and ternary", () => {
+    const program = parse(`view = Util.count(rows) > 0 ? table : empty`);
     const expr = program.statements[0]?.expression;
     expect(expr?.kind).toBe("Ternary");
   });

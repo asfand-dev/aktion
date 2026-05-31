@@ -1139,7 +1139,7 @@ commandPalette = CommandPalette([
   ["status:active", "team:eng", "priority:high", "region:us"],
   { onRemove: null }
 )`,
-      VirtualList: `rows = @Range(1, 200)
+      VirtualList: `rows = Util.range(1, 200)
 aktion = VirtualList(rows, { itemHeight: 36 })`,
       QueryBuilder: `$rules = [
   {field: "name", op: "contains", value: "Ada"},

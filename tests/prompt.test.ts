@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
-import { getBuiltinCatalog } from "../src/language/builtins.js";
 
 describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
@@ -16,7 +15,6 @@ describe("generatePrompt", () => {
     const minimal = generatePrompt(defaultLibrary, { toolCalls: false, bindings: false });
     expect(minimal).not.toContain("## Reactive State");
     expect(minimal).not.toContain("## Data — `Http({...})`");
-    expect(minimal).not.toContain("## Built-in functions");
 
     const full = generatePrompt(defaultLibrary, {
       tools: [{ name: "list_users", description: "Returns users.", argsExample: { limit: 10 } }],
@@ -26,19 +24,17 @@ describe("generatePrompt", () => {
     expect(full).toContain("list_users");
   });
 
-  it("projects the @-builtin catalog from `src/language/builtins.ts`", () => {
+  it("documents the `Util` runtime helper namespace", () => {
     const text = generatePrompt(defaultLibrary, {
       tools: [{ name: "lookup", description: "demo" }],
     });
-    const catalog = getBuiltinCatalog();
-    const dataBuiltins = catalog.filter((e) => e.category === "data");
-    expect(dataBuiltins.length).toBeGreaterThan(20);
-    for (const entry of dataBuiltins) {
-      expect(text, `${entry.signature} should appear`).toContain(entry.signature);
-    }
-    expect(text).toContain("### Data helpers");
-    // Legacy iteration-helper builtins were removed — native JS for/if/switch covers it.
-    expect(text).not.toContain("### Iteration helpers");
+    expect(text).toContain("`Util`");
+    expect(text).toContain("Util.format");
+    expect(text).toContain("Util.formatDate");
+    expect(text).toContain("Util.sort");
+    // Legacy `@`-builtin syntax must not be re-introduced.
+    expect(text).not.toContain("@Filter(");
+    expect(text).not.toContain("@Count(");
   });
 
   it("appends additional rules and examples", () => {
@@ -148,7 +144,7 @@ describe("generatePrompt", () => {
       expect(text).toContain("aktion = ...");
       expect(text).toContain("## Syntax (read-only subset)");
       expect(text).toContain("## Component library (read-only)");
-      expect(text).toContain("## Built-in `@`-functions");
+      expect(text).toContain("## `Util` — runtime helper namespace");
       expect(text).toContain("## Hoisting & streaming (CRITICAL)");
       expect(text).toContain("## Examples");
       expect(text).toContain("## Important rules");

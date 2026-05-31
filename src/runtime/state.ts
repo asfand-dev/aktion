@@ -144,7 +144,7 @@ export class StateStore {
     for (const name of names) {
       // Reset is a no-op for names that were never declared — keeps the
       // store free of `undefined` sentinels when the LLM types
-      // `@Reset($typo)` for a variable that doesn't exist.
+      // `Util.reset($typo)` for a variable that doesn't exist.
       if (!this.defaults.has(name)) continue;
       const fallback = this.defaults.get(name);
       if (this.values.get(name) === fallback) continue;

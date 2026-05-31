@@ -10,7 +10,6 @@ export type TokenType =
   | "Identifier"
   | "Keyword"
   | "StateIdentifier"
-  | "BuiltinIdentifier"
   | "Number"
   | "String"
   /**
@@ -323,17 +322,17 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Builtin identifier: @Name
+    // Legacy `Util.name(...)` builtin sigil — removed. Surface a clear
+    // error so authors get a single squiggle pointing at the migration
+    // site rather than a cascade of confused parse errors.
     if (ch === "@") {
-      const startLine = line;
-      const startCol = column;
-      advance();
-      let name = "";
-      while (i < source.length && isIdentifierChar(peek() ?? "")) {
-        name += advance();
-      }
-      push("BuiltinIdentifier", name, startLine, startCol);
-      continue;
+      const err = new Error(
+        'Legacy `Util.name(...)` builtins are removed. Use `Util.<name>(...)` ' +
+        'or the equivalent native JavaScript instead (e.g. `arr.length` for `Util.count(arr)`).',
+      ) as Error & { line?: number; column?: number };
+      err.line = line;
+      err.column = column;
+      throw err;
     }
 
     // State identifier: $name. Reactive atoms are declared with `$name = value`

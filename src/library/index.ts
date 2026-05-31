@@ -246,7 +246,7 @@ const componentGroups: ComponentGroup[] = [
       "- `StatCard(label, value, trend?, delta?, icon?, spark?, tone?)` gains an optional inline `Sparkline` via the `spark` prop. Use `Sparkline(values, tone?)` standalone for tiny trend chips in table cells.",
       "- `Tile(label, icon?, value?, description?, tone?, action?)` is the dense icon tile for quick-action menus and category grids; pair with `Grid` for uniform rows.",
       "- `Tree([TreeNode(label, children?, icon?, expanded?, active?, badge?, action?)])` renders a hierarchical tree (file browsers, nested navigation, category pickers); use `expanded=true` to open a branch by default.",
-      "- `Pagination(page, totalPages, siblings?, total?, perPage?, perPageOptions?, compact?)` — bind `page` (and optionally `perPage`) to a `$variable`; pass `total` to render the \"Showing N–M of T\" summary. Reuse the same variable when slicing data with `@Filter` / `for`.",
+      "- `Pagination(page, totalPages, siblings?, total?, perPage?, perPageOptions?, compact?)` — bind `page` (and optionally `perPage`) to a `$variable`; pass `total` to render the \"Showing N–M of T\" summary. Reuse the same variable when slicing data with `arr.filter(...)` / `for`.",
     ],
   },
   {
@@ -279,7 +279,7 @@ const componentGroups: ComponentGroup[] = [
       "- Use `HoverCard(trigger, content)` when the popover needs rich content (profile preview, link target) and the trigger should open on hover.",
       "- `Popover(trigger, content, title?, side?, align?, width?)` is the click-triggered counterpart of `HoverCard` — use for filter panels, color pickers, share menus, and small settings flyouts. Always renders an × close button in the header; clicking the trigger again, clicking outside, or pressing Escape also closes it.",
       "- `Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)` renders stars for product reviews, testimonials, and ranked lists. Pass a `$variable` as `value` with `interactive=true` to let users rate; add `halfStep=true` so clicking the left half of a star sets a half-value. Set `icon=\"heart\"|\"thumb\"|\"fire\"|\"bolt\"` (or any FA name) to swap glyphs.",
-      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists from an `action` body: `$toasts = [...$toasts, item]` to append and `$toasts = @Filter($toasts, \"id\", \"!=\", id)` to dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists from an `action` body: `$toasts = [...$toasts, item]` to append and `$toasts = $toasts.filter((t) => t.id !== id)` to dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
       "- `NotificationBell(count?, items?, onOpen?)` — compact inbox trigger; `CommandPalette` for Cmd-K action search.",
     ],
   },

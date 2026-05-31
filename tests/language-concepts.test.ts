@@ -104,7 +104,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("computes a `@Sum` over a literal array at planProgram time", () => {
     const { state } = harness(`
       $cart = [{ price: 10 }, { price: 20 }, { price: 30 }]
-      $total = @Sum($cart.price)
+      $total = Util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(60);
@@ -117,7 +117,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
         { item: "Muffin", qty: 1, price: 3.75 },
         { item: "Cookie", qty: 3, price: 2.25 }
       ]
-      $total = @Sum($orders.map(o => o.qty * o.price))
+      $total = Util.sum($orders.map(o => o.qty * o.price))
       aktion = Text(\`\${$total}\`)
     `);
     // 2 * 4.5 + 1 * 3.75 + 3 * 2.25 = 9 + 3.75 + 6.75 = 19.5
@@ -128,9 +128,9 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const source =
       'aktion = Stack([PageHeader("Order Summary"), Card([Table(cols)]), totalDisplay], { gap: "m", padding: "l" })\n' +
       '$orders = [{ item: "Latte", qty: 2, price: 4.5 }, { item: "Muffin", qty: 1, price: 3.75 }, { item: "Cookie", qty: 3, price: 2.25 }]\n' +
-      "$total = @Sum($orders.map(o => o.qty * o.price))\n" +
+      "$total = Util.sum($orders.map(o => o.qty * o.price))\n" +
       'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, { align: "right" }), Col("Subtotal", $orders.map(o => o.qty * o.price), { format: "currency", align: "right" })]\n' +
-      'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text(@Format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
+      'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text(Util.format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
     const { state, render } = harness(source);
     expect(state.get("total")).toBe(19.5);
     const host = render();
@@ -142,7 +142,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("re-derives a computed value when its dependency changes", async () => {
     const { state } = harness(`
       $cart  = [{ price: 1 }, { price: 2 }]
-      $total = @Sum($cart.price)
+      $total = Util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(3);
@@ -157,7 +157,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(`
       $cart     = [{ qty: 1, price: 10 }, { qty: 2, price: 5 }]
       $lines    = $cart.map(it => it.qty * it.price)
-      $subtotal = @Sum($lines)
+      $subtotal = Util.sum($lines)
       $shipping = $subtotal >= 100 ? 0 : 9
       $total    = $subtotal + $shipping
       aktion = Text(\`\${$total}\`)
@@ -178,7 +178,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
 
   it("supports forward references — declaration order does not matter for state defaults", () => {
     const { state } = harness(`
-      $total = @Count($rows)
+      $total = Util.count($rows)
       $rows  = [10, 20, 30]
       aktion = Text(\`\${$total}\`)
     `);
@@ -234,7 +234,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("disposeContext() unsubscribes the recompute hook so replans don't leak", async () => {
     const { state, dispose } = harness(`
       $cart  = [{ price: 1 }]
-      $total = @Sum($cart.price)
+      $total = Util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(1);
@@ -356,13 +356,13 @@ describe("Math & calculations", () => {
 
   it("@Round / @Floor / @Ceil / @Abs / @Clamp / @Pow / @Sqrt", () => {
     const { ctx } = harness(`
-      $round = @Round(2.567, 2)
-      $floor = @Floor(3.9)
-      $ceil  = @Ceil(3.1)
-      $abs   = @Abs(-7)
-      $clamp = @Clamp(15, 0, 10)
-      $pow   = @Pow(2, 10)
-      $sqrt  = @Sqrt(81)
+      $round = Util.round(2.567, 2)
+      $floor = Util.floor(3.9)
+      $ceil  = Util.ceil(3.1)
+      $abs   = Util.abs(-7)
+      $clamp = Util.clamp(15, 0, 10)
+      $pow   = Util.pow(2, 10)
+      $sqrt  = Util.sqrt(81)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("round")).toBe(2.57);
@@ -382,15 +382,15 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
   it("data: @Min, @Max, @First, @Last, @Find, @GroupBy, @Slice, @Unique, @Reverse", () => {
     const { ctx } = harness(`
       $rows  = [{ x: 3, k: "a" }, { x: 1, k: "b" }, { x: 2, k: "a" }]
-      $min   = @Min($rows.x)
-      $max   = @Max($rows.x)
-      $first = @First($rows.x)
-      $last  = @Last($rows.x)
-      $find  = @Find($rows, "x", "==", 2)
-      $group = @GroupBy($rows, "k")
-      $slice = @Slice($rows.x, 1, 3)
-      $uniq  = @Unique([1, 1, 2, 3, 3])
-      $rev   = @Reverse([1, 2, 3])
+      $min   = Util.min($rows.x)
+      $max   = Util.max($rows.x)
+      $first = Util.first($rows.x)
+      $last  = Util.last($rows.x)
+      $find  = Util.find($rows, "x", "==", 2)
+      $group = Util.groupBy($rows, "k")
+      $slice = Util.slice($rows.x, 1, 3)
+      $uniq  = Util.unique([1, 1, 2, 3, 3])
+      $rev   = Util.reverse([1, 2, 3])
       aktion = Text("ok")
     `);
     expect(ctx.state.get("min")).toBe(1);
@@ -409,9 +409,9 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("data: @Range generates inclusive integer sequences with optional step", () => {
     const { ctx } = harness(`
-      $asc      = @Range(1, 5)
-      $stepped  = @Range(0, 10, 2)
-      $desc     = @Range(5, 1)
+      $asc      = Util.range(1, 5)
+      $stepped  = Util.range(0, 10, 2)
+      $desc     = Util.range(5, 1)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("asc")).toEqual([1, 2, 3, 4, 5]);
@@ -421,12 +421,12 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("strings: @Capitalize, @Uppercase, @Titlecase, @Trim, @Replace, @Substring", () => {
     const { ctx } = harness(`
-      $cap     = @Capitalize("hello")
-      $upper   = @Uppercase("rusT")
-      $title   = @Titlecase("hello world FOO")
-      $trim    = @Trim("   spaced   ")
-      $replace = @Replace("foo bar foo", "foo", "baz")
-      $substr  = @Substring("hello world", 0, 5)
+      $cap     = Util.capitalize("hello")
+      $upper   = Util.uppercase("rusT")
+      $title   = Util.titlecase("hello world FOO")
+      $trim    = Util.trim("   spaced   ")
+      $replace = Util.replace("foo bar foo", "foo", "baz")
+      $substr  = Util.substring("hello world", 0, 5)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("cap")).toBe("Hello");
@@ -439,14 +439,14 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("strings: @StartsWith, @EndsWith, @Contains, @Match, @Plural, @Case", () => {
     const { ctx } = harness(`
-      $starts   = @StartsWith("hello world", "hello")
-      $ends     = @EndsWith("hello world", "world")
-      $contains = @Contains("hello world", "lo wo")
-      $match    = @Match("abc123", "^[a-z]+\\\\d+$")
-      $plural1  = @Plural(1, "order")
-      $plural3  = @Plural(3, "child", "children")
-      $snake    = @Case("helloWorld", "snake")
-      $kebab    = @Case("HelloWorld", "kebab")
+      $starts   = Util.startsWith("hello world", "hello")
+      $ends     = Util.endsWith("hello world", "world")
+      $contains = Util.contains("hello world", "lo wo")
+      $match    = Util.match("abc123", "^[a-z]+\\\\d+$")
+      $plural1  = Util.plural(1, "order")
+      $plural3  = Util.plural(3, "child", "children")
+      $snake    = Util.case("helloWorld", "snake")
+      $kebab    = Util.case("HelloWorld", "kebab")
       aktion = Text("ok")
     `);
     expect(ctx.state.get("starts")).toBe(true);
@@ -461,10 +461,10 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("dates: @Now, @Today, @AddDays, @DiffDays, @FormatDate", () => {
     const { ctx } = harness(`
-      $now     = @Now()
-      $iso     = @AddDays("2024-01-01", 7)
-      $diff    = @DiffDays("2024-01-01", "2024-01-31")
-      $fmt     = @FormatDate("2024-03-15", "YYYY/MM/DD")
+      $now     = Util.now()
+      $iso     = Util.addDays("2024-01-01", 7)
+      $diff    = Util.diffDays("2024-01-01", "2024-01-31")
+      $fmt     = Util.formatDate("2024-03-15", "YYYY/MM/DD")
       aktion = Text("ok")
     `);
     expect(typeof ctx.state.get("now")).toBe("number");
@@ -868,7 +868,7 @@ describe("Runtime safety budget", () => {
     const budget = createRuntimeBudget({ iterationLimit: 100 });
     const { render } = harness(
       `
-        $rows = @Range(1, 1000)
+        $rows = Util.range(1, 1000)
         $out  = $rows.map(r => r * 2)
         aktion = Text(\`\${$out.length}\`)
       `,
@@ -885,7 +885,7 @@ describe("Runtime safety budget", () => {
     const budget = createRuntimeBudget({ iterationLimit: 100 });
     const { ctx } = harness(
       `
-        $rows = @Range(1, 1000)
+        $rows = Util.range(1, 1000)
         function double(_) {
           let out = []
           for (let r of $rows) { out.push(r * 2) }
@@ -900,37 +900,37 @@ describe("Runtime safety budget", () => {
     expect(() => ctx.bindings.get("run")?.()).toThrowError(RuntimeBudgetError);
   });
 
-  it("rejects `@Range(0, N)` when N exceeds the array-length budget", () => {
+  it("rejects `Util.range(0, N)` when N exceeds the Util hard cap", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 50 });
     expect(() =>
       harness(
         `
-          $values = @Range(0, 100)
+          $values = Util.range(0, 200000)
           aktion = Text("ok")
         `,
         { budget },
       ),
-    ).toThrowError(RuntimeBudgetError);
+    ).toThrow(RangeError);
   });
 
-  it("rejects `@Repeat(value, N)` when N exceeds the array-length budget", () => {
+  it("rejects `Util.repeat(value, N)` when N exceeds the Util hard cap", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 5 });
     expect(() =>
       harness(
         `
-          $padding = @Repeat("·", 50)
+          $padding = Util.repeat("·", 200000)
           aktion = Text("ok")
         `,
         { budget },
       ),
-    ).toThrowError(RuntimeBudgetError);
+    ).toThrow(RangeError);
   });
 
   it("a `@Range` within the cap allocates normally", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 100 });
     const { state } = harness(
       `
-        $values = @Range(0, 9)
+        $values = Util.range(0, 9)
         aktion = Text("ok")
       `,
       { budget },
@@ -966,7 +966,7 @@ describe("Runtime safety budget", () => {
   it("disabling the budget (`budget: null`) lifts every limit", () => {
     const { state } = harness(
       `
-        $values = @Range(0, 1000)
+        $values = Util.range(0, 1000)
         aktion = Text("ok")
       `,
       { budget: null },
@@ -1009,8 +1009,8 @@ describe("Runtime safety budget", () => {
   it("default limits permit realistic apps (one large array + nested .map)", () => {
     const { state } = harness(
       `
-        $rows = @Range(1, 200)
-        $cells = $rows.map(r => @Range(1, 50).map(c => r * c))
+        $rows = Util.range(1, 200)
+        $cells = $rows.map(r => Util.range(1, 50).map(c => r * c))
         aktion = Text("ok")
       `,
     );

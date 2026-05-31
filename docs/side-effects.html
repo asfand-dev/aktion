@@ -198,7 +198,7 @@
         <span class="lay-demo-label">Live</span>
 <pre><code>$now = 0
 effect(() =&gt; {
-  let id = setInterval(() =&gt; { $now = @Now() }, 1000)
+  let id = setInterval(() =&gt; { $now = Util.now() }, 1000)
   cleanup(() =&gt; clearInterval(id))
 }, ["mount"])
 aktion = Column([ Text(`Ticks: ${$now}`) ])</code></pre>

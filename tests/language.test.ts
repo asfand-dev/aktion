@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   getLanguageSpec,
   getComponentCatalog,
-  getBuiltinCatalog,
   getSnippets,
   createStreamTokenizer,
   grammarSpec,
@@ -42,16 +41,6 @@ describe("getLanguageSpec", () => {
     expect(card?.group).toBe("Layout");
   });
 
-  it("includes every built-in @-function with a signature", () => {
-    const names = new Set(spec.builtins.map((b) => b.name));
-    for (const required of ["Filter", "Sum", "Join", "Case", "Count", "Format"]) {
-      expect(names.has(required), `@${required} should be in catalog`).toBe(true);
-    }
-    for (const entry of spec.builtins) {
-      expect(entry.signature.startsWith("@" + entry.name + "(")).toBe(true);
-    }
-  });
-
   it("ships at least 5 snippets keyed by name", () => {
     expect(spec.snippets.length).toBeGreaterThanOrEqual(5);
     const keys = new Set(spec.snippets.map((s) => s.name));
@@ -67,7 +56,6 @@ describe("getLanguageSpec", () => {
   });
 
   it("maps grammar token kinds to highlight tag names", () => {
-    expect(spec.tagMap.builtin).toBe("keyword");
     expect(spec.tagMap.component).toBe("typeName");
     expect(spec.tagMap.state).toBe("variableName.special");
   });
@@ -83,17 +71,6 @@ describe("getComponentCatalog (pure derivation)", () => {
       expect(Array.isArray(entry.params)).toBe(true);
       expect((entry as unknown as { render?: unknown }).render).toBeUndefined();
     }
-  });
-});
-
-describe("getBuiltinCatalog", () => {
-  const builtins = getBuiltinCatalog();
-  it("covers the data category (legacy iteration / action / javascript builtins removed)", () => {
-    const cats = new Set(builtins.map((b) => b.category));
-    expect(cats.has("data")).toBe(true);
-    expect(cats.has("iteration" as unknown as "data")).toBe(false);
-    expect(cats.has("action" as unknown as "data")).toBe(false);
-    expect(cats.has("javascript" as unknown as "data")).toBe(false);
   });
 });
 
@@ -184,7 +161,7 @@ describe("createStreamTokenizer", () => {
     return out;
   }
 
-  it("tags components, state refs, builtins, strings, numbers, and atoms", () => {
+  it("tags components, state refs, strings, numbers, and atoms", () => {
     const tokens = tokenize('aktion = Card("title", [for (let x of $items) { x.name }])');
     expect(tokens).toContain("component");
     expect(tokens).toContain("state");

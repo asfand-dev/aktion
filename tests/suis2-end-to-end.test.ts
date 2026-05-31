@@ -164,11 +164,11 @@ describe("Components and per-instance state", () => {
     expect(state.get(aliasKey!)).toBe(false);
   });
 
-  it("evaluates non-literal initializers (`$now = @Now()`) on the first render of a component instance", () => {
+  it("evaluates non-literal initializers (`$now = Util.now()`) on the first render of a component instance", () => {
     const { state, render } = harness(`
       aktion = Clock()
       function Clock() {
-        $tick = @Now()
+        $tick = Util.now()
         return Text(\`\${$tick}\`)
       }
     `);

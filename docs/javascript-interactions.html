@@ -219,14 +219,14 @@ aktion = Column([
         <code>effect</code> (not at the top level, which would re-create it on
         every render) and clear it in the effect&rsquo;s <code>cleanup</code>:
       </p>
-<pre><code>$now = @Now()
+<pre><code>$now = Util.now()
 
 effect(() =&gt; {
-  let id = setInterval(() =&gt; { $now = @Now() }, 1000)
+  let id = setInterval(() =&gt; { $now = Util.now() }, 1000)
   cleanup(() =&gt; clearInterval(id))
 }, ["mount"])
 
-clock = Text(@FormatDate($now, "time"))</code></pre>
+clock = Text(Util.formatDate($now, "time"))</code></pre>
       <p>
         For a debounce, clear and restart a <code>setTimeout</code> on each
         keystroke:

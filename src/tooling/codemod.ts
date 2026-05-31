@@ -274,12 +274,12 @@ const MANUAL_HINTS: Array<{
   {
     pattern: /@Const\(/,
     hint: () =>
-      `@Const(expr) → $name = expr (single reactive atom kind). Per-instance reactivity removes the need for explicit memoisation in 95% of cases.`,
+      `Util.const(expr) → $name = expr (single reactive atom kind). Per-instance reactivity removes the need for explicit memoisation in 95% of cases.`,
   },
   {
     pattern: /@Memo\(/,
     hint: () =>
-      `@Memo(expr) → $name = expr (single reactive atom kind).`,
+      `Util.memo(expr) → $name = expr (single reactive atom kind).`,
   },
   {
     pattern: /useInstanceState\(/,

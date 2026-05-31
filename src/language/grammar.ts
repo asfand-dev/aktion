@@ -18,7 +18,6 @@ export type GrammarTokenKind =
   | "number"         // 12, -3.14
   | "atom"           // true / false / null
   | "keyword"        // function, if, else, for, switch, return, …
-  | "builtin"        // @Sum, @Filter, @Format, …
   | "state"          // $variable
   | "component"      // Capitalised identifier in call position
   | "identifier"     // lowercase identifier
@@ -57,7 +56,6 @@ export interface GrammarSpec {
   };
   /** Sigils that mark non-identifier categories. */
   sigils: {
-    builtin: string;
     state: string;
   };
 }
@@ -94,7 +92,7 @@ export const grammarSpec: GrammarSpec = {
     start: /[A-Za-z_]/,
     part: /[A-Za-z0-9_]/,
   },
-  sigils: { builtin: "@", state: "$" },
+  sigils: { state: "$" },
 };
 
 /**
@@ -142,7 +140,7 @@ export const keywordDocs: Record<string, KeywordDoc> = {
   effect: {
     summary: "Run a side-effect when dependencies change (timers, fetch, analytics).",
     syntax: "effect(() => { ... }, [deps])",
-    example: 'effect(() => {\n  $now = @Now()\n}, [interval(1000)])',
+    example: 'effect(() => {\n  $now = Util.now()\n}, [interval(1000)])',
   },
   if: {
     summary: "Conditional statement — run a block when a condition is truthy.",
@@ -425,11 +423,6 @@ export function createStreamTokenizer(spec: GrammarSpec = grammarSpec): StreamTo
     }
 
     // Sigil-prefixed identifiers.
-    if (next === spec.sigils.builtin) {
-      stream.next();
-      stream.eatWhile(spec.identifier.part);
-      return "builtin";
-    }
     if (next === spec.sigils.state) {
       stream.next();
       // Legacy `$$name` is a hard error in Aktion 0.5; the
@@ -514,7 +507,6 @@ export const defaultTagMap: Record<GrammarTokenKind, string | null> = {
   number: "number",
   atom: "atom",
   keyword: "keyword",
-  builtin: "keyword",
   state: "variableName.special",
   component: "typeName",
   identifier: "variableName",

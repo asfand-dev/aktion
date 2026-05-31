@@ -22,7 +22,6 @@
 
 import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
 import { findPositionalProp } from "../library/types.js";
-import { getBuiltinCatalog, type BuiltinEntry } from "../language/builtins.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Public API                                                                */
@@ -70,13 +69,12 @@ export function describeComponentSpec(spec: ComponentSpec): string {
 /* -------------------------------------------------------------------------- */
 
 function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): string {
-  // Reactive state, HTTP, and the `@`-builtin catalog are core to Aktion.
-  // They are included by default; the legacy `bindings` / `toolCalls` flags
-  // can still force-disable them when a host wants a stripped-down prompt
-  // (e.g. only structural rendering without state).
+  // Reactive state and HTTP are core to Aktion. They are included by
+  // default; the legacy `bindings` / `toolCalls` flags can still
+  // force-disable them when a host wants a stripped-down prompt (e.g.
+  // only structural rendering without state).
   const showState = options.bindings ?? true;
   const showHttp = options.toolCalls ?? true;
-  const showBuiltins = showState || showHttp;
 
   const sections: string[] = [];
   sections.push(fullHeader(options.preamble));
@@ -91,7 +89,7 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(fullEmitAndWrappers());
   sections.push(fullEscapeHatches());
   sections.push(fullThemingI18nIcons());
-  if (showBuiltins) sections.push(fullBuiltins());
+  sections.push(fullUtil());
   sections.push(fullHelpers());
   sections.push(fullComponentLibrary(library));
   if (options.inlineMode) sections.push(fullInlineMode());
@@ -117,7 +115,7 @@ function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(chatHeader(options.preamble));
   sections.push(chatSyntax());
   sections.push(chatComponentLibrary(library));
-  sections.push(chatBuiltins());
+  sections.push(chatUtil());
   if (options.tools && options.tools.length > 0) {
     sections.push(chatToolsList(options.tools));
   }
@@ -210,7 +208,7 @@ merged   = { ...$base, status: "done" }
 name     = $user?.profile?.name ?? "Guest"
 
 // Template literals — preferred over string concatenation
-title = \`Found \${@Count(rows)} \${@Plural(@Count(rows), "result", "results")}\`
+title = \`Found \${rows.length} \${Util.plural(rows.length, "result", "results")}\`
 
 // Wrap a switch/match in a function and call it
 function panelFor(tab) {
@@ -250,7 +248,7 @@ function onType(q) {
 
 // A ticking clock — start on mount, clear on unmount
 effect(() => {
-  let id = setInterval(() => { $now = @Now() }, 1000)
+  let id = setInterval(() => { $now = Util.now() }, 1000)
   cleanup(() => clearInterval(id))
 }, ["mount"])
 \`\`\`
@@ -311,8 +309,8 @@ search   = Input("query",   { onChange: q => $results = Http({ url: \`https://ap
 There is no separate "computed" tier — just compute. Every \`$\` reference inside an expression auto-tracks.
 
 \`\`\`
-$open  = @Filter($todos, "done", "==", false)
-$total = @Sum($cart.price)
+$open  = $todos.filter((t) => !t.done)
+$total = Util.sum($cart.price)
 \`\`\``;
 }
 
@@ -389,9 +387,9 @@ Top-level effects mount on parse, tear down on \`setResponse\` / \`clear()\`. Ef
 
 \`\`\`
 function LiveClock() {
-  $now = @Now()
-  effect(() => { $now = @Now() }, ["every(1000)"])
-  return Text(@FormatDate($now, "time"))
+  $now = Util.now()
+  effect(() => { $now = Util.now() }, ["every(1000)"])
+  return Text(Util.formatDate($now, "time"))
 }
 
 // Debounced search — re-issue the request when inputs change
@@ -635,19 +633,48 @@ Icon-typed props expect a Font Awesome name as a string — no \`fa-\` prefix, N
 - \`Icon(name, { variant?, size? })\` renders a standalone glyph (\`size\` ∈ \`xs|sm|md|lg|xl\`).`;
 }
 
-function fullBuiltins(): string {
-  const catalog = getBuiltinCatalog();
-  return `## Built-in \`@\`-functions
+function fullUtil(): string {
+  return `## \`Util\` — runtime helper namespace
 
-Pure helpers — no side effects. Use anywhere in expressions for data shaping, formatting, math, and strings.
+Pure helpers — no side effects. \`Util\` is a global available inside every Aktion expression, action body, effect, and lambda. Library consumers can call the same methods from JavaScript (\`import { Util } from "aktion"\`).
 
-${formatBuiltinCatalog(catalog)}
+Reach for \`Util\` when native JavaScript would be verbose (formatting, date math, grouping). Prefer plain JS where it is just as clear: \`arr.length\` over \`Util.count(arr)\`, \`a.filter(x => x.done)\` over \`Util.filter(a, "done", "==", true)\`.
+
+### Collections
+- \`Util.count(arr)\` — length / object key count.
+- \`Util.sum(arr)\` / \`Util.avg(arr)\` / \`Util.min(arr)\` / \`Util.max(arr)\` — numeric reductions.
+- \`Util.first(arr)\` / \`Util.last(arr)\` — endpoints (safe on empty arrays).
+- \`Util.filter(arr, field, op, value)\` — declarative filter (\`op\` ∈ \`==\`, \`!=\`, \`<\`, \`<=\`, \`>\`, \`>=\`, \`contains\`, \`startsWith\`, \`endsWith\`).
+- \`Util.find(arr, field, op, value)\` — first match.
+- \`Util.sort(arr, field, dir?)\` — stable sort (\`dir\` ∈ \`"asc"\` | \`"desc"\`).
+- \`Util.groupBy(arr, field)\` — \`{ [key]: items[] }\`.
+- \`Util.unique(arr, field?)\` / \`Util.reverse(arr)\` / \`Util.slice(arr, start, end?)\` / \`Util.pick(obj, ["a", "b"])\`.
+- \`Util.range(start, end, step?)\` — inclusive numeric range.
+- \`Util.repeat(value, count)\` — fixed-length array.
+- \`Util.join(arr, sep?)\` — string join.
+
+### Strings
+- \`Util.capitalize(s)\` / \`Util.lowercase(s)\` / \`Util.uppercase(s)\` / \`Util.titlecase(s)\` / \`Util.case(s, mode)\`.
+- \`Util.split / .trim / .replace / .substring / .startsWith / .endsWith / .contains / .match\`.
+- \`Util.plural(n, singular, plural)\` — picks the right word for a count.
+
+### Formatting
+- \`Util.format(value, mode, opts?)\` — numbers, currency, percent, compact (\`{ currency, locale, decimals }\`).
+- \`Util.formatDate(value, mode, opts?)\` — \`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\` | token strings (\`"YYYY-MM-DD"\`).
+
+### Dates
+- \`Util.now()\` / \`Util.today()\` / \`Util.addDays(date, n)\` / \`Util.addHours(date, n)\` / \`Util.diffDays(a, b)\` / \`Util.startOfWeek(date)\` / \`Util.endOfMonth(date)\`.
+
+### Math
+- \`Util.round / .floor / .ceil / .abs / .clamp(v, min, max) / .pow / .sqrt / .random / .log\`.
+
+The namespace is open for extension — new helpers may be added over time.
 
 \`\`\`
-filtered  = @Filter($users, "team", "==", $team)
-sorted    = @Sort(filtered, "joinedAt", "desc")
-firstFive = @Slice(sorted, 0, 5)
-summary   = \`\${@Plural(@Count(rows), "order", "orders")}: \${@Format(@Sum(rows.amount), "currency")}\`
+filtered  = $users.filter((u) => u.team === $team)
+sorted    = Util.sort(filtered, "joinedAt", "desc")
+firstFive = sorted.slice(0, 5)
+summary   = \`\${rows.length} \${Util.plural(rows.length, "order", "orders")}: \${Util.format(Util.sum(rows.amount), "currency")}\`
 \`\`\``;
 }
 
@@ -758,7 +785,7 @@ renderRow = task => Card([Row([
 ], { gap: "m" })])
 
 ${ROOT} = Column([
-  PageHeader("Tasks", { subtitle: \`\${@Count($tasks.data)} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
+  PageHeader("Tasks", { subtitle: \`\${$tasks.data.length} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
   Async($tasks, {
     loading: LoadingState("Loading tasks…"),
     error:   ErrorState("Couldn't fetch tasks", { description: "Try again in a moment." }),
@@ -849,7 +876,7 @@ function chatSyntax(): string {
 A program is a flat list of \`name = expression\` statements, written in standard JavaScript. \`${ROOT}\` is the entry point — every program MUST begin with \`${ROOT} = ...\` (typically \`${ROOT} = Column([...])\`).
 
 ### Expressions
-- Strings \`"hello"\` / \`'hello'\`. Template literals: \`\` \`\${@Count(rows)} results\` \`\` — preferred over \`+\` concatenation.
+- Strings \`"hello"\` / \`'hello'\`. Template literals: \`\` \`\${rows.length} results\` \`\` — preferred over \`+\` concatenation.
 - Numbers, booleans, \`null\`, arrays \`[1, 2, 3]\`, objects \`{ key: value }\`.
 - Operators: \`+ - * / %\`, \`== != > < >= <=\`, \`&& || !\`, ternary \`cond ? a : b\`, nullish \`a ?? b\`, spread \`[...a, ...b]\`, member access \`obj.field\`, optional chaining \`obj?.field\`.
 
@@ -909,15 +936,15 @@ function chatComponentLibrary(library: ComponentLibrary): string {
   return lines.join("\n");
 }
 
-function chatBuiltins(): string {
-  const catalog = getBuiltinCatalog();
-  const dataLines = catalog.filter((e) => e.category === "data").map(formatBuiltinEntry).join("\n");
-  return `## Built-in \`@\`-functions
+function chatUtil(): string {
+  return `## \`Util\` — runtime helper namespace
 
-Pure helpers — no side effects. Use anywhere in expressions for data shaping, formatting, math, and strings.
+Pure helpers — no side effects. Use \`Util\` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (\`arr.length\`, \`arr.slice(0, 5)\`, \`s.toUpperCase()\`).
 
-### Data helpers
-${dataLines}
+### Most useful helpers
+- Collections: \`Util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?)\`.
+- Strings: \`Util.capitalize / .titlecase / .plural(n, singular, plural)\`.
+- Formatting: \`Util.format(value, mode, opts?)\` (numbers, currency, percent, compact) and \`Util.formatDate(value, mode)\` (\`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\`).
 
 Icons are Font Awesome names — \`"house"\`, \`"chart-line"\`, \`"regular:star"\`, \`"brands:github"\`. Never use \`fa-\` prefixes or emoji characters.`;
 }
@@ -956,7 +983,7 @@ tbl    = Table([
   Col("Users (M)",  langs.users, { format: "number" }),
   Col("First seen", langs.year,  { format: "number" })
 ])
-totals = Callout("info", { title: \`Tracking \${@Count(langs)} languages · \${@Sum(langs.users)}M users combined\`, icon: "chart-line", compact: true })
+totals = Callout("info", { title: \`Tracking \${langs.length} languages · \${Util.sum(langs.users)}M users combined\`, icon: "chart-line", compact: true })
 follow = FollowUpBlock(["Sort by users", "Show as a chart"])
 
 langs = [
@@ -1019,20 +1046,6 @@ function formatComponentSignature(spec: ComponentSpec): string {
     return `${prop.name}${prop.optional ? "?" : ""}: ${typePart}${tag}`;
   }).join(", ");
   return `- ${spec.name}(${params}) — ${spec.description}`;
-}
-
-function formatBuiltinCatalog(entries: ReadonlyArray<BuiltinEntry>): string {
-  const data = entries.filter((e) => e.category === "data");
-  const lines: string[] = [];
-  if (data.length > 0) {
-    lines.push("### Data helpers");
-    for (const entry of data) lines.push(formatBuiltinEntry(entry));
-  }
-  return lines.join("\n");
-}
-
-function formatBuiltinEntry(entry: BuiltinEntry): string {
-  return `- \`${entry.signature}\` — ${entry.description}`;
 }
 
 function examplesSection(title: string, examples: ReadonlyArray<string>): string {

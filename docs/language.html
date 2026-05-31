@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Language · Aktion</title>
-  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the built-in @-functions, and the full JavaScript global surface." />
+  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `Util` runtime helper namespace, and the full JavaScript global surface." />
   <script>
     (function () {
       try {
@@ -158,7 +158,7 @@ aktion = Column([
       <h2 id="expressions">Expressions</h2>
       <p>The right-hand side of any binding is a value-producing JS expression:</p>
       <ul>
-        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${@Count($todos)} todos`</code>.</li>
+        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${Util.count($todos)} todos`</code>.</li>
         <li><strong>Numbers, booleans, null</strong> &mdash; <code>42</code>, <code>3.14</code>, <code>1_000_000</code>, <code>true</code> / <code>false</code>, <code>null</code>.</li>
         <li><strong>Arrays &amp; objects</strong> &mdash; <code>[1, 2, 3]</code>, <code>{ name: "Ada", role: "Engineer" }</code>; both may span multiple lines.</li>
         <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>).</li>
@@ -240,31 +240,45 @@ panel = panelFor($tab)
 banner = if ($error) { Banner($error) }     // use a ternary instead
 rows   = for (let r of data) { Row(r) }      // use data.map(r => Row(r))</code></pre>
 
-      <h2 id="builtins">Built-in @-functions</h2>
+      <h2 id="builtins"><code>Util</code> &mdash; runtime helper namespace</h2>
       <p>
-        Aktion ships 50+ <strong>pure</strong> helpers prefixed with
-        <code>@</code>. They never have side effects, so you can use them
-        anywhere in an expression for aggregation, filtering, formatting, and
-        math. A sampling:
+        Aktion exposes a single global <code>Util</code> object with
+        <strong>pure</strong>, side-effect-free helpers for aggregation,
+        reshaping, formatting, dates, math, and strings. Every method is
+        callable from any expression position &mdash; render bodies, actions,
+        effects, lambdas &mdash; and from ordinary host JavaScript that imports
+        the bundle. New helpers can be added to <code>Util</code> over time
+        without changing the language.
       </p>
       <table class="signature-table">
-        <thead><tr><th>Group</th><th>Functions</th></tr></thead>
+        <thead><tr><th>Group</th><th>Methods</th></tr></thead>
         <tbody>
-          <tr><td>Aggregation</td><td><code>@Count</code>, <code>@Sum</code>, <code>@Avg</code>, <code>@Min</code>, <code>@Max</code>, <code>@First</code>, <code>@Last</code></td></tr>
-          <tr><td>Reshaping</td><td><code>@Filter</code>, <code>@Find</code>, <code>@Sort</code>, <code>@GroupBy</code>, <code>@Slice</code>, <code>@Unique</code>, <code>@Reverse</code>, <code>@Range</code>, <code>@Repeat</code>, <code>@Pick</code></td></tr>
-          <tr><td>Formatting</td><td><code>@Format</code>, <code>@FormatDate</code>, <code>@Plural</code>, <code>@Capitalize</code>, <code>@Titlecase</code></td></tr>
-          <tr><td>Date / time</td><td><code>@Now</code>, <code>@Today</code>, <code>@AddDays</code>, <code>@DiffDays</code></td></tr>
-          <tr><td>Math</td><td><code>@Round</code>, <code>@Floor</code>, <code>@Ceil</code>, <code>@Abs</code></td></tr>
+          <tr><td>Aggregation</td><td><code>Util.count</code>, <code>Util.sum</code>, <code>Util.avg</code>, <code>Util.min</code>, <code>Util.max</code>, <code>Util.first</code>, <code>Util.last</code></td></tr>
+          <tr><td>Reshaping</td><td><code>Util.filter</code>, <code>Util.find</code>, <code>Util.sort</code>, <code>Util.groupBy</code>, <code>Util.slice</code>, <code>Util.unique</code>, <code>Util.reverse</code>, <code>Util.range</code>, <code>Util.repeat</code>, <code>Util.pick</code></td></tr>
+          <tr><td>Formatting</td><td><code>Util.format</code>, <code>Util.formatDate</code>, <code>Util.plural</code>, <code>Util.capitalize</code>, <code>Util.titlecase</code>, <code>Util.case</code></td></tr>
+          <tr><td>Date / time</td><td><code>Util.now</code>, <code>Util.today</code>, <code>Util.addDays</code>, <code>Util.addHours</code>, <code>Util.diffDays</code>, <code>Util.startOfWeek</code>, <code>Util.endOfMonth</code></td></tr>
+          <tr><td>Math</td><td><code>Util.round</code>, <code>Util.floor</code>, <code>Util.ceil</code>, <code>Util.abs</code>, <code>Util.clamp</code>, <code>Util.pow</code>, <code>Util.sqrt</code>, <code>Util.random</code>, <code>Util.log</code></td></tr>
+          <tr><td>String</td><td><code>Util.join</code>, <code>Util.split</code>, <code>Util.trim</code>, <code>Util.replace</code>, <code>Util.substring</code>, <code>Util.startsWith</code>, <code>Util.endsWith</code>, <code>Util.contains</code>, <code>Util.match</code>, <code>Util.lowercase</code>, <code>Util.uppercase</code></td></tr>
         </tbody>
       </table>
+      <p>
+        Many <code>Util</code> helpers overlap with native JavaScript methods
+        (<code>arr.length</code>, <code>arr.filter(…)</code>, <code>arr.map(…)</code>,
+        <code>Math.round(…)</code>). Prefer the native form when it reads
+        cleanly; reach for <code>Util</code> when you want field-based
+        comparators (<code>Util.filter(arr, "status", "==", "open")</code>),
+        locale-aware formatting (<code>Util.format</code>,
+        <code>Util.formatDate</code>, <code>Util.plural</code>), or a quick
+        range / repeat for skeleton UIs.
+      </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$prices = [12, 8, 30, 5]
-total = @Sum($prices)
-count = @Count($prices)
+total = Util.sum($prices)
+count = Util.count($prices)
 aktion = Column([
-  Text(`${count} ${@Plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
-  Row(@Range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
+  Text(`${count} ${Util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
+  Row(Util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
 ], { gap: "m" })</code></pre>
         <div class="lay-demo-preview"></div>
       </div>

@@ -15,7 +15,6 @@ import { getLanguageSpec } from "aktion/language";
 
 const spec = getLanguageSpec();
 spec.components     // every built-in component with positional params + enums
-spec.builtins       // every @-builtin (@Sum, @Filter, @Format, …) with signatures
 spec.snippets       // ready-to-insert templates (Card, Hero, Routes, …)
 spec.grammar        // token / string / operator / bracket / keyword data
 spec.tokenizer      // CodeMirror-compatible StreamParser (no CM import)
@@ -84,7 +83,7 @@ const language = StreamLanguage.define({
 });
 
 const highlight = HighlightStyle.define([
-  { tag: tags.keyword,         color: "#7c3aed" },  // keywords + @builtins
+  { tag: tags.keyword,         color: "#7c3aed" },  // keywords
   { tag: tags.typeName,        color: "#0ea5e9" },  // Components
   { tag: tags.variableName,    color: "#0f172a" },
   { tag: tags.propertyName,    color: "#0f172a" },
@@ -100,7 +99,6 @@ const completions = autocompletion({
       if (!before) return null;
       const options = [
         ...spec.components.map((c) => ({ label: c.name, info: c.signature, type: "class" })),
-        ...spec.builtins.map((b) => ({ label: "@" + b.name, info: b.signature, type: "function" })),
         ...spec.snippets.map((s) => ({ label: s.name, type: "snippet", apply: snippet(s.template) })),
       ];
       return { from: before.from, options };
@@ -128,13 +126,6 @@ monaco.languages.registerCompletionItemProvider(spec.grammar.name, {
           kind: monaco.languages.CompletionItemKind.Class,
           insertText: c.signature,
           detail: c.description,
-        })),
-        ...spec.builtins.map((b) => ({
-          label: "@" + b.name,
-          kind: monaco.languages.CompletionItemKind.Function,
-          insertText: "@" + b.name + "($0)",
-          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          detail: b.description,
         })),
         ...spec.snippets.map((s) => ({
           label: s.name,

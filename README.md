@@ -74,9 +74,11 @@ Everything you need at runtime ships in a single bundle:
   `var` keywords are optional and have no effect on reactivity. The
   runtime tracks dependencies automatically. Automatic two-way binding
   via direct state refs (and member chains rooted at one —
-  `value: $form.email`), and **50+ pure `@`-functions** (`@Filter`,
-  `@Sort`, `@Find`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`,
-  `@Case`, `@Range`, `@Pick`, …).
+  `value: $form.email`), and a **`Util` runtime namespace** of pure
+  helpers (`Util.filter`, `Util.sort`, `Util.find`, `Util.groupBy`,
+  `Util.format`, `Util.formatDate`, `Util.plural`, `Util.case`,
+  `Util.range`, `Util.pick`, …) callable from Aktion expressions and
+  ordinary JavaScript alike.
 - **One component-call shape.** Every call follows the trailing-object
   rule — `Component(positionalArg, { prop: value, … })`. At most one
   positional argument; every other argument goes in a trailing
@@ -346,7 +348,7 @@ recursive program (typed live in the playground, mid-stream LLM token,
 | ------------------- | ------------ | -------------------------------------------------------- |
 | `componentDepth`    | 150 levels   | `function Foo() { return Foo() }` and other recursive trees |
 | `iterations`        | 250 000 / render | unbounded `for`/`while` loops inside function bodies    |
-| `arrayLength`       | 100 000 entries | `@Range(0, 1e9)`, `@Repeat(value, 1e9)`                 |
+| `arrayLength`       | 100 000 entries | `Util.range(0, 1e9)`, `Util.repeat(value, 1e9)`                 |
 
 When a limit trips, the runtime aborts the render, emits an `error`
 event whose detail is shaped like a parse error (`{ line: 0, column:
@@ -519,12 +521,12 @@ aktion = pages
   bare expression statements written at the program top level run once
   per plan (e.g. building a `$state` array with a `while` loop). Inside
   a render they behave like a module init block; prefer pure expressions
-  (`.map`, `@Range`) where you can.
-- **Built-in `@`-functions** — pure, side-effect-free helpers for data
-  shaping, formatting, dates, math, and strings (`@Filter`, `@Sort`,
-  `@Map`, `@GroupBy`, `@Format`, `@FormatDate`, `@Plural`, `@Range`,
-  `@AddDays`, `@Pick`, `@Count`, …). Never carry hidden state — safe
-  to call anywhere.
+  (`.map`, `Util.range`) where you can.
+- **`Util` runtime namespace** — pure, side-effect-free helpers for data
+  shaping, formatting, dates, math, and strings (`Util.filter`, `Util.sort`,
+  `Util.groupBy`, `Util.format`, `Util.formatDate`, `Util.plural`, `Util.range`,
+  `Util.addDays`, `Util.pick`, `Util.count`, …). Never carry hidden state —
+  safe to call anywhere.
 - **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
   raw HTML elements and `Styles(css)` for raw CSS injected into the
   shadow root. Use only when the standard component library cannot
@@ -600,7 +602,7 @@ function add() {
 }
 
 function remove(id) {
-  $todos = @Filter($todos, "id", "!=", id)
+  $todos = Util.filter($todos, "id", "!=", id)
 }
 
 row = t => Card([Stack([
@@ -655,11 +657,11 @@ removing one stops only that one:
 aktion = Stack([LiveClock("UTC"), LiveClock("Local")])
 
 function LiveClock(label) {
-  $now = @Now()
+  $now = Util.now()
   effect(() => {
-    $now = @Now()
+    $now = Util.now()
   }, ["every(1000)"])
-  return Stack([Text(label), Text(@FormatDate($now, "time"))])
+  return Stack([Text(label), Text(Util.formatDate($now, "time"))])
 }
 ```
 

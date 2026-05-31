@@ -1289,18 +1289,6 @@ function parsePrimary(ctx: ParserContext): Expression {
     ctx.consume();
     return { kind: "StateRef", name: tok.value };
   }
-  if (tok.type === "BuiltinIdentifier") {
-    ctx.consume();
-    ctx.expect("Punctuation", "(");
-    const args = parseCallArgs(ctx);
-    ctx.expect("Punctuation", ")");
-    return {
-      kind: "BuiltinCall",
-      name: tok.value,
-      arguments: args,
-      loc: { line: tok.line, column: tok.column },
-    };
-  }
   if (tok.type === "Identifier") {
     ctx.consume();
     // Unparenthesised single-param arrow: `x => expr` or `x => { … }`.

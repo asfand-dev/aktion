@@ -284,12 +284,12 @@ aktion = Hello("Ada")</code></pre>
         <div class="mig-compare">
           <div class="mig-pane">
             <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
-<pre><code>@Component({
+<pre><code>Util.component({
   selector: 'hello',
   template: `&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;`
 })
 export class Hello {
-  @Input() name!: string;
+  Util.input() name!: string;
 }</code></pre>
           </div>
           <div class="mig-pane">

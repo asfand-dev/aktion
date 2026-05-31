@@ -46,7 +46,7 @@ describe("Line-continuation across newlines", () => {
   it("ternary `?` and `:` on subsequent lines", () => {
     expectParses(`aktion = Text("ok")
 filteredTodos = []
-tabUI = @Count(filteredTodos) == 0
+tabUI = filteredTodos.length == 0
       ? Text("empty")
       : Text("ok")`);
   });
