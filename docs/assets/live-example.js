@@ -1,237 +1,16 @@
 /**
+ * Live example shell.
  *
- * The shell page (docs/live-example.html) loads this single module to render
- * any of the bundled live examples on demand via the `?example=<slug>` query
- * parameter. Each example's setup script keeps the original
- * `document.getElementById("rui-<id>")` / `document.getElementById("src-<id>")`
- * references; the bootstrapper builds the matching DOM before the setup runs.
+ * Renders any bundled live example on demand via the `?example=<slug>`
+ * query parameter. Each entry in EXAMPLES is a self-contained Aktion
+ * program: { name, slug, code }.
  */
 
-const EXAMPLES = {
-  "content-studio": {
-    slug: "content-studio",
-    docTitle: `Content studio · Aktion`,
-    eyebrow: `Live demo · editors + advanced forms`,
-    heroTitleHtml: `A CMS-style studio: RichTextEditor, CodeEditor, MultiStepForm, and every advanced input`,
-    heroDescriptionHtml: `A complete content authoring surface — write the body in
-        <code>RichTextEditor</code>, paste a snippet into
-        <code>CodeEditor</code>, pick a brand colour with
-        <code>ColorPicker</code>, manage tags with <code>TagInput</code>,
-        mention teammates via <code>MentionInput</code>, run a release
-        wizard with <code>MultiStepForm</code>, and gate publish with
-        <code>PinInput</code>/<code>OtpInput</code>. The whole form is
-        validated through <code>ValidationSummary</code>, grouped by
-        <code>FormSection</code>/<code>FieldSet</code>, and wrapped in
-        the new <code>TopBar</code>+<code>BreadcrumbPageHeader</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · content studio`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Every input writes back into a <code>$variable</code>, so the
-        preview card on the right reflects the document in real time.
-        Switch wizard steps with the <code>MultiStepForm</code> stepper —
-        each step's content is just an array of controls.`,
-      codeBlocks: [
-      { codeId: "src-studio", content: `$title = "Streaming UI v3 — release notes"
-$body = "&lt;h2&gt;What's new&lt;/h2&gt;&lt;p&gt;Thirty new components — &lt;b&gt;DataGrid&lt;/b&gt;, &lt;b&gt;CalendarView&lt;/b&gt;, &lt;b&gt;RichTextEditor&lt;/b&gt;, six charts, and a media stack.&lt;/p&gt;&lt;p&gt;Read on for the highlights.&lt;/p&gt;"
-$snippet = "import { defineElement } from 'aktion'\\n\\ndefineElement()\\n"
-$tags = ["release", "ui", "v3"]
-$mention = "Heads up @"
-$brand = "#6366f1"
-$pin = ""
-$otp = ""
-$pwd = ""
-$phone = ""
-$publishAt = "2026-06-01T09:00"
-$slot = "09:30"
-$step = 0
-$published = false
-
-topbar = TopBar("Acme CMS · Studio", {
-  subtitle: "Draft · autosaved 12s ago",
-  left: [Badge("v3 release", { tone: "primary", icon: "tag", size: "sm" }), StatusDot("Realtime", { tone: "success", pulse: true })],
-  center: [SearchBar("q", { placeholder: "Search posts, drafts, schedules…" })],
-  right: [Button("Preview", { variant: "ghost", size: "small", icon: "eye" }),
-   Button("Publish", { action: () => { $published = true; emit("assistant-message", { message: "Publish the post" }) }, variant: "primary", size: "small", icon: "rocket" })]
-})
-
-header = PageHeader($title, {
-  subtitle: "Compose, brand, schedule, and gate the release in one place.",
-  breadcrumbs: ["Workspace", "Content", "Drafts"],
-  actions: [Button("Save draft", { variant: "ghost", size: "small", icon: "floppy-disk" }),
-   Button("Discard", { action: () => { $title = ""; $body = ""; $tags = ""; $snippet = "" }, variant: "danger", size: "small", icon: "trash" })]
-})
-
-teammates = [
-  {name: "Ada Lovelace",   handle: "ada",     role: "Engineering"},
-  {name: "Linus Torvalds", handle: "linus",   role: "Kernel"},
-  {name: "Grace Hopper",   handle: "grace",   role: "Compilers"},
-  {name: "Margaret Hamilton", handle: "margaret", role: "Apollo"}
-]
-
-bodyEditor = Card([
-  SectionHeader("Body", { subtitle: "Rich text — drag images, paste markdown, mention people", eyebrow: "EDITOR" }),
-  FormSection("Post copy", {
-    children: [
-      FormControl("Title", { field: Input("title", { placeholder: "Catchy headline…", value: $title }) }),
-      FormControl("Body", { field: RichTextEditor("body", { value: $body, placeholder: "Start composing…", height: "260px" }) }),
-      FormControl("Tags", { field: TagInput("tags", { value: $tags, placeholder: "Press enter to add a tag", max: 10 }) }),
-      FormControl("Mention", { field: MentionInput("mention", { suggestions: teammates, value: $mention, placeholder: "Type @ to ping someone…" }) })
-    ],
-    description: "All fields stream into the preview pane below."
-  })
-])
-
-snippetEditor = Card([
-  SectionHeader("Code snippet", { subtitle: "Embedded in the release notes", eyebrow: "CODE" }),
-  CodeEditor("snippet", { value: $snippet, language: "javascript", placeholder: "// type your code…", height: "200px" })
-])
-
-brandSection = Card([
-  SectionHeader("Brand", { subtitle: "Choose the accent for this release", eyebrow: "DESIGN" }),
-  FieldSet("Visual", {
-    children: [
-      FormControl("Accent", { field: ColorPicker("brand", { value: $brand, label: "Pick a colour", presets: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"] }) }),
-      FormControl("Phone", { field: MaskedInput("phone", { mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114" }) }),
-      FormControl("Password", { field: PasswordInput("pwd", { value: $pwd, placeholder: "Choose a strong password", showStrength: true }) })
-    ],
-    description: "Used for callouts and CTA buttons in the published post."
-  })
-])
-
-scheduleSection = Card([
-  SectionHeader("Schedule", { subtitle: "When should this go live?", eyebrow: "TIMING" }),
-  Stack([
-    FormControl("Publish at", { field: DateTimePicker("publishAt", { value: $publishAt, label: "Launch window" }) }),
-    FormControl("Daily slot", { field: TimePicker("slot", { value: $slot, label: "Newsletter time" }) })
-  ], { direction: "row", gap: "m" })
-])
-
-gateSection = Card([
-  SectionHeader("Two-factor publish", { subtitle: "Confirm with a one-time code", eyebrow: "GATE",
-    status: Badge("Required", { tone: "warning", icon: "shield-halved", size: "sm" }) }),
-  Stack([
-    FormControl("4-digit PIN", { field: PinInput("pin", { length: 4, value: $pin, inputMode: "numeric" }) }),
-    FormControl("OTP from authenticator", { field: PinInput("otp", { length: 6, value: $otp }) })
-  ], { direction: "column", gap: "m" })
-])
-
-formErrors = [
-  $title == "" ? {label: "title",   message: "Title is required."} : null,
-  $pin.length != 4 ? {label: "pin",     message: "PIN must be 4 digits."} : null,
-  $otp.length != 6 ? {label: "otp",     message: "Enter the 6-digit OTP."} : null
-]
-
-validationCard = @Count(@Filter(formErrors, "label", "!=", null)) > 0
-  ? Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), { title: "Fix these before publishing" })])
-  : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed — hit Publish to go live.", icon: "circle-check", compact: true })])
-
-wizardSteps = [
-  {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
-  {title: "Brand",    details: "Accent + contact",  content: [brandSection]},
-  {title: "Schedule", details: "Pick a window",      content: [scheduleSection]},
-  {title: "Confirm",  details: "PIN + OTP",          content: [gateSection, validationCard]}
-]
-
-wizard = MultiStepForm(wizardSteps, { value: $step, onComplete: () => { $published = true; emit("assistant-message", { message: "Wizard submitted" }) } })
-
-tagBadges = Stack($tags.map(t => Badge(t, { tone: "primary", icon: "tag", size: "sm" })), { direction: "row", gap: "xs" })
-
-previewCard = Card([
-  SectionHeader("Live preview", { subtitle: $title, eyebrow: "OUTPUT",
-    status: Badge(\`Accent \${$brand}\`, { tone: "primary", icon: "palette", size: "sm" }) }),
-  tagBadges,
-  Separator("horizontal"),
-  Text($body, { variant: "body" })
-])
-
-teammateChips = Stack(
-  teammates.map(m => PersonChip(m.name, { role: m.role, size: "sm" })),
-  { direction: "row", gap: "s" }
-)
-
-teammatesCard = Card([
-  SectionHeader("Available reviewers", { subtitle: "Mention them in the body", eyebrow: "PEOPLE" }),
-  teammateChips
-])
-
-publishedBanner = $published
-  ? Banner("Published!", { message: \`\${$title} went live.\`, action: Button("View live post", { action: () => { window.open("/blog", "_blank", "noopener,noreferrer") }, variant: "primary" }), icon: "rocket", tone: "success" })
-  : null
-
-contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], { direction: "column", gap: "l" })], { columns: {sm: 1, lg: 2}, gap: "l" })
-
-followUps = FollowUpBlock([
-  FollowUpItem("Generate a summary for social"),
-  FollowUpItem("Translate to French"),
-  FollowUpItem("Add a hero image")
-], { label: "Try next" })
-
-aktion = Stack([
-  topbar,
-  header,
-  publishedBanner,
-  contentGrid,
-  followUps
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-studio", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `<code>MultiStepForm</code> renders the four-step wizard, manages
-        previous/next via the <code>$step</code> variable, and submits
-        through one <code>Action</code>. <code>ValidationSummary</code>
-        derives its messages from a single <code>@Filter</code> chain —
-        no manual error wiring. <code>RichTextEditor</code> and
-        <code>CodeEditor</code> are real contenteditable/textarea editors
-        with the design system's chrome, so they look at home in the same
-        page as the inputs. <code>TopBar</code> +
-        <code>BreadcrumbPageHeader</code> replace the ad-hoc topbar +
-        breadcrumb hand-roll seen in earlier examples.`,
-      codeBlocks: [],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-studio");
-    el.setResponse(document.getElementById("src-studio").textContent);
-    }
-  },
-  "data-explorer": {
+export const EXAMPLES = [
+  {
+    name: "Data explorer",
     slug: "data-explorer",
-    docTitle: `Data explorer · Aktion`,
-    eyebrow: `Live demo · DataGrid + 6 charts`,
-    heroTitleHtml: `A full analytics surface — DataGrid, Heatmap, Radar, Scatter, Histogram, Gauge, Area`,
-    heroDescriptionHtml: `One workspace that puts every <em>new</em> data primitive to work:
-        a sortable, paginated <code>DataGrid</code> with bulk-action
-        toolbar, a <code>Gauge</code> for SLA, an <code>AreaChart</code> for
-        trend, a <code>Heatmap</code> for activity-by-hour, a
-        <code>RadarChart</code> for vendor comparison, a
-        <code>ScatterChart</code> for cohort behaviour, a
-        <code>Histogram</code> for response times, plus an
-        <code>InfiniteList</code> activity feed and an
-        <code>AuditTrail</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · data explorer`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Click a column header to sort. Toggle selection checkboxes — the
-        bulk toolbar appears with a live count. Every metric, chart, and
-        gauge stays in sync.`,
-      codeBlocks: [
-      { codeId: "src-explorer", content: `$page = 1
+    code: `$page = 1
 $sort = {key: "Score", direction: "desc"}
 $selectedIds = []
 $tab = "grid"
@@ -390,58 +169,12 @@ aktion = Stack([
   chartGrid,
   chartGrid2,
   bottomGrid
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-explorer", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `<code>DataGrid</code> ships with a sticky header, sortable
-        columns, per-column filter chips, row selection (the toolbar
-        renders only when <code>@Count($selectedIds) &gt; 0</code>), and
-        built-in pagination via <code>$page</code>. The six charts share
-        the same <code>Series([...])</code> grammar — swap in a
-        <code>$foo.data</code> result from <code>http({...})</code> and they all redraw. The
-        <code>Gauge</code>, <code>Heatmap</code>, <code>RadarChart</code>,
-        <code>ScatterChart</code>, <code>Histogram</code>, and
-        <code>AreaChart</code> are all SVG primitives so they print
-        cleanly and stay sharp on retina.`,
-      codeBlocks: [],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-explorer");
-    el.setResponse(document.getElementById("src-explorer").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "media-gallery": {
+  {
+    name: "Media gallery",
     slug: "media-gallery",
-    docTitle: `Media gallery · Aktion`,
-    eyebrow: `Live demo · media + maps`,
-    heroTitleHtml: `Carousel, Gallery, Lightbox, Video, Audio &amp; Map — in one program`,
-    heroDescriptionHtml: `A travel-magazine layout that puts every new media primitive to
-        work — <code>Carousel</code> hero slides, a thumbnail
-        <code>Gallery</code> wired to a click-to-zoom <code>Lightbox</code>,
-        a <code>VideoPlayer</code> trailer, an <code>AudioPlayer</code>
-        soundtrack, and a Leaflet-backed <code>Map</code> with the
-        itinerary pinned. No imperative wiring — every interaction is a
-        <code>$variable</code> update.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · media gallery`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Tap a thumbnail to open the lightbox, drag through the carousel,
-        or hit play on the trailer — every transition is reactive state.`,
-      codeBlocks: [
-      { codeId: "src-media", content: `$slide = 0
+    code: `$slide = 0
 $lightboxOpen = false
 $lightboxIdx = 0
 
@@ -546,71 +279,158 @@ aktion = Stack([
   mapCard,
   followUps,
   zoomBox
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-media", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `What's powerful here`,
-      lede: `<code>Gallery</code> and <code>Lightbox</code> share the same
-        <code>photos</code> array — clicking a thumbnail flips
-        <code>$lightboxOpen</code> and lifts the same image to full size.
-        <code>Map</code> pins are a plain array of
-        <code>{lat, lng, label}</code> objects; swap them for a
-        <code>$itinerary.data</code> result from <code>http({...})</code> and the route updates
-        live. <code>VideoPlayer</code> and <code>AudioPlayer</code> are
-        thin wrappers around the native <code>&lt;video&gt;</code> and
-        <code>&lt;audio&gt;</code> elements, so they inherit the host
-        browser's playback UI while picking up the design system's
-        chrome.`,
-      codeBlocks: [],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-media");
-    el.setResponse(document.getElementById("src-media").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "routing-demo": {
+  {
+    name: "Content studio",
+    slug: "content-studio",
+    code: `$title = "Streaming UI v3 — release notes"
+$body = "&lt;h2&gt;What's new&lt;/h2&gt;&lt;p&gt;Thirty new components — &lt;b&gt;DataGrid&lt;/b&gt;, &lt;b&gt;CalendarView&lt;/b&gt;, &lt;b&gt;RichTextEditor&lt;/b&gt;, six charts, and a media stack.&lt;/p&gt;&lt;p&gt;Read on for the highlights.&lt;/p&gt;"
+$snippet = "import { defineElement } from 'aktion'\\n\\ndefineElement()\\n"
+$tags = ["release", "ui", "v3"]
+$mention = "Heads up @"
+$brand = "#6366f1"
+$pin = ""
+$otp = ""
+$pwd = ""
+$phone = ""
+$publishAt = "2026-06-01T09:00"
+$slot = "09:30"
+$step = 0
+$published = false
+
+topbar = TopBar("Acme CMS · Studio", {
+  subtitle: "Draft · autosaved 12s ago",
+  left: [Badge("v3 release", { tone: "primary", icon: "tag", size: "sm" }), StatusDot("Realtime", { tone: "success", pulse: true })],
+  center: [SearchBar("q", { placeholder: "Search posts, drafts, schedules…" })],
+  right: [Button("Preview", { variant: "ghost", size: "small", icon: "eye" }),
+   Button("Publish", { action: () => { $published = true; emit("assistant-message", { message: "Publish the post" }) }, variant: "primary", size: "small", icon: "rocket" })]
+})
+
+header = PageHeader($title, {
+  subtitle: "Compose, brand, schedule, and gate the release in one place.",
+  breadcrumbs: ["Workspace", "Content", "Drafts"],
+  actions: [Button("Save draft", { variant: "ghost", size: "small", icon: "floppy-disk" }),
+   Button("Discard", { action: () => { $title = ""; $body = ""; $tags = ""; $snippet = "" }, variant: "danger", size: "small", icon: "trash" })]
+})
+
+teammates = [
+  {name: "Ada Lovelace",   handle: "ada",     role: "Engineering"},
+  {name: "Linus Torvalds", handle: "linus",   role: "Kernel"},
+  {name: "Grace Hopper",   handle: "grace",   role: "Compilers"},
+  {name: "Margaret Hamilton", handle: "margaret", role: "Apollo"}
+]
+
+bodyEditor = Card([
+  SectionHeader("Body", { subtitle: "Rich text — drag images, paste markdown, mention people", eyebrow: "EDITOR" }),
+  FormSection("Post copy", {
+    children: [
+      FormControl("Title", { field: Input("title", { placeholder: "Catchy headline…", value: $title }) }),
+      FormControl("Body", { field: RichTextEditor("body", { value: $body, placeholder: "Start composing…", height: "260px" }) }),
+      FormControl("Tags", { field: TagInput("tags", { value: $tags, placeholder: "Press enter to add a tag", max: 10 }) }),
+      FormControl("Mention", { field: MentionInput("mention", { suggestions: teammates, value: $mention, placeholder: "Type @ to ping someone…" }) })
+    ],
+    description: "All fields stream into the preview pane below."
+  })
+])
+
+snippetEditor = Card([
+  SectionHeader("Code snippet", { subtitle: "Embedded in the release notes", eyebrow: "CODE" }),
+  CodeEditor("snippet", { value: $snippet, language: "javascript", placeholder: "// type your code…", height: "200px" })
+])
+
+brandSection = Card([
+  SectionHeader("Brand", { subtitle: "Choose the accent for this release", eyebrow: "DESIGN" }),
+  FieldSet("Visual", {
+    children: [
+      FormControl("Accent", { field: ColorPicker("brand", { value: $brand, label: "Pick a colour", presets: ["#6366f1","#10b981","#f59e0b","#ef4444","#06b6d4","#8b5cf6"] }) }),
+      FormControl("Phone", { field: MaskedInput("phone", { mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114" }) }),
+      FormControl("Password", { field: PasswordInput("pwd", { value: $pwd, placeholder: "Choose a strong password", showStrength: true }) })
+    ],
+    description: "Used for callouts and CTA buttons in the published post."
+  })
+])
+
+scheduleSection = Card([
+  SectionHeader("Schedule", { subtitle: "When should this go live?", eyebrow: "TIMING" }),
+  Stack([
+    FormControl("Publish at", { field: DateTimePicker("publishAt", { value: $publishAt, label: "Launch window" }) }),
+    FormControl("Daily slot", { field: TimePicker("slot", { value: $slot, label: "Newsletter time" }) })
+  ], { direction: "row", gap: "m" })
+])
+
+gateSection = Card([
+  SectionHeader("Two-factor publish", { subtitle: "Confirm with a one-time code", eyebrow: "GATE",
+    status: Badge("Required", { tone: "warning", icon: "shield-halved", size: "sm" }) }),
+  Stack([
+    FormControl("4-digit PIN", { field: PinInput("pin", { length: 4, value: $pin, inputMode: "numeric" }) }),
+    FormControl("OTP from authenticator", { field: PinInput("otp", { length: 6, value: $otp }) })
+  ], { direction: "column", gap: "m" })
+])
+
+formErrors = [
+  $title == "" ? {label: "title",   message: "Title is required."} : null,
+  $pin.length != 4 ? {label: "pin",     message: "PIN must be 4 digits."} : null,
+  $otp.length != 6 ? {label: "otp",     message: "Enter the 6-digit OTP."} : null
+]
+
+validationCard = @Count(@Filter(formErrors, "label", "!=", null)) > 0
+  ? Card([ValidationSummary(@Filter(formErrors, "label", "!=", null), { title: "Fix these before publishing" })])
+  : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed — hit Publish to go live.", icon: "circle-check", compact: true })])
+
+wizardSteps = [
+  {title: "Compose",  details: "Title, body, tags", content: [bodyEditor, snippetEditor]},
+  {title: "Brand",    details: "Accent + contact",  content: [brandSection]},
+  {title: "Schedule", details: "Pick a window",      content: [scheduleSection]},
+  {title: "Confirm",  details: "PIN + OTP",          content: [gateSection, validationCard]}
+]
+
+wizard = MultiStepForm(wizardSteps, { value: $step, onComplete: () => { $published = true; emit("assistant-message", { message: "Wizard submitted" }) } })
+
+tagBadges = Stack($tags.map(t => Badge(t, { tone: "primary", icon: "tag", size: "sm" })), { direction: "row", gap: "xs" })
+
+previewCard = Card([
+  SectionHeader("Live preview", { subtitle: $title, eyebrow: "OUTPUT",
+    status: Badge(\`Accent \${$brand}\`, { tone: "primary", icon: "palette", size: "sm" }) }),
+  tagBadges,
+  Separator("horizontal"),
+  Text($body, { variant: "body" })
+])
+
+teammateChips = Stack(
+  teammates.map(m => PersonChip(m.name, { role: m.role, size: "sm" })),
+  { direction: "row", gap: "s" }
+)
+
+teammatesCard = Card([
+  SectionHeader("Available reviewers", { subtitle: "Mention them in the body", eyebrow: "PEOPLE" }),
+  teammateChips
+])
+
+publishedBanner = $published
+  ? Banner("Published!", { message: \`\${$title} went live.\`, action: Button("View live post", { action: () => { window.open("/blog", "_blank", "noopener,noreferrer") }, variant: "primary" }), icon: "rocket", tone: "success" })
+  : null
+
+contentGrid = Grid([wizard, Stack([previewCard, teammatesCard], { direction: "column", gap: "l" })], { columns: {sm: 1, lg: 2}, gap: "l" })
+
+followUps = FollowUpBlock([
+  FollowUpItem("Generate a summary for social"),
+  FollowUpItem("Translate to French"),
+  FollowUpItem("Add a hero image")
+], { label: "Try next" })
+
+aktion = Stack([
+  topbar,
+  header,
+  publishedBanner,
+  contentGrid,
+  followUps
+], { direction: "column", gap: "l" })`,
+  },
+  {
+    name: "Multi-page routing",
     slug: "routing-demo",
-    docTitle: `Live demo · Routing · Aktion`,
-    eyebrow: `Live demo · Router({…}) + NavLink`,
-    heroTitleHtml: `A multi-page app, in a single Aktion program`,
-    heroDescriptionHtml: `One <code>&lt;aktion-app&gt;</code> tag renders a four-page UI
-        synced to the URL hash. Click the nav, use deep links, hit the browser
-        back button — it all stays in sync, with zero framework lock-in.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · routing`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Try <a href="#/dashboard">#/dashboard</a>,
-        <a href="#/users">#/users</a>, then drill into a user (e.g.
-        <a href="#/users/ada">#/users/ada</a>). Browser back / forward and
-        bookmarks all work.`,
-      codeBlocks: [],
-      render: { elId: "rui-routing", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `UI Script source`,
-      lede: `The <code>nav</code> stays visible across every page;
-        <code>main</code> is produced by
-        <code>Router({ … })</code>, which swaps in the matching arm.
-        Path parameters land in <code>params</code> inside each arm
-        body, and the reserved <code>route</code> handle exposes the
-        reactive surface everywhere else (and the imperative
-        <code>route.navigate(path)</code> method).`,
-      codeBlocks: [
-      { codeId: "src-routing", content: `$users = [
+    code: `$users = [
   {id: "ada",   name: "Ada Lovelace", role: "Founding engineer",   joined: "2019-04-02"},
   {id: "grace", name: "Grace Hopper", role: "Compiler researcher", joined: "2020-01-15"},
   {id: "lin",   name: "Lin-Manuel",   role: "Product designer",    joined: "2021-08-21"},
@@ -719,88 +539,12 @@ function settingsAreaPage(rest) {
   ])
 }
 
-notFoundPage = Callout("Not found", { tone: "warning", description: \`No page matches \${route}. Use the nav above or go back to /.\` })` }
-      ],
-      render: null,
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `How it works`,
-      lede: ``,
-      codeBlocks: [],
-      render: null,
-      extraHtml: `<ul>
-        <li>
-          The renderer always starts the built-in router. The reactive
-          <code>route</code> handle is exposed everywhere (with
-          <code>route.path</code>, <code>route.params</code>,
-          <code>route.query</code>) and the routing section is part of
-          the generated system prompt by default.
-        </li>
-        <li>
-          <code>nav</code> is rendered once at the top of <code>root</code> so
-          it stays visible across every page. <code>NavLink</code>s reflect
-          <code>data-active="true"</code> automatically — the home link uses
-          <code>exact=true</code> so it doesn't light up on every path.
-        </li>
-        <li>
-          <code>Router({ … })</code> picks exactly one arm per render
-          based on <code>window.location.hash</code>. The
-          <code>"/"</code> arm and the <code>default:</code> catch-all
-          guarantee something is always rendered.
-        </li>
-        <li>
-          Inside <code>userDetailPage</code> and <code>settingsAreaPage</code>,
-          the <code>params</code> loop variable is automatically injected by
-          the evaluator — no extra wiring needed. <code>params._</code> holds
-          the wildcard remainder.
-        </li>
-        <li>
-          <code>NavLink(label, { to: "/path" })</code> is the declarative way
-          to move; the imperative <code>route.navigate("/path")</code> works
-          from actions.
-        </li>
-        <li>
-          A persistent <code>$visits</code> counter shows that the rest of the
-          state model keeps working untouched — routing is additive, not
-          intrusive.
-        </li>
-      </ul>`,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-routing");
-    el.setResponse(document.getElementById("src-routing").textContent);
-
-    el.addEventListener("route-change", (event) => {
-      console.log("[routing-demo] route-change", event.detail);
-    });
-    }
+notFoundPage = Callout("Not found", { tone: "warning", description: \`No page matches \${route}. Use the nav above or go back to /.\` })`,
   },
-  "settings-app": {
+  {
+    name: "Settings app",
     slug: "settings-app",
-    docTitle: `Settings app · Aktion`,
-    eyebrow: `Live demo · rich patterns + two-way binding`,
-    heroTitleHtml: `A full settings & preferences screen, driven by two-way bound primitives`,
-    heroDescriptionHtml: `Tabs across the top, a <code>PageHeader</code> with breadcrumbs, a
-        usage progress bar, switches and toggle groups for preferences,
-        keyboard shortcut chips, and a slide-in <code>Drawer</code> for
-        confirming the dangerous "delete workspace" action. Every control
-        binds straight to a <code>$variable</code>.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · settings app`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Flip the switches, change the theme, hit "Save changes" — the save
-        progress bar animates and a banner confirms. "Delete workspace"
-        opens a confirmation drawer.`,
-      codeBlocks: [
-      { codeId: "src-settings", content: `$tab = "general"
+    code: `$tab = "general"
 $theme = "light"
 $accent = "indigo"
 $density = "comfortable"
@@ -951,91 +695,12 @@ confirmSheet = Drawer("Delete workspace?", {
   ]
 })
 
-aktion = Stack([header, saveBanner, tabs, confirmSheet], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-settings", theme: "light" },
-      extraHtml: ``,
-    },
-    {
-      id: null,
-      heading: `The mutation tools are trivial`,
-      lede: `Most of the UI binds straight to <code>$variables</code>. The only
-        thing the host has to do is mirror "Save" into a backend. Try
-        flipping a switch, then hitting "Save changes" — the saving banner
-        appears, then resolves into a "Saved" banner.`,
-      codeBlocks: [
-      { codeId: null, content: `el.setTools({
-  workspace_usage: () =&gt; ({
-    storageUsed: 42, storageMax: 100,
-    seatsUsed: 12, seatsMax: 25,
-    planLabel: "Pro", renews: "Mar 14",
-  }),
-  save_settings: async ({ tab, theme, density, language }) =&gt; {
-    await sleep(600);
-    console.log("[settings] save", { tab, theme, density, language });
-    return { ok: true };
+aktion = Stack([header, saveBanner, tabs, confirmSheet], { direction: "column", gap: "l" })`,
   },
-  delete_workspace: async () =&gt; {
-    await sleep(400);
-    console.warn("[settings] delete_workspace would fire here");
-    return { ok: true };
-  },
-});` }
-      ],
-      render: null,
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const el = document.getElementById("rui-settings");
-
-    el.setTools({
-      workspace_usage: () => ({
-        storageUsed: 42,
-        storageMax: 100,
-        seatsUsed: 12,
-        seatsMax: 25,
-        planLabel: "Pro",
-        renews: "Mar 14",
-      }),
-      save_settings: async ({ tab, theme, density, language }) => {
-        await sleep(600);
-        console.log("[settings] saved", { tab, theme, density, language });
-        return { ok: true };
-      },
-      delete_workspace: async () => {
-        await sleep(400);
-        console.warn("[settings] delete_workspace would fire here");
-        return { ok: true };
-      },
-    });
-
-    el.setResponse(document.getElementById("src-settings").textContent);
-    }
-  },
-  "kanban-pro": {
+  {
+    name: "Kanban board",
     slug: "kanban-pro",
-    docTitle: `Kanban board · Aktion`,
-    eyebrow: `Live demo · drag-and-drop board + autosave`,
-    heroTitleHtml: `A Kanban board with reactive columns, autosave, and hydration`,
-    heroDescriptionHtml: `Board state in a single <code>$columns</code> reactive variable.
-        Actions move, add, and archive cards. Effects autosave to
-        <code>Storage.local</code> with debounce and hydrate on mount.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · kanban`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Cards live in <code>$columns</code>. Actions mutate the array
-        and effects persist to localStorage. Open DevTools → Application →
-        Local Storage to see autosave fire after 500ms of inactivity.`,
-      codeBlocks: [
-      { codeId: "src-kanban", content: `$columns = [
+    code: `$columns = [
   {id: "todo",    title: "To do",       cards: [{id: "c1", title: "Design API schema",   priority: "high",   assignee: "Ada"},
                                                   {id: "c2", title: "Write unit tests",    priority: "medium", assignee: "Grace"}]},
   {id: "doing",   title: "In progress", cards: [{id: "c3", title: "Build dashboard view", priority: "high",   assignee: "Linus"}]},
@@ -1089,37 +754,12 @@ aktion = Stack([
   PageHeader("Kanban board", { subtitle: "Drag cards between columns — state autosaves", breadcrumbs: ["Workspace", "Board"] }),
   addForm,
   board
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-kanban", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-kanban");
-    el.setResponse(document.getElementById("src-kanban").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "analytics-pulse": {
+  {
+    name: "Analytics pulse",
     slug: "analytics-pulse",
-    docTitle: `Analytics pulse · Aktion`,
-    eyebrow: `Live demo · realtime dashboard`,
-    heroTitleHtml: `A realtime-feeling dashboard with interval effects and derived stats`,
-    heroDescriptionHtml: `A fake live feed driven by <code>effect(() => { … }, ["every(2000)"])</code>,
-        with <code>@Sum</code> aggregations, a date-range <code>Select</code>,
-        and a <code>Tabs</code> switcher.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · analytics`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `The event feed updates every 2 seconds. The KPI strip and
-        chart re-derive automatically because they read <code>$events</code>.`,
-      codeBlocks: [
-      { codeId: "src-analytics", content: `$events = [
+    code: `$events = [
   {ts: "12:00", value: 42, source: "web"},
   {ts: "12:01", value: 18, source: "api"},
   {ts: "12:02", value: 31, source: "web"},
@@ -1177,37 +817,12 @@ aktion = Stack([
   PageHeader("Analytics pulse", { subtitle: "Realtime event dashboard", breadcrumbs: ["Workspace", "Analytics"],
     actions: [rangeSelector, Button("Export", { variant: "ghost", icon: "file-csv" })] }),
   tabs
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-analytics", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-analytics");
-    el.setResponse(document.getElementById("src-analytics").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "recipe-explorer": {
+  {
+    name: "Recipe explorer",
     slug: "recipe-explorer",
-    docTitle: `Recipe explorer · Aktion`,
-    eyebrow: `Live demo · search + filter + sort`,
-    heroTitleHtml: `A search, filter, and sort UX with derived lists`,
-    heroDescriptionHtml: `Type a query, pick a cuisine, toggle sort — the card grid
-        re-derives instantly from <code>$query</code>, <code>$cuisine</code>,
-        and <code>$sort</code>. No manual re-render wiring.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · recipes`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Search is instant. The cuisine filter and sort toggle derive a
-        new list from the same <code>$recipes</code> array.`,
-      codeBlocks: [
-      { codeId: "src-recipes", content: `$query = ""
+    code: `$query = ""
 $cuisine = ""
 $sort = "rating"
 
@@ -1257,37 +872,12 @@ aktion = Stack([
   toolbar,
   recipeGrid,
   emptyState
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-recipes", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-recipes");
-    el.setResponse(document.getElementById("src-recipes").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "expense-tracker": {
+  {
+    name: "Expense tracker",
     slug: "expense-tracker",
-    docTitle: `Expense tracker · Aktion`,
-    eyebrow: `Live demo · budget + switch + storage`,
-    heroTitleHtml: `A budget tracker with tabbed views, charts, and local persistence`,
-    heroDescriptionHtml: `Three tabs — list, chart, and settings — driven by <code>switch</code>.
-        Uses <code>Storage.local</code> for persistence and <code>@Sum</code>
-        for running totals.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · expenses`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Add an expense, switch tabs, see the chart update. All data
-        persists in localStorage.`,
-      codeBlocks: [
-      { codeId: "src-expenses", content: `$tab = "list"
+    code: `$tab = "list"
 $expenses = [
   {id: "e1", label: "Groceries",    amount: 85,  category: "food"},
   {id: "e2", label: "Netflix",      amount: 15,  category: "entertainment"},
@@ -1378,37 +968,12 @@ aktion = Stack([
   PageHeader("Expense tracker", { subtitle: \`\${remaining > 0 ? "On track" : "Over budget"} · $\${remaining} remaining\`, breadcrumbs: ["Finance", "Budget"] }),
   kpis,
   tabs
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-expenses", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-expenses");
-    el.setResponse(document.getElementById("src-expenses").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "chat-search": {
+  {
+    name: "Chat search",
     slug: "chat-search",
-    docTitle: `Chat search · Aktion`,
-    eyebrow: `Live demo · command palette + debounced search`,
-    heroTitleHtml: `A command-palette search bar with debounced results`,
-    heroDescriptionHtml: `Type a query — results appear after a debounced pause. Demonstrates
-        <code>effect</code> with <code>"debounce(250)"</code> and reactive
-        state driving a modal results panel.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · search`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Type in the search box — results filter after 250ms of inactivity.
-        Click a result to "navigate" (just updates <code>$selected</code>).`,
-      codeBlocks: [
-      { codeId: "src-search", content: `$query = ""
+    code: `$query = ""
 $open = true
 $selected = null
 $results = []
@@ -1467,43 +1032,12 @@ aktion = Stack([
   PageHeader("Chat search", { subtitle: "Command-palette style search with debounce", breadcrumbs: ["Tools", "Search"] }),
   searchInput,
   Grid([resultsList, selectedCard], { columns: {sm: 1, md: 2}, gap: "l" })
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-search", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-search");
-    el.setResponse(document.getElementById("src-search").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-  "todos-crud": {
+  {
+    name: "Todos CRUD",
     slug: "todos-crud",
-    docTitle: `Todos CRUD · Aktion`,
-    eyebrow: `Live demo · REST API + Http({...})`,
-    heroTitleHtml: `Full CRUD against a live REST API with one network primitive`,
-    heroDescriptionHtml: `List, create, toggle, edit, and delete todos against a live mock
-        API at <code>mock-api-one-chi.vercel.app</code>. Every request uses
-        the single <code>Http({...})</code> primitive with a full absolute
-        URL; <code>Async</code> renders the loading / error / empty / data
-        states; and each mutation calls <code>$todos.refetch()</code> so the
-        list stays in sync. <strong>This talks to a real network</strong> —
-        the first load may take a moment while the mock API wakes up.`,
-    brandHref: "live-examples.html",
-    brandText: `Aktion · todos`,
-    backHref: "live-examples.html",
-    backText: `← Back to live examples`,
-    cards: [
-    {
-      id: null,
-      heading: `Live preview`,
-      lede: `Add a todo, tick it complete, rename it inline, or delete it —
-        each action fires an <code>Http({...})</code> request and refetches
-        the list. Open your network tab to watch the real GET / POST /
-        PATCH / PUT / DELETE calls.`,
-      codeBlocks: [
-      { codeId: "src-todos", content: `base = "https://mock-api-one-chi.vercel.app/api/mock/todo"
+    code: `base = "https://mock-api-one-chi.vercel.app/api/mock/todo"
 
 $todos     = Http({ url: base + "/todos" })
 $draft     = ""
@@ -1597,123 +1131,91 @@ aktion = Stack([
   }),
   composer,
   list
-], { direction: "column", gap: "l" })` }
-      ],
-      render: { elId: "rui-todos", theme: "light" },
-      extraHtml: ``,
-    }
-    ],
-    setup(){
-const el = document.getElementById("rui-todos");
-    el.setResponse(document.getElementById("src-todos").textContent);
-    }
+], { direction: "column", gap: "l" })`,
   },
-};
+];
 
 import "../../dist/aktion.js";
 
-const root = document.getElementById("example-root");
-const params = new URLSearchParams(window.location.search);
-const slug = params.get("example") || "settings-app";
-const example = EXAMPLES[slug];
+const THEMES = ["light", "dark", "neon", "pastel", "glass", "brutalist", "skyline"];
 
-if (!example) {
-  document.title = "Example not found · Aktion";
-  root.innerHTML = renderNotFound(slug);
-  wireThemeSwitcher();
-} else {
-  document.title = example.docTitle;
-  root.innerHTML = renderShell(example);
-  highlightCode();
-  wireThemeSwitcher();
-  wireCopyButtons();
-  customElements
-    .whenDefined("aktion-app")
-    .then(() => {
-      try {
-        example.setup();
-      } catch (err) {
-        console.error("Live example setup failed:", err);
-      }
+const root = document.getElementById("example-root");
+if (root) {
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get("example") || EXAMPLES[0].slug;
+  const example = EXAMPLES.find((e) => e.slug === slug);
+
+  if (!example) {
+    document.title = "Example not found · Aktion";
+    root.innerHTML = renderNotFound(slug);
+    wireThemeSwitcher();
+  } else {
+    document.title = `${example.name} · Aktion`;
+    root.innerHTML = renderShell(example);
+    highlightCode();
+    wireThemeSwitcher();
+    wireCopyButton();
+    customElements.whenDefined("aktion-app").then(() => {
+      const el = document.getElementById("rui-app");
+      const codeEl = document.getElementById("src-app");
+      if (el && codeEl) el.setResponse(codeEl.textContent);
     });
+  }
 }
 
-function renderNotFound(badSlug) {
-  const known = Object.keys(EXAMPLES).sort().map((k) => `<li><a href="?example=${k}">${k}</a></li>`).join("");
+function renderShell(ex) {
   return `
-    ${renderTopbar("live-examples.html", "Aktion · live example", "live-examples.html", "← Back to live examples")}
-    <section class="example-hero">
-      <span class="tag-pill">Not found</span>
-      <h1 style="margin-top:10px">No example named "${escapeHtml(badSlug)}"</h1>
-      <p>Pick one of the bundled examples below, or head back to the catalog.</p>
+    ${renderTopbar(ex)}
+    <section class="example-preview">
+      <div class="example-output">
+        <aktion-app id="rui-app" theme="light"></aktion-app>
+      </div>
+      <div class="example-source-panel">
+        <div class="example-source-header">
+          <span class="example-source-label">Aktion source</span>
+          <button class="example-copy-btn">Copy</button>
+        </div>
+        <pre class="example-source"><code id="src-app">${ex.code}</code></pre>
+      </div>
     </section>
-    <article class="example-card">
-      <h2>Bundled examples</h2>
-      <ul>${known}</ul>
-    </article>
   `;
 }
 
-function renderTopbar(brandHref, brandText, backHref, backText) {
-  const themeButtons = ["light", "dark", "neon", "pastel", "glass", "brutalist", "skyline"].map(
+function renderTopbar(ex) {
+  const themeButtons = THEMES.map(
     (t) => `<button data-theme="${t}" aria-pressed="false">${t[0].toUpperCase() + t.slice(1)}</button>`
   ).join("");
   return `
     <header class="example-topbar">
       <div class="example-topbar-left">
-        <a class="example-brand" href="${brandHref}"><span class="dot"></span>${brandText}</a>
-        <a class="example-back" href="${backHref}">${backText}</a>
+        <a class="example-back" href="live-examples.html">\u2190 All examples</a>
+        <h1 class="example-title">${ex.name}</h1>
       </div>
       <div class="example-topbar-right">
         <nav class="theme-switcher" aria-label="Theme">${themeButtons}</nav>
-        <a class="example-playground-link" href="playground.html" target="_blank">Open in playground</a>
+        <a class="example-playground-link" href="playground.html" target="_blank" rel="noopener">Open in playground</a>
       </div>
     </header>`;
 }
 
-function renderShell(ex) {
-  const cardsHtml = ex.cards.map(renderCard).join("");
-  return `
-    ${renderTopbar(ex.brandHref, ex.brandText, ex.backHref, ex.backText)}
-    <section class="example-hero">
-      <span class="tag-pill">${ex.eyebrow}</span>
-      <h1 style="margin-top:10px">${ex.heroTitleHtml}</h1>
-      <p>${ex.heroDescriptionHtml}</p>
-    </section>
-    ${cardsHtml}
-  `;
-}
-
-function renderCard(card) {
-  const idAttr = card.id ? ` id="${card.id}"` : "";
-  const heading = card.heading ? `<h2>${card.heading}</h2>` : "";
-  const lede = card.lede ? `<p class="lede">${card.lede}</p>` : "";
-  const hasSource = card.codeBlocks.length > 0;
-  const hasOutput = !!card.render;
-  const extra = card.extraHtml || "";
-
-  const codeBlocks = card.codeBlocks
-    .map((cb) => {
-      const codeIdAttr = cb.codeId ? ` id="${cb.codeId}"` : "";
-      return `
-        <div class="example-source-panel">
-          <div class="example-source-header">
-            <span class="example-source-label">Aktion source</span>
-            <button class="example-copy-btn" data-copy-target="${cb.codeId || ""}">Copy</button>
-          </div>
-          <pre class="example-source"><code${codeIdAttr}>${cb.content}</code></pre>
-        </div>`;
-    })
+function renderNotFound(badSlug) {
+  const known = EXAMPLES
+    .map((e) => `<li><a href="?example=${e.slug}">${e.name}</a></li>`)
     .join("");
-
-  const output = hasOutput
-    ? `<div class="example-output"><aktion-app id="${card.render.elId}" theme="${card.render.theme}"></aktion-app></div>`
-    : "";
-
-  if (hasSource && hasOutput) {
-    return `<article class="example-card"${idAttr}>${heading}${lede}<div class=""><div>${output}</div><div>${codeBlocks}</div></div>${extra}</article>`;
-  }
-  return `<article class="example-card"${idAttr}>${heading}${lede}${codeBlocks}${output}${extra}</article>`;
+  return `
+    <header class="example-topbar">
+      <div class="example-topbar-left">
+        <a class="example-back" href="live-examples.html">\u2190 All examples</a>
+        <h1 class="example-title">Example not found</h1>
+      </div>
+    </header>
+    <section class="example-preview">
+      <article class="example-source-panel" style="padding:20px">
+        <p>No example named "${escapeHtml(badSlug)}". Pick one:</p>
+        <ul>${known}</ul>
+      </article>
+    </section>
+  `;
 }
 
 function highlightCode() {
@@ -1729,12 +1231,12 @@ function tokenize(src) {
     /(@\w+)|(\$\w+)|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b(?:function|let|const|var|if|else|for|of|switch|case|break|default|return|effect|aktion|true|false|null)\b)|(\b\d+(?:\.\d+)?\b)|([A-Z][A-Za-z0-9]*(?=\s*\())/g,
     (m, builtin, state, comment, str, kw, num, comp) => {
       if (builtin) return `<span class="tk-builtin">${escapeHtml(builtin)}</span>`;
-      if (state) return `<span class="tk-state">${escapeHtml(state)}</span>`;
+      if (state)   return `<span class="tk-state">${escapeHtml(state)}</span>`;
       if (comment) return `<span class="tk-comment">${escapeHtml(comment)}</span>`;
-      if (str) return `<span class="tk-string">${escapeHtml(str)}</span>`;
-      if (kw) return `<span class="tk-kw">${escapeHtml(kw)}</span>`;
-      if (num) return `<span class="tk-number">${escapeHtml(num)}</span>`;
-      if (comp) return `<span class="tk-comp">${escapeHtml(comp)}</span>`;
+      if (str)     return `<span class="tk-string">${escapeHtml(str)}</span>`;
+      if (kw)      return `<span class="tk-kw">${escapeHtml(kw)}</span>`;
+      if (num)     return `<span class="tk-number">${escapeHtml(num)}</span>`;
+      if (comp)    return `<span class="tk-comp">${escapeHtml(comp)}</span>`;
       return m;
     }
   );
@@ -1745,31 +1247,25 @@ function wireThemeSwitcher() {
   if (!switcher) return;
   const buttons = switcher.querySelectorAll("button");
   const aktionEls = () => document.querySelectorAll("aktion-app");
-
   function setTheme(name) {
     buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.theme === name ? "true" : "false"));
     aktionEls().forEach((el) => el.setAttribute("theme", name));
   }
-
   const initial = document.querySelector("aktion-app")?.getAttribute("theme") || "light";
   setTheme(initial);
-
   buttons.forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.theme)));
 }
 
-function wireCopyButtons() {
-  document.querySelectorAll(".example-copy-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.copyTarget;
-      const code = target
-        ? document.getElementById(target)
-        : btn.closest(".example-source-panel")?.querySelector("code");
-      if (!code) return;
-      navigator.clipboard.writeText(code.textContent).then(() => {
-        btn.classList.add("copied");
-        btn.textContent = "Copied!";
-        setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "Copy"; }, 1800);
-      });
+function wireCopyButton() {
+  const btn = document.querySelector(".example-copy-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const code = document.getElementById("src-app");
+    if (!code) return;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      btn.classList.add("copied");
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "Copy"; }, 1800);
     });
   });
 }

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Live demos · Aktion</title>
-  <meta name="description" content="Every live example, in one place — chat, dashboards, commerce, routing, JavaScript apps, with source." />
+  <title>Live examples · Aktion</title>
+  <meta name="description" content="Standalone, full-page Aktion demos. Pick one to open its live preview and source." />
   <script>
     (function () {
       try {
@@ -17,153 +17,36 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <style>
-    .live-section { margin-top: 28px; }
-    .live-section-head {
+    .live-list {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 0;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .live-list li + li { border-top: 1px solid var(--doc-border); }
+    .live-list-row {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 6px;
+      gap: 16px;
+      padding: 14px 18px;
     }
-    .live-section h2 { margin: 0; font-size: 22px; }
-    .live-section-meta { font-size: 12.5px; color: var(--doc-text-muted); }
-    .live-section-sub {
-      margin: 0 0 16px;
-      color: var(--doc-text-muted);
-      font-size: 14px;
-      max-width: 70ch;
-    }
-
-    .live-search {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 14px 0 4px;
-    }
-    .live-search input {
-      flex: 1;
-      max-width: 360px;
-      font: inherit;
-      font-size: 13.5px;
-      padding: 8px 14px;
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius-sm);
-      background: var(--doc-surface);
-      color: var(--doc-text);
-      transition: border-color 150ms ease, box-shadow 150ms ease;
-    }
-    .live-search input:focus {
-      outline: none;
-      border-color: var(--doc-primary);
-      box-shadow: var(--doc-focus-ring);
-    }
-    .live-search input::placeholder { color: var(--doc-text-subtle); }
-
-    .live-filter {
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin: 6px 0;
-      padding: 3px;
-      background: var(--doc-surface);
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius-sm);
-    }
-    .live-filter button {
-      border: none;
-      background: transparent;
-      padding: 6px 12px;
-      font: inherit;
-      font-size: 12.5px;
-      font-weight: 500;
-      color: var(--doc-text-muted);
-      border-radius: var(--doc-radius-xs);
-      cursor: pointer;
-      transition: background 150ms ease, color 150ms ease;
-    }
-    .live-filter button:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
-    .live-filter button[aria-pressed="true"] {
-      background: var(--doc-bg-soft);
-      color: var(--doc-text);
+    .live-list-name {
+      font-size: 14.5px;
       font-weight: 600;
-      box-shadow: var(--doc-shadow-sm);
+      color: var(--doc-text);
     }
-
-    .live-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 14px;
-      margin: 12px 0 24px;
-    }
-
-    .live-card {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      background: var(--doc-surface);
-      border: 1px solid var(--doc-border);
-      border-radius: var(--doc-radius-md);
-      padding: 18px 20px;
-      text-decoration: none;
-      color: inherit;
-      transition: border-color var(--doc-transition), background var(--doc-transition), transform var(--doc-transition);
-    }
-    .live-card:hover {
-      border-color: var(--doc-border-strong);
-      background: var(--doc-surface-elev);
-      transform: translateY(-1px);
-    }
-    .live-card h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--doc-text); }
-    .live-card p {
-      margin: 0;
+    .live-list-link {
       font-size: 13px;
-      color: var(--doc-text-muted);
-      line-height: 1.55;
-      flex: 1;
-    }
-    .live-card-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-    .live-card-pill {
-      display: inline-flex;
-      align-items: center;
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--doc-primary);
-      background: var(--doc-primary-soft);
-      padding: 3px 9px;
-      border-radius: var(--doc-radius-pill);
-    }
-    .live-card-features {
-      font-size: 11.5px;
-      color: var(--doc-text-subtle);
-      margin-top: 2px;
-    }
-    .live-card-arrow {
-      font-size: 12.5px;
       font-weight: 600;
       color: var(--doc-primary);
-      margin-top: 4px;
+      text-decoration: none;
+      white-space: nowrap;
     }
-
-    .live-card.is-hidden { display: none; }
-
-    .live-empty {
-      padding: 28px;
-      text-align: center;
-      color: var(--doc-text-muted);
-      background: var(--doc-surface);
-      border: 1px dashed var(--doc-border);
-      border-radius: var(--doc-radius-md);
-      font-size: 13.5px;
-    }
-
-    @media (max-width: 720px) {
-      .live-grid { gap: 10px; }
-      .live-card { padding: 16px; }
-    }
+    .live-list-link:hover { text-decoration: underline; }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
@@ -173,245 +56,28 @@
 
     <main>
       <header class="hero">
-        <span class="hero-eyebrow">Live demos</span>
-        <h1>Every live example, in one place.</h1>
-        <p class="lead">
-          Standalone, full-page demos that exercise the renderer end to end —
-          tools, streaming, multi-page routing, JavaScript interactions, and
-          the rich-layout patterns the LLM should reach for. Each card opens
-          a focused page with editable source.
-        </p>
+        <span class="hero-eyebrow">Live examples</span>
+        <h1>Live examples</h1>
+        <p class="lead">Standalone, full-page Aktion programs. Open any demo to see its live preview and source.</p>
       </header>
 
-      <div class="callout">
-        <h4>How to use this page</h4>
-        <p>
-          Filter the catalog by tag (LLM streaming, JavaScript, routing,
-          patterns…) and pop the demo into a new tab. Each demo shows the
-          full Aktion source, the tools wiring, and the rendered
-          UI — so you can copy any pattern straight into your own app.
-        </p>
-        <p style="margin-top:8px">
-          Looking for a focused walkthrough of how buttons, forms, and
-          follow-ups wire to the runtime? Read the
-          <a href="actions.html">Actions guide</a> — it covers
-          <code>function Name() { ... }</code> blocks, every step-equivalent
-          statement, and the components that accept them.
-        </p>
-      </div>
-
-      <section class="live-section" data-section="all">
-        <div class="live-section-head">
-          <h2>All live examples</h2>
-          <span class="live-section-meta" id="live-count"></span>
-        </div>
-
-        <div class="live-search">
-          <input type="search" id="live-search" placeholder="Search examples by title or description…" autocomplete="off" />
-        </div>
-
-        <nav class="live-filter" id="live-filter" aria-label="Filter examples by tag">
-          <button data-tag="all" aria-pressed="true">All</button>
-          <button data-tag="data">Dashboards</button>
-          <button data-tag="patterns">Forms</button>
-          <button data-tag="routing">Routing</button>
-          <button data-tag="media">Media</button>
-          <button data-tag="javascript">JavaScript</button>
-          <button data-tag="theming">Theming</button>
-          <button data-tag="llm">LLM</button>
-        </nav>
-
-        <div class="live-grid" id="live-grid">
-
-          <a class="live-card" href="live-example.html?example=data-explorer" data-tags="data patterns javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">DataGrid</span>
-              <span class="live-card-pill">6 charts</span>
-            </div>
-            <h3>Data explorer</h3>
-            <p>A full analytics surface — sortable <code>DataGrid</code> with bulk-action toolbar, <code>Gauge</code> SLA dials, filled <code>LineChart</code>, <code>Heatmap</code>, <code>RadarChart</code>, <code>ScatterChart</code>, <code>Histogram</code>, <code>InfiniteList</code>, and <code>ActivityLog</code>.</p>
-            <span class="live-card-features">DataGrid · Gauge · Heatmap · LineChart · RadarChart · Stats</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=media-gallery" data-tags="media patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Carousel · Map</span>
-            </div>
-            <h3>Media gallery</h3>
-            <p>A travel-magazine layout — <code>Carousel</code> hero, <code>Gallery</code> wired to a <code>Lightbox</code>, <code>VideoPlayer</code> trailer, <code>AudioPlayer</code> soundtrack, and a Leaflet-backed <code>Map</code>.</p>
-            <span class="live-card-features">Carousel · Gallery · Lightbox · VideoPlayer · AudioPlayer · Map</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=content-studio" data-tags="patterns javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Editors · Wizard</span>
-            </div>
-            <h3>Content studio</h3>
-            <p>A CMS-style authoring surface: <code>RichTextEditor</code>, <code>CodeEditor</code>, <code>MultiStepForm</code>, <code>ColorPicker</code>, <code>TagInput</code>, <code>MentionInput</code>, <code>PinInput</code>, plus <code>ValidationSummary</code> and the new <code>TopBar</code>.</p>
-            <span class="live-card-features">RichTextEditor · CodeEditor · MultiStepForm · TopBar</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="brand-themes.html" data-tags="theming patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Theme({...})</span>
-            </div>
-            <h3>Brand themes</h3>
-            <p>The same dashboard reskinned to GitHub, Apple, Stripe, IONOS, Notion, and Vercel — using only a <code>theme = Theme({...})</code> line in the script.</p>
-            <span class="live-card-features">Theme · BrandTheme · design tokens</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="chat-bot.html" data-tags="llm">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Streaming</span>
-              <span class="live-card-pill">OpenRouter</span>
-            </div>
-            <h3>Chat bot</h3>
-            <p>OpenRouter-powered chat that streams replies straight into the renderer. Bring your own API key, attach images / PDFs, switch between chat, website, and app modes.</p>
-            <span class="live-card-features">Streaming · OpenRouter · file upload</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=routing-demo" data-tags="routing javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Router · NavLink</span>
-            </div>
-            <h3>Multi-page routing</h3>
-            <p>A four-page app driven by <code>pages = Router({ ... })</code>, <code>NavLink</code>, and <code>route.navigate(...)</code>. Deep links, browser back/forward, and <code>route</code> reactivity.</p>
-            <span class="live-card-features">Router · NavLink · route.navigate · params</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=settings-app" data-tags="patterns javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Settings</span>
-            </div>
-            <h3>Settings app</h3>
-            <p>Tabs, <code>Switch</code>, <code>ToggleGroup</code>, <code>Progress</code>, <code>Kbd</code>, and a danger-zone confirmation <code>Drawer</code>.</p>
-            <span class="live-card-features">Tabs · Switch · ToggleGroup · Drawer · Progress</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=kanban-pro" data-tags="javascript patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Kanban</span>
-              <span class="live-card-pill">Storage</span>
-            </div>
-            <h3>Kanban board</h3>
-            <p>Board state in a single <code>$columns</code> variable. Actions move and add cards. Effects autosave to <code>Storage.local</code> with debounce and hydrate on mount.</p>
-            <span class="live-card-features">KanbanBoard · effect · Storage.local · debounce</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=analytics-pulse" data-tags="data javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Realtime</span>
-              <span class="live-card-pill">every(N)</span>
-            </div>
-            <h3>Analytics pulse</h3>
-            <p>A realtime-feeling dashboard driven by <code>effect(() => { … }, ["every(2000)"])</code> with <code>@Sum</code> aggregations and a <code>Tabs</code> switcher.</p>
-            <span class="live-card-features">effect · every(N) · @Sum · LineChart · Tabs</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=recipe-explorer" data-tags="patterns javascript">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Search · Filter</span>
-            </div>
-            <h3>Recipe explorer</h3>
-            <p>Instant search, cuisine filter, and rating/alpha sort toggle. The grid re-derives from <code>$query</code>, <code>$cuisine</code>, and <code>$sort</code>.</p>
-            <span class="live-card-features">SearchBar · Select · ToggleGroup · Grid · for-of</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=expense-tracker" data-tags="data javascript patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">Budget</span>
-              <span class="live-card-pill">Storage</span>
-            </div>
-            <h3>Expense tracker</h3>
-            <p>Tabbed list / chart / settings views. Persisted via <code>Storage.local</code>. Uses <code>@Sum</code>, ternaries for tone, and <code>BarChart</code> for spending by category.</p>
-            <span class="live-card-features">Tabs · @Sum · Storage.local · BarChart · Progress</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=chat-search" data-tags="javascript patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">⌘K Palette</span>
-              <span class="live-card-pill">debounce</span>
-            </div>
-            <h3>Chat search</h3>
-            <p>A command-palette search bar with debounced filtering via <code>effect(() => { … }, [$query, "debounce(250)"])</code>. Results update after the user stops typing.</p>
-            <span class="live-card-features">effect · debounce · SearchBar · EmptyState</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-          <a class="live-card" href="live-example.html?example=todos-crud" data-tags="data javascript patterns">
-            <div class="live-card-pills">
-              <span class="live-card-pill">REST API</span>
-              <span class="live-card-pill">CRUD</span>
-            </div>
-            <h3>Todos CRUD</h3>
-            <p>Full create / read / update / delete against a live REST API using the single <code>Http({...})</code> primitive, <code>Async</code> for loading / error / empty states, and <code>.refetch()</code> after every mutation.</p>
-            <span class="live-card-features">Http · Async · refetch · Checkbox · PageHeader</span>
-            <span class="live-card-arrow">Open demo →</span>
-          </a>
-
-        </div>
-        <div class="live-empty" id="live-empty" hidden>No live examples match this filter.</div>
-      </section>
+      <ul class="live-list" id="live-list"></ul>
     </main>
   </div>
 
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
-  <script>
-    (function() {
-      var grid = document.getElementById("live-grid");
-      var empty = document.getElementById("live-empty");
-      var counter = document.getElementById("live-count");
-      var cards = Array.prototype.slice.call(grid.querySelectorAll(".live-card"));
-      var buttons = Array.prototype.slice.call(document.querySelectorAll(".live-filter button"));
-      var searchInput = document.getElementById("live-search");
-      var activeTag = "all";
-      var searchTerm = "";
+  <script type="module">
+    import { EXAMPLES } from "./assets/live-example.js";
 
-      function updateCount(visible) {
-        counter.textContent = visible + " of " + cards.length + " demos";
-      }
-
-      function applyFilters() {
-        var visible = 0;
-        cards.forEach(function(card) {
-          var tags = (card.getAttribute("data-tags") || "").split(/\s+/);
-          var matchesTag = activeTag === "all" || tags.indexOf(activeTag) !== -1;
-          var text = (card.querySelector("h3") || {}).textContent + " " + (card.querySelector("p") || {}).textContent;
-          var matchesSearch = !searchTerm || text.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1;
-          var show = matchesTag && matchesSearch;
-          card.classList.toggle("is-hidden", !show);
-          if (show) visible++;
-        });
-        empty.hidden = visible !== 0;
-        updateCount(visible);
-      }
-
-      buttons.forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          buttons.forEach(function(b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
-          activeTag = btn.getAttribute("data-tag");
-          applyFilters();
-        });
-      });
-
-      searchInput.addEventListener("input", function() {
-        searchTerm = this.value.trim();
-        applyFilters();
-      });
-
-      updateCount(cards.length);
-    })();
+    const list = document.getElementById("live-list");
+    list.innerHTML = EXAMPLES.map((ex) => `
+      <li>
+        <div class="live-list-row">
+          <span class="live-list-name">${ex.name}</span>
+          <a class="live-list-link" href="live-example.html?example=${ex.slug}">Open demo &rarr;</a>
+        </div>
+      </li>
+    `).join("");
   </script>
 </body>
 </html>

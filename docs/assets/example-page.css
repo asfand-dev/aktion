@@ -315,7 +315,6 @@ body {
   border: 1px solid var(--ex-border);
   border-radius: var(--ex-radius);
   background: var(--ex-surface-soft);
-  padding: 18px;
 }
 
 /* ── Buttons ────────────────────────────────────── */
@@ -429,7 +428,6 @@ body {
   .example-card { padding: 16px; border-radius: var(--ex-radius); }
   .example-card h2 { font-size: 16px; }
   .example-source { padding: 12px 14px; font-size: 12px; max-height: 200px; }
-  .example-output { padding: 14px; }
   .example-topbar { gap: 10px; padding: 10px 14px; }
   .example-back { font-size: 12px; padding: 5px 10px; }
   .field-row { grid-template-columns: 1fr; gap: 10px; }
@@ -445,3 +443,20 @@ body {
   .btn { width: 100%; }
   .btn-ghost { width: auto; }
 }
+
+/* ── Live example preview (clean layout) ──────── */
+.example-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ex-text);
+  letter-spacing: -0.005em;
+}
+.example-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+.example-preview .example-output { margin: 0; }
+.example-preview .example-source-panel { margin: 0; }

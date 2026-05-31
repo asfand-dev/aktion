@@ -113,6 +113,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-m);
+  padding: 20px;
 }
 
 .rui-error-banner {

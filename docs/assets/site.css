@@ -690,7 +690,6 @@ main pre code {
 .example-output {
   background: var(--doc-bg);
   border-radius: var(--doc-radius-sm);
-  padding: 18px;
   border: 1px solid var(--doc-border);
   transition: background 200ms ease;
 }
@@ -1268,7 +1267,6 @@ textarea.playground-input:focus {
 
   .example { margin: 16px 0; }
   .example-panel { padding: 14px; }
-  .example-output { padding: 14px; }
   .example-header { padding: 10px 14px; }
 
   .feature, .demo-card { padding: 16px; }
