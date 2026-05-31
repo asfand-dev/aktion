@@ -29,7 +29,6 @@ import { parse } from "../src/parser/index.js";
 import {
   StateStore,
   HttpRuntime,
-  I18nRuntime,
   Router,
   createContext,
   createRuntimeBudget,
@@ -47,7 +46,6 @@ import { defaultLibrary } from "../src/library/index.js";
 
 interface HarnessOptions {
   http?: HttpRuntime;
-  i18n?: I18nRuntime;
   router?: Router;
   /**
    * Override the runtime safety budget (e.g. set a tight `iterationLimit`
@@ -64,7 +62,6 @@ function harness(src: string, opts: HarnessOptions = {}) {
     router,
     library: defaultLibrary,
     http: opts.http,
-    i18n: opts.i18n,
     budget: opts.budget,
   });
   const program = parse(src);
@@ -595,85 +592,90 @@ describe("Hoisting (forward references)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
-// i18n({...}) — locale + message dictionaries + `t(key, vars)`
+// i18n({...}) — factory returning { t, setCurrentLanguage, getCurrentLanguage }
 // ──────────────────────────────────────────────────────────────────────
 describe("i18n({...}) language construct", () => {
-  it("`i18n({...})` configures the runtime; `t(key)` returns the localised string", () => {
-    const i18n = new I18nRuntime();
-    const { ctx } = harness(
-      `
-        $i18n = i18n({
-          locale: "fr",
-          messages: { hello: "Bonjour", bye: "Au revoir" },
-          fallback: "en",
-          fallbackMessages: { hello: "Hello", bye: "Goodbye" }
-        })
-        $hello = @T("hello")
-        $bye   = @T("bye")
-        aktion = Text(\`\${$hello}\`)
-      `,
-      { i18n },
-    );
+  it("destructured `t` resolves keys against `currentLanguage`", () => {
+    const { ctx } = harness(`
+      const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+        defaultLanguage: "en",
+        currentLanguage: "fr",
+        translations: {
+          hello: { en: "Hello", fr: "Bonjour" },
+          bye:   { en: "Goodbye", fr: "Au revoir" }
+        }
+      })
+      $hello = t("hello")
+      $bye   = t("bye")
+      $lang  = getCurrentLanguage()
+      aktion = Text("ok")
+    `);
     expect(ctx.state.get("hello")).toBe("Bonjour");
     expect(ctx.state.get("bye")).toBe("Au revoir");
+    expect(ctx.state.get("lang")).toBe("fr");
   });
 
-  it("falls back to `fallback` locale when the key is missing in the active locale", () => {
-    const i18n = new I18nRuntime();
-    const { ctx } = harness(
-      `
-        $i18n = i18n({
-          locale: "fr",
-          messages: { hello: "Bonjour" },
-          fallback: "en",
-          fallbackMessages: { missing: "Untranslated" }
-        })
-        $missing = @T("missing")
-        aktion = Text("ok")
-      `,
-      { i18n },
-    );
+  it("falls back to `defaultLanguage` when the key is missing in the current language", () => {
+    const { ctx } = harness(`
+      const { t } = i18n({
+        defaultLanguage: "en",
+        currentLanguage: "fr",
+        translations: {
+          hello:   { en: "Hello", fr: "Bonjour" },
+          missing: { en: "Untranslated" }
+        }
+      })
+      $missing = t("missing")
+      aktion = Text("ok")
+    `);
     expect(ctx.state.get("missing")).toBe("Untranslated");
   });
 
-  it("interpolates `${name}` placeholders from the vars object passed to `@T`", () => {
-    const i18n = new I18nRuntime();
-    const { ctx } = harness(
-      `
-        $i18n = i18n({
-          locale: "en",
-          messages: { greet: "Hi, \${name}!" },
-          fallback: "en"
-        })
-        $greet = @T("greet", { name: "Ada" })
-        aktion = Text("ok")
-      `,
-      { i18n },
-    );
-    expect(ctx.state.get("greet")).toBe("Hi, Ada!");
-  });
-
-  it("@Locale() returns the active locale tag", () => {
-    const i18n = new I18nRuntime();
-    const { ctx } = harness(
-      `
-        $i18n = i18n({ locale: "de-DE", messages: {}, fallback: "en" })
-        $tag = @Locale()
-        aktion = Text("ok")
-      `,
-      { i18n },
-    );
-    expect(ctx.state.get("tag")).toBe("de-DE");
-  });
-
-  it("with no `i18n({...})` configured, @T returns the bare key as a fallback", () => {
+  it("interpolates `{name}` placeholders from the vars object", () => {
     const { ctx } = harness(`
-      $missing = @T("hello")
+      const { t } = i18n({
+        defaultLanguage: "en",
+        translations: {
+          greet:       { en: "Hi, {name}!" },
+          items_count: { en: "{count} items" }
+        }
+      })
+      $greet = t("greet", { name: "Ada" })
+      $count = t("items_count", { count: 5 })
       aktion = Text("ok")
     `);
-    // Without an i18n runtime instance attached the builtin returns the
-    // key verbatim — programs degrade gracefully without crashing.
-    expect(ctx.state.get("missing")).toBe("hello");
+    expect(ctx.state.get("greet")).toBe("Hi, Ada!");
+    expect(ctx.state.get("count")).toBe("5 items");
+  });
+
+  it("supports the instance form with method calls", () => {
+    const { ctx } = harness(`
+      const i18nInstance = i18n({
+        defaultLanguage: "en",
+        currentLanguage: "en",
+        translations: {
+          hi: { en: "Hi", de: "Hallo" }
+        }
+      })
+      i18nInstance.setCurrentLanguage("de")
+      $hi   = i18nInstance.t("hi")
+      $lang = i18nInstance.getCurrentLanguage()
+      aktion = Text("ok")
+    `);
+    expect(ctx.state.get("hi")).toBe("Hallo");
+    expect(ctx.state.get("lang")).toBe("de");
+  });
+
+  it("returns the bare key when no translation entry exists", () => {
+    const { ctx } = harness(`
+      const { t } = i18n({
+        defaultLanguage: "en",
+        translations: { hi: { en: "Hi" } }
+      })
+      $missing = t("nope")
+      aktion = Text("ok")
+    `);
+    expect(ctx.state.get("missing")).toBe("nope");
   });
 });
 

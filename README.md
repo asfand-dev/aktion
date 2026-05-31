@@ -126,9 +126,7 @@ Everything you need at runtime ships in a single bundle:
   properties. **50+ design tokens** organised into `colors`, `radius`,
   `font`, `motion`, and `elevation` groups. Brand the UI from inside
   the script with `theme = Theme({...})`.
-- **`i18n` runtime.** `$i18n = i18n({ locale, messages, fallback })` plus
-  a global `t("key", vars?)` builtin and a `Locale()` helper that feeds
-  the active locale into `@Format` / `@FormatDate`.
+- **`i18n` factory.** `const { t, setCurrentLanguage, getCurrentLanguage } = i18n({ defaultLanguage, currentLanguage, translations })` builds a translation bundle keyed by language, with `{name}` placeholder interpolation.
 - **Font Awesome 6.7.2** auto-loaded — every `icon` prop accepts a Free
   Font Awesome name (no `fa-` prefix). Use `Icon(name, { variant?, size? })`
   for standalone glyphs. Variant prefixes supported: `"regular:star"`,
@@ -1040,28 +1038,45 @@ for the full surface.
 
 ## Internationalization
 
-The `$i18n = i18n({...})` declaration configures the active locale,
-message bundles, and fallback. A global `t(key, vars?)` builtin and a
-`Locale()` helper feed the active locale into `@Format` / `@FormatDate`.
+Call `i18n({...})` to build a translation bundle. You can destructure
+`t`, `setCurrentLanguage`, and `getCurrentLanguage`, or keep the result
+as an instance and call its methods.
 
 ```js
-$i18n = i18n({
-  locale: "fr-FR",
-  fallback: "en",
-  messages: {
-    greeting: "Bonjour, ${name}!",
-    orders: { title: "Commandes récentes" }
+const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+  defaultLanguage: "en",
+  currentLanguage: "fr",
+  translations: {
+    greeting:    { en: "Hello, {name}!",   fr: "Bonjour, {name}!"   },
+    orders_title:{ en: "Recent orders",    fr: "Commandes récentes" },
+    items_count: { en: "{count} items",    fr: "{count} objets"     }
   }
 })
 
-welcome     = Text(t("greeting", { name: $user.name }))
-sectionTitle = SectionHeader(t("orders.title"))
-formatted   = Text(@Format(1234.5, "currency", { currency: "EUR", locale: Locale() }))
+welcome      = Text(t("greeting", { name: $user.name }))
+sectionTitle = SectionHeader(t("orders_title"))
+count        = Text(t("items_count", { count: 5 }))
 ```
 
-Keys support dot paths. Variables are interpolated using `${name}`
-placeholders. Missing keys fall back to the fallback locale's bundle,
-then to the bare key as a literal string.
+Lookups resolve `translations[key][currentLanguage]`, fall back to
+`translations[key][defaultLanguage]`, then to the bare key as a literal
+string. Variables are interpolated using `{name}` placeholders.
+
+For reactive language switching, drive `currentLanguage` from a state
+atom and either call `setCurrentLanguage(...)` or rebuild the bundle:
+
+```js
+$lang = "fr"
+const i18nInstance = i18n({
+  defaultLanguage: "en",
+  currentLanguage: $lang,
+  translations: { hi: { en: "Hi", fr: "Salut", de: "Hallo" } }
+})
+aktion = Column([
+  Text(i18nInstance.t("hi")),
+  Button("Deutsch", { onClick: () => { $lang = "de" } })
+])
+```
 
 ---
 
@@ -1195,7 +1210,7 @@ The full catalog with tag filters lives at
 │   │   ├── state.ts           #     reactive store — `$name = value`
 │   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner
 │   │   ├── http.ts            #     Http({...}) reactive HTTP primitive + interceptors
-│   │   ├── i18n.ts            #     $i18n runtime + t() / Locale() builtins
+│   │   ├── i18n.ts            #     i18n({...}) factory — returns { t, setCurrentLanguage, getCurrentLanguage }
 │   │   ├── storage.ts         #     storage.local / .session / .cookies bridge
 │   │   ├── console.ts         #     console.* host bridge
 │   │   └── router.ts          #     Hash-based router for Router({…}) calls and NavLink

@@ -1,86 +1,93 @@
 /**
- * Aktion 0.5 i18n runtime — `$i18n` declaration + `t()` global builtin (§23).
+ * Aktion i18n factory — `i18n({...})` returns a `{ t, setCurrentLanguage,
+ * getCurrentLanguage }` bundle with language state held in closure.
  *
- * The runtime is intentionally tiny:
- *   - Holds the active locale, fallback locale, and message map.
- *   - `t(key, vars?)` looks up `key` (dot-paths supported, e.g. `"orders.title"`),
- *     falls back to the fallback locale's bundle, then to the bare key.
- *   - `vars?` are interpolated using `${name}` placeholders.
+ *   const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+ *     defaultLanguage: "en",
+ *     currentLanguage: "fr",
+ *     translations: {
+ *       greeting:    { en: "Hello, {name}!", fr: "Bonjour, {name}!" },
+ *       items_count: { en: "{count} items",  fr: "{count} objets"   },
+ *     },
+ *   })
  *
- * Locale-aware formatting (`Money`, `Date`, `Number`, `Percent`,
- * `RelativeTime`) is wired through `getLocale()` so library components
- * can read the live value without each declaring it as a prop.
+ *   t("greeting", { name: "Ada" })   // "Bonjour, Ada!"
+ *   setCurrentLanguage("en")
+ *   t("greeting", { name: "Ada" })   // "Hello, Ada!"
+ *
+ * Placeholders use `{name}` syntax. Lookup falls back to
+ * `defaultLanguage`, then to the bare key.
  */
 
 export interface I18nConfig {
-  locale: string;
-  messages: Record<string, unknown>;
-  fallback?: string;
-  /** Optional secondary message map for the fallback locale. */
-  fallbackMessages?: Record<string, unknown>;
+  defaultLanguage?: string;
+  currentLanguage?: string;
+  translations?: Record<string, Record<string, string>>;
 }
 
-export class I18nRuntime {
-  private locale = "en";
-  private fallback = "en";
-  private messages: Record<string, unknown> = {};
-  private fallbackMessages: Record<string, unknown> = {};
-
-  configure(config: I18nConfig): void {
-    this.locale = config.locale || "en";
-    this.fallback = config.fallback ?? "en";
-    this.messages = sanitiseMessages(config.messages);
-    this.fallbackMessages = sanitiseMessages(config.fallbackMessages ?? {});
-  }
-
-  /** Current active locale tag (e.g. `"en-US"`, `"de"`). */
-  getLocale(): string {
-    return this.locale;
-  }
-
-  /** Snapshot of the configured fallback locale. */
-  getFallback(): string {
-    return this.fallback;
-  }
-
-  /**
-   * Translate a dot-pathed key, optionally interpolating `${name}` vars.
-   *
-   * Resolution order:
-   *   1. The active locale's message map.
-   *   2. The fallback locale's message map (if provided separately).
-   *   3. The bare key as a literal string.
-   */
-  t(key: string, vars?: Record<string, unknown>): string {
-    const value =
-      readPath(this.messages, key) ??
-      readPath(this.fallbackMessages, key) ??
-      key;
-    if (typeof value !== "string") return key;
-    return interpolate(value, vars);
-  }
+export interface I18nInstance {
+  t(key: string, vars?: Record<string, unknown>): string;
+  setCurrentLanguage(lang: string): void;
+  getCurrentLanguage(): string;
 }
 
-function sanitiseMessages(input: unknown): Record<string, unknown> {
+export function createI18n(config: I18nConfig = {}): I18nInstance {
+  const translations = sanitiseTranslations(config.translations);
+  const defaultLanguage =
+    typeof config.defaultLanguage === "string" ? config.defaultLanguage : "";
+  let currentLanguage =
+    typeof config.currentLanguage === "string" && config.currentLanguage
+      ? config.currentLanguage
+      : defaultLanguage;
+
+  function t(key: string, vars?: Record<string, unknown>): string {
+    if (typeof key !== "string" || !key) return "";
+    const entry = translations[key];
+    let template: string | undefined;
+    if (entry) {
+      if (currentLanguage && typeof entry[currentLanguage] === "string") {
+        template = entry[currentLanguage];
+      } else if (defaultLanguage && typeof entry[defaultLanguage] === "string") {
+        template = entry[defaultLanguage];
+      }
+    }
+    if (template === undefined) return key;
+    return interpolate(template, vars);
+  }
+
+  function setCurrentLanguage(lang: string): void {
+    if (typeof lang !== "string" || !lang) return;
+    currentLanguage = lang;
+  }
+
+  function getCurrentLanguage(): string {
+    return currentLanguage;
+  }
+
+  return { t, setCurrentLanguage, getCurrentLanguage };
+}
+
+function sanitiseTranslations(
+  input: unknown,
+): Record<string, Record<string, string>> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-  return input as Record<string, unknown>;
-}
-
-function readPath(messages: Record<string, unknown>, key: string): unknown {
-  if (!key) return undefined;
-  // Fast path for non-nested keys.
-  if (key.indexOf(".") === -1) return messages[key];
-  let cursor: unknown = messages;
-  for (const segment of key.split(".")) {
-    if (!cursor || typeof cursor !== "object") return undefined;
-    cursor = (cursor as Record<string, unknown>)[segment];
+  const out: Record<string, Record<string, string>> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const langs: Record<string, string> = {};
+    for (const [lang, text] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (typeof text === "string") langs[lang] = text;
+    }
+    out[key] = langs;
   }
-  return cursor;
+  return out;
 }
 
 function interpolate(template: string, vars?: Record<string, unknown>): string {
   if (!vars) return template;
-  return template.replace(/\$\{([^}]+)\}/g, (_, expr: string) => {
+  return template.replace(/\{([^}]+)\}/g, (_, expr: string) => {
     const value = vars[expr.trim()];
     if (value === null || value === undefined) return "";
     return String(value);

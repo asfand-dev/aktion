@@ -23,7 +23,7 @@ import type {
 import type { StateStore } from "./state.js";
 import type { HttpRuntime } from "./http.js";
 import { createHttpResource, isEndpointResource } from "./http.js";
-import type { I18nRuntime } from "./i18n.js";
+import { createI18n, type I18nConfig } from "./i18n.js";
 import type { ActionDeclRunner } from "./effects.js";
 import { dataBuiltins, type ThemeNode } from "./builtins.js";
 import { matchRoute, type Router } from "./router.js";
@@ -434,8 +434,6 @@ export interface EvaluationContext {
   actionDecls: Map<string, ActionDeclaration>;
   /** HTTP runtime (`Http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
-  /** Aktion 0.5 i18n runtime (`$i18n = i18n({...})` declaration + `t()` builtin). */
-  i18n?: I18nRuntime;
   /** Action runner for function declarations. */
   actionRunner?: ActionDeclRunner;
   /** Notify the host that something changed and a re-render is needed. */
@@ -478,14 +476,13 @@ export interface EvaluationContext {
 
 /**
  * Optional injectables for `createContext` — the host element passes its
- * runtime singletons (HTTP, i18n, action runner) so endpoint use sites and
+ * runtime singletons (HTTP, action runner) so endpoint use sites and
  * action calls can resolve against them.
  */
 export interface CreateContextOptions {
   router?: Router;
   library?: ComponentLibrary;
   http?: HttpRuntime;
-  i18n?: I18nRuntime;
   actionRunner?: ActionDeclRunner;
   notify?: () => void;
   onEmit?: (eventName: string, detail: unknown) => void;
@@ -521,7 +518,6 @@ export function createContext(
     componentEffectStack: [],
     actionDecls: new Map(),
     http: options.http,
-    i18n: options.i18n,
     actionRunner: options.actionRunner,
     notify: options.notify,
     onEmit: options.onEmit,
@@ -659,18 +655,6 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
       ctx.state.declare(stmt.identifier, initial);
     }
   }
-  // 1.5 pass: resolve `i18n({...})` setup helper so subsequent reads of
-  // `$i18n` observe the configured locale/messages.
-  for (const stmt of program.statements) {
-    if (stmt.kind !== "Assignment") continue;
-    const expr = stmt.expression;
-    if (expr.kind !== "Call") continue;
-    if ((stmt.identifier === "i18n" || stmt.identifier === "$i18n") && expr.callee === "i18n") {
-      evaluate(expr, ctx);
-      continue;
-    }
-  }
-
   // Second pass: install bindings for components, helpers, actions,
   // effects, and any other non-state declarations.
   //
@@ -761,7 +745,6 @@ function installComputedStateDerivations(
     if (stmt.kind !== "Assignment" || !stmt.isState) continue;
     if (isPureLiteralExpression(stmt.expression)) continue;
     if (isHttpResourceCall(stmt.expression)) continue; // already handled in 1.25 pass
-    if (isRuntimeSetupCall(stmt.identifier, stmt.expression)) continue; // i18n()
 
     const entry: ComputedDerivation = {
       name: stmt.identifier,
@@ -844,15 +827,6 @@ function isHttpResourceCall(expr: Expression): boolean {
   return expr.kind === "Call" && expr.callee === "Http";
 }
 
-/** `true` for `$i18n = i18n({...})` setups (handled in 1.5 pass). */
-function isRuntimeSetupCall(identifier: string, expr: Expression): boolean {
-  if (expr.kind !== "Call") return false;
-  if (expr.callee === "i18n" && (identifier === "i18n" || identifier === "$i18n")) {
-    return true;
-  }
-  return false;
-}
-
 function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {
   switch (stmt.kind) {
     case "ComponentDeclaration":
@@ -893,6 +867,7 @@ function isTopLevelImperativeStatement(stmt: Statement): boolean {
     case "WhileStatement":
     case "DoWhileStatement":
     case "TryStatement":
+    case "DestructureStatement":
     case "ExpressionStatement":
     case "ThrowStatement":
       return true;
@@ -2239,25 +2214,15 @@ function evaluateComponentCall(
     return node;
   }
   if (callee === "i18n") {
-    // `i18n({ locale, messages, fallback })` — push into the host runtime.
+    // `i18n({ defaultLanguage, currentLanguage, translations })` —
+    // returns a `{ t, setCurrentLanguage, getCurrentLanguage }` bundle.
     const configArg = args[0];
     const config = configArg ? evaluate(configArg, ctx) : null;
-    if (config && typeof config === "object" && !Array.isArray(config) && ctx.i18n) {
-      const cfg = config as Record<string, unknown>;
-      ctx.i18n.configure({
-        locale: typeof cfg.locale === "string" ? cfg.locale : "en",
-        messages:
-          cfg.messages && typeof cfg.messages === "object" && !Array.isArray(cfg.messages)
-            ? (cfg.messages as Record<string, unknown>)
-            : {},
-        fallback: typeof cfg.fallback === "string" ? cfg.fallback : "en",
-        fallbackMessages:
-          cfg.fallbackMessages && typeof cfg.fallbackMessages === "object" && !Array.isArray(cfg.fallbackMessages)
-            ? (cfg.fallbackMessages as Record<string, unknown>)
-            : undefined,
-      });
-    }
-    return { __kind: "I18n", config };
+    const cfg =
+      config && typeof config === "object" && !Array.isArray(config)
+        ? (config as I18nConfig)
+        : {};
+    return createI18n(cfg);
   }
   // Final fallthrough: treat the call as a built-in component invocation
   // and build a `ComponentNode` the renderer will hand to the library. If
@@ -2858,28 +2823,6 @@ function evaluateBuiltinCall(
   // argument unchanged. (No event loop is available inside `evaluate`.)
   if (name === "__rui_await__") {
     return args[0] ? evaluate(args[0], ctx) : undefined;
-  }
-  // Aktion 0.5 i18n: `t(key, vars?)` — global translation builtin.
-  if (name === "T" || name === "t") {
-    const keyArg = args[0];
-    const varsArg = args[1];
-    const key = keyArg ? String(evaluate(keyArg, ctx) ?? "") : "";
-    if (!ctx.i18n) return key;
-    let vars: Record<string, unknown> | undefined;
-    if (varsArg) {
-      const evaluated = evaluate(varsArg, ctx);
-      if (evaluated && typeof evaluated === "object" && !Array.isArray(evaluated)) {
-        vars = evaluated as Record<string, unknown>;
-      }
-    }
-    return ctx.i18n.t(key, vars);
-  }
-
-  // Aktion 0.5 i18n: `Locale()` — return the active locale tag. Cheap escape
-  // hatch so authors can pass it to `Format`/`FormatDate` without wiring
-  // a `$session.locale` atom themselves.
-  if (name === "Locale") {
-    return ctx.i18n?.getLocale() ?? "";
   }
 
   const fn = dataBuiltins[name];

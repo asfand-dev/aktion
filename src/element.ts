@@ -47,7 +47,6 @@ import {
   type RouteChangeDetail,
 } from "./runtime/index.js";
 import { HttpRuntime } from "./runtime/http.js";
-import { I18nRuntime } from "./runtime/i18n.js";
 import { EffectRunner, ActionDeclRunner } from "./runtime/effects.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
@@ -211,7 +210,6 @@ export class AktionElement extends HTMLElement {
   private readonly router = new Router();
   private library: ComponentLibrary = defaultLibrary;
   private readonly http = new HttpRuntime();
-  private readonly i18n = new I18nRuntime();
   private readonly effectRunner: EffectRunner;
   private readonly actionDeclRunner: ActionDeclRunner;
   private renderer: Renderer;
@@ -284,7 +282,6 @@ export class AktionElement extends HTMLElement {
       router: this.router,
       library: this.library,
       http: this.http,
-      i18n: this.i18n,
       actionRunner: this.actionDeclRunner,
       notify: () => this.scheduleRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
@@ -822,7 +819,6 @@ export class AktionElement extends HTMLElement {
       router: this.router,
       library: this.library,
       http: this.http,
-      i18n: this.i18n,
       actionRunner: this.actionDeclRunner,
       notify: () => this.scheduleRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),

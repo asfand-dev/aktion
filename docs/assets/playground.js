@@ -859,11 +859,6 @@ const SPECIAL_IDENTIFIERS = [
     apply: "route",
   },
   {
-    label: "$i18n",
-    info: "i18n runtime binding: `$i18n = i18n({ locale, messages, fallback })`.",
-    apply: "$i18n",
-  },
-  {
     label: "theme",
     info: "Per-response theme override: `theme = Theme({ colors: { primary: ... } })`.",
     apply: "theme",

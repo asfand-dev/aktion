@@ -142,8 +142,8 @@ Internalize these rules and you will write correct, polished programs:
 20. **Reactive state survives the response, not the page.** The runtime
     only keeps `$name = value` atoms in memory for the lifetime of the
     `<aktion-app>` element. Host pages persist them via
-    `el.serializeState()` / `el.hydrateState()`. The `$i18n = i18n({...})`
-    setup binding configures the i18n runtime.
+    `el.serializeState()` / `el.hydrateState()`. Call `i18n({...})` to
+    build a translation bundle (§13).
 21. **Prefer ternary `cond ? a : b` and `switch` over nested ternaries.**
     Both evaluate lazily — only the chosen branch renders. Use ternary
     for two-way conditions, `switch` for multi-way dispatch.
@@ -239,9 +239,12 @@ onSearch = (q) => $query = q
 emit("order:selected", { id: order.id })
 
 // Internationalisation.
-$i18n   = i18n({ locale: "en", messages: { greeting: "Hello, ${name}!" }, fallback: "en" })
+const { t, setCurrentLanguage } = i18n({
+  defaultLanguage: "en",
+  currentLanguage: "en",
+  translations: { greeting: { en: "Hello, {name}!", fr: "Bonjour, {name}!" } }
+})
 welcome = t("greeting", { name: $user.name })
-locale  = Locale()
 
 // Per-instance state — every Counter() call holds an independent atom.
 function Counter(label) {
@@ -536,7 +539,6 @@ Three identifier conventions cooperate:
   - `route` (router-owned reactive surface — `route.path`,
     `route.params`, `route.query`, `route.pattern`,
     `route.navigate("/path")`).
-  - `$i18n` (i18n bundle handle).
 
 Two function conventions cooperate at the top level:
 
@@ -779,10 +781,9 @@ effect(() => {
 }, ["mount"])
 ```
 
-### Setup bindings (reserved)
+### Setup bindings
 
-- `$i18n = i18n({ locale, messages, fallback })` configures
-  internationalization (§13).
+- `const { t, setCurrentLanguage, getCurrentLanguage } = i18n({ defaultLanguage, currentLanguage, translations })` — build a translation bundle (§13).
 - `theme = Theme({ colors, radius, font, motion, elevation })` brands
   the UI (§14).
 
@@ -1867,8 +1868,7 @@ by the runtime:
 
 The other always-available bindings (also documented in §12 and §11)
 are `storage` (localStorage / sessionStorage / cookies), `console`,
-`route` (the router handle), the `$i18n` setup binding, and
-your own reactive `$atom`s.
+`route` (the router handle), and your own reactive `$atom`s.
 
 ### Common recipes
 
@@ -2065,23 +2065,34 @@ and inline lambdas.
 
 ## 13. Internationalization
 
+Call `i18n({...})` to build a translation bundle. Destructure `t`,
+`setCurrentLanguage`, `getCurrentLanguage` — or keep the bundle as an
+instance and call its methods.
+
 ```javascript
-$locale = "fr-FR"
-$bundle = Http({ url: "https://api.example.com/i18n/" + $locale + ".json", method: "GET" })
-$i18n = i18n({
-  locale:   $locale,
-  messages: $bundle.data ?? {},
-  fallback: "en"
+const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+  defaultLanguage: "en",
+  currentLanguage: "fr",
+  translations: {
+    orders_title:   { en: "Recent orders",      fr: "Commandes récentes"     },
+    orders_greeting:{ en: "Hello, {name}!",     fr: "Bonjour, {name}!"       },
+    items_count:    { en: "{count} items",      fr: "{count} objets"         }
+  }
 })
 
-Text(t("orders.title"))
-Text(t("orders.greeting", { name: $userName }))
+Text(t("orders_title"))
+Text(t("orders_greeting", { name: $userName }))
+Text(t("items_count",    { count: 5 }))
 ```
 
-- `t(key, vars?)` looks up the translation.
-- `Locale()` returns the active locale tag.
+- `t(key, vars?)` looks up `translations[key][currentLanguage]`,
+  falls back to `translations[key][defaultLanguage]`, then to the bare
+  `key`. Placeholders use `{name}` syntax.
+- `setCurrentLanguage(lang)` switches the active language on the bundle.
+- `getCurrentLanguage()` returns the active language tag.
 
-Reload-friendly pattern:
+Reactive language switching — drive `currentLanguage` from a `$state`
+atom so the bundle rebuilds when the user picks a new language:
 
 ```javascript
 $locale = storage.get("locale") ?? "en"
@@ -2091,12 +2102,19 @@ function setLocale(next) {
   storage.set("locale", next)
 }
 
-$i18n   = i18n({ locale: $locale, messages: messages, fallback: "en" })
-picker  = Select("locale", { items: [
+const { t } = i18n({
+  defaultLanguage: "en",
+  currentLanguage: $locale,
+  translations: { hi: { en: "Hi", fr: "Salut", de: "Hallo" } }
+})
+
+picker = Select("locale", { items: [
   SelectItem("en", "English"),
-  SelectItem("fr-FR", "Français"),
+  SelectItem("fr", "Français"),
   SelectItem("de", "Deutsch")
 ], value: $locale, onChange: setLocale })
+
+greeting = Text(t("hi"))
 ```
 
 ---
@@ -3119,7 +3137,7 @@ Before finishing, walk your output and verify:
 
 1. `aktion = ...` is the FIRST line.
 2. Every referenced name is defined somewhere.
-3. Every defined name (other than `aktion`, `theme`, `$i18n`)
+3. Every defined name (other than `aktion`, `theme`)
    is reachable from `aktion`.
 4. Containers reference their children by name; large data arrays
    live on their own trailing lines.
@@ -3163,7 +3181,7 @@ Before finishing, walk your output and verify:
 | JavaScript layer — `emit`, `cleanup`, browser APIs                     | §10.                                   |
 | Routing — `Router`, `params`, `route`                                  | §11.                                   |
 | Globals — `storage`, `console`                                         | §12.                                   |
-| Internationalisation — `$i18n`, `t()`, `Locale()`                      | §13.                                   |
+| Internationalisation — `i18n({...})`, `t()`, `setCurrentLanguage()`    | §13.                                   |
 | Theming — `Theme({...})`, structured tokens, brand recipes             | §14.                                   |
 | Icons (Font Awesome)                                                   | §15.                                   |
 | Application recipes A–V                                                | §16.                                   |

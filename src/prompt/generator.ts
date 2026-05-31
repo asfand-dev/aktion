@@ -173,7 +173,6 @@ effect(() => { console.log($count) }, [$count])                       // declara
 - \`${ROOT}\` — the UI root (REQUIRED, first line).
 - \`theme\` — optional brand override (\`theme = Theme({...})\`).
 - \`route\` — reactive router handle (\`route.path\`, \`route.params\`, \`route.navigate("/x")\`). NEVER declare \`route\` yourself.
-- \`$i18n\` — i18n bundle handle.
 
 ### Component-call shape — One positional argument max (TRAILING-OBJECT RULE)
 Every call takes **at most one positional argument**; every other argument lives in a trailing \`{ }\` object literal:
@@ -616,11 +615,17 @@ The host page picks one of seven base themes (\`light\`, \`dark\`, \`neon\`, \`p
 
 ### i18n
 \`\`\`
-$i18n = i18n({ locale: "fr-FR", fallback: "en", messages: { greeting: "Bonjour, \${name}!" } })
+const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+  defaultLanguage: "en",
+  currentLanguage: "fr",
+  translations: {
+    greeting:    { en: "Hello, {name}!", fr: "Bonjour, {name}!" },
+    items_count: { en: "{count} items",  fr: "{count} objets"   }
+  }
+})
 welcome = Text(t("greeting", { name: $user.name }))
-amount  = Text(@Format(1234.5, "currency", { currency: "EUR", locale: Locale() }))
 \`\`\`
-\`t(key, vars?)\` looks up dot-paths with \`\${name}\` interpolation. \`Locale()\` returns the active locale tag — \`@Format\` / \`@FormatDate\` consult it automatically.
+\`t(key, vars?)\` looks up \`translations[key][currentLanguage]\`, falls back to \`translations[key][defaultLanguage]\`, then to the bare key. Placeholders use \`{name}\` syntax. Drive \`currentLanguage\` from a \`$state\` atom (e.g. \`currentLanguage: $lang\`) for reactive language switching, or call \`setCurrentLanguage(next)\` on the bundle.
 
 ### Icons
 Icon-typed props expect a Font Awesome name as a string — no \`fa-\` prefix, NEVER an emoji character.
@@ -725,7 +730,7 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 Before finishing, walk your output and check:
 1. \`${ROOT} = ...\` is the FIRST line.
 2. Every referenced name is defined somewhere below.
-3. Every defined name (other than \`${ROOT}\`, \`theme\`, \`$i18n\`) is reachable from \`${ROOT}\`.
+3. Every defined name (other than \`${ROOT}\`, \`theme\`) is reachable from \`${ROOT}\`.
 4. **Every component name starts with an UPPERCASE letter (A–Z).** Scan every \`function name(...)\` that returns a UI node — rename \`todoList\` → \`TodoList\`, \`myApp\` → \`MyApp\`, \`header\` → \`Header\`. Lowercase-first names define actions, not components, and the renderer will not mount their return value.
 5. **Every component reference is invoked with parentheses.** Scan for bare PascalCase identifiers used as values (root assignment, array elements, prop values) — wrap each in \`()\`. \`${ROOT} = MyApp\` → \`${ROOT} = MyApp()\`; \`Column([Hero, Body])\` → \`Column([Hero(), Body()])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
 6. PascalCase functions end with an explicit \`return\`.
