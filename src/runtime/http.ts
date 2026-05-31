@@ -56,14 +56,6 @@ export interface HttpInterceptors {
   onError?: (error: unknown, request: HttpRequest) => void;
 }
 
-export interface HttpDefaults {
-  baseUrl?: string;
-  headers?: Record<string, string>;
-  timeoutMs?: number;
-  retry?: { count: number; backoff?: "linear" | "exponential" };
-  credentials?: RequestCredentials;
-}
-
 /** Reactive lifecycle of an `Http({...})` resource. */
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
 
@@ -105,8 +97,7 @@ export interface EndpointResource {
   onDone?: (resource: EndpointResource) => void;
 }
 
-/**
- * `true` when `value` is a live `Http({...})` resource bag. Used by the
+/** `true` when `value` is a live `Http({...})` resource bag. Used by the
  * evaluator to mutate property writes in place rather than cloning, which
  * would detach the running request's async continuations from the value
  * the program reads.
@@ -119,44 +110,26 @@ export function isEndpointResource(value: unknown): value is EndpointResource {
   );
 }
 
-/** Compatibility shim — subscription transports were removed in this version. */
-export interface SubscriptionTransport {
-  open(url: string, opts: { protocol?: string; headers?: Record<string, string> }): {
-    onMessage(cb: (raw: unknown) => void): void;
-    onError(cb: (err: unknown) => void): void;
-    onClose(cb: () => void): void;
-    onOpen(cb: () => void): void;
-    send(payload: unknown): void;
-    close(): void;
-  };
-}
-
 /* -------------------------------------------------------------------------- */
 /*  Runtime                                                                   */
 /* -------------------------------------------------------------------------- */
 
 export class HttpRuntime {
   private interceptors: HttpInterceptors = {};
-  private defaults: HttpDefaults = {};
-
-  setDefaults(defaults: HttpDefaults): void {
-    this.defaults = { ...defaults };
-  }
 
   /** Merge new interceptors on top of any previously-registered ones. */
   registerInterceptors(interceptors: HttpInterceptors): void {
     this.interceptors = { ...this.interceptors, ...interceptors };
   }
 
-  /** Resolve a relative URL against the configured `baseUrl`. */
+  /**
+   * Resolve a URL. Currently a pass-through — every `Http({ url })` call
+   * is expected to supply an absolute URL. Kept as a hook so request
+   * interceptors can rely on a stable shape if URL rewriting is added
+   * later.
+   */
   resolveUrl(url: string): string {
-    const base = this.defaults.baseUrl;
-    if (!base) return url;
-    if (/^https?:\/\//i.test(url) || /^wss?:\/\//i.test(url)) return url;
-    if (url.startsWith("/")) {
-      return base.replace(/\/$/, "") + url;
-    }
-    return base.replace(/\/$/, "") + "/" + url;
+    return url;
   }
 
   /**
@@ -165,10 +138,7 @@ export class HttpRuntime {
    * Honours `defaults.timeoutMs` via `AbortController`.
    */
   async request(input: HttpRequest): Promise<HttpResponse> {
-    let req: HttpRequest = {
-      ...input,
-      headers: { ...this.defaults.headers, ...input.headers },
-    };
+    let req: HttpRequest = { ...input, headers: { ...input.headers } };
     if (this.interceptors.onRequest) {
       try {
         req = await this.interceptors.onRequest(req);
@@ -180,82 +150,44 @@ export class HttpRuntime {
 
     const exec = async (): Promise<HttpResponse> => {
       const controller = new AbortController();
-      const timeoutMs = this.defaults.timeoutMs ?? 0;
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      if (timeoutMs > 0) {
-        timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const fetchFn = typeof fetch === "function" ? fetch : null;
+      if (!fetchFn) {
+        throw new Error("`fetch` is not available in this environment");
       }
-      try {
-        const fetchFn = typeof fetch === "function" ? fetch : null;
-        if (!fetchFn) {
-          throw new Error("`fetch` is not available in this environment");
-        }
-        const init: RequestInit = {
-          ...(req.init as RequestInit | undefined),
-          method: req.method,
-          headers: req.headers,
-          signal: req.signal ?? controller.signal,
-        };
-        if (req.body !== undefined && req.method !== "GET" && req.method !== "HEAD") {
-          init.body = encodeBody(req.body, req.headers);
-        }
-        if (this.defaults.credentials) {
-          init.credentials = this.defaults.credentials;
-        }
-        const response = await fetchFn(req.url, init);
-        const headers: Record<string, string> = {};
-        response.headers.forEach((value, key) => {
-          headers[key] = value;
-        });
-        const contentType = headers["content-type"] ?? "";
-        let body: unknown;
-        if (response.status === 204 || req.method === "HEAD") {
-          body = null;
-        } else if (contentType.includes("application/json")) {
-          body = await response.json().catch(() => null);
-        } else {
-          body = await response.text().catch(() => "");
-        }
-        return { status: response.status, headers, body };
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
+      const init: RequestInit = {
+        ...(req.init as RequestInit | undefined),
+        method: req.method,
+        headers: req.headers,
+        signal: req.signal ?? controller.signal,
+      };
+      if (req.body !== undefined && req.method !== "GET" && req.method !== "HEAD") {
+        init.body = encodeBody(req.body, req.headers);
       }
-    };
-
-    const retryCfg = this.defaults.retry;
-    const maxRetries = Math.max(0, retryCfg?.count ?? 0);
-    const backoffMode = retryCfg?.backoff ?? "exponential";
-
-    const execWithRetry = async (): Promise<HttpResponse> => {
-      let lastErr: unknown = null;
-      for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-        try {
-          const response = await exec();
-          if (response.status >= 500 && response.status <= 599 && attempt < maxRetries) {
-            await sleep(computeBackoff(backoffMode, attempt));
-            continue;
-          }
-          return response;
-        } catch (err) {
-          lastErr = err;
-          if (attempt < maxRetries) {
-            await sleep(computeBackoff(backoffMode, attempt));
-            continue;
-          }
-          throw err;
-        }
+      const response = await fetchFn(req.url, init);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      const contentType = headers["content-type"] ?? "";
+      let body: unknown;
+      if (response.status === 204 || req.method === "HEAD") {
+        body = null;
+      } else if (contentType.includes("application/json")) {
+        body = await response.json().catch(() => null);
+      } else {
+        body = await response.text().catch(() => "");
       }
-      throw lastErr ?? new Error("retry loop exhausted");
+      return { status: response.status, headers, body };
     };
 
     try {
-      let response = await execWithRetry();
+      let response = await exec();
       if (this.interceptors.onResponse) {
         let retried = false;
         const retry = async (): Promise<HttpResponse> => {
           if (retried) return response;
           retried = true;
-          return execWithRetry();
+          return exec();
         };
         response = await this.interceptors.onResponse(response, retry);
       }
@@ -265,15 +197,6 @@ export class HttpRuntime {
       throw err;
     }
   }
-}
-
-function computeBackoff(mode: "linear" | "exponential", attempt: number): number {
-  if (mode === "linear") return 1000 * (attempt + 1);
-  return Math.min(30_000, 500 * 2 ** attempt);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function encodeBody(body: unknown, headers: Record<string, string>): BodyInit {

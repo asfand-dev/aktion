@@ -37,7 +37,6 @@ import {
   StateStore,
   Router,
   createContext,
-  createLocalStorageAdapter,
   disposeContext,
   planProgram,
   resetMutableBindings,
@@ -316,7 +315,6 @@ export class AktionElement extends HTMLElement {
     ensureFontAwesomeLoaded(this.root);
     this.applyThemeFromAttribute();
     this.startRouter();
-    this.attachPersistenceAdapter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
       this.setResponse(responseAttr);
@@ -599,21 +597,6 @@ export class AktionElement extends HTMLElement {
     const next = buildRouteObject(this.router);
     if (routesEqual(this.state.get(STATE_ROUTE), next)) return;
     this.state.set(STATE_ROUTE, next);
-  }
-
-  /**
-   * Wire `$$variable` declarations to a `localStorage`-backed adapter.
-   * Persistence is namespaced by the element's `id` (falling back to the
-   * tag name when no id is set) so two `<aktion-app>` elements on
-   * the same page don't collide. SSR / sandboxed contexts without storage
-   * silently degrade to in-memory only — `$$variable` still works, just
-   * without survival across reloads.
-   */
-  private attachPersistenceAdapter(): void {
-    const storage = typeof window !== "undefined" ? window.localStorage : null;
-    const prefix = `rui:${AktionElement.tagName}:${this.id || "default"}`;
-    const adapter = createLocalStorageAdapter(prefix, storage ?? null);
-    this.state.setPersistenceAdapter(adapter);
   }
 
   /**

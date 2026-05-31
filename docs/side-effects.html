@@ -276,7 +276,7 @@ effect(() =&gt; {
 
       <h3>IntersectionObserver for infinite scroll</h3>
 <pre><code>effect(() =&gt; {
-  const sentinel = ctx.host.shadowRoot?.querySelector("[data-sentinel]")
+  const sentinel = document.querySelector("[data-sentinel]")
   if (!sentinel) return
   const observer = new IntersectionObserver((entries) =&gt; {
     if (entries.some((e) =&gt; e.isIntersecting)) {
@@ -334,7 +334,7 @@ function onType(q) {
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
           <h3>JavaScript interactions</h3>
-          <p>Inline JavaScript &mdash; browser APIs, the <code>ctx</code> bridge, host tools.</p>
+          <p>Inline JavaScript &mdash; browser APIs, host globals, and custom-event integration.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
         <a class="demo-card" href="http.html">

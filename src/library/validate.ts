@@ -1,16 +1,16 @@
 /**
  * Schema-as-truth validation (§15).
  *
- * Walks a parsed `Program` and reports advisory diagnostics for:
+ * Walks a parsed `Program` and reports **fatal** diagnostics for:
  *
  *   - Closed-token enum mismatches (`Button("Save", { tone: "magic" })` →
  *     "magic" is not in the `tone` enum).
  *   - Unknown props (`Stack([...], { gap: "md", junk: 1 })` → no such prop).
  *
- * The diagnostics are *warnings*, not errors — the runtime still
- * evaluates the program. Hosts may surface them as a banner or ignore
- * them entirely. The goal is to give authors (and LLMs) a clear signal
- * that they are reaching outside the documented surface.
+ * In Aktion 0.5 these are surfaced through `program.errors` and block
+ * rendering — see `validateProgram(source, library)` for the combined
+ * entry point the element calls. The goal is to give authors (and LLMs)
+ * a clear signal that they are reaching outside the documented surface.
  */
 
 import type {
