@@ -211,7 +211,6 @@
     .component-preview-output {
       background: var(--doc-bg);
       border-radius: var(--doc-radius-sm);
-      padding: 16px;
       border: 1px solid var(--doc-border);
       /* `transform: translate(0)` makes this box the containing block for any
          `position: fixed` descendants inside the shadow root (Modal, Sheet,
@@ -240,7 +239,6 @@
       .component-card { padding: 16px; }
       .prop-table th, .prop-table td { padding: 6px 8px; font-size: 12px; }
       .component-signature { font-size: 11.5px; padding: 10px 12px; }
-      .component-preview-output { padding: 12px; }
     }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
@@ -1730,6 +1728,7 @@ aktion = pages`,
       "Combobox",
       "HoverCard",
       "NotificationBell",
+      "MentionInput",
     ]);
 
     function formatSignature(spec) {

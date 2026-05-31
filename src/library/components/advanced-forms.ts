@@ -380,114 +380,162 @@ export const MentionInput: ComponentSpec = {
     }) as HTMLTextAreaElement;
     textarea.value = asString(props.value);
     const suggestions = el("div", { class: "rui-mention-input-suggestions", "data-open": "false" });
-    let activeIndex = 0;
-    let activeMatches: MentionItem[] = [];
 
-    const insertMention = (item: MentionItem) => {
-      const text = textarea.value;
-      const caret = textarea.selectionStart ?? text.length;
+    // Per-instance UI state survives re-renders triggered by two-way
+    // binding. The fresh render must reproduce the open state on the
+    // freshly-built suggestions panel so morph doesn't reset the live
+    // panel back to "closed" when it copies attributes/children over.
+    const activeSlot = helpers.useInstanceState<number>("activeIndex", 0);
+    const matchesSlot = helpers.useInstanceState<MentionItem[]>("matches", []);
+    const querySlot = helpers.useInstanceState<string | null>("query", null);
+
+    const liveSuggestionsFor = (origin: Element): HTMLElement | null => {
+      const root = origin.closest(".rui-mention-input");
+      return root?.querySelector<HTMLElement>(".rui-mention-input-suggestions") ?? null;
+    };
+
+    const liveTextareaFor = (origin: Element): HTMLTextAreaElement | null => {
+      const root = origin.closest(".rui-mention-input");
+      return root?.querySelector<HTMLTextAreaElement>(".rui-mention-input-field") ?? null;
+    };
+
+    const insertMention = (liveTextarea: HTMLTextAreaElement, item: MentionItem) => {
+      const text = liveTextarea.value;
+      const caret = liveTextarea.selectionStart ?? text.length;
       const before = text.slice(0, caret);
       const triggerIdx = before.lastIndexOf("@");
       if (triggerIdx === -1) return;
       const after = text.slice(caret);
       const insert = `@${item.value} `;
       const next = before.slice(0, triggerIdx) + insert + after;
-      textarea.value = next;
+      liveTextarea.value = next;
       const cursor = triggerIdx + insert.length;
-      textarea.selectionStart = textarea.selectionEnd = cursor;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-      textarea.focus();
+      liveTextarea.selectionStart = liveTextarea.selectionEnd = cursor;
+      liveTextarea.dispatchEvent(new Event("input", { bubbles: true }));
+      liveTextarea.focus();
     };
 
-    const renderSuggestions = (query: string) => {
-      suggestions.replaceChildren();
+    const paintSuggestions = (panel: HTMLElement, query: string | null) => {
+      panel.replaceChildren();
+      if (query === null) {
+        panel.setAttribute("data-open", "false");
+        matchesSlot.set([]);
+        return;
+      }
       const q = query.toLowerCase();
       const filtered = people.filter((p) =>
         p.label.toLowerCase().includes(q) || p.value.toLowerCase().includes(q),
       );
       const slice = filtered.slice(0, 6);
-      activeMatches = slice;
+      matchesSlot.set(slice);
       if (slice.length === 0) {
-        suggestions.setAttribute("data-open", "false");
+        panel.setAttribute("data-open", "false");
         return;
       }
-      activeIndex = Math.min(activeIndex, slice.length - 1);
-      suggestions.setAttribute("data-open", "true");
+      const nextActive = Math.min(activeSlot.get(), slice.length - 1);
+      activeSlot.set(nextActive);
+      panel.setAttribute("data-open", "true");
       slice.forEach((item, idx) => {
         const btn = el("button", {
           type: "button",
           class: "rui-mention-input-option",
           "data-value": item.value,
-          "data-active": idx === activeIndex ? "true" : "false",
+          "data-active": idx === nextActive ? "true" : "false",
         });
         btn.append(el("span", { class: "rui-mention-input-option-label" }, [item.label]));
         if (item.value && item.value !== item.label) {
           btn.append(el("span", { class: "rui-mention-input-option-handle" }, [`@${item.value}`]));
         }
         btn.onmousedown = (event) => event.preventDefault();
-        btn.onclick = () => {
-          insertMention(item);
-          suggestions.setAttribute("data-open", "false");
+        btn.onclick = (event) => {
+          const origin = event.currentTarget as Element;
+          const ta = liveTextareaFor(origin);
+          const live = liveSuggestionsFor(origin);
+          if (ta) insertMention(ta, item);
+          querySlot.set(null);
+          if (live) paintSuggestions(live, null);
         };
-        suggestions.append(btn);
+        panel.append(btn);
       });
     };
 
-    // Update suggestions based on the current caret position. Called both
-    // by our own input listener AND by the bindState callback (which fires
-    // first because the renderer overwrites `oninput`).
-    const updateFromCaret = () => {
-      const caret = textarea.selectionStart ?? textarea.value.length;
-      const before = textarea.value.slice(0, caret);
+    const updateFromCaret = (liveTextarea: HTMLTextAreaElement) => {
+      const live = liveSuggestionsFor(liveTextarea);
+      if (!live) return;
+      const caret = liveTextarea.selectionStart ?? liveTextarea.value.length;
+      const before = liveTextarea.value.slice(0, caret);
       const match = /@([\w-]*)$/.exec(before);
-      if (match) renderSuggestions(match[1] ?? "");
-      else suggestions.setAttribute("data-open", "false");
+      const nextQuery = match ? match[1] ?? "" : null;
+      querySlot.set(nextQuery);
+      paintSuggestions(live, nextQuery);
     };
 
     const stateName = node.argMeta?.[2]?.stateRef;
     if (stateName) {
       // bindState overwrites `oninput`, so we piggyback the suggestion
-      // update onto `getValue` (called by the renderer's listener).
+      // update onto `getValue` (called by the renderer's listener with
+      // the live currentTarget).
       helpers.bindState(textarea, stateName, {
         event: "input",
         getValue: (n) => {
-          updateFromCaret();
-          return (n as HTMLTextAreaElement).value;
+          const ta = n as HTMLTextAreaElement;
+          updateFromCaret(ta);
+          return ta.value;
         },
       });
     } else {
-      textarea.oninput = updateFromCaret;
+      textarea.oninput = (event) => {
+        updateFromCaret(event.currentTarget as HTMLTextAreaElement);
+      };
     }
     attachOnChange(textarea, props.onChange, helpers, {
       event: "input",
       getValue: (n) => (n as HTMLTextAreaElement).value,
     });
     textarea.onkeydown = (event) => {
-      if (suggestions.getAttribute("data-open") !== "true" || activeMatches.length === 0) return;
+      const ta = event.currentTarget as HTMLTextAreaElement;
+      const live = liveSuggestionsFor(ta);
+      if (!live || live.getAttribute("data-open") !== "true") return;
+      const matches = matchesSlot.get();
+      if (matches.length === 0) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        activeIndex = (activeIndex + 1) % activeMatches.length;
-        const items = suggestions.querySelectorAll<HTMLElement>(".rui-mention-input-option");
-        items.forEach((b, i) => b.setAttribute("data-active", i === activeIndex ? "true" : "false"));
+        const next = (activeSlot.get() + 1) % matches.length;
+        activeSlot.set(next);
+        const items = live.querySelectorAll<HTMLElement>(".rui-mention-input-option");
+        items.forEach((b, i) => b.setAttribute("data-active", i === next ? "true" : "false"));
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        activeIndex = (activeIndex - 1 + activeMatches.length) % activeMatches.length;
-        const items = suggestions.querySelectorAll<HTMLElement>(".rui-mention-input-option");
-        items.forEach((b, i) => b.setAttribute("data-active", i === activeIndex ? "true" : "false"));
+        const next = (activeSlot.get() - 1 + matches.length) % matches.length;
+        activeSlot.set(next);
+        const items = live.querySelectorAll<HTMLElement>(".rui-mention-input-option");
+        items.forEach((b, i) => b.setAttribute("data-active", i === next ? "true" : "false"));
       } else if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
-        const chosen = activeMatches[activeIndex];
+        const chosen = matches[activeSlot.get()];
         if (chosen) {
-          insertMention(chosen);
-          suggestions.setAttribute("data-open", "false");
+          insertMention(ta, chosen);
+          querySlot.set(null);
+          paintSuggestions(live, null);
         }
       } else if (event.key === "Escape") {
-        suggestions.setAttribute("data-open", "false");
+        querySlot.set(null);
+        paintSuggestions(live, null);
       }
     };
-    textarea.onblur = () => setTimeout(() => suggestions.setAttribute("data-open", "false"), 120);
+    textarea.onblur = (event) => {
+      const ta = event.currentTarget as HTMLTextAreaElement;
+      setTimeout(() => {
+        const live = liveSuggestionsFor(ta);
+        querySlot.set(null);
+        if (live) paintSuggestions(live, null);
+      }, 120);
+    };
     root.append(textarea);
     root.append(suggestions);
+    // Reproduce the persisted open/query state on this freshly-built
+    // panel so morph keeps the live popover open across re-renders.
+    paintSuggestions(suggestions, querySlot.get());
     return root;
   },
 };

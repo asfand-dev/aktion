@@ -1172,7 +1172,6 @@ recipe for `setResponse`, `appendChunk`, and `setTheme`.
 
 | Demo slug                       | Highlights                                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `routing-demo`                  | A four-page app driven by `pages = Router({ … })` + `NavLink`, deep links, browser back/forward.            |
 | `settings-app`                  | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Drawer`.                        |
 | `data-explorer`                 | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `LineChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `ActivityLog`. |
 | `media-gallery`                 | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer`, `AudioPlayer`, Leaflet-backed `Map`. |
