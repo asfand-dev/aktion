@@ -7071,7 +7071,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: var(--rui-color-text-muted);
 }
 .rui-multi-step-form-steps[data-layout="column"] .rui-steps-item::before {
-  top: 14px;
+  top: 6px;
   transform: none;
 }
 .rui-multi-step-form-steps .rui-steps-item[data-active="true"]::before {
