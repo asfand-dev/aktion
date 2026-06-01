@@ -248,7 +248,7 @@ export const Util = {
     const count = Math.floor(span / Math.abs(s)) + 1;
     if (count > MAX_RANGE) {
       throw new RangeError(
-        `Util.range refusing to allocate ${count} entries (limit ${MAX_RANGE}).`,
+        `$util.range refusing to allocate ${count} entries (limit ${MAX_RANGE}).`,
       );
     }
     const out: number[] = [];
@@ -260,7 +260,7 @@ export const Util = {
     const count = Math.max(0, toNumber(n));
     if (count > MAX_RANGE) {
       throw new RangeError(
-        `Util.repeat refusing to allocate ${count} entries (limit ${MAX_RANGE}).`,
+        `$util.repeat refusing to allocate ${count} entries (limit ${MAX_RANGE}).`,
       );
     }
     return Array.from({ length: count }, () => value);

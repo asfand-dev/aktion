@@ -52,17 +52,17 @@ switch ($tab) { case "a": PanelA(); break; default: PanelB() }
 Button("Save", { variant: "primary", action: handleClick })
 
 // Effects
-effect(() => {
+$effect(() => {
   let id = setInterval(() => { $now = Date.now() }, 1000)
-  return () => { clearInterval(id) }
+  cleanup(() => clearInterval(id))
 }, ["mount"])
 
 // App entry + theming
 aktion = Stack([MyComponent($data)])
-aktion.theme = Theme({ colors: { primary: "#0969da" } })
+theme = $theme({ colors: { primary: "#0969da" } })
 
 // Router
-pages = Router({
+pages = $router({
   "/":          HomePage(),
   "/users/:id": UserPage(params.id),
   default:      NotFoundPage()

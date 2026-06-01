@@ -132,7 +132,7 @@ const RULES: Rule[] = [
   },
   // Old `effect Name [uses { caps }] [on triggers] [debounce(N) | throttle(N)] { body }`
   // declarations migrate to the canonical anonymous form
-  // `effect(() => { body }, [deps])`. State triggers, lifecycle triggers,
+  // `$effect(() => { body }, [deps])`. State triggers, lifecycle triggers,
   // and any rate-limit modifier all collapse into a single bracketed
   // dependency list; the name is dropped.
   {
@@ -160,7 +160,7 @@ const RULES: Rule[] = [
       return `effect${depsClause} {`;
     },
     note: () =>
-      `effect Name [uses {...}] [on triggers] [debounce(N) | throttle(N)] → effect(() => { ... }, [...deps]) — the name is dropped, dependencies (state, "mount"/"unmount"/"every(N)", "debounce(N)", "throttle(N)") live in the deps array.`,
+      `effect Name [uses {...}] [on triggers] [debounce(N) | throttle(N)] → $effect(() => { ... }, [...deps]) — the name is dropped, dependencies (state, "mount"/"unmount"/"every(N)", "debounce(N)", "throttle(N)") live in the deps array.`,
   },
   // `uses { caps }` clause on `action`/`function` declarations is gone.
   {
@@ -202,7 +202,7 @@ const RULES: Rule[] = [
       `TextContent(...) → Text(...). The component was renamed; the new \`Text\` spec accepts the same props plus an optional \`style\` declaration string.`,
   },
   // Flat-shape Theme tokens — `colorPrimary: "#fff"` etc. We only target
-  // top-level keys directly inside a `Theme({...})` call argument list
+  // top-level keys directly inside a `$theme({...})` call argument list
   // and rewrite to the structured form. Multiple flat-shape keys at the
   // same level merge into one nested object per group.
   {
@@ -210,10 +210,10 @@ const RULES: Rule[] = [
     pattern: /Theme\(\s*\{([^{}]*)\}\s*\)/g,
     replace: (_match, body) => {
       const rewritten = rewriteThemeBody(body);
-      return `Theme({ ${rewritten} })`;
+      return `$theme({ ${rewritten} })`;
     },
     note: () =>
-      `Theme({...}) — flat-shape tokens and free-form --css-vars rewritten to the structured form (§16).`,
+      `$theme({...}) — flat-shape tokens and free-form --css-vars rewritten to the structured form (§16).`,
   },
 ];
 
@@ -229,47 +229,47 @@ const MANUAL_HINTS: Array<{
   {
     pattern: /Script\(/,
     hint: () =>
-      `Script(id, body, deps?) → effect(() => { … }, [...deps]). No capability list is needed.`,
+      `Script(id, body, deps?) → $effect(() => { … }, [...deps]). No capability list is needed.`,
   },
   {
     pattern: /Routes\(/,
     hint: () =>
-      `Routes(...) / Route(path, content) → pages = Router({ "/": Component(), default: Fallback() }).`,
+      `Routes(...) / Route(path, content) → pages = $router({ "/": Component(), default: Fallback() }).`,
   },
   {
     pattern: /(^|\n)\s*\$router(?:\s+[a-zA-Z_][\w]*)?\s*=\s*router\s*\{/,
     hint: () =>
-      `$router = router { … } → pages = Router({ "/": Home(), "/users/:id": User(params), default: NotFound() }). The router primitive is now a plain function call — assign its result to any binding (e.g. \`pages\`) and reference it inside \`aktion\`. Separate route arms with commas (object-literal form).`,
+      `$router = router { … } → pages = $router({ "/": Home(), "/users/:id": User(params), default: NotFound() }). The router primitive is now a plain function call — assign its result to any binding (e.g. \`pages\`) and reference it inside \`aktion\`. Separate route arms with commas (object-literal form).`,
   },
   {
     pattern: /\bQuery\(/,
     hint: () =>
-      `Query(name, args, placeholder) → $response = Http({ url, method: "GET", ... }). The reactive bag exposes data / error / loading / status / refetch() / cancel() / lastUpdated / headers.`,
+      `Query(name, args, placeholder) → $response = $http({ url, method: "GET", ... }). The reactive bag exposes data / error / loading / status / refetch() / cancel() / lastUpdated / headers.`,
   },
   {
     pattern: /\bMutation\(/,
     hint: () =>
-      `Mutation(name, args) → $response = Http({ url, method: "POST", body, ... }). Trigger via the surrounding action; observe data / error / loading on the resource.`,
+      `Mutation(name, args) → $response = $http({ url, method: "POST", body, ... }). Trigger via the surrounding action; observe data / error / loading on the resource.`,
   },
   {
     pattern: /^\s*(?:query|mutation|subscription)\s+[A-Z]/m,
     hint: () =>
-      `query / mutation / subscription declarations → call site $response = Http({ url, method, body, headers, ... }). The single Http() builtin returns a reactive bag with data, error, loading, status, lastUpdated, headers, refetch(), cancel().`,
+      `query / mutation / subscription declarations → call site $response = $http({ url, method, body, headers, ... }). The single $http() builtin returns a reactive bag with data, error, loading, status, lastUpdated, headers, refetch(), cancel().`,
   },
   {
     pattern: /\$(?:query|mutation|subscription)\s+[a-zA-Z_]/,
     hint: () =>
-      `$query / $mutation / $subscription bindings → $name = Http({ ... }). One reactive resource type for every HTTP method (GET/POST/PUT/PATCH/DELETE).`,
+      `$query / $mutation / $subscription bindings → $name = $http({ ... }). One reactive resource type for every HTTP method (GET/POST/PUT/PATCH/DELETE).`,
   },
   {
     pattern: /=\s*Http\s*\(\s*\{[^}]*\bbaseUrl\b/,
     hint: () =>
-      `$http = Http({ baseUrl, ... }) host-wide defaults were removed. Pass a full absolute url to each Http({ url, ... }) call instead — there is no Http() defaults setter.`,
+      `$http = $http({ baseUrl, ... }) host-wide defaults were removed. Pass a full absolute url to each $http({ url, ... }) call instead — there is no $http() defaults setter.`,
   },
   {
     pattern: /(^|[^A-Za-z0-9_$.])http\s*\(\s*\{/,
     hint: () =>
-      `Lowercase http({...}) was renamed to Http({...}). Use $response = Http({ url, method, query, headers, body, ... }); GET is the default method.`,
+      `Lowercase http({...}) was renamed to $http({...}). Use $response = $http({ url, method, query, headers, body, ... }); GET is the default method.`,
   },
   {
     pattern: /@Const\(/,
@@ -349,7 +349,7 @@ export function migrateV1(source: string): MigrateV1Result {
 }
 
 /**
- * Re-write the body of a `Theme({...})` call: every flat-shape token
+ * Re-write the body of a `$theme({...})` call: every flat-shape token
  * (`colorPrimary`, `radiusMd`, …) and every free-form `--css-var` is
  * promoted into the structured group form.
  */

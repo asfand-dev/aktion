@@ -38,18 +38,22 @@ export const Icon: ComponentSpec = {
   description:
     "Single Font Awesome icon. `name` is the FA name without the `fa-` " +
     "prefix (e.g. `\"house\"`, `\"chart-line\"`). Use `variant` for non-solid " +
-    "styles (`regular`/`brands`) or prefix the name (`\"regular:star\"`).",
+    "styles (`regular`/`brands`) or prefix the name (`\"regular:star\"`). " +
+    "`color` accepts any CSS colour (`\"#00ff00\"`, `\"tomato\"`, " +
+    "`\"var(--rui-color-primary)\"`).",
   props: [
     { name: "name", type: "string", description: "FA name without the fa- prefix" },
     { name: "variant", type: "string", optional: true, enum: ICON_VARIANTS },
     { name: "size", type: "string", optional: true, enum: ICON_SIZES },
+    { name: "color", type: "string", optional: true, description: "CSS colour applied to the glyph (hex, named, rgb()/hsl(), or var(--token))" },
   ],
   render: (_node, props) => {
     const name = asString(props.name);
     const variant = asString(props.variant, "");
     const size = asString(props.size, "md");
+    const color = asString(props.color, "");
     const composed = variant ? `${variant}:${name}` : name;
-    const node = renderIcon(composed, { size });
+    const node = renderIcon(composed, { size, color });
     if (node) return node;
     return el("span", { class: "rui-icon", "data-icon-size": size }, [name]);
   },

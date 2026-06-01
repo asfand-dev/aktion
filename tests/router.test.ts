@@ -151,11 +151,11 @@ describe("<aktion-app>: routing", () => {
     return el;
   };
 
-  it("renders the matching arm of `Router({ … })` based on the current path", async () => {
+  it("renders the matching arm of `$router({ … })` based on the current path", async () => {
     const el = create();
     window.location.hash = "#/about";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")]),
   default:  Callout("warning", "Not found")
@@ -172,7 +172,7 @@ aktion = Stack([pages])`);
     const el = create();
     window.location.hash = "#/nonexistent";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")]),
   default:  Card([CardHeader("404")])
@@ -188,7 +188,7 @@ aktion = Stack([pages])`);
     const el = create();
     window.location.hash = "#/anything-goes/here";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/": Card([CardHeader("Home")]),
   "*": Card([CardHeader("404")])
 })
@@ -202,7 +202,7 @@ aktion = Stack([pages])`);
     const el = create();
     window.location.hash = "#/users/42";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/users/:id": Card([CardHeader("User " + params.id, "Detail page")]),
   default:      Card([CardHeader("404")])
 })
@@ -216,7 +216,7 @@ aktion = Stack([pages])`);
     const el = create();
     window.location.hash = "#/users/7";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/users/:id": Card([CardHeader(\`User \${route.params.id}\`, route.path)]),
   default:      Card([CardHeader("404")])
 })
@@ -241,7 +241,7 @@ aktion = Stack([pages])`);
 
   it("`route.navigate(path)` updates the URL hash and re-renders", async () => {
     const el = create();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":         Card([CardHeader("Home")]),
   "/settings": Card([CardHeader("Settings")])
 })
@@ -263,7 +263,7 @@ aktion = Stack([trigger, pages])`);
 
   it("re-renders when the element's `navigate()` method is called", async () => {
     const el = create();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":         Card([CardHeader("Home")]),
   "/settings": Card([CardHeader("Settings")])
 })
@@ -280,11 +280,47 @@ aktion = Stack([pages])`);
     expect(title).toBe("Settings");
   });
 
+  it("re-renders a $router nested inside a (memoised) component on navigate", async () => {
+    // Regression: `$router({...})` inside a `function Pages()` component
+    // recorded no `route` dependency, so per-component memoisation skipped
+    // re-running its body on a hash/navigate change — the page only updated
+    // on a full reload. The arm must switch live.
+    const el = create();
+    el.setResponse(`aktion = AppShell(Navigation(), [Pages()])
+function Navigation() {
+  return Sidebar([
+    SidebarSection("Pages", [
+      SidebarItem("Page 1", { to: "/page1" }),
+      SidebarItem("Page 2", { to: "/page2" })
+    ])
+  ])
+}
+function Pages() {
+  return $router({
+    "/page1": Page1(),
+    "/page2": Page2(),
+    default:  Page1()
+  })
+}
+function Page1() { return Text("PAGE-ONE-BODY") }
+function Page2() { return Text("PAGE-TWO-BODY") }`);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("PAGE-ONE-BODY");
+    expect(el.shadowRoot!.textContent).not.toContain("PAGE-TWO-BODY");
+
+    el.navigate("/page2");
+    await waitForRenders();
+
+    expect(el.route).toBe("/page2");
+    expect(el.shadowRoot!.textContent).toContain("PAGE-TWO-BODY");
+    expect(el.shadowRoot!.textContent).not.toContain("PAGE-ONE-BODY");
+  });
+
   it("NavLink reflects data-active for the current path (prefix + exact)", async () => {
     const el = create();
     window.location.hash = "#/settings/profile";
     await flush();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":           Card([CardHeader("Home")]),
   "/settings/*": Card([CardHeader("Settings")])
 })
@@ -306,7 +342,7 @@ aktion = Stack([nav, pages])`);
 
   it("NavLink onclick navigates to the target route", async () => {
     const el = create();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":      Card([CardHeader("Home")]),
   "/about": Card([CardHeader("About")])
 })
@@ -329,7 +365,7 @@ aktion = Stack([nav, pages])`);
 
   it("dispatches a route-change event when the path changes", async () => {
     const el = create();
-    el.setResponse(`pages = Router({
+    el.setResponse(`pages = $router({
   "/":  Card([CardHeader("A")]),
   "/b": Card([CardHeader("B")])
 })
@@ -349,10 +385,12 @@ aktion = Stack([pages])`);
 describe("system prompt: routing", () => {
   it("includes a routing section in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("Router({");
+    expect(text).toContain("$router({");
     expect(text).toContain("NavLink");
     expect(text).toContain("route.path");
-    expect(text).not.toContain("$route");
+    // The route handle is `route`, never `$route` — but `$router` legitimately
+    // contains the substring, so assert `$route` only at a word boundary.
+    expect(text).not.toMatch(/\$route\b/);
   });
 
   it("omits the routing section from the chat-mode prompt", () => {

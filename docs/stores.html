@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Global state · Aktion</title>
+  <meta name="description" content="Global state management in Aktion with $store({...}) — colocate state, actions, and getters in one app-global store, share it across components without prop drilling, and get fine-grained per-component updates. Like Zustand/Pinia/Redux, in Aktion syntax." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body data-page="stores">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concept</span>
+        <h1>Global state.</h1>
+        <p class="lead">
+          <code>$store({ &hellip; })</code> bundles app-wide state with the actions
+          and getters that operate on it &mdash; the role Redux, Zustand, and
+          Pinia play in other ecosystems, expressed in Aktion. One store is
+          shared by every component that reads it, so there is no prop drilling,
+          and updates stay <strong>fine-grained</strong>: a component re-renders
+          only for the slice it actually reads.
+        </p>
+      </header>
+
+      <h2 id="why">Why a store</h2>
+      <p>
+        A top-level <code>$atom</code> is already global &mdash; any component can
+        read and write it. A <strong>store</strong> adds the missing piece:
+        <em>organisation</em>. It keeps a slice of related state together with the
+        functions that change it, behind one named, discoverable handle. Reach for
+        a store when state is shared across distant parts of the tree (a cart, the
+        signed-in user, a theme, a notification queue); keep using a component&rsquo;s
+        local <a href="hooks.html"><code>$state</code></a> / <code>$name = &hellip;</code>
+        when only that component owns the state.
+      </p>
+
+      <h2 id="define">Defining a store</h2>
+      <p>
+        Call <code>$store({ &hellip; })</code> at the top level and bind it to a
+        name. Inside the object, the rule is simple:
+      </p>
+      <ul>
+        <li><strong>Non-function entries are state</strong> &mdash; the reactive
+          data (<code>items: []</code>, <code>count: 0</code>).</li>
+        <li><strong>Function entries are methods</strong> &mdash; each receives the
+          store handle as its first argument, conventionally named <code>s</code>.
+          A method that <em>returns</em> a value is a getter; one that
+          <em>mutates</em> <code>s</code> is an action.</li>
+      </ul>
+<pre><code>cart = $store({
+  // state
+  items: [],
+  coupon: null,
+
+  // getters — derive a value from state
+  count: (s) =&gt; s.items.length,
+  total: (s) =&gt; $util.sum(s.items.map(i =&gt; i.price)),
+
+  // actions — mutate state with `s.field = …`
+  add: (s, item) =&gt; { s.items = [...s.items, item] },
+  remove: (s, id) =&gt; { s.items = s.items.filter(i =&gt; i.id != id) },
+  clear: (s) =&gt; { s.items = [] },
+})</code></pre>
+      <p>
+        The handle is an <strong>app-global singleton</strong> &mdash; the same
+        store no matter where or how often you reference <code>cart</code> &mdash;
+        and its methods are <strong>reference-stable</strong> across renders, so
+        passing <code>cart.add</code> as a prop never defeats memoization.
+      </p>
+
+      <h2 id="read">Reading state</h2>
+      <p>
+        Read a field with <code>store.field</code>. Reads are
+        <strong>fine-grained</strong>: <code>cart.items</code> subscribes the
+        reader to the <code>items</code> slice only, exactly like a
+        <code>$state</code> path read. Call a getter-method with
+        <code>store.getter()</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>counter = $store({
+  count: 0,
+  increment: (s) =&gt; { s.count = s.count + 1 },
+  decrement: (s) =&gt; { s.count = s.count - 1 },
+  isEven: (s) =&gt; s.count % 2 === 0,
+})
+
+function CounterView() {
+  return Column([
+    Text(`Count: ${counter.count} (${counter.isEven() ? "even" : "odd"})`, { variant: "large-heavy" }),
+    Row([
+      Button("Decrement", { onClick: counter.decrement }),
+      Button("Increment", { variant: "primary", onClick: counter.increment }),
+    ], { gap: "s" }),
+  ], { gap: "m" })
+}
+aktion = CounterView()</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="methods">Actions &amp; getters</h2>
+      <p>
+        A method&rsquo;s first parameter <code>s</code> <em>is</em> the store. Read
+        through it (<code>s.items</code>) and write through it
+        (<code>s.items = [...s.items, item]</code>) &mdash; member writes go
+        through the same immutable, reactive path as <code>$state</code>, so
+        subscribers wake up. Extra parameters after <code>s</code> are the
+        call-site arguments: <code>cart.add(item)</code> runs
+        <code>add(s, item)</code>. The compound operators work too
+        (<code>s.count += 1</code>, <code>s.count++</code>).
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>cart = $store({
+  items: [],
+  count: (s) =&gt; s.items.length,
+  total: (s) =&gt; $util.sum(s.items.map(i =&gt; i.price)),
+  add: (s, item) =&gt; { s.items = [...s.items, item] },
+  clear: (s) =&gt; { s.items = [] },
+})
+
+function Menu() {
+  return Row([
+    Button("Add Latte", { variant: "primary", onClick: () =&gt; cart.add({ name: "Latte", price: 4.5 }) }),
+    Button("Add Muffin", { onClick: () =&gt; cart.add({ name: "Muffin", price: 3 }) }),
+    Button("Clear", { onClick: cart.clear }),
+  ], { gap: "s" })
+}
+
+function Summary() {
+  return Card([
+    Text(`${cart.count()} items`, { variant: "large-heavy" }),
+    Text(`Total: ${$util.format(cart.total(), "currency")}`, { tone: "primary" }),
+  ])
+}
+aktion = Column([Menu(), Summary()], { gap: "m" })</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="sharing">Sharing across components</h2>
+      <p>
+        Because the store is global, any component can read it or call its actions
+        directly &mdash; no passing props down through intermediate components, no
+        context provider to wrap the tree. In the demo above <code>Menu</code> and
+        <code>Summary</code> are siblings with no relationship; both talk to the
+        same <code>cart</code>. Clicking a button in one updates the other.
+      </p>
+      <p>
+        And it stays efficient: reads are fine-grained <em>and</em> per-component.
+        Only the components that read the slice you changed re-render &mdash; a
+        component that reads <code>cart.total()</code> is left alone when you
+        change an unrelated field.
+      </p>
+
+      <h2 id="binding">Two-way binding</h2>
+      <p>
+        Pass a store field as a value prop and the runtime wires the input&rsquo;s
+        change handler back into the store automatically &mdash; the same implicit
+        binding you get with a <code>$state</code> reference.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>form = $store({
+  name: "",
+  email: "",
+})
+
+function SignupForm() {
+  return Column([
+    Input("name",  { placeholder: "Name",  value: form.name }),
+    Input("email", { placeholder: "Email", value: form.email }),
+    Text(`Hello, ${form.name == "" ? "stranger" : form.name}!`, { variant: "large-heavy" }),
+  ], { gap: "m" })
+}
+aktion = SignupForm()</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="vs-local">Store vs. local state</h2>
+      <p>
+        Stores and component-local state share one reactive engine; choose by
+        <em>who owns the data</em>.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th></th><th><code>$store({...})</code></th><th>Local <code>$state</code> / <code>$name = …</code></th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Scope</td>
+            <td>App-global &mdash; one shared instance, read anywhere.</td>
+            <td>Per component instance &mdash; two <code>Counter()</code>s hold their own.</td>
+          </tr>
+          <tr>
+            <td>Best for</td>
+            <td>State shared across distant components: cart, current user, theme, toasts.</td>
+            <td>State only one component owns: a toggle, an input draft, a hover flag.</td>
+          </tr>
+          <tr>
+            <td>Actions</td>
+            <td>Colocated methods (<code>cart.add(item)</code>), encapsulated with the data.</td>
+            <td>Inline handlers or the <code>$state</code> setter (<code>setCount(c =&gt; c + 1)</code>).</td>
+          </tr>
+          <tr>
+            <td>Reactivity</td>
+            <td colspan="2">Identical &mdash; fine-grained per-path, per-component re-rendering, two-way binding.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        You can freely mix them: derive a top-level computed value from a store
+        (<code>$cheapest = $util.min(cart.total())</code>), or read a store inside a
+        custom <a href="hooks.html">hook</a>.
+      </p>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="hooks.html">
+          <span class="demo-tag">Core concept</span>
+          <h3>Hooks</h3>
+          <p>Component-local state with <code>$state</code> / <code>$memo</code>, and your own custom hooks.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>Reactive state, fine-grained dependency tracking, and per-component re-rendering.</p>
+          <span class="demo-arrow">View the reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>Event handlers, state writes, navigation, and emitting custom events.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[stores demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

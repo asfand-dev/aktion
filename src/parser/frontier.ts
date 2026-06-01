@@ -159,6 +159,7 @@ function bindingNameOf(stmt: Statement): string | null {
     case "ComponentDeclaration":
     case "EffectDeclaration":
     case "ActionDeclaration":
+    case "HookDeclaration":
       return stmt.name;
     default: return null;
   }

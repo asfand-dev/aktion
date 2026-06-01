@@ -34,6 +34,7 @@ export interface InspectorBinding {
     | "component"
     | "effect"
     | "action"
+    | "hook"
     | "router";
   /** Source line (1-indexed). */
   line: number;
@@ -192,6 +193,16 @@ function toBinding(stmt: Statement): InspectorBinding | null {
         column: stmt.loc?.column ?? 0,
         summary: stmt.optimistic ? "action (optimistic)" : "action",
       };
+    case "HookDeclaration":
+      return {
+        // Surface the name with its `$` sigil so the inspector matches the
+        // call syntax (`$useCounter`).
+        name: `$${stmt.name}`,
+        kind: "hook",
+        line: stmt.loc?.line ?? 0,
+        column: stmt.loc?.column ?? 0,
+        summary: `hook (${stmt.params.length} param${stmt.params.length === 1 ? "" : "s"})`,
+      };
     default:
       return null;
   }
@@ -232,6 +243,18 @@ function scanDraftingNames(
         line: lineOffset + i + 1,
         column: rawLine.indexOf("$") + 1,
         summary: "$state",
+      });
+      continue;
+    }
+    // `function $useFoo(...)` — a hook declaration. Matched before the plain
+    // `function` pattern because that one stops at the `$` sigil.
+    const hookMatch = /^function\s+\$([A-Za-z_]\w*)/.exec(line);
+    if (hookMatch) {
+      bindings.push({
+        name: `$${hookMatch[1]!}`,
+        kind: "hook",
+        line: lineOffset + i + 1,
+        column: 1,
       });
       continue;
     }

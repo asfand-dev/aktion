@@ -427,7 +427,7 @@ el.registerComponents([ProductCard]);</code></pre>
   Card([CardHeader("Block 4"), Text("Body for block 4.")])
 ], { height: "200px" })`,
 
-      Theme: `theme = Theme({
+      Theme: `theme = $theme({
   colors: { primary: "#0969da", bg: "#f8fafc" },
   font:   { family: "'Inter', system-ui, sans-serif" },
   radius: { md: "12px" }
@@ -1099,7 +1099,7 @@ nav = Stack([
   NavLink("About", { to: "/about", variant: "ghost" }),
   NavLink("404",   { to: "/oops",  variant: "ghost" })
 ], { direction: "row", gap: "s" })
-pages = Router({
+pages = $router({
   "/":      homePage,
   "/about": aboutPage,
   default:  notFound
@@ -1107,7 +1107,7 @@ pages = Router({
 aktion = Stack([nav, pages])`,
       Route: `homePage = Card([CardHeader("Home page")])
 docsPage = Card([CardHeader("Docs page")])
-pages = Router({
+pages = $router({
   "/":     homePage,
   "/docs": docsPage
 })
@@ -1139,7 +1139,7 @@ commandPalette = CommandPalette([
   ["status:active", "team:eng", "priority:high", "region:us"],
   { onRemove: null }
 )`,
-      VirtualList: `rows = Util.range(1, 200)
+      VirtualList: `rows = $util.range(1, 200)
 aktion = VirtualList(rows, { itemHeight: 36 })`,
       QueryBuilder: `$rules = [
   {field: "name", op: "contains", value: "Ada"},
@@ -1590,7 +1590,7 @@ aktion = Stack([
 ])`,
       Redirect: `homePage = Card([CardHeader("Home"), Text("Welcome back.")])
 loginPage = Redirect("/home")
-pages = Router({
+pages = $router({
   "/home":  homePage,
   "/login": loginPage,
   default:  homePage

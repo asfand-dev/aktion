@@ -6,7 +6,7 @@
  * of JavaScript. Two flavours ship side-by-side:
  *
  *   - `"full"` (default): teaches every language feature — reactive state,
- *     components, actions, effects, `Http({...})`, routing, builtins,
+ *     components, actions, effects, `$http({...})`, routing, builtins,
  *     helpers, theming — plus the entire component library. Use when
  *     generating full applications.
  *
@@ -155,7 +155,7 @@ header  = PageHeader("Sales", { subtitle: "Q4 2026" })
 $count  = 0                                  // reactive atom — '$' prefix is the contract
 function Counter(label) { return Text(\`\${label}: \${$count}\`) }     // component (returns a render tree)
 function inc() { $count = $count + 1 }       // action (no return — runs for side effects)
-effect(() => { console.log($count) }, [$count])                       // declarative side effect
+$effect(() => { $console.log($count) }, [$count])                       // declarative side effect
 \`\`\`
 
 ### Three name conventions
@@ -168,7 +168,7 @@ effect(() => { console.log($count) }, [$count])                       // declara
 
 ### Reserved top-level names
 - \`${ROOT}\` — the UI root (REQUIRED, first line).
-- \`theme\` — optional brand override (\`theme = Theme({...})\`).
+- \`theme\` — optional brand override (\`theme = $theme({...})\`).
 - \`route\` — reactive router handle (\`route.path\`, \`route.params\`, \`route.navigate("/x")\`). NEVER declare \`route\` yourself.
 
 ### Component-call shape — One positional argument max (TRAILING-OBJECT RULE)
@@ -207,7 +207,7 @@ merged   = { ...$base, status: "done" }
 name     = $user?.profile?.name ?? "Guest"
 
 // Template literals — preferred over string concatenation
-title = \`Found \${rows.length} \${Util.plural(rows.length, "result", "results")}\`
+title = \`Found \${rows.length} \${$util.plural(rows.length, "result", "results")}\`
 
 // Wrap a switch/match in a function and call it
 function panelFor(tab) {
@@ -231,7 +231,7 @@ function submit(payload) {
     case "draft": $drafts = [...$drafts, payload]; break
     default:      $records = [...$records, payload]
   }
-  emit("submitted", { id: payload.id })
+  $emit("submitted", { id: payload.id })
 }
 \`\`\`
 
@@ -242,17 +242,17 @@ function submit(payload) {
 // Debounced search — restart a 300ms timer on every keystroke
 function onType(q) {
   clearTimeout($searchTimer)
-  $searchTimer = setTimeout(() => { $results = Http({ url: \`/search?q=\${q}\` }) }, 300)
+  $searchTimer = setTimeout(() => { $results = $http({ url: \`/search?q=\${q}\` }) }, 300)
 }
 
 // A ticking clock — start on mount, clear on unmount
-effect(() => {
-  let id = setInterval(() => { $now = Util.now() }, 1000)
+$effect(() => {
+  let id = setInterval(() => { $now = $util.now() }, 1000)
   cleanup(() => clearInterval(id))
 }, ["mount"])
 \`\`\`
 
-Prefer \`effect(..., ["every(1000)"])\` for a simple repeating effect; reach for \`setInterval\`/\`setTimeout\` when you need an imperative handle to clear, a one-shot delay, or a debounce/restart.
+Prefer \`$effect(..., ["every(1000)"])\` for a simple repeating effect; reach for \`setInterval\`/\`setTimeout\` when you need an imperative handle to clear, a one-shot delay, or a debounce/restart.
 
 ### Lambdas (arrow functions) — every JS form works
 \`() => expr\`, \`x => expr\`, \`(x, y) => expr\`, \`(x = 0) => x\`, \`(...args) => sum(args)\`, and the multi-statement \`(x) => { ...; return ... }\` form. Long lambdas may continue onto the next line.
@@ -286,11 +286,40 @@ $todos = []
 \`\`\`
 
 ### Read & write
-- Read \`$name\` anywhere — auto-subscribes the surrounding component / effect.
-- Write \`$name = ...\` only inside an action body, effect callback, or lambda body. \`+=\`, \`-=\`, \`*=\`, \`/=\`, \`??=\`, \`++\`, \`--\` work too. Member writes (\`$user.name = "Alex"\`) rebuild the root immutably so subscribers see a fresh reference.
+- Read \`$name\` anywhere — auto-subscribes whoever reads it (component, derived value, effect).
+- Write \`$name = ...\` from event handlers, effect callbacks, and lambda bodies — i.e. in response to an event, never while building the UI. \`+=\`, \`-=\`, \`*=\`, \`/=\`, \`??=\`, \`++\`, \`--\` work too. Member writes (\`$user.name = "Alex"\`) rebuild the root immutably so subscribers see a fresh reference.
+- **Never write \`$state\` in render position.** A \`$name = ...\` that runs while the UI is being built schedules a re-render that re-runs the write — an infinite loop. This bites when a \`function\` that *declares* state is invoked to render (\`aktion = app()\` where \`app\` does \`$user = {...}\`): a lowercase \`function\` called that way runs as an action, so the assignment is a per-render write. To hold component-local state, make it a **PascalCase component** (then top-of-body \`$count = 0\` is a set-once per-instance declaration) or use the \`$state\` hook — both seed once and persist. (The runtime defends against the loop — it applies the write but skips the re-render and warns — but the pattern is still wrong.)
+
+### Fine-grained reactivity (path-level)
+Subscriptions are tracked at the **path** you read, not the whole atom. Reading \`$user.name\` subscribes to \`user.name\` alone: a write to a sibling field (\`$user.role = ...\`) won't re-render or recompute it, while replacing the whole atom (\`$user = ...\`) or writing a descendant still does. The same rule drives computed values and effect deps (\`$effect(..., [$user.name])\` fires only on \`name\` changes). Reading a whole object (\`$user\`) or indexing into an array (\`$rows[i]\`, the \`$rows.field\` pluck) subscribes at that object/array — so prefer reading the exact field you need (\`$user.name\`) to get the tightest updates. No selectors or special syntax — just read the path.
+
+A component re-executes only when **its own inputs change** — its args (props) or a \`$state\` path its body read — like \`React.memo\` / Solid, but automatic. So \`ShowName($user.name)\` and \`ShowAge($user.age)\` are independent: changing \`$user.age\` re-runs only \`ShowAge\`. Args are compared shallowly, so (as in React) a fresh inline lambda prop each render makes the child re-render — hoist the handler to a stable binding to skip it.
 
 ### Per-instance state
 \`$name = value\` inside a function body is per-instance when the function is used as a component. Two \`Counter()\` siblings each hold their own \`$count\`. Add \`{ key: id }\` at the call site to keep state attached when siblings reorder.
+
+### Hooks — composable per-instance state
+A function whose name starts with \`$\` is a **hook** (mirroring React's \`use*\` convention). Call hooks only at the top level of a component body (or another hook), in a stable order — never inside an \`if\`, loop, or callback. Hook state is per-instance and resets when the instance leaves the tree.
+
+- \`$state(initial)\` → \`[value, setValue]\`, like React's \`useState\`. \`setValue(next)\` replaces the value; \`setValue(prev => next)\` derives it from the previous value. \`initial\` is evaluated once, on first render.
+- \`$memo(() => compute, [deps])\` → a cached value, like React's \`useMemo\`. Recomputes only when a dependency changes (shallow \`Object.is\` compare); omit the deps array to recompute every render.
+- \`function $name(...) { ... }\` declares a custom hook that composes the built-ins. Its \`$state\` / \`$memo\` calls attach to the component that called it.
+
+\`\`\`
+function $useCounter(start) {
+  const [count, setCount] = $state(start)
+  return { count: count, increment: () => setCount(c => c + 1) }
+}
+
+function Counter() {
+  const c = $useCounter(0)
+  const label = $memo(() => \`Count: \${c.count}\`, [c.count])
+  return Stack([Text(label), Button("+1", { onClick: c.increment })])
+}
+${ROOT} = Counter()
+\`\`\`
+
+Reach for \`$state(...)\` when a component owns local state with explicit setters; the bare \`$name = value\` per-instance form above is the lighter option when an atom is written directly by the component's actions. \`$state\` and \`$memo\` are reserved hook names.
 
 ### Two-way binding (implicit)
 Pass a \`$variable\` (or a member chain rooted at one — \`value: $form.email\`) as a value prop on any input/select/checkbox/switch/slider/picker and the runtime wires the change handler automatically. Add \`onChange: v => ...\` when you also need a side effect (debounced search, persistence, etc.).
@@ -301,7 +330,7 @@ $theme = "light"
 
 field    = Input("draft",   { value: $draft })
 darkMode = Switch("dark",   { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
-search   = Input("query",   { onChange: q => $results = Http({ url: \`https://api.example.com/search?q=\${q}\` }) })
+search   = Input("query",   { onChange: q => $results = $http({ url: \`https://api.example.com/search?q=\${q}\` }) })
 \`\`\`
 
 ### Computed values
@@ -309,8 +338,26 @@ There is no separate "computed" tier — just compute. Every \`$\` reference ins
 
 \`\`\`
 $open  = $todos.filter((t) => !t.done)
-$total = Util.sum($cart.price)
-\`\`\``;
+$total = $util.sum($cart.price)
+\`\`\`
+
+### Global stores — \`$store({...})\`
+For app-wide state shared across many components (no prop drilling), declare a **store** at the top level. Non-function entries are reactive **state**; function entries are **methods** that receive the store handle \`s\` as their first argument. Read state as \`store.field\` (fine-grained — subscribes to that slice) and call methods as \`store.method(args)\`. Mutate inside a method with \`s.field = …\`. The handle is an app-global singleton with reference-stable methods.
+
+\`\`\`
+cart = $store({
+  items: [],                                          // state
+  count: (s) => s.items.length,                       // getter-method → cart.count()
+  total: (s) => $util.sum(s.items.map(i => i.price)),  // getter-method → cart.total()
+  add: (s, item) => { s.items = [...s.items, item] }, // action → cart.add(item)
+  clear: (s) => { s.items = [] },
+})
+
+function CartBadge() { return Badge(\`\${cart.count()} items\`) }                     // reads the store
+function AddButton(item) { return Button("Add", { onClick: () => cart.add(item) }) } // calls a method
+\`\`\`
+
+Reads are fine-grained and per-component: changing \`cart.items\` re-renders only components that read \`items\`. Two-way binding works against a store field (\`Input(value: form.draft)\`). Use a \`Store\` for shared/global state; use a component's local \`$state\` / \`$name = …\` for state only one component owns.`;
 }
 
 function fullComponentsAndActions(): string {
@@ -352,8 +399,8 @@ A \`function\` whose body runs for side effects (rather than returning a render 
 \`\`\`
 function save(item) {
   $items = [...$items, item]
-  $save  = Http({ url: "https://api.example.com/save", method: "POST", body: { item } })
-  emit("saved", { id: item.id })
+  $save  = $http({ url: "https://api.example.com/save", method: "POST", body: { item } })
+  $emit("saved", { id: item.id })
 }
 
 submitBtn = Button("Save", { onClick: save })
@@ -362,14 +409,14 @@ resetBtn  = Button("Reset", { onClick: () => { $count = 0; $message = "" } })   
 
 \`return\` is optional. Inside the body, the full JS statement surface is available (see *JavaScript is fully supported*).
 
-### \`emit("name", { detail })\`
-Inside any action / effect / lambda, \`emit("name", { detail })\` dispatches an outbound \`CustomEvent\` on the host \`<aktion-app>\` element. Reserved names: \`assistant-message\` (chat follow-up), \`error\`, \`route-change\`. Pick stable names; the host listens with \`el.addEventListener("name", ...)\`.`;
+### \`$emit("name", { detail })\`
+Inside any action / effect / lambda, \`$emit("name", { detail })\` dispatches an outbound \`CustomEvent\` on the host \`<aktion-app>\` element. Reserved names: \`assistant-message\` (chat follow-up), \`error\`, \`route-change\`. Pick stable names; the host listens with \`el.addEventListener("name", ...)\`.`;
 }
 
 function fullEffects(): string {
   return `## Effects — Declarative side effects
 
-\`effect(() => { ... }, [...deps])\` runs declarative side effects. Dependency entries:
+\`$effect(() => { ... }, [...deps])\` runs declarative side effects. Dependency entries:
 
 - \`$atom\` — re-run when this reactive atom changes.
 - \`"mount"\` — run once when the surrounding scope mounts.
@@ -377,25 +424,25 @@ function fullEffects(): string {
 - \`"every(N)"\` — re-run every N milliseconds.
 - \`"debounce(N)"\` / \`"throttle(N)"\` — wrap the body with a trailing-edge rate limit.
 
-\`effect(() => { ... })\` (no second argument) is shorthand for \`["mount"]\`.
+\`$effect(() => { ... })\` (no second argument) is shorthand for \`["mount"]\`.
 
 ### Scope — top-level vs. component-local
 Top-level effects mount on parse, tear down on \`setResponse\` / \`clear()\`. Effects inside a component body mount per-instance and tear down when the instance leaves the tree (clearing intervals, watched-atom subscriptions, and \`cleanup(fn)\` registrations).
 
 \`\`\`
 function LiveClock() {
-  $now = Util.now()
-  effect(() => { $now = Util.now() }, ["every(1000)"])
-  return Text(Util.formatDate($now, "time"))
+  $now = $util.now()
+  $effect(() => { $now = $util.now() }, ["every(1000)"])
+  return Text($util.formatDate($now, "time"))
 }
 
 // Debounced search — re-issue the request when inputs change
-effect(() => {
-  $results = Http({ url: "https://api.example.com/search", query: { q: $query, page: $page } })
+$effect(() => {
+  $results = $http({ url: "https://api.example.com/search", query: { q: $query, page: $page } })
 }, [$query, $page, "debounce(250)"])
 
 // Cleanup
-effect(() => {
+$effect(() => {
   const onKey = e => { if (e.key == "/") $palette = true }
   document.addEventListener("keydown", onKey)
   cleanup(() => document.removeEventListener("keydown", onKey))
@@ -404,12 +451,12 @@ effect(() => {
 }
 
 function fullHttp(): string {
-  return `## Data — \`Http({...})\`
+  return `## Data — \`$http({...})\`
 
-\`Http({ ... })\` is the only HTTP primitive. Every call is self-contained — pass a full absolute \`url\`, an optional \`method\` (\`GET\` is the default), a convenience \`query\` object serialised into the URL, \`headers\`, \`body\`, and any other \`fetch\`-compatible option. There are NO host-wide defaults.
+\`$http({ ... })\` is the only HTTP primitive. Every call is self-contained — pass a full absolute \`url\`, an optional \`method\` (\`GET\` is the default), a convenience \`query\` object serialised into the URL, \`headers\`, \`body\`, and any other \`fetch\`-compatible option. There are NO host-wide defaults.
 
 \`\`\`
-$orders = Http({
+$orders = $http({
   url:    \`https://api.example.com/users/\${$userId}/orders\`,
   method: "GET",
   query:  { limit: 5, status: "open" },   // → ?limit=5&status=open
@@ -417,7 +464,7 @@ $orders = Http({
 })
 \`\`\`
 
-The request fires once when the binding mounts. To re-run it call \`$orders.refetch()\`, or wrap it in an \`effect(..., [$dep])\` so it re-issues when a dependency changes.
+The request fires once when the binding mounts. To re-run it call \`$orders.refetch()\`, or wrap it in an \`$effect(..., [$dep])\` so it re-issues when a dependency changes.
 
 ### Reactive resource shape
 \`\`\`
@@ -436,7 +483,7 @@ $orders.onDone = fn  // callback fired each time the request settles
 Assign \`onDone\` after creating the resource. It fires once every time the request completes — the initial load and every \`refetch()\`, on both success and error — and receives the resource bag as its argument. It does NOT fire for a request that was superseded or \`cancel()\`led. This is the idiomatic way to refresh a list after a mutation:
 
 \`\`\`
-$patch = Http({
+$patch = $http({
   url:    endpoint + "/" + todo.id,
   method: "PATCH",
   body:   { isCompleted: !todo.isCompleted }
@@ -450,9 +497,9 @@ $patch.onDone = () => {
 ### Writes — fire from an action
 \`\`\`
 function saveOrder(payload) {
-  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $save = $http({ url: "https://api.example.com/orders", method: "POST", body: payload })
   $save.onDone = () => { $orders.refetch() }
-  emit("assistant-message", { message: "Saved." })
+  $emit("assistant-message", { message: "Saved." })
 }
 \`\`\`
 
@@ -472,10 +519,10 @@ view = Async($orders, {
 function fullRouting(): string {
   return `## Routing
 
-The router is a plain function call. Assign \`Router({ ... })\` to a binding and reference that binding from your shell.
+The router is a plain function call. Assign \`$router({ ... })\` to a binding and reference that binding from your shell.
 
 \`\`\`
-pages = Router({
+pages = $router({
   "/":             Dashboard(),
   "/orders":       OrdersPage(),
   "/orders/:id":   OrderDetail({ id: params.id }),
@@ -500,21 +547,21 @@ function fullGlobals(): string {
 Both are always in scope, lowercase. No imports.
 
 \`\`\`
-// localStorage (default); 'storage.local' is its alias
-storage.set("name", "John")
-$name = storage.get("name")
-storage.remove("name")
+// localStorage (default); '$storage.local' is its alias
+$storage.set("name", "John")
+$name = $storage.get("name")
+$storage.remove("name")
 
 // sessionStorage (per-tab)
-storage.session.set("draft", $draft)
+$storage.session.set("draft", $draft)
 
 // Cookies — options as an object literal
-storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
-storage.cookies.remove("user", { path: "/" })
+$storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$storage.cookies.remove("user", { path: "/" })
 
 // Console — forwards to host console
-console.log("Hello", $user)
-console.error("Failed", $error)
+$console.log("Hello", $user)
+$console.error("Failed", $error)
 \`\`\`
 
 Non-string values JSON-roundtrip; missing keys return \`null\`. Cookie options: \`expires\` (days/Date/ISO), \`maxAge\` (seconds), \`path\`, \`domain\`, \`secure\`, \`sameSite\`. Failures (quota, disabled storage) are swallowed silently.
@@ -533,7 +580,7 @@ function remove(id) {
 id = crypto.randomUUID()
 \`\`\`
 
-Author declarations and built-in components always win over a same-named global, so the passthrough only fills in names you haven't defined. Prefer the reactive \`Http({...})\` over raw \`fetch\` for data that drives the UI, and keep timers/listeners inside \`effect(...)\` so they're cleaned up.`;
+Author declarations and built-in components always win over a same-named global, so the passthrough only fills in names you haven't defined. Prefer the reactive \`$http({...})\` over raw \`fetch\` for data that drives the UI, and keep timers/listeners inside \`$effect(...)\` so they're cleaned up.`;
 }
 
 
@@ -595,11 +642,11 @@ ${ROOT} = Column([
 function fullThemingI18nIcons(): string {
   return `## Theming, i18n & icons
 
-### \`theme = Theme({ ... })\`
+### \`theme = $theme({ ... })\`
 Assign before \`${ROOT}\` to brand the response. Tokens use the structured form — top-level groups \`colors\`, \`radius\`, \`font\`, \`motion\`, \`elevation\` (plus metadata: \`name\`, \`direction\`). Removing the line snaps the UI back to the host theme.
 
 \`\`\`
-theme = Theme({
+theme = $theme({
   colors: { primary: "#635bff", bg: "#0a0a23", surface: "#10103a", text: "#fff" },
   radius: { md: "0.5rem", button: "999px" },
   font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif" }
@@ -610,7 +657,7 @@ The host page picks one of seven base themes (\`light\`, \`dark\`, \`neon\`, \`p
 
 ### i18n
 \`\`\`
-const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({
   defaultLanguage: "en",
   currentLanguage: "fr",
   translations: {
@@ -631,47 +678,47 @@ Icon-typed props expect a Font Awesome name as a string — no \`fa-\` prefix, N
 }
 
 function fullUtil(): string {
-  return `## \`Util\` — runtime helper namespace
+  return `## \`$util\` — runtime helper namespace
 
-Pure helpers — no side effects. \`Util\` is a global available inside every Aktion expression, action body, effect, and lambda. Library consumers can call the same methods from JavaScript (\`import { Util } from "aktion"\`).
+Pure helpers — no side effects. \`$util\` is a global available inside every Aktion expression, action body, effect, and lambda. Library consumers can call the same methods from JavaScript (\`import { Util } from "aktion"\`).
 
-Reach for \`Util\` when native JavaScript would be verbose (formatting, date math, grouping). Prefer plain JS where it is just as clear: \`arr.length\` over \`Util.count(arr)\`, \`a.filter(x => x.done)\` over \`Util.filter(a, "done", "==", true)\`.
+Reach for \`$util\` when native JavaScript would be verbose (formatting, date math, grouping). Prefer plain JS where it is just as clear: \`arr.length\` over \`$util.count(arr)\`, \`a.filter(x => x.done)\` over \`$util.filter(a, "done", "==", true)\`.
 
 ### Collections
-- \`Util.count(arr)\` — length / object key count.
-- \`Util.sum(arr)\` / \`Util.avg(arr)\` / \`Util.min(arr)\` / \`Util.max(arr)\` — numeric reductions.
-- \`Util.first(arr)\` / \`Util.last(arr)\` — endpoints (safe on empty arrays).
-- \`Util.filter(arr, field, op, value)\` — declarative filter (\`op\` ∈ \`==\`, \`!=\`, \`<\`, \`<=\`, \`>\`, \`>=\`, \`contains\`, \`startsWith\`, \`endsWith\`).
-- \`Util.find(arr, field, op, value)\` — first match.
-- \`Util.sort(arr, field, dir?)\` — stable sort (\`dir\` ∈ \`"asc"\` | \`"desc"\`).
-- \`Util.groupBy(arr, field)\` — \`{ [key]: items[] }\`.
-- \`Util.unique(arr, field?)\` / \`Util.reverse(arr)\` / \`Util.slice(arr, start, end?)\` / \`Util.pick(obj, ["a", "b"])\`.
-- \`Util.range(start, end, step?)\` — inclusive numeric range.
-- \`Util.repeat(value, count)\` — fixed-length array.
-- \`Util.join(arr, sep?)\` — string join.
+- \`$util.count(arr)\` — length / object key count.
+- \`$util.sum(arr)\` / \`$util.avg(arr)\` / \`$util.min(arr)\` / \`$util.max(arr)\` — numeric reductions.
+- \`$util.first(arr)\` / \`$util.last(arr)\` — endpoints (safe on empty arrays).
+- \`$util.filter(arr, field, op, value)\` — declarative filter (\`op\` ∈ \`==\`, \`!=\`, \`<\`, \`<=\`, \`>\`, \`>=\`, \`contains\`, \`startsWith\`, \`endsWith\`).
+- \`$util.find(arr, field, op, value)\` — first match.
+- \`$util.sort(arr, field, dir?)\` — stable sort (\`dir\` ∈ \`"asc"\` | \`"desc"\`).
+- \`$util.groupBy(arr, field)\` — \`{ [key]: items[] }\`.
+- \`$util.unique(arr, field?)\` / \`$util.reverse(arr)\` / \`$util.slice(arr, start, end?)\` / \`$util.pick(obj, ["a", "b"])\`.
+- \`$util.range(start, end, step?)\` — inclusive numeric range.
+- \`$util.repeat(value, count)\` — fixed-length array.
+- \`$util.join(arr, sep?)\` — string join.
 
 ### Strings
-- \`Util.capitalize(s)\` / \`Util.lowercase(s)\` / \`Util.uppercase(s)\` / \`Util.titlecase(s)\` / \`Util.case(s, mode)\`.
-- \`Util.split / .trim / .replace / .substring / .startsWith / .endsWith / .contains / .match\`.
-- \`Util.plural(n, singular, plural)\` — picks the right word for a count.
+- \`$util.capitalize(s)\` / \`$util.lowercase(s)\` / \`$util.uppercase(s)\` / \`$util.titlecase(s)\` / \`$util.case(s, mode)\`.
+- \`$util.split / .trim / .replace / .substring / .startsWith / .endsWith / .contains / .match\`.
+- \`$util.plural(n, singular, plural)\` — picks the right word for a count.
 
 ### Formatting
-- \`Util.format(value, mode, opts?)\` — numbers, currency, percent, compact (\`{ currency, locale, decimals }\`).
-- \`Util.formatDate(value, mode, opts?)\` — \`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\` | token strings (\`"YYYY-MM-DD"\`).
+- \`$util.format(value, mode, opts?)\` — numbers, currency, percent, compact (\`{ currency, locale, decimals }\`).
+- \`$util.formatDate(value, mode, opts?)\` — \`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\` | token strings (\`"YYYY-MM-DD"\`).
 
 ### Dates
-- \`Util.now()\` / \`Util.today()\` / \`Util.addDays(date, n)\` / \`Util.addHours(date, n)\` / \`Util.diffDays(a, b)\` / \`Util.startOfWeek(date)\` / \`Util.endOfMonth(date)\`.
+- \`$util.now()\` / \`$util.today()\` / \`$util.addDays(date, n)\` / \`$util.addHours(date, n)\` / \`$util.diffDays(a, b)\` / \`$util.startOfWeek(date)\` / \`$util.endOfMonth(date)\`.
 
 ### Math
-- \`Util.round / .floor / .ceil / .abs / .clamp(v, min, max) / .pow / .sqrt / .random / .log\`.
+- \`$util.round / .floor / .ceil / .abs / .clamp(v, min, max) / .pow / .sqrt / .random / .log\`.
 
 The namespace is open for extension — new helpers may be added over time.
 
 \`\`\`
 filtered  = $users.filter((u) => u.team === $team)
-sorted    = Util.sort(filtered, "joinedAt", "desc")
+sorted    = $util.sort(filtered, "joinedAt", "desc")
 firstFive = sorted.slice(0, 5)
-summary   = \`\${rows.length} \${Util.plural(rows.length, "order", "orders")}: \${Util.format(Util.sum(rows.amount), "currency")}\`
+summary   = \`\${rows.length} \${$util.plural(rows.length, "order", "orders")}: \${$util.format($util.sum(rows.amount), "currency")}\`
 \`\`\``;
 }
 
@@ -680,7 +727,7 @@ function fullHelpers(): string {
 
 | Component | Purpose |
 |---|---|
-| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`Http({...})\` resource state. |
+| \`Async(resource, { loading, error, empty, data })\` | Branch on an \`$http({...})\` resource state. |
 | \`Show(when, { fallback?, children })\` | Sugar for \`when ? children : fallback\`. |
 | \`Portal(children, { target? })\` | Render outside the parent subtree. |
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
@@ -732,7 +779,7 @@ function fullVerification(): string {
 References resolve from the entire top-level scope, not source order. Emit the shell first so the renderer has somewhere to attach streamed leaves. Required statement order:
 
 1. \`${ROOT} = ...\` — first line, always.
-2. Function declarations (components & actions) and \`effect(...)\` calls.
+2. Function declarations (components & actions) and \`$effect(...)\` calls.
 3. Leaf data values (strings, numbers, arrays, objects) — last.
 
 Define one named reference per FormControl, TabItem, AccordionItem, Series, Col, etc. so each one streams independently. Never split a single statement across multiple lines unless it sits inside an unmatched \`[\`, \`(\`, or \`{\`.
@@ -741,7 +788,7 @@ Define one named reference per FormControl, TabItem, AccordionItem, Series, Col,
 - Output ONLY Aktion (or a fenced \`\`\`aktion\`\`\` block when inline mode is enabled).
 - Build a complete, navigable surface — \`PageHeader\`, multi-section layouts, working buttons. Don't reply with a single Card.
 - Wire every visible button. Declare \`function name() { ... }\` blocks (any case for the name); reference via \`Button("Label", { onClick: name })\`.
-- Use \`Router({...})\` for multi-page apps; reach \`pages\` from \`${ROOT}\`; link from sidebar/navbar with \`NavLink\`/\`SidebarItem\` (\`to: "/path"\`).
+- Use \`$router({...})\` for multi-page apps; reach \`pages\` from \`${ROOT}\`; link from sidebar/navbar with \`NavLink\`/\`SidebarItem\` (\`to: "/path"\`).
 - Seed realistic mock data inline when no backend is available (5–20 plausible rows).
 - Lay out with three primitives: \`Column([...])\` (vertical, the usual page/section), \`Row([...])\` (horizontal toolbars/rows), and \`Grid([...], { columns })\` (equal columns / card walls). \`Center([...], { minHeight })\` centers content. Use responsive prop maps (\`{ base: 1, md: 2, lg: 4 }\`) on \`Grid\` columns or \`Stack\` direction so the app works on phone and desktop.
 - Use template literals for any string mixing copy with values.
@@ -759,19 +806,19 @@ Before finishing, walk your output and check:
 5. **Every component reference is invoked with parentheses.** Scan for bare component identifiers used as values (root assignment, array elements, prop values) — wrap each in \`()\`. \`${ROOT} = MyApp\` → \`${ROOT} = MyApp()\`; \`Column([Hero, Body])\` → \`Column([Hero(), Body()])\`. The only exception is passing a component as a callback (e.g. \`render: UserCard\`) where the caller invokes it.
 6. A function with no \`return\` simply renders nothing when called in a render position.
 7. State uses the single-sigil \`$name = value\` form.
-8. \`Http({...})\` uses an absolute \`url\` and exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
-9. \`Router({...})\` arms use \`:\` (not \`->\`) and \`default\` (not \`_\`) for the wildcard.
-10. Effects use \`effect(() => {...}, [deps])\` — never the legacy bracket form.
+8. \`$http({...})\` uses an absolute \`url\` and exposes \`.data\`, \`.error\`, \`.loading\`, \`.status\`, \`.refetch()\`, \`.cancel()\`.
+9. \`$router({...})\` arms use \`:\` (not \`->\`) and \`default\` (not \`_\`) for the wildcard.
+10. Effects use \`$effect(() => {...}, [deps])\` — never the legacy bracket form.
 11. \`storage\` / \`console\` are lowercase; \`route\` is reserved (never declare it).`;
 }
 
 function fullDefaultExamples(): string[] {
   return [
-    `// Tasks dashboard — Http(), Async, action, multi-section layout
-$tasks = Http({ url: "https://api.example.com/tasks", method: "GET" })
+    `// Tasks dashboard — $http(), Async, action, multi-section layout
+$tasks = $http({ url: "https://api.example.com/tasks", method: "GET" })
 
 function toggle(task) {
-  $update = Http({ url: \`https://api.example.com/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
+  $update = $http({ url: \`https://api.example.com/tasks/\${task.id}\`, method: "PATCH", body: { done: !task.done } })
   $tasks.refetch()
 }
 
@@ -791,7 +838,7 @@ ${ROOT} = Column([
   })
 ], { gap: "l" })`,
     `// Multi-page app shell with router and sidebar
-pages = Router({
+pages = $router({
   "/":         Overview(),
   "/projects": Projects(),
   "/calendar": Calendar(),
@@ -934,14 +981,14 @@ function chatComponentLibrary(library: ComponentLibrary): string {
 }
 
 function chatUtil(): string {
-  return `## \`Util\` — runtime helper namespace
+  return `## \`$util\` — runtime helper namespace
 
-Pure helpers — no side effects. Use \`Util\` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (\`arr.length\`, \`arr.slice(0, 5)\`, \`s.toUpperCase()\`).
+Pure helpers — no side effects. Use \`$util\` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (\`arr.length\`, \`arr.slice(0, 5)\`, \`s.toUpperCase()\`).
 
 ### Most useful helpers
-- Collections: \`Util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?)\`.
-- Strings: \`Util.capitalize / .titlecase / .plural(n, singular, plural)\`.
-- Formatting: \`Util.format(value, mode, opts?)\` (numbers, currency, percent, compact) and \`Util.formatDate(value, mode)\` (\`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\`).
+- Collections: \`$util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?)\`.
+- Strings: \`$util.capitalize / .titlecase / .plural(n, singular, plural)\`.
+- Formatting: \`$util.format(value, mode, opts?)\` (numbers, currency, percent, compact) and \`$util.formatDate(value, mode)\` (\`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\`).
 
 Icons are Font Awesome names — \`"house"\`, \`"chart-line"\`, \`"regular:star"\`, \`"brands:github"\`. Never use \`fa-\` prefixes or emoji characters.`;
 }
@@ -980,7 +1027,7 @@ tbl    = Table([
   Col("Users (M)",  langs.users, { format: "number" }),
   Col("First seen", langs.year,  { format: "number" })
 ])
-totals = Callout("info", { title: \`Tracking \${langs.length} languages · \${Util.sum(langs.users)}M users combined\`, icon: "chart-line", compact: true })
+totals = Callout("info", { title: \`Tracking \${langs.length} languages · \${$util.sum(langs.users)}M users combined\`, icon: "chart-line", compact: true })
 follow = FollowUpBlock(["Sort by users", "Show as a chart"])
 
 langs = [
@@ -1064,7 +1111,7 @@ function rulesSection(rules: ReadonlyArray<string>): string {
 function toolsListSection(tools: ReadonlyArray<ToolSpec>): string {
   const lines: string[] = [
     "## Available endpoints",
-    "These endpoints are provided by the host. Fire requests with `Http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
+    "These endpoints are provided by the host. Fire requests with `$http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`).",
   ];
   for (const tool of tools) {
     const kind = tool.kind === "Mutation" ? "POST/PUT/PATCH/DELETE" : "GET";

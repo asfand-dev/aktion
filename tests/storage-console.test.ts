@@ -46,19 +46,19 @@ afterEach(() => {
 
 describe("parser — method call", () => {
   it("parses `obj.method(args)` as a MethodCall expression", () => {
-    const program = parse(`x = storage.set("k", "v")`);
+    const program = parse(`x = $storage.set("k", "v")`);
     expect(program.errors).toEqual([]);
     const stmt = program.statements[0];
     if (!stmt || stmt.kind !== "Assignment") throw new Error("expected assignment");
     expect(stmt.expression).toMatchObject({
       kind: "MethodCall",
       method: "set",
-      object: { kind: "Identifier", name: "storage" },
+      object: { kind: "StateRef", name: "storage" },
     });
   });
 
-  it("parses chained namespace methods `storage.local.get(...)`", () => {
-    const program = parse(`x = storage.local.get("k")`);
+  it("parses chained namespace methods `$storage.local.get(...)`", () => {
+    const program = parse(`x = $storage.local.get("k")`);
     expect(program.errors).toEqual([]);
     const stmt = program.statements[0];
     if (!stmt || stmt.kind !== "Assignment") throw new Error("expected assignment");
@@ -82,7 +82,7 @@ describe("parser — method call", () => {
   });
 
   it("collects positional + trailing object args inside a method call", () => {
-    const program = parse(`x = storage.cookies.set("name", "John", { expires: 1, path: "/" })`);
+    const program = parse(`x = $storage.cookies.set("name", "John", { expires: 1, path: "/" })`);
     expect(program.errors).toEqual([]);
     const stmt = program.statements[0];
     if (!stmt || stmt.kind !== "Assignment") throw new Error("expected assignment");
@@ -93,62 +93,62 @@ describe("parser — method call", () => {
 
 describe("storage — localStorage default namespace", () => {
   it("stores and retrieves a string value", () => {
-    evalExpr(`storage.set("${SCRATCH_KEY}", "John")`);
-    expect(evalExpr(`storage.get("${SCRATCH_KEY}")`)).toBe("John");
+    evalExpr(`$storage.set("${SCRATCH_KEY}", "John")`);
+    expect(evalExpr(`$storage.get("${SCRATCH_KEY}")`)).toBe("John");
   });
 
   it("round-trips objects through JSON serialisation", () => {
-    evalExpr(`storage.set("${SCRATCH_KEY}", {a: 1, b: [2, 3]})`);
-    expect(evalExpr(`storage.get("${SCRATCH_KEY}")`)).toEqual({ a: 1, b: [2, 3] });
+    evalExpr(`$storage.set("${SCRATCH_KEY}", {a: 1, b: [2, 3]})`);
+    expect(evalExpr(`$storage.get("${SCRATCH_KEY}")`)).toEqual({ a: 1, b: [2, 3] });
   });
 
   it("removes and clears items", () => {
-    evalExpr(`storage.set("${SCRATCH_KEY}", "x")`);
-    evalExpr(`storage.remove("${SCRATCH_KEY}")`);
-    expect(evalExpr(`storage.get("${SCRATCH_KEY}")`)).toBeNull();
-    evalExpr(`storage.set("${SCRATCH_KEY}", "y")`);
-    evalExpr(`storage.clear()`);
-    expect(evalExpr(`storage.get("${SCRATCH_KEY}")`)).toBeNull();
+    evalExpr(`$storage.set("${SCRATCH_KEY}", "x")`);
+    evalExpr(`$storage.remove("${SCRATCH_KEY}")`);
+    expect(evalExpr(`$storage.get("${SCRATCH_KEY}")`)).toBeNull();
+    evalExpr(`$storage.set("${SCRATCH_KEY}", "y")`);
+    evalExpr(`$storage.clear()`);
+    expect(evalExpr(`$storage.get("${SCRATCH_KEY}")`)).toBeNull();
   });
 
-  it("`storage.local.*` is an alias for the default namespace", () => {
-    evalExpr(`storage.local.set("${SCRATCH_KEY}", 42)`);
-    expect(evalExpr(`storage.get("${SCRATCH_KEY}")`)).toBe(42);
-    expect(evalExpr(`storage.local.get("${SCRATCH_KEY}")`)).toBe(42);
+  it("`$storage.local.*` is an alias for the default namespace", () => {
+    evalExpr(`$storage.local.set("${SCRATCH_KEY}", 42)`);
+    expect(evalExpr(`$storage.get("${SCRATCH_KEY}")`)).toBe(42);
+    expect(evalExpr(`$storage.local.get("${SCRATCH_KEY}")`)).toBe(42);
   });
 });
 
 describe("storage — sessionStorage namespace", () => {
   it("writes and reads from sessionStorage independently of localStorage", () => {
-    evalExpr(`storage.session.set("${SCRATCH_KEY}", "session-value")`);
-    expect(evalExpr(`storage.session.get("${SCRATCH_KEY}")`)).toBe("session-value");
-    expect(evalExpr(`storage.local.get("${SCRATCH_KEY}")`)).toBeNull();
+    evalExpr(`$storage.session.set("${SCRATCH_KEY}", "session-value")`);
+    expect(evalExpr(`$storage.session.get("${SCRATCH_KEY}")`)).toBe("session-value");
+    expect(evalExpr(`$storage.local.get("${SCRATCH_KEY}")`)).toBeNull();
   });
 });
 
 describe("storage — cookies namespace", () => {
   it("writes and reads cookies with trailing object options", () => {
     storage.cookies.clear();
-    evalExpr(`storage.cookies.set("user", "John", { path: "/", maxAge: 60 })`);
-    expect(evalExpr(`storage.cookies.get("user")`)).toBe("John");
+    evalExpr(`$storage.cookies.set("user", "John", { path: "/", maxAge: 60 })`);
+    expect(evalExpr(`$storage.cookies.get("user")`)).toBe("John");
   });
 
   it("removes a cookie by key", () => {
     storage.cookies.clear();
-    evalExpr(`storage.cookies.set("user", "John", { path: "/" })`);
-    expect(evalExpr(`storage.cookies.get("user")`)).toBe("John");
-    evalExpr(`storage.cookies.remove("user", { path: "/" })`);
+    evalExpr(`$storage.cookies.set("user", "John", { path: "/" })`);
+    expect(evalExpr(`$storage.cookies.get("user")`)).toBe("John");
+    evalExpr(`$storage.cookies.remove("user", { path: "/" })`);
     // Some hosts (notably happy-dom) keep expired cookies in the
     // document.cookie string with an empty value rather than purging
     // them outright — the `get` helper still treats that as "missing"
     // because removal succeeded from the script's point of view.
-    const after = evalExpr(`storage.cookies.get("user")`);
+    const after = evalExpr(`$storage.cookies.get("user")`);
     expect(after === null || after === "").toBe(true);
   });
 
   it("returns null for missing cookies", () => {
     storage.cookies.clear();
-    expect(evalExpr(`storage.cookies.get("nope")`)).toBeNull();
+    expect(evalExpr(`$storage.cookies.get("nope")`)).toBeNull();
   });
 });
 

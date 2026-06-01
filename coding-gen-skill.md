@@ -31,12 +31,12 @@ description: >-
 - [4. Components and lambdas](#4-components-and-lambdas)
 - [5. Actions](#5-actions)
 - [6. Effects](#6-effects)
-- [7. HTTP — `Http({...})`](#7-http--http)
-- [8. `Util` — runtime helper namespace](#8-util--runtime-helper-namespace)
+- [7. HTTP — `$http({...})`](#7-http--http)
+- [8. `$util` — runtime helper namespace](#8-util--runtime-helper-namespace)
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
 - [11. Routing](#11-routing)
-- [12. Globals — `storage`, `console`](#12-globals--storage-console)
+- [12. Globals — `$storage`, `$console`](#12-globals--storage-console)
 - [13. Internationalization](#13-internationalization)
 - [14. Theming](#14-theming)
 - [15. Icons (Font Awesome)](#15-icons-font-awesome)
@@ -61,13 +61,13 @@ Internalize these rules and you will write correct, polished programs:
    kind of atom for every use case. Inside function bodies (actions/components)
    and `effect` callbacks the assignment operators
    `= += -= *= /= ??= ++ --` are allowed.
-4. **HTTP is one function.** `Http({ url, method, body, headers, query, ... })`
+4. **HTTP is one function.** `$http({ url, method, body, headers, query, ... })`
    is the only network primitive. Pass a full absolute `url`; `GET` is the
    default `method`; there are no host-wide defaults. It returns a reactive
    bag exposing `.data | .error | .status | .loading | .headers | .lastUpdated`,
    the callables `.refetch()` / `.cancel()`, and a settable `.onDone`
    callback. Re-run a request via `.refetch()` or by wrapping it in an
-   `effect(..., [$dep])`; use `.onDone` to refresh another resource after a
+   `$effect(..., [$dep])`; use `.onDone` to refresh another resource after a
    write.
 5. **Components are PascalCase functions that MUST `return`.**
    `function Name(args) { … return Expression }` — PascalCase name signals
@@ -96,9 +96,9 @@ Internalize these rules and you will write correct, polished programs:
     action functions use ordinary JS parameter binding —
     `(id, status) => …` and `function update(id, status) { … }` read
     their arguments by name. There is no `ctx.args` indirection.
-11. **Prefer declarative helpers** (`[...spread]`, `Util.filter`, `Util.sort`,
+11. **Prefer declarative helpers** (`[...spread]`, `$util.filter`, `$util.sort`,
     `.map()`, ternary) over imperative DOM code. Reach for raw
-    JavaScript only when neither a `Util` helper nor a native JS
+    JavaScript only when neither a `$util` helper nor a native JS
     feature is a clearer fit.
 12. **Strings come in three flavours.** `"double"`, `'single'`, and
     `` `backtick` ``. Backticks span lines and don't need escapes — use
@@ -110,14 +110,14 @@ Internalize these rules and you will write correct, polished programs:
 14. **Add status colour everywhere.** `StatCard(..., { trend, delta })`,
     `Badge` variants, `TimelineItem` tone, `Banner` tone,
     `StatusDot(label, { tone })` — colour conveys meaning.
-15. **`storage` and `console` are always-available globals (lowercase).**
-    Use `storage.set/get/remove/clear` (alias `storage.local.*`),
-    `storage.session.*`, and `storage.cookies.*` (with options:
+15. **`$storage` and `$console` are always-available globals (lowercase).**
+    Use `$storage.set/get/remove/clear` (alias `$storage.local.*`),
+    `$storage.session.*`, and `$storage.cookies.*` (with options:
     `expires`, `maxAge`, `path`, `domain`, `secure`, `sameSite`)
     directly. `console.log/error/warn/info/debug` forwards to the host
     console. Both globals follow the standard `obj.method(args)`
     method-call syntax and accept object-literal options.
-16. **`pages = Router({ … })` and `NavLink(label, { to })` are always
+16. **`pages = $router({ … })` and `NavLink(label, { to })` are always
     available.** The reactive `route.path` / `route.params` /
     `route.query` surface stays live across the whole app; inside a
     matched arm the `params` local holds the captured path segments.
@@ -143,7 +143,7 @@ Internalize these rules and you will write correct, polished programs:
 20. **Reactive state survives the response, not the page.** The runtime
     only keeps `$name = value` atoms in memory for the lifetime of the
     `<aktion-app>` element. Host pages persist them via
-    `el.serializeState()` / `el.hydrateState()`. Call `i18n({...})` to
+    `el.serializeState()` / `el.hydrateState()`. Call `$i18n({...})` to
     build a translation bundle (§13).
 21. **Prefer ternary `cond ? a : b` and `switch` over nested ternaries.**
     Both evaluate lazily — only the chosen branch renders. Use ternary
@@ -184,7 +184,7 @@ Everything an LLM might reach for first:
 $count = 0
 $theme = "dark"
 $cart  = []
-$total = Util.sum($cart.price)
+$total = $util.sum($cart.price)
 
 // Components are PascalCase functions that MUST return.
 function UserCard(user, { tone = "default" } = {}) {
@@ -200,19 +200,19 @@ greetings    = $users.map(u => UserCard(u))
 hint         = $hasError ? Banner("Try again", { tone: "danger" }) : null
 
 // Effects — callback + dependency array.
-effect(() => {
-  $save = Http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
+$effect(() => {
+  $save = $http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
 }, [$draft, "debounce(500)"])
 
 // Actions — camelCase functions. Optional `return`.
 function markShipped(orderId) {
   $orders = $orders.map(o => o.id == orderId ? {...o, status: "shipped"} : o)
-  $ship   = Http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
+  $ship   = $http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
   return orderId
 }
 
 // HTTP — the single primitive. Returns a reactive resource bag.
-$orders = Http({
+$orders = $http({
   url:    "https://api.example.com/users/42/orders",
   method: "GET",
   query:  { limit: 10 }
@@ -220,9 +220,9 @@ $orders = Http({
 // $orders.data | .error | .status | .loading | .headers | .lastUpdated
 // $orders.refetch() | $orders.cancel()
 
-// Router — `Router({…})` is a regular function call. `params` is bound
+// Router — `$router({…})` is a regular function call. `params` is bound
 // inside each matched arm (captures from `:id`, `*`).
-pages = Router({
+pages = $router({
   "/":           Dashboard(),
   "/orders/:id": OrderDetail({ id: params.id }),
   default:       NotFound()
@@ -237,10 +237,10 @@ EmailField = Input("email", { value: $form.email })
 onSearch = (q) => $query = q
 
 // Outbound CustomEvent.
-emit("order:selected", { id: order.id })
+$emit("order:selected", { id: order.id })
 
 // Internationalisation.
-const { t, setCurrentLanguage } = i18n({
+const { t, setCurrentLanguage } = $i18n({
   defaultLanguage: "en",
   currentLanguage: "en",
   translations: { greeting: { en: "Hello, {name}!", fr: "Bonjour, {name}!" } }
@@ -267,7 +267,7 @@ function TaskRow(task) {
 language keywords, to keep the core small:
 
 - `Async(resource, { loading, error, empty, data })` — branches on an
-  `Http({...})` resource state.
+  `$http({...})` resource state.
 - `Show(when, { fallback, children })` — sugar over ternary.
 - `Portal(children, { target })` — render outside the parent subtree.
 - `Redirect(path)` — router-aware navigate-and-unmount.
@@ -413,15 +413,15 @@ Rules for theme-friendly authoring:
 - **Brutalist and neon will collapse if you nest gradients.** Stay
   declarative; the theme adds the visual personality.
 
-### In-script theming with `Theme({...})`
+### In-script theming with `$theme({...})`
 
 When the user **explicitly asks for a brand or product feel** ("make it
-look like GitHub", "use our company colours"), emit a `Theme({...})`
+look like GitHub", "use our company colours"), emit a `$theme({...})`
 declaration on a top-level binding called `theme`. The runtime evaluates
 the call and writes the token map to the host as CSS custom properties.
 
 ```javascript
-theme = Theme({
+theme = $theme({
   colors: {
     primary:     "#0969da",
     primaryHover:"#0860c4",
@@ -443,17 +443,17 @@ aktion = Stack([...])
 
 **Rules:**
 
-- `Theme(...)` expects the **structured form** — top-level groups must
+- `$theme(...)` expects the **structured form** — top-level groups must
   be one of `colors`, `radius`, `font`, `motion`, `elevation` (plus the
   metadata keys `name` and `direction`). Flat-shape keys
-  (`Theme({ colorPrimary: ... })`) raise a schema-validator error.
-- Put `theme = Theme({...})` **before** the `aktion = ...` line so the
+  (`$theme({ colorPrimary: ... })`) raise a schema-validator error.
+- Put `theme = $theme({...})` **before** the `aktion = ...` line so the
   tokens are visible when the rest of the program streams in.
 - Stick to documented keys. The runtime ignores unknown keys inside a
   group, so typos fail silent.
-- **Don't double-pay tokens.** If `Theme(...)` already sets `colors.primary`,
+- **Don't double-pay tokens.** If `$theme(...)` already sets `colors.primary`,
   do NOT also pass `"primary"` overrides on individual components.
-- Removing the `Theme(...)` line snaps the UI back to the base theme.
+- Removing the `$theme(...)` line snaps the UI back to the base theme.
 
 ### Anti-patterns (never ship these)
 
@@ -510,9 +510,9 @@ the language doesn't model **is just JavaScript**:
   `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`,
   `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`,
   `BigInt`, …), and `window` / `document`. Author declarations and built-in
-  components always win over a same-named global. Still prefer `Http({...})`
+  components always win over a same-named global. Still prefer `$http({...})`
   over raw `fetch` for reactive data, and keep timers/listeners inside
-  `effect(...)` so they're torn down on unmount.
+  `$effect(...)` so they're torn down on unmount.
 - Inside **action bodies, effect callbacks, and lambda bodies**, you
   may also call browser APIs directly — `navigator.clipboard`,
   `window.open`, `document.addEventListener`, `setTimeout`,
@@ -536,7 +536,7 @@ Three identifier conventions cooperate:
   a function body or effect callback notifies subscribers.
 - **Reserved built-ins**:
   - `aktion` (the UI root, required first line).
-  - `theme` (optional in-script `Theme({...})` brand override).
+  - `theme` (optional in-script `$theme({...})` brand override).
   - `route` (router-owned reactive surface — `route.path`,
     `route.params`, `route.query`, `route.pattern`,
     `route.navigate("/path")`).
@@ -549,15 +549,15 @@ Two function conventions cooperate at the top level:
 - `function camelName(args) { … }` — an action. Imperative side-effect
   block triggered by events. MAY `return` a value.
 
-Effects are declared via the `effect(callback, deps)` function call:
+Effects are declared via the `$effect(callback, deps)` function call:
 
-- `effect(() => { … }, [$atom, "mount", "every(N)", "debounce(N)"])` —
+- `$effect(() => { … }, [$atom, "mount", "every(N)", "debounce(N)"])` —
   declarative background work with dependencies. Dependencies can be
   `$atom` references or string qualifiers: `"mount"`, `"unmount"`,
   `"every(N)"`, `"debounce(N)"`, `"throttle(N)"`.
 
-Everything else (`Http({...})`, `Router({...})`, `Theme({...})`,
-`i18n({...})`, `Toast(...)`, `Stack(...)`) is a regular function /
+Everything else (`$http({...})`, `$router({...})`, `$theme({...})`,
+`$i18n({...})`, `Toast(...)`, `Stack(...)`) is a regular function /
 component call.
 
 ### Three layers
@@ -579,11 +579,11 @@ component call.
 ┌─────────────────────────────────────────────────────────────────┐
 │ Layer 2 — Reactive state + HTTP                                 │
 │   `$variables` (read/written by humans and by JS) and           │
-│   `Http({...})` resource bags. A change to either               │
+│   `$http({...})` resource bags. A change to either               │
 │   schedules a re-render.                                        │
 │                                                                 │
 │       $message = "Hello"                                        │
-│       $data    = Http({ url: "https://api.x.dev/metrics" })     │
+│       $data    = $http({ url: "https://api.x.dev/metrics" })     │
 └─────────────────────────────────────────────────────────────────┘
                               ▲
                               │ updated by
@@ -649,7 +649,7 @@ chart   = LineChart({ labels: months, series: [series] })
 footer  = Text("Generated by Aktion", { variant: "small", tone: "muted" })
 
 $days   = "90"
-$data   = Http({ url: "https://api.example.com/perf", query: { days: $days } })
+$data   = $http({ url: "https://api.example.com/perf", query: { days: $days } })
 months  = ["Jul", "Aug", "Sep"]
 series  = Series("Revenue", { values: [120000, 145000, 162000] })
 ```
@@ -709,7 +709,32 @@ $theme = "dark"
 - `count` (no sigil) is a plain binding — **not** tracked, **not**
   reactive.
 - `$count` (with sigil) is a tracked atom — reading subscribes the
-  surrounding component / effect; writing notifies subscribers.
+  reader (component / derived value / effect); writing notifies subscribers.
+
+### Fine-grained reactivity (path-level)
+
+Subscriptions are keyed to the **path** you read, not the whole atom.
+
+- Reading `$user.name` subscribes to `user.name`. A write to a sibling
+  (`$user.role = …`) does **not** re-render, recompute, or re-fire it;
+  replacing the whole atom (`$user = …`, an ancestor) or writing a
+  descendant does. Sibling paths never interfere.
+- Object fields track field-by-field; reading into an **array**
+  (`$rows[i]`, the `$rows.field` pluck) or through a **dynamic key**
+  (`$obj[$key]`) subscribes at the array/container, so any element change
+  re-renders. Prefer reading the exact field (`$user.name`) for the
+  tightest updates; read the whole object (`$user`) only when you need it.
+- The same rule drives computed values and effect deps:
+  `$effect(() => save($user.name), [$user.name])` fires on `name` changes,
+  not `role`. No selectors, no special syntax — just read the path.
+- **Per-component re-rendering.** A component re-executes only when its own
+  inputs change — its args (props) or a `$state` path its body read — like
+  `React.memo` / Solid, but automatic. Split a screen into focused
+  components (`ShowName($user.name)`, `ShowAge($user.age)`) and each updates
+  independently. Args are compared shallowly, so (as in React) a fresh
+  inline-lambda prop each render makes the child re-render; hoist the
+  handler to a stable binding to skip it. Name case does **not** matter —
+  `App` and `app` both seed `$state` once and re-render the same way.
 
 ### Assignment rules
 
@@ -737,15 +762,95 @@ function Counter(label) {
 aktion = Stack([Counter("A"), Counter("B")])  // independent counters
 ```
 
+### Hooks — `$state`, `$memo`, custom `$name`
+
+A function whose name starts with `$` is a **hook** (React's `use*`
+convention). Hooks are the composable form of per-instance state. The two
+built-ins mirror React exactly:
+
+- `$state(initial)` → `[value, setValue]` (like `useState`). `setValue(v)`
+  replaces the value; `setValue(prev => v)` derives it from the previous
+  value. `initial` is evaluated once, on first render.
+- `$memo(() => compute, [deps])` → a cached value (like `useMemo`) that
+  recomputes only when a dependency changes (shallow `Object.is`). Omit the
+  deps array to recompute every render.
+
+```javascript
+function Counter() {
+  const [count, setCount] = $state(0)
+  const label = $memo(() => `Count: ${count}`, [count])
+  return Stack([Text(label), Button("+1", { onClick: () => setCount(c => c + 1) })])
+}
+
+aktion = Counter()
+```
+
+Declare custom hooks with `function $name(...)`. The body runs **inline
+in the calling component's hook scope**, so its `$state` / `$memo` calls
+attach to that component — the React custom-hook model:
+
+```javascript
+function $useToggle(initial) {
+  const [on, setOn] = $state(initial)
+  return { on: on, toggle: () => setOn(v => !v) }
+}
+
+function Panel() {
+  const t = $useToggle(false)
+  return Stack([
+    Button(t.on ? "Hide" : "Show", { onClick: t.toggle }),
+    t.on ? Card([Text("Revealed")]) : null
+  ])
+}
+```
+
+**Rules of hooks** (inherited from React): call hooks unconditionally and
+in a stable order at the top level of a component / hook body — never
+inside an `if`, loop, or callback (slots are matched by call order across
+renders). Hook state **resets when the instance leaves the tree**; a
+remounted component starts from its initial value again. `$state` and
+`$memo` are reserved names. Prefer the hook form when a component owns
+local state with explicit setters; the bare `$name = value` form above is
+the lighter option when an atom is written directly by the component's
+actions.
+
 ### Computed values
 
 There is no dedicated `$computed` keyword. Just compute:
 
 ```javascript
 $cart  = []
-$total = Util.sum($cart.price)
-$open  = Util.filter($todos, "done", "==", false)
+$total = $util.sum($cart.price)
+$open  = $util.filter($todos, "done", "==", false)
 ```
+
+### Global stores — `$store({...})`
+
+For state shared across distant components (cart, current user, theme,
+notifications), declare a **store** at the top level. Non-function entries
+are reactive state; function entries are methods that receive the store
+handle `s` first. Read state as `store.field` (fine-grained), call methods as
+`store.method(args)`, and mutate inside a method with `s.field = …`. The
+handle is an app-global singleton with reference-stable methods — every
+component talks to it directly, so there is **no prop drilling**.
+
+```javascript
+cart = $store({
+  items: [],                                          // state
+  count: (s) => s.items.length,                       // getter → cart.count()
+  total: (s) => $util.sum(s.items.map(i => i.price)),  // getter → cart.total()
+  add: (s, item) => { s.items = [...s.items, item] }, // action → cart.add(item)
+  clear: (s) => { s.items = [] },
+})
+
+function CartBadge() { return Badge(`${cart.count()} items`) }  // reads the store directly
+function ClearButton() { return Button("Clear", { onClick: cart.clear }) }
+```
+
+Reads are fine-grained and per-component (changing `cart.items` re-renders
+only components that read `items`), and two-way binding works against a store
+field (`Input(value: form.draft)`). Use a `$store` for shared state; use a
+component's local `$state` / `$name = …` for state one component owns.
 
 ### URL-synced state
 
@@ -769,23 +874,23 @@ target.loadSnapshot({ programText, state: snapshot });
 ```
 
 For ad-hoc per-tab / per-browser persistence from inside the script,
-use the `storage` global (§12):
+use the `$storage` global (§12):
 
 ```javascript
 // Sync a single $variable to localStorage manually.
-effect(() => {
-  storage.set("draft", $draft)
+$effect(() => {
+  $storage.set("draft", $draft)
 }, [$draft, "debounce(500)"])
 
-effect(() => {
-  $draft = storage.get("draft") ?? ""
+$effect(() => {
+  $draft = $storage.get("draft") ?? ""
 }, ["mount"])
 ```
 
 ### Setup bindings
 
-- `const { t, setCurrentLanguage, getCurrentLanguage } = i18n({ defaultLanguage, currentLanguage, translations })` — build a translation bundle (§13).
-- `theme = Theme({ colors, radius, font, motion, elevation })` brands
+- `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })` — build a translation bundle (§13).
+- `theme = $theme({ colors, radius, font, motion, elevation })` brands
   the UI (§14).
 
 ---
@@ -910,8 +1015,8 @@ a component body); invoke from any event-handler prop (`onClick`,
 ```javascript
 function save(item) {
   $items = [...$items, item]
-  $save  = Http({ url: "https://api.example.com/save", method: "POST", body: { item: item } })
-  emit("saved", { id: item.id })
+  $save  = $http({ url: "https://api.example.com/save", method: "POST", body: { item: item } })
+  $emit("saved", { id: item.id })
 }
 
 submitBtn = Button("Save", { onClick: save })
@@ -939,11 +1044,11 @@ aktion = Grid(fruits.filter(long).map(Fruit))   // ✅ equivalent to .map(n => F
 Inside an action body the imperative surface is small:
 
 - Assignments: `$x = newValue`, `$x += 1`, `$x = { ...$x, field: v }`.
-- `Http({ ... })` — fire a request.
-- `emit("event-name", { detail })` — dispatch a `CustomEvent` on the
+- `$http({ ... })` — fire a request.
+- `$emit("event-name", { detail })` — dispatch a `CustomEvent` on the
   host element.
 - `route.navigate("/path")` — programmatic navigation.
-- `storage.set(...)`, `console.log(...)` — global namespaces (§12).
+- `$storage.set(...)`, `console.log(...)` — global namespaces (§12).
 - Standard JS control flow: `if`/`switch`/`for`.
 - `return` — optionally yields a value to the caller.
 
@@ -983,7 +1088,7 @@ function toggle(id) {
 }
 
 function remove(id) {
-  $todos = Util.filter($todos, "id", "!=", id)
+  $todos = $util.filter($todos, "id", "!=", id)
 }
 ```
 
@@ -993,9 +1098,9 @@ function remove(id) {
 function shipOrder(orderId) {
   let prev = $orders
   $orders = $orders.map(o => o.id == orderId ? {...o, status: "shipped"} : o)
-  $ship   = Http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
+  $ship   = $http({ url: "https://api.example.com/orders/" + orderId + "/ship", method: "POST" })
 
-  effect(() => {
+  $effect(() => {
     if ($ship.error) { $orders = prev }
   }, [$ship])
 }
@@ -1009,7 +1114,7 @@ $body  = ""
 
 function submit() {
   if (!$title) { return }
-  $create = Http({
+  $create = $http({
     url:    "https://api.example.com/posts",
     method: "POST",
     body:   { title: $title, body: $body },
@@ -1038,10 +1143,10 @@ function openExternal(url) {
 ## 6. Effects
 
 `effect` attaches side effects to a component or top-level binding.
-The signature is `effect(callback, dependencies)`:
+The signature is `$effect(callback, dependencies)`:
 
 ```javascript
-effect(() => {
+$effect(() => {
   // body
 }, [...dependencies])
 ```
@@ -1059,21 +1164,21 @@ Dependencies can be combined freely:
 
 ```javascript
 function LiveClock() {
-  $now = Util.now()
-  effect(() => { $now = Util.now() }, ["every(1000)"])
-  return Text(Util.formatDate($now, "time"))
+  $now = $util.now()
+  $effect(() => { $now = $util.now() }, ["every(1000)"])
+  return Text($util.formatDate($now, "time"))
 }
 
-effect(() => {
-  $results = Http({
+$effect(() => {
+  $results = $http({
     url:   "https://api.example.com/search",
     query: { q: $query, page: $page }
   })
 }, [$query, $page, "debounce(250)"])
 ```
 
-`effect(() => { ... })` with no second argument is equivalent to
-`effect(() => { ... }, ["mount"])`.
+`$effect(() => { ... })` with no second argument is equivalent to
+`$effect(() => { ... }, ["mount"])`.
 
 ### Scope — top-level vs. component-local
 
@@ -1091,7 +1196,7 @@ An `effect` can live in **two** places:
 aktion = App()
 $value = 10
 
-effect(() => {
+$effect(() => {
   $value = $value + 1
 }, ["every(1000)"])
 
@@ -1105,7 +1210,7 @@ function App() {
 ```javascript
 function App() {
   $value = 10
-  effect(() => {
+  $effect(() => {
     $value = $value + 1
   }, ["every(1000)"])
   return Box([Text("Value: " + $value)])
@@ -1119,9 +1224,9 @@ Use `cleanup(fn)` inside an effect callback to register teardown for
 intervals, listeners, observers:
 
 ```javascript
-effect(() => {
+$effect(() => {
   const onKey = (e) => {
-    if (e.key === "k" && e.metaKey) emit("toggle-palette", {})
+    if (e.key === "k" && e.metaKey) $emit("toggle-palette", {})
   }
   document.addEventListener("keydown", onKey)
   cleanup(() => document.removeEventListener("keydown", onKey))
@@ -1133,15 +1238,15 @@ effect(() => {
 **Sync to storage:**
 
 ```javascript
-effect(() => {
-  storage.set("draft", $draft)
+$effect(() => {
+  $storage.set("draft", $draft)
 }, [$draft, "debounce(500)"])
 ```
 
 **Periodic refresh:**
 
 ```javascript
-effect(() => {
+$effect(() => {
   $orders.refetch()
 }, ["every(30000)"])
 ```
@@ -1149,18 +1254,18 @@ effect(() => {
 **Cross-cutting analytics on route changes:**
 
 ```javascript
-effect(() => {
-  emit("track", { event: "page_view", path: route.path })
+$effect(() => {
+  $emit("track", { event: "page_view", path: route.path })
 }, [route.path])
 ```
 
 ---
 
-## 7. HTTP — `Http({...})`
+## 7. HTTP — `$http({...})`
 
-There is exactly one HTTP primitive: the `Http({ ... })` function. Every
+There is exactly one HTTP primitive: the `$http({ ... })` function. Every
 call is **self-contained** — there are NO host-wide defaults, no
-`$http = Http({ baseUrl })` setter. Pass a full absolute `url` to each
+`$http = $http({ baseUrl })` setter. Pass a full absolute `url` to each
 call.
 
 ### Config options
@@ -1177,7 +1282,7 @@ call.
 ### Reads (GET / HEAD / OPTIONS)
 
 ```javascript
-$orders = Http({
+$orders = $http({
   url:    "https://api.example.com/users/" + $userId + "/orders",
   method: "GET",                          // GET is the default — can be omitted
   query:  { limit: 5, status: "open" },   // → ?limit=5&status=open
@@ -1186,12 +1291,12 @@ $orders = Http({
 ```
 
 A request fires once when its binding mounts. To re-run it, call
-`$orders.refetch()`, or wrap the call in an `effect(..., [$dep])` so it
+`$orders.refetch()`, or wrap the call in an `$effect(..., [$dep])` so it
 re-issues when a dependency changes:
 
 ```javascript
-effect(() => {
-  $results = Http({ url: "https://api.example.com/search", query: { q: $query } })
+$effect(() => {
+  $results = $http({ url: "https://api.example.com/search", query: { q: $query } })
 }, [$query, "debounce(300)"])
 ```
 
@@ -1199,9 +1304,9 @@ effect(() => {
 
 ```javascript
 function saveOrder(payload) {
-  $save = Http({ url: "https://api.example.com/orders", method: "POST", body: payload })
+  $save = $http({ url: "https://api.example.com/orders", method: "POST", body: payload })
   $orders.refetch()   // refresh the list after a write
-  emit("assistant-message", { message: "Saved." })
+  $emit("assistant-message", { message: "Saved." })
 }
 ```
 
@@ -1228,7 +1333,7 @@ a superseded or `cancel()`led request. It's the cleanest way to refresh a
 list after a write:
 
 ```javascript
-$patch = Http({
+$patch = $http({
   url:    endpoint + "/" + todo.id,
   method: "PATCH",
   body:   { isCompleted: !todo.isCompleted }
@@ -1252,86 +1357,86 @@ view = Async($orders, {
 
 ---
 
-## 8. `Util` — runtime helper namespace
+## 8. `$util` — runtime helper namespace
 
-Aktion exposes a single global `Util` object whose methods may appear
+Aktion exposes a single global `$util` object whose methods may appear
 anywhere in an expression. Every method is **pure** — no side effects,
 no I/O — and the namespace is extensible: new helpers can be added to
-`Util` over time without changing the language. Many helpers overlap
+`$util` over time without changing the language. Many helpers overlap
 with native JavaScript (`arr.length`, `arr.filter(…)`,
 `Math.round(…)`); prefer the native form when it reads cleanly and
-reach for `Util` for field-based comparators, locale-aware
+reach for `$util` for field-based comparators, locale-aware
 formatting, or skeleton ranges.
 
 ### Aggregation
 
 | Function           | Purpose                                |
 | ------------------ | -------------------------------------- |
-| `Util.count(arr)`      | Number of items.                       |
-| `Util.sum(arr)`        | Sum of numeric items.                  |
-| `Util.avg(arr)`        | Mean of numeric items.                 |
-| `Util.min(arr)`        | Smallest numeric value.                |
-| `Util.max(arr)`        | Largest numeric value.                 |
-| `Util.first(arr)`      | First item or `null`.                  |
-| `Util.last(arr)`       | Last item or `null`.                   |
+| `$util.count(arr)`      | Number of items.                       |
+| `$util.sum(arr)`        | Sum of numeric items.                  |
+| `$util.avg(arr)`        | Mean of numeric items.                 |
+| `$util.min(arr)`        | Smallest numeric value.                |
+| `$util.max(arr)`        | Largest numeric value.                 |
+| `$util.first(arr)`      | First item or `null`.                  |
+| `$util.last(arr)`       | Last item or `null`.                   |
 
 ### Numeric
 
 | Function                          | Purpose                                |
 | --------------------------------- | -------------------------------------- |
-| `Util.round(n, decimals?)`            | Round to N decimal places.             |
-| `Util.abs(n)` / `Util.floor(n)` / `Util.ceil(n)` | Standard math.                     |
-| `Util.clamp(n, min, max)`             | Constrain into a range.                |
-| `Util.pow(base, exp)` / `Util.sqrt(n)` / `Util.log(n)` | Standard math.               |
-| `Util.random()`                       | Random number in `[0, 1)`.             |
+| `$util.round(n, decimals?)`            | Round to N decimal places.             |
+| `$util.abs(n)` / `$util.floor(n)` / `$util.ceil(n)` | Standard math.                     |
+| `$util.clamp(n, min, max)`             | Constrain into a range.                |
+| `$util.pow(base, exp)` / `$util.sqrt(n)` / `$util.log(n)` | Standard math.               |
+| `$util.random()`                       | Random number in `[0, 1)`.             |
 
 ### Array shape
 
 | Function                                    | Purpose                                                         |
 | ------------------------------------------- | --------------------------------------------------------------- |
-| `Util.filter(arr, "field", "op", value)`        | Keep items matching a comparator.                               |
-| `Util.sort(arr, "field", "asc" \| "desc")`      | Stable sort by field.                                           |
-| `Util.find(arr, "field", "op", value)`          | First match (or `null`).                                        |
-| `Util.groupBy(arr, "field")`                    | `{ groupKey: [items…] }`.                                       |
-| `Util.slice(arr, start?, end?)`                 | Standard slice.                                                 |
-| `Util.reverse(arr)`                             | Reversed copy.                                                  |
-| `Util.unique(arr, "field"?)`                    | Deduplicate.                                                    |
-| `Util.range(start, end, step?)`                 | Inclusive integer range.                                        |
-| `Util.repeat(value, n)`                         | Repeat a value N times.                                         |
-| `Util.pick(obj, ["a", "b"])`                    | Keep only the listed keys.                                      |
+| `$util.filter(arr, "field", "op", value)`        | Keep items matching a comparator.                               |
+| `$util.sort(arr, "field", "asc" \| "desc")`      | Stable sort by field.                                           |
+| `$util.find(arr, "field", "op", value)`          | First match (or `null`).                                        |
+| `$util.groupBy(arr, "field")`                    | `{ groupKey: [items…] }`.                                       |
+| `$util.slice(arr, start?, end?)`                 | Standard slice.                                                 |
+| `$util.reverse(arr)`                             | Reversed copy.                                                  |
+| `$util.unique(arr, "field"?)`                    | Deduplicate.                                                    |
+| `$util.range(start, end, step?)`                 | Inclusive integer range.                                        |
+| `$util.repeat(value, n)`                         | Repeat a value N times.                                         |
+| `$util.pick(obj, ["a", "b"])`                    | Keep only the listed keys.                                      |
 
 ### Formatting
 
 | Function                                                            | Purpose                                                                    |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `Util.format(value, mode?, options?)`                                   | Locale-aware number formatter. Modes: `"number"`, `"currency"`, `"percent"`, `"compact"`. |
-| `Util.formatDate(value, format?)`                                       | Formats a date. Named modes: `"relative"`, `"date"`, `"time"`, `"datetime"`, `"iso"`. |
-| `Util.plural(n, "singular", "plural"?)`                                 | Returns `"1 order"` / `"2 orders"`.                                        |
+| `$util.format(value, mode?, options?)`                                   | Locale-aware number formatter. Modes: `"number"`, `"currency"`, `"percent"`, `"compact"`. |
+| `$util.formatDate(value, format?)`                                       | Formats a date. Named modes: `"relative"`, `"date"`, `"time"`, `"datetime"`, `"iso"`. |
+| `$util.plural(n, "singular", "plural"?)`                                 | Returns `"1 order"` / `"2 orders"`.                                        |
 
 ### Date / time
 
 | Function                       | Purpose                                    |
 | ------------------------------ | ------------------------------------------ |
-| `Util.now()`                       | Current moment as epoch ms.                |
-| `Util.today()`                     | Today's date at midnight, ISO string.      |
-| `Util.addDays(date, n)`            | Shift a date by N days.                    |
-| `Util.addHours(date, n)`           | Shift a date by N hours.                   |
-| `Util.diffDays(start, end)`        | Whole-day difference.                      |
-| `Util.startOfWeek(date)`           | UTC Sunday 00:00:00 for the week.          |
-| `Util.endOfMonth(date)`            | Last moment of the calendar month.         |
+| `$util.now()`                       | Current moment as epoch ms.                |
+| `$util.today()`                     | Today's date at midnight, ISO string.      |
+| `$util.addDays(date, n)`            | Shift a date by N days.                    |
+| `$util.addHours(date, n)`           | Shift a date by N hours.                   |
+| `$util.diffDays(start, end)`        | Whole-day difference.                      |
+| `$util.startOfWeek(date)`           | UTC Sunday 00:00:00 for the week.          |
+| `$util.endOfMonth(date)`            | Last moment of the calendar month.         |
 
 ### String
 
 | Function                                                                     | Purpose                              |
 | ---------------------------------------------------------------------------- | ------------------------------------ |
-| `Util.capitalize(s)` / `Util.lowercase(s)` / `Util.uppercase(s)` / `Util.titlecase(s)`      | Standard case operations.            |
-| `Util.case(value, "camel" \| "snake" \| "kebab" \| "pascal")`                    | Re-case a value.                     |
-| `Util.join(arr, sep?)`                                                           | Join with separator.                 |
-| `Util.split(s, sep?)`                                                            | Split on separator.                  |
-| `Util.trim(s)` / `Util.startsWith(s, p)` / `Util.endsWith(s, p)` / `Util.contains(s, p)`   | Standard string ops.                 |
-| `Util.replace(s, search, replacement?)`                                          | Replace all occurrences.             |
-| `Util.substring(s, start, end?)`                                                 | Standard substring.                  |
-| `Util.match(s, pattern)`                                                         | Boolean regex match.                 |
+| `$util.capitalize(s)` / `$util.lowercase(s)` / `$util.uppercase(s)` / `$util.titlecase(s)`      | Standard case operations.            |
+| `$util.case(value, "camel" \| "snake" \| "kebab" \| "pascal")`                    | Re-case a value.                     |
+| `$util.join(arr, sep?)`                                                           | Join with separator.                 |
+| `$util.split(s, sep?)`                                                            | Split on separator.                  |
+| `$util.trim(s)` / `$util.startsWith(s, p)` / `$util.endsWith(s, p)` / `$util.contains(s, p)`   | Standard string ops.                 |
+| `$util.replace(s, search, replacement?)`                                          | Replace all occurrences.             |
+| `$util.substring(s, start, end?)`                                                 | Standard substring.                  |
+| `$util.match(s, pattern)`                                                         | Boolean regex match.                 |
 
 ### Array shortcuts (not functions)
 
@@ -1405,7 +1510,7 @@ function submit(payload) {
 }
 
 function safeFetch(_) {
-  try   { $resp = Http({ url: "https://api.example.com/data" }) }
+  try   { $resp = $http({ url: "https://api.example.com/data" }) }
   catch (err) { $error = err }
   finally     { $loading = false }
 }
@@ -1432,7 +1537,7 @@ filteredTodos = $todos
   .filter(t => t.title.includes($searchQuery))
 
 // Ternary split across lines.
-tabUI = Util.count(filteredTodos) == 0
+tabUI = $util.count(filteredTodos) == 0
   ? EmptyState()
   : Stack(filteredTodos.map(TodoRow))
 
@@ -1505,7 +1610,7 @@ automatically:
 
 ```javascript
 async function loadUser(id) {
-  let user = await Http({ url: "https://api.example.com/users/" + id }).data
+  let user = await $http({ url: "https://api.example.com/users/" + id }).data
   $current = user
   return user
 }
@@ -1756,7 +1861,7 @@ Notes:
 - `Css(child, { style?, class? })` — merge raw class tokens and inline
   style declarations onto the child. Use ONLY when the standard
   component props can't express the styling. Prefer `Box` / `Stack` /
-  `Grid` props for layout and `Theme(...)` for tokens.
+  `Grid` props for layout and `$theme(...)` for tokens.
 - `Link(label_or_child, { to?, href?, external?, variant? })` —
   anchor primitive. The positional accepts either a string label or
   a wrapped component. Pass `to` for client-side router navigation
@@ -1805,7 +1910,7 @@ When to reach for what:
 - Need infinite scroll? → `OnIntersect({ onEnter: loadMore, once: true })`
   on a sentinel at the bottom of the list.
 - Need a custom CSS class or one-off style? → `Css`. Need theme tokens
-  or sweeping styles? → `Theme(...)` or `Styles` + a selector.
+  or sweeping styles? → `$theme(...)` or `Styles` + a selector.
 
 ### Escape hatches — last-resort raw HTML / CSS
 
@@ -1866,7 +1971,7 @@ accessible inside function bodies and effect callbacks.
 Two globals (beyond `window` and the usual browser APIs) are recognised
 by the runtime:
 
-- `emit("name", detail?)` — dispatches a `CustomEvent` on the
+- `$emit("name", detail?)` — dispatches a `CustomEvent` on the
   `<aktion-app>` host element. Reserved names: `assistant-message`,
   `error`, `route-change`. Hosts listen with
   `el.addEventListener("name", ...)`.
@@ -1874,7 +1979,7 @@ by the runtime:
   component. Fires on dependency re-run, unmount, or `clear()`.
 
 The other always-available bindings (also documented in §12 and §11)
-are `storage` (localStorage / sessionStorage / cookies), `console`,
+are `$storage` (localStorage / sessionStorage / cookies), `$console`,
 `route` (the router handle), and your own reactive `$atom`s.
 
 ### Common recipes
@@ -1884,14 +1989,14 @@ are `storage` (localStorage / sessionStorage / cookies), `console`,
 ```javascript
 function copyShareLink() {
   navigator.clipboard.writeText(window.location.href)
-  emit("assistant-message", { message: "Link copied" })
+  $emit("assistant-message", { message: "Link copied" })
 }
 ```
 
 **Keyboard shortcuts:**
 
 ```javascript
-effect(() => {
+$effect(() => {
   const onKey = (e) => {
     if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
       $paletteOpen = true
@@ -1907,12 +2012,12 @@ effect(() => {
 
 ```javascript
 function LiveClock() {
-  $now = Util.now()
-  effect(() => {
+  $now = $util.now()
+  $effect(() => {
     const id = setInterval(() => { $now = Date.now() }, 1000)
     cleanup(() => clearInterval(id))
   }, ["mount"])
-  return Text(Util.formatDate($now, "time"))
+  return Text($util.formatDate($now, "time"))
 }
 ```
 
@@ -1920,7 +2025,7 @@ function LiveClock() {
 
 ```javascript
 function loadOrders() {
-  $orders = Http({ url: "https://api.example.com/orders", query: { limit: 10 } })
+  $orders = $http({ url: "https://api.example.com/orders", query: { limit: 10 } })
 }
 ```
 
@@ -1948,11 +2053,11 @@ The CSP note: effect callbacks and action functions are evaluated with
 
 ## 11. Routing
 
-The router is a plain function call. `Router({ "/path": ... })` returns
+The router is a plain function call. `$router({ "/path": ... })` returns
 the matched arm's evaluated value — assign the result to any binding.
 
 ```javascript
-pages = Router({
+pages = $router({
   "/":             Dashboard(),
   "/orders":       OrdersPage(),
   "/orders/:id":   OrderDetail({ id: params.id }),
@@ -2001,7 +2106,7 @@ nav = Stack([
 
 ```javascript
 function SettingsArea() {
-  inner = Router({
+  inner = $router({
     "/settings/profile":       ProfilePane(),
     "/settings/billing":       BillingPane(),
     "/settings/notifications": NotificationsPane(),
@@ -2010,7 +2115,7 @@ function SettingsArea() {
   return Stack([SettingsSidebar(), inner], { direction: "row", gap: "l" })
 }
 
-pages = Router({
+pages = $router({
   "/":           Dashboard(),
   "/settings/*": SettingsArea(),
   default:       NotFound()
@@ -2019,30 +2124,30 @@ pages = Router({
 
 ---
 
-## 12. Globals — `storage`, `console`
+## 12. Globals — `$storage`, `$console`
 
 Two namespace globals are always in scope — no import, no declaration.
 Both names are **lowercase** and follow standard JS `obj.method(args)`
 method-call syntax with object-literal options.
 
-### `storage` — browser storage
+### `$storage` — browser storage
 
 ```javascript
-// localStorage is the default; `storage.local` is its alias.
-storage.set("name", "John")
-$name = storage.get("name")
-storage.remove("name")
-storage.clear()
+// localStorage is the default; `$storage.local` is its alias.
+$storage.set("name", "John")
+$name = $storage.get("name")
+$storage.remove("name")
+$storage.clear()
 
 // Per-tab sessionStorage.
-storage.session.set("draft", $draft)
-$draft = storage.session.get("draft")
+$storage.session.set("draft", $draft)
+$draft = $storage.session.get("draft")
 
 // Cookies — options as an object literal.
-storage.cookies.set("user", "John", { expires: 7, path: "/", domain: "example.com", secure: true, sameSite: "Lax" })
-$user = storage.cookies.get("user")
-storage.cookies.remove("user", { path: "/" })
-storage.cookies.clear()
+$storage.cookies.set("user", "John", { expires: 7, path: "/", domain: "example.com", secure: true, sameSite: "Lax" })
+$user = $storage.cookies.get("user")
+$storage.cookies.remove("user", { path: "/" })
+$storage.cookies.clear()
 ```
 
 **Notes:**
@@ -2055,7 +2160,7 @@ storage.cookies.clear()
   swallowed silently — perfect for partial-stream renders in
   privacy / SSR contexts.
 
-### `console` — host console forwarder
+### `$console` — host console forwarder
 
 ```javascript
 console.log("Hello", $user)
@@ -2072,12 +2177,12 @@ and inline lambdas.
 
 ## 13. Internationalization
 
-Call `i18n({...})` to build a translation bundle. Destructure `t`,
+Call `$i18n({...})` to build a translation bundle. Destructure `t`,
 `setCurrentLanguage`, `getCurrentLanguage` — or keep the bundle as an
 instance and call its methods.
 
 ```javascript
-const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({
   defaultLanguage: "en",
   currentLanguage: "fr",
   translations: {
@@ -2102,14 +2207,14 @@ Reactive language switching — drive `currentLanguage` from a `$state`
 atom so the bundle rebuilds when the user picks a new language:
 
 ```javascript
-$locale = storage.get("locale") ?? "en"
+$locale = $storage.get("locale") ?? "en"
 
 function setLocale(next) {
   $locale = next
-  storage.set("locale", next)
+  $storage.set("locale", next)
 }
 
-const { t } = i18n({
+const { t } = $i18n({
   defaultLanguage: "en",
   currentLanguage: $locale,
   translations: { hi: { en: "Hi", fr: "Salut", de: "Hallo" } }
@@ -2134,12 +2239,12 @@ The host page chooses one of seven built-in themes via the `theme`
 attribute or `el.setTheme(...)`. Authored programs should be
 theme-neutral.
 
-### In-script branding with `Theme({...})`
+### In-script branding with `$theme({...})`
 
 When the user **explicitly asks for a brand feel**, emit:
 
 ```javascript
-theme = Theme({
+theme = $theme({
   colors: {
     primary:    "#635bff",
     bg:         "#0a0a23",
@@ -2215,7 +2320,7 @@ function toggle(id) {
 }
 
 function remove(id) {
-  $todos = Util.filter($todos, "id", "!=", id)
+  $todos = $util.filter($todos, "id", "!=", id)
 }
 
 row = (t) => Card([Stack([
@@ -2226,12 +2331,12 @@ row = (t) => Card([Stack([
 list = $todos.map(t => row(t))
 
 aktion = Stack([
-  PageHeader("Todos", { subtitle: `${Util.count($todos)} items`, actions: [Button("Clear all", { onClick: () => $todos = [], variant: "ghost" })] }),
+  PageHeader("Todos", { subtitle: `${$util.count($todos)} items`, actions: [Button("Clear all", { onClick: () => $todos = [], variant: "ghost" })] }),
   Card([Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft, onEnter: add }),
     Button("Add", { onClick: add, variant: "primary" })
   ], { direction: "row", gap: "s" })]),
-  Util.count($todos) == 0
+  $util.count($todos) == 0
     ? EmptyState("No todos yet", { description: "Add your first task above.", icon: "list-check" })
     : Stack(list, { gap: "s" })
 ], { gap: "l" })
@@ -2263,10 +2368,10 @@ aktion = Grid([
 
 ```javascript
 function refresh() { $orders.refetch() }
-function exportCsv() { $exp = Http({ url: "https://api.example.com/exports/orders.csv", method: "POST" }) }
+function exportCsv() { $exp = $http({ url: "https://api.example.com/exports/orders.csv", method: "POST" }) }
 function newOrder() { route.navigate("/orders/new") }
 
-$orders = Http({ url: "https://api.example.com/orders", method: "GET", query: { range: $range } })
+$orders = $http({ url: "https://api.example.com/orders", method: "GET", query: { range: $range } })
 $range  = "30d"
 
 header = PageHeader("Orders", {
@@ -2325,9 +2430,9 @@ ordersTable = Card([
 activity = Card([
   SectionHeader("Recent activity"),
   ActivityLog([
-    { actor: "Asha", title: "Approved refund for #4821", time: Util.formatDate(Util.now() - 600000, "relative"), icon: "circle-check", tone: "success" },
-    { actor: "Wren", title: "Flagged order #4798 for review", time: Util.formatDate(Util.now() - 3600000, "relative"), icon: "flag", tone: "warning" },
-    { actor: "Mira", title: "Updated shipping rules", time: Util.formatDate(Util.now() - 7200000, "relative"), icon: "truck" }
+    { actor: "Asha", title: "Approved refund for #4821", time: $util.formatDate($util.now() - 600000, "relative"), icon: "circle-check", tone: "success" },
+    { actor: "Wren", title: "Flagged order #4798 for review", time: $util.formatDate($util.now() - 3600000, "relative"), icon: "flag", tone: "warning" },
+    { actor: "Mira", title: "Updated shipping rules", time: $util.formatDate($util.now() - 7200000, "relative"), icon: "truck" }
   ])
 ])
 
@@ -2347,7 +2452,7 @@ stepLabels = ["Profile", "Account", "Review"]
 function next() { if ($step < 2) { $step = $step + 1 } }
 function prev() { if ($step > 0) { $step = $step - 1 } }
 function submit() {
-  $save = Http({ url: "https://api.example.com/users", method: "POST", body: $data })
+  $save = $http({ url: "https://api.example.com/users", method: "POST", body: $data })
   $step = 0
   $data = { name: "", email: "", role: "" }
 }
@@ -2405,7 +2510,7 @@ $timezone     = "America/Los_Angeles"
 $theme_pref   = "system"
 
 function save() {
-  $save = Http({ url: "https://api.example.com/settings", method: "PUT", body: { profile: $profile, notify: { email: $notify_email, sms: $notify_sms }, timezone: $timezone, theme: $theme_pref } })
+  $save = $http({ url: "https://api.example.com/settings", method: "PUT", body: { profile: $profile, notify: { email: $notify_email, sms: $notify_sms }, timezone: $timezone, theme: $theme_pref } })
 }
 
 general = Card([
@@ -2459,9 +2564,9 @@ $draft = ""
 
 function send() {
   if (!$draft) { return }
-  $thread = [...$thread, { id: $thread.length + 1, from: "me", body: $draft, time: Util.formatDate(Util.now(), "time") }]
+  $thread = [...$thread, { id: $thread.length + 1, from: "me", body: $draft, time: $util.formatDate($util.now(), "time") }]
   $draft  = ""
-  emit("assistant-message", { message: "User said: " + $draft })
+  $emit("assistant-message", { message: "User said: " + $draft })
 }
 
 inbox = InboxPanel([
@@ -2527,7 +2632,7 @@ function NotFound() {
   return EmptyState("Page not found", { description: `We couldn't find ${route.path}.`, action: Button("Go home", { onClick: () => route.navigate("/"), variant: "primary" }) })
 }
 
-pages = Router({
+pages = $router({
   "/":             HomePage(),
   "/orders":       OrdersPage(),
   "/orders/:id":   OrderDetail({ id: params.id }),
@@ -2589,12 +2694,12 @@ list = Stack($services.map(s =>
 timeline = Card([
   SectionHeader("Recent incidents"),
   Timeline([
-    TimelineItem("Database latency",   { time: Util.formatDate(Util.now() - 1800000, "relative"), description: "p99 latency above 500ms.", icon: "database", tone: "warning" }),
-    TimelineItem("Resolved: queue",    { time: Util.formatDate(Util.now() - 86400000, "relative"), description: "Queue throughput restored.", icon: "circle-check", tone: "success" })
+    TimelineItem("Database latency",   { time: $util.formatDate($util.now() - 1800000, "relative"), description: "p99 latency above 500ms.", icon: "database", tone: "warning" }),
+    TimelineItem("Resolved: queue",    { time: $util.formatDate($util.now() - 86400000, "relative"), description: "Queue throughput restored.", icon: "circle-check", tone: "success" })
   ])
 ])
 
-effect(() => {
+$effect(() => {
   console.log("refreshing status")
 }, ["every(30000)"])
 
@@ -2656,13 +2761,13 @@ $cart  = [
   { id: 2, title: "Notebook",     qty: 1, price: 18.0 },
   { id: 3, title: "Sticker pack", qty: 3, price: 4.5 }
 ]
-$total = Util.sum($cart.map(it => it.qty * it.price))
+$total = $util.sum($cart.map(it => it.qty * it.price))
 $customer = { name: "", email: "", address: "" }
 
 function next() { $step = "payment" }
 function back() { $step = "details" }
 function place() {
-  $place = Http({ url: "https://api.example.com/checkout", method: "POST", body: { customer: $customer, items: $cart } })
+  $place = $http({ url: "https://api.example.com/checkout", method: "POST", body: { customer: $customer, items: $cart } })
   $step = "confirm"
 }
 
@@ -2673,11 +2778,11 @@ orderSummary = Card([
   Stack($cart.map(it =>
     Stack([
       Text(`${it.qty} × ${it.title}`),
-      Text(Util.format(it.qty * it.price, "currency"))
+      Text($util.format(it.qty * it.price, "currency"))
     ], { direction: "row", justify: "between" })
   ), { gap: "s" }),
   Separator(),
-  Stack([Text("Total", { variant: "large-heavy" }), Text(Util.format($total, "currency"), { variant: "large-heavy" })], { direction: "row", justify: "between" })
+  Stack([Text("Total", { variant: "large-heavy" }), Text($util.format($total, "currency"), { variant: "large-heavy" })], { direction: "row", justify: "between" })
 ])
 
 detailsForm = Card([
@@ -2695,7 +2800,7 @@ paymentForm = Card([
   Callout("This demo doesn't process real payments.", { variant: "info", icon: "circle-info" }),
   Buttons([
     Button("Back", { onClick: back, variant: "ghost", icon: "arrow-left" }),
-    Button(`Pay ${Util.format($total, "currency", "USD")}`, { onClick: place, variant: "primary" })
+    Button(`Pay ${$util.format($total, "currency", "USD")}`, { onClick: place, variant: "primary" })
   ])
 ])
 
@@ -2731,7 +2836,7 @@ function open(node) {
 }
 
 function back() {
-  if ($path.length > 1) { $path = Util.slice($path, 0, $path.length - 1) }
+  if ($path.length > 1) { $path = $util.slice($path, 0, $path.length - 1) }
 }
 
 breadcrumb = Breadcrumb($path)
@@ -2773,14 +2878,14 @@ aktion = Stack([
 ### Pattern L — Calendar / scheduler
 
 ```javascript
-$selected = Util.today()
+$selected = $util.today()
 $events   = [
-  { date: Util.today(),              title: "Team standup",     time: "9:00",  tone: "primary" },
-  { date: Util.addDays(Util.today(), 1), title: "Customer call",   time: "14:00", tone: "info" },
-  { date: Util.addDays(Util.today(), 3), title: "1:1 with manager", time: "11:00", tone: "warning" }
+  { date: $util.today(),              title: "Team standup",     time: "9:00",  tone: "primary" },
+  { date: $util.addDays($util.today(), 1), title: "Customer call",   time: "14:00", tone: "info" },
+  { date: $util.addDays($util.today(), 3), title: "1:1 with manager", time: "11:00", tone: "warning" }
 ]
 
-dayEvents = Util.filter($events, "date", "==", $selected)
+dayEvents = $util.filter($events, "date", "==", $selected)
 
 calendar = Card([
   SectionHeader("Schedule", { actions: [Button("Add event", { icon: "plus", variant: "primary" })] }),
@@ -2788,8 +2893,8 @@ calendar = Card([
 ])
 
 list = Card([
-  SectionHeader(`Events for ${Util.formatDate($selected, "MMM D")}`),
-  Util.count(dayEvents) == 0
+  SectionHeader(`Events for ${$util.formatDate($selected, "MMM D")}`),
+  $util.count(dayEvents) == 0
     ? EmptyState("Nothing scheduled", { description: "Pick a different day or add an event.", icon: "calendar-plus" })
     : Stack(dayEvents.map(e =>
         Stack([Badge(e.time, { variant: e.tone }), Text(e.title)], { direction: "row", gap: "m", align: "center" })
@@ -2826,8 +2931,8 @@ function getContent() {
   switch (route.path) {
     case "/docs/install":    return Markdown("# Installation\n\nRun `npm install acme`.")
     case "/docs/quickstart": return Markdown("# Quick start\n\nMount the tag and stream a response.")
-    case "/docs/routing":    return Markdown("# Routing\n\nUse `pages = Router({ … })`.")
-    case "/docs/theming":    return Markdown("# Theming\n\nPick a theme or pass `Theme({…})`.")
+    case "/docs/routing":    return Markdown("# Routing\n\nUse `pages = $router({ … })`.")
+    case "/docs/theming":    return Markdown("# Theming\n\nPick a theme or pass `$theme({…})`.")
     default:                 return Markdown("# Welcome\n\nPick a topic from the tree.")
   }
 }
@@ -2873,8 +2978,8 @@ $people = [
   { name: "Mira Patel",  role: "Engineer", team: "Mobile",    status: "online" }
 ]
 
-filtered = Util.filter(
-  $role == "all" ? $people : Util.filter($people, "role", "==", $role),
+filtered = $util.filter(
+  $role == "all" ? $people : $util.filter($people, "role", "==", $role),
   "name", "contains", $query
 )
 
@@ -2895,9 +3000,9 @@ cards = Grid(filtered.map(p =>
 ), { columns: { sm: 1, md: 2, lg: 3 }, gap: "l" })
 
 aktion = Stack([
-  PageHeader("Directory", { subtitle: `${Util.count(filtered)} people` }),
+  PageHeader("Directory", { subtitle: `${$util.count(filtered)} people` }),
   toolbar,
-  Util.count(filtered) == 0
+  $util.count(filtered) == 0
     ? EmptyState("No matches", { description: "Try a different search term.", icon: "magnifying-glass" })
     : cards
 ], { gap: "l" })
@@ -2906,7 +3011,7 @@ aktion = Stack([
 ### Pattern P — Brand-themed landing page
 
 ```javascript
-theme = Theme({
+theme = $theme({
   colors: { primary: "#0969da", accent: "#1f6feb", bg: "#ffffff", text: "#1f2328", border: "#d0d7de" },
   font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", familyHeading: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightHeading: "600" },
   radius: { button: "6px", input: "6px" }
@@ -2949,10 +3054,10 @@ columns = [
   { id: "done",   title: "Done" }
 ]
 
-cardsFor = (colId) => Util.filter($cards, "col", "==", colId)
+cardsFor = (colId) => $util.filter($cards, "col", "==", colId)
 
 aktion = Stack([
-  PageHeader("Sprint board", { subtitle: `${Util.count($cards)} cards across ${Util.count(columns)} columns` }),
+  PageHeader("Sprint board", { subtitle: `${$util.count($cards)} cards across ${$util.count(columns)} columns` }),
   KanbanBoard(columns.map(c =>
     KanbanColumn(c.title, { items: cardsFor(c.id).map(card =>
       KanbanCard(card.title, { description: card.title, tags: card.tags, assignee: card.assignee, tone: card.tone })
@@ -2978,7 +3083,7 @@ list = InboxPanel($threads.map(t => ({ ...t, onClick: () => open(t.id) })), { ti
 thread = $active
   ? Card([
       SectionHeader($threads.first.title),
-      Stack(Util.range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "s" }),
+      Stack($util.range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "s" }),
       TextArea("reply", { placeholder: "Reply…" }),
       Buttons([Button("Send", { variant: "primary", icon: "paper-plane" })])
     ])
@@ -3024,7 +3129,7 @@ aktion = Stack([
 ### Pattern T — Data explorer
 
 ```javascript
-$rows = Http({ url: "https://api.example.com/events", method: "GET" })
+$rows = $http({ url: "https://api.example.com/events", method: "GET" })
 $sortField = "ts"
 $sortDir   = "desc"
 $selected  = []
@@ -3034,9 +3139,9 @@ function sortBy(field) {
   else { $sortField = field; $sortDir = "asc" }
 }
 
-bulk = Util.count($selected) > 0
+bulk = $util.count($selected) > 0
   ? Card([Stack([
-      Text(`${Util.count($selected)} selected`),
+      Text(`${$util.count($selected)} selected`),
       Buttons([
         Button("Mark resolved", { variant: "primary" }),
         Button("Clear", { onClick: () => $selected = [], variant: "ghost" })
@@ -3052,7 +3157,7 @@ table = DataGrid([
 ], { rowIds: $rows.data.id, selectedIds: $selected, selectable: true, sort: { field: $sortField, direction: $sortDir } })
 
 aktion = Stack([
-  PageHeader("Events", { subtitle: `${Util.count($rows.data)} events` }),
+  PageHeader("Events", { subtitle: `${$util.count($rows.data)} events` }),
   bulk,
   Async($rows, {
     loading: LoadingState("Loading events…"),
@@ -3090,21 +3195,21 @@ aktion = Stack([
 ```javascript
 $messages = []
 
-effect(() => {
-  $messages = [{ id: Util.now(), body: "Server tick at " + Util.formatDate(Util.now(), "time"), tone: "info" }, ...$messages]
-  if ($messages.length > 20) { $messages = Util.slice($messages, 0, 20) }
+$effect(() => {
+  $messages = [{ id: $util.now(), body: "Server tick at " + $util.formatDate($util.now(), "time"), tone: "info" }, ...$messages]
+  if ($messages.length > 20) { $messages = $util.slice($messages, 0, 20) }
 }, ["every(2000)"])
 
 feed = Stack($messages.map(m =>
   Card([Stack([
-    Badge(Util.formatDate(m.id, "time"), { variant: m.tone }),
+    Badge($util.formatDate(m.id, "time"), { variant: m.tone }),
     Text(m.body)
   ], { direction: "row", gap: "m" })])
 ), { gap: "s" })
 
 aktion = Stack([
   PageHeader("Live feed", { subtitle: "Auto-updating every 2s" }),
-  Util.count($messages) == 0
+  $util.count($messages) == 0
     ? EmptyState("Waiting for events…", { icon: "satellite-dish" })
     : feed
 ], { gap: "l" })
@@ -3123,16 +3228,16 @@ Use only the JS-aligned surface. Common shapes to follow:
 | `Button("Save", { variant: "primary", loading: true })`                                                  | Multi-positional calls raise a schema error — group options into a trailing object.  |
 | `function User(u) { return Card([...]) }`                                                                | PascalCase function = component. MUST `return` its tree. The DSL `component` keyword is gone. |
 | `function save() { ... }`                                                                                | camelCase function = action. The DSL `action` keyword is gone.                       |
-| `effect(() => { ... }, [$x])`                                                                            | Callback + deps array. The old square-bracket effect form is gone.                   |
+| `$effect(() => { ... }, [$x])`                                                                            | Callback + deps array. The old square-bracket effect form is gone.                   |
 | `items.map(x => ...)` / `cond ? a : b`                                                                   | Use standard JS `.map()` and ternaries in expression position. Function declarations work as bare callbacks too — `items.map(Row)` and `items.filter(isReady)`. |
 | `switch (value) { case "a": return X; default: return Y }`                                               | Standard JS `switch`. The DSL `match` keyword is gone.                               |
-| `Router({ ... })` / `route.path`                                                                         | Capitalised helper, no-underscore route surface. Legacy underscored forms are gone.  |
-| `emit("name", { detail })`                                                                               | Function-call syntax. The old whitespace-string form is gone.                        |
-| `storage.set("key", value)`                                                                              | Lowercase global. `storage.local.*`, `storage.session.*`, `storage.cookies.*` cover every browser-persistence target. |
+| `$router({ ... })` / `route.path`                                                                         | Capitalised helper, no-underscore route surface. Legacy underscored forms are gone.  |
+| `$emit("name", { detail })`                                                                               | Function-call syntax. The old whitespace-string form is gone.                        |
+| `$storage.set("key", value)`                                                                              | Lowercase global. `$storage.local.*`, `$storage.session.*`, `$storage.cookies.*` cover every browser-persistence target. |
 | `navigator.clipboard.writeText(...)`                                                                     | Direct JS — there is no `js`-wrapper block anymore.                                  |
 | `// comment` or `/* … */`                                                                                | Only the two JS comment forms. `#` line comments are no longer parsed.               |
 | `Button("Save", { variant: "primary" })`                                                                 | Named props always live inside a trailing `{ ... }` object literal.                  |
-| `theme = Theme({ colors: { primary: "..." } })`                                                          | Structured tokens only — flat `colorPrimary`-style keys are gone.                    |
+| `theme = $theme({ colors: { primary: "..." } })`                                                          | Structured tokens only — flat `colorPrimary`-style keys are gone.                    |
 | Font Awesome names (`"heart"`, `"triangle-exclamation"`)                                                 | No emoji in `icon:` slots.                                                           |
 | `Series("Name", { values: numbers })`                                                                    | Chart colours come from the theme — don't pass `stroke` / `fill` overrides.          |
 
@@ -3151,11 +3256,11 @@ Before finishing, walk your output and verify:
 5. Components (PascalCase functions) end with an explicit `return`.
 6. Actions (camelCase functions) use `function` keyword.
 7. State uses the single-sigil `$name = value` form.
-8. HTTP uses `Http({ url, method, ... })` with an absolute `url`; the
+8. HTTP uses `$http({ url, method, ... })` with an absolute `url`; the
    reactive bag exposes `.data` / `.error` / `.loading` / `.status` /
    `.refetch()` / `.cancel()`.
-9. Router uses `Router({...})` and route surface is `route.*`.
-10. Effects use `effect(() => { ... }, [deps])` syntax.
+9. Router uses `$router({...})` and route surface is `route.*`.
+10. Effects use `$effect(() => { ... }, [deps])` syntax.
 11. Named arguments are wrapped in an object: `Button("x", { variant: "primary" })`.
 12. Every visible button is wired to a function or a lambda.
 13. Icons are Font Awesome names (no `fa-` prefix, no emoji).
@@ -3165,8 +3270,8 @@ Before finishing, walk your output and verify:
 16. One positional argument max per component call.
 17. Comments use only `//` or `/* */`.
 18. No DSL JS-wrapper blocks — direct JS lives in function/effect bodies.
-19. `emit("name", detail)` function call syntax for events.
-20. `storage.*` / `console.*` are lowercase — the only built-in globals.
+19. `$emit("name", detail)` function call syntax for events.
+20. `$storage.*` / `console.*` are lowercase — the only built-in globals.
 
 ---
 
@@ -3182,14 +3287,14 @@ Before finishing, walk your output and verify:
 | Component declarations, lambdas, `key:`                                | §4.                                    |
 | Actions — handlers, optimistic updates, navigation                     | §5.                                    |
 | Effects — triggers, debounce, cleanup                                  | §6.                                    |
-| HTTP — `Http({...})`, `Async`, interceptors                            | §7.                                    |
-| `Util` runtime helpers (aggregation, formatting, dates)               | §8.                                    |
+| HTTP — `$http({...})`, `Async`, interceptors                            | §7.                                    |
+| `$util` runtime helpers (aggregation, formatting, dates)               | §8.                                    |
 | Component catalog by group                                             | §9.                                    |
-| JavaScript layer — `emit`, `cleanup`, browser APIs                     | §10.                                   |
-| Routing — `Router`, `params`, `route`                                  | §11.                                   |
-| Globals — `storage`, `console`                                         | §12.                                   |
-| Internationalisation — `i18n({...})`, `t()`, `setCurrentLanguage()`    | §13.                                   |
-| Theming — `Theme({...})`, structured tokens, brand recipes             | §14.                                   |
+| JavaScript layer — `$emit`, `cleanup`, browser APIs                     | §10.                                   |
+| Routing — `$router`, `params`, `route`                                  | §11.                                   |
+| Globals — `$storage`, `$console`                                         | §12.                                   |
+| Internationalisation — `$i18n({...})`, `t()`, `setCurrentLanguage()`    | §13.                                   |
+| Theming — `$theme({...})`, structured tokens, brand recipes             | §14.                                   |
 | Icons (Font Awesome)                                                   | §15.                                   |
 | Application recipes A–V                                                | §16.                                   |
 | Things to avoid                                                        | §17 + the anti-patterns table in §0.5. |

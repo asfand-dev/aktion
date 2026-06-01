@@ -130,9 +130,9 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Router",
-    description: "Multi-page router via Router({…}) with NavLink sidebar.",
+    description: "Multi-page router via $router({…}) with NavLink sidebar.",
     template:
-      'pages = Router({\n' +
+      'pages = $router({\n' +
       '  "/":            HomePage(),\n' +
       '  "/dashboard":   DashboardPage(),\n' +
       '  "/users/:id":   UserPage(params.id),\n' +
@@ -165,20 +165,20 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     description: "Lifecycle-managed effect (clock/interval) with cleanup.",
     template:
       '$${3:now} = ""\n\n' +
-      'effect(() => {\n' +
-      '  let id = setInterval(() => helpers.setState("${3:now}", new Date().toISOString()), 1000)\n' +
-      '  return () => { clearInterval(id) }\n' +
+      '$effect(() => {\n' +
+      '  let id = setInterval(() => { $${3:now} = new Date().toISOString() }, 1000)\n' +
+      '  cleanup(() => clearInterval(id))\n' +
       '}, ["mount"])\n\n' +
       'body = Text($${3:now})',
   },
   {
     name: "Action",
-    description: "Action declaration that POSTs through the Http() builtin.",
+    description: "Action declaration that POSTs through the $http() builtin.",
     template:
       '$${1:items} = []\n\n' +
       'function add(text) {\n' +
       '  $${1:items} = [...$${1:items}, { id: $${1:items}.length + 1, text: text }]\n' +
-      '  $response = Http({ url: "https://api.example.com/save", method: "POST", body: { item: { text: text } } })\n' +
+      '  $response = $http({ url: "https://api.example.com/save", method: "POST", body: { item: { text: text } } })\n' +
       '}',
   },
   {
@@ -218,7 +218,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     name: "Theme",
     description: "Brand-style theme override applied on top of the base theme.",
     template:
-      'aktion.theme = Theme({\n' +
+      'theme = $theme({\n' +
       '  name: "${1:brand}",\n' +
       '  colors: {\n' +
       '    primary:      "${2:#0969da}",\n' +
@@ -279,9 +279,9 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Http",
-    description: "Fire an Http() request and bind the reactive resource bag.",
+    description: "Fire an $http() request and bind the reactive resource bag.",
     template:
-      '$${1:response} = Http({\n' +
+      '$${1:response} = $http({\n' +
       '  url: "${2:https://api.example.com/items}",\n' +
       '  method: "${3:GET}",\n' +
       '  headers: { "Content-Type": "application/json" }\n' +
@@ -291,6 +291,35 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     name: "State",
     description: "Reactive state atom — declared with `$name = value`.",
     template: '$${1:name} = ${2:"default"}',
+  },
+  {
+    name: "Store",
+    description: "Global store — colocated state + actions shared across components (like Zustand/Pinia).",
+    template:
+      '${1:cart} = $store({\n' +
+      '  ${2:items}: [],\n' +
+      '  ${3:count}: (s) => s.${2:items}.length,\n' +
+      '  ${4:add}: (s, item) => { s.${2:items} = [...s.${2:items}, item] },\n' +
+      '})',
+  },
+  {
+    name: "useState",
+    description: "`$state` hook — per-instance state with a [value, setValue] pair (like React's useState).",
+    template: 'const [${1:value}, set${2:Value}] = $state(${3:"default"})',
+  },
+  {
+    name: "useMemo",
+    description: "`$memo` hook — value recomputed only when a dependency changes (like React's useMemo).",
+    template: 'const ${1:memoized} = $memo(() => ${2:compute}, [${3:deps}])',
+  },
+  {
+    name: "Hook",
+    description: "Custom hook declaration — a `$`-prefixed function that composes $state / $memo.",
+    template:
+      'function $use${1:Counter}(${2:start}) {\n' +
+      '  const [${3:count}, set${4:Count}] = $state(${2:start})\n' +
+      '  return { ${3:count}: ${3:count}, increment: () => set${4:Count}(v => v + 1) }\n' +
+      '}',
   },
   {
     name: "ResponsiveGrid",

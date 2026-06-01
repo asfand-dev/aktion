@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Themes · Aktion</title>
-  <meta name="description" content="Ship Aktion apps with seven polished built-in themes — light, dark, neon, pastel, glass, brutalist, skyline — switch with one attribute, and override any design token in-program with Theme({...}): colors, radius, typography, motion, elevation." />
+  <meta name="description" content="Ship Aktion apps with seven polished built-in themes — light, dark, neon, pastel, glass, brutalist, skyline — switch with one attribute, and override any design token in-program with $theme({...}): colors, radius, typography, motion, elevation." />
   <script>
     (function () {
       try {
@@ -68,7 +68,7 @@
           Aktion ships with polished <strong>built&#8209;in themes</strong> &mdash;
           switch between them with one attribute on <code>&lt;aktion-app&gt;</code>.
           Need a brand of your own? Override any design token in&#8209;program with
-          <strong><code>Theme({&hellip;})</code></strong>: colors, radius, typography,
+          <strong><code>$theme({&hellip;})</code></strong>: colors, radius, typography,
           motion. No raw CSS, no stylesheet plumbing &mdash; just a token map.
         </p>
       </header>
@@ -101,9 +101,9 @@
         background.
       </p>
 
-      <h2 id="custom-tokens">Custom tokens with <code>Theme({&hellip;})</code></h2>
+      <h2 id="custom-tokens">Custom tokens with <code>$theme({&hellip;})</code></h2>
       <p>
-        Assign <code>Theme({&hellip;})</code> to a top&#8209;level binding named
+        Assign <code>$theme({&hellip;})</code> to a top&#8209;level binding named
         <code>theme</code> (alongside your <code>aktion</code> root). The runtime
         detects it, writes those tokens to the host as CSS custom properties, and
         reskins the rest of the UI instantly. Tokens live in groups: override just
@@ -112,7 +112,7 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = Theme({ colors: { primary: "#7c3aed", primaryHover: "#6d28d9" } })
+<pre><code>theme = $theme({ colors: { primary: "#7c3aed", primaryHover: "#6d28d9" } })
 aktion = Column([
   Card([
     CardHeader("Purple brand", { subtitle: "Only colors.primary changed" }),
@@ -132,7 +132,7 @@ aktion = Column([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = Theme({
+<pre><code>theme = $theme({
   colors: { primary: "#0d9488", primaryHover: "#0f766e", accent: "#f59e0b" },
   radius: { md: "18px", button: "999px" }
 })
@@ -156,7 +156,7 @@ aktion = Column([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = Theme({
+<pre><code>theme = $theme({
   colors: { primary: "#dc2626", primaryHover: "#b91c1c" },
   font:   { family: "Georgia, 'Times New Roman', serif", familyHeading: "Georgia, serif" },
   radius: { md: "2px", button: "2px" }
@@ -164,7 +164,7 @@ aktion = Column([
 aktion = Column([
   Card([
     CardHeader("Editorial", { subtitle: "Serif type, crimson accent, sharp corners" }),
-    Text("Theme({...}) overrides only the tokens you pass — everything else inherits the host theme."),
+    Text("$theme({...}) overrides only the tokens you pass — everything else inherits the host theme."),
     Row([Button("Read more", { variant: "primary" }), Badge("Featured", { tone: "danger" })], { gap: "s" })
   ])
 ], { gap: "m" })</code></pre>
@@ -173,7 +173,7 @@ aktion = Column([
 
       <h2 id="token-groups">Token groups</h2>
       <p>
-        Inside <code>Theme({&hellip;})</code> the top&#8209;level keys are
+        Inside <code>$theme({&hellip;})</code> the top&#8209;level keys are
         <strong>structured groups</strong>. Each group's camel&#8209;case keys flatten
         predictably: <code>colors.primary</code> &rarr; <code>colorPrimary</code>,
         <code>radius.md</code> &rarr; <code>radiusMd</code>,
@@ -193,7 +193,7 @@ aktion = Column([
         Two metadata keys are also accepted at the top level: <code>name</code> and
         <code>direction</code>. They are never emitted as CSS variables. Flat&#8209;shape
         tokens (<code>colorPrimary</code>) and free&#8209;form CSS variables raise a
-        schema warning inside <code>Theme({&hellip;})</code> and are dropped &mdash;
+        schema warning inside <code>$theme({&hellip;})</code> and are dropped &mdash;
         always use the structured groups here.
       </p>
 
@@ -202,9 +202,9 @@ aktion = Column([
         There are two layers. The <strong>host</strong> picks a base with the
         <code>theme="&hellip;"</code> attribute (one of the seven built&#8209;ins). A
         program can then layer a <strong>per&#8209;response</strong> override on top by
-        binding <code>theme = Theme({&hellip;})</code> &mdash; it applies <em>only</em>
+        binding <code>theme = $theme({&hellip;})</code> &mdash; it applies <em>only</em>
         the tokens you pass, so everything else still inherits the host theme. The
-        in&#8209;program <code>Theme({&hellip;})</code> wins for the tokens it sets;
+        in&#8209;program <code>$theme({&hellip;})</code> wins for the tokens it sets;
         remove the line and the UI snaps back to the host theme. Because the override
         is scoped to that single <code>&lt;aktion-app&gt;</code> embed, themes never
         leak across responses &mdash; the previous tokens are cleared before the next
@@ -219,7 +219,7 @@ aktion = Column([
       </p>
       <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
-        You can still layer a per&#8209;response <code>Theme({&hellip;})</code> on top of
+        You can still layer a per&#8209;response <code>$theme({&hellip;})</code> on top of
         <code>dark</code> to brand it &mdash; e.g. override <code>colors.primary</code>
         while keeping the dark surfaces underneath.
       </p>

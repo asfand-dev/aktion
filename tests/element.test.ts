@@ -530,7 +530,7 @@ aktion = Stack([btn, display])`);
     ).toContain("Is Done: Yes");
   });
 
-  it("per-instance `effect(fn, [$state])` fires when its per-instance state changes", async () => {
+  it("per-instance `$effect(fn, [$state])` fires when its per-instance state changes", async () => {
     const logs: unknown[] = [];
     const originalLog = console.log;
     console.log = (...args: unknown[]) => {
@@ -545,7 +545,7 @@ aktion = Stack([btn, display])`);
 function Item(todo) {
   $isDone = null
 
-  effect(() => {
+  $effect(() => {
     console.log("isDone:", $isDone)
   }, [$isDone])
 

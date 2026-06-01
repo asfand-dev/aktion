@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Side effects · Aktion</title>
-  <meta name="description" content="The effect() call — anonymous, declarative side effects with a dependency array mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers. Plus first-class timers, data refetching, and DOM listeners with cleanup." />
+  <meta name="description" content="The $effect() call — anonymous, declarative side effects with a dependency array mixing state triggers, lifecycle hooks, intervals, and rate-limit modifiers. Plus first-class timers, data refetching, and DOM listeners with cleanup." />
   <script>
     (function () {
       try {
@@ -65,7 +65,7 @@
         <span class="hero-eyebrow">Behaviour</span>
         <h1>Side effects.</h1>
         <p class="lead">
-          <code>effect(() =&gt; { &hellip; }, [...deps])</code> runs declarative
+          <code>$effect(() =&gt; { &hellip; }, [...deps])</code> runs declarative
           side effects when its dependencies change &mdash; polling, clocks,
           hydration, analytics, keyboard listeners &mdash; rather than when a
           user clicks. The body is anonymous; the optional dependency array
@@ -75,18 +75,18 @@
 
       <h2 id="anatomy">Anatomy</h2>
       <p>An effect declaration has two parts: a body and an optional dependency array.</p>
-<pre><code>effect(() =&gt; {
-  // body — side effects: state writes, Http(…), emit(…), cleanup(…)
+<pre><code>$effect(() =&gt; {
+  // body — side effects: state writes, $http(…), $emit(…), cleanup(…)
 }, [...dependencies])</code></pre>
       <ul>
-        <li>The <code>effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name and no return value. The runtime keys on the source location.</li>
+        <li>The <code>$effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name and no return value. The runtime keys on the source location.</li>
         <li>An arrow-function body that performs the side effect.</li>
         <li>An optional second argument &mdash; a <strong>dependency array</strong> &mdash; that controls when the body runs.</li>
       </ul>
       <p>
         <strong>No array runs once on mount.</strong>
-        <code>effect(() =&gt; { &hellip; })</code> is exactly equivalent to
-        <code>effect(() =&gt; { &hellip; }, ["mount"])</code> &mdash; both run the
+        <code>$effect(() =&gt; { &hellip; })</code> is exactly equivalent to
+        <code>$effect(() =&gt; { &hellip; }, ["mount"])</code> &mdash; both run the
         body a single time when the surrounding scope mounts.
       </p>
 
@@ -165,7 +165,7 @@
         re-run AND on unmount</strong> &mdash; this is where you clear timers,
         remove listeners, and drop subscriptions.
       </p>
-<pre><code>effect(() =&gt; {
+<pre><code>$effect(() =&gt; {
   const onKey = (e) =&gt; {
     if (e.key === "k" &amp;&amp; (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
@@ -197,8 +197,8 @@
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$now = 0
-effect(() =&gt; {
-  let id = setInterval(() =&gt; { $now = Util.now() }, 1000)
+$effect(() =&gt; {
+  let id = setInterval(() =&gt; { $now = $util.now() }, 1000)
   cleanup(() =&gt; clearInterval(id))
 }, ["mount"])
 aktion = Column([ Text(`Ticks: ${$now}`) ])</code></pre>
@@ -207,30 +207,30 @@ aktion = Column([ Text(`Ticks: ${$now}`) ])</code></pre>
 
       <h2 id="fetching">Fetching data in an effect</h2>
       <p>
-        Re-run an <code>Http({&hellip;})</code> request when a watched atom
+        Re-run an <code>$http({&hellip;})</code> request when a watched atom
         changes &mdash; the canonical search-as-you-type pattern. List the
         atoms you watch plus a <code>"debounce(N)"</code> so keystrokes
         don&rsquo;t flood the network:
       </p>
 <pre><code>$query = ""
 
-effect(() =&gt; {
-  $results = Http({
+$effect(() =&gt; {
+  $results = $http({
     url:   "https://api.example.com/search",
     query: { q: $query }
   })
 }, [$query, "debounce(300)"])</code></pre>
       <p>
         You do <strong>not</strong> need an effect for a one-shot fetch &mdash; a
-        top-level <code>$results = Http({ &hellip; })</code> already fires once
+        top-level <code>$results = $http({ &hellip; })</code> already fires once
         on mount. For the &ldquo;refresh a list after a write&rdquo; case, prefer
         the resource&rsquo;s <code>.onDone</code> callback over an effect: it
         fires every time the request settles, so you can refetch the list from
         the write resource directly.
       </p>
-<pre><code>$orders = Http({ url: "https://api.example.com/orders" })
+<pre><code>$orders = $http({ url: "https://api.example.com/orders" })
 
-$create = Http({ url: "https://api.example.com/orders", method: "POST", body: { name: $name } })
+$create = $http({ url: "https://api.example.com/orders", method: "POST", body: { name: $name } })
 $create.onDone = () =&gt; { $orders.refetch() }</code></pre>
 
       <h2 id="recipes">Recipes</h2>
@@ -239,23 +239,23 @@ $create.onDone = () =&gt; { $orders.refetch() }</code></pre>
 <pre><code>$query = ""
 $page  = 1
 
-effect(() =&gt; {
-  $results = Http({
+$effect(() =&gt; {
+  $results = $http({
     url:   "https://api.example.com/search",
     query: { q: $query, page: $page }
   })
 }, [$query, $page, "debounce(250)"])</code></pre>
 
       <h3>Polling on an interval</h3>
-<pre><code>effect(() =&gt; {
+<pre><code>$effect(() =&gt; {
   $orders.refetch()
 }, ["every(30000)"])</code></pre>
 
       <h3>Autosave a draft</h3>
 <pre><code>$draft = ""
 
-effect(() =&gt; {
-  $save = Http({
+$effect(() =&gt; {
+  $save = $http({
     url:    "https://api.example.com/draft",
     method: "PUT",
     body:   { draft: $draft }
@@ -263,7 +263,7 @@ effect(() =&gt; {
 }, [$draft, "debounce(500)"])</code></pre>
 
       <h3>Keyboard-shortcut listener</h3>
-<pre><code>effect(() =&gt; {
+<pre><code>$effect(() =&gt; {
   const onKey = (e) =&gt; {
     if (e.key === "/" &amp;&amp; !e.metaKey &amp;&amp; !e.ctrlKey) {
       e.preventDefault()
@@ -275,7 +275,7 @@ effect(() =&gt; {
 }, ["mount"])</code></pre>
 
       <h3>IntersectionObserver for infinite scroll</h3>
-<pre><code>effect(() =&gt; {
+<pre><code>$effect(() =&gt; {
   const sentinel = document.querySelector("[data-sentinel]")
   if (!sentinel) return
   const observer = new IntersectionObserver((entries) =&gt; {
@@ -288,7 +288,7 @@ effect(() =&gt; {
 }, ["mount"])</code></pre>
 
       <h3>WebSocket subscription</h3>
-<pre><code>effect(() =&gt; {
+<pre><code>$effect(() =&gt; {
   const socket = new WebSocket("wss://example.com/ticker")
   socket.addEventListener("message", (event) =&gt; {
     $ticker = JSON.parse(event.data)
@@ -302,7 +302,7 @@ effect(() =&gt; {
 function onType(q) {
   clearTimeout($searchTimer)
   $searchTimer = setTimeout(() =&gt; {
-    $results = Http({ url: `https://api.example.com/search?q=${q}` })
+    $results = $http({ url: `https://api.example.com/search?q=${q}` })
   }, 300)
 }</code></pre>
 
@@ -313,7 +313,7 @@ function onType(q) {
         <code>function</code> triggered explicitly by the user.
       </p>
       <table class="signature-table">
-        <thead><tr><th></th><th><code>effect(() =&gt; { &hellip; }, [&hellip;])</code></th><th><code>function name(args) { &hellip; }</code></th></tr></thead>
+        <thead><tr><th></th><th><code>$effect(() =&gt; { &hellip; }, [&hellip;])</code></th><th><code>function name(args) { &hellip; }</code></th></tr></thead>
         <tbody>
           <tr><td>Trigger</td><td>Mount, unmount, interval, watched atoms.</td><td>Explicit call from a handler (<code>onClick</code>) or expression.</td></tr>
           <tr><td>Identity</td><td>Anonymous &mdash; keyed on source location.</td><td>Named &mdash; referenced by identifier.</td></tr>
@@ -340,7 +340,7 @@ function onType(q) {
         <a class="demo-card" href="http.html">
           <span class="demo-tag">Data</span>
           <h3>HTTP &amp; resources</h3>
-          <p>The <code>Http({…})</code> resource bag, <code>refetch()</code>, and the <code>onDone</code> callback.</p>
+          <p>The <code>$http({…})</code> resource bag, <code>refetch()</code>, and the <code>onDone</code> callback.</p>
           <span class="demo-arrow">View the guide &rarr;</span>
         </a>
       </div>

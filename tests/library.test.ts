@@ -25,7 +25,7 @@ import {
 } from "../src/library/components/patterns.js";
 import {
   Container, Spacer, Quote, Markdown, Image, Skeleton,
-  Spinner, Badge, BadgeList, Callout, CodeBlock, Text, TextContent,
+  Spinner, Badge, BadgeList, Callout, CodeBlock, Text, TextContent, Icon,
 } from "../src/library/components/content.js";
 import {
   Link, OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css,
@@ -135,6 +135,44 @@ describe("default library", () => {
     expect(groupNames).toContain("App shell");
     expect(groupNames).toContain("Feedback & Media");
     expect(groupNames).toContain("Navigation");
+  });
+});
+
+describe("Icon", () => {
+  it("renders a Font Awesome glyph for a known name", () => {
+    const node = Icon.render(makeNode("Icon", ["house"]), { name: "house" }, helpers) as HTMLElement;
+    expect(node.classList.contains("rui-icon")).toBe(true);
+    expect(node.className).toContain("fa-house");
+  });
+
+  it("applies a valid CSS colour via inline style", () => {
+    const node = Icon.render(
+      makeNode("Icon", ["star"]),
+      { name: "star", color: "#00ff00" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("style")).toBe("color:#00ff00;");
+  });
+
+  it("accepts named, rgb(), and var() colours", () => {
+    for (const color of ["tomato", "rgb(0, 128, 255)", "var(--rui-color-primary)"]) {
+      const node = Icon.render(makeNode("Icon", ["star"]), { name: "star", color }, helpers) as HTMLElement;
+      expect(node.getAttribute("style")).toBe(`color:${color};`);
+    }
+  });
+
+  it("drops an injection attempt instead of emitting a style", () => {
+    const node = Icon.render(
+      makeNode("Icon", ["star"]),
+      { name: "star", color: "red; background: url(http://evil)" },
+      helpers,
+    ) as HTMLElement;
+    expect(node.getAttribute("style")).toBeNull();
+  });
+
+  it("omits the style attribute when no colour is given", () => {
+    const node = Icon.render(makeNode("Icon", ["star"]), { name: "star" }, helpers) as HTMLElement;
+    expect(node.getAttribute("style")).toBeNull();
   });
 });
 

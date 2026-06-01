@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Language · Aktion</title>
-  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `Util` runtime helper namespace, and the full JavaScript global surface." />
+  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
   <script>
     (function () {
       try {
@@ -119,7 +119,7 @@ body = Card([
       <p>
         Three top-level names are <strong>reserved</strong>:
         <code>aktion</code> (the UI root, required, first line),
-        <code>theme</code> (an optional <code>Theme({&hellip;})</code> brand
+        <code>theme</code> (an optional <code>$theme({&hellip;})</code> brand
         override), and <code>route</code> (the router-owned reactive handle &mdash;
         never declare it yourself).
       </p>
@@ -153,11 +153,101 @@ aktion = Column([
         <code>$name</code> declared inside a component body is per-instance: two
         siblings each get their own atom.
       </p>
+      <p>
+        Subscriptions are <strong>fine-grained</strong>: dependencies track the
+        exact <em>path</em> you read, not the whole atom. Reading
+        <code>$user.name</code> subscribes to <code>user.name</code> alone, so a
+        write to a sibling field (<code>$user.role = &hellip;</code>) won&rsquo;t
+        re-render, recompute, or re-fire it &mdash; while replacing the whole
+        atom (<code>$user = &hellip;</code>, an ancestor) or writing a descendant
+        still does. Object fields track field-by-field; reading into an array
+        (<code>$rows[i]</code>, the <code>$rows.field</code> pluck) or through a
+        dynamic key subscribes at the array/container. The same rule drives
+        computed values and effect dependencies
+        (<code>$effect(&hellip;, [$user.name])</code>). No selectors, no special
+        syntax &mdash; just read the path.
+      </p>
+      <p>
+        It also drives <strong>per-component re-rendering</strong>: a component
+        re-executes only when its own inputs change &mdash; its args (props) or a
+        <code>$state</code> path its body read &mdash; the granularity of
+        <code>React.memo</code> / Solid, but automatic. Split a screen into focused
+        components (<code>ShowName($user.name)</code>, <code>ShowAge($user.age)</code>)
+        and changing <code>$user.age</code> re-runs only <code>ShowAge</code>. Args
+        are compared shallowly, so (as in React) a fresh inline-lambda prop each
+        render makes the child re-render &mdash; hoist the handler to a stable
+        binding to skip it. First-letter case does not matter: <code>App</code> and
+        <code>app</code> seed state once and re-render identically.
+      </p>
+
+      <h2 id="hooks">Hooks</h2>
+      <p>
+        A function whose name starts with <code>$</code> is a <strong>hook</strong>
+        &mdash; the same <code>use*</code> convention you know from React. Hooks are
+        the composable way to manage per-instance state. Two are built in:
+        <code>$state</code> mirrors <code>useState</code> and <code>$memo</code>
+        mirrors <code>useMemo</code>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>function Counter() {
+  const [count, setCount] = $state(0)
+  const label = $memo(() =&gt; `Count: ${count}`, [count])
+  return Column([
+    Text(label, { variant: "large-heavy" }),
+    Button("Increment", { variant: "primary", onClick: () =&gt; setCount(c =&gt; c + 1) })
+  ])
+}
+aktion = Counter()</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <ul>
+        <li>
+          <strong><code>$state(initial)</code></strong> returns a
+          <code>[value, setValue]</code> pair. <code>setValue(next)</code> replaces
+          the value; <code>setValue(prev =&gt; next)</code> derives it from the
+          previous value. The initializer runs once, on first render.
+        </li>
+        <li>
+          <strong><code>$memo(() =&gt; value, [deps])</code></strong> caches a value
+          and recomputes it only when a dependency changes (shallow
+          <code>Object.is</code>). Omit the deps array to recompute every render.
+        </li>
+      </ul>
+      <p>
+        Declare your own hooks with <code>function $name(...)</code>. The body
+        runs <em>inline in the calling component&rsquo;s hook scope</em>, so its
+        <code>$state</code> / <code>$memo</code> calls attach to that component
+        &mdash; exactly how a React custom hook shares its caller&rsquo;s slots:
+      </p>
+<pre><code>function $useToggle(initial) {
+  const [on, setOn] = $state(initial)
+  return { on: on, toggle: () =&gt; setOn(v =&gt; !v) }
+}
+
+function Panel() {
+  const t = $useToggle(false)
+  return Column([
+    Button(t.on ? "Hide" : "Show", { onClick: t.toggle }),
+    t.on ? Card([Text("Revealed")]) : null
+  ])
+}</code></pre>
+      <p>
+        Two rules carry over from React: call hooks
+        <strong>unconditionally and in a stable order</strong> at the top level of a
+        component / hook body (slots are matched by call order across renders), and
+        note that hook state <strong>resets when the instance leaves the tree</strong>
+        &mdash; a remounted component starts again from its initial value.
+        <code>$state</code> and <code>$memo</code> are reserved names. Reach for the
+        hook form when a component owns local state with explicit setters; the bare
+        <code>$name = value</code> per-instance form above is the lighter option when
+        an atom is written directly by the component&rsquo;s actions.
+      </p>
 
       <h2 id="expressions">Expressions</h2>
       <p>The right-hand side of any binding is a value-producing JS expression:</p>
       <ul>
-        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${Util.count($todos)} todos`</code>.</li>
+        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${$util.count($todos)} todos`</code>.</li>
         <li><strong>Numbers, booleans, null</strong> &mdash; <code>42</code>, <code>3.14</code>, <code>1_000_000</code>, <code>true</code> / <code>false</code>, <code>null</code>.</li>
         <li><strong>Arrays &amp; objects</strong> &mdash; <code>[1, 2, 3]</code>, <code>{ name: "Ada", role: "Engineer" }</code>; both may span multiple lines.</li>
         <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>).</li>
@@ -239,45 +329,45 @@ panel = panelFor($tab)
 banner = if ($error) { Banner($error) }     // use a ternary instead
 rows   = for (let r of data) { Row(r) }      // use data.map(r => Row(r))</code></pre>
 
-      <h2 id="builtins"><code>Util</code> &mdash; runtime helper namespace</h2>
+      <h2 id="builtins"><code>$util</code> &mdash; runtime helper namespace</h2>
       <p>
-        Aktion exposes a single global <code>Util</code> object with
+        Aktion exposes a single global <code>$util</code> object with
         <strong>pure</strong>, side-effect-free helpers for aggregation,
         reshaping, formatting, dates, math, and strings. Every method is
         callable from any expression position &mdash; render bodies, actions,
         effects, lambdas &mdash; and from ordinary host JavaScript that imports
-        the bundle. New helpers can be added to <code>Util</code> over time
+        the bundle. New helpers can be added to <code>$util</code> over time
         without changing the language.
       </p>
       <table class="signature-table">
         <thead><tr><th>Group</th><th>Methods</th></tr></thead>
         <tbody>
-          <tr><td>Aggregation</td><td><code>Util.count</code>, <code>Util.sum</code>, <code>Util.avg</code>, <code>Util.min</code>, <code>Util.max</code>, <code>Util.first</code>, <code>Util.last</code></td></tr>
-          <tr><td>Reshaping</td><td><code>Util.filter</code>, <code>Util.find</code>, <code>Util.sort</code>, <code>Util.groupBy</code>, <code>Util.slice</code>, <code>Util.unique</code>, <code>Util.reverse</code>, <code>Util.range</code>, <code>Util.repeat</code>, <code>Util.pick</code></td></tr>
-          <tr><td>Formatting</td><td><code>Util.format</code>, <code>Util.formatDate</code>, <code>Util.plural</code>, <code>Util.capitalize</code>, <code>Util.titlecase</code>, <code>Util.case</code></td></tr>
-          <tr><td>Date / time</td><td><code>Util.now</code>, <code>Util.today</code>, <code>Util.addDays</code>, <code>Util.addHours</code>, <code>Util.diffDays</code>, <code>Util.startOfWeek</code>, <code>Util.endOfMonth</code></td></tr>
-          <tr><td>Math</td><td><code>Util.round</code>, <code>Util.floor</code>, <code>Util.ceil</code>, <code>Util.abs</code>, <code>Util.clamp</code>, <code>Util.pow</code>, <code>Util.sqrt</code>, <code>Util.random</code>, <code>Util.log</code></td></tr>
-          <tr><td>String</td><td><code>Util.join</code>, <code>Util.split</code>, <code>Util.trim</code>, <code>Util.replace</code>, <code>Util.substring</code>, <code>Util.startsWith</code>, <code>Util.endsWith</code>, <code>Util.contains</code>, <code>Util.match</code>, <code>Util.lowercase</code>, <code>Util.uppercase</code></td></tr>
+          <tr><td>Aggregation</td><td><code>$util.count</code>, <code>$util.sum</code>, <code>$util.avg</code>, <code>$util.min</code>, <code>$util.max</code>, <code>$util.first</code>, <code>$util.last</code></td></tr>
+          <tr><td>Reshaping</td><td><code>$util.filter</code>, <code>$util.find</code>, <code>$util.sort</code>, <code>$util.groupBy</code>, <code>$util.slice</code>, <code>$util.unique</code>, <code>$util.reverse</code>, <code>$util.range</code>, <code>$util.repeat</code>, <code>$util.pick</code></td></tr>
+          <tr><td>Formatting</td><td><code>$util.format</code>, <code>$util.formatDate</code>, <code>$util.plural</code>, <code>$util.capitalize</code>, <code>$util.titlecase</code>, <code>$util.case</code></td></tr>
+          <tr><td>Date / time</td><td><code>$util.now</code>, <code>$util.today</code>, <code>$util.addDays</code>, <code>$util.addHours</code>, <code>$util.diffDays</code>, <code>$util.startOfWeek</code>, <code>$util.endOfMonth</code></td></tr>
+          <tr><td>Math</td><td><code>$util.round</code>, <code>$util.floor</code>, <code>$util.ceil</code>, <code>$util.abs</code>, <code>$util.clamp</code>, <code>$util.pow</code>, <code>$util.sqrt</code>, <code>$util.random</code>, <code>$util.log</code></td></tr>
+          <tr><td>String</td><td><code>$util.join</code>, <code>$util.split</code>, <code>$util.trim</code>, <code>$util.replace</code>, <code>$util.substring</code>, <code>$util.startsWith</code>, <code>$util.endsWith</code>, <code>$util.contains</code>, <code>$util.match</code>, <code>$util.lowercase</code>, <code>$util.uppercase</code></td></tr>
         </tbody>
       </table>
       <p>
-        Many <code>Util</code> helpers overlap with native JavaScript methods
+        Many <code>$util</code> helpers overlap with native JavaScript methods
         (<code>arr.length</code>, <code>arr.filter(…)</code>, <code>arr.map(…)</code>,
         <code>Math.round(…)</code>). Prefer the native form when it reads
-        cleanly; reach for <code>Util</code> when you want field-based
-        comparators (<code>Util.filter(arr, "status", "==", "open")</code>),
-        locale-aware formatting (<code>Util.format</code>,
-        <code>Util.formatDate</code>, <code>Util.plural</code>), or a quick
+        cleanly; reach for <code>$util</code> when you want field-based
+        comparators (<code>$util.filter(arr, "status", "==", "open")</code>),
+        locale-aware formatting (<code>$util.format</code>,
+        <code>$util.formatDate</code>, <code>$util.plural</code>), or a quick
         range / repeat for skeleton UIs.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$prices = [12, 8, 30, 5]
-total = Util.sum($prices)
-count = Util.count($prices)
+total = $util.sum($prices)
+count = $util.count($prices)
 aktion = Column([
-  Text(`${count} ${Util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
-  Row(Util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
+  Text(`${count} ${$util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
+  Row($util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
 ], { gap: "m" })</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
@@ -312,7 +402,7 @@ id = crypto.randomUUID()</code></pre>
       <p>
         Your own declarations and built-in components always win over a
         same-named global &mdash; the passthrough only fills names you have not
-        defined. Prefer the reactive <code>Http({&hellip;})</code> over raw
+        defined. Prefer the reactive <code>$http({&hellip;})</code> over raw
         <code>fetch</code> for data that drives the UI. See the
         <a href="javascript-interactions.html">JavaScript interactions guide</a>
         for the full bridge surface.

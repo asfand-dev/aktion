@@ -105,7 +105,7 @@
         <li><strong>Batteries included.</strong> Around <strong>130 components</strong> &mdash; layout, forms, charts, tables, and full patterns like dashboards and app shells.</li>
         <li><strong>Reactive.</strong> One sigil, <code>$state</code>. Read it in your tree, write it in a <code>function</code>, and the UI re&#8209;renders itself.</li>
         <li><strong>Streaming&#8209;friendly.</strong> The language is line&#8209;oriented and error&#8209;tolerant, so an LLM&rsquo;s tokens render top&#8209;down as they arrive.</li>
-        <li><strong>Themeable.</strong> Switch palettes with the <code>theme</code> attribute or override tokens in&#8209;script with <code>Theme({&hellip;})</code>.</li>
+        <li><strong>Themeable.</strong> Switch palettes with the <code>theme</code> attribute or override tokens in&#8209;script with <code>$theme({&hellip;})</code>.</li>
         <li><strong>Runs anywhere.</strong> A standard custom element &mdash; drop it into React, Vue, Angular, Svelte, or plain HTML.</li>
       </ul>
 
@@ -148,7 +148,7 @@ aktion = Card([
       </div>
 
       <p>
-        Data comes from <code>Http({ url, &hellip; })</code> &mdash; a reactive
+        Data comes from <code>$http({ url, &hellip; })</code> &mdash; a reactive
         resource with <code>.data</code>, <code>.error</code>, <code>.loading</code>,
         and <code>.refetch()</code>. Pair it with <code>Async(resource, { loading,
         error, empty, data })</code> to branch on its state &mdash; one of the four
@@ -183,7 +183,7 @@ aktion = Card([
           and are torn down with the program. <a href="javascript-interactions.html">JavaScript interactions &rarr;</a>
         </li>
         <li>
-          <strong><code>Http(&hellip;).onDone</code>.</strong> Fire a callback when a
+          <strong><code>$http(&hellip;).onDone</code>.</strong> Fire a callback when a
           request settles &mdash; ideal for refetching a list after a save.
           <a href="actions.html">See actions &rarr;</a>
         </li>

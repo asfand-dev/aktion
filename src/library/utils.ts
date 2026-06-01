@@ -143,6 +143,27 @@ export function sanitiseCssLength(raw: unknown, fallback: string): string {
 }
 
 /**
+ * Validate an LLM-supplied CSS colour value before it lands on an inline
+ * `color: …` declaration. Accepts the full standard colour vocabulary —
+ * hex (`#00ff00`), named colours (`tomato`), functional notations
+ * (`rgb(...)`, `hsl(...)`, `color-mix(...)`), and `var(--token)` — while
+ * rejecting anything that could break out of the single declaration:
+ * `;`/`{`/`}` (declaration separators), quotes/backslash/angle-brackets,
+ * and the `url()` / `expression()` / `javascript:` / `@import` attack
+ * vectors. Returns an empty string for blank or rejected input so callers
+ * can drop the style entirely.
+ */
+const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
+export function sanitiseCssColor(raw: unknown): string {
+  const trimmed = asString(raw).trim();
+  if (!trimmed) return "";
+  if (trimmed.length > 64) return "";
+  if (!CSS_COLOR_ALLOWED.test(trimmed)) return "";
+  if (/\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(trimmed)) return "";
+  return trimmed;
+}
+
+/**
  * URL schemes that are allowed in anchor `href` and `window.open` targets.
  * Anything outside this allow-list (notably `javascript:`, `vbscript:`,
  * `data:` text payloads, `file:`) is rewritten to a safe placeholder so a
@@ -352,21 +373,25 @@ export function fillTableCell(
  */
 export function renderIcon(
   value: unknown,
-  options: { className?: string; size?: IconSize | string } = {},
+  options: { className?: string; size?: IconSize | string; color?: string } = {},
 ): HTMLElement | null {
   const text = asString(value);
   if (!text) return null;
+  const color = options.color ? sanitiseCssColor(options.color) : "";
+  const style = color ? `color:${color};` : null;
   const classes = resolveIconClasses(text);
   const wrapperClass = ["rui-icon", options.className].filter(Boolean).join(" ");
   if (classes.length === 0) {
     return el("span", {
       class: wrapperClass,
       "data-icon-size": options.size ?? null,
+      style,
     }, [text]);
   }
   return el("i", {
     class: `${wrapperClass} ${classes.join(" ")}`,
     "data-icon-size": options.size ?? null,
+    style,
     "aria-hidden": "true",
   });
 }

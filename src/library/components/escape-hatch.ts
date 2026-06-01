@@ -185,7 +185,7 @@ export const Styles: ComponentSpec = {
   description:
     "Escape-hatch primitive that injects a `<style>` block containing the " +
     "given CSS rules. Use ONLY when a layout cannot be expressed via " +
-    "component props or the `Theme(...)` token map. The CSS is rendered " +
+    "component props or the `$theme(...)` token map. The CSS is rendered " +
     "verbatim into the document so authors can target their own " +
     "`HTMLTag` markup or scope rules to a wrapper class. Payloads " +
     "containing `</style>`, `<script>`, `expression(`, `javascript:`, " +

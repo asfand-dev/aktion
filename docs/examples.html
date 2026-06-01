@@ -58,7 +58,7 @@
       <p>
         Want a focused tour of <code>function name() { ... }</code> blocks? See
         the <a href="actions.html">Actions guide</a> &mdash; it walks through
-        assignment, <code>Http({...})</code> mutations, <code>emit()</code>,
+        assignment, <code>$http({...})</code> mutations, <code>$emit()</code>,
         programmatic navigation via <code>route.navigate("/path")</code>,
         and inline side effects. For browser API
         access inside an action or effect body, see
@@ -178,10 +178,10 @@ function reset() {
 function chain() {
   $count = $count + 5
   $log = `Chained two writes — $count is now ${$count}.`
-  emit("assistant-message", { message: "Bumped count by 5" })
+  $emit("assistant-message", { message: "Bumped count by 5" })
 }
 function ask() {
-  emit("assistant-message", { message: "Tell me more about action blocks." })
+  $emit("assistant-message", { message: "Tell me more about action blocks." })
   $log = "Emitted an assistant-message event."
 }
 function openUrl() {
@@ -291,8 +291,8 @@ aktion = Stack([header, tags, sep, snippet, group])</code></pre>
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">function openSettings()    { emit("assistant-message", { message: "Open settings" }) }
-function startNewProject() { emit("assistant-message", { message: "Start a new project" }) }
+<pre><code class="example-source">function openSettings()    { $emit("assistant-message", { message: "Open settings" }) }
+function startNewProject() { $emit("assistant-message", { message: "Start a new project" }) }
 
 nav = Sidebar([
   SidebarSection("Workspace", { items: [
@@ -359,7 +359,7 @@ aktion = AppShell({ sidebar: nav, content: content, topbar: topbar })</code></pr
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">function editCustomer() { emit("assistant-message", { message: "Edit Acme Co customer" }) }
+<pre><code class="example-source">function editCustomer() { $emit("assistant-message", { message: "Edit Acme Co customer" }) }
 
 header = PageHeader("Acme Co", {
   subtitle: "Customer · since 2021 · Team plan",
@@ -404,7 +404,7 @@ aktion = Stack([header, info, activity], { direction: "column", gap: "l" })</cod
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">function upgrade(plan) { emit("assistant-message", { message: `Start a ${plan} trial` }) }
+<pre><code class="example-source">function upgrade(plan) { $emit("assistant-message", { message: `Start a ${plan} trial` }) }
 
 hero = Hero("Simple, predictable pricing", {
   subtitle: "Three plans. Cancel anytime. All include 14-day trials.",
@@ -465,7 +465,7 @@ aktion = Stack([hero, plans, faqs], { direction: "column", gap: "xl" })</code></
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">function requestDemo() { emit("assistant-message", { message: "Book a 15-minute demo" }) }
+<pre><code class="example-source">function requestDemo() { $emit("assistant-message", { message: "Book a 15-minute demo" }) }
 
 aktion = Hero("Build assistant UIs in seconds", {
   subtitle: "A declarative library for streaming, theme-aware UIs that ship with every LLM response.",
@@ -532,7 +532,7 @@ aktion = Stack([
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">aktion = Stats([
   StatCard("Teams", { value: "1,240+", icon: "people-group" }),
-  StatCard("Daily messages", { value: Util.format(184000, "number"), icon: "comments" }),
+  StatCard("Daily messages", { value: $util.format(184000, "number"), icon: "comments" }),
   StatCard("Uptime", { value: "99.99%", icon: "shield-halved" }),
   StatCard("Regions", { value: "12", icon: "globe" })
 ], { align: "center" })</code></pre>
@@ -837,7 +837,7 @@ $password = ""
 $accept = false
 
 function register() {
-  emit("assistant-message", { message: `Register ${$email}` })
+  $emit("assistant-message", { message: `Register ${$email}` })
 }
 
 aktion = Card([
@@ -880,14 +880,14 @@ aktion = Card([
 
   function checkout() {
     if ($cart.length == 0) { return }
-    $checkout = Http({ url: "https://api.example.com/checkout", method: "POST", body: { items: $cart } })
+    $checkout = $http({ url: "https://api.example.com/checkout", method: "POST", body: { items: $cart } })
     $cart = []
     route.navigate("/success")
   }
 
   // --- Components ---
   function CatalogPage() {
-    $visible = $category == "all" ? products : Util.filter(products, "category", "==", $category)
+    $visible = $category == "all" ? products : $util.filter(products, "category", "==", $category)
 
     header = PageHeader("Product Catalog", {
       subtitle: "Explore our latest arrivals and essentials",
@@ -914,7 +914,7 @@ aktion = Card([
 
     cards = Grid($visible.map(p =&gt; MediaCard(p.name, {
       imageSrc: p.img,
-      description: Util.format(p.price, "currency", "USD"),
+      description: $util.format(p.price, "currency", "USD"),
       badge: Badge(p.category, { tone: "info" }),
       actions: [
         Button("Add to cart", {
@@ -934,19 +934,19 @@ aktion = Card([
     $cart.length == 0
       ? EmptyState("Your cart is empty", { icon: "cart-shopping" })
       : Stack([
-          ...$cart.map(item =&gt; PersonChip(item.name, { role: Util.format(item.price, "currency", "USD"), avatarSrc: item.img })),
+          ...$cart.map(item =&gt; PersonChip(item.name, { role: $util.format(item.price, "currency", "USD"), avatarSrc: item.img })),
           Separator(),
           Stack([
             Text("Total", { variant: "body-heavy" }),
             Spacer(),
-            Text(Util.format(Util.sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
+            Text($util.format($util.sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
           ], { direction: "row" }),
           Button("Checkout", { onClick: checkout, variant: "primary", fullWidth: true })
         ], { gap: "s" })
   ], { padding: "m", maxWidth: "320px" })
 
   // --- Router & Layout ---
-  pages = Router({
+  pages = $router({
     "/": CatalogPage(),
     "/success": SuccessState("Order Placed!", {
       description: "Thank you for your purchase. Your items will ship soon.",
@@ -1013,26 +1013,26 @@ aktion = Card([
 ]
 
 function checkout() {
-  emit("assistant-message", { message: "Proceed to checkout" })
+  $emit("assistant-message", { message: "Proceed to checkout" })
 }
 
 $lines = $cart.map(item =&gt; item.qty * item.price)
-$subtotal = Util.sum($lines)
+$subtotal = $util.sum($lines)
 $shipping = $subtotal &gt;= 100 ? 0 : 9
 $total = $subtotal + $shipping
 
 items = $cart.map(item =&gt;
   ListItem(item.name, {
-    meta: `${item.qty} × ${Util.format(item.price, "currency", "USD")}`,
+    meta: `${item.qty} × ${$util.format(item.price, "currency", "USD")}`,
     icon: "box" })
 )
 
 summary = Card([
   SectionHeader("Order summary"),
   DescriptionList([
-    DescriptionItem("Subtotal", { value: Util.format($subtotal, "currency", "USD") }),
-    DescriptionItem("Shipping", { value: if ($shipping == 0) { "Free" } else { Util.format($shipping, "currency", "USD") } }),
-    DescriptionItem("Total", { value: Util.format($total, "currency", "USD"), icon: "sack-dollar" })
+    DescriptionItem("Subtotal", { value: $util.format($subtotal, "currency", "USD") }),
+    DescriptionItem("Shipping", { value: if ($shipping == 0) { "Free" } else { $util.format($shipping, "currency", "USD") } }),
+    DescriptionItem("Total", { value: $util.format($total, "currency", "USD"), icon: "sack-dollar" })
   ]),
   Button("Checkout", { action: checkout, variant: "primary" })
 ])
@@ -1067,7 +1067,7 @@ aktion = Stack([
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">$ticks = 0
 
-  effect(() => {
+  $effect(() => {
     $ticks += 1
   }, ["every(1000)"])
   

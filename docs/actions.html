@@ -163,8 +163,8 @@ aktion = Card([Column($items.map(item =&gt; Row([
 
       <h2 id="server">Talking to the server</h2>
       <p>
-        A write to the server is just an <code>Http({...})</code> call with a
-        non-GET method, fired from inside an action. <code>Http(...)</code> returns
+        A write to the server is just an <code>$http({...})</code> call with a
+        non-GET method, fired from inside an action. <code>$http(...)</code> returns
         a reactive <strong>resource</strong> &mdash; bind it to an atom and you get
         <code>.data</code>, <code>.error</code>, <code>.loading</code>,
         <code>.refetch()</code>, and <code>.cancel()</code>.
@@ -176,10 +176,10 @@ aktion = Card([Column($items.map(item =&gt; Row([
         load and every <code>refetch()</code>, on both success and error. It does
         not fire for a request that was superseded or <code>cancel()</code>led.
       </p>
-<pre><code>$todos = Http({ url: "https://api.example.com/todos" })
+<pre><code>$todos = $http({ url: "https://api.example.com/todos" })
 
 function save() {
-  $res = Http({
+  $res = $http({
     url:    "https://api.example.com/todos",
     method: "POST",
     body:   { title: $draft, done: false }
@@ -231,14 +231,14 @@ row = Button("View", { onClick: () =&gt; openOrder(order.id), variant: "ghost" }
 
       <h2 id="emit">Emitting events to the host</h2>
       <p>
-        Inside any action, <code>emit("name", detail)</code> dispatches an outbound
+        Inside any action, <code>$emit("name", detail)</code> dispatches an outbound
         <code>CustomEvent</code> on the <code>&lt;aktion-app&gt;</code> host element.
         The page embedding the app listens with <code>addEventListener</code>. Pick
         stable names; <code>assistant-message</code>, <code>error</code>, and
         <code>route-change</code> are reserved.
       </p>
 <pre><code>function submit() {
-  emit("form-submitted", { email: $email, name: $name })
+  $emit("form-submitted", { email: $email, name: $name })
 }</code></pre>
 <pre><code>// Host page:
 el.addEventListener("form-submitted", (event) =&gt; {
@@ -254,7 +254,7 @@ el.addEventListener("form-submitted", (event) =&gt; {
         <thead><tr><th>Tool</th><th>Triggered by</th><th>Use for</th></tr></thead>
         <tbody>
           <tr><td><strong>Action</strong> &mdash; <code>function save() { &hellip; }</code></td><td>A user event (click, change, submit)</td><td>Mutations the user initiates: writes, server calls, navigation.</td></tr>
-          <tr><td><strong>Effect</strong> &mdash; <code>effect(() =&gt; { &hellip; }, [$dep])</code></td><td>A dependency changing (or mount / interval)</td><td>Reactive side effects: debounced search, timers, subscriptions &mdash; see <a href="side-effects.html">Side effects</a>.</td></tr>
+          <tr><td><strong>Effect</strong> &mdash; <code>$effect(() =&gt; { &hellip; }, [$dep])</code></td><td>A dependency changing (or mount / interval)</td><td>Reactive side effects: debounced search, timers, subscriptions &mdash; see <a href="side-effects.html">Side effects</a>.</td></tr>
           <tr><td><strong>Binding</strong> &mdash; <code>$total = sum($items)</code></td><td>Any read it depends on changing</td><td>Pure, derived reactive values. No side effects.</td></tr>
         </tbody>
       </table>
@@ -264,7 +264,7 @@ el.addEventListener("form-submitted", (event) =&gt; {
         <a class="demo-card" href="side-effects.html">
           <span class="demo-tag">Reactive</span>
           <h3>Side effects</h3>
-          <p><code>effect(...)</code> for dependency-triggered work: timers, debounced search, cleanup.</p>
+          <p><code>$effect(...)</code> for dependency-triggered work: timers, debounced search, cleanup.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="javascript-interactions.html">

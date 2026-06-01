@@ -15,12 +15,14 @@ import type {
   ComponentDeclaration,
   EffectDeclaration,
   ActionDeclaration,
+  HookDeclaration,
   BlockExpr,
   ObjectProperty,
   SwitchCase,
   DestructuringPattern,
 } from "../parser/types.js";
 import type { StateStore } from "./state.js";
+import { pathsOverlap } from "./state.js";
 import type { HttpRuntime } from "./http.js";
 import { createHttpResource, isEndpointResource } from "./http.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
@@ -41,12 +43,6 @@ import { consoleNs as consoleGlobal } from "./console.js";
  * (e.g. `storage.local.get("x")`, `console.warn("…")`).
  */
 const GLOBAL_NAMESPACES: Record<string, unknown> = {
-  storage: storageGlobal,
-  console: consoleGlobal,
-  // Curated namespace of pure data / formatting helpers — the
-  // replacement for the removed `@`-builtin catalog. See
-  // `src/runtime/util.ts` for the full method list.
-  Util,
   // Curated fast-path for the most-used JS standard library globals, so
   // `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`, `new Date()`,
   // `new Map()`, `Number("5")`, etc. resolve without an import and without
@@ -89,6 +85,24 @@ const GLOBAL_NAMESPACES: Record<string, unknown> = {
   encodeURI,
   decodeURI,
   structuredClone: typeof structuredClone === "function" ? structuredClone : undefined,
+};
+
+/**
+ * Aktion's own runtime **namespaces**, addressed with the `$` sigil that marks
+ * every Aktion-provided global (state, hooks, builtins). A bare reference
+ * (`$util`, `$console`, `$storage`) resolves to the namespace object; member
+ * access (`$util.format(...)`, `$storage.local.get(...)`) then resolves on it.
+ * These names are reserved — a `$util = …` declaration can't shadow them.
+ *
+ * The factory builtins (`$store`, `$router`, `$http`, `$theme`, `$i18n`,
+ * `$emit`, `$effect`) are NOT here: they're only meaningful when *called*, so
+ * they're dispatched at the call site (`evaluateInvoke` / the parser for
+ * `$effect`). `$storage` is both — a namespace AND a `$storage({...})` factory.
+ */
+const RESERVED_STATE_NAMESPACES: Record<string, unknown> = {
+  util: Util,
+  console: consoleGlobal,
+  storage: storageGlobal,
 };
 
 /**
@@ -333,6 +347,33 @@ export const isUserComponentNode = (value: unknown): value is UserComponentNode 
 };
 
 /**
+ * A global store created by `Store({ …state, …methods })` (§ Global state).
+ *
+ * State (the non-function entries of the config) lives in a single reactive
+ * atom named `__atom`, so reads through the handle (`store.field`) get the
+ * same fine-grained path tracking as a `$state` read, and writes
+ * (`s.field = …` inside a method) route through `setPath`. Methods (the
+ * function entries) are pre-bound so calling `store.method(args)` invokes the
+ * author's function with the handle injected as the first argument
+ * (`(s, ...args)`); the bound functions are reference-stable across renders,
+ * which keeps memoization tight when an action is passed as a prop.
+ */
+export interface StoreHandle {
+  __kind: "Store";
+  /** Backing reactive atom name holding the store's state object. */
+  __atom: string;
+  /** Pre-bound methods: `(...args) => rawMethod(handle, ...args)`. */
+  __methods: Record<string, (...args: unknown[]) => unknown>;
+}
+
+export const isStoreHandle = (value: unknown): value is StoreHandle => {
+  return Boolean(
+    value && typeof value === "object" &&
+    (value as { __kind?: unknown }).__kind === "Store",
+  );
+};
+
+/**
  * An `effect(() => { … }, [deps])` declaration discovered inside a `function` component
  * body, paired with the per-instance state-alias stack captured at the
  * moment the body was walked. The runner restores those aliases before
@@ -363,6 +404,37 @@ export interface ScopedEffectDecl {
    * the ones captured at first mount.
    */
   capturedLoopVars: ReadonlyMap<string, unknown>;
+}
+
+/**
+ * One hook slot held by a component instance (§ Hooks). Slots are matched
+ * by call order across renders — the React "rules of hooks" model.
+ *
+ *   - `state` cells back a `$state(initial)` call. The `value` is the live
+ *     current state; the setter returned by the hook mutates it in place and
+ *     calls `ctx.notify()` to schedule a re-render. The cell object identity
+ *     is stable across renders, so a setter captured in an event handler from
+ *     an earlier render still writes the slot the next render reads.
+ *   - `memo` cells back a `$memo(fn, deps)` call. `value` is the last
+ *     computed result; `deps` is the dependency array it was computed with
+ *     (shallow-compared via `Object.is` to decide whether to recompute).
+ */
+export type HookCell =
+  | { kind: "state"; value: unknown }
+  | { kind: "memo"; deps: ReadonlyArray<unknown> | undefined; value: unknown };
+
+/**
+ * Active hook scope — the component instance currently rendering, plus a
+ * monotonically increasing slot cursor. Set by `evaluateUserComponent`
+ * around the body walk and shared by any `$hook()` calls (built-in or
+ * user-declared) encountered while walking, so a custom hook's internal
+ * `$state` / `$memo` allocate slots on the calling component (React's
+ * custom-hook model). `null` when no component is rendering.
+ */
+export interface HookScope {
+  instanceKey: string;
+  /** Next slot index to hand out — advanced once per hook call. */
+  cursor: number;
 }
 
 export interface EvaluationContext {
@@ -425,6 +497,35 @@ export interface EvaluationContext {
   componentEffectStack: ScopedEffectDecl[][];
   /** Action declarations (`function foo() { ... }` — camelCase). */
   actionDecls: Map<string, ActionDeclaration>;
+  /**
+   * Hook declarations (`function $useFoo() { ... }`), keyed by name WITHOUT
+   * the `$` sigil. Invoked as `$useFoo(...)`; the body runs inline in the
+   * caller's hook scope so its `$state` / `$memo` calls allocate slots on
+   * the rendering component instance.
+   */
+  hookDecls: Map<string, HookDeclaration>;
+  /**
+   * Active hook scope, or `null` when no user component is rendering. Set by
+   * `evaluateUserComponent` around the body walk and consumed by the
+   * `$state` / `$memo` built-ins (and any user `$hook()` they reach).
+   */
+  hookScope: HookScope | null;
+  /**
+   * Per-instance hook cells, keyed by the same `instanceKey` the renderer
+   * derives for per-instance `$state` / effects. Each entry is the ordered
+   * slot array for one component instance. Persists across renders so hook
+   * state survives a re-render; the renderer prunes an instance's entry when
+   * it leaves the tree (`clearInstanceHooks`), giving React-like reset-on-
+   * unmount semantics.
+   */
+  hookStore: Map<string, HookCell[]>;
+  /**
+   * Global stores created by `Store({...})`, keyed by source location so the
+   * same call site yields one singleton handle across renders (the store is
+   * app-global, not per-instance). Lives as long as the program; rebuilt on
+   * replan with a fresh context.
+   */
+  stores: Map<string, StoreHandle>;
   /** HTTP runtime (`Http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
   /** Action runner for function declarations. */
@@ -510,6 +611,10 @@ export function createContext(
     effectDecls: new Map(),
     componentEffectStack: [],
     actionDecls: new Map(),
+    hookDecls: new Map(),
+    hookScope: null,
+    hookStore: new Map(),
+    stores: new Map(),
     http: options.http,
     actionRunner: options.actionRunner,
     notify: options.notify,
@@ -625,10 +730,20 @@ function stateRefForArg(
   if (expr.kind === "StateRef") return resolveStateAlias(ctx, expr.name);
   if (expr.kind === "Member") {
     const extracted = extractStatePath(expr, ctx);
-    if (!extracted) return null;
-    return extracted.path.length === 0
-      ? extracted.name
-      : `${extracted.name}.${extracted.path.join(".")}`;
+    if (extracted) {
+      return extracted.path.length === 0
+        ? extracted.name
+        : `${extracted.name}.${extracted.path.join(".")}`;
+    }
+    // Two-way binding to a store field — `Input(value: cart.draft)`. The
+    // backing-atom name has no dots, so the renderer's `writeState` splits it
+    // back into root + path and routes the write through `setPath`.
+    const storePath = extractStorePath(expr, ctx);
+    if (storePath) {
+      return storePath.path.length === 0
+        ? storePath.atom
+        : `${storePath.atom}.${storePath.path.join(".")}`;
+    }
   }
   return null;
 }
@@ -669,8 +784,7 @@ export function planProgram(program: Program, ctx: EvaluationContext): void {
   // state (e.g. `base = "https://api…"` then `$todos = Http({ url: base + "/todos" })`).
   for (const stmt of program.statements) {
     if (stmt.kind !== "Assignment" || !stmt.isState) continue;
-    if (stmt.expression.kind !== "Call") continue;
-    if (stmt.expression.callee !== "Http") continue;
+    if (!isHttpResourceCall(stmt.expression)) continue;
     const value = evaluate(stmt.expression, ctx);
     ctx.state.set(stmt.identifier, value);
   }
@@ -765,13 +879,11 @@ function installComputedStateDerivations(
       for (let depth = 0; depth < COMPUTED_DERIVATION_MAX_DEPTH; depth += 1) {
         let progressed = false;
         for (const entry of computed) {
-          let needs = false;
-          for (const dep of entry.deps) {
-            if (propagated.has(dep)) {
-              needs = true;
-              break;
-            }
-          }
+          // Recompute only when a changed path overlaps one of this
+          // derivation's tracked paths — `$total = $cart.total` recomputes
+          // on a `cart.total` (or whole-`cart`) write, but not on a
+          // `cart.shipping` write. `anyPathAffects` applies the prefix rule.
+          const needs = pathsOverlap(propagated, entry.deps);
           if (!needs) continue;
           const before = ctx.state.get(entry.name);
           recompute(entry);
@@ -815,9 +927,13 @@ function isPureLiteralExpression(expr: Expression): boolean {
   }
 }
 
-/** `true` for `Http({...})` resource declarations (handled in 1.25 pass). */
+/** `true` for `$http({...})` resource declarations (handled in the 1.55 pass). */
 function isHttpResourceCall(expr: Expression): boolean {
-  return expr.kind === "Call" && expr.callee === "Http";
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    expr.callee.name === "http"
+  );
 }
 
 function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {
@@ -846,6 +962,9 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
       return;
     case "ActionDeclaration":
       ctx.actionDecls.set(stmt.name, stmt);
+      return;
+    case "HookDeclaration":
+      ctx.hookDecls.set(stmt.name, stmt);
       return;
     case "Await":
     case "Return":
@@ -953,7 +1072,7 @@ function evaluateRouterCall(
   if (!arg || arg.kind !== "Object") {
     // eslint-disable-next-line no-console
     console.error(
-      `[aktion] Router expects an object literal of route arms (e.g. \`Router({ "/": Home(), default: NotFound() })\`).`,
+      `[aktion] $router expects an object literal of route arms (e.g. \`$router({ "/": Home(), default: NotFound() })\`).`,
       loc,
     );
     ctx.router?.setActiveMatch(null, {});
@@ -1109,6 +1228,11 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       return null;
     }
     case "StateRef": {
+      // Reserved Aktion namespaces (`$util`, `$console`, `$storage`) resolve
+      // to their namespace object — they are constants, not tracked state.
+      if (Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, expr.name)) {
+        return RESERVED_STATE_NAMESPACES[expr.name];
+      }
       // Resolve through the per-instance alias stack so `$n` inside a
       // component body picks the right per-instance slot.
       const resolved = resolveStateAlias(ctx, expr.name);
@@ -1154,6 +1278,19 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       return obj;
     }
     case "Member": {
+      // Fine-grained reactivity: a member chain rooted at a `$atom`
+      // subscribes to the *precise path* it reads (`$user.name` → `user.name`)
+      // rather than the whole atom. Non-state-rooted chains (loop vars,
+      // `route.params`, function results, …) keep the plain behaviour.
+      if (memberChainRootsAtState(expr)) {
+        return evaluateStateMember(expr, ctx);
+      }
+      // A chain rooted at a `Store` handle reads the store's state atom with
+      // the same fine-grained tracking (`cart.items` → `<atom>.items`).
+      const storeHandle = storeChainRootHandle(expr, ctx);
+      if (storeHandle) {
+        return evaluateStoreMember(expr, ctx, storeHandle);
+      }
       const target = evaluate(expr.object, ctx);
       if (expr.optional && target == null) return undefined;
       if (expr.computed) {
@@ -1710,10 +1847,281 @@ function runStatementInBlock(stmt: Statement, ctx: EvaluationContext): void {
 }
 
 /** Evaluate `expr(...args)` — call postfix on an arbitrary expression / IIFE. */
-function evaluateInvoke(
-  expr: { callee: Expression; arguments: Expression[]; optional?: boolean },
+/** True when a `Member` chain bottoms out at a `$state` reference. */
+function memberChainRootsAtState(expr: Expression): boolean {
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") cursor = cursor.object;
+  // A reserved namespace root (`$util.format`, `$storage.local`) is NOT
+  // fine-grained reactive state — let it fall through to the normal member
+  // path so the StateRef resolves to the namespace object and `memberAccess`
+  // reads off it.
+  if (cursor.kind === "StateRef" &&
+      Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, cursor.name)) {
+    return false;
+  }
+  return cursor.kind === "StateRef";
+}
+
+/**
+ * Evaluate a member chain rooted at a `$atom`, recording the *precise* path
+ * it reads in `ctx.trackedState` so the reader subscribes only to that path
+ * (fine-grained reactivity).
+ *
+ * The path is refined segment-by-segment through plain-object property
+ * accesses (`$user.address.city` → `user.address.city`). Refinement stops —
+ * and the dependency becomes the container path read so far — as soon as the
+ * chain reaches an **array** (`$rows.name` pluck, `$cart.items[0]`), a
+ * **dynamic computed key** (`$list[$i]`), or a primitive/`null`. That rule is
+ * the whole contract: *object fields are tracked field-by-field; reading into
+ * an array (or via a dynamic key) subscribes to the array/container.* It is
+ * always sound — coarsening can only ever subscribe to MORE than is read,
+ * never less — so a relevant change is never missed.
+ *
+ * Values are produced with the same `memberAccess` / `computedMemberAccess`
+ * helpers the plain `Member` path uses, so array pluck, `.length`/`.first`/
+ * `.last`, bounded indices, and string indexing behave identically. Dynamic
+ * key sub-expressions are still evaluated, so their own dependencies are
+ * tracked.
+ */
+function evaluateStateMember(expr: Expression, ctx: EvaluationContext): unknown {
+  const accesses = flattenMemberAccesses(expr);
+  // `cursor` is the rooting StateRef (guaranteed by `memberChainRootsAtState`).
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") cursor = cursor.object;
+  const root = resolveStateAlias(ctx, (cursor as { name: string }).name);
+  return walkAtomMember(accesses, root, ctx);
+}
+
+/** Flatten a `Member` chain into root → leaf access order. */
+function flattenMemberAccesses(
+  expr: Expression,
+): Array<{ property?: string; computed?: Expression }> {
+  const accesses: Array<{ property?: string; computed?: Expression }> = [];
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") {
+    accesses.unshift({ property: cursor.property, computed: cursor.computed });
+    cursor = cursor.object;
+  }
+  return accesses;
+}
+
+/**
+ * Walk `accesses` from the reactive atom `atomName`, returning the value and
+ * recording the precise path read in `ctx.trackedState`. Shared by `$state`
+ * reads and `Store` reads — both bottom out at a single reactive atom that
+ * holds an object graph, so the fine-grained refinement rule is identical.
+ */
+function walkAtomMember(
+  accesses: Array<{ property?: string; computed?: Expression }>,
+  atomName: string,
   ctx: EvaluationContext,
 ): unknown {
+  let value: unknown = ctx.state.get(atomName);
+  const pathSegs: string[] = [atomName];
+  let refining = true;
+
+  for (const acc of accesses) {
+    let key: unknown;
+    let staticSegment: string | null = null; // appendable static path segment, else null
+    if (acc.computed) {
+      if (acc.computed.kind === "Literal") {
+        key = acc.computed.value;
+        if (typeof key === "string" || typeof key === "number") staticSegment = String(key);
+      } else {
+        // Dynamic key — evaluate it so ITS dependencies are tracked too.
+        key = evaluate(acc.computed, ctx);
+      }
+    } else {
+      key = acc.property ?? "";
+      staticSegment = acc.property ?? "";
+    }
+
+    // Refine the path only while we're walking plain objects with a static
+    // key. Arrays, dynamic keys, and primitives stop refinement.
+    const isPlainObject = value != null && typeof value === "object" && !Array.isArray(value);
+    if (refining && staticSegment !== null && isPlainObject) {
+      pathSegs.push(staticSegment);
+    } else {
+      refining = false;
+    }
+
+    value = acc.computed
+      ? computedMemberAccess(value, key)
+      : memberAccess(value, acc.property ?? "");
+  }
+
+  ctx.trackedState.add(pathSegs.join("."));
+  return value;
+}
+
+/**
+ * If `expr` is a member chain whose root identifier resolves to a `Store`
+ * handle (`cart.items`, `s.user.name`), return that handle; otherwise `null`.
+ * Stores are always bound to a simple identifier, so we only need to evaluate
+ * the root (a cheap, cached binding/loop-var lookup).
+ */
+function storeChainRootHandle(expr: Expression, ctx: EvaluationContext): StoreHandle | null {
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") cursor = cursor.object;
+  if (cursor.kind !== "Identifier") return null;
+  const value = evaluate(cursor, ctx);
+  return isStoreHandle(value) ? value : null;
+}
+
+/**
+ * Evaluate a member chain rooted at a `Store` handle. A leading method name
+ * (`cart.add`) returns the pre-bound method; anything else is a state read
+ * that walks the store's atom with the same fine-grained tracking as
+ * `$state` (`cart.items` → subscribe to `<atom>.items`).
+ */
+function evaluateStoreMember(
+  expr: Expression,
+  ctx: EvaluationContext,
+  handle: StoreHandle,
+): unknown {
+  const accesses = flattenMemberAccesses(expr);
+  const first = accesses[0];
+  if (first && first.computed === undefined && first.property !== undefined &&
+      Object.prototype.hasOwnProperty.call(handle.__methods, first.property)) {
+    // Method reference (`cart.add`). Apply any deeper accesses to the bound
+    // function (rare, e.g. reading a property off it).
+    let value: unknown = handle.__methods[first.property];
+    for (let i = 1; i < accesses.length; i += 1) {
+      const acc = accesses[i]!;
+      if (acc.computed) value = computedMemberAccess(value, evaluate(acc.computed, ctx));
+      else value = memberAccess(value, acc.property ?? "");
+    }
+    return value;
+  }
+  return walkAtomMember(accesses, handle.__atom, ctx);
+}
+
+/**
+ * Evaluate `Store({ ...state, ...methods })`. Splits the config into reactive
+ * state (non-function entries, held in a single atom) and methods (function
+ * entries, pre-bound to receive the handle as their first argument). Returns
+ * a singleton handle per call site so the store is a stable, app-global
+ * value across renders.
+ */
+function evaluateStoreCall(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const key = loc ? `${loc.line}:${loc.column}` : `anon:${ctx.stores.size}`;
+  const cached = ctx.stores.get(key);
+  if (cached) return cached;
+
+  const config = args[0] ? evaluate(args[0], ctx) : {};
+  const state: Record<string, unknown> = {};
+  const rawMethods: Record<string, (...a: unknown[]) => unknown> = {};
+  if (config && typeof config === "object" && !Array.isArray(config)) {
+    for (const [name, value] of Object.entries(config as Record<string, unknown>)) {
+      if (typeof value === "function") rawMethods[name] = value as (...a: unknown[]) => unknown;
+      else state[name] = value;
+    }
+  }
+
+  const atom = loc ? `__store_${loc.line}_${loc.column}` : `__store_anon_${ctx.stores.size}`;
+  ctx.state.declare(atom, state);
+
+  const methods: Record<string, (...args: unknown[]) => unknown> = {};
+  const handle: StoreHandle = { __kind: "Store", __atom: atom, __methods: methods };
+  // Pre-bind each method to inject the handle as `s`. The bound functions are
+  // created once, so a `store.action` reference is stable across renders.
+  for (const [name, raw] of Object.entries(rawMethods)) {
+    methods[name] = (...callArgs: unknown[]) => raw(handle, ...callArgs);
+  }
+
+  ctx.stores.set(key, handle);
+  return handle;
+}
+
+/**
+ * Like `extractStatePath`, but for a member chain rooted at a `Store` handle.
+ * Returns the backing atom name + the trailing dotted path so a write
+ * (`s.items = …`) or a two-way binding (`value: cart.draft`) can route
+ * through `setPath` on the store's atom. Returns `null` when the chain isn't
+ * store-rooted or uses a dynamic key.
+ */
+function extractStorePath(
+  expr: Expression,
+  ctx: EvaluationContext,
+): { atom: string; path: string[] } | null {
+  const segments: string[] = [];
+  let cursor: Expression = expr;
+  while (cursor.kind === "Member") {
+    if (cursor.computed) {
+      if (cursor.computed.kind !== "Literal") return null;
+      const key = cursor.computed.value;
+      if (typeof key !== "string" && typeof key !== "number") return null;
+      segments.unshift(String(key));
+    } else if (cursor.property) {
+      segments.unshift(cursor.property);
+    } else {
+      return null;
+    }
+    cursor = cursor.object;
+  }
+  if (cursor.kind !== "Identifier") return null;
+  const value = evaluate(cursor, ctx);
+  if (!isStoreHandle(value)) return null;
+  return { atom: value.__atom, path: segments };
+}
+
+function evaluateInvoke(
+  expr: { callee: Expression; arguments: Expression[]; optional?: boolean; loc?: { line: number; column: number } },
+  ctx: EvaluationContext,
+): unknown {
+  // Every Aktion-provided global is `$`-prefixed, so a `$name(...)` call lexes
+  // as an Invoke on a `StateRef`. We dispatch those here — hooks, the runtime
+  // factory builtins, and user-declared `$useFoo` hooks — BEFORE resolving the
+  // name as a stored state value. (`$effect(...)` is handled in the parser, so
+  // its dependency array keeps its special parsing.) Any other `$name(...)`
+  // (e.g. invoking a lambda stored in state) falls through to the normal path.
+  if (expr.callee.kind === "StateRef") {
+    const name = expr.callee.name;
+    // Hooks.
+    if (name === "state") return evaluateStateHook(expr.arguments, ctx, expr.loc);
+    if (name === "memo") return evaluateMemoHook(expr.arguments, ctx, expr.loc);
+    // Runtime factory builtins.
+    switch (name) {
+      case "store":
+        return evaluateStoreCall(expr.arguments, ctx, expr.loc);
+      case "router":
+        return evaluateRouterCall(expr.arguments, ctx, expr.loc);
+      case "http": {
+        const optsArg = expr.arguments[0];
+        return createHttpResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "theme": {
+        const tokensArg = expr.arguments[0];
+        const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
+        return { kind: "Theme", tokens } satisfies ThemeNode;
+      }
+      case "i18n": {
+        const configArg = expr.arguments[0];
+        const config = configArg ? evaluate(configArg, ctx) : null;
+        const cfg = config && typeof config === "object" && !Array.isArray(config)
+          ? (config as I18nConfig)
+          : {};
+        return createI18n(cfg);
+      }
+      case "emit": {
+        const eventName = expr.arguments[0] ? String(evaluate(expr.arguments[0], ctx)) : "";
+        const detail = expr.arguments[1] ? evaluate(expr.arguments[1], ctx) : undefined;
+        ctx.onEmit?.(eventName, detail);
+        return undefined;
+      }
+      case "storage": {
+        // `$storage({...})` factory form — returns the storage namespace.
+        if (expr.arguments[0]) evaluate(expr.arguments[0], ctx);
+        return storageGlobal;
+      }
+    }
+    const hookDecl = ctx.hookDecls.get(name);
+    if (hookDecl) return invokeHookDecl(hookDecl, expr.arguments, ctx);
+  }
   const callee = evaluate(expr.callee, ctx);
   if (callee == null) {
     return expr.optional ? undefined : null;
@@ -1892,6 +2300,7 @@ function evaluateBlock(
         }
         case "ComponentDeclaration":
         case "ActionDeclaration":
+        case "HookDeclaration":
           // Top-level constructs that may legally appear inside a block;
           // register them on the context so they're discoverable from
           // sibling statements without mutating outer scope.
@@ -2059,7 +2468,12 @@ function evaluateMethodCall(
   if (target == null) {
     return expr.optional ? undefined : null;
   }
-  const fn = (target as Record<string, unknown>)[expr.method];
+  // `store.method(args)` — dispatch to the store's pre-bound method (which
+  // injects the handle). Methods live on `__methods`, not on the handle
+  // object itself, so this lookup must precede the generic property path.
+  const fn = isStoreHandle(target)
+    ? target.__methods[expr.method]
+    : (target as Record<string, unknown>)[expr.method];
   if (typeof fn !== "function") return null;
 
   const positional: unknown[] = [];
@@ -2095,24 +2509,11 @@ function evaluateComponentCall(
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
-  // `Router({ "/": Home(), "/users/:id": User(params), default: NotFound() })`
-  // — the routing primitive. Intercept *before* arguments are evaluated so
-  // only the matching arm's body runs (and so `params` is in scope for it).
-  if (callee === "Router") {
-    return evaluateRouterCall(args, ctx, loc);
-  }
-  // `emit("name", detail)` — dispatch a custom event via the host.
-  if (callee === "emit") {
-    const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
-    const detail = args[1] ? evaluate(args[1], ctx) : undefined;
-    ctx.onEmit?.(eventName, detail);
-    return undefined;
-  }
-  // `Storage({...})` — returns the built-in storage namespace.
-  if (callee === "Storage") {
-    if (args[0]) evaluate(args[0], ctx);
-    return storageGlobal;
-  }
+  // Aktion's own runtime factory builtins (`$store`, `$router`, `$http`,
+  // `$theme`, `$i18n`, `$emit`, `$storage(...)`) are `$`-prefixed and dispatch
+  // through `evaluateInvoke`; they never reach this bare-callee path. Timers
+  // (`setTimeout` / `setInterval` / …) stay bare — they are standard JS.
+  //
   // Aktion 0.5 component declarations win over the legacy macro form and the
   // built-in library. This lets author code override built-in components
   // by name (e.g. wrapping `Button` with telemetry).
@@ -2132,15 +2533,6 @@ function evaluateComponentCall(
   if (actionDecl) {
     const evaluated = args.map((a) => evaluate(a, ctx));
     return runActionDeclSync(actionDecl, evaluated, ctx);
-  }
-  // `Http({ url, method, body, headers, query, ... })` builtin — returns
-  // a reactive `EndpointResource` bag with `data`, `error`, `loading`,
-  // `status`, `lastUpdated`, `headers`, `refetch()`, `cancel()`. Each
-  // call is fully self-contained; there are no host-wide defaults.
-  if (callee === "Http") {
-    const optsArg = args[0];
-    const opts = optsArg ? evaluate(optsArg, ctx) : {};
-    return createHttpResource(opts, ctx);
   }
   // Timer builtins — `setTimeout(fn, ms)`, `setInterval(fn, ms)`,
   // `clearTimeout(id)`, `clearInterval(id)`. They mirror the host globals
@@ -2184,10 +2576,18 @@ function evaluateComponentCall(
   // `String(x)`, `Array(3)`, `isNaN(x)`. Constructors like `Date`/`Map`
   // are also callable here (returning whatever the function form yields)
   // but are usually reached via `new` (see `evaluateNew`).
+  //
+  // A library component ALWAYS wins over a same-named curated global, so a
+  // call to the `Map` component (`Map(lat, { lng })`) builds a component
+  // node instead of invoking the `Map` *constructor* (which throws without
+  // `new`). This mirrors the `!findComponent` guard on the host-global
+  // passthrough below — see the §"library component still wins" note on
+  // `lookupHostGlobal`.
   if (
     Object.prototype.hasOwnProperty.call(GLOBAL_NAMESPACES, callee) &&
     typeof GLOBAL_NAMESPACES[callee] === "function" &&
-    !(ctx.componentDecls.has(callee))
+    !(ctx.componentDecls.has(callee)) &&
+    !(ctx.library && findComponent(ctx.library, callee))
   ) {
     const fn = GLOBAL_NAMESPACES[callee] as (...a: unknown[]) => unknown;
     const evaluated: unknown[] = [];
@@ -2208,32 +2608,6 @@ function evaluateComponentCall(
     }
   }
 
-  if (callee === "Theme") {
-    // `Theme({ colors: {...}, radius: {...}, font: {...}, motion: {...},
-    // elevation: {...} })` — capture the structured token map to be
-    // applied on top of the base theme between render cycles. We do not
-    // render anything; the element picks the value up via the `theme`
-    // binding (or any other binding) and writes the tokens to its host.
-    //
-    // The keys inside each group are flattened into prefixed CSS tokens
-    // (`colors.primary` → `colorPrimary`, `radius.md` → `radiusMd`, …).
-    // The legacy flat-shape form is rejected — see `collectThemeTokens`.
-    const tokensArg = args[0];
-    const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
-    const node: ThemeNode = { kind: "Theme", tokens };
-    return node;
-  }
-  if (callee === "i18n") {
-    // `i18n({ defaultLanguage, currentLanguage, translations })` —
-    // returns a `{ t, setCurrentLanguage, getCurrentLanguage }` bundle.
-    const configArg = args[0];
-    const config = configArg ? evaluate(configArg, ctx) : null;
-    const cfg =
-      config && typeof config === "object" && !Array.isArray(config)
-        ? (config as I18nConfig)
-        : {};
-    return createI18n(cfg);
-  }
   // Final fallthrough: treat the call as a built-in component invocation
   // and build a `ComponentNode` the renderer will hand to the library. If
   // the callee resolves against *neither* the library nor any user
@@ -2560,6 +2934,13 @@ function invokeComponentDecl(
 export interface EvaluatedUserComponent {
   value: unknown;
   effects: ReadonlyArray<ScopedEffectDecl>;
+  /**
+   * Number of hook slots (`$state` / `$memo` / user `$hook`) this instance
+   * consumed during the body walk. `0` when the component uses no hooks.
+   * The renderer uses a non-zero count to track the instance for hook
+   * teardown when it later leaves the tree (reset-on-unmount).
+   */
+  hooks: number;
 }
 
 /**
@@ -2673,10 +3054,20 @@ export function evaluateUserComponent(
   // mutating the global `effectDecls` map.
   const effectsFrame: ScopedEffectDecl[] = [];
   ctx.componentEffectStack.push(effectsFrame);
+  // Open a fresh hook scope for this instance. The cursor starts at 0 every
+  // render so `$state` / `$memo` calls map to the same slots they did last
+  // render (call-order identity — the React rules-of-hooks model). Nested
+  // user-component children are produced as lazy nodes here (not expanded),
+  // so they don't disturb this cursor; the renderer expands them later with
+  // their own scope.
+  const prevHookScope = ctx.hookScope;
+  const hookScope: HookScope = { instanceKey, cursor: 0 };
+  ctx.hookScope = hookScope;
   try {
     const value = evaluateBlock(decl.body, ctx, { stateAsDeclaration: true });
-    return { value, effects: effectsFrame };
+    return { value, effects: effectsFrame, hooks: hookScope.cursor };
   } finally {
+    ctx.hookScope = prevHookScope;
     ctx.componentEffectStack.pop();
     ctx.stateAliases.pop();
     for (const slot of restoreLoopVars) {
@@ -2704,6 +3095,30 @@ function runActionDeclSync(
   args: unknown[],
   ctx: EvaluationContext,
 ): unknown {
+  return runDeclBodySync(decl.params, decl.body, args, ctx);
+}
+
+/**
+ * Bind `params` (with defaults / destructuring) into `ctx.loopVars`, run
+ * `body` via `evaluateBlock`, then restore the previous bindings. Shared by
+ * the action runner and the hook runner — the only behavioural difference
+ * between an action call and a hook call is *where* the call site dispatches
+ * from, not how the body executes.
+ *
+ * Name case does NOT decide component-vs-action semantics for state seeding:
+ * when this body runs *during a render* (e.g. a lowercase `function app()`
+ * invoked via `aktion = app()`), its top-level `$x = expr` assignments are
+ * treated as set-once declarations — exactly like a PascalCase component —
+ * so the state seeds once and survives later updates instead of being
+ * re-written (and clobbered) on every re-render. Outside render (event
+ * handlers, value calls) the same `$x = expr` is an ordinary write.
+ */
+function runDeclBodySync(
+  params: ReadonlyArray<{ name: string; defaultValue?: Expression; pattern?: DestructuringPattern }>,
+  body: BlockExpr,
+  args: unknown[],
+  ctx: EvaluationContext,
+): unknown {
   const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
   const bindLocal = (name: string, value: unknown) => {
     restore.push({
@@ -2713,8 +3128,8 @@ function runActionDeclSync(
     });
     ctx.loopVars.set(name, value);
   };
-  for (let i = 0; i < decl.params.length; i += 1) {
-    const param = decl.params[i]!;
+  for (let i = 0; i < params.length; i += 1) {
+    const param = params[i]!;
     let value: unknown = args[i];
     if (value === undefined && param.defaultValue) {
       value = evaluate(param.defaultValue, ctx);
@@ -2728,13 +3143,175 @@ function runActionDeclSync(
     bindLocal(param.name, value);
   }
   try {
-    return evaluateBlock(decl.body, ctx, {});
+    return evaluateBlock(body, ctx, { stateAsDeclaration: ctx.state.isRendering() });
   } finally {
     for (const slot of restore) {
       if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
       else ctx.loopVars.delete(slot.name);
     }
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Hooks (§ Hooks) — `$state`, `$memo`, and user-declared `$useFoo(...)`.
+//
+// A hook is a `$`-prefixed callable that participates in the rendering
+// component's per-instance slot scope. Built-in `$state` / `$memo` mirror
+// React's `useState` / `useMemo`; a `function $useFoo() { ... }` declaration
+// composes them. Slots are matched by call order across renders (the React
+// rules of hooks): call hooks unconditionally, in a stable order, at the top
+// level of a component / hook body.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Get the ordered hook-cell array for the rendering instance, creating it on
+ * first use. Returns `null` when called outside any component render (no
+ * active hook scope) so callers can degrade gracefully.
+ */
+function instanceHookCells(ctx: EvaluationContext): HookCell[] | null {
+  const scope = ctx.hookScope;
+  if (!scope) return null;
+  let cells = ctx.hookStore.get(scope.instanceKey);
+  if (!cells) {
+    cells = [];
+    ctx.hookStore.set(scope.instanceKey, cells);
+  }
+  return cells;
+}
+
+/** Shallow `Object.is` comparison of two dependency arrays (React semantics). */
+function depsEqual(a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (!Object.is(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+/**
+ * `$state(initial)` — React's `useState`. Returns a `[value, setValue]` pair.
+ * The initializer is evaluated once, on the render that first reaches this
+ * slot; later renders return the stored value (so user mutations persist).
+ * `setValue(next)` accepts a replacement value or an updater function
+ * (`setValue(prev => prev + 1)`); it no-ops when the value is unchanged
+ * (`Object.is`) and otherwise schedules a re-render via `ctx.notify()`.
+ */
+function evaluateStateHook(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const cells = instanceHookCells(ctx);
+  if (!cells) {
+    // Outside a component — degrade to a one-shot value with an inert setter
+    // so a stray top-level `$state(...)` doesn't crash the render.
+    warnHookOutsideComponent("state", loc);
+    const initial = args[0] ? evaluate(args[0], ctx) : undefined;
+    return [initial, () => {}];
+  }
+  const slot = ctx.hookScope!.cursor++;
+  let cell = cells[slot];
+  if (!cell || cell.kind !== "state") {
+    const initial = args[0] ? evaluate(args[0], ctx) : undefined;
+    cell = { kind: "state", value: initial };
+    cells[slot] = cell;
+  }
+  const stateCell = cell;
+  const setValue = (next: unknown): void => {
+    const resolved = typeof next === "function"
+      ? (next as (prev: unknown) => unknown)(stateCell.value)
+      : next;
+    if (Object.is(resolved, stateCell.value)) return;
+    stateCell.value = resolved;
+    ctx.notify?.();
+  };
+  return [stateCell.value, setValue];
+}
+
+/**
+ * `$memo(() => compute, [deps])` — React's `useMemo`. Recomputes `fn()` only
+ * when a dependency changes (shallow `Object.is` compare); otherwise returns
+ * the cached value. With no deps array it recomputes every render (matching
+ * React). `fn` may also be a plain function reference or a bare value.
+ */
+function evaluateMemoHook(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const fnExpr = args[0];
+  const depsExpr = args[1];
+  const compute = (): unknown => {
+    const fn = fnExpr ? evaluate(fnExpr, ctx) : undefined;
+    return typeof fn === "function" ? (fn as () => unknown)() : fn;
+  };
+  const cells = instanceHookCells(ctx);
+  if (!cells) {
+    warnHookOutsideComponent("memo", loc);
+    return compute();
+  }
+  const slot = ctx.hookScope!.cursor++;
+  const deps = depsExpr ? evaluate(depsExpr, ctx) : undefined;
+  const depsArr = Array.isArray(deps) ? (deps as ReadonlyArray<unknown>) : undefined;
+  const prev = cells[slot];
+  if (
+    prev && prev.kind === "memo" &&
+    depsArr && prev.deps && depsEqual(prev.deps, depsArr)
+  ) {
+    return prev.value;
+  }
+  const value = compute();
+  cells[slot] = { kind: "memo", deps: depsArr, value };
+  return value;
+}
+
+/**
+ * Invoke a user hook (`$useFoo(...)`). The body runs inline in the CURRENT
+ * hook scope (no new instance scope is opened), so `$state` / `$memo` calls
+ * inside it allocate slots on the rendering component — exactly how a React
+ * custom hook shares its caller's slots.
+ */
+function invokeHookDecl(
+  decl: HookDeclaration,
+  argExprs: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const args: unknown[] = [];
+  for (const arg of argExprs) {
+    if (arg.kind === "Spread") {
+      const value = evaluate(arg.argument, ctx);
+      if (Array.isArray(value)) for (const item of value) args.push(item);
+      continue;
+    }
+    args.push(evaluate(arg, ctx));
+  }
+  return runDeclBodySync(decl.params, decl.body, args, ctx);
+}
+
+let warnedHookOutsideComponent = false;
+function warnHookOutsideComponent(
+  hookName: string,
+  loc?: { line: number; column: number },
+): void {
+  // Throttle to one warning per program so a top-level mistake doesn't spam
+  // the console on every render.
+  if (warnedHookOutsideComponent) return;
+  warnedHookOutsideComponent = true;
+  // eslint-disable-next-line no-console
+  console.error(
+    `[aktion] $${hookName}(...) was called outside a component render. ` +
+      `Hooks may only be called at the top level of a component body or another $hook.`,
+    loc,
+  );
+}
+
+/**
+ * Drop every hook cell owned by `instanceKey`. Called by the renderer when a
+ * component instance leaves the tree so its `$state` resets to the initial
+ * value on a future remount (React-like reset-on-unmount).
+ */
+export function clearInstanceHooks(ctx: EvaluationContext, instanceKey: string): void {
+  ctx.hookStore.delete(instanceKey);
 }
 
 /**
@@ -2989,6 +3566,15 @@ function evaluateSyntheticAssign(
       ctx.state.setPath(extracted.name, extracted.path, next);
       return next;
     }
+    // `s.field = value` inside a store method (or `cart.field = …` directly):
+    // route through the store's backing atom so the write is reactive.
+    const storePath = extractStorePath(targetExpr, ctx);
+    if (storePath) {
+      const current = readAtPath(ctx.state.get(storePath.atom), storePath.path);
+      const next = applyAssignOp(op, current, rhs);
+      ctx.state.setPath(storePath.atom, storePath.path, next);
+      return next;
+    }
     // Member on a non-reactive root (loop var, local helper, …). Best
     // effort: mutate in place so the assignment is at least observable
     // to subsequent reads on the same value.
@@ -3137,11 +3723,19 @@ function evaluateSyntheticPrefix(
  * imperatively (e.g. for SSR-style hydration).
  */
 function readRoutePath(ctx: EvaluationContext): string {
+  // Subscribe the current render to the `route` state slot — ALWAYS, even
+  // when a live `router` is present. The host writes this slot on every
+  // route change (`writeRouteState` in element.ts), and per-component
+  // memoisation re-runs a body only when a changed path overlaps the paths
+  // it read last render. Without this, a `$router({...})` component records
+  // no `route` dependency, so an in-app `navigate(...)` / hash change is
+  // memoised away and the page only updates on a full reload (where the
+  // first paint renders ungated). Mirrors the bare `route` identifier read.
+  ctx.trackedState.add("route");
   if (ctx.router) {
     return ctx.router.getPath();
   }
   if (ctx.state.has("route")) {
-    ctx.trackedState.add("route");
     const value = ctx.state.get("route");
     if (typeof value === "string" && value) return value;
     if (value && typeof value === "object" && "path" in value) {

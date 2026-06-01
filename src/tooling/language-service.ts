@@ -73,15 +73,15 @@ export interface HoverInfo {
 
 const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
   { label: "function",     detail: "Declare a component or action — either case works" },
-  { label: "effect",       detail: "Reactive side-effect: effect(() => { ... }, [deps])" },
-  { label: "Router",       detail: "pages = Router({ '/': Home(), default: NotFound() })" },
+  { label: "$effect",      detail: "Reactive side-effect: $effect(() => { ... }, [deps])" },
+  { label: "$router",      detail: "pages = $router({ '/': Home(), default: NotFound() })" },
   { label: "switch",       detail: "switch (value) { case …: …; break; default: … }" },
   { label: "for",          detail: "for (let x of xs) { … }" },
   { label: "if",           detail: "if (condition) { … } else { … }" },
   { label: "return",       detail: "Return value from a component or action" },
   { label: "let",          detail: "Declare a variable (reactive if $-prefixed)" },
   { label: "const",        detail: "Declare a constant" },
-  { label: "emit",         detail: "emit('name', detail) — dispatch a CustomEvent" },
+  { label: "$emit",        detail: "$emit('name', detail) — dispatch a CustomEvent" },
   { label: "cleanup",      detail: "Register an effect teardown callback" },
 ];
 
@@ -131,11 +131,23 @@ export function getCompletions(
 ): CompletionItem[] {
   const ctx = analyseCursor(source, position);
 
-  // After `$` — no specific suggestions in single-tier mode; surface
-  // a generic hint so the editor doesn't blank out on `$x` lookups.
+  // After `$` — surface the reactive-atom hint plus the built-in hooks
+  // (`$state` / `$memo`), which also start with the `$` sigil.
   if (ctx.afterDollar) {
     return [
       { label: "$name = value", kind: "state" as const, detail: "Declare or assign a reactive atom" },
+      { label: "$state(initial)", kind: "builtin" as const, detail: "Hook: per-instance state → [value, setValue] (like useState)" },
+      { label: "$memo(() => value, [deps])", kind: "builtin" as const, detail: "Hook: value recomputed only when deps change (like useMemo)" },
+      { label: "$effect(() => {}, [deps])", kind: "builtin" as const, detail: "Declarative side effect" },
+      { label: "$store({ ...state, ...methods })", kind: "builtin" as const, detail: "Global store: shared state + actions" },
+      { label: "$http({ url, method, ... })", kind: "builtin" as const, detail: "Reactive HTTP resource" },
+      { label: "$router({ '/': Home(), default: NotFound() })", kind: "builtin" as const, detail: "Outlet-first router" },
+      { label: "$util", kind: "builtin" as const, detail: "Runtime helper namespace ($util.format, $util.sum, …)" },
+      { label: "$emit('name', detail)", kind: "builtin" as const, detail: "Dispatch a CustomEvent" },
+      { label: "$theme({ colors, radius, ... })", kind: "builtin" as const, detail: "In-script theme override" },
+      { label: "$storage", kind: "builtin" as const, detail: "Persistent storage namespace ($storage.local, …)" },
+      { label: "$console", kind: "builtin" as const, detail: "Console namespace ($console.log, …)" },
+      { label: "$i18n({ translations, ... })", kind: "builtin" as const, detail: "Translation bundle" },
     ];
   }
 
@@ -195,6 +207,12 @@ export function getHoverInfo(
         `**${spec.name}** — ${spec.description ?? "Component."}\n\n` +
         `Signature: \`${signaturePreview(spec)}\``,
     };
+  }
+  if (word === "$state") {
+    return { kind: "builtin", contents: "**$state(initial)** — hook returning `[value, setValue]` (per-instance state, like React's useState)" };
+  }
+  if (word === "$memo") {
+    return { kind: "builtin", contents: "**$memo(() => value, [deps])** — hook returning a value recomputed only when a dependency changes (like React's useMemo)" };
   }
   if (word.startsWith("$")) {
     return { kind: "state", contents: `**${word}** — reactive state atom` };

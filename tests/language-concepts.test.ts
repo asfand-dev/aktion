@@ -104,7 +104,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("computes a `@Sum` over a literal array at planProgram time", () => {
     const { state } = harness(`
       $cart = [{ price: 10 }, { price: 20 }, { price: 30 }]
-      $total = Util.sum($cart.price)
+      $total = $util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(60);
@@ -117,7 +117,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
         { item: "Muffin", qty: 1, price: 3.75 },
         { item: "Cookie", qty: 3, price: 2.25 }
       ]
-      $total = Util.sum($orders.map(o => o.qty * o.price))
+      $total = $util.sum($orders.map(o => o.qty * o.price))
       aktion = Text(\`\${$total}\`)
     `);
     // 2 * 4.5 + 1 * 3.75 + 3 * 2.25 = 9 + 3.75 + 6.75 = 19.5
@@ -128,9 +128,9 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const source =
       'aktion = Stack([PageHeader("Order Summary"), Card([Table(cols)]), totalDisplay], { gap: "m", padding: "l" })\n' +
       '$orders = [{ item: "Latte", qty: 2, price: 4.5 }, { item: "Muffin", qty: 1, price: 3.75 }, { item: "Cookie", qty: 3, price: 2.25 }]\n' +
-      "$total = Util.sum($orders.map(o => o.qty * o.price))\n" +
+      "$total = $util.sum($orders.map(o => o.qty * o.price))\n" +
       'cols = [Col("Item", $orders.item), Col("Qty", $orders.qty, { align: "right" }), Col("Subtotal", $orders.map(o => o.qty * o.price), { format: "currency", align: "right" })]\n' +
-      'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text(Util.format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
+      'totalDisplay = Card([Stack([Text("Order Total", { variant: "large-heavy" }), Spacer(), Text($util.format($total, "currency"), { variant: "large-heavy", tone: "primary" })], { direction: "row" })])';
     const { state, render } = harness(source);
     expect(state.get("total")).toBe(19.5);
     const host = render();
@@ -142,7 +142,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("re-derives a computed value when its dependency changes", async () => {
     const { state } = harness(`
       $cart  = [{ price: 1 }, { price: 2 }]
-      $total = Util.sum($cart.price)
+      $total = $util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(3);
@@ -157,7 +157,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     const { state } = harness(`
       $cart     = [{ qty: 1, price: 10 }, { qty: 2, price: 5 }]
       $lines    = $cart.map(it => it.qty * it.price)
-      $subtotal = Util.sum($lines)
+      $subtotal = $util.sum($lines)
       $shipping = $subtotal >= 100 ? 0 : 9
       $total    = $subtotal + $shipping
       aktion = Text(\`\${$total}\`)
@@ -178,7 +178,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
 
   it("supports forward references — declaration order does not matter for state defaults", () => {
     const { state } = harness(`
-      $total = Util.count($rows)
+      $total = $util.count($rows)
       $rows  = [10, 20, 30]
       aktion = Text(\`\${$total}\`)
     `);
@@ -234,7 +234,7 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
   it("disposeContext() unsubscribes the recompute hook so replans don't leak", async () => {
     const { state, dispose } = harness(`
       $cart  = [{ price: 1 }]
-      $total = Util.sum($cart.price)
+      $total = $util.sum($cart.price)
       aktion = Text(\`\${$total}\`)
     `);
     expect(state.get("total")).toBe(1);
@@ -248,14 +248,14 @@ describe("Computed values (`$name = expr` with non-literal RHS)", () => {
     expect(state.get("total")).toBe(1);
   });
 
-  it("`Http({...})` slots are NOT clobbered by the computed-derivation pass", () => {
+  it("`$http({...})` slots are NOT clobbered by the computed-derivation pass", () => {
     const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
     (globalThis as { fetch?: typeof fetch }).fetch = (async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
     try {
       const { state } = harness(
         `
-          $orders = Http({ url: "https://api.example.com/orders" })
+          $orders = $http({ url: "https://api.example.com/orders" })
           aktion = Text("ok")
         `,
         { http: new HttpRuntime() },
@@ -356,13 +356,13 @@ describe("Math & calculations", () => {
 
   it("@Round / @Floor / @Ceil / @Abs / @Clamp / @Pow / @Sqrt", () => {
     const { ctx } = harness(`
-      $round = Util.round(2.567, 2)
-      $floor = Util.floor(3.9)
-      $ceil  = Util.ceil(3.1)
-      $abs   = Util.abs(-7)
-      $clamp = Util.clamp(15, 0, 10)
-      $pow   = Util.pow(2, 10)
-      $sqrt  = Util.sqrt(81)
+      $round = $util.round(2.567, 2)
+      $floor = $util.floor(3.9)
+      $ceil  = $util.ceil(3.1)
+      $abs   = $util.abs(-7)
+      $clamp = $util.clamp(15, 0, 10)
+      $pow   = $util.pow(2, 10)
+      $sqrt  = $util.sqrt(81)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("round")).toBe(2.57);
@@ -382,15 +382,15 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
   it("data: @Min, @Max, @First, @Last, @Find, @GroupBy, @Slice, @Unique, @Reverse", () => {
     const { ctx } = harness(`
       $rows  = [{ x: 3, k: "a" }, { x: 1, k: "b" }, { x: 2, k: "a" }]
-      $min   = Util.min($rows.x)
-      $max   = Util.max($rows.x)
-      $first = Util.first($rows.x)
-      $last  = Util.last($rows.x)
-      $find  = Util.find($rows, "x", "==", 2)
-      $group = Util.groupBy($rows, "k")
-      $slice = Util.slice($rows.x, 1, 3)
-      $uniq  = Util.unique([1, 1, 2, 3, 3])
-      $rev   = Util.reverse([1, 2, 3])
+      $min   = $util.min($rows.x)
+      $max   = $util.max($rows.x)
+      $first = $util.first($rows.x)
+      $last  = $util.last($rows.x)
+      $find  = $util.find($rows, "x", "==", 2)
+      $group = $util.groupBy($rows, "k")
+      $slice = $util.slice($rows.x, 1, 3)
+      $uniq  = $util.unique([1, 1, 2, 3, 3])
+      $rev   = $util.reverse([1, 2, 3])
       aktion = Text("ok")
     `);
     expect(ctx.state.get("min")).toBe(1);
@@ -409,9 +409,9 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("data: @Range generates inclusive integer sequences with optional step", () => {
     const { ctx } = harness(`
-      $asc      = Util.range(1, 5)
-      $stepped  = Util.range(0, 10, 2)
-      $desc     = Util.range(5, 1)
+      $asc      = $util.range(1, 5)
+      $stepped  = $util.range(0, 10, 2)
+      $desc     = $util.range(5, 1)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("asc")).toEqual([1, 2, 3, 4, 5]);
@@ -421,12 +421,12 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("strings: @Capitalize, @Uppercase, @Titlecase, @Trim, @Replace, @Substring", () => {
     const { ctx } = harness(`
-      $cap     = Util.capitalize("hello")
-      $upper   = Util.uppercase("rusT")
-      $title   = Util.titlecase("hello world FOO")
-      $trim    = Util.trim("   spaced   ")
-      $replace = Util.replace("foo bar foo", "foo", "baz")
-      $substr  = Util.substring("hello world", 0, 5)
+      $cap     = $util.capitalize("hello")
+      $upper   = $util.uppercase("rusT")
+      $title   = $util.titlecase("hello world FOO")
+      $trim    = $util.trim("   spaced   ")
+      $replace = $util.replace("foo bar foo", "foo", "baz")
+      $substr  = $util.substring("hello world", 0, 5)
       aktion = Text("ok")
     `);
     expect(ctx.state.get("cap")).toBe("Hello");
@@ -439,14 +439,14 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("strings: @StartsWith, @EndsWith, @Contains, @Match, @Plural, @Case", () => {
     const { ctx } = harness(`
-      $starts   = Util.startsWith("hello world", "hello")
-      $ends     = Util.endsWith("hello world", "world")
-      $contains = Util.contains("hello world", "lo wo")
-      $match    = Util.match("abc123", "^[a-z]+\\\\d+$")
-      $plural1  = Util.plural(1, "order")
-      $plural3  = Util.plural(3, "child", "children")
-      $snake    = Util.case("helloWorld", "snake")
-      $kebab    = Util.case("HelloWorld", "kebab")
+      $starts   = $util.startsWith("hello world", "hello")
+      $ends     = $util.endsWith("hello world", "world")
+      $contains = $util.contains("hello world", "lo wo")
+      $match    = $util.match("abc123", "^[a-z]+\\\\d+$")
+      $plural1  = $util.plural(1, "order")
+      $plural3  = $util.plural(3, "child", "children")
+      $snake    = $util.case("helloWorld", "snake")
+      $kebab    = $util.case("HelloWorld", "kebab")
       aktion = Text("ok")
     `);
     expect(ctx.state.get("starts")).toBe(true);
@@ -461,10 +461,10 @@ describe("Built-in @-functions (catalogue smoke tests)", () => {
 
   it("dates: @Now, @Today, @AddDays, @DiffDays, @FormatDate", () => {
     const { ctx } = harness(`
-      $now     = Util.now()
-      $iso     = Util.addDays("2024-01-01", 7)
-      $diff    = Util.diffDays("2024-01-01", "2024-01-31")
-      $fmt     = Util.formatDate("2024-03-15", "YYYY/MM/DD")
+      $now     = $util.now()
+      $iso     = $util.addDays("2024-01-01", 7)
+      $diff    = $util.diffDays("2024-01-01", "2024-01-31")
+      $fmt     = $util.formatDate("2024-03-15", "YYYY/MM/DD")
       aktion = Text("ok")
     `);
     expect(typeof ctx.state.get("now")).toBe("number");
@@ -594,10 +594,10 @@ describe("Hoisting (forward references)", () => {
 // ──────────────────────────────────────────────────────────────────────
 // i18n({...}) — factory returning { t, setCurrentLanguage, getCurrentLanguage }
 // ──────────────────────────────────────────────────────────────────────
-describe("i18n({...}) language construct", () => {
+describe("$i18n({...}) language construct", () => {
   it("destructured `t` resolves keys against `currentLanguage`", () => {
     const { ctx } = harness(`
-      const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+      const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({
         defaultLanguage: "en",
         currentLanguage: "fr",
         translations: {
@@ -617,7 +617,7 @@ describe("i18n({...}) language construct", () => {
 
   it("falls back to `defaultLanguage` when the key is missing in the current language", () => {
     const { ctx } = harness(`
-      const { t } = i18n({
+      const { t } = $i18n({
         defaultLanguage: "en",
         currentLanguage: "fr",
         translations: {
@@ -633,7 +633,7 @@ describe("i18n({...}) language construct", () => {
 
   it("interpolates `{name}` placeholders from the vars object", () => {
     const { ctx } = harness(`
-      const { t } = i18n({
+      const { t } = $i18n({
         defaultLanguage: "en",
         translations: {
           greet:       { en: "Hi, {name}!" },
@@ -650,7 +650,7 @@ describe("i18n({...}) language construct", () => {
 
   it("supports the instance form with method calls", () => {
     const { ctx } = harness(`
-      const i18nInstance = i18n({
+      const i18nInstance = $i18n({
         defaultLanguage: "en",
         currentLanguage: "en",
         translations: {
@@ -668,7 +668,7 @@ describe("i18n({...}) language construct", () => {
 
   it("returns the bare key when no translation entry exists", () => {
     const { ctx } = harness(`
-      const { t } = i18n({
+      const { t } = $i18n({
         defaultLanguage: "en",
         translations: { hi: { en: "Hi" } }
       })
@@ -682,10 +682,10 @@ describe("i18n({...}) language construct", () => {
 // ──────────────────────────────────────────────────────────────────────
 // Theme({...}) — token map merged on top of the active base theme
 // ──────────────────────────────────────────────────────────────────────
-describe("Theme({...}) language construct (smoke)", () => {
-  it("a `Theme({...})` declaration evaluates to a ThemeNode marker", () => {
+describe("$theme({...}) language construct (smoke)", () => {
+  it("a `$theme({...})` declaration evaluates to a ThemeNode marker", () => {
     const { ctx } = harness(`
-      theme = Theme({
+      theme = $theme({
         colors: { primary: "#ff0066" },
         radius: { md: "8px" },
         font:   { heading: "Inter" }
@@ -868,7 +868,7 @@ describe("Runtime safety budget", () => {
     const budget = createRuntimeBudget({ iterationLimit: 100 });
     const { render } = harness(
       `
-        $rows = Util.range(1, 1000)
+        $rows = $util.range(1, 1000)
         $out  = $rows.map(r => r * 2)
         aktion = Text(\`\${$out.length}\`)
       `,
@@ -885,7 +885,7 @@ describe("Runtime safety budget", () => {
     const budget = createRuntimeBudget({ iterationLimit: 100 });
     const { ctx } = harness(
       `
-        $rows = Util.range(1, 1000)
+        $rows = $util.range(1, 1000)
         function double(_) {
           let out = []
           for (let r of $rows) { out.push(r * 2) }
@@ -900,12 +900,12 @@ describe("Runtime safety budget", () => {
     expect(() => ctx.bindings.get("run")?.()).toThrowError(RuntimeBudgetError);
   });
 
-  it("rejects `Util.range(0, N)` when N exceeds the Util hard cap", () => {
+  it("rejects `$util.range(0, N)` when N exceeds the Util hard cap", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 50 });
     expect(() =>
       harness(
         `
-          $values = Util.range(0, 200000)
+          $values = $util.range(0, 200000)
           aktion = Text("ok")
         `,
         { budget },
@@ -913,12 +913,12 @@ describe("Runtime safety budget", () => {
     ).toThrow(RangeError);
   });
 
-  it("rejects `Util.repeat(value, N)` when N exceeds the Util hard cap", () => {
+  it("rejects `$util.repeat(value, N)` when N exceeds the Util hard cap", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 5 });
     expect(() =>
       harness(
         `
-          $padding = Util.repeat("·", 200000)
+          $padding = $util.repeat("·", 200000)
           aktion = Text("ok")
         `,
         { budget },
@@ -930,7 +930,7 @@ describe("Runtime safety budget", () => {
     const budget = createRuntimeBudget({ arrayLengthLimit: 100 });
     const { state } = harness(
       `
-        $values = Util.range(0, 9)
+        $values = $util.range(0, 9)
         aktion = Text("ok")
       `,
       { budget },
@@ -966,7 +966,7 @@ describe("Runtime safety budget", () => {
   it("disabling the budget (`budget: null`) lifts every limit", () => {
     const { state } = harness(
       `
-        $values = Util.range(0, 1000)
+        $values = $util.range(0, 1000)
         aktion = Text("ok")
       `,
       { budget: null },
@@ -1009,8 +1009,8 @@ describe("Runtime safety budget", () => {
   it("default limits permit realistic apps (one large array + nested .map)", () => {
     const { state } = harness(
       `
-        $rows = Util.range(1, 200)
-        $cells = $rows.map(r => Util.range(1, 50).map(c => r * c))
+        $rows = $util.range(1, 200)
+        $cells = $rows.map(r => $util.range(1, 50).map(c => r * c))
         aktion = Text("ok")
       `,
     );

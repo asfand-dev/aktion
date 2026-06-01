@@ -89,12 +89,12 @@ describe("Util namespace", () => {
     expect(Util.sort(rows, "x", "desc")).toEqual([{ x: 3 }, { x: 2 }, { x: 1 }]);
   });
 
-  it("Util.join concatenates array values", () => {
+  it("$util.join concatenates array values", () => {
     expect(Util.join([1, 2, 3])).toBe("1,2,3");
     expect(Util.join(["a", "b"], "-")).toBe("a-b");
   });
 
-  it("Util.format accepts an options object", () => {
+  it("$util.format accepts an options object", () => {
     const usd = Util.format(1234.5, "currency", { currency: "USD", locale: "en-US" });
     expect(String(usd)).toContain("$");
     expect(String(usd)).toMatch(/1,234/);
@@ -106,7 +106,7 @@ describe("Util namespace", () => {
     expect(String(compact)).toMatch(/1\.5M/);
   });
 
-  it("Util.format keeps the legacy positional shape working", () => {
+  it("$util.format keeps the legacy positional shape working", () => {
     const legacy = Util.format(1000, "currency", "EUR", "en-US");
     expect(String(legacy)).toContain("€");
     const number = Util.format(1000, "number", "en-US");
@@ -271,7 +271,7 @@ describe("for...of loop variable scoping", () => {
   });
 });
 
-describe("Http({...}) reactive resource", () => {
+describe("$http({...}) reactive resource", () => {
   let originalFetch: typeof fetch | undefined;
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -303,7 +303,7 @@ describe("Http({...}) reactive resource", () => {
     buildContext(
       `
 $id = 5
-$response = Http({
+$response = $http({
   url: "https://api.example.com/items",
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -325,7 +325,7 @@ aktion = Stack()
   it("defaults the method to GET when omitted", async () => {
     const http = new HttpRuntime();
     buildContext(
-      `$response = Http({ url: "https://api.example.com/todos" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/todos" })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -337,7 +337,7 @@ aktion = Stack()
     const http = new HttpRuntime();
     buildContext(
       `
-$todos = Http({ url: base + "/todos" })
+$todos = $http({ url: base + "/todos" })
 base = "https://api.example.com"
 aktion = Stack()
       `,
@@ -352,7 +352,7 @@ aktion = Stack()
     const http = new HttpRuntime();
     const { ctx } = buildContext(
       `
-$response = Http({ url: "https://api.example.com/items", method: "GET" })
+$response = $http({ url: "https://api.example.com/items", method: "GET" })
 aktion = Stack()
       `,
       { http },
@@ -383,7 +383,7 @@ aktion = Stack()
     const http = new HttpRuntime();
     buildContext(
       `
-$response = Http({ url: "https://api.example.com/users", method: "GET", query: { limit: 5, slug: "abc" } })
+$response = $http({ url: "https://api.example.com/users", method: "GET", query: { limit: 5, slug: "abc" } })
 aktion = Stack()
       `,
       { http },
@@ -397,7 +397,7 @@ aktion = Stack()
   it("appends query params with `&` when the url already has a querystring", async () => {
     const http = new HttpRuntime();
     buildContext(
-      `$response = Http({ url: "https://api.example.com/users?team=core", query: { limit: 5 } })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/users?team=core", query: { limit: 5 } })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -408,7 +408,7 @@ aktion = Stack()
   it("forwards unknown options verbatim as fetch init (`...rest`)", async () => {
     const http = new HttpRuntime();
     buildContext(
-      `$response = Http({ url: "https://api.example.com/me", credentials: "include", mode: "cors" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/me", credentials: "include", mode: "cors" })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -421,7 +421,7 @@ aktion = Stack()
     fetchMock.mockImplementationOnce(async () => jsonResponse({ message: "nope" }, 404));
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/missing" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/missing" })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -441,7 +441,7 @@ aktion = Stack()
     fetchMock.mockImplementationOnce(async () => jsonResponse(null, 204));
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/todos/1", method: "DELETE" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/todos/1", method: "DELETE" })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -454,7 +454,7 @@ aktion = Stack()
   it("re-issues the request when `.refetch()` is called", async () => {
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/items" })\naktion = Stack()`,
       { http },
     );
     await settle();
@@ -477,7 +477,7 @@ aktion = Stack()
     });
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
       { http },
     );
     await Promise.resolve();
@@ -496,7 +496,7 @@ aktion = Stack()
     );
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/items" })\naktion = Stack()`,
       { http },
     );
     await Promise.resolve();
@@ -516,7 +516,7 @@ aktion = Stack()
   it("fires `onDone` once when the request settles, with the resource as argument", async () => {
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/items" })\naktion = Stack()`,
       { http },
     );
     const calls: Array<{ data: unknown; loading: boolean }> = [];
@@ -533,7 +533,7 @@ aktion = Stack()
   it("re-fires `onDone` on every refetch (the `$patch.onDone = () => $todos.refetch()` pattern)", async () => {
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/items" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/items" })\naktion = Stack()`,
       { http },
     );
     let done = 0;
@@ -553,7 +553,7 @@ aktion = Stack()
     fetchMock.mockImplementation(async () => jsonResponse({ message: "nope" }, 500));
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/boom" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/boom" })\naktion = Stack()`,
       { http },
     );
     let sawError = false;
@@ -572,7 +572,7 @@ aktion = Stack()
     );
     const http = new HttpRuntime();
     const { ctx } = buildContext(
-      `$response = Http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
+      `$response = $http({ url: "https://api.example.com/slow" })\naktion = Stack()`,
       { http },
     );
     let done = 0;
@@ -593,7 +593,7 @@ aktion = Stack()
     const http = new HttpRuntime();
     const { ctx } = buildContext(
       `
-$response = Http({ url: "https://api.example.com/items" })
+$response = $http({ url: "https://api.example.com/items" })
 $response.onDone = () => { $loaded = true }
 $loaded = false
 aktion = Stack()
@@ -806,7 +806,7 @@ describe("StateStore behaviour", () => {
   });
 
   it("non-literal state initializers are computed against the current store", () => {
-    const { state } = buildContext(`$total = Util.count($rows)\n$rows = [1, 2]`);
+    const { state } = buildContext(`$total = $util.count($rows)\n$rows = [1, 2]`);
     expect(state.get("total")).toBe(2);
   });
 });

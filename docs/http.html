@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HTTP · Aktion</title>
-  <meta name="description" content="The Aktion HTTP guide — the single Http({...}) network primitive, config options, the reactive resource bag, the Async helper, refetch/cancel patterns, and a full CRUD walkthrough." />
+  <meta name="description" content="The Aktion HTTP guide — the single $http({...}) network primitive, config options, the reactive resource bag, the Async helper, refetch/cancel patterns, and a full CRUD walkthrough." />
   <script>
     (function () {
       try {
@@ -28,7 +28,7 @@
         <h1>HTTP.</h1>
         <p class="lead">
           Aktion has exactly one network primitive:
-          <code>Http({ url, method, headers, body, query, &hellip; })</code>.
+          <code>$http({ url, method, headers, body, query, &hellip; })</code>.
           Every call is <strong>self-contained</strong> &mdash; it carries
           a full absolute URL and all of its options, returns a reactive
           resource bag, and fires the request the moment its binding
@@ -39,11 +39,11 @@
 
       <h2 id="basics">The basics</h2>
       <p>
-        Assign the result of <code>Http({...})</code> to a reactive atom.
+        Assign the result of <code>$http({...})</code> to a reactive atom.
         The request fires once when the binding mounts; the atom holds a
         reactive bag whose fields update in place as the request resolves.
       </p>
-<pre><code>$todos = Http({
+<pre><code>$todos = $http({
   url:    "https://api.example.com/todos",
   method: "GET"                        // GET is the default — this line is optional
 })</code></pre>
@@ -51,7 +51,7 @@
         Because <code>GET</code> is the default method, a read is often a
         one-liner:
       </p>
-<pre><code>$todos = Http({ url: "https://api.example.com/todos" })</code></pre>
+<pre><code>$todos = $http({ url: "https://api.example.com/todos" })</code></pre>
 
       <h2 id="options">Config options</h2>
       <table class="signature-table">
@@ -65,7 +65,7 @@
           <tr><td><code>&hellip;rest</code></td><td><code>fetch</code> options</td><td>Any other <code>fetch</code> option (<code>credentials</code>, <code>mode</code>, <code>cache</code>, <code>redirect</code>, <code>referrer</code>, &hellip;) is forwarded verbatim to the underlying request.</td></tr>
         </tbody>
       </table>
-<pre><code>$orders = Http({
+<pre><code>$orders = $http({
   url:         "https://api.example.com/users/" + $userId + "/orders",
   method:      "GET",
   query:       { limit: 5, status: "open" },   // → ?limit=5&status=open
@@ -75,7 +75,7 @@
 
       <h2 id="resource">The reactive resource bag</h2>
       <p>
-        Every <code>Http({...})</code> call returns the same shape. The
+        Every <code>$http({...})</code> call returns the same shape. The
         fields mutate in place and the runtime re-renders as they change,
         so you can read them anywhere in your tree.
       </p>
@@ -107,7 +107,7 @@ $orders.onDone = fn  // callback fired each time the request settles</code></pre
         idiomatic way to refresh a list after a mutation without threading
         the refresh through every call site:
       </p>
-<pre><code>$patch = Http({
+<pre><code>$patch = $http({
   url:    endpoint + "/" + todo.id,
   method: "PATCH",
   body:   { isCompleted: !todo.isCompleted }
@@ -149,12 +149,12 @@ $patch.onDone = () =&gt; {
         progress and error states. Refresh a list resource with
         <code>.refetch()</code> after the write succeeds.
       </p>
-<pre><code>$todos = Http({ url: "https://api.example.com/todos" })
+<pre><code>$todos = $http({ url: "https://api.example.com/todos" })
 $draft = ""
 
 function addTodo() {
   if (!$draft) { return }
-  $create = Http({
+  $create = $http({
     url:    "https://api.example.com/todos",
     method: "POST",
     body:   { title: $draft, isCompleted: false }
@@ -174,12 +174,12 @@ function addTodo() {
         <li><strong>Reactively</strong> &mdash; wrap the call in an <code>effect</code> with the dependencies that should trigger a new request.</li>
       </ul>
 <pre><code>// Re-run the search whenever $query changes, debounced 300ms.
-effect(() =&gt; {
-  $results = Http({ url: "https://api.example.com/search", query: { q: $query } })
+$effect(() =&gt; {
+  $results = $http({ url: "https://api.example.com/search", query: { q: $query } })
 }, [$query, "debounce(300)"])
 
 // Poll an endpoint every 30 seconds.
-effect(() =&gt; {
+$effect(() =&gt; {
   $todos.refetch()
 }, ["every(30000)"])</code></pre>
 
@@ -201,18 +201,18 @@ effect(() =&gt; {
       </p>
 <pre><code>endpoint = "https://api.example.com/todos"
 
-$todos = Http({ url: endpoint })
+$todos = $http({ url: endpoint })
 $draft = ""
 
 function addTodo() {
   if (!$draft) { return }
-  $create = Http({ url: endpoint, method: "POST", body: { title: $draft } })
+  $create = $http({ url: endpoint, method: "POST", body: { title: $draft } })
   $draft  = ""
   $todos.refetch()
 }
 
 function toggleTodo(todo) {
-  $patch = Http({
+  $patch = $http({
     url:    endpoint + "/" + todo.id,
     method: "PATCH",
     body:   { isCompleted: !todo.isCompleted }
@@ -221,7 +221,7 @@ function toggleTodo(todo) {
 }
 
 function deleteTodo(todo) {
-  $del = Http({ url: endpoint + "/" + todo.id, method: "DELETE" })
+  $del = $http({ url: endpoint + "/" + todo.id, method: "DELETE" })
   $todos.refetch()
 }
 
@@ -254,7 +254,7 @@ aktion = Stack([
         The request function is intentionally free of cross-cutting
         concerns like auth and logging. Host integrators attach those once
         via <code>el.registerHttpInterceptors(...)</code>; the hooks fire
-        around every <code>Http({...})</code> request issued by the
+        around every <code>$http({...})</code> request issued by the
         response.
       </p>
 <pre><code>el.registerHttpInterceptors({

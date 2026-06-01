@@ -85,6 +85,7 @@ function walkStatement(
     case "ComponentDeclaration":
     case "ActionDeclaration":
     case "EffectDeclaration":
+    case "HookDeclaration":
       for (const inner of stmt.body.body) walkStatement(inner, library, out);
       return;
     case "Return":
@@ -204,6 +205,11 @@ function walkExpression(
       walkExpression(expr.argument, library, out);
       return;
     case "Invoke":
+      // `$theme({...})` is an Invoke on a StateRef — validate its token shape
+      // here (the `expr.callee === "Theme"` Call path no longer fires).
+      if (expr.callee.kind === "StateRef" && expr.callee.name === "theme") {
+        validateThemeCall(expr, out);
+      }
       walkExpression(expr.callee, library, out);
       for (const arg of expr.arguments) walkExpression(arg, library, out);
       return;
@@ -237,13 +243,13 @@ function walkExpression(
  */
 const LEGACY_V1_CALLS: Record<string, string> = {
   Script:
-    `Script("id", body, deps?) is not supported. Use \`effect(() => { … }, [deps])\` (see §9 — effect declarations).`,
+    `Script("id", body, deps?) is not supported. Use \`$effect(() => { … }, [deps])\` (see §9 — effect declarations).`,
   Action:
     `Action([@Set, @Run, …]) payloads are removed in 0.5. Use \`function name() { … }\` declarations and reference them by name (e.g. \`Button("Save", { action: save })\`) — see §10.`,
   Routes:
-    `Routes(items, default?) is removed in 0.5. Use \`pages = Router({ "/": Home(), default: NotFound() })\` (see §12 — outlet-first router).`,
+    `Routes(items, default?) is removed in 0.5. Use \`pages = $router({ "/": Home(), default: NotFound() })\` (see §12 — outlet-first router).`,
   Route:
-    `Route(path, content) is only valid inside a v1 \`Routes(...)\` outlet, which has been removed. Use \`"/path": content\` arms inside a \`Router({ … })\` call (see §12).`,
+    `Route(path, content) is only valid inside a v1 \`Routes(...)\` outlet, which has been removed. Use \`"/path": content\` arms inside a \`$router({ … })\` call (see §12).`,
   Query:
     `Query("name", args, placeholder, refreshSec?) is removed in 0.5. Declare a top-level \`query <Name>(args) { url, method, … }\` block and bind it with \`$query foo = <Name>(args)\` (see §11.2).`,
   Mutation:
@@ -384,7 +390,7 @@ function collectNamedPropNames(
  *
  * SUIS/2 only accepts the structured form:
  *
- *   Theme({ name?, direction?, colors: {...}, radius: {...},
+ *   $theme({ name?, direction?, colors: {...}, radius: {...},
  *           font: {...}, motion: {...}, elevation: {...} })
  *
  * Any other top-level key is either a legacy flat-shape token
@@ -396,7 +402,7 @@ const STRUCTURED_THEME_GROUPS = new Set(["colors", "radius", "font", "motion", "
 const THEME_METADATA_KEYS = new Set(["name", "direction"]);
 
 function validateThemeCall(
-  expr: Extract<Expression, { kind: "Call" }>,
+  expr: { arguments: ReadonlyArray<Expression>; loc?: { line: number; column: number } },
   out: ParseError[],
 ): void {
   const arg = expr.arguments[0];
@@ -407,8 +413,8 @@ function validateThemeCall(
     if (THEME_METADATA_KEYS.has(prop.key)) continue;
     const suggestion = suggestStructuredKey(prop.key);
     const message = prop.key.startsWith("--")
-      ? `Theme({"${prop.key}": ...}) — free-form CSS variable keys are removed in Aktion 0.5. Use the structured form: Theme({ colors: {...}, radius: {...}, font: {...} }).`
-      : `Theme({${prop.key}: ...}) — legacy flat-shape token is removed in Aktion 0.5. Use ${suggestion}.`;
+      ? `$theme({"${prop.key}": ...}) — free-form CSS variable keys are removed in Aktion 0.5. Use the structured form: $theme({ colors: {...}, radius: {...}, font: {...} }).`
+      : `$theme({${prop.key}: ...}) — legacy flat-shape token is removed in Aktion 0.5. Use ${suggestion}.`;
     out.push({
       message,
       line: expr.loc?.line ?? 0,
@@ -435,8 +441,8 @@ function suggestStructuredKey(flatKey: string): string {
     if (flatKey.startsWith(prefix) && flatKey.length > prefix.length) {
       const tail = flatKey.slice(prefix.length);
       const inner = tail.charAt(0).toLowerCase() + tail.slice(1);
-      return `Theme({ ${group}: { ${inner}: ... } })`;
+      return `$theme({ ${group}: { ${inner}: ... } })`;
     }
   }
-  return `Theme({ colors: {...}, radius: {...}, font: {...}, motion: {...}, elevation: {...} })`;
+  return `$theme({ colors: {...}, radius: {...}, font: {...}, motion: {...}, elevation: {...} })`;
 }

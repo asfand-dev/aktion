@@ -27,6 +27,7 @@ import {
   type UserComponentNode,
 } from "../runtime/evaluator.js";
 import type { StateStore } from "../runtime/state.js";
+import { pathsOverlap } from "../runtime/state.js";
 import type { Router } from "../runtime/router.js";
 import { sanitiseHref } from "../library/utils.js";
 import { findComponent } from "../library/registry.js";
@@ -76,9 +77,49 @@ export interface RenderOptions {
    * (between two `beginRender`/`endRender` passes).
    */
   unmountInstanceEffects?: (instanceKey: string) => void;
+  /**
+   * Drop the per-instance hook cells (`$state` / `$memo`) held under
+   * `instanceKey`. Invoked when a component that used hooks disappears from
+   * the render tree, giving React-like reset-on-unmount: a future remount
+   * starts its `$state` from the initial value again. The host wires this to
+   * `clearInstanceHooks(ctx, key)`.
+   */
+  unmountInstanceHooks?: (instanceKey: string) => void;
 }
 
 const ROOT_PATH = "$";
+
+/** One memoized user-component instance render (see `memoCache`). */
+interface RenderMemoEntry {
+  /** Positional args from the last render (shallow-compared). */
+  positional: ReadonlyArray<unknown>;
+  /** Named args from the last render (shallow-compared). */
+  named: Record<string, unknown>;
+  /** `$state` paths the body read last render. */
+  deps: ReadonlySet<string>;
+  /** The body's last return value (the lazy render tree), reused on a hit. */
+  value: unknown;
+}
+
+/** Shallow `Object.is` equality of two positional arg lists. */
+function positionalEqual(a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (!Object.is(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+/** Shallow `Object.is` equality of two named-arg records. */
+function namedEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    if (!Object.prototype.hasOwnProperty.call(b, k) || !Object.is(a[k], b[k])) return false;
+  }
+  return true;
+}
 
 export class Renderer {
   /**
@@ -103,6 +144,30 @@ export class Renderer {
    * GC even when an instance never registered `useInstanceState`.
    */
   private readonly instancesWithEffects = new Set<string>();
+  /**
+   * User-declared component instances that currently hold per-instance hook
+   * cells (`$state` / `$memo`). Tracked so the renderer can fire
+   * `unmountInstanceHooks` when the instance leaves the tree.
+   */
+  private readonly instancesWithHooks = new Set<string>();
+  /**
+   * Per-instance render memo (React.memo / Solid-style granularity). Keyed by
+   * instance path; holds the args + the `$state` paths the body read + the
+   * body's last return value. On a re-render where the change paths are fully
+   * known, an instance whose args are unchanged AND whose read-paths don't
+   * overlap the change set reuses its cached value — its body (and its
+   * `console.log`s / work) is skipped. Reusing the *value* (not the DOM) means
+   * children are still visited and re-checked against their own memo, so a
+   * descendant that reads a changed path still re-renders. GC'd in `endRender`.
+   */
+  private readonly memoCache = new Map<string, RenderMemoEntry>();
+  /**
+   * Paths changed since the last render (set by the host before `render`).
+   * Drives memoization. `null`/empty + `memoEnabled=false` ⇒ full re-render.
+   */
+  private changedPaths: ReadonlySet<string> = new Set();
+  /** Whether memoization may apply this render (false on mount / replan / notify). */
+  private memoEnabled = false;
 
   constructor(private options: RenderOptions) {}
 
@@ -130,6 +195,7 @@ export class Renderer {
     }
     this.instanceDisposers.clear();
     this.instanceStates.clear();
+    this.memoCache.clear();
     // Tear down any per-instance effects so they don't outlive the
     // program. The host's `EffectRunner.reset()` clears top-level effects
     // separately, but instance effects need an explicit per-key unmount.
@@ -144,12 +210,33 @@ export class Renderer {
       }
     }
     this.instancesWithEffects.clear();
+    // Drop any per-instance hook state so a fresh program starts clean.
+    if (this.options.unmountInstanceHooks) {
+      for (const instanceKey of this.instancesWithHooks) {
+        try {
+          this.options.unmountInstanceHooks(instanceKey);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+        }
+      }
+    }
+    this.instancesWithHooks.clear();
     this.aliveInstances = new Set<string>();
   }
 
-  /** Begin a fresh render pass; tracks which instances are still alive. */
-  beginRender(): void {
+  /**
+   * Begin a fresh render pass; tracks which instances are still alive.
+   *
+   * `changedPaths` is the set of `$state` paths that changed since the last
+   * render and `memoize` says whether per-component memoization may apply
+   * (false on first paint, replan, or a `notify()`-driven render where the
+   * change set isn't fully known — those re-render everything).
+   */
+  beginRender(opts: { changedPaths?: ReadonlySet<string>; memoize?: boolean } = {}): void {
     this.aliveInstances = new Set<string>();
+    this.changedPaths = opts.changedPaths ?? new Set();
+    this.memoEnabled = opts.memoize ?? false;
   }
 
   /**
@@ -190,6 +277,25 @@ export class Renderer {
         }
         this.instancesWithEffects.delete(instanceKey);
       }
+    }
+    // Reset per-instance hook state (`$state` / `$memo`) for instances that
+    // vanished, so a future remount starts fresh from the initial value.
+    if (this.options.unmountInstanceHooks) {
+      for (const instanceKey of [...this.instancesWithHooks]) {
+        if (alive.has(instanceKey)) continue;
+        try {
+          this.options.unmountInstanceHooks(instanceKey);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+        }
+        this.instancesWithHooks.delete(instanceKey);
+      }
+    }
+    // Drop memo entries for instances that left the tree so the cache can't
+    // grow unbounded (and a remounted instance re-renders fresh).
+    for (const instanceKey of [...this.memoCache.keys()]) {
+      if (!alive.has(instanceKey)) this.memoCache.delete(instanceKey);
     }
   }
 
@@ -265,6 +371,32 @@ export class Renderer {
       : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.decl.name}${keyPart}`;
     this.aliveInstances.add(instancePath);
+
+    // Per-component memoization: when the change set is fully known and this
+    // instance's args are unchanged AND none of the `$state` paths it read
+    // last render changed, skip re-executing its body and reuse the cached
+    // return value. We still descend into the reused value (below), so a
+    // child that reads a changed path re-renders independently — only THIS
+    // body's work (and its `console.log`s) is skipped.
+    const memo = this.memoCache.get(instancePath);
+    if (
+      this.memoEnabled && memo &&
+      positionalEqual(node.positional, memo.positional) &&
+      namedEqual(node.named, memo.named) &&
+      !pathsOverlap(this.changedPaths, memo.deps)
+    ) {
+      // Keep the instance's tracked deps in the render's read-set so the host
+      // render-gate stays complete, then re-render the cached value tree.
+      const tracker = ctx.trackedState;
+      for (const dep of memo.deps) tracker.add(dep);
+      enterUserComponent(ctx, node.decl.name);
+      try {
+        return this.renderAt(memo.value, instancePath);
+      } finally {
+        leaveUserComponent(ctx);
+      }
+    }
+
     // Reserve a budget slot before walking the body. The matching
     // `leaveUserComponent` MUST run in a finally that wraps the
     // recursive `renderAt(value)` call — that's the chain that grows
@@ -274,7 +406,21 @@ export class Renderer {
     // walk and miss the actual recursion (which happens in the renderer).
     enterUserComponent(ctx, node.decl.name);
     try {
-      const { value, effects } = evaluateUserComponent(node, ctx, instancePath);
+      // Capture exactly which `$state` paths THIS body reads (its memo deps)
+      // by scoping a fresh tracker around the body walk, then folding those
+      // reads back into the surrounding render tracker so the parent's
+      // read-set (and the host gate) stay complete.
+      const outerTracker = ctx.trackedState;
+      const instanceDeps = new Set<string>();
+      ctx.trackedState = instanceDeps;
+      let evaluated;
+      try {
+        evaluated = evaluateUserComponent(node, ctx, instancePath);
+      } finally {
+        ctx.trackedState = outerTracker;
+        for (const dep of instanceDeps) outerTracker.add(dep);
+      }
+      const { value, effects, hooks } = evaluated;
       // Hand any `effect(() => { … }, [deps])` declarations discovered
       // inside this component's body to the host's effect runner under
       // the stable instance key. The runner is idempotent across re-
@@ -284,6 +430,16 @@ export class Renderer {
         this.options.mountInstanceEffects(instancePath, effects, ctxRef);
         if (effects.length > 0) this.instancesWithEffects.add(instancePath);
       }
+      // Track instances that used hooks so `endRender` can reset their
+      // `$state` / `$memo` cells when they leave the tree.
+      if (hooks > 0) this.instancesWithHooks.add(instancePath);
+      // Record the memo for next render.
+      this.memoCache.set(instancePath, {
+        positional: node.positional,
+        named: node.named,
+        deps: instanceDeps,
+        value,
+      });
       return this.renderAt(value, instancePath);
     } finally {
       leaveUserComponent(ctx);

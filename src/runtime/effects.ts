@@ -20,6 +20,7 @@
 import type {
   ActionDeclaration,
   EffectDeclaration,
+  Expression,
   Statement,
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
@@ -32,6 +33,20 @@ import {
   runControlFlowStatement,
 } from "./evaluator.js";
 import type { StateStore, StateValue } from "./state.js";
+import { anyPathAffects } from "./state.js";
+
+/**
+ * `true` for a `$emit("name", detail)` call — an Invoke on the reserved
+ * `$emit` StateRef. The effect / action runner dispatches these straight to
+ * `onEmit` rather than evaluating them as ordinary expressions.
+ */
+function isEmitCall(expr: Expression): expr is Extract<Expression, { kind: "Invoke" }> {
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    expr.callee.name === "emit"
+  );
+}
 
 export interface EffectRunnerOptions {
   state: StateStore;
@@ -254,7 +269,9 @@ export class EffectRunner {
           // would never match and the effect would never fire.
           const targetName = resolveTriggerAlias(trigger.name, capturedAliases);
           const unsub = this.options.state.subscribe((changed) => {
-            if (changed.has(targetName)) runBody();
+            // Fine-grained: a `[$user.name]` trigger fires only when
+            // `user.name` (or the whole `user`) changes, not `user.role`.
+            if (anyPathAffects(changed, targetName)) runBody();
           });
           mounted.unsubscribers.push(unsub);
           break;
@@ -424,8 +441,8 @@ function runStatement(
         }
         return undefined;
       }
-      // `emit("name", detail)` — dispatch an outbound CustomEvent.
-      if (expr.kind === "Call" && expr.callee === "emit") {
+      // `$emit("name", detail)` — dispatch an outbound CustomEvent.
+      if (isEmitCall(expr)) {
         const args = expr.arguments;
         const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
         const detail = args[1] ? evaluate(args[1], ctx) : undefined;
@@ -489,9 +506,15 @@ function resolveTriggerAlias(
   name: string,
   frames: ReadonlyArray<ReadonlyMap<string, string>>,
 ): string {
+  // A trigger may be a dotted path (`user.name`); only the ROOT atom is
+  // aliased per-instance, so resolve the root segment and re-attach the
+  // trailing path (`Item@2:0#0:user` + `.name`).
+  const dot = name.indexOf(".");
+  const root = dot < 0 ? name : name.slice(0, dot);
+  const rest = dot < 0 ? "" : name.slice(dot);
   for (let i = frames.length - 1; i >= 0; i -= 1) {
-    const aliased = frames[i]!.get(name);
-    if (aliased !== undefined) return aliased;
+    const aliased = frames[i]!.get(root);
+    if (aliased !== undefined) return aliased + rest;
   }
   return name;
 }
@@ -585,8 +608,8 @@ export class ActionDeclRunner {
     switch (stmt.kind) {
       case "ExpressionStatement": {
         const expr = stmt.expression;
-        // `emit("name", detail)` — dispatch an outbound CustomEvent.
-        if (expr.kind === "Call" && expr.callee === "emit") {
+        // `$emit("name", detail)` — dispatch an outbound CustomEvent.
+        if (isEmitCall(expr)) {
           const args = expr.arguments;
           const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
           const detail = args[1] ? evaluate(args[1], ctx) : undefined;

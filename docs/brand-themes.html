@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Brand themes · Aktion</title>
-  <meta name="description" content="Same Aktion program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style Theme() declarations. Copy any brand into your own response." />
+  <meta name="description" content="Same Aktion program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style $theme() declarations. Copy any brand into your own response." />
   <link rel="stylesheet" href="assets/example-page.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
@@ -193,11 +193,11 @@
     </header>
 
     <section class="example-hero">
-      <span class="tag-pill">Live demo · Theme({...})</span>
+      <span class="tag-pill">Live demo · $theme({...})</span>
       <h1 style="margin-top:10px">Same UI, six brands.</h1>
       <p>
         Pick a brand below — the preview reskins to GitHub, Apple, Stripe,
-        IONOS, Notion, or Vercel using only a <code>theme = Theme({...})</code>
+        IONOS, Notion, or Vercel using only a <code>theme = $theme({...})</code>
         line at the top of the response. No CSS, no host configuration, no
         custom components. Copy any token map into your own LLM response to
         brand a single reply, or feed it through
@@ -208,7 +208,7 @@
     <article class="example-card">
       <h2>Pick a brand</h2>
       <p class="lede">
-        Each chip swaps just the <code>Theme({...})</code> block at the top
+        Each chip swaps just the <code>$theme({...})</code> block at the top
         of the program. The rest of the UI Script is identical across every
         brand — the renderer picks up the new tokens between renders.
       </p>
@@ -246,7 +246,7 @@
             <dl class="brand-tokens" id="brand-tokens"></dl>
             <div class="copy-row">
               <button class="copy-btn" id="copy-theme" type="button">
-                <i class="fa-solid fa-copy"></i> Copy Theme({...})
+                <i class="fa-solid fa-copy"></i> Copy $theme({...})
               </button>
               <button class="copy-btn" id="copy-program" type="button">
                 <i class="fa-solid fa-file-code"></i> Copy full program
@@ -266,7 +266,7 @@
       <h2>The shared UI program</h2>
       <p class="lede">
         Every brand renders the same Aktion source. Only the
-        <code>theme = Theme({...})</code> line at the top changes — the
+        <code>theme = $theme({...})</code> line at the top changes — the
         runtime applies the new tokens to the host as CSS custom properties,
         so the existing components instantly pick up the new palette,
         typography, and shape.
@@ -356,12 +356,12 @@ aktion = Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap:
     <article class="example-card">
       <h2>Use it from your app</h2>
       <p class="lede">
-        Three equivalent ways to apply a brand: emit a <code>Theme(...)</code>
+        Three equivalent ways to apply a brand: emit a <code>$theme(...)</code>
         line from the LLM, call <code>setTheme()</code> from the host page,
         or set CSS variables on the host element.
       </p>
       <pre class="example-source"><code>// 1. Brand a single response from inside the script (structured form).
-el.setResponse(`theme = Theme({
+el.setResponse(`theme = $theme({
   colors: { primary: "#0969da" },
   font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightButton: "500" },
   radius: { button: "6px" }
@@ -711,7 +711,7 @@ aktion-app {
        The shared UI program — lives in the <code id="src-shared"> block
        above so it stays in lockstep with what's displayed and so the
        demos smoke-test can find it. Identical across every brand; only
-       the Theme({...}) prefix changes.
+       the $theme({...}) prefix changes.
        ------------------------------------------------------------------ */
 
     // Decode the HTML-escaped entities ripgrep / browsers may have applied.
@@ -744,7 +744,7 @@ aktion-app {
     // "fontFamilyHeading", "buttonFontWeight", "shadowMd") to a structured
     // group/inner-key pair (e.g. { group: "colors", inner: "primaryHover" }).
     //
-    // The in-script `Theme({...})` binding only accepts the structured
+    // The in-script `$theme({...})` binding only accepts the structured
     // groups (`colors`, `radius`, `font`, `motion`, `elevation`) per
     // §16 — flat keys raise a schema-validator error.
     function flatToStructured(key) {
@@ -793,7 +793,7 @@ aktion-app {
         const { group, inner } = flatToStructured(key);
         buckets[group].push({ inner, value });
       }
-      const lines = ["theme = Theme({"];
+      const lines = ["theme = $theme({"];
       const groupKeys = Object.keys(buckets).filter((g) => buckets[g].length > 0);
       groupKeys.forEach((group, gi) => {
         const longest = Math.max(...buckets[group].map((e) => e.inner.length));
@@ -866,7 +866,7 @@ aktion-app {
       const themeBlock = formatThemeBlock(brand.tokens);
       themeSrcEl.textContent = themeBlock;
 
-      // Apply by re-running the program with the Theme(...) prefix. Reusing
+      // Apply by re-running the program with the $theme(...) prefix. Reusing
       // setResponse keeps aktion as the single source of truth
       // — every brand exercises the same code path an LLM would hit.
       previewEl.setResponse(buildFullProgram(key));

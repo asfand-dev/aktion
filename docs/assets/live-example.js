@@ -305,7 +305,7 @@ nav = Card([
   ], { direction: "row", gap: "s" })
 ])
 
-main = Router({
+main = $router({
   "/":           homePage,
   "/dashboard":  dashboardPage,
   "/users":      usersListPage,
@@ -407,12 +407,12 @@ usage = {storageUsed: 0, storageMax: 100, seatsUsed: 0, seatsMax: 0, planLabel: 
 
 function saveSettings() {
   $saveStatus = "saving"
-  $saved = http({ url: "/api/settings", method: "PUT", body: { theme: $theme, accent: $accent }, headers: { "Content-Type": "application/json" } })
+  $saved = $http({ url: "/api/settings", method: "PUT", body: { theme: $theme, accent: $accent }, headers: { "Content-Type": "application/json" } })
   $saveStatus = "saved"
 }
 
 function deleteWorkspace() {
-  $deleted = http({ url: "/api/workspace", method: "DELETE" })
+  $deleted = $http({ url: "/api/workspace", method: "DELETE" })
   $deleting = false
   emit("assistant-message", { message: "Workspace deleted" })
 }
@@ -821,14 +821,14 @@ aktion = Stack([
     slug: "todos-crud",
     code: `base = "https://mock-api-one-chi.vercel.app/api/mock/todo"
 
-$todos     = Http({ url: base + "/todos" })
+$todos     = $http({ url: base + "/todos" })
 $draft     = ""
 $editingId = null
 $editTitle = ""
 
 function addTodo() {
   if (!$draft) { return }
-  $create = Http({ url: base + "/todos", method: "POST", body: { title: $draft } })
+  $create = $http({ url: base + "/todos", method: "POST", body: { title: $draft } })
   $draft  = ""
   $create.onDone = () =&gt; {
     $todos.refetch()  
@@ -836,7 +836,7 @@ function addTodo() {
 }
 
 function toggleTodo(todo) {
-  $patch = Http({
+  $patch = $http({
     url:    base + "/todos/" + todo.id,
     method: "PATCH",
     body:   { isCompleted: !todo.isCompleted }
@@ -852,7 +852,7 @@ function startEdit(todo) {
 }
 
 function saveEdit(todo) {
-  $update = Http({
+  $update = $http({
     url:    base + "/todos/" + todo.id,
     method: "PUT",
     body:   { title: $editTitle, isCompleted: todo.isCompleted }
@@ -865,7 +865,7 @@ function saveEdit(todo) {
 }
 
 function deleteTodo(todo) {
-  $del = Http({ url: base + "/todos/" + todo.id, method: "DELETE" })
+  $del = $http({ url: base + "/todos/" + todo.id, method: "DELETE" })
   $del.onDone = () =&gt; {
     $todos.refetch()
   }
@@ -908,7 +908,7 @@ list = Card([
 
 aktion = Stack([
   PageHeader("Todos", {
-    subtitle: "Create, toggle, edit and delete — every action is a real Http({...}) call",
+    subtitle: "Create, toggle, edit and delete — every action is a real $http({...}) call",
     breadcrumbs: ["Demos", "Todos CRUD"]
   }),
   composer,

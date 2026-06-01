@@ -40,6 +40,8 @@ const NAV_GROUPS = [
       { href: "language.html", label: "Language" },
       { href: "layout.html", label: "Layout" },
       { href: "components.html", label: "Components" },
+      { href: "hooks.html", label: "Hooks", badge: "New" },
+      { href: "stores.html", label: "Global state", badge: "New" },
     ],
   },
   {
@@ -71,7 +73,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "layout.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -94,6 +96,8 @@ const PAGE_KEYWORDS = {
   "language.html": "syntax expressions state queries mutations builtins",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
   "components.html": "props library catalog signatures",
+  "hooks.html": "hooks $state $memo usestate usememo custom hook useeffect local state reactive per-instance setvalue setter memoize derived react",
+  "stores.html": "store global state management redux zustand pinia jotai recoil mobx shared state actions getters singleton prop drilling slice selector context cart user theme",
   "actions.html": "action assignment http emit assistant-message navigate route js button click",
   "http.html": "http fetch request response query headers body refetch cancel async resource crud rest api network",
   "javascript-interactions.html": "script @js useeffect hooks",

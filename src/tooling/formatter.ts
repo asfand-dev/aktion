@@ -77,6 +77,7 @@ function needsBlankLineBetween(prev: Statement, next: Statement): boolean {
     "ComponentDeclaration",
     "EffectDeclaration",
     "ActionDeclaration",
+    "HookDeclaration",
   ]);
   if (heavy.has(prev.kind) || heavy.has(next.kind)) return true;
   return false;
@@ -105,11 +106,18 @@ function printStatement(stmt: Statement, indent: number): string {
       }
       const body = printBlock(stmt.body.body, indent + 1);
       const depsArray = `[${deps.join(", ")}]`;
-      return `${pad}effect(() => {\n${body}\n${pad}}, ${depsArray})`;
+      return `${pad}$effect(() => {\n${body}\n${pad}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
       const params = stmt.params.map(printDeclParam).join(", ");
       const head = `${pad}function ${stmt.name}(${params}) {`;
+      const body = printBlock(stmt.body.body, indent + 1);
+      return `${head}\n${body}\n${pad}}`;
+    }
+    case "HookDeclaration": {
+      // Re-emit the `$` sigil that marks the function as a hook.
+      const params = stmt.params.map(printDeclParam).join(", ");
+      const head = `${pad}function $${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return `${head}\n${body}\n${pad}}`;
     }

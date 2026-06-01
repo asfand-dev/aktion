@@ -78,8 +78,8 @@ greeting = Card([
 sample = Card([
   CardHeader("Sample stats"),
   Stats([
-    StatCard("Active users", { value: \`\${Util.format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users" }),
-    StatCard("Revenue",      { value: \`\${Util.format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar" }),
+    StatCard("Active users", { value: \`\${$util.format(12540, "number")}\`, trend: "up",   delta: "+12% vs last week", icon: "users" }),
+    StatCard("Revenue",      { value: \`\${$util.format(48230, "currency", "USD")}\`, trend: "flat", delta: "stable",       icon: "sack-dollar" }),
     StatCard("Errors",       { value: "12", trend: "down", delta: "-32%", icon: "triangle-exclamation" })
   ])
 ])
@@ -100,7 +100,7 @@ projects = [
   {title: "Activity timeline", description: "Shipped to everyone.",    tags: ["shipped"],  assignee: "Mira", tone: "success", icon: "circle-check",        stage: "done"}
 ]
 
-$atRisk = Util.filter(projects, "tone", "==", "warning")
+$atRisk = $util.filter(projects, "tone", "==", "warning")
 
 function Card2(p) {
   return KanbanCard(p.title, { description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon })
@@ -110,22 +110,22 @@ aktion = Stack([
   PageHeader(
     "Engineering Q3",
     {
-      subtitle: \`\${Util.count(projects)} active · \${Util.count($atRisk)} at risk\`,
+      subtitle: \`\${$util.count(projects)} active · \${$util.count($atRisk)} at risk\`,
       breadcrumbs: ["Workspace", "Engineering"],
       status: Badge("On track", { tone: "success" })
     }
   ),
   Stats([
-    StatCard("Active",  { value: \`\${Util.count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder" }),
-    StatCard("At risk", { value: \`\${Util.count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation" }),
+    StatCard("Active",  { value: \`\${$util.count(projects)}\`,   trend: "flat", delta: "0 vs last week",                          icon: "folder" }),
+    StatCard("At risk", { value: \`\${$util.count($atRisk)}\`,    trend: "up",   delta: "+1 vs last week",                         icon: "triangle-exclamation" }),
     StatCard("Shipped", { value: "8",                       trend: "up",   delta: "+3 vs last week",                         icon: "rocket" }),
     StatCard("On-time", { value: "87%",                     trend: "down", delta: "-3% vs last week",                        icon: "clock" })
   ]),
   KanbanBoard([
-    KanbanColumn("To do",  { items: Util.filter(projects, "stage", "==", "todo").map(p => Card2(p)) }),
-    KanbanColumn("Doing",  { items: Util.filter(projects, "stage", "==", "doing").map(p => Card2(p)), tone: "primary" }),
-    KanbanColumn("Review", { items: Util.filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
-    KanbanColumn("Done",   { items: Util.filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
+    KanbanColumn("To do",  { items: $util.filter(projects, "stage", "==", "todo").map(p => Card2(p)) }),
+    KanbanColumn("Doing",  { items: $util.filter(projects, "stage", "==", "doing").map(p => Card2(p)), tone: "primary" }),
+    KanbanColumn("Review", { items: $util.filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
+    KanbanColumn("Done",   { items: $util.filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
   ])
 ])`,
   },
@@ -143,7 +143,7 @@ function addTodo() {
 function Row(t) {
   return Card([Stack([
     Text(t.text),
-    Button("Delete", { action: () => { $todos = Util.filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
+    Button("Delete", { action: () => { $todos = $util.filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
   ], { direction: "row", gap: "s", align: "center", justify: "between" })])
 }
 
@@ -153,7 +153,7 @@ body = $todos.length > 0
   : EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
 
 aktion = Stack([
-  Card([CardHeader("Todo list", { subtitle: \`\${Util.count($todos)} \${Util.plural(Util.count($todos), "task", "tasks")} · persisted across reloads\` })]),
+  Card([CardHeader("Todo list", { subtitle: \`\${$util.count($todos)} \${$util.plural($util.count($todos), "task", "tasks")} · persisted across reloads\` })]),
   Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
   Button("Add", { action: addTodo, variant: "primary" }),
   body
@@ -170,11 +170,11 @@ $events = [
 ]
 
 function removeItem(name) {
-  $events = Util.filter($events, "title", "!=", name)
+  $events = $util.filter($events, "title", "!=", name)
 }
 
 function addEvent() {
-  $events = [...$events, { title: \`New Event \${Util.now()}\` }]
+  $events = [...$events, { title: \`New Event \${$util.now()}\` }]
 }
 
 function Item(name) {
@@ -190,8 +190,8 @@ items = $events.map(e => Item(e.title))`,
   },
   routing: {
     label: "Routing demo",
-    code: `// Highlights: Router({…}) call, params injected per-arm, route.path reads, named-arg NavLink.
-page = Router({
+    code: `// Highlights: $router({…}) call, params injected per-arm, route.path reads, named-arg NavLink.
+page = $router({
   "/":          Card([CardHeader("Welcome", { subtitle: "Click a link above to navigate" })]),
   "/dashboard": Card([
     CardHeader("Dashboard"),
@@ -224,7 +224,7 @@ function reset() { $count = 0 }
 aktion = Card([
   CardHeader("JS counter", { subtitle: "Three actions, one $atom." }),
   Stack([
-    Text(\`Current: \${Util.clamp($count, -99, 99)}\`),
+    Text(\`Current: \${$util.clamp($count, -99, 99)}\`),
     Stack([
       Button("-",     { action: dec }),
       Button("Reset", { action: reset, variant: "ghost" }),
@@ -243,7 +243,7 @@ lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]
 aktion = Stack([
   PageHeader("Analytics", { subtitle: \`Daily traffic last \${$range} days\` }),
   Stats([
-    StatCard("Sessions",     { value: \`\${Util.format(Util.sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${Util.round((Util.sum(thisWk) / Util.sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
+    StatCard("Sessions",     { value: \`\${$util.format($util.sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${$util.round(($util.sum(thisWk) / $util.sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
     StatCard("Avg duration", { value: "3m 12s",                              trend: "flat", delta: "stable",                                                     icon: "clock" }),
     StatCard("Bounce rate",  { value: "32%",                                 trend: "down", delta: "-2%",                                                        icon: "arrow-trend-down" })
   ]),
@@ -278,10 +278,10 @@ people = [
   {id: "u08", name: "Barbara Liskov",    team: "Compilers",   score: 89, commits: 272}
 ]
 
-bulkBar = Util.count($selectedIds) > 0
+bulkBar = $util.count($selectedIds) > 0
   ? Toolbar(
       {
-        left: [Badge(\`\${Util.count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
+        left: [Badge(\`\${$util.count($selectedIds)} selected\`, { tone: "primary", icon: "check", size: "sm" })],
         right: [
           Button("Email",  { variant: "ghost",     size: "small", icon: "envelope" }),
           Button("Export", { variant: "secondary", size: "small", icon: "file-csv" }),
@@ -295,7 +295,7 @@ aktion = Stack([
   PageHeader(
     "Top contributors",
     {
-      subtitle: \`\${Util.count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
+      subtitle: \`\${$util.count(people)} engineers · sorted by \${$sort.key} \${$sort.direction}\`,
       breadcrumbs: ["Workspace", "Engineering"]
     }
   ),
@@ -332,7 +332,7 @@ events = [
 ]
 
 aktion = Stack([
-  PageHeader("May 2026", { subtitle: \`\${Util.count(events)} events · \${$obDone}/3 onboarding\` }),
+  PageHeader("May 2026", { subtitle: \`\${$util.count(events)} events · \${$obDone}/3 onboarding\` }),
   Grid([
     Card([
       SectionHeader("Calendar", { subtitle: "Focus a day to see details", eyebrow: "PLANNER" }),
@@ -432,12 +432,12 @@ $tags = ["release", "ui", "v3"]
 $brand = "#6366f1"
 $pin = ""
 
-$errors = Util.filter([
+$errors = $util.filter([
   $title == "" ? {label: "title", message: "Title is required."} : null,
   $pin.length != 4 ? {label: "pin",   message: "PIN must be 4 digits."} : null
 ], "label", "!=", null)
 
-publishGate = Util.count($errors) > 0
+publishGate = $util.count($errors) > 0
   ? Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
   : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
 
@@ -527,37 +527,37 @@ aktion = Stack([
   },
   storageConsole: {
     label: "Storage + console globals",
-    code: `// Highlights: \`storage\` namespace (local / session / cookies), \`console\` forwarder, named-arg method calls.
-$name = storage.get("rui:demo:name")
-$theme = storage.session.get("rui:demo:theme")
-$consent = storage.cookies.get("rui:demo:consent")
+    code: `// Highlights: \`$storage\` namespace (local / session / cookies), \`$console\` forwarder, named-arg method calls.
+$name = $storage.get("rui:demo:name")
+$theme = $storage.session.get("rui:demo:theme")
+$consent = $storage.cookies.get("rui:demo:consent")
 
 function saveName(value) {
-  storage.set("rui:demo:name", value)
+  $storage.set("rui:demo:name", value)
   $name = value
-  console.log("Saved name", value)
+  $console.log("Saved name", value)
 }
 
 function setTheme(value) {
-  storage.session.set("rui:demo:theme", value)
+  $storage.session.set("rui:demo:theme", value)
   $theme = value
-  console.info("Theme preference set to", value)
+  $console.info("Theme preference set to", value)
 }
 
 function acceptCookies() {
-  storage.cookies.set("rui:demo:consent", "accepted", { expires: 30, path: "/", sameSite: "Lax" })
+  $storage.cookies.set("rui:demo:consent", "accepted", { expires: 30, path: "/", sameSite: "Lax" })
   $consent = "accepted"
-  console.warn("Cookies accepted — will persist for 30 days")
+  $console.warn("Cookies accepted — will persist for 30 days")
 }
 
 function clearAll() {
-  storage.clear()
-  storage.session.clear()
-  storage.cookies.clear()
+  $storage.clear()
+  $storage.session.clear()
+  $storage.cookies.clear()
   $name = null
   $theme = null
   $consent = null
-  console.error("Cleared every storage namespace (demo only).")
+  $console.error("Cleared every storage namespace (demo only).")
 }
 
 aktion = Stack([
@@ -798,7 +798,6 @@ const KEYWORD_DOCS = langSpec.keywordDocs || {};
  */
 const LANGUAGE_KEYWORDS = [
   { label: "function",  info: "Declare a function (component or callable action): `function Name(arg) { return ... }`." },
-  { label: "effect",    info: "Declare an anonymous side-effect: `effect(() => { ... }, [$atom, \"mount\", \"debounce(N)\"])`." },
   { label: "if",        info: "Expression-form `if (cond) { ... } else { ... }`." },
   { label: "else",      info: "`else` arm of an `if` expression." },
   { label: "switch",    info: "Statement-form `switch (value) { case \"x\": A(); break; default: B() }`. Use inside a function body — wrap and `return` to pick a value." },
@@ -824,17 +823,16 @@ const LANGUAGE_KEYWORDS = [
   { label: "void",      info: "`void expr` — evaluate an expression and yield `undefined`." },
   { label: "await",     info: "Wait for an HTTP / promise inside a function body." },
   { label: "async",     info: "Marks a function as async — accepted as a no-op modifier." },
-  { label: "return",    info: "Return from a `function` / `effect` body." },
-  { label: "cleanup",   info: "Register a teardown handler inside an `effect` body — e.g. `cleanup(() => clearInterval(id))`." },
+  { label: "return",    info: "Return from a `function` / `$effect` body." },
+  { label: "cleanup",   info: "Register a teardown handler inside a `$effect` body — e.g. `cleanup(() => clearInterval(id))`." },
   { label: "optimistic",info: "Mark a mutating `function` as optimistic: `function save(...) optimistic { ... }`." },
-  { label: "emit",      info: "Dispatch a custom event: `emit(\"name\", { detail })`." },
-  { label: "default",   info: "Wildcard arm inside `Router({...})`." },
+  { label: "default",   info: "Wildcard arm inside `$router({...})`." },
 ];
 
 /**
  * Reserved identifiers / special globals exposed by the runtime. Surfaced
  * in autocomplete so authors learn the names — `aktion` is the top-level
- * entry binding and `Router` / `route` are the routing primitives.
+ * entry binding and `$router` / `route` are the routing primitives.
  */
 const SPECIAL_IDENTIFIERS = [
   {
@@ -843,14 +841,44 @@ const SPECIAL_IDENTIFIERS = [
     apply: "aktion = ",
   },
   {
-    label: "Router",
-    info: "Routing primitive. Pass an object literal whose keys are route patterns.",
-    apply: "Router({\n  \"/\":     ${1:Home()},\n  default: ${2:NotFound()}\n})",
+    label: "$router",
+    info: "Routing primitive. Pass an object literal whose keys are route patterns; bind the result and read `route.*` for the active match.",
+    apply: "$router({\n  \"/\":     ${1:Home()},\n  default: ${2:NotFound()}\n})",
+    snippet: true,
+  },
+  {
+    label: "$store",
+    info: "App-wide store factory: `name = $store({ field, method: (s, …) => … })`. Non-function entries are reactive state; function entries are methods that receive the store handle `s`. Read `store.field` (fine-grained) and call `store.method(args)`.",
+    apply: "$store({\n  ${1:items}: [],\n  ${2:add}: (s, item) => { s.${1:items} = [...s.${1:items}, item] }\n})",
+    snippet: true,
+  },
+  {
+    label: "$effect",
+    info: "Declarative side-effect: `$effect(() => { … }, [deps])`. Deps are `$atoms` plus lifecycle strings (\"mount\", \"unmount\", \"every(1000)\", \"debounce(300)\", \"throttle(300)\"). Register teardown with `cleanup(() => …)`.",
+    apply: "$effect(() => {\n  ${2}\n}, [$${1:dep}])",
+    snippet: true,
+  },
+  {
+    label: "$emit",
+    info: "Dispatch an outbound CustomEvent on the host `<aktion-app>`: `$emit(\"name\", { detail })`. Reserved names: `assistant-message`, `error`, `route-change`.",
+    apply: "$emit(\"${1:event}\", { ${2:detail} })",
+    snippet: true,
+  },
+  {
+    label: "$theme",
+    info: "Per-response theme override: `theme = $theme({ colors: { primary: … }, radius, font, motion, elevation })`. Assign before `aktion` to brand the response.",
+    apply: "$theme({\n  colors: { primary: \"${1:#6366f1}\" }\n})",
+    snippet: true,
+  },
+  {
+    label: "$i18n",
+    info: "Internationalisation factory: `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })`. `t(key, vars?)` resolves a translation with `{placeholder}` interpolation.",
+    apply: "$i18n({\n  defaultLanguage: \"${1:en}\",\n  translations: { ${2:greeting}: { en: \"${3:Hello}\" } }\n})",
     snippet: true,
   },
   {
     label: "params",
-    info: "Inside a `Router({...})` arm, holds the captured path segments (`params.id`, `params._`).",
+    info: "Inside a `$router({...})` arm, holds the captured path segments (`params.id`, `params._`).",
     apply: "params",
   },
   {
@@ -860,7 +888,7 @@ const SPECIAL_IDENTIFIERS = [
   },
   {
     label: "theme",
-    info: "Per-response theme override: `theme = Theme({ colors: { primary: ... } })`.",
+    info: "Per-response theme override binding: `theme = $theme({ colors: { primary: … } })`. Removing it snaps back to the host theme.",
     apply: "theme",
   },
 ];
@@ -869,14 +897,14 @@ const SPECIAL_IDENTIFIERS = [
  * Top-level multi-line snippets — surfaced via the `…` ellipsis suffix
  * so they show up alongside ordinary identifiers without polluting the
  * inline completion list. Pulled from `langSpec.snippets` plus the
- * language constructs (`function`, `effect`, `switch`, `Router`).
+ * language constructs (`function`, `effect`, `switch`, `$router`).
  */
 const LANGUAGE_SNIPPETS = [
   {
     name: "router",
-    description: "Multi-page Router({...}) with NavLink nav.",
+    description: "Multi-page $router({...}) with NavLink nav.",
     template:
-      'pages = Router({\n' +
+      'pages = $router({\n' +
       '  "/":          ${1:Home()},\n' +
       '  "/users/:id": ${2:UserPage({ id: params.id })},\n' +
       '  default:      ${3:NotFound()}\n' +
@@ -900,7 +928,7 @@ const LANGUAGE_SNIPPETS = [
     description: "Callable action — invoked via `{ action: name }` props.",
     template:
       'function ${1:save}(${2:payload}) {\n' +
-      '  $${3:result} = Http({ url: "https://api.example.com/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
+      '  $${3:result} = $http({ url: "https://api.example.com/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
       '}',
   },
   {
@@ -924,7 +952,7 @@ const LANGUAGE_SNIPPETS = [
   {
     name: "for",
     description: "for-of loop statement — use `.map(item => …)` for value-producing iteration.",
-    template: 'for (let ${1:item} of ${2:items}) { ${3:console.log(${1:item})} }',
+    template: 'for (let ${1:item} of ${2:items}) { ${3:$console.log(${1:item})} }',
   },
   {
     name: "map",
@@ -950,14 +978,14 @@ const LANGUAGE_SNIPPETS = [
     name: "http",
     description: "Reactive HTTP resource + onDone refresh.",
     template:
-      '$${1:data} = Http({ url: "${2:https://api.example.com/items}", method: "${3:GET}" })',
+      '$${1:data} = $http({ url: "${2:https://api.example.com/items}", method: "${3:GET}" })',
   },
   {
     name: "http-write",
     description: "Mutation that refreshes a list resource via onDone.",
     template:
       'function ${1:save}(${2:item}) {\n' +
-      '  $${3:patch} = Http({ url: "${4:https://api.example.com/items}", method: "${5:POST}", body: ${2:item} })\n' +
+      '  $${3:patch} = $http({ url: "${4:https://api.example.com/items}", method: "${5:POST}", body: ${2:item} })\n' +
       '  $${3:patch}.onDone = () => { $${6:items}.refetch() }\n' +
       '}',
   },
@@ -965,26 +993,91 @@ const LANGUAGE_SNIPPETS = [
 
 /**
  * Built-in namespace globals — surfaced in autocomplete so authors can
- * discover the runtime's globals (`storage`, `console`, plus the curated
- * JS standard library: `Math`, `JSON`, `Object`, `Array`) the same way they
- * discover components and `@`-builtins. Members are stored in RELATIVE form
- * (`name`/`apply` are the part AFTER the namespace dot) so they can be
- * surfaced both flat at the top level (`Math.max`) and after a typed dot
- * (`Math.` → `max`). Keep in sync with `GLOBAL_NAMESPACES` in
- * `src/runtime/evaluator.ts`.
+ * discover the runtime's globals. Aktion's own namespaces carry the `$`
+ * sigil (`$util`, `$console`, `$storage`); the curated JS standard library
+ * (`Math`, `JSON`, `Object`, `Array`) is referenced bare. Members are
+ * stored in RELATIVE form (`name`/`apply` are the part AFTER the namespace
+ * dot) so they can be surfaced both flat at the top level (`$util.count`)
+ * and after a typed dot (`$util.` → `count`). Keep `$util`/`$console`/
+ * `$storage` in sync with `RESERVED_STATE_NAMESPACES` (and `Util` in
+ * `src/runtime/util.ts`); the bare JS namespaces mirror `GLOBAL_NAMESPACES`
+ * in `src/runtime/evaluator.ts`.
  */
 const GLOBAL_NAMESPACES = [
   {
-    name: "storage",
-    signature: "storage.<local|session|cookies>?.<set|get|remove|clear>(...)",
+    name: "$util",
+    signature: "$util.<count|sum|filter|sort|format|formatDate|plural|…>(...)",
+    description: "Pure data-transformation helpers — aggregation, reshaping, formatting, date math, and string/number utilities. Available everywhere; no import needed.",
+    members: [
+      // Aggregation
+      { name: "count",   apply: "count(${1:items})",  info: "Number of items in an array." },
+      { name: "sum",     apply: "sum(${1:items})",    info: "Sum of the numeric values." },
+      { name: "avg",     apply: "avg(${1:items})",    info: "Arithmetic mean of the values." },
+      { name: "min",     apply: "min(${1:items})",    info: "Smallest numeric value." },
+      { name: "max",     apply: "max(${1:items})",    info: "Largest numeric value." },
+      { name: "first",   apply: "first(${1:items})",  info: "First element, or null when empty." },
+      { name: "last",    apply: "last(${1:items})",   info: "Last element, or null when empty." },
+      // Reshaping
+      { name: "filter",  apply: "filter(${1:items}, \"${2:field}\", \"${3:==}\", ${4:value})", info: "Keep items where field matches. Operators: == != > < >= <= contains in." },
+      { name: "find",    apply: "find(${1:items}, \"${2:field}\", \"${3:==}\", ${4:value})",   info: "First item matching the comparator, or null." },
+      { name: "sort",    apply: "sort(${1:items}, \"${2:field}\", \"${3:asc}\")", info: "Sort by field, \"asc\" (default) or \"desc\"." },
+      { name: "groupBy", apply: "groupBy(${1:items}, \"${2:field}\")", info: "Group items into an object keyed by the field value." },
+      { name: "slice",   apply: "slice(${1:items}, ${2:0}, ${3:10})", info: "Subarray between start and end indices." },
+      { name: "unique",  apply: "unique(${1:items})", info: "De-duplicate an array (optionally by a field)." },
+      { name: "reverse", apply: "reverse(${1:items})", info: "Reversed copy of the array." },
+      { name: "range",   apply: "range(${1:0}, ${2:10})", info: "Array of numbers from start to end (inclusive)." },
+      { name: "repeat",  apply: "repeat(${1:value}, ${2:3})", info: "Array with the value repeated n times." },
+      { name: "pick",    apply: "pick(${1:obj}, ${2:[\"a\", \"b\"]})", info: "Object containing only the listed keys." },
+      // Formatting
+      { name: "format",     apply: "format(${1:value}, \"${2:number}\")", info: "Locale number format: \"number\" | \"currency\" | \"percent\" | \"compact\"." },
+      { name: "formatDate", apply: "formatDate(${1:value}, \"${2:MMM D}\")", info: "Format a date — a token pattern (MMM D, YYYY-MM-DD) or \"relative\"/\"date\"/\"time\"/\"datetime\"/\"iso\"." },
+      { name: "plural",     apply: "plural(${1:count}, \"${2:item}\")", info: "Count + correctly pluralised noun: `3 items` / `1 item`." },
+      { name: "capitalize", apply: "capitalize(${1:text})", info: "Capitalise the first letter." },
+      { name: "lowercase",  apply: "lowercase(${1:text})",  info: "Lowercase the whole string." },
+      { name: "uppercase",  apply: "uppercase(${1:text})",  info: "Uppercase the whole string." },
+      { name: "titlecase",  apply: "titlecase(${1:text})",  info: "Title-case each word." },
+      { name: "case",       apply: "case(${1:text}, \"${2:camel}\")", info: "Recase: \"camel\" | \"pascal\" | \"snake\" | \"kebab\"." },
+      // Date / time
+      { name: "now",         apply: "now()",   info: "Current time as epoch milliseconds." },
+      { name: "today",       apply: "today()", info: "Start of today as an ISO string." },
+      { name: "addDays",     apply: "addDays(${1:date}, ${2:1})",   info: "Date shifted by n days (ISO)." },
+      { name: "addHours",    apply: "addHours(${1:date}, ${2:1})",  info: "Date shifted by n hours (ISO)." },
+      { name: "diffDays",    apply: "diffDays(${1:start}, ${2:end})", info: "Whole days between two dates." },
+      { name: "startOfWeek", apply: "startOfWeek(${1:date})", info: "Start of the week containing the date (ISO)." },
+      { name: "endOfMonth",  apply: "endOfMonth(${1:date})",  info: "End of the month containing the date (ISO)." },
+      // String / regex
+      { name: "join",       apply: "join(${1:items}, \"${2:, }\")", info: "Join an array into a string with a separator." },
+      { name: "split",      apply: "split(${1:text}, \"${2:,}\")",  info: "Split a string into an array on a separator." },
+      { name: "trim",       apply: "trim(${1:text})", info: "Trim surrounding whitespace." },
+      { name: "replace",    apply: "replace(${1:text}, \"${2:search}\", \"${3:replacement}\")", info: "Replace every occurrence of a substring." },
+      { name: "substring",  apply: "substring(${1:text}, ${2:0}, ${3:5})", info: "Substring between two indices." },
+      { name: "startsWith", apply: "startsWith(${1:text}, \"${2:prefix}\")", info: "True when the text starts with the prefix." },
+      { name: "endsWith",   apply: "endsWith(${1:text}, \"${2:suffix}\")", info: "True when the text ends with the suffix." },
+      { name: "contains",   apply: "contains(${1:text}, \"${2:needle}\")", info: "True when the text contains the needle." },
+      { name: "match",      apply: "match(${1:text}, \"${2:pattern}\")", info: "Test the text against a regular-expression pattern." },
+      // Math
+      { name: "round",  apply: "round(${1:value}, ${2:0})", info: "Round to n decimal places." },
+      { name: "floor",  apply: "floor(${1:value})", info: "Round down to an integer." },
+      { name: "ceil",   apply: "ceil(${1:value})",  info: "Round up to an integer." },
+      { name: "abs",    apply: "abs(${1:value})",   info: "Absolute value." },
+      { name: "clamp",  apply: "clamp(${1:value}, ${2:min}, ${3:max})", info: "Constrain a number to a [min, max] range." },
+      { name: "pow",    apply: "pow(${1:base}, ${2:exp})", info: "Exponentiation (base^exp)." },
+      { name: "sqrt",   apply: "sqrt(${1:value})",  info: "Square root." },
+      { name: "random", apply: "random()",          info: "Pseudo-random number in [0, 1)." },
+      { name: "log",    apply: "log(${1:value})",   info: "Natural logarithm." },
+    ],
+  },
+  {
+    name: "$storage",
+    signature: "$storage.<local|session|cookies>?.<set|get|remove|clear>(...)",
     description: "Browser storage namespace — localStorage (default), sessionStorage, and cookies share a uniform set/get/remove/clear surface.",
     members: [
       { name: "set",            apply: "set(\"${1:key}\", ${2:value})",                              info: "Persist a value to localStorage (default namespace)." },
       { name: "get",            apply: "get(\"${1:key}\")",                                          info: "Read a value from localStorage. Returns null when missing." },
       { name: "remove",         apply: "remove(\"${1:key}\")",                                       info: "Delete a key from localStorage." },
       { name: "clear",          apply: "clear()",                                                    info: "Wipe every localStorage entry." },
-      { name: "local.set",      apply: "local.set(\"${1:key}\", ${2:value})",                        info: "Alias of `storage.set`." },
-      { name: "local.get",      apply: "local.get(\"${1:key}\")",                                    info: "Alias of `storage.get`." },
+      { name: "local.set",      apply: "local.set(\"${1:key}\", ${2:value})",                        info: "Alias of `$storage.set`." },
+      { name: "local.get",      apply: "local.get(\"${1:key}\")",                                    info: "Alias of `$storage.get`." },
       { name: "session.set",    apply: "session.set(\"${1:key}\", ${2:value})",                      info: "Per-tab sessionStorage write." },
       { name: "session.get",    apply: "session.get(\"${1:key}\")",                                  info: "Per-tab sessionStorage read." },
       { name: "session.remove", apply: "session.remove(\"${1:key}\")",                               info: "Drop a sessionStorage entry." },
@@ -996,8 +1089,8 @@ const GLOBAL_NAMESPACES = [
     ],
   },
   {
-    name: "console",
-    signature: "console.<log|error|warn|info|debug>(...)",
+    name: "$console",
+    signature: "$console.<log|error|warn|info|debug>(...)",
     description: "Forwards to the browser console. Useful for stream-time debugging from inside function / effect bodies.",
     members: [
       { name: "log",   apply: "log(${1})",   info: "Log a message at the default level." },
@@ -1059,15 +1152,15 @@ const GLOBAL_NAMESPACES = [
 ];
 
 /**
- * Synthetic param spec for the `Http({...})` config object. Surfaced as
- * named-arg completions inside the braces (`Http({ <here> })`) the same way
+ * Synthetic param spec for the `$http({...})` config object. Surfaced as
+ * named-arg completions inside the braces (`$http({ <here> })`) the same way
  * component props are, so authors discover `url` / `method` / `query` / … .
  * Mirrors the keys recognised by `buildRequestFromConfig` in
  * `src/runtime/http.ts` (everything else is forwarded to `fetch`).
  */
 const HTTP_CONFIG_SPEC = {
-  name: "Http",
-  signature: "Http({ url, method?, query?, headers?, body?, ...fetchOptions })",
+  name: "$http",
+  signature: "$http({ url, method?, query?, headers?, body?, ...fetchOptions })",
   description: "The reactive network primitive. Returns a resource bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`, `.cancel()`, `.onDone`).",
   params: [
     { name: "url",         type: "string", required: true,  description: "Absolute request URL." },
@@ -1082,8 +1175,8 @@ const HTTP_CONFIG_SPEC = {
 };
 
 /**
- * The reactive resource bag returned by `Http({...})`. Surfaced as
- * member completions after a dot on any `$variable` assigned from `Http(`
+ * The reactive resource bag returned by `$http({...})`. Surfaced as
+ * member completions after a dot on any `$variable` assigned from `$http(`
  * (e.g. `$todos.` → `data`, `refetch()`, `onDone`, …). Mirrors
  * `EndpointResource` in `src/runtime/http.ts` — keep the two in sync.
  */
@@ -1112,7 +1205,7 @@ const ROUTE_MEMBERS = [
 
 /**
  * Plain callable globals and constructors exposed by the runtime — the
- * network primitive `Http`, the timer family, the curated slice of the JS
+ * network primitive `$http`, the timer family, the curated slice of the JS
  * standard library, and the most-reached-for browser globals. Surfaced as
  * bare-identifier completions so authors can discover and insert them. This
  * is NOT exhaustive: the runtime exposes the FULL JavaScript global surface
@@ -1124,10 +1217,10 @@ const ROUTE_MEMBERS = [
  */
 const CALLABLE_GLOBALS = [
   {
-    label: "Http",
+    label: "$http",
     detail: "network",
     info: "The only network primitive. Self-contained config: absolute `url`, optional `method` (GET default), `query`, `headers`, `body`, plus any fetch option. Returns a reactive resource bag (`.data`, `.error`, `.loading`, `.status`, `.headers`, `.lastUpdated`, `.refetch()`, `.cancel()`, settable `.onDone`).",
-    apply: 'Http({\n  url:    "${1:https://api.example.com/items}",\n  method: "${2:GET}"\n})',
+    apply: '$http({\n  url:    "${1:https://api.example.com/items}",\n  method: "${2:GET}"\n})',
     snippet: true,
   },
   { label: "setTimeout",    detail: "timer", info: "Run a callback once after `ms`. Returns a handle for `clearTimeout`. Tracked by the runtime and cleared on re-plan/disconnect.", apply: "setTimeout(() => {\n  ${1}\n}, ${2:1000})", snippet: true },
@@ -1155,14 +1248,14 @@ const CALLABLE_GLOBALS = [
   { label: "alert",   detail: "dialog", info: "Show a blocking alert dialog: `alert(message)`.", apply: "alert(${1})", snippet: true },
   { label: "confirm", detail: "dialog", info: "Show a blocking confirm dialog — returns `true`/`false`: `confirm(message)`.", apply: "confirm(${1})", snippet: true },
   { label: "prompt",  detail: "dialog", info: "Show a blocking prompt dialog — returns the entered string (or null): `prompt(message, default?)`.", apply: "prompt(${1})", snippet: true },
-  { label: "fetch",   detail: "global", info: "Low-level network fetch. Prefer the reactive `Http({…})` primitive for UI data — use `fetch` only for imperative one-off requests inside actions.", apply: "fetch(${1:url})", snippet: true },
+  { label: "fetch",   detail: "global", info: "Low-level network fetch. Prefer the reactive `$http({…})` primitive for UI data — use `fetch` only for imperative one-off requests inside actions.", apply: "fetch(${1:url})", snippet: true },
   { label: "URL",            detail: "constructor", info: "URL parser — `new URL(\"https://example.com/path?q=1\")`.", apply: "URL(${1})", snippet: true },
   { label: "URLSearchParams", detail: "constructor", info: "Query-string helper — `new URLSearchParams(\"a=1&b=2\")`.", apply: "URLSearchParams(${1})", snippet: true },
   { label: "atob",    detail: "global", info: "Decode a base-64 string.", apply: "atob(${1})", snippet: true },
   { label: "btoa",    detail: "global", info: "Encode a string to base-64.", apply: "btoa(${1})", snippet: true },
   { label: "crypto",  detail: "namespace", info: "Web Crypto namespace — e.g. `crypto.randomUUID()`.", apply: "crypto" },
   { label: "navigator", detail: "namespace", info: "Browser navigator — e.g. `navigator.clipboard.writeText(text)`.", apply: "navigator" },
-  { label: "localStorage",  detail: "namespace", info: "Raw Web Storage. Prefer the `storage` global for a friendlier API.", apply: "localStorage" },
+  { label: "localStorage",  detail: "namespace", info: "Raw Web Storage. Prefer the `$storage` global for a friendlier API.", apply: "localStorage" },
   { label: "Intl",    detail: "namespace", info: "Internationalization API — `Intl.NumberFormat`, `Intl.DateTimeFormat`.", apply: "Intl" },
   { label: "BigInt",  detail: "global", info: "Arbitrary-precision integer — `BigInt(123)`.", apply: "BigInt(${1})", snippet: true },
 ];
@@ -1474,18 +1567,17 @@ function initPlayground(cm) {
     const call = findEnclosingCall(text, pos);
     if (call && call.name) {
       // Named props are written inside a trailing object literal
-      // (`Button("Save", { variant: … })`, `Http({ url: … })`). When the
+      // (`Button("Save", { variant: … })`, `$http({ url: … })`). When the
       // cursor sits inside such an object, scan the current arg / used keys
       // relative to that `{` so key + value completions fire inside braces.
       const objOpen = enclosingObjectOpen(text, call, pos);
       const argBase = objOpen != null ? objOpen : call.openParen;
       const inObject = objOpen != null;
-      const ctxKind = call.name.startsWith("@") ? "builtin" : "component";
-      const spec = ctxKind === "builtin"
-        ? langSpec.builtinsByName[call.name.slice(1)]
-        : (call.name === "Http" && inObject)
-          ? HTTP_CONFIG_SPEC
-          : langSpec.componentsByName[call.name];
+      // `$http({ … })` exposes the synthetic config spec (`url`, `method`,
+      // …); every other call resolves to a library component by name.
+      const spec = (call.name === "$http" && inObject)
+        ? HTTP_CONFIG_SPEC
+        : langSpec.componentsByName[call.name];
 
       if (spec) {
         const { argStart, argText } = readCurrentArg(text, call, pos, argBase);
@@ -1522,22 +1614,30 @@ function initPlayground(cm) {
         //         bare identifier with no colon after it. Suggest the
         //         remaining named args of the enclosing call so the
         //         user can fill them in `name:` form.
+        //
+        //         Named args live in a trailing object literal — `Button("Save",
+        //         { variant: "primary" })`. When the cursor is NOT yet inside a
+        //         `{ }` (a bare positional slot like `Button("Save", |)`), the
+        //         completion inserts the WHOLE object (`{ variant: "primary" }`)
+        //         so it stays valid; inside the braces it just inserts the
+        //         `name: value` pair. A bare `name: value` directly as a call
+        //         argument is a parse error, so we never emit that shape.
         const couldBeNamedArgName = /^\s*[A-Za-z_]?[\w]*$/.test(argText);
-        if (couldBeNamedArgName && ctxKind === "component") {
+        if (couldBeNamedArgName && spec.params && spec.params.length > 0) {
           const used = collectUsedNamedArgs(text, call, argBase);
           const remaining = spec.params.filter((p) => !used.has(p.name));
           if (remaining.length > 0) {
             const options = remaining.map((p) => ({
-              label: `${p.name}:`,
+              label: inObject ? `${p.name}:` : `{ ${p.name}: … }`,
               type: "property",
               detail: p.type + (p.required ? "" : " (optional)"),
               boost: p.required ? 50 : 30,
               info: () => makeParamInfo(p),
-              apply: applyNamedArg(p),
+              apply: applyNamedArg(p, inObject),
             }));
             // When we have something to offer for named args, return them
             // as the only suggestions — anything else (component names,
-            // builtins) would be wrong here. The user can still escape
+            // globals) would be wrong here. The user can still escape
             // with `Esc` if they want a positional value.
             const from = word.from;
             return { from, options, validFor: /[\w]*/ };
@@ -1565,125 +1665,120 @@ function initPlayground(cm) {
     const wordText = word.text;
     const options = [];
 
-    // @builtins
-    if (wordText.startsWith("@") || wordText === "") {
-      for (const b of langSpec.builtins) {
+    // Sigil-aware visibility. `$`-typing shows only the Aktion globals that
+    // carry the sigil (`$util`, `$http`, `$router`, `$store`, …); a plain (or
+    // empty / explicit) prefix shows everything else, INCLUDING the `$`
+    // globals so they're still discoverable when typed without the sigil and
+    // CodeMirror fuzzy-matches them. (`@`-builtins were removed when the
+    // runtime moved to the `$util` namespace, so nothing starts with `@`.)
+    const sigilOk = (label) => {
+      if (wordText.startsWith("@")) return label.startsWith("@");
+      if (wordText.startsWith("$")) return label.startsWith("$");
+      return !label.startsWith("@");
+    };
+
+    // Components (with snippet-aware apply). Names are always bare, so they
+    // drop out as soon as the user types a `$`.
+    for (const c of langSpec.components) {
+      if (!sigilOk(c.name)) continue;
+      const snippet = langSpec.snippets.find((s) => s.name === c.name);
+      const apply = snippet
+        ? autocomplete.snippet(snippet.template)
+        : autocomplete.snippet(componentCallTemplate(c));
+      options.push({
+        label: c.name,
+        type: "class",
+        detail: c.group,
+        info: () => makeInfoPopup(c.signature, c.description, c.params),
+        apply,
+      });
+    }
+
+    // Built-in namespace globals — Aktion's `$util` / `$console` / `$storage`
+    // plus the bare JS standard library (`Math`, `JSON`, `Object`, `Array`).
+    // We surface the namespace itself plus its flat members (`$util.count`).
+    for (const ns of GLOBAL_NAMESPACES) {
+      if (!sigilOk(ns.name)) continue;
+      options.push({
+        label: ns.name,
+        type: "namespace",
+        detail: "global",
+        info: ns.description,
+        apply: `${ns.name}.`,
+      });
+      for (const member of ns.members) {
         options.push({
-          label: `@${b.name}`,
-          type: "function",
-          detail: b.category ?? "builtin",
-          info: () => makeInfoPopup(b.signature, b.description, b.params),
-          apply: `@${b.name}(`,
+          label: `${ns.name}.${member.name}`,
+          type: member.apply.includes("(") ? "method" : "property",
+          detail: ns.name,
+          info: member.info,
+          apply: autocomplete.snippet(`${ns.name}.${member.apply}`),
         });
       }
     }
 
-    // Components (with snippet-aware apply)
-    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
-      for (const c of langSpec.components) {
-        const snippet = langSpec.snippets.find((s) => s.name === c.name);
-        const apply = snippet
-          ? autocomplete.snippet(snippet.template)
-          : autocomplete.snippet(componentCallTemplate(c));
-        options.push({
-          label: c.name,
-          type: "class",
-          detail: c.group,
-          info: () => makeInfoPopup(c.signature, c.description, c.params),
-          apply,
-        });
-      }
-    }
-
-    // Built-in namespace globals (`storage`, `console`, `Math`, `JSON`,
-    // `Object`, `Array`) — the namespace itself plus its flat members.
-    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
-      for (const ns of GLOBAL_NAMESPACES) {
-        options.push({
-          label: ns.name,
-          type: "namespace",
-          detail: "global",
-          info: ns.description,
-          apply: `${ns.name}.`,
-        });
-        for (const member of ns.members) {
-          options.push({
-            label: `${ns.name}.${member.name}`,
-            type: member.apply.includes("(") ? "method" : "property",
-            detail: ns.name,
-            info: member.info,
-            apply: autocomplete.snippet(`${ns.name}.${member.apply}`),
-          });
-        }
-      }
-    }
-
-    // Callable globals & constructors (`Http`, the timer family,
+    // Callable globals & constructors (`$http`, the timer family,
     // `parseInt`, `Date`, `Map`, …).
-    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
-      for (const g of CALLABLE_GLOBALS) {
-        options.push({
-          label: g.label,
-          type: g.detail === "constructor" ? "class" : "function",
-          detail: g.detail,
-          info: g.info,
-          apply: g.snippet ? autocomplete.snippet(g.apply) : g.apply,
-        });
-      }
+    for (const g of CALLABLE_GLOBALS) {
+      if (!sigilOk(g.label)) continue;
+      options.push({
+        label: g.label,
+        type: g.detail === "constructor" ? "class" : "function",
+        detail: g.detail,
+        info: g.info,
+        apply: g.snippet ? autocomplete.snippet(g.apply) : g.apply,
+      });
     }
 
-    // Language keywords (`if`, `match`, `for`, `component`, …).
-    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
-      for (const kw of LANGUAGE_KEYWORDS) {
-        options.push({
-          label: kw.label,
-          type: "keyword",
-          detail: "keyword",
-          info: kw.info,
-        });
-      }
+    // Language keywords (`if`, `match`, `for`, `function`, …).
+    for (const kw of LANGUAGE_KEYWORDS) {
+      if (!sigilOk(kw.label)) continue;
+      options.push({
+        label: kw.label,
+        type: "keyword",
+        detail: "keyword",
+        info: kw.info,
+      });
     }
 
-    // Reserved identifiers (`aktion`, `Router`, `route`, `params`, …).
-    if (!wordText.startsWith("@")) {
-      for (const id of SPECIAL_IDENTIFIERS) {
-        if (wordText.startsWith("$") && !id.label.startsWith("$")) continue;
-        if (!wordText.startsWith("$") && id.label.startsWith("$") && wordText !== "") continue;
-        options.push({
-          label: id.label,
-          type: id.label.startsWith("$") ? "variable" : "constant",
-          detail: id.label.startsWith("_") ? "runtime" : "reactive",
-          info: id.info,
-          apply: id.snippet ? autocomplete.snippet(id.apply) : id.apply,
-        });
-      }
+    // Reserved identifiers & Aktion globals (`aktion`, `route`, `$router`,
+    // `$store`, `$effect`, `$emit`, `$theme`, `$i18n`, …).
+    for (const id of SPECIAL_IDENTIFIERS) {
+      if (!sigilOk(id.label)) continue;
+      options.push({
+        label: id.label,
+        type: id.label.startsWith("$") ? "variable" : "constant",
+        detail: id.label.startsWith("$") ? "global" : "reactive",
+        info: id.info,
+        apply: id.snippet ? autocomplete.snippet(id.apply) : id.apply,
+      });
     }
 
     // Multi-line snippets — language-level templates first, then the
-    // library's component-shaped snippets.
-    if (!wordText.startsWith("@") && !wordText.startsWith("$")) {
-      for (const s of LANGUAGE_SNIPPETS) {
-        options.push({
-          label: s.name + "…",
-          type: "snippet",
-          detail: "language",
-          info: s.description,
-          apply: autocomplete.snippet(s.template),
-        });
-      }
-      for (const s of langSpec.snippets) {
-        // Skip snippets that are already surfaced as `LANGUAGE_SNIPPETS`
-        // (router) — they share a name and the language version is more
-        // up-to-date.
-        if (LANGUAGE_SNIPPETS.some((ls) => ls.name === s.name.toLowerCase())) continue;
-        options.push({
-          label: s.name + "…",
-          type: "snippet",
-          detail: "snippet",
-          info: s.description,
-          apply: autocomplete.snippet(s.template),
-        });
-      }
+    // library's component-shaped snippets. Snippet names are bare.
+    for (const s of LANGUAGE_SNIPPETS) {
+      if (!sigilOk(s.name)) continue;
+      options.push({
+        label: s.name + "…",
+        type: "snippet",
+        detail: "language",
+        info: s.description,
+        apply: autocomplete.snippet(s.template),
+      });
+    }
+    for (const s of langSpec.snippets) {
+      if (!sigilOk(s.name)) continue;
+      // Skip snippets that are already surfaced as `LANGUAGE_SNIPPETS`
+      // (router) — they share a name and the language version is more
+      // up-to-date.
+      if (LANGUAGE_SNIPPETS.some((ls) => ls.name === s.name.toLowerCase())) continue;
+      options.push({
+        label: s.name + "…",
+        type: "snippet",
+        detail: "snippet",
+        info: s.description,
+        apply: autocomplete.snippet(s.template),
+      });
     }
 
     // $variables — scan the program for stateRefs declared elsewhere.
@@ -1715,23 +1810,32 @@ function initPlayground(cm) {
    * the user can tab through; for plain string / number params we just
    * leave the cursor after the colon. Boolean params get a `true` /
    * `false` template choice.
+   *
+   * `inObject` controls wrapping: inside an existing props object we emit
+   * the bare `name: value` pair; at a positional slot we wrap it in a fresh
+   * `{ … }` so the result is `Button("Save", { variant: "primary" })` rather
+   * than the invalid `Button("Save", variant: "primary")`.
    */
-  function applyNamedArg(param) {
+  function applyNamedArg(param, inObject = true) {
     const enumValues = param.enumValues ?? [];
+    let body;
     if (enumValues.length > 0) {
-      const choices = enumValues.map((v) => `"${v}"`).join("|");
-      return autocomplete.snippet(`${param.name}: \${1|${choices}|}`);
+      // CodeMirror 6 has no choice-field snippet syntax (`${1|a,b|}` is a
+      // VS Code-ism), so seed the FIRST allowed value as an overtypeable
+      // placeholder — `variant: "primary"`. The value-position completion
+      // and the status-bar enum picker offer the rest once the cursor lands
+      // in the slot.
+      body = `${param.name}: \${1:"${enumValues[0]}"}`;
+    } else if (param.type === "boolean") {
+      body = `${param.name}: \${1:true}`;
+    } else if (param.type === "string") {
+      body = `${param.name}: "\${1}"`;
+    } else if (param.type === "number") {
+      body = `${param.name}: \${1:0}`;
+    } else {
+      body = `${param.name}: \${1}`;
     }
-    if (param.type === "boolean") {
-      return autocomplete.snippet(`${param.name}: \${1|true,false|}`);
-    }
-    if (param.type === "string") {
-      return autocomplete.snippet(`${param.name}: "\${1}"`);
-    }
-    if (param.type === "number") {
-      return autocomplete.snippet(`${param.name}: \${1:0}`);
-    }
-    return autocomplete.snippet(`${param.name}: \${1}`);
+    return autocomplete.snippet(inObject ? body : `{ ${body} }`);
   }
 
   /**
@@ -1813,14 +1917,14 @@ function initPlayground(cm) {
   }
 
   /**
-   * Find every `$name` whose value comes from an `Http({...})` call
-   * (`$todos = Http(`, `$x = await Http(`). Those names carry the reactive
+   * Find every `$name` whose value comes from an `$http({...})` call
+   * (`$todos = $http(`, `$x = await $http(`). Those names carry the reactive
    * resource bag, so `$name.` should complete to `.data` / `.refetch()` /
    * `.onDone` / … rather than nothing.
    */
   function scanHttpResources(source) {
     const out = new Set();
-    const re = /\$([A-Za-z_][\w]*)\s*=\s*(?:await\s+)?Http\s*\(/g;
+    const re = /\$([A-Za-z_][\w]*)\s*=\s*(?:await\s+)?\$http\s*\(/g;
     let m;
     while ((m = re.exec(source))) out.add(m[1]);
     return out;
@@ -1841,7 +1945,7 @@ function initPlayground(cm) {
    * Resolve member completions for a `receiver.` position. Handles the JS
    * namespace globals (and their nested sub-namespaces like
    * `storage.local`), the reserved `route` handle, and any `$variable`
-   * assigned from `Http({...})` (→ the reactive resource bag). Returns
+   * assigned from `$http({...})` (→ the reactive resource bag). Returns
    * `null` when the receiver isn't a known object so general completions
    * can take over.
    */
@@ -1873,20 +1977,114 @@ function initPlayground(cm) {
   // ---- Spec lookup (hover & signature tooltips share this) ----
   function resolveSpec(rawName) {
     if (!rawName) return null;
-    if (rawName.startsWith("@")) {
-      const builtin = langSpec.builtinsByName[rawName.slice(1)];
-      return builtin ? { kind: "builtin", spec: builtin } : null;
-    }
+    // `$http(...)` carries a synthetic param spec (`url`, `method`, …) so
+    // signature help + hover light up inside the config object. Kind
+    // "component" keeps the `$http` name un-prefixed in the tooltip.
+    if (rawName === "$http") return { kind: "component", spec: HTTP_CONFIG_SPEC };
     const component = langSpec.componentsByName[rawName];
     if (component) return { kind: "component", spec: component };
     return null;
   }
 
   /**
+   * Resolve a runtime global / reserved identifier (namespace, callable, or
+   * special binding) to a small doc record for the hover popup. Covers the
+   * Aktion globals (`$util`, `$console`, `$storage`, `$router`, `$store`,
+   * `$effect`, `$emit`, `$theme`, `$i18n`, `route`, `params`, `aktion`) and
+   * the curated JS surface (`Math`, `setTimeout`, `Date`, …). Returns `null`
+   * when the name isn't a known global so the caller can fall through.
+   */
+  function resolveGlobalDoc(rawName) {
+    if (!rawName) return null;
+    const ns = GLOBAL_NAMESPACES.find((n) => n.name === rawName);
+    if (ns) {
+      return {
+        name: ns.name,
+        signature: ns.signature,
+        description: ns.description,
+        kind: "namespace",
+        members: ns.members,
+      };
+    }
+    const callable = CALLABLE_GLOBALS.find((g) => g.label === rawName);
+    if (callable) {
+      return { name: callable.label, description: callable.info, kind: callable.detail };
+    }
+    const ident = SPECIAL_IDENTIFIERS.find((s) => s.label === rawName);
+    if (ident) {
+      return {
+        name: ident.label,
+        description: ident.info,
+        kind: ident.label.startsWith("$") ? "global" : "reserved",
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Build the hover-popup DOM for a runtime global — header + optional
+   * signature + description, plus a member-chip preview for namespaces.
+   * Reuses the shared `.pg-cm-*` tooltip styling.
+   */
+  function buildGlobalTooltipDom(doc) {
+    const wrap = document.createElement("div");
+    const header = document.createElement("h4");
+    const icon = document.createElement("i");
+    icon.className = doc.kind === "namespace"
+      ? "fa-solid fa-cubes"
+      : (doc.kind === "constructor" || doc.kind === "class")
+        ? "fa-solid fa-cube"
+        : "fa-solid fa-bolt";
+    header.append(icon, document.createTextNode(` ${doc.name}`));
+    if (doc.kind) {
+      const tag = document.createElement("span");
+      tag.className = "pg-cm-group";
+      tag.textContent = doc.kind;
+      header.append(tag);
+    }
+    wrap.append(header);
+    if (doc.signature) {
+      const sig = document.createElement("code");
+      sig.className = "pg-cm-sig";
+      sig.textContent = doc.signature;
+      wrap.append(sig);
+    }
+    if (doc.description) {
+      const p = document.createElement("p");
+      p.className = "pg-cm-desc";
+      p.textContent = doc.description;
+      wrap.append(p);
+    }
+    if (doc.members && doc.members.length > 0) {
+      const lbl = document.createElement("div");
+      lbl.className = "pg-cm-section";
+      lbl.textContent = "Members";
+      wrap.append(lbl);
+      const list = document.createElement("div");
+      list.className = "pg-cm-enum-list";
+      const shown = doc.members.slice(0, 16);
+      for (const m of shown) {
+        const chip = document.createElement("span");
+        chip.className = "pg-cm-enum";
+        chip.textContent = m.name;
+        list.append(chip);
+      }
+      if (doc.members.length > shown.length) {
+        const more = document.createElement("span");
+        more.className = "pg-cm-enum";
+        more.textContent = `+${doc.members.length - shown.length} more`;
+        list.append(more);
+      }
+      wrap.append(list);
+    }
+    return wrap;
+  }
+
+  /**
    * Return the source index of the innermost object-literal `{` that
    * encloses `pos` within the call's parentheses, or `null` when the cursor
    * isn't inside a `{ }`. Used so named-arg completion fires relative to a
-   * trailing props object (`Button("Save", { … })`, `Http({ … })`) rather
+   * trailing props object (`Button("Save", { … })`, `$http({ … })`) rather
    * than the call's bare `(`. String / comment aware.
    */
   function enclosingObjectOpen(text, call, pos) {
@@ -2252,11 +2450,13 @@ function initPlayground(cm) {
     const word = cmView.state.wordAt(pos);
     if (!word) return null;
     const prev = word.from > 0 ? text[word.from - 1] : "";
-    const fromIdx = prev === "@" ? word.from - 1 : word.from;
+    // Pull the sigil into the name so `$util` / `$router` / `$http` resolve
+    // as globals (CodeMirror's `wordAt` stops at the `$`).
+    const fromIdx = (prev === "@" || prev === "$") ? word.from - 1 : word.from;
     const rawName = text.slice(fromIdx, word.to);
 
     // Reserved-keyword popup: definition + syntax + example. Only when the
-    // hovered word isn't sigil-prefixed (`@builtin` / `$state` are handled
+    // hovered word isn't sigil-prefixed (`$state` / `$global` are handled
     // elsewhere) and is a known keyword.
     if (prev !== "@" && prev !== "$" && KEYWORD_DOCS[rawName]) {
       const kwDoc = KEYWORD_DOCS[rawName];
@@ -2288,7 +2488,24 @@ function initPlayground(cm) {
       };
     }
 
-    // Not a component/builtin — fall back to "is this a named-arg key of
+    // Runtime globals — `$util`, `$console`, `$storage`, `$router`, `$store`,
+    // `route`, `setTimeout`, `Math`, … — show their signature + description.
+    const globalDoc = resolveGlobalDoc(rawName);
+    if (globalDoc) {
+      return {
+        pos: fromIdx,
+        end: word.to,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "pg-cm-tooltip";
+          dom.append(buildGlobalTooltipDom(globalDoc));
+          return { dom };
+        },
+      };
+    }
+
+    // Not a component/global — fall back to "is this a named-arg key of
     // the enclosing call?". Lets users hover over `variant`, `tone`,
     // `icon`, etc. in `Button("Save", variant: "primary")` and see the
     // exact parameter spec (type, description, allowed values).

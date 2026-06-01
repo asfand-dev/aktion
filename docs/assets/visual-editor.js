@@ -1161,7 +1161,7 @@ function objectToSource(properties, depth) {
 
 /**
  * Object literal keys must be either a valid identifier, the reserved
- * `default` keyword (for Router arms), or a quoted string. Anything with
+ * `default` keyword (for $router arms), or a quoted string. Anything with
  * special characters (slashes, colons, dashes…) needs quotes.
  */
 const VALID_IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -2485,7 +2485,7 @@ const SCHEMATICS = {
     <rect x="58" y="22" width="22" height="10" rx="5" fill="${COLOR.fill}"/>`,
 
   // ---- Routing & shells ----
-  Router: `
+  $router: `
     <rect x="6" y="14" width="20" height="6" rx="2" fill="${COLOR.primary}"/>
     <rect x="6" y="24" width="20" height="6" rx="2" fill="${COLOR.fill}"/>
     <rect x="6" y="34" width="20" height="6" rx="2" fill="${COLOR.fill}"/>
@@ -2513,7 +2513,7 @@ const CATEGORY_FALLBACK = {
   "Advanced UI":    "Theme",
   Helpers:          "Spacer",
   Theming:          "Theme",
-  Routing:          "Router",
+  Routing:          "$router",
   "Escape hatches": "Code",
   Other:            "Card",
 };

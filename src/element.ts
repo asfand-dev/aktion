@@ -39,6 +39,8 @@ import {
   createContext,
   disposeContext,
   planProgram,
+  clearInstanceHooks,
+  pathsOverlap,
   resetMutableBindings,
   isThemeNode,
   resetRuntimeBudget,
@@ -220,6 +222,29 @@ export class AktionElement extends HTMLElement {
   private renderScheduled = false;
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
+  /**
+   * Set of state paths the most recent render actually read (e.g. `"user.name"`,
+   * `"cart"`). The state subscription uses it to gate re-renders: a reactive
+   * write only re-renders when its changed path overlaps something the UI
+   * read (fine-grained reactivity). `null` means "no baseline yet" — the next
+   * change always renders (first paint, post-replan). Explicit `notify()`
+   * signals (async/HTTP/timers/effects/hooks) bypass this gate entirely.
+   */
+  private lastRenderDeps: ReadonlySet<string> | null = null;
+  /**
+   * Reactive paths changed since the last render, accumulated across flushes
+   * (and across gated renders). Drives per-component memoization: the renderer
+   * skips a component whose args are unchanged and whose read-paths don't
+   * overlap this set.
+   */
+  private pendingChangedPaths = new Set<string>();
+  /**
+   * Set when a re-render was requested via `notify()` (async resolution,
+   * timer, HTTP, hook, effect) rather than a tracked `$state` write. The
+   * change set isn't fully known in that case, so the next render disables
+   * memoization and re-renders everything.
+   */
+  private forceFullRender = false;
   private parseErrors: string[] = [];
   /**
    * Token keys most recently applied by an in-script `Theme({...})`
@@ -267,12 +292,12 @@ export class AktionElement extends HTMLElement {
 
     this.effectRunner = new EffectRunner({
       state: this.state,
-      notify: () => this.scheduleRender(),
+      notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
     this.actionDeclRunner = new ActionDeclRunner({
       state: this.state,
-      notify: () => this.scheduleRender(),
+      notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onAssistantMessage: dispatchAssistantMessage,
     });
@@ -282,7 +307,7 @@ export class AktionElement extends HTMLElement {
       library: this.library,
       http: this.http,
       actionRunner: this.actionDeclRunner,
-      notify: () => this.scheduleRender(),
+      notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
     this.renderer = new Renderer({
@@ -305,9 +330,28 @@ export class AktionElement extends HTMLElement {
         this.effectRunner.syncInstanceEffects(instanceKey, decls, getCtx),
       unmountInstanceEffects: (instanceKey) =>
         this.effectRunner.unmountInstance(instanceKey),
+      // Reset a component's `$state` / `$memo` cells when it leaves the tree
+      // (React-like reset-on-unmount). The context is rebuilt on replan, so
+      // the getter always reaches the live hook store.
+      unmountInstanceHooks: (instanceKey) =>
+        clearInstanceHooks(this.context, instanceKey),
     });
 
-    this.state.subscribe(() => this.scheduleRender());
+    this.state.subscribe((changedPaths) => {
+      // Accumulate every changed path (even when the gate skips this render)
+      // so the NEXT render sees the full change set — that keeps per-component
+      // memoization correct across gated renders.
+      for (const p of changedPaths) this.pendingChangedPaths.add(p);
+      // Fine-grained render gate: re-render only when a changed reactive path
+      // overlaps what the last render actually read. Until a baseline exists
+      // (first paint / post-replan) always render. This is the payoff of
+      // path-level tracking — writing `$user.role` no longer re-renders a UI
+      // that only reads `$user.name`. Explicit `notify()` callbacks (async
+      // resolutions, timers, effects, hooks) force a full render instead.
+      if (this.lastRenderDeps === null || pathsOverlap(changedPaths, this.lastRenderDeps)) {
+        this.scheduleRender();
+      }
+    });
     this.router.subscribe((detail) => this.handleRouteChange(detail));
   }
 
@@ -652,6 +696,16 @@ export class AktionElement extends HTMLElement {
     queueMicrotask(() => this.renderNow());
   }
 
+  /**
+   * Request a full (non-memoized) re-render. Used for changes the path
+   * tracker can't see — async / HTTP resolutions, timers, hook setters,
+   * effect bodies, custom events. The whole tree re-evaluates next tick.
+   */
+  private requestFullRender(): void {
+    this.forceFullRender = true;
+    this.scheduleRender();
+  }
+
   private renderNow(): void {
     this.renderScheduled = false;
     if (!this.isConnected) return;
@@ -674,58 +728,111 @@ export class AktionElement extends HTMLElement {
     // could otherwise freeze the whole browser.
     if (this.context.budget) resetRuntimeBudget(this.context.budget);
 
-    // Apply any in-script `Theme({...})` declaration before render so the
-    // tokens are in place when components measure themselves or read CSS
-    // custom properties (charts that grab `--rui-chart-1`, etc.).
-    this.applyScriptThemeOverrides();
+    // Scope a fresh dependency tracker to this render so we learn exactly
+    // which state paths the UI read — that read-set becomes the gate that
+    // decides whether a future reactive write needs a re-render. Restored in
+    // `finally` so an abort can't leak the tracker into the next pass.
+    const renderTracker = new Set<string>();
+    const prevTracker = this.context.trackedState;
+    this.context.trackedState = renderTracker;
+    let renderCompleted = false;
+    // Open the render guard: any `$state` write that happens while we evaluate
+    // the tree (the "set state during render" anti-pattern — e.g. `$user = {…}`
+    // at the top of a function used in render position) updates the value but
+    // does NOT schedule a re-render, so it can't loop forever.
+    this.state.beginRenderPass();
+    try {
+      // Apply any in-script `Theme({...})` declaration before render so the
+      // tokens are in place when components measure themselves or read CSS
+      // custom properties (charts that grab `--rui-chart-1`, etc.).
+      this.applyScriptThemeOverrides();
 
-    // Drop the previous render's mutable-binding cache so top-level
-    // `let`/`var`/plain variables re-seed from their initialisers this
-    // render (keeping derived values reactive) while staying stable
-    // within the render (so `.push` / `[...x, y]` mutations behave like
-    // ordinary JS module variables instead of leaking across renders).
-    resetMutableBindings(this.context);
+      // Drop the previous render's mutable-binding cache so top-level
+      // `let`/`var`/plain variables re-seed from their initialisers this
+      // render (keeping derived values reactive) while staying stable
+      // within the render (so `.push` / `[...x, y]` mutations behave like
+      // ordinary JS module variables instead of leaking across renders).
+      resetMutableBindings(this.context);
 
-    // The program's entry-point binding is `aktion`.
-    const appBinding = this.context.bindings.get("aktion");
-    let rootValue: unknown = null;
-    if (appBinding) {
+      // The program's entry-point binding is `aktion`.
+      const appBinding = this.context.bindings.get("aktion");
+      let rootValue: unknown = null;
+      if (appBinding) {
+        try {
+          rootValue = appBinding();
+        } catch (err) {
+          if (err instanceof RuntimeBudgetError) {
+            this.handleRuntimeBudgetError(err);
+            return;
+          }
+          // eslint-disable-next-line no-console
+          console.error("[aktion] entry point evaluation error", err);
+        }
+      }
+
+      // Snapshot the accumulated change set for this render and decide whether
+      // per-component memoization may apply. Memoization is safe only when the
+      // change set is fully known: not on first paint / post-replan (no
+      // baseline yet) and not when a `notify()` forced this render (the change
+      // isn't a tracked path). In those cases every component re-renders.
+      const changedPaths = this.pendingChangedPaths;
+      this.pendingChangedPaths = new Set<string>();
+      const memoize = !this.forceFullRender && this.lastRenderDeps !== null;
+      this.forceFullRender = false;
+
+      // Each tick we re-evaluate the entire tree, but instead of throwing the
+      // live DOM away (`replaceChildren`) we hand the freshly-rendered tree
+      // to a small reconciler that diffs against the existing DOM. That keeps
+      // form inputs, scroll positions, <details>.open, and any other browser-
+      // owned state stable across renders — typing into one input no longer
+      // resets the active tab three components over. The focus snapshot is
+      // still useful as a defensive backstop for the rare case where a node's
+      // identity actually changes (different tag, replaced subtree).
+      this.renderer.beginRender({ changedPaths, memoize });
+      const focusSnapshot = this.captureFocus();
+      let rendered: Node;
       try {
-        rootValue = appBinding();
+        rendered = this.renderer.render(rootValue);
       } catch (err) {
+        this.renderer.endRender();
         if (err instanceof RuntimeBudgetError) {
           this.handleRuntimeBudgetError(err);
           return;
         }
-        // eslint-disable-next-line no-console
-        console.error("[aktion] entry point evaluation error", err);
+        throw err;
       }
-    }
-
-    // Each tick we re-evaluate the entire tree, but instead of throwing the
-    // live DOM away (`replaceChildren`) we hand the freshly-rendered tree
-    // to a small reconciler that diffs against the existing DOM. That keeps
-    // form inputs, scroll positions, <details>.open, and any other browser-
-    // owned state stable across renders — typing into one input no longer
-    // resets the active tab three components over. The focus snapshot is
-    // still useful as a defensive backstop for the rare case where a node's
-    // identity actually changes (different tag, replaced subtree).
-    this.renderer.beginRender();
-    const focusSnapshot = this.captureFocus();
-    let rendered: Node;
-    try {
-      rendered = this.renderer.render(rootValue);
-    } catch (err) {
+      morphChildren(this.rootEl, rendered);
       this.renderer.endRender();
-      if (err instanceof RuntimeBudgetError) {
-        this.handleRuntimeBudgetError(err);
-        return;
-      }
-      throw err;
+      this.restoreFocus(focusSnapshot);
+      renderCompleted = true;
+    } finally {
+      this.context.trackedState = prevTracker;
+      // A completed render's read-set becomes the new gating baseline. If the
+      // render aborted (budget error / throw) we drop the baseline so the
+      // next change force-renders rather than being wrongly skipped.
+      this.lastRenderDeps = renderCompleted ? renderTracker : null;
+      // Close the render guard. If a reactive write was suppressed, surface the
+      // anti-pattern once so the author can move state seeding out of render.
+      if (this.state.endRenderPass()) this.warnStateWriteDuringRender();
     }
-    morphChildren(this.rootEl, rendered);
-    this.renderer.endRender();
-    this.restoreFocus(focusSnapshot);
+  }
+
+  /** Whether the "state write during render" warning has already fired. */
+  private warnedStateWriteDuringRender = false;
+  private warnStateWriteDuringRender(): void {
+    if (this.warnedStateWriteDuringRender) return;
+    this.warnedStateWriteDuringRender = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[aktion] A reactive `$state` write happened during render and was applied " +
+        "WITHOUT scheduling a re-render, to prevent an infinite render loop. This " +
+        "usually means a `$name = …` assignment is running in render position — e.g. " +
+        "`$user = {…}` at the top of a lowercase `function` that's invoked to build " +
+        "the UI (`aktion = app()`), where the function runs as an action and re-writes " +
+        "the atom every render. Seed component-local state with a PascalCase component " +
+        "(so `$name = …` becomes a set-once per-instance declaration) or the `$state` " +
+        "hook, and only write state from event handlers / effects.",
+    );
   }
 
   /**
@@ -794,6 +901,11 @@ export class AktionElement extends HTMLElement {
 
   private replan(): void {
     this.effectRunner.reset();
+    // A new program has a brand-new dependency surface — drop the render-gate
+    // baseline so the first render of the new program always runs and
+    // re-establishes it. Re-arm the render-write warning for the new program.
+    this.lastRenderDeps = null;
+    this.warnedStateWriteDuringRender = false;
     // Drop any state-store subscribers / cleanup callbacks the previous
     // context attached (computed-state derivations, …) so they don't
     // accumulate across replans.
@@ -803,7 +915,7 @@ export class AktionElement extends HTMLElement {
       library: this.library,
       http: this.http,
       actionRunner: this.actionDeclRunner,
-      notify: () => this.scheduleRender(),
+      notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
 

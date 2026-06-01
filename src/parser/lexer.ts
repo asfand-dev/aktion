@@ -31,7 +31,8 @@ export type TokenType =
  */
 export const KEYWORDS_AKTION = new Set([
   "function",
-  "effect",
+  // NOTE: `$effect` (the side-effect builtin) is `$`-prefixed, so it lexes as
+  // a StateIdentifier and is recognised in the parser — it is NOT a keyword.
   "if",
   "else",
   "switch",
@@ -322,13 +323,13 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Legacy `Util.name(...)` builtin sigil — removed. Surface a clear
+    // Legacy `@name(...)` builtin sigil — removed. Surface a clear
     // error so authors get a single squiggle pointing at the migration
     // site rather than a cascade of confused parse errors.
     if (ch === "@") {
       const err = new Error(
-        'Legacy `Util.name(...)` builtins are removed. Use `Util.<name>(...)` ' +
-        'or the equivalent native JavaScript instead (e.g. `arr.length` for `Util.count(arr)`).',
+        'Legacy `@name(...)` builtins are removed. Use `$util.<name>(...)` ' +
+        'or the equivalent native JavaScript instead (e.g. `arr.length` for `$util.count(arr)`).',
       ) as Error & { line?: number; column?: number };
       err.line = line;
       err.column = column;

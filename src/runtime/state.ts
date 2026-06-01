@@ -9,7 +9,61 @@
 
 export type StateValue = unknown;
 
-export type Subscriber = (changedNames: ReadonlySet<string>) => void;
+/**
+ * Subscribers receive the set of **changed paths** since the last flush, not
+ * just atom names. A whole-atom write (`set("user", …)`) reports the root
+ * path `"user"`; a nested write (`setPath("user", ["name"], …)`) reports the
+ * precise path `"user.name"`. Consumers decide whether a change is relevant
+ * to them with `pathAffects` / `anyPathAffects` (the prefix-overlap rule),
+ * which is what gives Aktion fine-grained reactivity: a dependency on
+ * `user.name` ignores a `user.role` write but still wakes for a `user`
+ * (ancestor) replacement.
+ */
+export type Subscriber = (changedPaths: ReadonlySet<string>) => void;
+
+/**
+ * Join an atom name and a nested path into the canonical dotted dependency
+ * key (`"user"`, `"user.name"`, `"cart.items.0.qty"`).
+ */
+export function joinStatePath(rootName: string, path: ReadonlyArray<string>): string {
+  return path.length === 0 ? rootName : `${rootName}.${path.join(".")}`;
+}
+
+/**
+ * The core fine-grained-reactivity predicate: does a change to path
+ * `changed` affect a dependency on path `dep`?
+ *
+ * True when the two paths lie on the same root-to-leaf line — i.e. they are
+ * equal, `changed` is an ancestor of `dep` (the whole subtree the dep lives
+ * in was replaced), or `dep` is an ancestor of `changed` (a field inside the
+ * value the dep reads changed). Sibling paths (`user.name` vs `user.role`)
+ * never affect each other. Boundaries are matched at dot separators so
+ * `user` does not spuriously match `username`.
+ */
+export function pathAffects(changed: string, dep: string): boolean {
+  if (changed === dep) return true;
+  if (dep.startsWith(changed + ".")) return true; // an ancestor of the dep changed
+  if (changed.startsWith(dep + ".")) return true; // a descendant of the dep changed
+  return false;
+}
+
+/** True when any path in `changed` affects the single dependency `dep`. */
+export function anyPathAffects(changed: ReadonlySet<string>, dep: string): boolean {
+  // Fast path: an exact hit is the common case (`$count` ↔ `count`).
+  if (changed.has(dep)) return true;
+  for (const c of changed) {
+    if (pathAffects(c, dep)) return true;
+  }
+  return false;
+}
+
+/** True when any path in `changed` affects any dependency in `deps`. */
+export function pathsOverlap(changed: ReadonlySet<string>, deps: Iterable<string>): boolean {
+  for (const dep of deps) {
+    if (anyPathAffects(changed, dep)) return true;
+  }
+  return false;
+}
 
 export class StateStore {
   private values = new Map<string, StateValue>();
@@ -17,6 +71,17 @@ export class StateStore {
   private subscribers = new Set<Subscriber>();
   private pendingChanges = new Set<string>();
   private flushScheduled = false;
+  /**
+   * True while the host is evaluating a render. Writes that land in this
+   * window still update the value, but are NOT broadcast as changes — so a
+   * `$x = …` assignment running in render position can't schedule a re-render
+   * that re-runs the same write and loops forever. Writing reactive state
+   * during render is an anti-pattern (React/Vue/Solid all guard against it);
+   * we degrade gracefully instead of freezing the tab.
+   */
+  private rendering = false;
+  /** Set when a write was suppressed during the render pass (for diagnostics). */
+  private renderWriteOccurred = false;
 
   declare(name: string, defaultValue: StateValue): void {
     this.defaults.set(name, defaultValue);
@@ -36,8 +101,53 @@ export class StateStore {
   set(name: string, value: StateValue): void {
     if (this.values.get(name) === value) return;
     this.values.set(name, value);
-    this.pendingChanges.add(name);
+    this.enqueueChange(name);
+  }
+
+  /**
+   * Record a changed path and schedule a flush — unless a render is in
+   * progress, in which case the value is kept but no notification fires.
+   * This is the loop-breaker for state writes during render.
+   */
+  private enqueueChange(path: string): void {
+    if (this.rendering) {
+      this.renderWriteOccurred = true;
+      return;
+    }
+    this.pendingChanges.add(path);
     this.scheduleFlush();
+  }
+
+  /**
+   * Open a render guard. Writes between this and `endRenderPass` update
+   * values without scheduling re-renders. Returns nothing; pair with
+   * `endRenderPass` in a `finally`.
+   */
+  beginRenderPass(): void {
+    this.rendering = true;
+    this.renderWriteOccurred = false;
+  }
+
+  /**
+   * Whether a render is currently in progress. Used by the evaluator to give
+   * a function body's top-level `$x = expr` *set-once* (declaration)
+   * semantics while rendering — so a function used to build the UI seeds its
+   * state once and preserves later mutations, regardless of name case.
+   */
+  isRendering(): boolean {
+    return this.rendering;
+  }
+
+  /**
+   * Close the render guard. Returns `true` when at least one write was
+   * suppressed during the pass, so the host can surface a one-time warning
+   * pointing at the "state write during render" anti-pattern.
+   */
+  endRenderPass(): boolean {
+    this.rendering = false;
+    const occurred = this.renderWriteOccurred;
+    this.renderWriteOccurred = false;
+    return occurred;
   }
 
   /**
@@ -59,7 +169,14 @@ export class StateStore {
     }
     const current = this.values.get(rootName);
     const nextRoot = updateAtPath(current, path, 0, value);
-    this.set(rootName, nextRoot);
+    // Write the new root reference, but notify with the *precise* path
+    // (`user.name`) rather than the bare atom (`user`). Subscribers that only
+    // depend on a sibling field (`user.role`) are left untouched — this is
+    // the write half of fine-grained reactivity. Reads of the whole atom or
+    // an ancestor still wake up via `pathAffects` (the changed path is a
+    // descendant of their dependency).
+    this.values.set(rootName, nextRoot);
+    this.enqueueChange(joinStatePath(rootName, path));
   }
 
   /** Iterate over every (name, value) pair. Order is insertion order. */
@@ -91,7 +208,6 @@ export class StateStore {
   }
 
   reset(...names: string[]): void {
-    let dirty = false;
     for (const name of names) {
       // Reset is a no-op for names that were never declared — keeps the
       // store free of `undefined` sentinels when the LLM types
@@ -100,21 +216,16 @@ export class StateStore {
       const fallback = this.defaults.get(name);
       if (this.values.get(name) === fallback) continue;
       this.values.set(name, fallback);
-      this.pendingChanges.add(name);
-      dirty = true;
+      this.enqueueChange(name);
     }
-    if (dirty) this.scheduleFlush();
   }
 
   resetAll(): void {
-    let dirty = false;
     for (const [name, value] of this.defaults.entries()) {
       if (this.values.get(name) === value) continue;
       this.values.set(name, value);
-      this.pendingChanges.add(name);
-      dirty = true;
+      this.enqueueChange(name);
     }
-    if (dirty) this.scheduleFlush();
   }
 
   /**

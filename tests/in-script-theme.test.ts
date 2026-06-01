@@ -26,7 +26,7 @@ type ScriptedEl = HTMLElement & {
   setTheme(theme: string | Partial<ThemeTokens>): void;
 };
 
-describe("Theme({...}) language construct", () => {
+describe("$theme({...}) language construct", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
@@ -39,7 +39,7 @@ describe("Theme({...}) language construct", () => {
 
   it("writes token overrides as CSS custom properties on the host", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({
+    el.setResponse(`theme = $theme({
   colors: { primary: "#0969da" },
   radius: { button: "6px" },
   font:   { family: "-apple-system, sans-serif" }
@@ -57,7 +57,7 @@ aktion = Card([CardHeader("Hello")])`);
   it("layers on top of the base theme; untouched tokens keep base values", async () => {
     const el = create();
     el.setAttribute("theme", "dark");
-    el.setResponse(`theme = Theme({colors: { primary: "#ff5722" }})
+    el.setResponse(`theme = $theme({colors: { primary: "#ff5722" }})
 aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
@@ -66,9 +66,9 @@ aktion = Card([CardHeader("Hello")])`);
     expect(el.style.getPropertyValue("--rui-color-bg")).toBe("#0b1220");
   });
 
-  it("clears stale script tokens when Theme({...}) is removed from the program", async () => {
+  it("clears stale script tokens when $theme({...}) is removed from the program", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }})
+    el.setResponse(`theme = $theme({colors: { primary: "#16a34a" }})
 aktion = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
@@ -82,15 +82,15 @@ aktion = Card([CardHeader("v1")])`);
     );
   });
 
-  it("replaces previous script tokens when Theme({...}) changes between renders", async () => {
+  it("replaces previous script tokens when $theme({...}) changes between renders", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colors: { primary: "#16a34a" }, radius: { button: "12px" }})
+    el.setResponse(`theme = $theme({colors: { primary: "#16a34a" }, radius: { button: "12px" }})
 aktion = Card([CardHeader("v1")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#16a34a");
     expect(el.style.getPropertyValue("--rui-radius-button")).toBe("12px");
 
-    el.setResponse(`theme = Theme({colors: { primary: "#0070f3" }})
+    el.setResponse(`theme = $theme({colors: { primary: "#0070f3" }})
 aktion = Card([CardHeader("v2")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
@@ -101,7 +101,7 @@ aktion = Card([CardHeader("v2")])`);
 
   it("ignores unknown token keys silently", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({
+    el.setResponse(`theme = $theme({
   colors: { primary: "#7928ca", notARealToken: "should be ignored" }
 })
 aktion = Card([CardHeader("Hello")])`);
@@ -122,9 +122,9 @@ aktion = Card([CardHeader("Hello")])`);
     );
   });
 
-  it("Theme({...}) overrides survive host-level setTheme() updates", async () => {
+  it("$theme({...}) overrides survive host-level setTheme() updates", async () => {
     const el = create();
-    el.setResponse(`theme = Theme({colors: { primary: "#0969da" }})
+    el.setResponse(`theme = $theme({colors: { primary: "#0969da" }})
 aktion = Card([CardHeader("Hello")])`);
     for (let i = 0; i < 4; i += 1) await flush();
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#0969da");
@@ -145,7 +145,7 @@ aktion = Card([CardHeader("Hello")])`);
       "../src/index.js"
     );
     const program = parse(
-      `theme = Theme({colorPrimary: "#0969da", radiusMd: "8px"})`,
+      `theme = $theme({colorPrimary: "#0969da", radiusMd: "8px"})`,
     );
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings.length).toBeGreaterThanOrEqual(2);
@@ -161,14 +161,14 @@ aktion = Card([CardHeader("Hello")])`);
     const { parse, validateProgramSchema, defaultLibrary } = await import(
       "../src/index.js"
     );
-    const program = parse(`theme = Theme({"--rui-color-x": "#abc"})`);
+    const program = parse(`theme = $theme({"--rui-color-x": "#abc"})`);
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings.length).toBeGreaterThanOrEqual(1);
     expect(warnings[0]?.message).toMatch(/free-form CSS variable keys/i);
   });
 });
 
-describe("theme utilities (used by Theme({...}))", () => {
+describe("theme utilities (used by $theme({...}))", () => {
   it("applyPartialTheme writes only the requested keys and returns them", () => {
     const host = document.createElement("div");
     const keys = applyPartialTheme(host, {

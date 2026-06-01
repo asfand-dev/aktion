@@ -164,11 +164,11 @@ describe("Components and per-instance state", () => {
     expect(state.get(aliasKey!)).toBe(false);
   });
 
-  it("evaluates non-literal initializers (`$now = Util.now()`) on the first render of a component instance", () => {
+  it("evaluates non-literal initializers (`$now = $util.now()`) on the first render of a component instance", () => {
     const { state, render } = harness(`
       aktion = Clock()
       function Clock() {
-        $tick = Util.now()
+        $tick = $util.now()
         return Text(\`\${$tick}\`)
       }
     `);
@@ -302,9 +302,9 @@ describe("Expression control flow (strict JS subset)", () => {
 });
 
 describe("Router calls", () => {
-  it("`pages = Router({ p: C })` registers and matches paths", () => {
+  it("`pages = $router({ p: C })` registers and matches paths", () => {
     const { ctx, router } = harness(`
-      pages = Router({
+      pages = $router({
         "/":      Text("home"),
         "/about": Text("about")
       })
@@ -318,7 +318,7 @@ describe("Router calls", () => {
 
   it("falls back to the `default` arm when no path matches", () => {
     const { render, router } = harness(`
-      pages = Router({
+      pages = $router({
         "/":     Text("home"),
         default: Text("missing")
       })
@@ -330,7 +330,7 @@ describe("Router calls", () => {
 
   it("exposes `params` inside an arm body for `:id` segments", () => {
     const { ctx, router } = harness(`
-      pages = Router({
+      pages = $router({
         "/users/:id": Text(\`User \${params.id}\`),
         default:      Text("missing")
       })
@@ -344,7 +344,7 @@ describe("Router calls", () => {
 
   it("exposes `params._` for trailing wildcards", () => {
     const { ctx, router } = harness(`
-      pages = Router({
+      pages = $router({
         "/docs/*": Text(\`Docs · \${params._}\`),
         default:   Text("home")
       })
@@ -360,7 +360,7 @@ describe("Router calls", () => {
 
   it("renders `null` when nothing matches and no default is provided", () => {
     const { ctx, router } = harness(`
-      pages = Router({
+      pages = $router({
         "/": Text("home")
       })
       aktion = pages
@@ -466,9 +466,9 @@ describe("Action declarations", () => {
 });
 
 describe("Effect declarations", () => {
-  it("`effect(() => { … }, [\"mount\"])` parses", () => {
+  it("`$effect(() => { … }, [\"mount\"])` parses", () => {
     const { ctx, program } = harness(`
-      effect(() => {
+      $effect(() => {
         $visits = 0
       }, ["mount"])
       aktion = Text("hi")
@@ -477,9 +477,9 @@ describe("Effect declarations", () => {
     expect(ctx.effectDecls.size).toBe(1);
   });
 
-  it("`effect(() => { … })` (no deps) is equivalent to mount-once", () => {
+  it("`$effect(() => { … })` (no deps) is equivalent to mount-once", () => {
     const { ctx, program } = harness(`
-      effect(() => {
+      $effect(() => {
         $visits = 0
       })
       aktion = Text("hi")
@@ -488,10 +488,10 @@ describe("Effect declarations", () => {
     expect(ctx.effectDecls.size).toBe(1);
   });
 
-  it("`effect(() => { … }, [$dep, \"debounce(N)\"])` mixes state triggers and rate limits", () => {
+  it("`$effect(() => { … }, [$dep, \"debounce(N)\"])` mixes state triggers and rate limits", () => {
     const { ctx, program } = harness(`
       $count = 0
-      effect(() => {
+      $effect(() => {
         $logged = $count
       }, [$count, "debounce(250)"])
       aktion = Text("hi")
@@ -504,10 +504,10 @@ describe("Effect declarations", () => {
   });
 });
 
-describe("emit() custom events", () => {
-  it("`emit(\"name\", { detail })` parses without errors", () => {
+describe("$emit() custom events", () => {
+  it("`$emit(\"name\", { detail })` parses without errors", () => {
     const { program } = harness(`
-      function notify() { emit("ping", { ok: true }) }
+      function notify() { $emit("ping", { ok: true }) }
       aktion = Button("notify", { onClick: notify })
     `);
     expect(program.errors).toEqual([]);

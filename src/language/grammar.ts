@@ -64,15 +64,16 @@ export const grammarSpec: GrammarSpec = {
   name: "aktion",
   atoms: ["true", "false", "null", "undefined"],
   // Full reserved-word set, kept in sync with `KEYWORDS_AKTION` in
-  // `src/parser/lexer.ts` plus the reserved top-level handles
-  // (`aktion`, `route`) and `emit`. Every entry is documented in
-  // `keywordDocs` so the playground can show an explanation popup.
+  // `src/parser/lexer.ts` plus the reserved top-level handle `aktion` and the
+  // router handle `route`. Aktion's `$`-prefixed builtins (`$effect`, `$emit`,
+  // …) lex as StateIdentifiers, so they are not in this keyword list. Every
+  // entry is documented in `keywordDocs` so the playground can show a popup.
   keywords: [
-    "function", "effect", "if", "else", "switch", "case", "break",
+    "function", "if", "else", "switch", "case", "break",
     "continue", "for", "while", "do", "of", "in", "let", "var", "const",
     "await", "async", "return", "default", "try", "catch", "finally",
     "throw", "new", "typeof", "instanceof", "delete", "void",
-    "aktion", "route", "emit",
+    "aktion", "route",
   ],
   operators: ["+", "-", "*", "/", "%", "!", "=", "<", ">", "?", ":", ".", ","],
   // Long operators include `??` and `?.` (nullish coalescing + optional chain)
@@ -127,20 +128,20 @@ export const keywordDocs: Record<string, KeywordDoc> = {
     syntax: "route.path · route.params · route.query · route.navigate(path)",
     example: 'Button("Home", () => route.navigate("/"))',
   },
-  emit: {
+  $emit: {
     summary: "Dispatch a custom DOM event from the host element.",
-    syntax: 'emit("event-name", detail)',
-    example: 'Button("Save", () => emit("saved", { id: $id }))',
+    syntax: '$emit("event-name", detail)',
+    example: 'Button("Save", () => $emit("saved", { id: $id }))',
   },
   function: {
     summary: "Declare a component or action — first-letter case does not matter.",
     syntax: "function name(params) { ... }",
     example: 'function Greeting(name) {\n  return Text(`Hello ${name}`)\n}',
   },
-  effect: {
+  $effect: {
     summary: "Run a side-effect when dependencies change (timers, fetch, analytics).",
-    syntax: "effect(() => { ... }, [deps])",
-    example: 'effect(() => {\n  $now = Util.now()\n}, [interval(1000)])',
+    syntax: "$effect(() => { ... }, [deps])",
+    example: '$effect(() => {\n  $now = $util.now()\n}, ["every(1000)"])',
   },
   if: {
     summary: "Conditional statement — run a block when a condition is truthy.",
@@ -215,7 +216,7 @@ export const keywordDocs: Record<string, KeywordDoc> = {
   await: {
     summary: "Await a promise inside an action/effect body (or expression).",
     syntax: "await expression",
-    example: "let res = await Http({ url: \"https://api.example.com\" })",
+    example: "let res = await $http({ url: \"https://api.example.com\" })",
   },
   async: {
     summary: "Marks a function as async — accepted as a no-op modifier.",

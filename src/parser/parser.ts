@@ -66,10 +66,17 @@ export function parse(source: string): Program {
  */
 function parseStatement(ctx: ParserContext, _topLevel: boolean): Statement | null {
   const head = ctx.peek();
+  // `$effect(() => { … }, [deps])` — the side-effect builtin. Its name is
+  // `$`-prefixed (lexes as a StateIdentifier), but it is parsed specially so
+  // the dependency array keeps its trigger semantics (`$state` refs by name,
+  // `"mount"`, `"every(N)"`, …) rather than being read as a plain array.
+  if (head.type === "StateIdentifier" && head.value === "effect" &&
+      ctx.peek(1).type === "Punctuation" && ctx.peek(1).value === "(") {
+    return parseEffectStatement(ctx);
+  }
   if (head.type === "Keyword") {
     switch (head.value) {
       case "function": return parseFunctionDecl(ctx);
-      case "effect":   return parseEffectStatement(ctx);
       case "await":    return parseAwait(ctx);
       case "async": {
         // `async function name(...) { ... }` — the runtime is already
@@ -185,10 +192,25 @@ function isAssignableTarget(expr: Expression): boolean {
  */
 function parseFunctionDecl(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "function");
-  const nameTok = ctx.expect("Identifier");
+  // A `$`-prefixed name (`function $useCounter() { ... }`) declares a HOOK.
+  // The lexer emits the name as a `StateIdentifier` (value without the `$`).
+  // Hooks compose per-instance state — their body runs inline in the calling
+  // component's hook scope (React's custom-hook model).
+  const isHook = ctx.peek().type === "StateIdentifier";
+  const nameTok = isHook ? ctx.consume() : ctx.expect("Identifier");
   const params = parseFunctionParams(ctx);
   const body = parseBlock(ctx);
   skipTerminator(ctx);
+
+  if (isHook) {
+    return {
+      kind: "HookDeclaration",
+      name: nameTok.value,
+      params,
+      body,
+      loc: { line: start.line, column: start.column },
+    };
+  }
 
   const isPascalCase =
     nameTok.value.length > 0 && nameTok.value[0]! >= "A" && nameTok.value[0]! <= "Z";
@@ -282,7 +304,7 @@ function parseFunctionParams(ctx: ParserContext): DeclParam[] {
  * Produces an EffectDeclaration AST node.
  */
 function parseEffectStatement(ctx: ParserContext): Statement {
-  const start = ctx.consume(); // consume "effect" keyword
+  const start = ctx.consume(); // consume the `$effect` StateIdentifier
   ctx.expect("Punctuation", "(");
   skipWhitespace(ctx);
 
@@ -348,7 +370,20 @@ function parseEffectDep(
 
   if (head.type === "StateIdentifier") {
     ctx.consume();
-    triggers.push({ kind: "state", name: head.value });
+    // Consume a dotted property path so an effect can depend on a precise
+    // sub-path: `effect(() => …, [$user.name])` → trigger "user.name", which
+    // fires only when `user.name` (or the whole `user`) changes. Bracket /
+    // computed access stops the path (the trigger coarsens to what precedes
+    // it), keeping the dependency sound.
+    let name = head.value;
+    while (ctx.peek().type === "Punctuation" && ctx.peek().value === ".") {
+      const prop = ctx.peek(1);
+      if (prop.type !== "Identifier" && prop.type !== "Keyword") break;
+      ctx.consume(); // "."
+      ctx.consume(); // property
+      name += "." + prop.value;
+    }
+    triggers.push({ kind: "state", name });
     return;
   }
 
@@ -1230,7 +1265,7 @@ function parsePrimary(ctx: ParserContext): Expression {
     }
     // Keywords that are also valid identifier names in expressions.
     if (
-      tok.value === "function" || tok.value === "effect" ||
+      tok.value === "function" ||
       tok.value === "let" || tok.value === "const" || tok.value === "var" ||
       tok.value === "of" || tok.value === "in" || tok.value === "case" ||
       tok.value === "break" || tok.value === "continue" || tok.value === "default"
@@ -1310,6 +1345,13 @@ function parsePrimary(ctx: ParserContext): Expression {
     return { kind: "Literal", value: null };
   }
   if (tok.type === "StateIdentifier") {
+    // `$effect(...)` in expression position — produce an EffectDeclaration so
+    // its dependency array keeps trigger semantics (rare; effects are usually
+    // statements). Other `$name(...)` calls stay StateRef Invokes.
+    if (tok.value === "effect" && ctx.peek(1).type === "Punctuation" && ctx.peek(1).value === "(") {
+      ctx.consume();
+      return parseEffectCallAsExpr(ctx, tok);
+    }
     ctx.consume();
     return { kind: "StateRef", name: tok.value };
   }
@@ -1327,10 +1369,6 @@ function parsePrimary(ctx: ParserContext): Expression {
       };
     }
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-      // Intercept `effect(...)` to produce an EffectDeclaration.
-      if (tok.value === "effect") {
-        return parseEffectCallAsExpr(ctx, tok);
-      }
       ctx.consume();
       const args = parseCallArgs(ctx);
       ctx.expect("Punctuation", ")");

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Routing · Aktion</title>
-  <meta name="description" content="Client-side, hash-based routing in one call. Router({ ... }) maps URL patterns to UI, NavLink and SidebarItem navigate, and the reactive route handle tells you where you are — params, query, pattern, and navigate()." />
+  <meta name="description" content="Client-side, hash-based routing in one call. $router({ ... }) maps URL patterns to UI, NavLink and SidebarItem navigate, and the reactive route handle tells you where you are — params, query, pattern, and navigate()." />
   <script>
     (function () {
       try {
@@ -66,7 +66,7 @@
         <h1>Routing.</h1>
         <p class="lead">
           Client&#8209;side, hash&#8209;based routing in a single function call.
-          <strong><code>Router({ &hellip; })</code></strong> maps URL patterns to
+          <strong><code>$router({ &hellip; })</code></strong> maps URL patterns to
           UI, <strong><code>NavLink</code></strong> navigates, and the reactive
           <strong><code>route</code></strong> handle tells you where you are. Deep
           links and back/forward work with no server config &mdash; the router
@@ -76,12 +76,12 @@
 
       <h2 id="router">The Router</h2>
       <p>
-        <code>Router</code> is a plain function call: hand it an object that maps
+        <code>$router</code> is a plain function call: hand it an object that maps
         URL patterns to UI, assign it to a binding, and reference that binding from
         your shell. Only the arm matching the current hash runs &mdash; the others
         are never evaluated.
       </p>
-<pre><code>pages = Router({
+<pre><code>pages = $router({
   "/":             Home(),
   "/users/:id":    User(params.id),
   "/docs/*":       Docs(params._),
@@ -173,7 +173,7 @@ aktion = AppShell(MainSidebar(), pages)</code></pre>
         <code>SidebarItem(label, { to, icon?, badge? })</code>, which navigate and
         auto&#8209;highlight just like <code>NavLink</code>.
       </p>
-<pre><code>pages = Router({
+<pre><code>pages = $router({
   "/":          Home(),
   "/projects":  Projects(),
   "/calendar":  Calendar(),

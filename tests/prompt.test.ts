@@ -14,24 +14,52 @@ describe("generatePrompt", () => {
   it("toggles tool/binding sections by feature flag", () => {
     const minimal = generatePrompt(defaultLibrary, { toolCalls: false, bindings: false });
     expect(minimal).not.toContain("## Reactive State");
-    expect(minimal).not.toContain("## Data — `Http({...})`");
+    expect(minimal).not.toContain("## Data — `$http({...})`");
 
     const full = generatePrompt(defaultLibrary, {
       tools: [{ name: "list_users", description: "Returns users.", argsExample: { limit: 10 } }],
     });
     expect(full).toContain("## Reactive State");
-    expect(full).toContain("## Data — `Http({...})`");
+    expect(full).toContain("## Data — `$http({...})`");
     expect(full).toContain("list_users");
   });
 
-  it("documents the `Util` runtime helper namespace", () => {
+  it("documents fine-grained (path-level) reactivity", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("Fine-grained reactivity");
+    expect(text).toContain("$user.name");
+    expect(text).toContain("path");
+  });
+
+  it("documents per-component re-rendering (memoization)", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("re-executes only when");
+    expect(text).toContain("React.memo");
+  });
+
+  it("documents the global `$store({...})` primitive", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("Global stores");
+    expect(text).toContain("$store({");
+    expect(text).toContain("store.method(args)");
+  });
+
+  it("documents the hook primitives (`$state` / `$memo` / `$name`)", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("### Hooks");
+    expect(text).toContain("$state(initial)");
+    expect(text).toContain("$memo(");
+    expect(text).toContain("function $name");
+  });
+
+  it("documents the `$util` runtime helper namespace", () => {
     const text = generatePrompt(defaultLibrary, {
       tools: [{ name: "lookup", description: "demo" }],
     });
-    expect(text).toContain("`Util`");
-    expect(text).toContain("Util.format");
-    expect(text).toContain("Util.formatDate");
-    expect(text).toContain("Util.sort");
+    expect(text).toContain("`$util`");
+    expect(text).toContain("$util.format");
+    expect(text).toContain("$util.formatDate");
+    expect(text).toContain("$util.sort");
     // Legacy `@`-builtin syntax must not be re-introduced.
     expect(text).not.toContain("@Filter(");
     expect(text).not.toContain("@Count(");
@@ -54,11 +82,11 @@ describe("generatePrompt", () => {
     });
     expect(text).toContain("## Effects");
     expect(text).toContain("## Actions");
-    expect(text).toContain("## Data — `Http({...})`");
+    expect(text).toContain("## Data — `$http({...})`");
     expect(text).toContain("effect");
     expect(text).toContain("mount");
     expect(text).toContain("debounce(");
-    expect(text).toContain("Http({");
+    expect(text).toContain("$http({");
     expect(text).toContain(".refetch()");
     expect(text).toContain(".loading");
     expect(text).toContain("Async(");
@@ -66,10 +94,12 @@ describe("generatePrompt", () => {
 
   it("documents the router block surface in the full prompt", () => {
     const text = generatePrompt(defaultLibrary);
-    expect(text).toContain("Router({");
+    expect(text).toContain("$router({");
     expect(text).toContain("NavLink");
     expect(text).toContain("route");
-    expect(text).not.toContain("$route");
+    // The router handle is `route` (not `$route`); `$router` is fine and would
+    // otherwise trip a naive substring check, so match `$route` at a boundary.
+    expect(text).not.toMatch(/\$route\b/);
     expect(text).toContain('"/":');
     expect(text).toContain("default:");
   });
@@ -144,7 +174,7 @@ describe("generatePrompt", () => {
       expect(text).toContain("aktion = ...");
       expect(text).toContain("## Syntax (read-only subset)");
       expect(text).toContain("## Component library (read-only)");
-      expect(text).toContain("## `Util` — runtime helper namespace");
+      expect(text).toContain("## `$util` — runtime helper namespace");
       expect(text).toContain("## Hoisting & streaming (CRITICAL)");
       expect(text).toContain("## Examples");
       expect(text).toContain("## Important rules");
@@ -156,9 +186,9 @@ describe("generatePrompt", () => {
       expect(text).not.toContain("## Effects");
       expect(text).not.toContain("## Routing");
       expect(text).not.toContain("## Actions");
-      expect(text).not.toContain("Router({");
-      expect(text).not.toContain("## Data — `Http({...})`");
-      expect(text).not.toContain("Http({");
+      expect(text).not.toContain("$router({");
+      expect(text).not.toContain("## Data — `$http({...})`");
+      expect(text).not.toContain("$http({");
       expect(text).not.toContain(`js` + `{`);
       expect(text).not.toContain("bind:value:");
     });

@@ -49,7 +49,7 @@ describe("effects: declaration, mount, and triggers", () => {
   it("runs an effect body once on mount", async () => {
     const el = mount();
     el.setResponse(`$count = 0
-effect(() => {
+$effect(() => {
   $count = 1
 }, ["mount"])
 aktion = Stack([])`);
@@ -61,7 +61,7 @@ aktion = Stack([])`);
     const el = mount();
     el.setResponse(`$input = "a"
 $runs = 0
-effect(() => {
+$effect(() => {
   $runs = $runs + 1
 }, [$input])
 aktion = Stack([])`);
@@ -80,7 +80,7 @@ aktion = Stack([])`);
     el.setResponse(`$watched = 0
 $ignored = 0
 $runs = 0
-effect(() => {
+$effect(() => {
   $runs = $runs + 1
 }, [$watched])
 aktion = Stack([])`);
@@ -96,7 +96,7 @@ aktion = Stack([])`);
     el.setResponse(`aktion = App()
 $ticks = 0
 function App() {
-  effect(() => {
+  $effect(() => {
     $ticks = $ticks + 1
   }, ["mount"])
   return Stack([])
@@ -111,7 +111,7 @@ function App() {
 $input = "a"
 $runs = 0
 function App() {
-  effect(() => {
+  $effect(() => {
     $runs = $runs + 1
   }, [$input])
   return Stack([])
@@ -129,7 +129,7 @@ function App() {
 $showApp = true
 $ticks = 0
 function App() {
-  effect(() => {
+  $effect(() => {
     $ticks = $ticks + 1
   }, ["every(10)"])
   return Stack([])
@@ -154,7 +154,7 @@ function App() {
     el.setResponse(`aktion = Stack([Counter(), Counter()])
 function Counter() {
   $count = 0
-  effect(() => {
+  $effect(() => {
     $count = $count + 5
   }, ["mount"])
   return Text(\`\${$count}\`)
@@ -172,12 +172,12 @@ function Counter() {
     expect(el.shadowRoot?.textContent ?? "").toContain("5");
   });
 
-  it("re-fires a per-instance `effect(fn, [$state])` when its per-instance atom changes (and only that instance)", async () => {
+  it("re-fires a per-instance `$effect(fn, [$state])` when its per-instance atom changes (and only that instance)", async () => {
     const el = mount();
     el.setResponse(`aktion = Stack([Item("A"), Item("B")])
 function Item(label) {
   $hits = 0
-  effect(() => {
+  $effect(() => {
     $log = $log + 1
   }, [$hits])
   return Button(label, () => { $hits = $hits + 1 })
@@ -207,7 +207,7 @@ $shared = 0
 $runs = 0
 function Item() {
   $local = 0
-  effect(() => {
+  $effect(() => {
     $runs = $runs + 1
   }, [$local, $shared])
   return Stack([])
@@ -235,7 +235,7 @@ $on = true
 $runs = 0
 function Item() {
   $local = 0
-  effect(() => {
+  $effect(() => {
     $runs = $runs + 1
   }, [$local])
   return Stack([])
@@ -266,7 +266,7 @@ function Item() {
     el.setResponse(`aktion = App()
 $runs = 0
 function App() {
-  effect(() => {
+  $effect(() => {
     $runs = $runs + 1
   }, ["mount"])
   return Stack([])
@@ -280,7 +280,7 @@ function App() {
   it("resets the effect runner cleanly across setResponse calls", async () => {
     const el = mount();
     el.setResponse(`$count = 0
-effect(() => {
+$effect(() => {
   $count = $count + 1
 }, ["mount"])
 aktion = Stack([])`);
@@ -288,7 +288,7 @@ aktion = Stack([])`);
     expect(el.state.get("count")).toBe(1);
 
     el.setResponse(`$count = 0
-effect(() => {
+$effect(() => {
   $count = 99
 }, ["mount"])
 aktion = Stack([])`);
@@ -390,7 +390,7 @@ describe("HTTP interceptors (replacement for setTools)", () => {
     expect(() => el.registerHttpInterceptors({ onResponse })).not.toThrow();
   });
 
-  it("interceptors fire around HTTP requests issued by Http({...}) calls", async () => {
+  it("interceptors fire around HTTP requests issued by $http({...}) calls", async () => {
     const phases: Array<"request" | "response"> = [];
     const requestedUrls: string[] = [];
     const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
@@ -412,7 +412,7 @@ describe("HTTP interceptors (replacement for setTools)", () => {
           return res;
         },
       });
-      el.setResponse(`$items = Http({ url: "https://api.example.com/items", method: "GET" })
+      el.setResponse(`$items = $http({ url: "https://api.example.com/items", method: "GET" })
 aktion = Stack([])`);
       await waitForRenders(30);
       expect(phases).toContain("request");
@@ -474,7 +474,7 @@ describe("effects: closures over component params + outer loop vars", () => {
 
 function Item(todo) {
   $isDone = null
-  effect(() => {
+  $effect(() => {
     console.log("todo in effect:", todo)
   }, [$isDone])
   return Button(todo.title, () => { $isDone = !$isDone })
@@ -509,7 +509,7 @@ $todos = [
       el.setResponse(`aktion = Stack($todos.map(todo => Item(todo)))
 function Item(todo) {
   $isDone = false
-  effect(() => {
+  $effect(() => {
     console.log("fire:", todo.title, $isDone)
   }, [$isDone])
   return Button(todo.title, () => { $isDone = !$isDone })
@@ -545,7 +545,7 @@ $todos = [{ id: "1", title: "A" }, { id: "2", title: "B" }]`);
       el.setResponse(`aktion = Stack($todos.map(todo => Item(todo)))
 function Item(todo) {
   $isDone = false
-  effect(() => {
+  $effect(() => {
     console.log("title:", todo.title)
   }, [$isDone])
   return Button(todo.title, () => { $isDone = !$isDone })
@@ -576,7 +576,7 @@ $todos = [{ id: "1", title: "Original" }]`);
     const el = mount();
     el.setResponse(`aktion = $on ? Item(name) : Stack([])
 function Item(name) {
-  effect(() => {
+  $effect(() => {
     cleanup(() => { $mark = name })
   }, ["mount"])
   return Text(name)
@@ -599,7 +599,7 @@ name = "Alpha"`);
       const el = mount();
       el.setResponse(`aktion = Item(name)
 function Item(name) {
-  effect(() => {
+  $effect(() => {
     console.log("tick:", name)
   }, ["every(10)"])
   return Text(name)
@@ -625,7 +625,7 @@ name = "Beta"`);
       el.setResponse(`aktion = Stack([Item("X"), Item("Y")])
 function Item(label) {
   $hits = 0
-  effect(() => {
+  $effect(() => {
     console.log("hit:", label)
   }, [$hits])
   return Button(label, () => { $hits = $hits + 1 })
@@ -658,7 +658,7 @@ function Item(label) {
       const el = mount();
       el.setResponse(`aktion = Stack([1, 2, 3].map(n => Item(n)))
 function Item(n) {
-  effect(() => {
+  $effect(() => {
     console.log("n=", n)
   }, ["mount"])
   return Text(\`\${n}\`)
@@ -680,7 +680,7 @@ function Item(n) {
       el.setResponse(`aktion = Item("Gamma")
 function Item(name) {
   $count = 0
-  effect(() => {
+  $effect(() => {
     console.log("debounced:", name, $count)
   }, [$count, "debounce(20)"])
   return Button("tap", () => { $count = $count + 1 })
@@ -711,7 +711,7 @@ function Item(name) {
       el.setResponse(`aktion = Item("Delta")
 function Item(name) {
   $count = 0
-  effect(() => {
+  $effect(() => {
     console.log("throttled:", name)
   }, [$count, "throttle(30)"])
   return Button("tap", () => { $count = $count + 1 })
@@ -735,7 +735,7 @@ function Item(name) {
     el.setResponse(`aktion = Stack([Counter("a"), Counter("b")])
 function Counter(label) {
   $count = 0
-  effect(() => {
+  $effect(() => {
     $count = label == "a" ? 10 : 20
   }, ["mount"])
   return Text(\`\${label}:\${$count}\`)
@@ -751,7 +751,7 @@ function Counter(label) {
     const el = mount();
     el.setResponse(`$count = 0
 $mark = "untouched"
-effect(() => {
+$effect(() => {
   $mark = "touched"
 }, [$count])
 aktion = Stack([])`);
@@ -771,7 +771,7 @@ aktion = Stack([])`);
       el.setResponse(`aktion = Item("only")
 function Item(label) {
   $rows = [1, 2].map(n => n)
-  effect(() => {
+  $effect(() => {
     console.log("label:", label, "n:", n)
   }, ["mount"])
   return Text(label)
@@ -795,7 +795,7 @@ function Item(label) {
       el.setResponse(`aktion = $on ? Item("only") : Stack([])
 function Item(label) {
   $count = 0
-  effect(() => {
+  $effect(() => {
     console.log("fire:", label, $count)
   }, [$count])
   return Button(label, () => { $count = $count + 1 })
@@ -829,7 +829,7 @@ $on = true`);
       const el = mount();
       el.setResponse(`aktion = Item(true, "Hi")
 function Item(visible, msg) {
-  effect(() => {
+  $effect(() => {
     console.log("seen:", visible, msg)
   }, ["mount"])
   return visible ? Text(msg) : Stack([])
@@ -852,7 +852,7 @@ function Item(visible, msg) {
       const el = mount();
       el.setResponse(`aktion = Section("Hello", { footer: Text("Bye") })
 function Section(title, footer) {
-  effect(() => {
+  $effect(() => {
     console.log("slot-present:", footer != null)
   }, ["mount"])
   return Stack([Text(title), footer])
@@ -874,7 +874,7 @@ function Section(title, footer) {
       const el = mount();
       el.setResponse(`aktion = Stack([Item("stable"), Counter()])
 function Item(label) {
-  effect(() => {
+  $effect(() => {
     console.log("once:", label)
   }, ["mount"])
   return Text(label)

@@ -211,8 +211,8 @@
         state is any identifier prefixed with <code>$</code>; whenever it changes
         the runtime re&#8209;renders the smallest part of the tree that depended
         on it. Components are plain JavaScript functions that <code>return</code> a
-        node. Side effects live in <code>effect(() =&gt; { … }, [...deps])</code>,
-        and the network is a single primitive: <code>Http({ url, method, … })</code>.
+        node. Side effects live in <code>$effect(() =&gt; { … }, [...deps])</code>,
+        and the network is a single primitive: <code>$http({ url, method, … })</code>.
       </p>
       <table class="signature-table">
         <thead><tr><th>You used to&hellip;</th><th>In Aktion&hellip;</th></tr></thead>
@@ -223,8 +223,8 @@
           <tr><td>Render a list with <code>.map(…)</code></td><td>Same: <code>$items.map(x =&gt; …)</code></td></tr>
           <tr><td>Conditionally render with <code>{cond &amp;&amp; …}</code></td><td><code>if (cond) { … } else { … }</code> &mdash; expressions can be assigned</td></tr>
           <tr><td>Reach for a CSS framework / utility classes</td><td>Use the built&#8209;in component library and theme tokens; drop down to <code>Css(child, { class, style })</code> only when needed</td></tr>
-          <tr><td>Pick a router package</td><td>Use the built&#8209;in <code>Router({ … })</code></td></tr>
-          <tr><td>Pick a fetch library / TanStack Query</td><td>Use the built&#8209;in <code>Http({ … })</code> resource</td></tr>
+          <tr><td>Pick a router package</td><td>Use the built&#8209;in <code>$router({ … })</code></td></tr>
+          <tr><td>Pick a fetch library / TanStack Query</td><td>Use the built&#8209;in <code>$http({ … })</code> resource</td></tr>
         </tbody>
       </table>
 
@@ -286,12 +286,12 @@ aktion = Hello("Ada")</code></pre>
         <div class="mig-compare">
           <div class="mig-pane">
             <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
-<pre><code>Util.component({
+<pre><code>$util.component({
   selector: 'hello',
   template: `&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;`
 })
 export class Hello {
-  Util.input() name!: string;
+  $util.input() name!: string;
 }</code></pre>
           </div>
           <div class="mig-pane">
@@ -896,7 +896,7 @@ aktion = Input("name", { value: $name, placeholder: "Your name" })</code></pre>
       <!-- ===================== EFFECTS ===================== -->
       <h2 id="effects">Side effects</h2>
       <p>
-        <code>effect(() =&gt; { … }, [...deps])</code> runs after render whenever
+        <code>$effect(() =&gt; { … }, [...deps])</code> runs after render whenever
         any dependency changes. Dependencies are <code>$</code>variables or
         lifecycle / scheduling strings: <code>"mount"</code>, <code>"unmount"</code>,
         <code>"every(N)"</code>, <code>"debounce(N)"</code>, <code>"throttle(N)"</code>.
@@ -915,7 +915,7 @@ aktion = Input("name", { value: $name, placeholder: "Your name" })</code></pre>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$now = Date.now()
-effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
+$effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
           </div>
         </div>
       </div>
@@ -929,8 +929,8 @@ effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>effect(() =&gt; {
-  $results = Http({ url: "/api/search", query: { q: $query } })
+<pre><code>$effect(() =&gt; {
+  $results = $http({ url: "/api/search", query: { q: $query } })
 }, [$query, "debounce(300)"])</code></pre>
           </div>
         </div>
@@ -939,11 +939,11 @@ effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
         <div class="mig-compare">
           <div class="mig-pane">
             <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
-<pre><code>effect(() =&gt; { console.log('query:', this.query()); });</code></pre>
+<pre><code>$effect(() =&gt; { console.log('query:', this.query()); });</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
           </div>
         </div>
       </div>
@@ -951,11 +951,11 @@ effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
         <div class="mig-compare">
           <div class="mig-pane">
             <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
-<pre><code>$effect(() =&gt; { console.log('query:', query); });</code></pre>
+<pre><code>$$effect(() =&gt; { console.log('query:', query); });</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
           </div>
         </div>
       </div>
@@ -967,7 +967,7 @@ effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
           </div>
         </div>
       </div>
@@ -980,7 +980,7 @@ window.addEventListener('beforeunload', () =&gt; clearInterval(id));</code></pre
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>effect(() =&gt; { tick() }, ["every(1000)"])</code></pre>
+<pre><code>$effect(() =&gt; { tick() }, ["every(1000)"])</code></pre>
           </div>
         </div>
       </div>
@@ -988,7 +988,7 @@ window.addEventListener('beforeunload', () =&gt; clearInterval(id));</code></pre
       <!-- ===================== HTTP ===================== -->
       <h2 id="http">HTTP &amp; data fetching</h2>
       <p>
-        <code>Http({ url, method, query, body, headers, ... })</code> returns a
+        <code>$http({ url, method, query, body, headers, ... })</code> returns a
         <em>reactive resource</em> with <code>.data</code>, <code>.error</code>,
         <code>.loading</code>, <code>.status</code>, <code>.headers</code>,
         <code>.lastUpdated</code>, <code>.refetch()</code>, <code>.cancel()</code>,
@@ -1008,7 +1008,7 @@ return isLoading ? &lt;Spinner /&gt; : &lt;List items={data} /&gt;;</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })
+<pre><code>$todos = $http({ url: "/api/todos" })
 aktion = Async($todos, {
   loading: Spinner(),
   error:   ErrorState("Couldn't load"),
@@ -1026,7 +1026,7 @@ aktion = Async($todos, {
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })</code></pre>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
           </div>
         </div>
       </div>
@@ -1040,7 +1040,7 @@ aktion = Async($todos, {
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })
+<pre><code>$todos = $http({ url: "/api/todos" })
 aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
         </div>
@@ -1057,7 +1057,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })
+<pre><code>$todos = $http({ url: "/api/todos" })
 aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
         </div>
@@ -1070,7 +1070,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })</code></pre>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
           </div>
         </div>
       </div>
@@ -1082,7 +1082,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>$todos = Http({ url: "/api/todos" })</code></pre>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
           </div>
         </div>
       </div>
@@ -1093,7 +1093,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
         line:
       </p>
 <pre><code>function toggle(todo) {
-  $patch = Http({
+  $patch = $http({
     url:    `/api/todos/${todo.id}`,
     method: "PATCH",
     body:   { done: !todo.done }
@@ -1104,7 +1104,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
       <!-- ===================== ROUTING ===================== -->
       <h2 id="routing">Routing</h2>
       <p>
-        <code>Router({ … })</code> returns the matched view for the current URL
+        <code>$router({ … })</code> returns the matched view for the current URL
         (hash router by default). Inside any route, <code>params</code> is the
         bound parameter object. <code>NavLink(label, { to })</code> is a
         router&#8209;aware anchor; <code>route.navigate(path)</code> changes the
@@ -1122,7 +1122,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
@@ -1141,7 +1141,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
@@ -1160,7 +1160,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
@@ -1176,7 +1176,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
@@ -1195,7 +1195,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
@@ -1211,7 +1211,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Router({
+<pre><code>aktion = $router({
   "/":          Home(),
   default:      NotFound()
 })</code></pre>
@@ -1224,7 +1224,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
       <p>
         Skip CSS frameworks entirely &mdash; every component already speaks the
         active theme&rsquo;s tokens. Switch themes with
-        <code>aktion.theme = Theme({ … })</code>, override single tokens, or
+        <code>aktion.theme = $theme({ … })</code>, override single tokens, or
         attach raw class / style to any component with
         <code>Css(child, { class, style })</code>.
       </p>
@@ -1240,7 +1240,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
         </div>
         <div class="mig-pane">
           <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion.theme = Theme({ colors: { primary: "#2563eb" } })
+<pre><code>aktion.theme = $theme({ colors: { primary: "#2563eb" } })
 aktion = Button("Save", { variant: "primary" })
 
 // Escape hatch when you really need raw CSS:
@@ -1251,7 +1251,7 @@ Css(Button("Save"), { class: "my-button", style: "padding: 12px;" })</code></pre
       <!-- ===================== STORAGE ===================== -->
       <h2 id="storage">Persistence &amp; storage</h2>
       <p>
-        Use the <code>Storage({ … })</code> helper instead of touching
+        Use the <code>$storage({ … })</code> helper instead of touching
         <code>localStorage</code>/<code>sessionStorage</code>/cookies by hand.
       </p>
       <div class="mig-compare">
@@ -1273,13 +1273,13 @@ Storage.cookies.set("uid", id, { expires: 7 })</code></pre>
       <!-- ===================== EVENTS OUT ===================== -->
       <h2 id="events-out">Outbound events (host integration)</h2>
       <p>
-        Need to tell the surrounding page something? <code>emit("name", { … })</code>
+        Need to tell the surrounding page something? <code>$emit("name", { … })</code>
         dispatches a <code>CustomEvent</code> on the <code>&lt;aktion-app&gt;</code>
         host element &mdash; the same way you would <code>$emit</code> in Vue or
         call a Svelte <code>createEventDispatcher()</code>.
       </p>
       <pre><code>// in any action / effect
-emit("checkout", { items: $cart, total: $total })
+$emit("checkout", { items: $cart, total: $total })
 
 &lt;!-- in the host page --&gt;
 &lt;script&gt;
@@ -1330,12 +1330,12 @@ aktion = MyCard([
           <tr><td>Event</td><td><code>onClick</code> / <code>@click</code> / <code>(click)</code></td><td><code>{ onClick: fn }</code> (named arg)</td></tr>
           <tr><td>If</td><td><code>?:</code> / <code>v-if</code> / <code>@if</code> / <code>{#if}</code> / <code>&lt;Show&gt;</code></td><td>Ternary: <code>cond ? a : b</code> (statement <code>if</code> works in function bodies)</td></tr>
           <tr><td>List</td><td><code>.map</code> / <code>v-for</code> / <code>@for</code> / <code>{#each}</code> / <code>&lt;For&gt;</code></td><td><code>$items.map(x =&gt; …)</code></td></tr>
-          <tr><td>Side effect</td><td><code>useEffect</code> / <code>watch</code> / <code>effect</code></td><td><code>effect(() =&gt; { … }, [...deps])</code></td></tr>
-          <tr><td>HTTP</td><td>TanStack Query / VueUse / HttpClient</td><td><code>Http({ url, method, query, body })</code></td></tr>
-          <tr><td>Routing</td><td>React Router / Vue Router / Angular Router</td><td><code>Router({ "/": Home(), default: NotFound() })</code></td></tr>
+          <tr><td>Side effect</td><td><code>useEffect</code> / <code>watch</code> / <code>effect</code></td><td><code>$effect(() =&gt; { … }, [...deps])</code></td></tr>
+          <tr><td>HTTP</td><td>TanStack Query / VueUse / HttpClient</td><td><code>$http({ url, method, query, body })</code></td></tr>
+          <tr><td>Routing</td><td>React Router / Vue Router / Angular Router</td><td><code>$router({ "/": Home(), default: NotFound() })</code></td></tr>
           <tr><td>Persistence</td><td><code>localStorage</code> / cookies-js</td><td><code>Storage.set / .get / .session / .cookies</code></td></tr>
-          <tr><td>Theme</td><td>ThemeProvider + Tailwind / styled-components</td><td><code>aktion.theme = Theme({ … })</code></td></tr>
-          <tr><td>Outbound event</td><td><code>$emit</code> / <code>EventEmitter</code> / dispatcher</td><td><code>emit("name", { detail })</code></td></tr>
+          <tr><td>Theme</td><td>ThemeProvider + Tailwind / styled-components</td><td><code>aktion.theme = $theme({ … })</code></td></tr>
+          <tr><td>Outbound event</td><td><code>$emit</code> / <code>EventEmitter</code> / dispatcher</td><td><code>$emit("name", { detail })</code></td></tr>
           <tr><td>Children</td><td>JSX children / slots</td><td>Pass an array of nodes as the first positional argument</td></tr>
         </tbody>
       </table>

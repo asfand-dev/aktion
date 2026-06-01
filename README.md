@@ -42,8 +42,8 @@ HTML, or no framework at all.
 - [Themes](#themes)
 - [Icons](#icons)
 - [Routing](#routing)
-- [Built-in globals (`storage`, `console`)](#built-in-globals)
-- [Internationalization (`i18n`)](#internationalization)
+- [Built-in globals (`$storage`, `$console`)](#built-in-globals)
+- [Internationalization (`$i18n`)](#internationalization)
 - [System prompt generator](#system-prompt-generator)
 - [Tooling](#tooling)
 - [Documentation site](#documentation-site)
@@ -72,27 +72,31 @@ Everything you need at runtime ships in a single bundle:
   `$name = value` and read or write it with `$name`. The `$` prefix is
   the only thing that makes a binding reactive — `let` / `const` /
   `var` keywords are optional and have no effect on reactivity. The
-  runtime tracks dependencies automatically. Automatic two-way binding
+  runtime tracks dependencies automatically — and at **path
+  granularity**: reading `$user.name` subscribes to `user.name` alone,
+  so a write to `$user.role` never re-renders, recomputes, or re-fires
+  an effect that only read `name` (see *Fine-grained reactivity* below).
+  Automatic two-way binding
   via direct state refs (and member chains rooted at one —
-  `value: $form.email`), and a **`Util` runtime namespace** of pure
-  helpers (`Util.filter`, `Util.sort`, `Util.find`, `Util.groupBy`,
-  `Util.format`, `Util.formatDate`, `Util.plural`, `Util.case`,
-  `Util.range`, `Util.pick`, …) callable from Aktion expressions and
+  `value: $form.email`), and a **`$util` runtime namespace** of pure
+  helpers (`$util.filter`, `$util.sort`, `$util.find`, `$util.groupBy`,
+  `$util.format`, `$util.formatDate`, `$util.plural`, `$util.case`,
+  `$util.range`, `$util.pick`, …) callable from Aktion expressions and
   ordinary JavaScript alike.
 - **One component-call shape.** Every call follows the trailing-object
   rule — `Component(positionalArg, { prop: value, … })`. At most one
   positional argument; every other argument goes in a trailing
   `{ }` object literal.
-- **One HTTP primitive.** `Http({ url, method, headers, body, query, ... })`
+- **One HTTP primitive.** `$http({ url, method, headers, body, query, ... })`
   is the only network call. Each call is self-contained (pass a full
   absolute `url`; `GET` is the default; no host-wide defaults). It returns
   a reactive resource bag exposing
   `data | error | status | loading | headers | lastUpdated`, plus the
   callables `refetch()` and `cancel()`. Re-run a request via `refetch()`
-  or by wrapping it in an `effect(..., [$dep])`.
-- **`storage` and `console` globals.** Always in scope, no import,
-  lowercase. `storage.set/get` (localStorage by default),
-  `storage.session.*`, `storage.cookies.*` with object-literal options,
+  or by wrapping it in an `$effect(..., [$dep])`.
+- **`$storage` and `$console` globals.** Always in scope, no import,
+  lowercase. `$storage.set/get` (localStorage by default),
+  `$storage.session.*`, `$storage.cookies.*` with object-literal options,
   and `console.log/error/warn/info/debug`.
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
@@ -102,23 +106,23 @@ Everything you need at runtime ships in a single bundle:
 - **A rich component library** of **170+ components** spanning layout,
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
   editors, advanced UI, and standard helpers. See [Component library](#component-library).
-- **Declarative side effects.** `effect(() => { body }, [...deps])` for
+- **Declarative side effects.** `$effect(() => { body }, [...deps])` for
   background work — anonymous blocks where the dependency list mixes
   state triggers (`$atom`), lifecycle triggers (`"mount"`, `"unmount"`,
   `"every(N)"`), and rate-limit modifiers (`"debounce(N)"`,
-  `"throttle(N)"`). `effect(() => { … })` with no dependency array is
-  equivalent to `effect(() => { … }, ["mount"])`. Declare an effect
+  `"throttle(N)"`). `$effect(() => { … })` with no dependency array is
+  equivalent to `$effect(() => { … }, ["mount"])`. Declare an effect
   **at the top level** for program-wide work, or **inside a component
   function body** to scope it to a single instance — timers, watched
   atoms, and `cleanup(fn)` registrations tear down when the component
   leaves the tree. `function name(args) { … }` (camelCase) declares an
   action — click-driven mutations that may optionally `return` a value.
-- **Outbound events.** `emit("name", { detail })` dispatches a
+- **Outbound events.** `$emit("name", { detail })` dispatches a
   `CustomEvent` on the host element from inside any action / effect /
   lambda body. The host listens with
   `el.addEventListener("name", …)`.
 - **A built-in router.**
-  `pages = Router({ "/path": Component(), "/users/:id": UserPage({ id: params.id }), default: NotFound() })`
+  `pages = $router({ "/path": Component(), "/users/:id": UserPage({ id: params.id }), default: NotFound() })`
   plus `NavLink(label, { to })` and a reserved `route` handle that
   exposes `route.path`, `route.params`, `route.query`, `route.pattern`,
   and `route.navigate("/path")`. Hash-based, framework-agnostic, always
@@ -127,8 +131,8 @@ Everything you need at runtime ships in a single bundle:
   `brutalist`, `skyline`) plus full custom-token support via CSS custom
   properties. **50+ design tokens** organised into `colors`, `radius`,
   `font`, `motion`, and `elevation` groups. Brand the UI from inside
-  the script with `theme = Theme({...})`.
-- **`i18n` factory.** `const { t, setCurrentLanguage, getCurrentLanguage } = i18n({ defaultLanguage, currentLanguage, translations })` builds a translation bundle keyed by language, with `{name}` placeholder interpolation.
+  the script with `theme = $theme({...})`.
+- **`$i18n` factory.** `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })` builds a translation bundle keyed by language, with `{name}` placeholder interpolation.
 - **Font Awesome 6.7.2** auto-loaded — every `icon` prop accepts a Free
   Font Awesome name (no `fa-` prefix). Use `Icon(name, { variant?, size? })`
   for standalone glyphs. Variant prefixes supported: `"regular:star"`,
@@ -265,7 +269,7 @@ const prompt = el.getSystemPrompt({
 ```
 
 > Network calls are issued by the LLM-authored code itself via the
-> `Http({ url, method, body, ... })` primitive. The host is not involved.
+> `$http({ url, method, body, ... })` primitive. The host is not involved.
 > Install `el.registerHttpInterceptors(...)` if you need to attach auth
 > headers, retry on 401, or log every request.
 
@@ -319,7 +323,7 @@ surfaces from the *generated prompt*, build it via
 | `registerComponents(specs, root?)`                              | Extend the built-in library with your own components.                                                                        |
 | `getSystemPrompt(options?)`                                     | Build a system prompt that matches the current library. Pass `{ mode: "chat" }` for the compact variant.                     |
 | `navigate(path)`                                                | Programmatically navigate. Updates `window.location.hash`.                                                                   |
-| `registerHttpInterceptors({ onRequest?, onResponse?, onError? })` | Install interceptors for the `Http({...})` layer. `onResponse` receives a `retry()` one-shot for e.g. 401 refresh flows.       |
+| `registerHttpInterceptors({ onRequest?, onResponse?, onError? })` | Install interceptors for the `$http({...})` layer. `onResponse` receives a `retry()` one-shot for e.g. 401 refresh flows.       |
 | `serializeState()`                                              | Return every reactive atom as a plain JSON-friendly object (for SSR / resumption).                                           |
 | `hydrateState(snapshot)`                                        | Apply a snapshot to the live store and schedule a re-render. Atoms not in the snapshot are untouched.                        |
 | `loadSnapshot({ programText, state })`                          | Atomic program + state load. The next render plans the program with the hydrated state already in place.                     |
@@ -329,10 +333,10 @@ surfaces from the *generated prompt*, build it via
 
 | Event                | Detail                                        | When it fires                                                                  |
 | -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `assistant-message`  | `{ message: string }`                         | When an action or lambda calls `emit("assistant-message", { message: "..." })`. |
+| `assistant-message`  | `{ message: string }`                         | When an action or lambda calls `$emit("assistant-message", { message: "..." })`. |
 | `error`              | `{ errors: ParseError[] }`                    | After each render whose source had parse errors.                               |
 | `route-change`       | `{ path, previousPath, source }`              | When the current hash path changes. `source` is `"init" \| "hashchange" \| "navigate" \| "external"`. |
-| `<custom-name>`      | User-defined `{ ... }`                        | When script calls `emit("name", { ... })` inside an action / effect body.       |
+| `<custom-name>`      | User-defined `{ ... }`                        | When script calls `$emit("name", { ... })` inside an action / effect body.       |
 
 The `error` event always fires regardless of `showerrors`, so host apps
 can log or report errors even when the in-page banner is suppressed.
@@ -348,7 +352,7 @@ recursive program (typed live in the playground, mid-stream LLM token,
 | ------------------- | ------------ | -------------------------------------------------------- |
 | `componentDepth`    | 150 levels   | `function Foo() { return Foo() }` and other recursive trees |
 | `iterations`        | 250 000 / render | unbounded `for`/`while` loops inside function bodies    |
-| `arrayLength`       | 100 000 entries | `Util.range(0, 1e9)`, `Util.repeat(value, 1e9)`                 |
+| `arrayLength`       | 100 000 entries | `$util.range(0, 1e9)`, `$util.repeat(value, 1e9)`                 |
 
 When a limit trips, the runtime aborts the render, emits an `error`
 event whose detail is shaped like a parse error (`{ line: 0, column:
@@ -383,20 +387,20 @@ function Counter(label = "Count") {
 }
 
 function loadOrders() {
-  $orders = Http({ url: "https://api.example.com/orders", method: "GET" })
+  $orders = $http({ url: "https://api.example.com/orders", method: "GET" })
 }
 
-effect(() => {
-  $save = Http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
+$effect(() => {
+  $save = $http({ url: "https://api.example.com/draft", method: "PUT", body: $draft })
 }, [$draft, "debounce(500)"])
 
-$orders = Http({
+$orders = $http({
   url:    "https://api.example.com/users/42/orders",
   method: "GET",
   query:  { limit: 5 }
 })
 
-pages = Router({
+pages = $router({
   "/":         Counter(),
   "/orders":   Async($orders, { loading: Spinner(), data: OrderTable($orders.data) }),
   default:     NotFound()
@@ -436,17 +440,17 @@ aktion = pages
 - `function name(args) { body }` — camelCase name means it's an action.
   Callable effects with optional `return`. Used as event handlers
   (`onClick: save`) or as expressions (`$result = greet("Ada")`).
-- `effect(() => { body }, [...deps])` — declarative, anonymous side
+- `$effect(() => { body }, [...deps])` — declarative, anonymous side
   effects. The dependency array mixes state triggers (`$atom`),
   lifecycle / interval triggers (`"mount"`, `"unmount"`, `"every(N)"`),
   and rate-limit modifiers (`"debounce(N)"`, `"throttle(N)"`).
-  `effect(() => { … })` (no second argument) is equivalent to
-  `effect(() => { … }, ["mount"])`. Declare at the program top level
+  `$effect(() => { … })` (no second argument) is equivalent to
+  `$effect(() => { … }, ["mount"])`. Declare at the program top level
   for global work, or inside a component function body to scope the
   effect to that instance — the runtime mounts it on first render and
   tears down its timers / subscriptions / `cleanup(fn)` handlers when
   the instance leaves the tree.
-- `emit("name", { detail })` — dispatch an outbound `CustomEvent` on
+- `$emit("name", { detail })` — dispatch an outbound `CustomEvent` on
   the host element. Call from any action / effect / lambda body
   whenever the surrounding host page needs to react to a user
   interaction.
@@ -483,13 +487,13 @@ aktion = pages
   start of the next line and the parser keeps building the same
   expression — matches JavaScript's ASI rules. Use this to split long
   method chains, ternaries, and logical expressions across lines.
-- `Http({ url, method, headers, body, query, ... })` — the only network
+- `$http({ url, method, headers, body, query, ... })` — the only network
   primitive (absolute `url`; `GET` default; no host-wide defaults).
   Returns a reactive resource with `.data`, `.error`,
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
   `.cancel()`, and a settable `.onDone` callback that fires each time the
   request settles (handy for `$todos.refetch()` after a write).
-- `pages = Router({ "/path": Component(), default: NotFound() })` —
+- `pages = $router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
   reactive surface (`route.path`, `route.params`, `route.query`,
   `route.pattern`) and a `route.navigate("/path")` method; each arm
@@ -521,11 +525,11 @@ aktion = pages
   bare expression statements written at the program top level run once
   per plan (e.g. building a `$state` array with a `while` loop). Inside
   a render they behave like a module init block; prefer pure expressions
-  (`.map`, `Util.range`) where you can.
-- **`Util` runtime namespace** — pure, side-effect-free helpers for data
-  shaping, formatting, dates, math, and strings (`Util.filter`, `Util.sort`,
-  `Util.groupBy`, `Util.format`, `Util.formatDate`, `Util.plural`, `Util.range`,
-  `Util.addDays`, `Util.pick`, `Util.count`, …). Never carry hidden state —
+  (`.map`, `$util.range`) where you can.
+- **`$util` runtime namespace** — pure, side-effect-free helpers for data
+  shaping, formatting, dates, math, and strings (`$util.filter`, `$util.sort`,
+  `$util.groupBy`, `$util.format`, `$util.formatDate`, `$util.plural`, `$util.range`,
+  `$util.addDays`, `$util.pick`, `$util.count`, …). Never carry hidden state —
   safe to call anywhere.
 - **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
   raw HTML elements and `Styles(css)` for raw CSS injected into the
@@ -541,26 +545,26 @@ aktion = pages
 
 | Global    | Purpose                                                              |
 | --------- | -------------------------------------------------------------------- |
-| `storage` | Browser persistence — `storage.set/get`, `storage.session.*`, `storage.cookies.*`. |
-| `console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
+| `$storage` | Browser persistence — `$storage.set/get`, `$storage.session.*`, `$storage.cookies.*`. |
+| `$console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
 | JS stdlib | The JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
 | timers    | `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` — like their JS counterparts, but tracked by the runtime and cleared automatically on re-plan/disconnect. Use inside an `effect` and clear in `cleanup`. |
 | full JS globals | The **entire** JavaScript global surface is available — dialogs (`alert`, `confirm`, `prompt`), Web APIs (`fetch`, `URL`, `URLSearchParams`, `Blob`, `FormData`, `crypto`, `navigator`, `localStorage`, `atob`/`btoa`, `Intl`, `BigInt`, `Reflect`, …), and `window` / `document` themselves. Any `globalThis` member resolves by name. |
 
-Both `storage` and `console` are **lowercase**; the `route` handle is
+Both `$storage` and `$console` are **lowercase**; the `route` handle is
 **reserved** (never declare a state slot named `route`). Author declarations
 and built-in components always win over a same-named global (a library
 `Text` / `Map` component is never shadowed by the DOM `Text` / `Map`), so the
 global passthrough only resolves names you haven't otherwise defined. For
-reactive data prefer `Http({...})` over raw `fetch`, and timers/listeners
-belong inside an `effect(...)` so they're cleaned up on unmount.
+reactive data prefer `$http({...})` over raw `fetch`, and timers/listeners
+belong inside an `$effect(...)` so they're cleaned up on unmount.
 
 ### The 60-second pitch
 
 ```js
 $days = "7"
-$data = Http({ url: "https://api.example.com/metrics", method: "GET", query: { days: $days } })
+$data = $http({ url: "https://api.example.com/metrics", method: "GET", query: { days: $days } })
 
 filter = FormControl("Range", { control: Select("days", {
   items: [SelectItem("7", "7d"), SelectItem("30", "30d")],
@@ -602,7 +606,7 @@ function add() {
 }
 
 function remove(id) {
-  $todos = Util.filter($todos, "id", "!=", id)
+  $todos = $util.filter($todos, "id", "!=", id)
 }
 
 row = t => Card([Stack([
@@ -617,6 +621,76 @@ aktion = Stack([
   list
 ])
 ```
+
+### Fine-grained reactivity
+
+Dependencies are tracked at the **path** you read, not the whole atom.
+Reading `$user.name` subscribes to `user.name` — so a write to a
+**sibling** field leaves that reader untouched, while replacing the whole
+atom (an ancestor) or writing a descendant still wakes it. This is the
+auto-tracking of MobX, the path-granularity of Solid, and the
+"recompute-only-on-input-change" of Redux selectors — with no selectors
+or special syntax. You just read the path.
+
+```js
+$user = { name: "Ada", role: "Engineer" }
+
+// Reads `user.name` → depends on `user.name` only.
+greeting = Text(`Hi ${$user.name}`)
+
+// Writing the sibling `role` does NOT re-render `greeting`, recompute a
+// `$user.name`-derived value, or fire a `[$user.name]` effect.
+function promote() { $user.role = "Manager" }   // greeting stays put
+function rename(next) { $user.name = next }      // greeting updates
+```
+
+The rule that keeps it predictable:
+
+| You read… | You depend on… |
+| --- | --- |
+| `$user` | `user` (the whole atom) |
+| `$user.name` | `user.name` |
+| `$user.address.city` | `user.address.city` |
+| `$rows[i]` / `$rows.name` (array index / pluck) | `rows` (the array) |
+| `$obj[$key]` (dynamic key) | `obj` + whatever `$key` reads |
+
+A change to path **C** wakes a dependency on path **D** exactly when one
+is a prefix of the other (equal, ancestor, or descendant) — sibling paths
+never interfere. Object fields are tracked field-by-field; reading into an
+array (or through a dynamic key) subscribes at the array/container, so
+mutating any element re-renders the list. The same model powers the four
+places work is triggered: **render scheduling** (the app re-renders only
+when a changed path overlaps what it displayed), **computed values**
+(`$total = $util.sum($cart.lines)` recomputes only when `cart.lines`
+changes), **effects** (`$effect(..., [$user.name])`), and **per-component
+re-rendering** (below).
+
+#### Per-component re-rendering
+
+A component only re-executes when **its own inputs change** — its args
+(props) or a `$state` path its body read. This is the granularity of
+`React.memo` / Solid, but automatic: no `memo()` wrapper. If `$user.age`
+changes, a `ShowName($user.name)` that only read `name` is skipped (its
+body — and any `console.log` in it — doesn't run); only the components that
+actually depend on `age` re-execute.
+
+```js
+function App() {
+  $user = { name: "Ada", age: 30 }
+  return [ShowName($user.name), ShowAge($user.age)]   // siblings, independent
+}
+// Changing $user.age re-runs ShowAge only; ShowName is reused (memoized).
+```
+
+Args are compared shallowly (`Object.is`), so — exactly as in React —
+passing a **fresh inline lambda** each render (`onClick: () => …`) makes the
+receiving component re-render every time; hoist the handler to a stable
+binding if you want it skipped. State changes the path-tracker can't see
+(hook setters, timers, HTTP, effects) fall back to a full re-render.
+
+> Granularity is at both the *subscription* and *component* level. When a
+> component does re-execute, Aktion rebuilds its render tree and the morph
+> reconciler patches only the DOM that actually differs.
 
 ### Per-instance state & content-addressed identity
 
@@ -643,9 +717,92 @@ function TaskRow(task) {
 }
 ```
 
+### Hooks — `$state`, `$memo`, and custom `$name`
+
+A function whose name starts with `$` is a **hook**, mirroring React's
+`use*` convention. Hooks are the composable way to manage per-instance
+state. Built-in `$state` and `$memo` mirror React's `useState` and
+`useMemo`:
+
+```js
+function Counter() {
+  const [count, setCount] = $state(0)
+  const label = $memo(() => `Count: ${count}`, [count])
+  return Stack([
+    Text(label),
+    Button("+1", { onClick: () => setCount(c => c + 1) })
+  ])
+}
+
+aktion = Counter()
+```
+
+- `$state(initial)` returns a `[value, setValue]` pair. `setValue(next)`
+  replaces the value; `setValue(prev => next)` derives it from the
+  previous value. The initializer is evaluated once, on first render.
+- `$memo(() => compute, [deps])` returns a cached value and recomputes
+  only when a dependency changes (shallow `Object.is` compare). Omit the
+  deps array to recompute every render.
+
+Declare your own hooks with `function $name(...)`. A custom hook's
+body runs **inline in the calling component's hook scope**, so its
+`$state` / `$memo` calls attach to that component — exactly how a React
+custom hook shares its caller's slots:
+
+```js
+function $useCounter(start) {
+  const [count, setCount] = $state(start)
+  return { count: count, increment: () => setCount(c => c + 1) }
+}
+
+function Counter(label) {
+  const c = $useCounter(0)
+  return Stack([Text(`${label}: ${c.count}`), Button("+1", { onClick: c.increment })])
+}
+```
+
+Two rules, both inherited from React: call hooks **unconditionally and in
+a stable order** at the top level of a component / hook body (slots are
+matched by call order across renders), and remember that hook state
+**resets when the instance leaves the tree** — a remounted component
+starts again from its initial value. `$state` and `$memo` are reserved
+names. The lighter `$name = value` per-instance form above remains
+available when an atom is written directly by the component's actions.
+
+### Global stores — `$store({...})`
+
+For state shared across components — the role Redux / Zustand / Pinia play
+elsewhere — declare a **store**. Non-function entries are reactive state;
+function entries are methods that receive the store handle `s` first. Read
+state with `store.field` (fine-grained), call methods with
+`store.method(args)`, and mutate inside a method with `s.field = …`. The
+handle is an app-global singleton with reference-stable methods, so any
+component reads it or calls its actions directly — no prop drilling.
+
+```js
+cart = $store({
+  items: [],                                          // state
+  count: (s) => s.items.length,                       // getter → cart.count()
+  total: (s) => $util.sum(s.items.map(i => i.price)),  // getter → cart.total()
+  add: (s, item) => { s.items = [...s.items, item] }, // action → cart.add(item)
+  clear: (s) => { s.items = [] },
+})
+
+// Siblings with no relationship both talk to the same cart.
+function AddLatte() { return Button("Add", { onClick: () => cart.add({ price: 4.5 }) }) }
+function MiniCart() { return Text(`${cart.count()} items — ${$util.format(cart.total(), "currency")}`) }
+aktion = Column([AddLatte(), MiniCart()])
+```
+
+Reads are fine-grained and per-component (changing `cart.items` re-renders
+only components that read it), and store fields support two-way binding
+(`Input(value: form.draft)`). Use a `$store` for shared state; use a
+component's local `$state` / `$name = value` for state one component owns.
+See the [Global state guide](https://asfand-dev.github.io/aktion/stores.html).
+
 ### Component-scoped effects
 
-`effect(() => { … }, [...deps])` blocks can live at the program top level
+`$effect(() => { … }, [...deps])` blocks can live at the program top level
 **or** inside a component function body. Inside a component body the
 runtime mounts the effect when the instance first renders and tears it
 down (clearing timers, unsubscribing watched atoms, firing every
@@ -657,15 +814,15 @@ removing one stops only that one:
 aktion = Stack([LiveClock("UTC"), LiveClock("Local")])
 
 function LiveClock(label) {
-  $now = Util.now()
-  effect(() => {
-    $now = Util.now()
+  $now = $util.now()
+  $effect(() => {
+    $now = $util.now()
   }, ["every(1000)"])
-  return Stack([Text(label), Text(Util.formatDate($now, "time"))])
+  return Stack([Text(label), Text($util.formatDate($now, "time"))])
 }
 ```
 
-Use a top-level `effect(() => { … }, [...])` for global work (analytics,
+Use a top-level `$effect(() => { … }, [...])` for global work (analytics,
 app-wide keyboard shortcuts, hydration of shared atoms); use a
 component-local effect whenever the background work logically belongs
 to the UI it serves.
@@ -723,8 +880,8 @@ production-quality SaaS UI in a single line.
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
 | **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection listeners or raw class / style to ANY component without it needing a dedicated prop. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
-| **Theming**        | `Theme` |
-| **Routing**        | `Router({ … })`, `NavLink` |
+| **Theming**        | `$theme` |
+| **Routing**        | `$router({ … })`, `NavLink` |
 
 ### Form `onChange` callback
 
@@ -735,8 +892,8 @@ beyond a state write (debounce a search, persist a setting, kick off
 a fetch).
 
 ```js
-Input("query", { onChange: q => $results = Http({ url: `https://api.example.com/search?q=${q}` }) })
-Slider("vol", { min: 0, max: 100, value: $vol, onChange: v => storage.set("volume", v) })
+Input("query", { onChange: q => $results = $http({ url: `https://api.example.com/search?q=${q}` }) })
+Slider("vol", { min: 0, max: 100, value: $vol, onChange: v => $storage.set("volume", v) })
 Switch("dark", { value: $theme == "dark", onChange: on => $theme = on ? "dark" : "light" })
 ```
 
@@ -776,7 +933,7 @@ live previews is at
 ### Rich pattern composites
 
 ```js
-function export_q3() { $exp = Http({ url: "https://api.example.com/exports/q3", method: "POST" }) }
+function export_q3() { $exp = $http({ url: "https://api.example.com/exports/q3", method: "POST" }) }
 function new_project() { route.navigate("/projects/new") }
 
 dashHeader  = PageHeader("Engineering Q3", { subtitle: "12 active · 4 at risk", breadcrumbs: ["Workspace", "Engineering"], actions: dashActions, status: Badge("On track", "success") })
@@ -865,14 +1022,14 @@ el.setTheme({
 });
 ```
 
-### `Theme({...})` from inside a response
+### `$theme({...})` from inside a response
 
-A response can brand itself by assigning a `Theme({...})` call to the
+A response can brand itself by assigning a `$theme({...})` call to the
 reserved top-level `theme` binding. The tokens land on the host as CSS
 variables on top of the base theme.
 
 ```js
-theme = Theme({
+theme = $theme({
   colors: {
     primary: "#0969da",
     border:  "#d0d7de",
@@ -889,9 +1046,9 @@ theme = Theme({
 aktion = Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
 ```
 
-`Theme` expects the **structured** form — top-level groups `colors` /
+`$theme` expects the **structured** form — top-level groups `colors` /
 `radius` / `font` / `motion` / `elevation` (plus metadata keys `name`
-and `direction`). Removing the `Theme(...)` line snaps the UI back to
+and `direction`). Removing the `$theme(...)` line snaps the UI back to
 the base theme. Unknown keys are ignored silently, so typos in an
 LLM-emitted token map can never break the page.
 
@@ -958,7 +1115,7 @@ back/forward, bookmarks, and deep links all work — and the host page
 never reloads.
 
 ```js
-pages = Router({
+pages = $router({
   "/":          homePage,
   "/dashboard": dashboardPage,
   "/users/:id": userPage({ id: params.id }),
@@ -979,7 +1136,7 @@ userPage      = (id) => Card([CardHeader(`User ${id}`)])
 notFoundPage  = Callout("Not found", { description: `We couldn't find ${route.path}.`, variant: "warning" })
 ```
 
-- `pages = Router({ "/path": Component(), default: Fallback() })` picks
+- `pages = $router({ "/path": Component(), default: Fallback() })` picks
   the matching arm based on the current hash path. First match wins;
   `default:` is the fallback.
 - Route patterns support literal segments (`"/about"`), parameter
@@ -1006,18 +1163,18 @@ program — no import required. Both follow the standard
 `obj.method(args)` method-call syntax and accept object-literal options.
 
 ```js
-// localStorage is the default; `storage.local` is its alias.
-storage.set("name", "John")
-$name = storage.get("name")
+// localStorage is the default; `$storage.local` is its alias.
+$storage.set("name", "John")
+$name = $storage.get("name")
 
 // Per-tab sessionStorage.
-storage.session.set("draft", $draft)
-$draft = storage.session.get("draft")
+$storage.session.set("draft", $draft)
+$draft = $storage.session.get("draft")
 
 // Cookies — options as an object literal.
-storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
-$user = storage.cookies.get("user")
-storage.cookies.remove("user", { path: "/" })
+$storage.cookies.set("user", "John", { expires: 7, path: "/", sameSite: "Lax" })
+$user = $storage.cookies.get("user")
+$storage.cookies.remove("user", { path: "/" })
 
 // Forwards to the host console.
 console.log("Hello", $user)
@@ -1040,12 +1197,12 @@ for the full surface.
 
 ## Internationalization
 
-Call `i18n({...})` to build a translation bundle. You can destructure
+Call `$i18n({...})` to build a translation bundle. You can destructure
 `t`, `setCurrentLanguage`, and `getCurrentLanguage`, or keep the result
 as an instance and call its methods.
 
 ```js
-const { t, setCurrentLanguage, getCurrentLanguage } = i18n({
+const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({
   defaultLanguage: "en",
   currentLanguage: "fr",
   translations: {
@@ -1069,7 +1226,7 @@ atom and either call `setCurrentLanguage(...)` or rebuild the bundle:
 
 ```js
 $lang = "fr"
-const i18nInstance = i18n({
+const i18nInstance = $i18n({
   defaultLanguage: "en",
   currentLanguage: $lang,
   translations: { hi: { en: "Hi", fr: "Salut", de: "Hallo" } }
@@ -1161,10 +1318,10 @@ consumes from the CDN.
 | `get-started.html`                  | Step-by-step integration walkthrough.                                                   |
 | `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
 | `language.html`                     | Full Aktion language reference.                                            |
-| `http.html`                         | HTTP guide — the `Http({...})` primitive, config options, the reactive resource bag, `Async`, refetch/cancel patterns, and a full CRUD walkthrough. |
+| `http.html`                         | HTTP guide — the `$http({...})` primitive, config options, the reactive resource bag, `Async`, refetch/cancel patterns, and a full CRUD walkthrough. |
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
-| `side-effects.html`                 | `effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
+| `side-effects.html`                 | `$effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
 | `javascript-interactions.html`      | Effect + action bodies — the JavaScript execution surface.                               |
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
@@ -1193,7 +1350,7 @@ recipe for `setResponse`, `appendChunk`, and `setTheme`.
 | `data-explorer`                 | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `LineChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `ActivityLog`. |
 | `media-gallery`                 | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer`, `AudioPlayer`, Leaflet-backed `Map`. |
 | `content-studio`                | CMS-style authoring surface: `RichTextEditor`, `CodeEditor`, `MultiStepForm`, `ColorPicker`, `TagInput`, `MentionInput`, `PinInput`, `ValidationSummary`, `TopBar`. |
-| `brand-themes.html`             | Same UI reskinned with `Theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, **Vercel** (bespoke UI on its own page). |
+| `brand-themes.html`             | Same UI reskinned with `$theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, **Vercel** (bespoke UI on its own page). |
 
 The full catalog with tag filters lives at
 [`docs/live-examples.html`](https://asfand-dev.github.io/aktion/live-examples.html).
@@ -1211,11 +1368,11 @@ The full catalog with tag filters lives at
 │   │   ├── evaluator.ts       #     program planner + binding resolver
 │   │   ├── state.ts           #     reactive store — `$name = value`
 │   │   ├── effects.ts         #     EffectRunner + ActionDeclRunner
-│   │   ├── http.ts            #     Http({...}) reactive HTTP primitive + interceptors
-│   │   ├── i18n.ts            #     i18n({...}) factory — returns { t, setCurrentLanguage, getCurrentLanguage }
-│   │   ├── storage.ts         #     storage.local / .session / .cookies bridge
+│   │   ├── http.ts            #     $http({...}) reactive HTTP primitive + interceptors
+│   │   ├── i18n.ts            #     $i18n({...}) factory — returns { t, setCurrentLanguage, getCurrentLanguage }
+│   │   ├── $storage.ts         #     $storage.local / .session / .cookies bridge
 │   │   ├── console.ts         #     console.* host bridge
-│   │   └── router.ts          #     Hash-based router for Router({…}) calls and NavLink
+│   │   └── router.ts          #     Hash-based router for $router({…}) calls and NavLink
 │   ├── library/               #   Component specs and registry
 │   │   └── components/        #     layout / content / forms / data / charts / chat /
 │   │                          #     feedback / navigation / menu / patterns / helpers / router
@@ -1303,8 +1460,8 @@ npm test
 ```
 
 The suite covers parser/lexer, runtime evaluator + reactive state +
-`Http({...})`, effects / actions, the hash-based router + `NavLink`,
-theme resolution, in-script `Theme(...)` overrides, the component
+`$http({...})`, effects / actions, the hash-based router + `NavLink`,
+theme resolution, in-script `$theme(...)` overrides, the component
 library, element-level integration via happy-dom, the system prompt
 generator, storage / console globals, the language-support spec for
 editor tooling, prop aliases & one-positional-max enforcement, icon
@@ -1334,7 +1491,7 @@ Then open <http://localhost:4321/index.html>.
 
 The library treats every LLM-supplied attribute as untrusted and runs
 it through a small set of sanitisers before it lands on the DOM. HTTP
-requests issued by the LLM through `Http({...})` flow through your host's
+requests issued by the LLM through `$http({...})` flow through your host's
 `registerHttpInterceptors({ onRequest, onResponse, onError })` chain so
 auth headers, CORS workarounds, and refresh-token retries stay under
 host control.
@@ -1356,7 +1513,7 @@ use `eval`. Effect and action bodies are evaluated with
 `new Function(...)` which requires `'unsafe-eval'` if you want them to
 run arbitrary JavaScript; if you cannot relax CSP, simply avoid emitting
 complex JS expressions from the LLM — declarative constructs (component
-trees, `Http()`, `@`-functions) keep working without `unsafe-eval`.
+trees, `$http()`, `@`-functions) keep working without `unsafe-eval`.
 
 ---
 

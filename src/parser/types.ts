@@ -344,6 +344,32 @@ export interface ActionDeclaration {
   loc?: SourceLocation;
 }
 
+/**
+ * `function $name(args) { body }` — a **hook** declaration (the `$` sigil
+ * on the function name is the marker, mirroring React's `use*` convention).
+ *
+ * Hooks are the composable unit of per-instance state. Unlike a component
+ * or action, a hook's body runs *inline inside the calling component's hook
+ * scope* — it does NOT open its own instance scope — so the `$state(...)` /
+ * `$memo(...)` calls inside it allocate slots on the component that invoked
+ * the hook (exactly how a React custom hook shares its caller's hook slots).
+ *
+ * `name` is stored WITHOUT the leading `$` (e.g. `function $useCounter()`
+ * becomes `{ name: "useCounter" }`); the hook is invoked as `$useCounter()`.
+ *
+ * Like React, hooks must be called unconditionally and in a stable order at
+ * the top level of a component / hook body — slots are matched by call
+ * order across renders.
+ */
+export interface HookDeclaration {
+  kind: "HookDeclaration";
+  /** Hook name WITHOUT the leading `$` (e.g. `"useCounter"`). */
+  name: string;
+  params: ReadonlyArray<DeclParam>;
+  body: BlockExpr;
+  loc?: SourceLocation;
+}
+
 /** `await expr` statement / expression — only valid inside `function`/`effect`. */
 export interface AwaitStatement {
   kind: "Await";
@@ -502,6 +528,7 @@ export type Statement =
   | ComponentDeclaration
   | EffectDeclaration
   | ActionDeclaration
+  | HookDeclaration
   | AwaitStatement
   | ReturnStatement
   | ExpressionStatement
