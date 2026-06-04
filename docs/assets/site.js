@@ -38,6 +38,7 @@ const NAV_GROUPS = [
     label: "Core Concepts",
     items: [
       { href: "language.html", label: "Language" },
+      { href: "modules.html", label: "Modules", badge: "New" },
       { href: "layout.html", label: "Layout" },
       { href: "components.html", label: "Components" },
       { href: "hooks.html", label: "Hooks", badge: "New" },
@@ -52,6 +53,8 @@ const NAV_GROUPS = [
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "side-effects.html", label: "Side effects" },
       { href: "routing.html", label: "Routing" },
+      { href: "testing.html", label: "Testing", badge: "New" },
+      { href: "devtools.html", label: "DevTools", badge: "New" },
     ],
   },
   {
@@ -73,7 +76,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -94,6 +97,7 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "migration-guide.html": "migrate react vue angular svelte solid preact nextjs jsx tsx hooks composition api signals stores props state",
   "language.html": "syntax expressions state queries mutations builtins",
+  "modules.html": "modules import export multi-file multifile code-splitting code splitting link linker file project component reuse private scope shared state url remote dependency app.aktion entry playground zip",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
   "components.html": "props library catalog signatures",
   "hooks.html": "hooks $state $memo usestate usememo custom hook useeffect local state reactive per-instance setvalue setter memoize derived react",
@@ -102,6 +106,8 @@ const PAGE_KEYWORDS = {
   "http.html": "http fetch request response query headers body refetch cancel async resource crud rest api network",
   "javascript-interactions.html": "script @js useeffect hooks",
   "routing.html": "routes navlink navigate hash router",
+  "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit",
+  "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
   "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",
   "examples.html": "recipes copy paste snippets",
   "live-examples.html": "demos catalog showcase",

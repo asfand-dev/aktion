@@ -58,8 +58,8 @@ $effect(() => {
 }, ["mount"])
 
 // App entry + theming
-aktion = Stack([MyComponent($data)])
-theme = $theme({ colors: { primary: "#0969da" } })
+$app(Stack([MyComponent($data)]))
+$theme({ colors: { primary: "#0969da" } })
 
 // Router
 pages = $router({

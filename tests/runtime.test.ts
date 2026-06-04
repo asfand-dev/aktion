@@ -15,7 +15,6 @@ import {
   planProgram,
   evaluate,
 } from "../src/runtime/index.js";
-import { dataBuiltins } from "../src/runtime/builtins.js";
 import { Util } from "../src/runtime/util.js";
 import { defaultLibrary } from "../src/library/index.js";
 
@@ -65,10 +64,6 @@ card = Card([CardHeader("Hi", "There")])
 });
 
 describe("Util namespace", () => {
-  it("the legacy @-builtin registry is empty", () => {
-    expect(Object.keys(dataBuiltins)).toEqual([]);
-  });
-
   it("counts, sums, and averages", () => {
     expect(Util.count([1, 2, 3])).toBe(3);
     expect(Util.sum([1, 2, 3])).toBe(6);
@@ -207,24 +202,24 @@ describe("bracket member access", () => {
 describe("named component arguments", () => {
   it("merges a trailing object literal into the component's named prop slots", () => {
     const { ctx } = buildContext(
-      'btn = Button("Hi", {variant: "primary", size: "small"})',
+      'btn = Button("Hi", {variant: "primary", size: "sm"})',
     );
     const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Button");
     expect(node.args[0]).toBe("Hi");
     expect(node.args[2]).toBe("primary");
-    expect(node.args[4]).toBe("small");
+    expect(node.args[4]).toBe("sm");
   });
 
   it("merges trailing object keys into the component's prop order", () => {
     const { ctx } = buildContext(
-      'btn = Button("Hi", { variant: "primary", size: "small" })',
+      'btn = Button("Hi", { variant: "primary", size: "sm" })',
     );
     const node = ctx.bindings.get("btn")?.() as { name: string; args: unknown[] };
     expect(node.name).toBe("Button");
     expect(node.args[0]).toBe("Hi");
     expect(node.args[2]).toBe("primary");
-    expect(node.args[4]).toBe("small");
+    expect(node.args[4]).toBe("sm");
   });
 
   it("merges trailing object keys with positional props", () => {

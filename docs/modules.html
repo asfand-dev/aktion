@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Modules · Aktion</title>
+  <meta name="description" content="Split an Aktion app across multiple .aktion files. Import and export components, variables, functions, and reactive $state with JavaScript-like syntax, true per-file scope, and relative, absolute, or URL specifiers — all linked in the browser, no build step." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Multi-file demo: stack each file with a small filename header. */
+    .mf-files { display: flex; flex-direction: column; min-width: 0; }
+    .mf-file { display: flex; flex-direction: column; min-width: 0; }
+    .mf-file + .mf-file { border-top: 1px solid var(--doc-border); }
+    .mf-file-name {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      color: var(--doc-text-muted);
+      padding: 6px 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mf-file-name .mf-entry {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border: 1px solid var(--doc-border);
+      border-radius: 999px;
+      padding: 0 6px;
+    }
+  </style>
+</head>
+<body data-page="modules">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concepts</span>
+        <h1>Modules &amp; multi-file apps.</h1>
+        <p class="lead">
+          A single program is one flat list of statements &mdash; great for a
+          streamed reply, cramped for a real app. <strong>Modules</strong> let you
+          split an app across many <code>.aktion</code> files that
+          <code>import</code> and <code>export</code> components, variables,
+          functions, and reactive <code>$state</code>, with
+          <strong>JavaScript-like syntax</strong> and <strong>true per-file
+          scope</strong>. The files are <strong>linked in the browser</strong> &mdash;
+          no build step &mdash; so the <a href="playground.html">playground</a> and
+          any web page work the same way.
+        </p>
+      </header>
+
+      <h2 id="first-split">A first split</h2>
+      <p>
+        Here is a two-file app. <code>app.aktion</code> is the <strong>entry</strong> &mdash;
+        it holds the <code>$app(&hellip;)</code> root and pulls in a component
+        declared in <code>Greeting.aktion</code>. Editing either file re-links the
+        whole program; the preview shows the linked result.
+      </p>
+      <div class="lay-demo lay-demo--multi" data-entry="app.aktion">
+        <span class="lay-demo-label">Live · multi-file</span>
+        <div class="mf-files">
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> app.aktion <span class="mf-entry">entry</span></span>
+<pre data-file="app.aktion"><code>import { Greeting } from "./Greeting.aktion"
+
+$app(Greeting("Aktion"))</code></pre>
+          </div>
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> Greeting.aktion</span>
+<pre data-file="Greeting.aktion"><code>export function Greeting(name) {
+  return Card([
+    CardHeader(`Hello, ${name}!`, { subtitle: "Rendered from an imported file" })
+  ])
+}</code></pre>
+          </div>
+        </div>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="exporting">Exporting</h2>
+      <p>
+        Prefix any top-level declaration with <code>export</code> to make it
+        importable from another file. Anything <em>not</em> exported is private to
+        its file. Every binding kind can be exported &mdash; components, actions,
+        hooks, reactive <code>$state</code>, and plain bindings:
+      </p>
+<pre><code>// components.aktion
+export function Card2({ title }) {        // a component
+  return Card([CardHeader(title)])
+}
+
+export function track(name) {             // an action (lowercase)
+  console.log(name)
+}
+
+export function $useToggle() {            // a hook ($-prefixed)
+  $on = $state(false)
+  return { on: $on, toggle: () =&gt; { $on = !$on } }
+}
+
+export $count = 0                         // a reactive atom
+export accent = "var(--rui-primary)"      // a plain binding</code></pre>
+      <p>
+        <code>export { a, b }</code> lists, re-exports, and
+        <code>export</code> of a destructuring declaration are not supported &mdash;
+        export each binding inline, where it is declared.
+      </p>
+
+      <h2 id="importing">Importing</h2>
+      <p>
+        Import named bindings with <code>import { &hellip; } from "&hellip;"</code>.
+        Rename with <code>as</code>, and import reactive state by keeping its
+        <code>$</code> sigil on both sides:
+      </p>
+<pre><code>import { Card2 } from "./components.aktion"
+import { Card2 as PanelCard } from "./components.aktion"   // aliased
+import { $count, increment } from "./store.aktion"          // a shared atom + an action
+import { $count as $total } from "./store.aktion"           // $ stays across `as`</code></pre>
+      <p>
+        Names are matched by their bare name, so <code>export $count</code> lines up
+        with <code>import { $count }</code>. A <code>$state</code> import must keep
+        its <code>$</code> across <code>as</code> (<code>{ $a as $b }</code>) &mdash;
+        mixing <code>{ $a as b }</code> is a syntax error. <code>from</code> and
+        <code>as</code> are ordinary identifiers everywhere else, so existing code
+        that uses them as variable names keeps working.
+      </p>
+
+      <h2 id="scope">True per-file scope</h2>
+      <p>
+        Each file is its own scope. A file's non-exported top-level names are
+        <strong>private</strong>, so two files can reuse the same name without
+        clashing &mdash; the linker renames each file's private symbols behind the
+        scenes. Only the names you <code>import</code> cross the boundary.
+      </p>
+<pre><code>// Button.aktion
+icon = "bolt"                              // private to this file
+export function PrimaryButton({ label, onClick }) {
+  return Button(label, { variant: "primary", icon: icon, onClick: onClick })
+}
+
+// Link.aktion
+icon = "arrow-up-right-from-square"        // a DIFFERENT, private `icon`
+export function LinkButton({ label, onClick }) {
+  return Button(label, { variant: "ghost", icon: icon, onClick: onClick })
+}</code></pre>
+      <p>
+        Built-in library components (<code>Button</code>, <code>Card</code>,
+        <code>Column</code>, &hellip;) and runtime globals (<code>$util</code>,
+        <code>route</code>, <code>console</code>) are resolved by the runtime, not by
+        a module, so they are always available without importing &mdash; and never
+        renamed.
+      </p>
+
+      <h2 id="shared-state">Sharing reactive state</h2>
+      <p>
+        Export a <code>$state</code> atom and the files that import it read and write
+        the <strong>same</strong> reactive cell. This is the simplest way to share
+        state across an app &mdash; a tiny store in its own file:
+      </p>
+      <div class="lay-demo lay-demo--multi" data-entry="app.aktion">
+        <span class="lay-demo-label">Live · shared store</span>
+        <div class="mf-files">
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> app.aktion <span class="mf-entry">entry</span></span>
+<pre data-file="app.aktion"><code>import { $count, increment } from "./store.aktion"
+
+$app(Column([
+  Card([
+    CardHeader("Shared store"),
+    Text(`Count: ${$count}`),
+    Button("Increment", { variant: "primary", onClick: increment })
+  ])
+], { gap: "l", align: "center", padding: "xl" }))</code></pre>
+          </div>
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> store.aktion</span>
+<pre data-file="store.aktion"><code>export $count = 0
+
+export function increment() {
+  $count = $count + 1
+}</code></pre>
+          </div>
+        </div>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The <strong>entry file keeps its own names canonical</strong>: the
+        <code>$state</code> atoms you declare or import into <code>app.aktion</code>
+        are exactly the names that <code>serializeState()</code>,
+        <code>hydrateState()</code>, and <code>applyDelta()</code> target.
+      </p>
+
+      <h2 id="specifiers">Where modules resolve from</h2>
+      <p>
+        A specifier can be relative, absolute (from the project root), or a full
+        URL. URL modules are <strong>fetched over the network</strong> when the
+        project is linked, so you can pull a shared component straight from a CDN or
+        gist:
+      </p>
+<pre><code>import { Button } from "./Button.aktion"                     // same folder
+import { Card2 } from "../components/Card2.aktion"           // parent folder
+import { Nav } from "/layout/Nav.aktion"                     // from the project root
+import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched on link</code></pre>
+      <p>
+        A relative import inside a URL module resolves against that URL, so a remote
+        file can pull in its own neighbours. Bare specifiers
+        (<code>import { x } from "lodash"</code>) have no meaning and are reported as
+        unresolved.
+      </p>
+
+      <h2 id="entry">The entry file</h2>
+      <p>
+        Linking starts from one <strong>entry</strong> file &mdash;
+        <code>app.aktion</code> in the playground. The entry is what defines the
+        rendered root (a <code>$app(&hellip;)</code> statement, or the legacy
+        <code>aktion = &hellip;</code> binding); imported files normally only
+        <em>declare and export</em>. The linker walks every <code>import</code> from
+        the entry, merges the whole graph into one program, and the runtime renders
+        it &mdash; import cycles are fine (each file is merged once).
+      </p>
+
+      <h2 id="playground">In the playground</h2>
+      <p>
+        The <a href="playground.html">playground</a> is multi-file. Use the
+        <strong>file explorer</strong> on the left to create, rename, switch, and
+        delete files; <code>app.aktion</code> is always the entry. Press
+        <i class="fa-solid fa-file-zipper"></i> to <strong>download the whole project
+        as a <code>.zip</code></strong>, or the share / download buttons to get a
+        single linked program (every file inlined). Examples and shared links load
+        into <code>app.aktion</code>. Try the
+        <strong>&ldquo;Multi-file modules&rdquo;</strong> preset to start from a
+        ready-made split.
+      </p>
+
+      <h2 id="lazy">Lazy loading &amp; code-splitting</h2>
+      <p>
+        Modules organise your <em>source</em>; the <code>Lazy(&hellip;)</code> helper
+        defers <em>rendering</em>. Reach for <code>Lazy(&hellip;)</code> when a part
+        of the UI should mount only when it is needed (showing a fallback until a
+        promise resolves), and reach for modules to keep that part &mdash; and the
+        rest of the app &mdash; in readable, reusable files.
+      </p>
+<pre><code>// In app.aktion
+import { Dashboard } from "./Dashboard.aktion"
+
+$app(Column([
+  Header(),
+  // Render the heavy view behind a fallback until it's ready.
+  Lazy(() =&gt; Dashboard(), { fallback: Skeleton({ lines: 6 }) })
+]))</code></pre>
+
+      <h2 id="best-practices">Best practices</h2>
+      <ul>
+        <li><strong>One component per file</strong> (named to match), so imports read like a manifest.</li>
+        <li><strong>Keep shared <code>$state</code> in its own store file</strong> and export the atoms plus the actions that mutate them &mdash; importers get a consistent surface.</li>
+        <li><strong>Keep the entry thin.</strong> Let <code>app.aktion</code> wire pieces together and own the <code>$app(&hellip;)</code> root; push real UI into imported files.</li>
+        <li><strong>Export only what other files need.</strong> Everything else stays private &mdash; that is what makes a name safe to reuse.</li>
+        <li><strong>Prefer relative imports</strong> within a project; reserve URL imports for genuinely shared, versioned components.</li>
+      </ul>
+
+      <h2 id="next">Next steps</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Open the playground</h3>
+          <p>Create files, import between them, and download the project as a zip.</p>
+          <span class="demo-arrow">Launch playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>Program structure, <code>$state</code>, expressions, and control flow.</p>
+          <span class="demo-arrow">Read the reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="stores.html">
+          <span class="demo-tag">Pattern</span>
+          <h3>Global state</h3>
+          <p>Patterns for sharing reactive state across an app.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Registers <aktion-app> and exposes the in-browser linker.
+    import { linkProject, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "../dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+
+    // Single-file demos: setResponse the one code block. (Excludes multi-file demos.)
+    for (const demo of document.querySelectorAll(".lay-demo:not(.lay-demo--multi)")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(code.textContent || "");
+        else app.setAttribute("response", code.textContent || "");
+      } catch (err) {
+        console.error("[modules demo] render failed", err);
+      }
+    }
+
+    // Multi-file demos: collect every [data-file] block, link the project, and
+    // mount the compiled result — exactly what the playground does.
+    for (const demo of document.querySelectorAll(".lay-demo--multi")) {
+      const entry = demo.dataset.entry || "app.aktion";
+      const files = {};
+      for (const pre of demo.querySelectorAll("[data-file]")) {
+        const code = pre.querySelector("code") || pre;
+        files[pre.dataset.file] = code.textContent || "";
+      }
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!host) continue;
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      linkProject({ entry, files })
+        .then((res) => {
+          app.mountCompiled(
+            defineCompiledProgram({
+              __aktionCompiled: COMPILED_PROGRAM_VERSION,
+              program: res.program,
+              source: res.source,
+              path: entry,
+            }),
+          );
+        })
+        .catch((err) => console.error("[modules demo] link failed", err));
+    }
+
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

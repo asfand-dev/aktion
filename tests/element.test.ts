@@ -105,7 +105,7 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     const el = create();
     const prompt = el.getSystemPrompt();
     expect(prompt).toContain("Aktion");
-    expect(prompt).toContain("aktion = Column(");
+    expect(prompt).toContain("$app(Column(");
   });
 
   it("hides the parse-error banner while streaming and surfaces errors after", async () => {

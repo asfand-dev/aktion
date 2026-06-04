@@ -12,6 +12,14 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./test": {
+      "types": "./dist/types/testing/index.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./devtools": {
+      "types": "./dist/types/devtools/index.d.ts",
+      "import": "./dist/devtools.js"
+    },
     "./style.css": "./dist/aktion.css",
     "./system_prompt.txt": "./dist/system_prompt.txt",
     "./system_prompt_chat.txt": "./dist/system_prompt_chat.txt"
@@ -24,8 +32,10 @@
   },
   "scripts": {
     "dev": "npm run build && vite",
-    "build": "tsc -p tsconfig.build.json && vite build && node scripts/emit-prompt.mjs && node scripts/emit-entry.mjs",
+    "build": "tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.devtools.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-entry.mjs",
     "build:lib": "vite build",
+    "build:test": "vite build --config vite.testing.config.ts",
+    "build:devtools": "vite build --config vite.devtools.config.ts",
     "build:prompt": "node scripts/emit-prompt.mjs",
     "build:entry": "node scripts/emit-entry.mjs",
     "build:docs": "node scripts/build-docs.mjs",

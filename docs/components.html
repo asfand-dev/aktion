@@ -313,7 +313,7 @@ el.registerComponents([ProductCard]);</code></pre>
 
     /**
      * Per-component sample programs. Each value is a self-contained
-     * Aktion snippet that ends with an `aktion = ...` statement,
+     * Aktion snippet that ends with an `$app(...)` call,
      * so it can be fed straight into `setResponse()` on a renderer instance.
      *
      * Sub-components (e.g. `CardHeader`, `KanbanCard`, `SidebarItem`) are
@@ -322,261 +322,261 @@ el.registerComponents([ProductCard]);</code></pre>
      */
     const SAMPLES = {
       // Layout
-      Column: `aktion = Column([
+      Column: `$app(Column([
   Card([CardHeader("First section")]),
   Card([CardHeader("Second section")]),
   Card([CardHeader("Third section")])
-], { gap: "m" })`,
-      Row: `aktion = Row([
+], { gap: "m" }))`,
+      Row: `$app(Row([
   Text("Inbox", { variant: "large-heavy" }),
   Spacer(),
   Button("Filter", { variant: "ghost" }),
   Button("Compose", { variant: "primary" })
-], { gap: "s" })`,
-      Center: `aktion = Center([
+], { gap: "s" }))`,
+      Center: `$app(Center([
   EmptyState("No results", { description: "Try a different search term." })
-], { minHeight: "40vh" })`,
-      Stack: `aktion = Stack([
+], { minHeight: "40vh" }))`,
+      Stack: `$app(Stack([
   Badge("First",  { tone: "primary" }),
   Badge("Second", { tone: "info" }),
   Badge("Third",  { tone: "success" })
-], { direction: "row", gap: "m", align: "center" })`,
-      Grid: `aktion = Grid([
+], { direction: "row", gap: "m", align: "center" }))`,
+      Grid: `$app(Grid([
   Card([CardHeader("Tile A")]),
   Card([CardHeader("Tile B")]),
   Card([CardHeader("Tile C")])
-], { columns: 3, gap: "m" })`,
-      StackItem: `aktion = Row([
+], { columns: 3, gap: "m" }))`,
+      StackItem: `$app(Row([
   Badge("Fixed", { tone: "info" }),
   StackItem(Input("search", { placeholder: "This input grows to fill the row" }), { grow: 1 }),
   Button("Action", { variant: "primary" })
-], { gap: "m" })`,
-      GridItem: `aktion = Grid([
+], { gap: "m" }))`,
+      GridItem: `$app(Grid([
   GridItem(Card([CardHeader("Sidebar"), Text("1/4 width.")]), { span: "1/4" }),
   GridItem(Card([CardHeader("Main content"), Text("3/4 width.")]), { span: "3/4" })
-], { columns: 12, gap: "m" })`,
-      Box: `aktion = Stack([
+], { columns: 12, gap: "m" }))`,
+      Box: `$app(Stack([
   Box([Text("Padded box with primary background.")], { padding: "m", background: "primary", border: "subtle" }),
   Box([Text("Muted surface with large padding.")], { padding: "l", background: "muted", border: "default" })
-], { gap: "m" })`,
-      Container: `aktion = Container([
+], { gap: "m" }))`,
+      Container: `$app(Container([
   Card([CardHeader("Centred content", { subtitle: "Wrapped in Container size=md" })])
-], { size: "md" })`,
-      Spacer: `aktion = Row([
+], { size: "md" }))`,
+      Spacer: `$app(Row([
   Text("Left edge"),
   Spacer(),
   Text("Right edge")
-], { gap: "m" })`,
-      Card: `aktion = Card([
+], { gap: "m" }))`,
+      Card: `$app(Card([
   CardHeader("Card title", { subtitle: "With a subtitle" }),
   Text("Card body content."),
   CardFooter([Button("Action", { variant: "primary", type: "button", size: "small" })])
-])`,
-      CardHeader: `aktion = Card([
+]))`,
+      CardHeader: `$app(Card([
   CardHeader("Card title", { subtitle: "With a subtitle" }),
   Text("Body of the card.")
-])`,
-      CardFooter: `aktion = Card([
+]))`,
+      CardFooter: `$app(Card([
   CardHeader("With footer"),
   Text("Card body."),
   CardFooter([Button("Save", { variant: "primary", type: "button", size: "small" })])
-])`,
-      Separator: `aktion = Stack([
+]))`,
+      Separator: `$app(Stack([
   Text("Above the separator"),
   Separator({ orientation: "horizontal" }),
   Text("Below the separator"),
   Separator({ orientation: "horizontal", label: "OR" }),
   Text("After a labelled separator")
-])`,
-      Tabs: `aktion = Tabs([
+]))`,
+      Tabs: `$app(Tabs([
   TabItem("overview", { label: "Overview", children: [Text("Overview tab content.")] }),
   TabItem("details",  { label: "Details",  children: [Text("Details tab content.")] })
-])`,
-      TabItem: `aktion = Tabs([
+]))`,
+      TabItem: `$app(Tabs([
   TabItem("first",  { label: "First",  children: [Text("First tab body.")] }),
   TabItem("second", { label: "Second", children: [Text("Second tab body.")] })
-])`,
-      Accordion: `aktion = Accordion([
+]))`,
+      Accordion: `$app(Accordion([
   AccordionItem("Open by default", { children: [Markdown("This **AccordionItem** has open=true.")], open: true }),
   AccordionItem("Another question", { children: [Markdown("Click to reveal the answer.")] }),
   AccordionItem("And one more",    { children: [Markdown("Stacks as a sequence of disclosures.")] })
-], { showArrow: true })`,
-      AccordionItem: `aktion = Accordion([
+], { showArrow: true }))`,
+      AccordionItem: `$app(Accordion([
   AccordionItem("Open by default", { children: [Markdown("This item starts expanded.")], open: true, showArrow: true }),
   AccordionItem("Closed",          { children: [Markdown("Click to expand.")], showArrow: true })
-])`,
-      Modal: `aktion = Modal("Modal title", { open: true, children: [
+]))`,
+      Modal: `$app(Modal("Modal title", { open: true, children: [
   Text("Modal body shown when open=true."),
   Buttons([
     Button("Cancel", { variant: "ghost",   type: "button", size: "small" }),
     Button("Confirm", { variant: "primary", type: "button", size: "small" })
   ])
-] })`,
-      Steps: `aktion = Steps([
+] }))`,
+      Steps: `$app(Steps([
   { title: "Create account",   details: "Sign up with your email." },
   { title: "Invite teammates", details: "Share an invite link." },
   { title: "Connect data",     details: "Hook up your first source." }
-])`,
-      AspectRatio: `aktion = AspectRatio("16:9", { children: [
+]))`,
+      AspectRatio: `$app(AspectRatio("16:9", { children: [
   Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", { alt: "Demo image" })
-] })`,
-      ScrollArea: `aktion = ScrollArea([
+] }))`,
+      ScrollArea: `$app(ScrollArea([
   Card([CardHeader("Block 1"), Text("Body for block 1.")]),
   Card([CardHeader("Block 2"), Text("Body for block 2.")]),
   Card([CardHeader("Block 3"), Text("Body for block 3.")]),
   Card([CardHeader("Block 4"), Text("Body for block 4.")])
-], { height: "200px" })`,
+], { height: "200px" }))`,
 
-      Theme: `theme = $theme({
+      Theme: `$theme({
   colors: { primary: "#0969da", bg: "#f8fafc" },
   font:   { family: "'Inter', system-ui, sans-serif" },
   radius: { md: "12px" }
 })
-aktion = Card([
+$app(Card([
   CardHeader("Themed card", { subtitle: "Custom primary and radius applied." }),
   Text("This card uses a local theme override.")
-])`,
+]))`,
 
       // Content
-      Text: `aktion = Stack([
+      Text: `$app(Stack([
   Text("Small text.",        { variant: "small" }),
   Text("Body text.",         { variant: "body" }),
   Text("Large heavy text.",  { variant: "large-heavy" }),
   Text("Styled.",            { style: "font-size: 18px; font-weight: 600; color: #6366f1;" }),
   Text("Heading variant.",   { variant: "heading", tone: "primary" })
-])`,
-      Image: `aktion = Image(
+]))`,
+      Image: `$app(Image(
   "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=720&q=80",
   { alt: "Workspace photo", caption: "Photo by Bram Naus on Unsplash" }
-)`,
-      Icon: `aktion = Stack([
+))`,
+      Icon: `$app(Stack([
   Icon("house",      { variant: "solid",   size: "lg" }),
   Icon("chart-line", { variant: "solid",   size: "lg" }),
   Icon("star",       { variant: "regular", size: "lg" }),
   Icon("github",     { variant: "brands",  size: "lg" })
-], { direction: "row", gap: "m", align: "center" })`,
-      Link: `aktion = Stack([
+], { direction: "row", gap: "m", align: "center" }))`,
+      Link: `$app(Stack([
   Link("Internal link", { href: "#section" }),
   Link("External link", { href: "https://example.com", external: true })
-], { direction: "row", gap: "m", align: "center" })`,
-      Badge: `aktion = Stack([
+], { direction: "row", gap: "m", align: "center" }))`,
+      Badge: `$app(Stack([
   Badge("Default"),
   Badge("Primary", { tone: "primary" }),
   Badge("Success", { tone: "success" }),
   Badge("Warning", { tone: "warning" }),
   Badge("Danger",  { tone: "danger" }),
   Badge("Info",    { tone: "info" })
-], { direction: "row", gap: "s", align: "center" })`,
-      BadgeList: `aktion = BadgeList(["react", "typescript", "ui", "streaming"], { tone: "primary", size: "sm" })`,
-      Callout: `aktion = Stack([
+], { direction: "row", gap: "s", align: "center" }))`,
+      BadgeList: `$app(BadgeList(["react", "typescript", "ui", "streaming"], { tone: "primary", size: "sm" }))`,
+      Callout: `$app(Stack([
   Callout("info",    { title: "Pro tip",      text: "Use $variables for reactive two-way binding." }),
   Callout("success", { title: "All caught up", text: "Your draft was auto-saved at 10:24 AM.", icon: "circle-check" }),
   Callout("warning", { title: "Heads up",     text: "Owner: Mei · ARR $84,000 · renewal in Q3", icon: "lightbulb", ignored1: true })
-], { direction: "column", gap: "s" })`,
-      Quote: `aktion = Quote(
+], { direction: "column", gap: "s" }))`,
+      Quote: `$app(Quote(
   "Aktion took our recap email from 4k lines of glue to 40.",
   { attribution: "Naomi · last QBR", tone: "primary" }
-)`,
-      CodeBlock: `aktion = CodeBlock("bash", { code: "npm install aktion" })`,
-      Skeleton: `aktion = Skeleton(4, { count: 14 })`,
-      Markdown: `aktion = Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\n\n- First bullet\n- Second bullet\n- Third bullet")`,
-      Kbd: `aktion = Stack([
+))`,
+      CodeBlock: `$app(CodeBlock("bash", { code: "npm install aktion" }))`,
+      Skeleton: `$app(Skeleton(4, { count: 14 }))`,
+      Markdown: `$app(Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\n\n- First bullet\n- Second bullet\n- Third bullet"))`,
+      Kbd: `$app(Stack([
   Kbd(["Cmd", "K"]),
   Kbd(["Shift", "?"], { size: "sm" })
-], { direction: "row", gap: "m", align: "center" })`,
+], { direction: "row", gap: "m", align: "center" }))`,
 
       // Forms
       Form: `$email = ""
 $plan = "pro"
 submit = Button("Save", { variant: "primary", type: "submit" })
-aktion = Form("profile", { buttons: submit, fields: [
+$app(Form("profile", { buttons: submit, fields: [
   FormControl("Email", { control: Input("email", { placeholder: "you@example.com", type: "email", value: $email }) }),
   FormControl("Plan",  { control: Select("plan", { items: [
     SelectItem("free", { label: "Free" }),
     SelectItem("pro",  { label: "Pro" }),
     SelectItem("team", { label: "Team" })
   ], value: $plan }) })
-] })`,
-      FormControl: `aktion = FormControl(
+] }))`,
+      FormControl: `$app(FormControl(
   "Email",
   { control: Input("email", { placeholder: "you@example.com", type: "email" }),
   hint: "We'll never share your email." }
-)`,
+))`,
       Input: `$name = ""
 $email = ""
-aktion = Stack([
+$app(Stack([
   FormControl("Name",  { control: Input("name",  { placeholder: "Your name", type: "text", value: $name }) }),
   FormControl("Email", { control: Input("email", { placeholder: "you@example.com", type: "email", value: $email }) })
-])`,
+]))`,
       TextArea: `$notes = ""
-aktion = FormControl(
+$app(FormControl(
   "Notes",
   { control: TextArea("notes", { placeholder: "Add a few sentences…", rows: 4, value: $notes }) }
-)`,
+))`,
       Select: `$plan = "pro"
-aktion = FormControl("Plan", { control: Select("plan", { items: [
+$app(FormControl("Plan", { control: Select("plan", { items: [
   SelectItem("free", { label: "Free" }),
   SelectItem("pro",  { label: "Pro" }),
   SelectItem("team", { label: "Team" })
-], placeholder: "Pick a plan", value: $plan }) })`,
+], placeholder: "Pick a plan", value: $plan }) }))`,
       SelectItem: `$size = "m"
-aktion = FormControl("Size", { control: Select("size", { items: [
+$app(FormControl("Size", { control: Select("size", { items: [
   SelectItem("s", { label: "Small" }),
   SelectItem("m", { label: "Medium" }),
   SelectItem("l", { label: "Large" })
-], value: $size }) })`,
+], value: $size }) }))`,
       Checkbox: `$accepted = true
-aktion = Checkbox("accept", { label: "I agree to the Terms of Service", value: $accepted })`,
+$app(Checkbox("accept", { label: "I agree to the Terms of Service", value: $accepted }))`,
       CheckBoxGroup: `$alerts = {email: true, sms: false, push: true}
-aktion = CheckBoxGroup("alerts", { items: [
+$app(CheckBoxGroup("alerts", { items: [
   CheckBoxItem("Email", { name: "email", description: "Major product updates",  defaultChecked: true }),
   CheckBoxItem("SMS",   { name: "sms",   description: "Critical alerts only",   defaultChecked: false }),
   CheckBoxItem("Push",  { name: "push",  description: "Real-time notifications", defaultChecked: true })
-], value: $alerts })`,
+], value: $alerts }))`,
       CheckBoxItem: `$alerts = {email: true, sms: false}
-aktion = CheckBoxGroup("alerts", { items: [
+$app(CheckBoxGroup("alerts", { items: [
   CheckBoxItem("Email", { name: "email", description: "Major product updates", defaultChecked: true }),
   CheckBoxItem("SMS",   { name: "sms",   description: "Critical alerts only",  defaultChecked: false })
-], value: $alerts })`,
+], value: $alerts }))`,
       Radio: `$size = "m"
-aktion = Radio("size", { items: [
+$app(Radio("size", { items: [
   SelectItem("s", { label: "Small" }),
   SelectItem("m", { label: "Medium" }),
   SelectItem("l", { label: "Large" })
-], value: $size })`,
+], value: $size }))`,
       Switch: `$notify = true
-aktion = Switch("notify", { label: "Email notifications", value: $notify, description: "Receive product updates" })`,
+$app(Switch("notify", { label: "Email notifications", value: $notify, description: "Receive product updates" }))`,
       ToggleGroup: `$view = "list"
-aktion = ToggleGroup("view", { items: [
+$app(ToggleGroup("view", { items: [
   ["list",  "List",  "list"],
   ["grid",  "Grid",  "grip"],
   ["board", "Board", "table-cells-large"]
-], value: $view, variant: "outline", size: "md" })`,
-      Button: `aktion = Stack([
+], value: $view, variant: "outline", size: "md" }))`,
+      Button: `$app(Stack([
   Button("Primary", { variant: "primary" }),
   Button("Secondary", { variant: "secondary" }),
   Button("Ghost", { variant: "ghost" }),
   Button("Danger", { variant: "danger" })
-], { direction: "row", gap: "s", align: "center" })`,
-      Buttons: `aktion = Buttons([
+], { direction: "row", gap: "s", align: "center" }))`,
+      Buttons: `$app(Buttons([
   Button("Save", { variant: "primary" }),
   Button("Cancel", { variant: "ghost" })
-])`,
+]))`,
       SearchBar: `$q = ""
-aktion = SearchBar("q", { placeholder: "Search the catalog…", value: $q })`,
+$app(SearchBar("q", { placeholder: "Search the catalog…", value: $q }))`,
       Slider: `$volume = 60
-aktion = Slider("vol", { min: 0, max: 100, step: 5, value: $volume, label: "Volume", showValue: true })`,
+$app(Slider("vol", { min: 0, max: 100, step: 5, value: $volume, label: "Volume", showValue: true }))`,
       NumberInput: `$qty = 2
-aktion = FormControl("Quantity", { control: NumberInput("qty", { value: $qty, min: 1, max: 99, step: 1 }) })`,
+$app(FormControl("Quantity", { control: NumberInput("qty", { value: $qty, min: 1, max: 99, step: 1 }) }))`,
       DatePicker: `$date = "2026-06-01"
-aktion = DatePicker("date", { value: $date, placeholder: "Pick a date", min: "2026-01-01", max: "2026-12-31" })`,
-      FileUpload: `aktion = FileUpload(
+$app(DatePicker("date", { value: $date, placeholder: "Pick a date", min: "2026-01-01", max: "2026-12-31" }))`,
+      FileUpload: `$app(FileUpload(
   "avatar",
   { label: "Click or drop a PNG / JPG",
   hint: "Up to 5 MB",
   accept: "image/*",
   multiple: false }
-)`,
+))`,
       Combobox: `$country = "us"
 countries = [
   SelectItem("us", { label: "United States" }),
@@ -586,14 +586,14 @@ countries = [
   SelectItem("fr", { label: "France" }),
   SelectItem("jp", { label: "Japan" })
 ]
-aktion = Combobox("country", { items: countries, value: $country, placeholder: "Search countries…", open: true })`,
+$app(Combobox("country", { items: countries, value: $country, placeholder: "Search countries…", open: true }))`,
 
       // Data
-      Table: `aktion = Table([
+      Table: `$app(Table([
   Col("Name",  { values: ["Ada Lovelace", "Linus Torvalds", "Grace Hopper"] }),
   Col("Stars", { values: [1820, 2300, 940], align: "right", format: "number" }),
   Col("Forks", { values: [220,  412,  80],  align: "right", format: "number" })
-], { title: "Top contributors" })`,
+], { title: "Top contributors" }))`,
       Col: `$rows = [
   { name: "Ada",   active: true },
   { name: "Linus", active: false },
@@ -601,46 +601,46 @@ aktion = Combobox("country", { items: countries, value: $country, placeholder: "
 ]
 # A column cell can be plain text, a Badge, a Button, or any component.
 # Map values to components directly \u2014 no render() needed:
-aktion = Table([
+$app(Table([
   Col("Name", $rows.name, { onClick: (name) =&gt; { $picked = name } }),
   Col("Status", $rows.map(r =&gt; Badge(r.active ? "Active" : "Off", { tone: r.active ? "success" : "neutral" }))),
   Col("", $rows.map(r =&gt; Button("Edit", { onClick: () =&gt; { $picked = r.name }, size: "sm", variant: "ghost" })))
-])`,
-      List: `aktion = List([
+]))`,
+      List: `$app(List([
   ListItem("Tasks",    { meta: "3 active",   icon: "list-check" }),
   ListItem("Calendar", { meta: "2 events",   icon: "calendar" }),
   ListItem("Inbox",    { meta: "5 unread",   icon: "inbox" })
-])`,
-      ListItem: `aktion = List([
+]))`,
+      ListItem: `$app(List([
   ListItem("Tasks",    { meta: "3 active", icon: "list-check" }),
   ListItem("Calendar", { meta: "2 events", icon: "calendar" })
-])`,
-      StatCard: `aktion = StatCard("Revenue", { value: "$48,230", trend: "up", delta: "+12% vs Q2", icon: "sack-dollar" })`,
-      Stats: `aktion = Stats([
+]))`,
+      StatCard: `$app(StatCard("Revenue", { value: "$48,230", trend: "up", delta: "+12% vs Q2", icon: "sack-dollar" }))`,
+      Stats: `$app(Stats([
   {label:"Teams trust it",   value:"2,400+", hint:"In 40 countries",      tone:"primary"},
   {label:"Uptime SLA",       value:"99.99%", hint:"Multi-region",         tone:"success"},
   {label:"Time to first UI", value:"<90 s",  hint:"Signup → render",      tone:"info"},
   {label:"Support reply",    value:"<1 hr",  hint:"Median weekday reply", tone:"warning"}
-], { align: "center" })`,
-      Tile: `aktion = Grid([
+], { align: "center" }))`,
+      Tile: `$app(Grid([
   Tile("Total contacts",   { icon: "users",                value: "2,481", description: "+128 this week",            tone: "primary" }),
   Tile("Active deals",     { icon: "briefcase",            value: "47",    description: "$418k ARR pipeline",        tone: "info" }),
   Tile("At-risk accounts", { icon: "triangle-exclamation", value: "12",    description: "Needs follow-up this week", tone: "warning" }),
   Tile("Champions",        { icon: "trophy",               value: "63",    description: "NPS 9–10 in last 30d",      tone: "success" })
-], { columns: 4, gap: "m" })`,
-      Progress: `aktion = Stack([
+], { columns: 4, gap: "m" }))`,
+      Progress: `$app(Stack([
   Progress(72,   { max: 100, label: "Upload progress", tone: "primary", indeterminate: false, showValue: true }),
   Progress(40,   { max: 100, label: "Quota used",      tone: "warning", indeterminate: false, showValue: true }),
   Progress(null, { label: "Loading…",       tone: "info",    indeterminate: true })
-])`,
-      ProgressRing: `aktion = Stack([
+]))`,
+      ProgressRing: `$app(Stack([
   ProgressRing(72,  { max: 100,           description: "In stock", tone: "success" }),
   ProgressRing(28,  { max: 100,           description: "Backlog",  tone: "warning" }),
   ProgressRing(100, { max: 100, label: "circle-check", description: "Shipped",  tone: "primary" })
-], { direction: "row", gap: "l", align: "center" })`,
+], { direction: "row", gap: "l", align: "center" }))`,
       Pagination: `$page = 3
-aktion = Pagination($page, { pages: 10, siblings: 1 })`,
-      Tree: `aktion = Tree([
+$app(Pagination($page, { pages: 10, siblings: 1 }))`,
+      Tree: `$app(Tree([
   TreeNode("src", { children: [
     TreeNode("library", { children: [
       TreeNode("components.ts", { icon: "file-code" }),
@@ -649,54 +649,54 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     TreeNode("index.ts", { icon: "file-code" })
   ], icon: "folder-open", expanded: true }),
   TreeNode("README.md", { icon: "file-lines" })
-])`,
-      TreeNode: `aktion = Tree([
+]))`,
+      TreeNode: `$app(Tree([
   TreeNode("src", { children: [
     TreeNode("index.ts", { icon: "file-code" }),
     TreeNode("app.ts", { icon: "file-code" })
   ], icon: "folder-open", expanded: true }),
   TreeNode("README.md", { icon: "file-lines" })
-])`,
+]))`,
 
       // Charts
-      BarChart: `aktion = BarChart(
+      BarChart: `$app(BarChart(
   ["Q1", "Q2", "Q3", "Q4"],
   { series: [Series("Sales", { values: [120, 180, 160, 210] }), Series("Refunds", { values: [12, 14, 9, 18] })],
   title: "Quarterly sales" }
-)`,
-      LineChart: `aktion = LineChart(
+))`,
+      LineChart: `$app(LineChart(
   ["Mon", "Tue", "Wed", "Thu", "Fri"],
   { series: [Series("Visits", { values: [120, 180, 160, 210, 250] }), Series("Signups", { values: [12, 18, 15, 22, 28] })] }
-)`,
-      PieChart: `aktion = PieChart(["Free", "Pro", "Team"], { values: [240, 95, 32], title: "Plan mix", valueFormat: "both" })`,
-      Series: `aktion = BarChart(
+))`,
+      PieChart: `$app(PieChart(["Free", "Pro", "Team"], { values: [240, 95, 32], title: "Plan mix", valueFormat: "both" }))`,
+      Series: `$app(BarChart(
   ["Mon", "Tue", "Wed", "Thu"],
   { series: [Series("Visits", { values: [120, 180, 160, 210] }), Series("Signups", { values: [12, 18, 15, 22] })] }
-)`,
+))`,
 
       // Feedback & Media
-      Avatar: `aktion = Box([
+      Avatar: `$app(Box([
   Avatar("Ada Lovelace",   { src: "https://i.pravatar.cc/64?img=47", size: "sm", status: "online" }),
   Avatar("Linus Torvalds", { src: "https://i.pravatar.cc/64?img=11", size: "md", status: "busy" }),
   Avatar("Grace Hopper",   { size: "lg" })
-])`,
-      AvatarGroup: `aktion = AvatarGroup([
+]))`,
+      AvatarGroup: `$app(AvatarGroup([
   {name: "Ada",   src: "https://i.pravatar.cc/64?img=47"},
   {name: "Linus", src: "https://i.pravatar.cc/64?img=11"},
   {name: "Grace", src: "https://i.pravatar.cc/64?img=32"},
   {name: "Alan"},
   {name: "Mei"}
-], { max: 3, size: "md" })`,
-      PersonChip: `aktion = Stack([
+], { max: 3, size: "md" }))`,
+      PersonChip: `$app(Stack([
   PersonChip("Naomi Rivers", { role: "VP Engineering",       src: "https://i.pravatar.cc/64?img=47", size: "md", status: "online" }),
   PersonChip("Marc Lee",     { role: "Head of Data",         src: "https://i.pravatar.cc/64?img=11", size: "md", status: "busy" }),
   PersonChip("Grace Hopper", { role: "Founder · Atlasworks", size: "md", status: "online" })
-])`,
-      Tooltip: `aktion = Stack([
+]))`,
+      Tooltip: `$app(Stack([
   Text("Hover or focus the button to reveal the tooltip.", { variant: "small", tone: "muted" }),
   Tooltip("Tooltip on top", { children: Button("Hover me"), placement: "top" })
-])`,
-      HoverCard: `aktion = Stack([
+]))`,
+      HoverCard: `$app(Stack([
   Text("Hover or focus to reveal the rich card.", { variant: "small", tone: "muted" }),
   HoverCard(
     Button("Preview Ada"),
@@ -709,8 +709,8 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     placement: "bottom",
     open: false }
   )
-])`,
-      Popover: `aktion = Stack([
+]))`,
+      Popover: `$app(Stack([
   Text("Click the trigger to open the popover.", { variant: "small", tone: "muted" }),
   Popover(
     Button("Open popover"),
@@ -727,31 +727,31 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     width: "280px",
     open: false }
   )
-])`,
-      Rating: `aktion = Stack([
+]))`,
+      Rating: `$app(Stack([
   Rating(4.5, { max: 5, label: "4.5 of 5", count: 1284, size: "md" }),
   Rating(5,   { max: 5, size: "sm" }),
   Rating(3,   { max: 5, label: "3 stars",  count: 42,   size: "lg" })
-])`,
-      Toast: `aktion = Toast(
+]))`,
+      Toast: `$app(Toast(
   "Changes saved",
   { description: "Your draft was synced across all devices.",
   tone: "success",
   icon: "circle-check" }
-)`,
+))`,
 
       // Navigation
-      Breadcrumb: `aktion = Breadcrumb([
+      Breadcrumb: `$app(Breadcrumb([
   BreadcrumbItem("Home",        { href: "#", icon: "house" }),
   BreadcrumbItem("Workspace",   { href: "#" }),
   BreadcrumbItem("Engineering")
-])`,
-      BreadcrumbItem: `aktion = Breadcrumb([
+]))`,
+      BreadcrumbItem: `$app(Breadcrumb([
   BreadcrumbItem("Home",      { href: "#", icon: "house" }),
   BreadcrumbItem("Reports",   { href: "#" }),
   BreadcrumbItem("Q3 results")
-])`,
-      Navbar: `aktion = Navbar(
+]))`,
+      Navbar: `$app(Navbar(
   "Acme",
   { items: [
     NavbarItem("Home",    { to: "/",        icon: "house", active: true }),
@@ -764,18 +764,18 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
   ],
   sticky: false,
   variant: "default" }
-)`,
-      NavbarItem: `aktion = Navbar(
+))`,
+      NavbarItem: `$app(Navbar(
   "Acme",
   { items: [
     NavbarItem("Home", { to: "/",     icon: "house", active: true }),
     NavbarItem("Docs", { to: "/docs", icon: "book" }),
     NavbarItem("Blog", { to: "/blog", icon: "newspaper" })
   ] }
-)`,
+))`,
 
       // Menus
-      DropdownMenu: `aktion = Stack([
+      DropdownMenu: `$app(Stack([
   Text("Click the trigger to open the menu.", { variant: "small", tone: "muted" }),
   DropdownMenu(
     Button("Open menu"),
@@ -793,13 +793,13 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     align: "start",
     open: true }
   )
-])`,
-      MenuItem: `aktion = Stack([
+]))`,
+      MenuItem: `$app(Stack([
   MenuItem("Profile", { icon: "user",     shortcut: "⌘P" }),
   MenuItem("Settings", { icon: "gear",     shortcut: "⌘," }),
   MenuItem("Sign out", { icon: "right-from-bracket", variant: "danger" })
-])`,
-      MenuSeparator: `aktion = DropdownMenu(
+]))`,
+      MenuSeparator: `$app(DropdownMenu(
   Button("Open menu"),
   { items: [
     MenuItem("Profile", { icon: "user" }),
@@ -808,8 +808,8 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     MenuItem("Sign out", { icon: "right-from-bracket", variant: "danger" })
   ],
   open: true }
-)`,
-      MenuLabel: `aktion = DropdownMenu(
+))`,
+      MenuLabel: `$app(DropdownMenu(
   Button("Open menu"),
   { items: [
     MenuLabel("Account"),
@@ -820,59 +820,59 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     MenuItem("Invite", { icon: "user-plus" })
   ],
   open: true }
-)`,
+))`,
 
       // Chat
-      SectionBlock: `aktion = SectionBlock(
+      SectionBlock: `$app(SectionBlock(
   "Section block",
   { children: [Text("Body content lives inside the SectionBlock.")],
   description: "Optional description shown beneath the title." }
-)`,
-      ListBlock: `aktion = ListBlock([
+))`,
+      ListBlock: `$app(ListBlock([
   "First step",
   "Second step",
   "Third step"
-])`,
-      FollowUpBlock: `aktion = FollowUpBlock([
+]))`,
+      FollowUpBlock: `$app(FollowUpBlock([
   FollowUpItem("Show me a chart"),
   FollowUpItem("Add a filter"),
   FollowUpItem("Export as CSV")
-])`,
-      FollowUpItem: `aktion = FollowUpBlock([
+]))`,
+      FollowUpItem: `$app(FollowUpBlock([
   FollowUpItem("Show at-risk projects"),
   FollowUpItem("Compare to last quarter"),
   FollowUpItem("Open billing")
-])`,
-      ActionLink: `aktion = Stack([
+]))`,
+      ActionLink: `$app(Stack([
   Text("Need help?", { variant: "body" }),
   ActionLink("Contact support", { action: null })
-])`,
-      ChatBubble: `aktion = Stack([
+]))`,
+      ChatBubble: `$app(Stack([
   ChatBubble("Support",
              { text: "Hi! Tracking shows your package landed in the local hub this morning.",
              time: "9:12 AM", role: "agent", status: "delivered" }),
   ChatBubble("You",
              { text: "Perfect — I can wait. Thank you!",
              time: "9:15 AM", role: "me", status: "read" })
-])`,
+]))`,
 
       // Patterns
-      Hero: `aktion = Hero(
+      Hero: `$app(Hero(
   "Ship faster",
   { subtitle: "From idea to production in minutes.",
   primary: Button("Get started", { variant: "primary" }),
   secondary: Button("Live demo", { variant: "ghost" }),
   eyebrow: "v2 launch",
   highlights: ["No credit card", "Cancel anytime", "Free for 14 days"] }
-)`,
-      PageHeader: `aktion = PageHeader(
+))`,
+      PageHeader: `$app(PageHeader(
   "Engineering Q3",
   { subtitle: "12 active · 4 at risk",
   breadcrumbs: ["Workspace", "Engineering"],
   actions: [Button("Export", { variant: "secondary" }), Button("New project", { variant: "primary" })],
   badge: Badge("On track", { tone: "success" }) }
-)`,
-      SectionHeader: `aktion = Card([
+))`,
+      SectionHeader: `$app(Card([
   SectionHeader(
     "Daily traffic",
     { subtitle: "Visits vs signups",
@@ -881,42 +881,42 @@ aktion = Pagination($page, { pages: 10, siblings: 1 })`,
     actions: [Button("View all", { variant: "ghost", type: "button", size: "small" })] }
   ),
   Text("Section body content lives below the header.")
-])`,
+]))`,
       Toolbar: `$range = "q3"
-aktion = Toolbar(
+$app(Toolbar(
   [FormControl("Range", { control: Select("range", { items: [
     SelectItem("q1", { label: "Q1" }), SelectItem("q2", { label: "Q2" }), SelectItem("q3", { label: "Q3" })
   ], ignored: $range }) })],
   { right: [StatusDot("Live", { tone: "success", pulse: true }),
    Button("New", { variant: "primary", type: "button", size: "small" })] }
-)`,
-      EmptyState: `aktion = EmptyState(
+))`,
+      EmptyState: `$app(EmptyState(
   "No results found",
   { description: "Try a different search or clear the active filters.",
   icon: "magnifying-glass",
   action: Button("Clear filters", { variant: "primary" }) }
-)`,
-      Timeline: `aktion = Timeline([
+))`,
+      Timeline: `$app(Timeline([
   TimelineItem("Ada merged PR #248",    { time: "5m ago",    description: "Patterns ready for review",    icon: "code-pull-request",    tone: "primary" }),
   TimelineItem("QA caught regression",  { time: "1h ago",    description: "Quota dashboard double-count", icon: "triangle-exclamation", tone: "warning" }),
   TimelineItem("Tokenizer 2.1 shipped", { time: "Yesterday", description: "Latency -14%",                icon: "circle-check",         tone: "success" })
-])`,
-      TimelineItem: `aktion = Timeline([
+]))`,
+      TimelineItem: `$app(Timeline([
   TimelineItem("Shipped v2.0",         { time: "2h ago",     description: "Updated 14 components.",         icon: "rocket",  tone: "success" }),
   TimelineItem("Joined Design Review", { time: "Yesterday",  description: "Reviewed dashboard wireframes.", icon: "palette", tone: "primary" }),
   TimelineItem("Profile updated",      { time: "3 days ago", description: "",                               icon: "pen" })
-])`,
-      FeatureGrid: `aktion = FeatureGrid([
+]))`,
+      FeatureGrid: `$app(FeatureGrid([
   FeatureItem("Streaming-first", { description: "Parse and render token-by-token.",          icon: "bolt",         tone: "primary" }),
   FeatureItem("Themeable",       { description: "Seven built-in themes, custom tokens too.", icon: "palette",      tone: "success" }),
   FeatureItem("Framework-free",  { description: "One web component, any host stack.",        icon: "puzzle-piece", tone: "info" })
-])`,
-      FeatureItem: `aktion = FeatureGrid([
+]))`,
+      FeatureItem: `$app(FeatureGrid([
   FeatureItem("Fast",     { description: "Streams token-by-token.",  icon: "bolt",         tone: "primary" }),
   FeatureItem("Themed",   { description: "Seven themes, any tokens.", icon: "palette",      tone: "success" }),
   FeatureItem("Portable", { description: "One web component.",        icon: "puzzle-piece", tone: "info" })
-])`,
-      MediaCard: `aktion = MediaCard(
+]))`,
+      MediaCard: `$app(MediaCard(
   "Aurora Headphones",
   { src: "https://images.unsplash.com/photo-1518443895914-83a35c1eed90?w=900&q=80",
   description: "Studio-grade sound, 40-hour battery.",
@@ -924,15 +924,15 @@ aktion = Toolbar(
   meta: "$249 · 4.8 stars",
   actions: [Button("Add to cart", { variant: "primary" }), Button("Details", { variant: "ghost" })],
   badge: "New" }
-)`,
-      Testimonial: `aktion = Testimonial(
+))`,
+      Testimonial: `$app(Testimonial(
   "Aktion saved us weeks of glue code.",
   { name: "Naomi Rivers",
   role: "VP Engineering · Looplog",
   src: "https://i.pravatar.cc/64?img=47",
   rating: 5 }
-)`,
-      ProfileCard: `aktion = ProfileCard(
+))`,
+      ProfileCard: `$app(ProfileCard(
   "Alex Rivera",
   { role: "Product Designer",
   src: "https://i.pravatar.cc/64?img=12",
@@ -940,8 +940,8 @@ aktion = Toolbar(
   tags: ["design", "ux", "typography"],
   actions: [Button("Follow", { variant: "primary", type: "button", size: "small" }),
    Button("Resume", { variant: "ghost",   type: "button", size: "small" })] }
-)`,
-      Comment: `aktion = Stack([
+))`,
+      Comment: `$app(Stack([
   Comment("Ada Lovelace",
           { text: "Loving the new patterns API — it's much cleaner.",
           time: "2h ago",
@@ -952,15 +952,15 @@ aktion = Toolbar(
           { text: "+1, especially the PageHeader composite.",
           time: "1h ago",
           src: "https://i.pravatar.cc/64?img=11" })
-])`,
-      Banner: `aktion = Banner(
+]))`,
+      Banner: `$app(Banner(
   "Spring release",
   { description: "Streaming UI v2.4 ships with 20 new components.",
   action: Button("See what's new", { variant: "primary" }),
   icon: "sparkles",
   tone: "primary" }
-)`,
-      Notification: `aktion = Stack([
+))`,
+      Notification: `$app(Stack([
   Notification("Stripe receipt",
                { description: "Receipt for Pro plan — $29.00 charged today.",
                time: "10:24 AM",
@@ -972,43 +972,43 @@ aktion = Toolbar(
                time: "Yesterday", icon: "code-branch",
                tone: "info", unread: false,
                actions: [Button("Open", { variant: "ghost", type: "button", size: "small" })] })
-])`,
-      KanbanBoard: `aktion = KanbanBoard([
+]))`,
+      KanbanBoard: `$app(KanbanBoard([
   KanbanColumn("To do",  { cards: [KanbanCard("Migrate auth",      { description: "Roll out the new SDK.",  tags: ["auth"],     assignee: "Asha" })] }),
   KanbanColumn("Doing",  { cards: [KanbanCard("Streaming UI v2",   { description: "20 new components.",     tags: ["frontend"], assignee: "Alex", tone: "primary" })] }),
   KanbanColumn("Review", { cards: [KanbanCard("Mobile onboarding", { description: "Awaiting design.",       tags: ["mobile"],   assignee: "Wren", tone: "warning" })] }),
   KanbanColumn("Done",   { cards: [KanbanCard("Activity timeline", { description: "Shipped to 100%.",       tags: ["shipped"],  assignee: "Mira", tone: "success" })] })
-])`,
-      KanbanColumn: `aktion = KanbanBoard([
+]))`,
+      KanbanColumn: `$app(KanbanBoard([
   KanbanColumn("To do", { cards: [KanbanCard("Spec API",     { description: "Outline endpoints." })] }),
   KanbanColumn("Doing", { cards: [KanbanCard("Build router", { description: "Routes + NavLink.", assignee: "Alex", tone: "primary" })] }),
   KanbanColumn("Done",  { cards: [KanbanCard("Hello world",  { description: "First render.",     assignee: "Ada",  tone: "success" })] })
-])`,
-      KanbanCard: `aktion = KanbanBoard([
+]))`,
+      KanbanCard: `$app(KanbanBoard([
   KanbanColumn("Doing", { cards: [
     KanbanCard("Migrate auth",    { description: "Roll out the new SDK.", tags: ["auth"],     assignee: "Asha" }),
     KanbanCard("Streaming UI v2", { description: "20 new components.",    tags: ["frontend"], assignee: "Alex", tone: "primary" })
   ] })
-])`,
-      DescriptionList: `aktion = DescriptionList([
+]))`,
+      DescriptionList: `$app(DescriptionList([
   DescriptionItem("Team",     { value: "Design Systems",       icon: "users" }),
   DescriptionItem("Manager",  { value: "Margaret Hamilton" }),
   DescriptionItem("Location", { value: "Berlin, DE",           icon: "location-dot" }),
   DescriptionItem("Joined",   { value: "Mar 2022" }),
   DescriptionItem("Status",   { value: Badge("Active", { tone: "success", size: "sm" }) })
-], { columns: 2 })`,
-      DescriptionItem: `aktion = DescriptionList([
+], { columns: 2 }))`,
+      DescriptionItem: `$app(DescriptionList([
   DescriptionItem("Plan",   { value: "Pro",       icon: "rocket" }),
   DescriptionItem("Seats",  { value: "12 / 25" }),
   DescriptionItem("Status", { value: Badge("Active", { tone: "success", size: "sm" }) })
-], { columns: 1 })`,
-      StatusDot: `aktion = Stack([
+], { columns: 1 }))`,
+      StatusDot: `$app(Stack([
   StatusDot("API",       { tone: "success" }),
   StatusDot("Database",  { tone: "success" }),
   StatusDot("Webhooks",  { tone: "warning" }),
   StatusDot("Streaming", { tone: "success", pulse: true })
-], { direction: "row", gap: "m", align: "center" })`,
-      PricingTable: `aktion = PricingTable([
+], { direction: "row", gap: "m", align: "center" }))`,
+      PricingTable: `$app(PricingTable([
   PricingCard("Starter", { price: "$0",  period: "/mo", description: "For hobby projects.",
     features: ["1 workspace", "Community support", "1 GB storage"],
     cta: Button("Get started", { variant: "secondary" }), highlighted: false }),
@@ -1019,15 +1019,15 @@ aktion = Toolbar(
   PricingCard("Scale", { price: "Talk to us", description: "Custom requirements.",
     features: ["SSO + SCIM", "99.99% SLA", "On-prem available"],
     cta: Button("Contact sales", { variant: "ghost" }), highlighted: false })
-])`,
-      PricingCard: `aktion = PricingCard(
+]))`,
+      PricingCard: `$app(PricingCard(
   "Pro", { price: "$29", period: "/mo",
   description: "For teams shipping LLM features in production.",
   features: ["Unlimited workspaces", "Priority support", "100 GB storage"],
   cta: Button("Start free trial", { variant: "primary" }),
   badge: "Most popular",
   highlighted: true }
-)`,
+))`,
 
       // App shell
       AppShell: `nav = Sidebar([
@@ -1047,8 +1047,8 @@ content = [
     StatCard("Tickets", { value: "23",     trend: "down", delta: "-9" })
   ])
 ]
-aktion = AppShell(nav, { content: content, topbar: topbar })`,
-      Sidebar: `aktion = Sidebar([
+$app(AppShell(nav, { content: content, topbar: topbar }))`,
+      Sidebar: `$app(Sidebar([
   SidebarSection("Workspace", { items: [
     SidebarItem("Overview", { icon: "house",    active: true }),
     SidebarItem("Projects", { icon: "folder",   active: false, badge: "12" }),
@@ -1060,8 +1060,8 @@ aktion = AppShell(nav, { content: content, topbar: topbar })`,
     SidebarItem("Reports",   { icon: "chart-line" }),
     SidebarItem("Billing",   { icon: "credit-card" })
   ] })
-], { brand: "Acme HQ", footer: "Production · v2.3" })`,
-      SidebarSection: `aktion = Sidebar([
+], { brand: "Acme HQ", footer: "Production · v2.3" }))`,
+      SidebarSection: `$app(Sidebar([
   SidebarSection("Workspace", { items: [
     SidebarItem("Overview", { icon: "house",  active: true }),
     SidebarItem("Projects", { icon: "folder", active: false, badge: "12" })
@@ -1070,12 +1070,12 @@ aktion = AppShell(nav, { content: content, topbar: topbar })`,
     SidebarItem("Analytics", { icon: "chart-pie" }),
     SidebarItem("Reports",   { icon: "chart-line" })
   ] })
-])`,
-      SidebarItem: `aktion = Sidebar([
+]))`,
+      SidebarItem: `$app(Sidebar([
   SidebarItem("Overview", { icon: "house",  active: true }),
   SidebarItem("Projects", { icon: "folder", active: false, badge: "12" }),
   SidebarItem("Calendar", { icon: "calendar" })
-])`,
+]))`,
       SplitView: `primary = Card([
   CardHeader("Inbox", { subtitle: "3 messages" }),
   List([
@@ -1088,7 +1088,7 @@ detail = Card([
   CardHeader("Welcome to the team", { subtitle: "From Ada Lovelace · 10:24 AM" }),
   Text("Hi! Glad you joined. Here's the onboarding checklist and a few quick wins to get you up to speed.")
 ])
-aktion = SplitView([primary], { secondary: [detail], splitAt: "280px" })`,
+$app(SplitView([primary], { secondary: [detail], splitAt: "280px" }))`,
 
       // Routing
       Routes: `homePage  = Card([CardHeader("Home"),  Text("Default route content.")])
@@ -1104,28 +1104,28 @@ pages = $router({
   "/about": aboutPage,
   default:  notFound
 })
-aktion = Stack([nav, pages])`,
+$app(Stack([nav, pages]))`,
       Route: `homePage = Card([CardHeader("Home page")])
 docsPage = Card([CardHeader("Docs page")])
 pages = $router({
   "/":     homePage,
   "/docs": docsPage
 })
-aktion = pages`,
-      NavLink: `aktion = Stack([
+$app(pages)`,
+      NavLink: `$app(Stack([
   NavLink("Home",    { to: "/",        variant: "ghost",   exact: true,  icon: "house" }),
   NavLink("Docs",    { to: "/docs",    variant: "ghost",   exact: false, icon: "book" }),
   NavLink("Pricing", { to: "/pricing", variant: "primary", exact: false, icon: "tag" })
-], { direction: "row", gap: "s", align: "center" })`,
+], { direction: "row", gap: "s", align: "center" }))`,
 
       // New components & refined widgets (May 2026 rollout)
-      IconButton: `aktion = Stack([
+      IconButton: `$app(Stack([
   IconButton("pencil", { label: "Edit", variant: "primary", size: "md" }),
   IconButton("trash", { label: "Delete", variant: "danger", size: "md" }),
   IconButton("ellipsis-vertical", { label: "More", variant: "ghost", size: "md" })
-], { direction: "row", gap: "s", align: "center" })`,
+], { direction: "row", gap: "s", align: "center" }))`,
       CommandPalette: `$open = false
-aktion = Stack([btn, commandPalette])
+$app(Stack([btn, commandPalette]))
 btn = Button("Open Command Palette", { action: () => { $open = true } });
 
 commandPalette = CommandPalette([
@@ -1135,126 +1135,126 @@ commandPalette = CommandPalette([
   {label: "Toggle theme", value: "theme", group: "Settings"},
   {label: "Sign out", value: "signout", group: "Account"}
 ], { open: $open, placeholder: "Type a command…", shortcut: "Cmd+K" })`,
-      FilterChips: `aktion = FilterChips(
+      FilterChips: `$app(FilterChips(
   ["status:active", "team:eng", "priority:high", "region:us"],
   { onRemove: null }
-)`,
+))`,
       VirtualList: `rows = $util.range(1, 200)
-aktion = VirtualList(rows, { itemHeight: 36 })`,
+$app(VirtualList(rows, { itemHeight: 36 }))`,
       QueryBuilder: `$rules = [
   {field: "name", op: "contains", value: "Ada"},
   {field: "score", op: "gt", value: "90"}
 ]
-aktion = QueryBuilder(
+$app(QueryBuilder(
   [{name: "name", label: "Name"}, {name: "score", label: "Score", type: "number"}, {name: "team", label: "Team"}],
   { value: $rules }
-)`,
-      FieldRepeater: `aktion = FieldRepeater(
+))`,
+      FieldRepeater: `$app(FieldRepeater(
   [{name: "Ada Lovelace", role: "Compilers", score: 98}, {name: "Linus Torvalds", role: "Kernel", score: 96}],
   { fields: [{name: "name", label: "Name"}, {name: "role", label: "Role"}, {name: "score", label: "Score", type: "number"}],
   addLabel: "Add contributor" }
-)`,
-      DiffViewer: `aktion = DiffViewer(
+))`,
+      DiffViewer: `$app(DiffViewer(
   "function greet(name) {\\n  return 'Hello ' + name\\n}",
   { right: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}",
   mode: "unified" }
-)`,
-      JsonTree: `aktion = JsonTree({
+))`,
+      JsonTree: `$app(JsonTree({
   name: "aktion",
   version: "0.5.0",
   features: ["streaming", "theming", "routing"],
   config: {theme: "system", locale: "en"}
-}, { expanded: true })`,
-      Gantt: `aktion = Gantt([
+}, { expanded: true }))`,
+      Gantt: `$app(Gantt([
   {id: "design", label: "Design phase", start: "2026-05-01", end: "2026-05-02", progress: 100},
   {id: "build", label: "Build sprint", start: "2026-05-02", end: "2026-05-04", progress: 60},
   {id: "ship", label: "Ship release", start: "2026-05-03", end: "2026-05-05", progress: 0}
-], { startDate: "2026-05-01", endDate: "2026-05-05" })`,
-      Truncate: `aktion = Truncate(
+], { startDate: "2026-05-01", endDate: "2026-05-05" }))`,
+      Truncate: `$app(Truncate(
   "Aktion is a compact, declarative DSL designed for LLM-generated rich UI responses. It ships with 130+ components, seven built-in themes, hash-based routing, and real-time streaming. The language is parsed token-by-token so partial responses render progressively without waiting for the full payload.",
   { maxLines: 2, expandLabel: "Read more" }
-)`,
+))`,
       InlineEdit: `$value = "Click to edit this text"
-aktion = InlineEdit($value, { label: "Title" })`,
-      NotificationBell: `aktion = Grid([
+$app(InlineEdit($value, { label: "Title" }))`,
+      NotificationBell: `$app(Grid([
   GridItem([], 11),
   NotificationBell({ count: 3, items: [
     {title: "New comment on PR #142", message: "Ada: looks great!", time: "2m ago"},
     {title: "Build succeeded", message: "Tests passed.", time: "10m ago"},
     {title: "Weekly digest ready", time: "1h ago"}
   ] })
-], 12)`,
-      Spinner: `aktion = Stack([
+], 12))`,
+      Spinner: `$app(Stack([
   Spinner("sm"),
   Spinner("md", { label: "Loading" }),
   Spinner("lg", { label: "Importing rows", tone: "success" })
-], { direction: "row", gap: "m", align: "center" })`,
-      Sparkline: `aktion = Stack([
+], { direction: "row", gap: "m", align: "center" }))`,
+      Sparkline: `$app(Stack([
   Text("Weekly visits", { variant: "small" }),
   Sparkline([10, 14, 9, 22, 18, 28, 31], { tone: "primary" })
-])`,
-      BadgeList: `aktion = BadgeList(["React", "Vue", "Svelte", "Solid"], { tone: "primary", size: "sm" })`,
+]))`,
+      BadgeList: `$app(BadgeList(["React", "Vue", "Svelte", "Solid"], { tone: "primary", size: "sm" }))`,
       MultiSelect: `$picks = ["ts"]
-aktion = Stack([
+$app(Stack([
   Text("Pick languages", { variant: "small" }),
   MultiSelect("langs",
     { items: [SelectItem("ts", { label: "TypeScript" }), SelectItem("js", { label: "JavaScript" }),
      SelectItem("py", { label: "Python" }),      SelectItem("rs", { label: "Rust" })],
     value: $picks, placeholder: "Pick languages", open: true })
-])`,
+]))`,
       DateRangePicker: `$from = "2026-05-01"
 $to   = "2026-05-15"
-aktion = DateRangePicker("range", { from: $from, to: $to, label: "Reporting window" })`,
-      Callout: `aktion = Stack([
+$app(DateRangePicker("range", { from: $from, to: $to, label: "Reporting window" }))`,
+      Callout: `$app(Stack([
   Callout("success", { title: "Saved", text: "Your settings were saved." }),
   Callout("warning", { title: "Heads up", text: "Compact note style", compact: true })
-])`,
-      Markdown: `aktion = Markdown("# Aktion\\n\\nA **compact**, *declarative* DSL.\\n\\n- Headings\\n- Fenced code\\n- Auto-linked URLs: https://example.com")`,
-      CodeBlock: `aktion = CodeBlock("typescript", { code: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", copy: true, highlight: "1-3" })`,
-      Image: `aktion = Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
-{ alt: "Hero photo", caption: "Self-constrained 16:9 image", ratio: "16:9", fit: "cover" })`,
-      Skeleton: `aktion = Stack([
+]))`,
+      Markdown: `$app(Markdown("# Aktion\\n\\nA **compact**, *declarative* DSL.\\n\\n- Headings\\n- Fenced code\\n- Auto-linked URLs: https://example.com"))`,
+      CodeBlock: `$app(CodeBlock("typescript", { code: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", copy: true, highlight: "1-3" }))`,
+      Image: `$app(Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
+{ alt: "Hero photo", caption: "Self-constrained 16:9 image", ratio: "16:9", fit: "cover" }))`,
+      Skeleton: `$app(Stack([
   Skeleton("card"),
   Stack([Skeleton("avatar"), Skeleton("paragraph", { count: 2 })], { direction: "row", gap: "m", align: "center" })
-])`,
-      Modal: `aktion = Modal("Modal title", { open: true, children: [
+]))`,
+      Modal: `$app(Modal("Modal title", { open: true, children: [
   Text("Modal body shown when open=true.")
 ], size: "md", footer: [
   Button("Cancel", { variant: "ghost",   type: "button", size: "sm" }),
   Button("Save", { variant: "primary", type: "button", size: "sm" })
-] })`,
-      Toolbar: `aktion = Toolbar(
+] }))`,
+      Toolbar: `$app(Toolbar(
   [SearchBar("q", { placeholder: "Search…" })],
   { right: [Button("New", { variant: "primary", type: "button", size: "sm", icon: "plus" })],
   center: [ToggleGroup("v", { items: [{value: "grid", label: "Grid"}, {value: "list", label: "List"}], value: "grid" })] }
-)`,
+))`,
       Pagination: `$page = 3
-aktion = Pagination($page, { pages: 10, siblings: 1, total: 240, perPage: 25 })`,
-      Table: `aktion = Table([
+$app(Pagination($page, { pages: 10, siblings: 1, total: 240, perPage: 25 }))`,
+      Table: `$app(Table([
   Col("Name",  { values: ["Ada", "Linus", "Grace"] }),
   Col("Score", { values: [98, 92, 96], align: "right", format: "number" })
-], { title: "Top 3", density: "compact", striped: true })`,
-      Progress: `aktion = Stack([
+], { title: "Top 3", density: "compact", striped: true }))`,
+      Progress: `$app(Stack([
   Progress(60, { max: 100, label: "Linear", tone: "primary", indeterminate: false, showValue: true }),
   Progress(60, { max: 100, label: "Buffered", tone: "info", indeterminate: false, showValue: true, buffered: 85 }),
   Progress(60, { max: 100, label: "Step 3 of 5", tone: "primary", indeterminate: false, showValue: true, segments: 5 })
-])`,
+]))`,
       Rating: `$score = 3.5
-aktion = Rating($score, { max: 5, label: "3.5 of 5", count: 128, size: "md", readonly: true, halfStep: true, icon: "star" })`,
-      Steps: `aktion = Steps([
+$app(Rating($score, { max: 5, label: "3.5 of 5", count: 128, size: "md", readonly: true, halfStep: true, icon: "star" }))`,
+      Steps: `$app(Steps([
   {title: "Sign up", details: "Free", active: false},
   {title: "Verify",  details: "Email link", active: true},
   {title: "Invite"}
-])`,
-      Stats: `aktion = Stats([
+]))`,
+      Stats: `$app(Stats([
   {label: "MRR",   value: "$84.2k", hint: "+12%", tone: "success", spark: [12, 14, 18, 22, 28, 31]},
   {label: "Churn", value: "1.8%",   hint: "-0.4%", tone: "danger",  spark: [2.3, 2.2, 2.0, 1.9, 1.8]}
-])`,
-      StatCard: `aktion = StatCard("Active users", { value: "12,481", trend: "up", delta: "+8.2%", icon: "users", spark: [42, 50, 55, 60, 71, 80] })`,
-      EmptyState: `aktion = EmptyState(
+]))`,
+      StatCard: `$app(StatCard("Active users", { value: "12,481", trend: "up", delta: "+8.2%", icon: "users", spark: [42, 50, 55, 60, 71, 80] }))`,
+      EmptyState: `$app(EmptyState(
   "No projects yet", { description: "Create a project to start tracking work.", icon: "folder",
   actions: [Button("Create project", { variant: "primary", type: "button", size: "sm", icon: "plus" }),
-   Button("Read the guide", { variant: "ghost",   type: "button", size: "sm" })] })`,
+   Button("Read the guide", { variant: "ghost",   type: "button", size: "sm" })] }))`,
 
       // -------------------------------------------------------------------
       // Advanced data
@@ -1262,7 +1262,7 @@ aktion = Rating($score, { max: 5, label: "3.5 of 5", count: 128, size: "md", rea
       DataGrid: `$page = 1
 $sort = {column: "score", direction: "desc"}
 $selectedIds = []
-aktion = DataGrid(
+$app(DataGrid(
   [
     Col("Id",    { values: [1, 2, 3, 4] }),
     Col("Name",  { values: ["Ada Lovelace", "Linus Torvalds", "Grace Hopper", "Margaret Hamilton"], align: "left", sortable: true, filterable: true }),
@@ -1277,9 +1277,9 @@ aktion = DataGrid(
   page: $page,
   perPage: 3,
   emptyLabel: "No matching rows" }
-)`,
+))`,
       CalendarView: `$selected = "2026-05-17"
-aktion = CalendarView(
+$app(CalendarView(
   $selected,
   { month: "2026-05",
   events: [
@@ -1288,13 +1288,13 @@ aktion = CalendarView(
     {date: "2026-05-22", title: "Retro",      time: "16:00", tone: "info"}
   ],
   view: "month" }
-)`,
-      ActivityLog: `aktion = ActivityLog([
+))`,
+      ActivityLog: `$app(ActivityLog([
   {actor: "Ada",   title: "merged PR #142",        description: "Streaming UI v2 components.", time: "2m",  icon: "code-merge", tone: "success"},
   {actor: "Linus", title: "opened ticket #2049",   description: "Kernel scheduler regression.", time: "1h",  icon: "circle-exclamation", tone: "warning"},
   {actor: "Grace", title: "deployed compiler 4.2", time: "yesterday", icon: "rocket",          tone: "primary"}
-])`,
-      ComparisonTable: `aktion = ComparisonTable(
+]))`,
+      ComparisonTable: `$app(ComparisonTable(
   ["Free", "Pro", "Enterprise"],
   { rows: [
     {label: "Projects",   values: ["3", "Unlimited", "Unlimited"]},
@@ -1304,10 +1304,10 @@ aktion = CalendarView(
     {label: "Priority support", values: [false, true, true]}
   ],
   highlightColumn: 1 }
-)`,
+))`,
       InfiniteList: `$pages = 2
 function loadMore() { $pages = $pages + 1 }
-aktion = InfiniteList(
+$app(InfiniteList(
   [
     ListItem("Build component library", { meta: "Add 30+ new primitives.", icon: "code" }),
     ListItem("Ship docs site",          { meta: "Update components.html.", icon: "book" }),
@@ -1317,12 +1317,12 @@ aktion = InfiniteList(
   { onLoadMore: loadMore,
   loading: false,
   hasMore: true }
-)`,
+))`,
 
       // -------------------------------------------------------------------
       // Media
       // -------------------------------------------------------------------
-      VideoPlayer: `aktion = VideoPlayer(
+      VideoPlayer: `$app(VideoPlayer(
   "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
   { controls: true,
   autoplay: false,
@@ -1330,27 +1330,27 @@ aktion = InfiniteList(
   muted: false,
   caption: "Big Buck Bunny — sample clip",
   ratio: "16:9" }
-)`,
-      AudioPlayer: `aktion = AudioPlayer(
+))`,
+      AudioPlayer: `$app(AudioPlayer(
   "https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg",
   { title: "Cello Suite No. 1",
   artist: "J. S. Bach",
   controls: true }
-)`,
-      Carousel: `aktion = Carousel([
+))`,
+      Carousel: `$app(Carousel([
   {src: "https://picsum.photos/seed/streaming1/640/360", alt: "Slide 1", caption: "Launch your product"},
   {src: "https://picsum.photos/seed/streaming2/640/360", alt: "Slide 2", caption: "Onboard customers"},
   {src: "https://picsum.photos/seed/streaming3/640/360", alt: "Slide 3", caption: "Grow your team"}
-], { activeIndex: 0, ratio: "16:9", showDots: true })`,
-      Gallery: `aktion = Gallery([
+], { activeIndex: 0, ratio: "16:9", showDots: true }))`,
+      Gallery: `$app(Gallery([
   {src: "https://picsum.photos/seed/gallery1/320/320", alt: "City",   caption: "City"},
   {src: "https://picsum.photos/seed/gallery2/320/320", alt: "Beach",  caption: "Beach"},
   {src: "https://picsum.photos/seed/gallery3/320/320", alt: "Forest", caption: "Forest"},
   {src: "https://picsum.photos/seed/gallery4/320/320", alt: "Hills",  caption: "Hills"}
-], { columns: 4 })`,
+], { columns: 4 }))`,
       Lightbox: `$open = false
 $index = 0
-aktion = Stack([
+$app(Stack([
   Gallery([
     {src: "https://picsum.photos/seed/lb1/640/400", caption: "Photo 1"},
     {src: "https://picsum.photos/seed/lb2/640/400", caption: "Photo 2"},
@@ -1361,8 +1361,8 @@ aktion = Stack([
     {src: "https://picsum.photos/seed/lb2/1200/800", caption: "Photo 2"},
     {src: "https://picsum.photos/seed/lb3/1200/800", caption: "Photo 3"}
   ], { open: $open, index: $index })
-])`,
-      Map: `aktion = Map(
+]))`,
+      Map: `$app(Map(
   48.8566,
   { lng: 2.3522,
   zoom: 12,
@@ -1373,16 +1373,16 @@ aktion = Stack([
   ],
   height: "320px",
   caption: "Three Paris landmarks" }
-)`,
+))`,
 
       // -------------------------------------------------------------------
       // Editors & overlays
       // -------------------------------------------------------------------
       RichTextEditor: `$body = "<h2>Email draft</h2><p>Hi <b>Ada</b>, just confirming our <i>demo</i> on Friday.</p>"
-aktion = RichTextEditor("draft", { value: $body, placeholder: "Start composing…", minHeight: "200px" })`,
+$app(RichTextEditor("draft", { value: $body, placeholder: "Start composing…", minHeight: "200px" }))`,
       CodeEditor: `$code = "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n"
-aktion = CodeEditor("snippet", { value: $code, language: "javascript", placeholder: "// type your code…", minHeight: "200px" })`,
-      ContextMenu: `aktion = ContextMenu(
+$app(CodeEditor("snippet", { value: $code, language: "javascript", placeholder: "// type your code…", minHeight: "200px" }))`,
+      ContextMenu: `$app(ContextMenu(
   Card([CardHeader("Right-click anywhere on this card", { subtitle: "ContextMenu attaches here" })]),
   { items: [
     {label: "Open",       icon: "arrow-up-right-from-square"},
@@ -1390,16 +1390,16 @@ aktion = CodeEditor("snippet", { value: $code, language: "javascript", placehold
     MenuSeparator(),
     {label: "Delete",     icon: "trash", variant: "danger"}
   ] }
-)`,
+))`,
       ColorPicker: `$brand = "#6366f1"
-aktion = ColorPicker("brand", { value: $brand, label: "Brand colour",
-  swatches: ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6"] })`,
+$app(ColorPicker("brand", { value: $brand, label: "Brand colour",
+  swatches: ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#8b5cf6"] }))`,
 
       // -------------------------------------------------------------------
       // Advanced charts
       // -------------------------------------------------------------------
-      Gauge: `aktion = Gauge(78, { min: 0, max: 100, label: "Uptime", tone: "success", size: "md" })`,
-      Heatmap: `aktion = Heatmap(
+      Gauge: `$app(Gauge(78, { min: 0, max: 100, label: "Uptime", tone: "success", size: "md" }))`,
+      Heatmap: `$app(Heatmap(
   ["Mon", "Tue", "Wed", "Thu", "Fri"],
   { yLabels: ["9am", "12pm", "3pm", "6pm"],
   values: [
@@ -1410,118 +1410,118 @@ aktion = ColorPicker("brand", { value: $brand, label: "Brand colour",
     [2, 5, 10, 12]
   ],
   title: "Office capacity" }
-)`,
-      RadarChart: `aktion = RadarChart(
+))`,
+      RadarChart: `$app(RadarChart(
   ["Speed", "Quality", "Cost", "Coverage", "Trust"],
   { series: [Series("Plan A", { values: [80, 70, 60, 75, 85] }),
    Series("Plan B", { values: [60, 85, 70, 65, 80] })],
   title: "Vendor comparison" }
-)`,
-      ScatterChart: `aktion = ScatterChart(
+))`,
+      ScatterChart: `$app(ScatterChart(
   [Series("Cohort A", { values: [{x: 1, y: 2}, {x: 2, y: 4}, {x: 3, y: 5}, {x: 4, y: 7}] }),
    Series("Cohort B", { values: [{x: 1, y: 3}, {x: 2, y: 2}, {x: 3, y: 6}, {x: 4, y: 5}] })],
   { xLabel: "Sessions",
   yLabel: "Conversions",
   title: "Cohort behaviour" }
-)`,
-      Histogram: `aktion = Histogram(
+))`,
+      Histogram: `$app(Histogram(
   [1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 8, 9], { binCount: 6,
   title: "Response time (s)" }
-)`,
+))`,
 
       // -------------------------------------------------------------------
       // Advanced forms
       // -------------------------------------------------------------------
       PinInput: `$pin = ""
-aktion = PinInput("pin", { length: 4, value: $pin, type: "numeric" })`,
+$app(PinInput("pin", { length: 4, value: $pin, type: "numeric" }))`,
       PasswordInput: `$pw = "Hunter2!"
-aktion = PasswordInput("pw", { value: $pw, placeholder: "Choose a strong password", label: "Password", showStrength: true })`,
+$app(PasswordInput("pw", { value: $pw, placeholder: "Choose a strong password", label: "Password", showStrength: true }))`,
       TagInput: `$tags = ["streaming", "ui", "library"]
-aktion = TagInput("tags", { value: $tags, placeholder: "Add a tag and press Enter", label: "Tags", max: 8 })`,
+$app(TagInput("tags", { value: $tags, placeholder: "Add a tag and press Enter", label: "Tags", max: 8 }))`,
       MentionInput: `$note = "Heads up @"
-aktion = MentionInput("note",
+$app(MentionInput("note",
   { people: [
     {name: "Ada Lovelace",   handle: "ada",   role: "Engineering"},
     {name: "Linus Torvalds", handle: "linus", role: "Kernel"},
     {name: "Grace Hopper",   handle: "grace", role: "Compilers"}
   ],
-  value: $note, placeholder: "Type @ to mention someone…" })`,
+  value: $note, placeholder: "Type @ to mention someone…" }))`,
       TimePicker: `$time = "09:30"
-aktion = TimePicker("time", { value: $time, label: "Meeting time" })`,
+$app(TimePicker("time", { value: $time, label: "Meeting time" }))`,
       DateTimePicker: `$when = "2026-05-17T14:30"
-aktion = DateTimePicker("when", { value: $when, label: "Launch window" })`,
+$app(DateTimePicker("when", { value: $when, label: "Launch window" }))`,
       MaskedInput: `$phone = ""
-aktion = MaskedInput("phone", { mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114", label: "Phone number" })`,
-      FormSection: `aktion = FormSection("Account",
+$app(MaskedInput("phone", { mask: "(999) 999-9999", value: $phone, placeholder: "(415) 555-0114", label: "Phone number" }))`,
+      FormSection: `$app(FormSection("Account",
   { fields: [
     FormControl("Email",    { control: Input("email", { placeholder: "you@example.com", type: "email" }) }),
     FormControl("Username", { control: Input("user",  { placeholder: "ada-lovelace" }) })
   ],
-  description: "Used to sign in and send notifications." })`,
-      FieldSet: `aktion = FieldSet("Notifications",
+  description: "Used to sign in and send notifications." }))`,
+      FieldSet: `$app(FieldSet("Notifications",
   { fields: [
     Checkbox("email-news",  { label: "Product updates",  checked: true }),
     Checkbox("email-promo", { label: "Offers & promos", checked: false }),
     Checkbox("email-tips",  { label: "Tips & guides",    checked: true })
   ],
-  hint: "We never share your email address." })`,
-      ValidationSummary: `aktion = ValidationSummary(
+  hint: "We never share your email address." }))`,
+      ValidationSummary: `$app(ValidationSummary(
   [
     {label: "email",    message: "Email is required."},
     {label: "password", message: "Password must be at least 8 characters."}
   ],
   { title: "Please fix the following before continuing" }
-)`,
+))`,
       MultiStepForm: `$step = 0
-aktion = MultiStepForm([
+$app(MultiStepForm([
   {title: "Account", details: "Email & password",
     content: [FormControl("Email", { control: Input("email", { placeholder: "you@example.com", type: "email" }) })]},
   {title: "Profile", details: "Tell us about you",
     content: [FormControl("Name", { control: Input("name", { placeholder: "Your name" }) })]},
   {title: "Done",    details: "Review",
     content: [Banner("Almost there", { description: "Click Submit to finish.", icon: "circle-info", tone: "success" })]}
-], { current: $step, stepsLayout: "column" })`,
+], { current: $step, stepsLayout: "column" }))`,
 
       // -------------------------------------------------------------------
       // Advanced patterns
       // -------------------------------------------------------------------
-      InboxPanel: `aktion = InboxPanel([
+      InboxPanel: `$app(InboxPanel([
   {title: "New comment on PR #142",    message: "Ada: looks great, two nits inline.", time: "2m",  icon: "comment",  unread: true},
   {title: "Build #482 succeeded",       message: "Tests passed in 2m31s.",            time: "12m", icon: "circle-check", tone: "success", unread: true},
   {title: "Weekly report",              message: "This week's metrics digest.",       time: "1d",  icon: "chart-pie"},
   {title: "Subscription renewed",       message: "Pro plan billed $29.",              time: "1w",  icon: "credit-card"}
-], { emptyLabel: "Notifications" })`,
-      OnboardingChecklist: `aktion = OnboardingChecklist([
+], { emptyLabel: "Notifications" }))`,
+      OnboardingChecklist: `$app(OnboardingChecklist([
   {title: "Create your workspace", description: "Pick a name and slug.",         done: true},
   {title: "Invite teammates",      description: "Share an invite link.",         done: true},
   {title: "Connect a data source", description: "Hook up GitHub / Postgres / S3.", done: false, action: null, cta: "Connect"},
   {title: "Ship your first board", description: "Publish a dashboard.",          done: false}
-], { title: "Get started", subtitle: "Most teams finish setup in under 10 minutes." })`,
-      LoadingState: `aktion = LoadingState("Loading projects…", { description: "Hang tight, fetching your workspaces." })`,
-      ErrorState: `aktion = ErrorState(
+], { title: "Get started", subtitle: "Most teams finish setup in under 10 minutes." }))`,
+      LoadingState: `$app(LoadingState("Loading projects…", { description: "Hang tight, fetching your workspaces." }))`,
+      ErrorState: `$app(ErrorState(
   "We couldn't load that project",
   { description: "There was a problem reaching the server. Try again in a moment.",
   actions: [Button("Retry", { variant: "primary", type: "button", size: "sm", icon: "rotate-right" }),
    Button("Contact support", { variant: "ghost", type: "button", size: "sm", icon: "life-ring" })] }
-)`,
-      SuccessState: `aktion = SuccessState(
+))`,
+      SuccessState: `$app(SuccessState(
   "Order placed!",
   { description: "Your invoice will arrive by email shortly.",
   actions: [Button("View receipt", { variant: "primary", type: "button", size: "sm", icon: "file-invoice" }),
    Button("Back to dashboard", { variant: "ghost", type: "button", size: "sm" })] }
-)`,
+))`,
       Tour: `$step = 0
-aktion = Tour([
+$app(Tour([
   {title: "Welcome",   description: "Take a 30-second tour of the workspace."},
   {title: "Sidebar",   description: "Switch between projects from the left rail."},
   {title: "Inspector", description: "Inspect any record by clicking a row."}
-], { current: $step })`,
-      Spotlight: `aktion = Spotlight(
+], { current: $step }))`,
+      Spotlight: `$app(Spotlight(
   "Try the new filter bar",
   { description: "Press F to focus the filter bar or click any column header to sort.",
   action: Button("Got it", { variant: "primary", type: "button", size: "sm" }) }
-)`,
-      Sticky: `aktion = ScrollArea([
+))`,
+      Sticky: `$app(ScrollArea([
   Sticky([Banner("Sticky banner", { description: "Stays pinned while you scroll.", icon: "thumbtack", tone: "primary" })], { side: "top" }),
   Stack([
     Card([CardHeader("Block 1"), Text("Scroll down to see the banner stay put.")]),
@@ -1529,8 +1529,8 @@ aktion = Tour([
     Card([CardHeader("Block 3"), Text("Keep scrolling.")]),
     Card([CardHeader("Block 4"), Text("Almost done.")])
   ])
-], { height: "260px" })`,
-      ResizablePanels: `aktion = ResizablePanels(
+], { height: "260px" }))`,
+      ResizablePanels: `$app(ResizablePanels(
   [Card([CardHeader("Files"), List([
     ListItem("README.md", { meta: "Edited 2m ago" }),
     ListItem("package.json", { meta: "Edited 1h ago" }),
@@ -1538,15 +1538,15 @@ aktion = Tour([
   ])])],
   { secondary: [Card([CardHeader("Preview"), CodeBlock("typescript", { code: "const greet = (name) => 'Hello, ' + name + '!'\\n\\ngreet('Ada')" })])],
   initialPrimaryWidth: "240px" }
-)`,
-      MasonryGrid: `aktion = MasonryGrid([
+))`,
+      MasonryGrid: `$app(MasonryGrid([
   Card([CardHeader("Short note"), Text("Just a line.")]),
   Card([CardHeader("Longer note"), Text("This note has a bit more content to demonstrate uneven heights.")]),
   Card([CardHeader("Another"), Text("Masonry packs them efficiently.")]),
   Card([CardHeader("Medium"), Text("Two sentences here. Just enough to look different.")]),
   Card([CardHeader("Tiny")])
-], { columns: 3 })`,
-      Drawer: `aktion = Drawer("Filter results", { open: true, children: [
+], { columns: 3 }))`,
+      Drawer: `$app(Drawer("Filter results", { open: true, children: [
   FormControl("Status", { control: Select("status", { items: [
     SelectItem("all",    { label: "All" }),
     SelectItem("open",   { label: "Open" }),
@@ -1560,34 +1560,34 @@ aktion = Tour([
     Button("Reset", { variant: "ghost",   type: "button", size: "sm" }),
     Button("Apply", { variant: "primary", type: "button", size: "sm" })
   ])
-], side: "right" })`,
-      TopBar: `aktion = TopBar(
+], side: "right" }))`,
+      TopBar: `$app(TopBar(
   "Project Atlas",
   { subtitle: "12 active issues",
   badges: [Badge("v0.4", { tone: "info" })],
   search: [SearchBar("q", { placeholder: "Search Atlas…" })],
   actions: [Button("New issue", { variant: "primary", type: "button", size: "sm", icon: "plus" })] }
-)`,
+))`,
 
       // -------------------------------------------------------------------
       // Lifecycle & helpers
       // -------------------------------------------------------------------
-      Async: `aktion = Async({state: "loading", loading: true},
+      Async: `$app(Async({state: "loading", loading: true},
   { loading: Skeleton("paragraph", { count: 3 }),
   error: Callout("danger", { title: "Load failed", text: "Could not fetch users." }),
   data: Text("Users loaded successfully.") }
-)`,
+))`,
       Show: `$isOpen = true
-aktion = Stack([
+$app(Stack([
   Switch("toggle", { label: "Show content", value: $isOpen }),
   Show($isOpen, { fallback: Callout("info", { title: "Hidden", text: "Toggle the switch above." }), children: [
     Callout("success", { title: "Visible", text: "The content is showing." })
   ] })
-])`,
-      Portal: `aktion = Stack([
+]))`,
+      Portal: `$app(Stack([
   Text("Portal renders children outside the normal subtree."),
   Portal([Badge("Portalled content", { tone: "primary" })])
-])`,
+]))`,
       Redirect: `homePage = Card([CardHeader("Home"), Text("Welcome back.")])
 loginPage = Redirect("/home")
 pages = $router({
@@ -1595,16 +1595,16 @@ pages = $router({
   "/login": loginPage,
   default:  homePage
 })
-aktion = pages`,
-      Lazy: `aktion = Lazy(null,
+$app(pages)`,
+      Lazy: `$app(Lazy(null,
   { fallback: Skeleton("card"),
   children: [Card([CardHeader("Loaded"), Text("Content arrived.")])] }
-)`,
-      ErrorBoundary: `aktion = ErrorBoundary(
+))`,
+      ErrorBoundary: `$app(ErrorBoundary(
   { fallback: Callout("danger", { title: "Something went wrong", text: "An error occurred in this section." }),
   children: [Card([CardHeader("Safe content"), Text("This renders normally.")])] }
-)`,
-      MenuSeparator: `aktion = DropdownMenu(
+))`,
+      MenuSeparator: `$app(DropdownMenu(
   Button("Actions"),
   { items: [
     MenuLabel("File"),
@@ -1618,19 +1618,19 @@ aktion = pages`,
     MenuItem("Delete", { icon: "trash", variant: "danger" })
   ],
   open: true }
-)`,
+))`,
 
       // -------------------------------------------------------------------
       // Behaviour & styling wrappers
       // -------------------------------------------------------------------
-      OnClick: `aktion = OnClick(
+      OnClick: `$app(OnClick(
   Card([
     CardHeader("Clickable card"),
     Text("Click anywhere — fires the OnClick handler.")
   ]),
   { onClick: () => console.log("card clicked") }
-)`,
-      OnMouse: `aktion = OnMouse(
+))`,
+      OnMouse: `$app(OnMouse(
   Card([
     CardHeader("Hover / drag surface", { subtitle: "Open the console to watch events" }),
     Text("Move the mouse, right-click, or drag a file onto this card.")
@@ -1641,15 +1641,15 @@ aktion = pages`,
     dragOver:  (e) => e.preventDefault(),
     drop:      (e) => { e.preventDefault(); console.log("dropped", e.dataTransfer.files) }
   }
-)`,
-      OnKeyboard: `aktion = OnKeyboard(
+))`,
+      OnKeyboard: `$app(OnKeyboard(
   Card([
     CardHeader("Press a key"),
     Text("Focus this card and press any key — the handler logs to console.")
   ]),
   { onKeyDown: (e) => console.log("key:", e.key) }
-)`,
-      OnFocus: `aktion = OnFocus(
+))`,
+      OnFocus: `$app(OnFocus(
   Card([
     CardHeader("Focus tracker"),
     Input("Try focusing me", { placeholder: "Tab to focus / blur" })
@@ -1658,38 +1658,38 @@ aktion = pages`,
     onFocus: () => console.log("focus entered"),
     onBlur:  () => console.log("focus left")
   }
-)`,
-      OnIntersect: `aktion = OnIntersect(
+))`,
+      OnIntersect: `$app(OnIntersect(
   Card([
     CardHeader("Visible-on-scroll sentinel"),
     Text("Fires onEnter when this card enters the viewport.")
   ]),
   { onEnter: () => console.log("visible!"), once: true }
-)`,
-      Css: `aktion = Css(
+))`,
+      Css: `$app(Css(
   Card([
     CardHeader("Custom styled card"),
     Text("Class + inline style merged onto the rendered Card element.")
   ]),
   { class: "highlight", style: "border-color: #f59e0b; box-shadow: 0 0 0 2px #fde68a;" }
-)`,
-      Link: `aktion = Stack([
+))`,
+      Link: `$app(Stack([
   Link("Internal route",   { to: "/dashboard" }),
   Link("External docs",    { href: "https://example.com", external: true }),
   Link(Badge("Wrapped component", { tone: "primary" }), { to: "/profile" })
-], { gap: "s" })`,
+], { gap: "s" }))`,
 
       // -------------------------------------------------------------------
       // Escape hatches — last-resort raw HTML / CSS primitives
       // -------------------------------------------------------------------
-      HTMLTag: `aktion = HTMLTag("section",
+      HTMLTag: `$app(HTMLTag("section",
   { attributes: { class: "rui-html-demo", "data-role": "spotlight" },
   children: [
     HTMLTag("h2", { attributes: { class: "rui-html-demo-title" }, children: [Text("Custom markup")] }),
     HTMLTag("p",  { attributes: { class: "rui-html-demo-body" },  children: [Text("Reach for HTMLTag only when no built-in component captures the shape you need.")] })
   ] }
-)`,
-      Styles: `aktion = Stack([
+))`,
+      Styles: `$app(Stack([
   Styles(\`
     .escape-hatch-card {
       border: 1px dashed var(--rui-color-border);
@@ -1702,7 +1702,7 @@ aktion = pages`,
   HTMLTag("div", { attributes: { class: "escape-hatch-card" }, children: [
     Markdown("Use **Styles** + **HTMLTag** together to scope custom CSS to your own selectors.")
   ] })
-])`,
+]))`,
     };
 
     /**

@@ -69,7 +69,7 @@
           semantics layered on top. Every program is valid JS &mdash; functions,
           arrows, template literals, spread, optional chaining &mdash; and the
           runtime adds two things: it makes <code>$state</code> reactive and it
-          renders the component tree you assign to <code>aktion</code>. If you
+          renders the component tree you pass to <code>$app(&hellip;)</code>. If you
           know JavaScript, you already know almost all of this page.
         </p>
       </header>
@@ -77,28 +77,34 @@
       <h2 id="program-structure">Program structure</h2>
       <p>
         A program is a flat list of <code>name = expression</code> statements,
-        one per line. The reserved entry point is <code>aktion = &hellip;</code>
-        &mdash; whatever you assign to <code>aktion</code> becomes the rendered
+        one per line. The entry point is a call to <code>$app(&hellip;)</code>
+        &mdash; whatever you pass to <code>$app(&hellip;)</code> becomes the rendered
         UI, normally a <code>Column([&hellip;])</code> for a page or an
         <code>AppShell(&hellip;)</code> for an app. Every other binding is
-        referenced from <code>aktion</code> directly or through other bindings.
+        referenced from the <code>$app(&hellip;)</code> root directly or through other bindings.
       </p>
       <p>
         Newlines terminate statements; semicolons are optional. Forward
-        references resolve from the whole scope, so you can declare
-        <code>aktion</code> first and let the pieces it depends on stream in
+        references resolve from the whole scope, so you can call
+        <code>$app(&hellip;)</code> first and let the pieces it depends on stream in
         below it &mdash; the renderer re-parses each chunk and fills in names as
         they arrive.
       </p>
+      <p>
+        A program does not have to live in one file. Once an app grows, split it
+        into multiple <code>.aktion</code> files that <code>import</code> and
+        <code>export</code> components, helpers, and reactive state &mdash; see
+        <a href="modules.html">Modules</a>.
+      </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([header, body])
+<pre><code>$app(Column([header, body]))
 
 header = PageHeader("Project Atlas", { subtitle: "Forward references resolve fine" })
 
 body = Card([
   CardHeader("Overview"),
-  Text("aktion is declared first; header and body are defined below it.")
+  Text("$app(...) is called first; header and body are defined below it.")
 ])</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
@@ -117,8 +123,8 @@ body = Card([
         </tbody>
       </table>
       <p>
-        Three top-level names are <strong>reserved</strong>:
-        <code>aktion</code> (the UI root, required, first line),
+        The UI root is set by calling <code>$app(&hellip;)</code> (required, first
+        line). Two top-level names are also <strong>reserved</strong>:
         <code>theme</code> (an optional <code>$theme({&hellip;})</code> brand
         override), and <code>route</code> (the router-owned reactive handle &mdash;
         never declare it yourself).
@@ -135,10 +141,10 @@ body = Card([
         <span class="lay-demo-label">Live</span>
 <pre><code>$count = 0
 function inc() { $count = $count + 1 }
-aktion = Column([
+$app(Column([
   Text(`Count: ${$count}`, { variant: "large-heavy" }),
   Button("Increment", { variant: "primary", onClick: inc })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -198,7 +204,7 @@ aktion = Column([
     Button("Increment", { variant: "primary", onClick: () =&gt; setCount(c =&gt; c + 1) })
   ])
 }
-aktion = Counter()</code></pre>
+$app(Counter())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <ul>
@@ -260,10 +266,10 @@ function Panel() {
         <span class="lay-demo-label">Live</span>
 <pre><code>$value = 42
 tone = $value &gt; 0 ? "success" : ($value &lt; 0 ? "danger" : "neutral")
-aktion = Column([
+$app(Column([
   Badge(`value is ${$value}`, { tone: tone }),
   Button("Flip sign", { onClick: () =&gt; { $value = -$value } })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -287,10 +293,10 @@ cards = $people.map(p =&gt; Card([
   Text(p.name, { variant: "large-heavy" }),
   Text(p.role, { tone: "muted" })
 ]))
-aktion = Column([
+$app(Column([
   Text(`${$people.length} people`, { tone: "muted" }),
   Column(cards, { gap: "s" })
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -365,10 +371,10 @@ rows   = for (let r of data) { Row(r) }      // use data.map(r => Row(r))</code>
 <pre><code>$prices = [12, 8, 30, 5]
 total = $util.sum($prices)
 count = $util.count($prices)
-aktion = Column([
+$app(Column([
   Text(`${count} ${$util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
   Row($util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -426,11 +432,11 @@ StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
 Button("Save", "primary")</code></pre>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Grid([
+<pre><code>$app(Grid([
   Card([Text("One")]),
   Card([Text("Two")]),
   Card([Text("Three")])
-], { columns: 3, gap: "m" })</code></pre>
+], { columns: 3, gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -448,7 +454,7 @@ $count = 0 // trailing comment on a statement
 
 /* A block comment
    spanning several lines. */
-aktion = Text(`Count: ${$count}`)</code></pre>
+$app(Text(`Count: ${$count}`))</code></pre>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">

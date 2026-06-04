@@ -135,7 +135,6 @@ export class HttpRuntime {
   /**
    * Issue a single HTTP request. Runs through `onRequest`/`onResponse`
    * interceptors and surfaces a `retry()` one-shot inside `onResponse`.
-   * Honours `defaults.timeoutMs` via `AbortController`.
    */
   async request(input: HttpRequest): Promise<HttpResponse> {
     let req: HttpRequest = { ...input, headers: { ...input.headers } };

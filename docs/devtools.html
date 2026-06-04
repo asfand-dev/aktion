@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DevTools · Aktion</title>
+  <meta name="description" content="Aktion DevTools — a real, in-page debugger for any <aktion-app>. Inspect and edit live reactive $state, profile every render commit (mount/update/memoized) with a flamegraph and ranked components, and watch a timeline of every effect's mount, run, cleanup, and unmount. The React/Vue DevTools experience, built on Aktion's own runtime signals." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .dt-demo {
+      border: 1px solid var(--doc-border, #e2e8f0);
+      border-radius: 14px;
+      overflow: hidden;
+      margin: 1.5rem 0;
+      background: var(--doc-surface, #fff);
+    }
+    .dt-demo-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--doc-border, #e2e8f0);
+      background: var(--doc-surface-2, #f8fafc);
+      flex-wrap: wrap;
+    }
+    .dt-demo-bar .dt-launch {
+      appearance: none;
+      border: none;
+      border-radius: 8px;
+      background: #7c9cff;
+      color: #0c0e12;
+      font-weight: 700;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .dt-demo-bar .dt-launch:hover { background: #94b0ff; }
+    .dt-demo-bar .dt-hint { color: var(--doc-text-dim, #64748b); font-size: 13px; }
+    .dt-demo-stage { padding: 18px; min-height: 220px; }
+    .dt-demo-stage aktion-app { display: block; }
+  </style>
+</head>
+<body data-page="devtools">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Quality</span>
+        <h1>DevTools.</h1>
+        <p class="lead">
+          <strong>Aktion DevTools</strong> (<code>aktion/devtools</code>) is a
+          real, in-page debugger for any <code>&lt;aktion-app&gt;</code> on the
+          page &mdash; the Aktion equivalent of the React / Vue DevTools, built
+          on Aktion&rsquo;s own runtime signals. Inspect and edit live reactive
+          <code>$state</code>, profile every render commit, and watch a
+          timeline of every effect as it mounts, runs, and cleans up.
+        </p>
+      </header>
+
+      <h2 id="try-it">Try it live</h2>
+      <p>
+        The little app below is a normal <code>&lt;aktion-app&gt;</code>. Click
+        <strong>Launch DevTools</strong> to open the inspector docked to the
+        corner of this page, then poke at the app &mdash; increment the counter,
+        toggle the checkbox, watch the uptime ticker &mdash; and see the three
+        panels react in real time.
+      </p>
+
+      <div class="dt-demo">
+        <div class="dt-demo-bar">
+          <button class="dt-launch" id="dt-launch" type="button">⚡ Launch DevTools</button>
+          <span class="dt-hint">Opens a draggable, resizable panel pinned to the corner. Click again to toggle.</span>
+        </div>
+        <div class="dt-demo-stage">
+          <aktion-app id="devtools-demo-app" data-devtools-label="Demo app" data-theme-managed="true" theme="light"></aktion-app>
+        </div>
+      </div>
+
+      <p class="muted">The program driving the demo:</p>
+<pre><code id="dt-demo-program">$count = 0
+$seconds = 0
+$user = { name: "Ada", role: "engineer", prefs: { notify: true, theme: "dark" } }
+$tags = ["state", "renders", "effects"]
+
+// An interval effect — runs every second, so the Effect timeline fills up live.
+$effect(() => { $seconds = $seconds + 1 }, ["every(1000)"])
+
+// A user component — appears as its own instance in the Render profiler.
+function Stat(label, value, tone) {
+  return Card([
+    Column([
+      Text(label, { variant: "small", tone: "muted" }),
+      Text(value, { variant: "title" }),
+      Badge(tone, { tone: tone })
+    ], { gap: "xs" })
+  ])
+}
+
+$app(Column([
+  CardHeader("DevTools demo", { subtitle: "Open the inspector, then interact." }),
+  Row([
+    Stat("Count", `${$count}`, "info"),
+    Stat("Uptime", `${$seconds}s`, "success")
+  ], { grow: true }),
+  Row([
+    Button("Increment", { onClick: () =&gt; $count = $count + 1, variant: "primary" }),
+    Button("Reset", { onClick: () =&gt; $count = 0, variant: "secondary" })
+  ]),
+  Separator(),
+  Checkbox("notify", { label: "Email notifications", value: $user.prefs.notify }),
+  Text(`Signed in as ${$user.name} (${$user.role})`, { variant: "small", tone: "muted" })
+]))</code></pre>
+
+      <h2 id="how-it-works">How it works</h2>
+      <p>
+        DevTools mirrors the architecture of the browser DevTools: a
+        <strong>backend</strong> (the runtime) and a <strong>frontend</strong>
+        (the panel) that only ever talk through a structured event protocol.
+      </p>
+      <ul>
+        <li>
+          <strong>The runtime always emits to a global hook</strong>
+          (<code>window.__AKTION_DEVTOOLS_HOOK__</code>), exactly like React&rsquo;s
+          <code>__REACT_DEVTOOLS_GLOBAL_HOOK__</code>. Until a frontend installs
+          that hook <em>and</em> subscribes, every emit is a single
+          property-read no-op &mdash; so production bundles that never open
+          DevTools pay essentially nothing.
+        </li>
+        <li>
+          <strong>The panel is a separate, opt-in entry</strong>
+          (<code>aktion/devtools</code>). It installs the hook, adopts every
+          <code>&lt;aktion-app&gt;</code> on the page, and renders inside its own
+          shadow root &mdash; fully isolated from the app it inspects, so it can
+          debug even a broken program without sharing its fate.
+        </li>
+        <li>
+          <strong>Everything is the real runtime.</strong> State edits flow back
+          through the genuine reactive pipeline; the profiler reads the actual
+          per-instance memoization decisions; the effect timeline is fed by the
+          real effect runner. Nothing is mocked.
+        </li>
+      </ul>
+
+      <h2 id="state-inspector">State inspector</h2>
+      <p>
+        A live, editable tree of every reactive <code>$state</code> atom. Expand
+        objects and arrays to any depth, filter by name, and
+        <strong>click any value to edit it</strong> &mdash; the edit is parsed
+        (JSON first, then bare string) and written through the same path the
+        runtime uses, so dependents re-render and computed atoms re-derive
+        exactly as a real event handler would. Dotted edits
+        (<code>user.prefs.notify</code>) reconstruct the object immutably, so
+        sibling fields are preserved. Atoms flash as they change, and runtime-owned
+        atoms (like <code>route</code>) are shown but marked read-only.
+      </p>
+<pre><code>import { mountDevtools } from "aktion/devtools";
+mountDevtools();        // attaches to every &lt;aktion-app&gt; on the page</code></pre>
+
+      <h2 id="render-profiler">Render profiler</h2>
+      <p>
+        Every commit is captured with its trigger, total duration, and a
+        per-component breakdown. The <strong>commit strip</strong> shows each
+        render as a bar (green = initial mount, amber = full render, blue =
+        incremental); click one to inspect it. The <strong>flamegraph</strong>
+        lists every component instance in that commit, indented by tree depth and
+        coloured by phase:
+      </p>
+      <ul>
+        <li><strong>mount</strong> &mdash; the instance appeared for the first time;</li>
+        <li><strong>update</strong> &mdash; it re-evaluated, with the reason (an arg changed, a <code>$state</code> dependency changed, or a forced full render);</li>
+        <li><strong>memoized</strong> &mdash; its body was skipped because neither its args nor the <code>$state</code> paths it reads changed.</li>
+      </ul>
+      <p>
+        A ranked <strong>&ldquo;most expensive components&rdquo;</strong> table
+        aggregates self-time across captured commits so you can spot the
+        hot paths at a glance. Flip on <strong>Flash on commit</strong> to
+        outline the app element every time it re-renders.
+      </p>
+
+      <h2 id="effect-timeline">Effect timeline</h2>
+      <p>
+        A chronological stream of every effect lifecycle transition &mdash;
+        <code>mount</code>, <code>run</code>, <code>cleanup</code>,
+        <code>unmount</code>, and <code>error</code> &mdash; each attributed to
+        the trigger that fired it: a <code>$state</code> change
+        (<code>state:count</code>), an interval tick
+        (<code>every(1000)</code>), or a lifecycle event. Per-effect
+        <strong>lanes</strong> summarise run counts and total run time, and you
+        can filter the log by phase. Component-scoped effects (declared inside a
+        <code>function</code> body) are tagged <em>instance</em> and correctly
+        report their <code>unmount</code> when the component leaves the tree.
+      </p>
+
+      <h2 id="enable">Enable it</h2>
+      <p>One line, from any page that already loads Aktion:</p>
+<pre><code>import "aktion-runtime";                  // registers &lt;aktion-app&gt;
+import { mountDevtools } from "aktion-runtime/devtools";
+
+mountDevtools();</code></pre>
+      <p>Or straight from a CDN, as ES modules:</p>
+<pre><code>&lt;script type="module"&gt;
+  import "https://cdn.jsdelivr.net/npm/aktion-runtime/dist/aktion.js";
+  import { mountDevtools } from "https://cdn.jsdelivr.net/npm/aktion-runtime/dist/devtools.js";
+  mountDevtools();
+&lt;/script&gt;</code></pre>
+      <p>
+        <code>mountDevtools()</code> returns a controller
+        (<code>{ element, open, close, toggle, selectApp, destroy }</code>) so
+        you can bind it to a keyboard shortcut or a &ldquo;debug&rdquo; button
+        and ship it behind a flag. Because the hook is shared, multiple panels
+        cooperate on one event stream.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Zero-cost when closed.</strong> If you never import
+          <code>aktion/devtools</code>, the runtime&rsquo;s instrumentation is
+          dormant &mdash; no profiling bookkeeping, no event allocation. Open the
+          panel and it lights up on the next render.
+        </p>
+      </div>
+
+      <h2 id="more">Keep exploring</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="hooks.html">
+          <span class="demo-tag">State</span>
+          <h3>Hooks</h3>
+          <p>Per-instance <code>$state</code> / <code>$memo</code> &mdash; exactly what the State inspector shows you live.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Side effects</h3>
+          <p>Effects, intervals, and cleanup &mdash; the events that fill the Effect timeline.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="testing.html">
+          <span class="demo-tag">Quality</span>
+          <h3>Testing</h3>
+          <p>Assert on rendered output, <code>$state</code>, and events with the Aktion Testing Library.</p>
+          <span class="demo-arrow">View the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    // Drive the live demo from the program shown above (single source of truth),
+    // and wire the Launch button to the real `aktion/devtools` bundle.
+    const libUrl = new URL("../dist/aktion.js", import.meta.url).href;
+    const dtUrl = new URL("../dist/devtools.js", import.meta.url).href;
+
+    const app = document.getElementById("devtools-demo-app");
+    const codeEl = document.getElementById("dt-demo-program");
+    const program = (codeEl.textContent || "").trim();
+
+    await import(/* @vite-ignore */ libUrl);
+    app.setResponse(program);
+
+    let controller = null;
+    const launch = document.getElementById("dt-launch");
+    launch.addEventListener("click", async () => {
+      if (!controller) {
+        const { mountDevtools } = await import(/* @vite-ignore */ dtUrl);
+        controller = mountDevtools();
+        launch.textContent = "⚡ Toggle DevTools";
+      } else {
+        controller.toggle();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -9,20 +9,20 @@
  *   └─────────┴──────────────────────────┴────────────┘
  *   │ Bottom: live preview · code · standalone HTML    │
  *
- * The user composes the right-hand side of the `aktion` assignment by
+ * The user composes the argument passed to `$app(...)` by
  * dragging components from the palette onto the canvas. Every component
  * surfaces its real prop catalog (read from the language spec) so the
  * inspector can render typed editors with enum suggestions, and any prop
  * can be flipped into "raw expression" mode for advanced Aktion syntax.
  *
  * Source-text round-trip:
- *   - Import: parses the program, extracts the `aktion` expression by
+ *   - Import: parses the program, extracts the `$app(...)` root expression by
  *     bracket-tracking the original source, and walks the AST into the
  *     visual tree. Every other top-level statement (state, components,
  *     actions, effects, theme overrides) survives verbatim as a "prelude"
  *     block.
  *   - Export: emits the prelude unchanged, then re-serialises the visual
- *     tree as `aktion = <expr>` and concatenates the two.
+ *     tree as `$app(<expr>)` and concatenates the two.
  */
 
 import {
@@ -561,6 +561,48 @@ function createDefaultTree() {
 
 const ROOT_ENTITY_NAME = "aktion";
 
+/**
+ * Rewrite a canonical `$app(<expr>)` root statement into the editor's internal
+ * `aktion = <expr>` binding form so the entity parser (which models the root
+ * as a named assignment) can build the canvas tree. Export re-emits the
+ * `$app(...)` call; legacy `aktion = <expr>` source is left untouched.
+ */
+function normalizeAppRoot(src) {
+  const head = /^([ \t]*)\$app[ \t]*\(/gm;
+  let m;
+  while ((m = head.exec(src)) !== null) {
+    const openIdx = m.index + m[0].length - 1; // the "(" of $app(
+    const closeIdx = matchParenEnd(src, openIdx);
+    if (closeIdx < 0) break;
+    const inner = src.slice(openIdx + 1, closeIdx).trim();
+    const before = src.slice(0, m.index) + m[1] + ROOT_ENTITY_NAME + " = " + inner;
+    src = before + src.slice(closeIdx + 1);
+    head.lastIndex = before.length; // continue past the rewritten statement
+  }
+  return src;
+}
+
+/**
+ * Index of the `)` that closes the `(` at `openIdx`, or -1 if unbalanced.
+ * Strings and template literals are skipped so their inner parens don't count.
+ */
+function matchParenEnd(src, openIdx) {
+  let depth = 0;
+  let str = null;
+  for (let i = openIdx; i < src.length; i++) {
+    const ch = src[i];
+    if (str !== null) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === str) str = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") { str = ch; continue; }
+    if (ch === "(") depth++;
+    else if (ch === ")") { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
 function uuidEntity() {
   return "e_" + Math.random().toString(36).slice(2, 10) + "_" + Date.now().toString(36);
 }
@@ -789,8 +831,16 @@ function syncActiveTreeFromEntity() {
  */
 function emitEntitySource(ent) {
   if (ent.kind === "assignment") {
-    if (ent.tree) return ent.name + " = " + emitNode(ent.tree, 0);
-    if (ent.raw != null) return ent.name + " = " + ent.raw;
+    // The reserved root entity serialises to the canonical `$app(<expr>)`
+    // call; every other top-level binding keeps its `name = <expr>` form.
+    const isRoot = ent.name === ROOT_ENTITY_NAME;
+    if (ent.tree) {
+      const expr = emitNode(ent.tree, 0);
+      return isRoot ? "$app(" + expr + ")" : ent.name + " = " + expr;
+    }
+    if (ent.raw != null) {
+      return isRoot ? "$app(" + ent.raw + ")" : ent.name + " = " + ent.raw;
+    }
     return ent.source || "";
   }
   if (ent.kind === "state") {
@@ -880,8 +930,7 @@ function emitProgram() {
   const exprSrc = emitNode(tree, 0);
   const prelude = (state.prelude || "").trim();
   const head = prelude ? prelude + "\n\n" : "";
-  const rootId = state.rootId || "aktion";
-  return head + rootId + " = " + exprSrc + "\n";
+  return head + "$app(" + exprSrc + ")\n";
 }
 
 /**
@@ -1432,7 +1481,7 @@ function scanExpressionEnd(source, start) {
 }
 
 function importFromSource(source) {
-  const text = String(source ?? "");
+  const text = normalizeAppRoot(String(source ?? ""));
   if (!text.trim()) {
     const def = defaultEntities();
     return {
@@ -2855,7 +2904,7 @@ function decorateRenderedDOM() {
   if (!rendered) return;
   // Walk from `aktion` so the WYSIWYG canvas can tag (and therefore select /
   // hover / drop on) every rendered component — even those defined in a
-  // different top-level binding (e.g. `aktion = Stack([block])` where
+  // different top-level binding (e.g. `$app(Stack([block]))` where
   // `block`, `card`, `followup` live in their own assignments). Falling
   // back to the active tree keeps the old behaviour when no `aktion`
   // entity exists yet.
@@ -2875,7 +2924,7 @@ function decorateRenderedDOM() {
   if (!startTree) return;
   // The rui-root wraps the program tree in one element. Drill down into
   // its single child if the visual root is a single component (the common
-  // case — `aktion = Stack(...)`).
+  // case — `$app(Stack(...))`).
   let renderedRoot = rendered;
   if (startTree.kind === "component" && rendered.children.length === 1) {
     renderedRoot = rendered.children[0];
@@ -4735,19 +4784,19 @@ const EXAMPLES = [
     name: "Welcome card",
     desc: "Stack with a card and a follow-up block.",
     code:
-      'aktion = Stack([\n' +
+      '$app(Stack([\n' +
       '  Card([CardHeader("Hello, world", { subtitle: "Generated visually" })]),\n' +
       '  FollowUpBlock([\n' +
       '    FollowUpItem("Tell me more"),\n' +
       '    FollowUpItem("Show an example")\n' +
       '  ])\n' +
-      '])',
+      ']))',
   },
   {
     name: "Dashboard",
     desc: "Header + KPI strip + chart.",
     code:
-      'aktion = Stack([\n' +
+      '$app(Stack([\n' +
       '  PageHeader("Sales", { subtitle: "This week" }),\n' +
       '  Stats([\n' +
       '    StatCard("Revenue", { value: "$12,540", trend: "up", delta: "+12%", icon: "sack-dollar" }),\n' +
@@ -4759,7 +4808,7 @@ const EXAMPLES = [
       '    LineChart(["Mo","Tu","We","Th","Fr","Sa","Su"],\n' +
       '      { series: [Series("This week", { values: [820, 1240, 1500, 1180, 1310, 980, 740] })] })\n' +
       '  ])\n' +
-      '])',
+      ']))',
   },
   {
     name: "Reactive todo",
@@ -4774,25 +4823,25 @@ const EXAMPLES = [
       'function Row(t) {\n' +
       '  return Card([Text(t.text)])\n' +
       '}\n\n' +
-      'aktion = Stack([\n' +
+      '$app(Stack([\n' +
       '  Card([CardHeader("Todo list")]),\n' +
       '  Input("draft", { placeholder: "What needs doing?", value: $draft }),\n' +
       '  Button("Add", { action: addTodo, variant: "primary" }),\n' +
       '  ...$todos.map(t => Row(t))\n' +
-      '])',
+      ']))',
   },
   {
     name: "Pricing table",
     desc: "Three pricing cards in a grid.",
     code:
-      'aktion = Stack([\n' +
+      '$app(Stack([\n' +
       '  Hero("Plans for every team", { subtitle: "Pick the size that fits." }),\n' +
       '  PricingTable([\n' +
       '    PricingCard("Starter", { price: "$0",  period: "/mo", features: ["1 user", "Community support"] }),\n' +
       '    PricingCard("Team",    { price: "$24", period: "/mo", features: ["10 users", "Email support"], featured: true }),\n' +
       '    PricingCard("Scale",   { price: "$99", period: "/mo", features: ["Unlimited", "Priority support"] })\n' +
       '  ])\n' +
-      '])',
+      ']))',
   },
 ];
 

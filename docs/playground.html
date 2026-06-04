@@ -134,6 +134,46 @@
     .pg-iconbtn[aria-pressed="true"] { background: var(--doc-primary-soft); color: var(--doc-primary); }
     .pg-iconbtn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
 
+    /* --- Segmented groups ---------------------------------------------------
+       Buttons placed inside a `.pg-group` form a connected segmented control:
+       they shed their individual border/background and share the group's
+       container, lighting up only on hover or when active/pressed. This keeps
+       the toolbar's many actions visually organised into a few tidy clusters
+       (Run · View · Debug · Share) instead of a loose row of buttons. */
+    .pg-group .pg-btn:not(.pg-btn--primary):not([aria-pressed="true"]),
+    .pg-group .pg-iconbtn:not([aria-pressed="true"]) {
+      border-color: transparent;
+      background: transparent;
+    }
+    .pg-group .pg-btn:not(.pg-btn--primary):not([aria-pressed="true"]):hover,
+    .pg-group .pg-iconbtn:not([aria-pressed="true"]):hover {
+      background: var(--doc-surface);
+      color: var(--doc-text);
+    }
+    /* A subtle hairline divider between a group's segments. */
+    .pg-group > * + * {
+      position: relative;
+    }
+    .pg-group--divided > * + *::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: 4px;
+      bottom: 4px;
+      width: 1px;
+      background: var(--doc-border);
+    }
+
+    /* The one primary action in the bar (Run) stays filled and prominent,
+       even inside its group, so it reads as the main call to action. */
+    .pg-btn--primary {
+      background: var(--doc-primary);
+      color: #fff;
+      border-color: transparent;
+    }
+    .pg-btn--primary:hover { background: var(--doc-primary); filter: brightness(1.07); border-color: transparent; }
+    .pg-btn--primary[disabled] { opacity: .45; filter: none; }
+
     .pg-pill {
       display: inline-flex;
       align-items: center;
@@ -552,6 +592,193 @@
       transform: rotate(180deg);
     }
 
+    /* ------- File explorer — VSCode-like tree (replaces the docs nav) ------- */
+    .pg-files {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+      padding-right: 2px;
+    }
+    .pg-files-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .pg-files-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--doc-text-muted);
+    }
+    .pg-files-actions { display: inline-flex; gap: 1px; }
+    .pg-files-actions .pg-iconbtn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      font-size: 14px;
+      border-radius: var(--doc-radius-sm);
+      color: var(--doc-text-muted);
+    }
+    .pg-files-actions .pg-iconbtn:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+
+    .pg-file-tree {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      outline: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .pg-file-tree[data-root-drop="true"] {
+      box-shadow: inset 0 0 0 1px var(--doc-primary);
+      border-radius: var(--doc-radius-sm);
+    }
+    .pg-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 6px 0 0;
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      white-space: nowrap;
+      color: var(--doc-text);
+      font-size: 13px;
+      position: relative;
+    }
+    .pg-row:hover { background: var(--doc-bg-soft); }
+    .pg-row[data-selected="true"] { background: var(--doc-primary-softer); }
+    .pg-row[data-active="true"] { background: color-mix(in srgb, var(--doc-primary) 18%, transparent); }
+    .pg-row[data-active="true"]::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+      background: var(--doc-primary);
+    }
+    .pg-row[data-drop="true"] { box-shadow: inset 0 0 0 1px var(--doc-primary); }
+    /* A cut file/folder is dimmed until it's pasted (VSCode behaviour). */
+    .pg-row[data-cut="true"] { opacity: 0.45; }
+    .pg-row-twisty {
+      width: 14px; flex: none; text-align: center;
+      color: var(--doc-text-subtle); font-size: 10px;
+      transition: transform var(--doc-transition);
+    }
+    .pg-row[data-kind="file"] .pg-row-twisty { visibility: hidden; }
+    .pg-row-icon { width: 16px; flex: none; text-align: center; font-size: 13px; }
+    .pg-row-name { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .pg-row-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--doc-text-subtle); border: 1px solid var(--doc-border);
+      border-radius: 999px; padding: 0 6px; flex: none;
+    }
+    /* File-type icon colors (VSCode-ish palette). */
+    .pg-ic-aktion { color: #a78bfa; }
+    .pg-ic-html   { color: #e44d26; }
+    .pg-ic-css    { color: #42a5f5; }
+    .pg-ic-js     { color: #f7df1e; }
+    .pg-ic-ts     { color: #3178c6; }
+    .pg-ic-json   { color: #cbcb41; }
+    .pg-ic-md     { color: #90a4ae; }
+    .pg-ic-img    { color: #26a69a; }
+    .pg-ic-file   { color: var(--doc-text-subtle); }
+    .pg-ic-folder { color: #e0b65b; }
+
+    .pg-files-hint {
+      margin: auto 0 0;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--doc-text-subtle);
+    }
+    .pg-files-hint code {
+      font-family: var(--doc-mono);
+      font-size: 10px;
+      background: var(--doc-bg-soft);
+      padding: 1px 4px;
+      border-radius: var(--doc-radius-xs);
+    }
+    .pg-files-hint a { color: var(--doc-primary); text-decoration: none; }
+    .pg-files-hint a:hover { text-decoration: underline; }
+
+    /* ------- Editor tabs ------- */
+    .pg-pane-toolbar--tabs { padding: 0; gap: 0; overflow: hidden; }
+    .pg-tabs {
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      scrollbar-width: thin;
+    }
+    .pg-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px 0 12px;
+      height: 34px;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+      border-right: 1px solid var(--doc-border);
+      cursor: pointer;
+      white-space: nowrap;
+      background: var(--doc-bg-soft);
+      max-width: 220px;
+    }
+    .pg-tab[data-active="true"] {
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      box-shadow: inset 0 -2px 0 var(--doc-primary);
+    }
+    .pg-tab-name { overflow: hidden; text-overflow: ellipsis; }
+    .pg-tab-icon { font-size: 12px; flex: none; }
+    .pg-tab-close {
+      border: 0; background: none; cursor: pointer; color: var(--doc-text-subtle);
+      width: 18px; height: 18px; border-radius: var(--doc-radius-xs); flex: none;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+      opacity: 0; transition: opacity var(--doc-transition), background var(--doc-transition);
+    }
+    .pg-tab:hover .pg-tab-close, .pg-tab[data-active="true"] .pg-tab-close { opacity: 1; }
+    .pg-tab-close:hover { background: var(--doc-border); color: var(--doc-text); }
+    .pg-tab-dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--doc-text-muted); flex: none; }
+
+    /* ------- Context menu + popover menus ------- */
+    .pg-ctxmenu {
+      position: fixed;
+      z-index: 1000;
+      min-width: 200px;
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+      padding: 4px;
+      font-size: 13px;
+    }
+    .pg-ctxmenu[hidden] { display: none; }
+    .pg-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      color: var(--doc-text);
+      white-space: nowrap;
+    }
+    .pg-menu-item:hover { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .pg-menu-item[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+    .pg-menu-item i { width: 16px; text-align: center; color: var(--doc-text-subtle); font-size: 12px; }
+    .pg-menu-item:hover i { color: var(--doc-primary); }
+    .pg-menu-item .pg-menu-key { margin-left: auto; padding-left: 18px; color: var(--doc-text-subtle); font-size: 11px; }
+    .pg-menu-sep { height: 1px; background: var(--doc-border); margin: 4px 6px; }
+    /* Inline rename field rendered inside a tree row. */
+    .pg-rename-input {
+      flex: 1; min-width: 0; font: inherit; font-size: 13px;
+      background: var(--doc-bg); color: var(--doc-text);
+      border: 1px solid var(--doc-primary); border-radius: var(--doc-radius-xs);
+      padding: 1px 4px; outline: none;
+    }
+
     /* ------- Editor hover / signature tooltip ------- */
     .pg-cm-tooltip {
       max-width: 360px;
@@ -695,26 +922,39 @@
 </head>
 <body data-page="playground">
   <div class="layout" data-wide="true">
-    <aside class="sidebar">
-      <h1>Aktion</h1>
-      <p>Web component runtime for Aktion</p>
-      <nav>
-        <a href="index.html">Overview</a>
-        <a href="get-started.html">Get started</a>
-        <a href="frameworks.html">Framework integration</a>
-        <a href="language.html">Language reference</a>
-        <a href="components.html">Component reference</a>
-        <a href="actions.html">Actions</a>
-        <a href="side-effects.html">Side effects</a>
-        <a href="javascript-interactions.html">JavaScript interactions</a>
-        <a href="routing.html">Routing</a>
-        <a href="themes.html">Theming</a>
-        <a href="examples.html">Examples</a>
-        <a href="playground.html" aria-current="page">Playground</a>
-        <a href="visual-editor.html">Visual editor</a>
-        <a href="live-examples.html">Live examples</a>
-      </nav>
+    <aside class="sidebar pg-files" id="pg-files" aria-label="Project files">
+      <div class="pg-files-head">
+        <span class="pg-files-title">Explorer</span>
+        <div class="pg-files-actions">
+          <button class="pg-iconbtn" id="pg-file-new" title="New file" aria-label="New file">
+            <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-folder-new" title="New folder" aria-label="New folder">
+            <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-import" title="Import files, a .zip, or a URL" aria-label="Import" aria-haspopup="true">
+            <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-export" title="Export project" aria-label="Export" aria-haspopup="true">
+            <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="pg-file-tree" id="pg-file-list" role="tree" aria-label="Project files" tabindex="0"></div>
+      <p class="pg-files-hint">
+        <code>app.aktion</code> is the entry. Right-click for actions; drag to move.
+        Import folders with <code>import { X } from "./components/X.aktion"</code>.
+        <a href="modules.html">Learn more →</a>
+      </p>
     </aside>
+
+    <!-- File-explorer context menu (positioned on right-click) -->
+    <div class="pg-ctxmenu" id="pg-ctxmenu" role="menu" hidden></div>
+    <!-- Hidden inputs used by the Import menu -->
+    <input type="file" id="pg-import-files" multiple hidden
+           accept=".aktion,.html,.css,.js,.ts,.json,.md,.txt,.svg" />
+    <input type="file" id="pg-import-folder" webkitdirectory directory multiple hidden />
+    <input type="file" id="pg-import-zip" accept=".zip,application/zip" hidden />
 
     <main>
       <div class="pg-app" id="pg-app">
@@ -722,9 +962,9 @@
         <header class="pg-bar" role="banner">
           <button class="pg-iconbtn pg-sidebar-toggle" id="pg-sidebar-toggle"
                   aria-pressed="false"
-                  aria-controls="site-nav"
-                  title="Collapse sidebar"
-                  aria-label="Toggle sidebar">
+                  aria-controls="pg-files"
+                  title="Hide file explorer"
+                  aria-label="Toggle file explorer">
             <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
           </button>
           <div class="pg-bar-title">
@@ -736,6 +976,7 @@
             <label class="sr-only" for="pg-example">Example</label>
             <select id="pg-example" aria-label="Example preset">
               <option value="chat">Chat reply</option>
+              <option value="modules">Multi-file modules</option>
               <option value="dashboard">Project dashboard</option>
               <option value="todo">Reactive todo</option>
               <option value="reactiveApp">Reactive app</option>
@@ -766,18 +1007,20 @@
 
           <div class="pg-spacer"></div>
 
-          <div role="group" aria-label="Run mode">
-            <button class="pg-btn" id="pg-run-mode" aria-pressed="false" title="Toggle live / manual run">
+          <!-- Run: live/manual toggle + the primary Run action -->
+          <div class="pg-group" role="group" aria-label="Run">
+            <button class="pg-btn" id="pg-run-mode" aria-pressed="false" title="Toggle live / manual run (Cmd/Ctrl+K)">
               <i class="fa-solid fa-bolt" aria-hidden="true"></i>
               <span class="pg-btn-text" id="pg-run-label">Live</span>
             </button>
-            <button class="pg-btn" id="pg-run" title="Run (Cmd/Ctrl+Enter)" aria-label="Run program">
+            <button class="pg-btn pg-btn--primary" id="pg-run" title="Run (Cmd/Ctrl+Enter)" aria-label="Run program">
               <i class="fa-solid fa-play" aria-hidden="true"></i>
               <span class="pg-btn-text">Run</span>
             </button>
           </div>
 
-          <div role="group" aria-label="View mode">
+          <!-- View: layout segmented control -->
+          <div class="pg-group" role="group" aria-label="View layout">
             <button class="pg-iconbtn" data-mode="split-h" title="Side-by-side" aria-label="Side-by-side layout">
               <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
             </button>
@@ -792,23 +1035,34 @@
             </button>
           </div>
 
-          <button class="pg-btn" id="pg-inspect" aria-pressed="false" title="Inspect mode (Cmd/Ctrl+Shift+I)">
-            <i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i>
-            <span class="pg-btn-text">Inspect</span>
-          </button>
+          <!-- Debug: inspect mode + the DevTools panel -->
+          <div class="pg-group" role="group" aria-label="Debug tools">
+            <button class="pg-btn" id="pg-inspect" aria-pressed="false" title="Inspect mode (Cmd/Ctrl+Shift+I)">
+              <i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i>
+              <span class="pg-btn-text">Inspect</span>
+            </button>
+            <button class="pg-btn" id="pg-devtools" aria-pressed="false" title="Aktion DevTools — state, profiler, effects (Cmd/Ctrl+Shift+D)">
+              <i class="fa-solid fa-bug" aria-hidden="true"></i>
+              <span class="pg-btn-text">DevTools</span>
+            </button>
+          </div>
 
-          <button class="pg-iconbtn" id="pg-share" title="Copy share link" aria-label="Copy share link">
-            <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
-          </button>
-          <button class="pg-iconbtn" id="pg-copy" title="Copy code" aria-label="Copy code">
-            <i class="fa-solid fa-copy" aria-hidden="true"></i>
-          </button>
-          <button class="pg-iconbtn" id="pg-download" title="Download as standalone HTML" aria-label="Download as standalone HTML">
-            <i class="fa-solid fa-download" aria-hidden="true"></i>
-          </button>
-          <button class="pg-iconbtn" id="pg-reset" title="Reset to example" aria-label="Reset to current example">
-            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
-          </button>
+          <!-- Share & export -->
+          <div class="pg-group" role="group" aria-label="Share & export">
+            <button class="pg-iconbtn" id="pg-share" title="Copy share link" aria-label="Copy share link">
+              <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-copy" title="Copy code" aria-label="Copy code">
+              <i class="fa-solid fa-copy" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-download" title="Download as standalone HTML" aria-label="Download as standalone HTML">
+              <i class="fa-solid fa-download" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-reset" title="Reset to example" aria-label="Reset to current example">
+              <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+            </button>
+          </div>
+
           <button class="pg-iconbtn" id="pg-help" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
             <i class="fa-solid fa-keyboard" aria-hidden="true"></i>
           </button>
@@ -817,10 +1071,8 @@
         <!-- Editor + viewer workspace -->
         <div class="pg-workspace" id="pg-workspace" data-mode="split-h">
           <section class="pg-pane pg-pane--editor" aria-label="Editor pane">
-            <div class="pg-pane-toolbar">
-              <h3>Aktion</h3>
-              <div class="pg-spacer"></div>
-              <span class="pg-pill" id="pg-pill-preset" title="Active example">Chat reply</span>
+            <div class="pg-pane-toolbar pg-pane-toolbar--tabs">
+              <div class="pg-tabs" id="pg-tabs" role="tablist" aria-label="Open files"></div>
             </div>
             <div class="pg-editor-host" id="pg-editor">
               <div class="pg-loader" id="pg-editor-loader">
@@ -895,6 +1147,7 @@
               <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Run program (in manual mode)</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd></td><td>Toggle inspect mode</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd></td><td>Toggle Aktion DevTools (state · profiler · effects)</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save to localStorage (auto on type)</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Toggle live / manual run</td></tr>
               <tr><td><kbd>Tab</kbd> / <kbd>Enter</kbd></td><td>Accept the highlighted autocomplete suggestion (Tab otherwise indents / advances snippet fields)</td></tr>
@@ -948,6 +1201,15 @@
             status bar to open the error inspector — every diagnostic, with
             line numbers and click-to-jump.
           </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>DevTools.</strong> Click <i class="fa-solid fa-bug"
+            aria-hidden="true"></i> <strong>DevTools</strong> (or
+            <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd>) to
+            open the Aktion inspector docked to the page: a live, editable
+            <code>$state</code> tree, a render profiler with a per-commit
+            flamegraph, and a timeline of every effect. See the
+            <a href="devtools.html">DevTools guide</a> for details.
+          </p>
         </div>
       </div>
 
@@ -955,6 +1217,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.06.01-router-fix-v2"></script>
+  <script type="module" src="assets/playground.js?v=2026.06.04-files2"></script>
 </body>
 </html>

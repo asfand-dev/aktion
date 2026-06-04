@@ -11,8 +11,8 @@
  *   - "skyline"    (deep navy + cyan, crisp & calm)
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
- * `element.setTheme({...})`, or declare `theme = Theme({...})` inside a
- * Aktion program. All three paths flow through `mergeTheme`
+ * `element.setTheme({...})`, or write a bare `$theme({...})` statement
+ * inside a Aktion program. All three paths flow through `mergeTheme`
  * so partial token maps are layered on top of the `light` defaults.
  *
  * Token taxonomy:
@@ -643,7 +643,7 @@ export function clearTokenOverrides(
 /**
  * Filter an arbitrary object down to the keys recognised by `ThemeTokens`,
  * stringifying primitive values along the way. Used when an Aktion program
- * declares `theme = Theme({...})` — the evaluator hands us
+ * applies `$theme({...})` — the evaluator hands us
  * a plain JS object, and we want to ignore anything that isn't a real token
  * (LLM typo guard) before applying it.
  */

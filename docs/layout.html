@@ -107,11 +107,11 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   PageHeader("Project Atlas", { subtitle: "Updated 2 hours ago" }),
   Card([CardHeader("Overview"), Text("A Column stacks its children top to bottom with an even gap.")]),
   Card([CardHeader("Activity"), Text("Each card is a child; the Column owns the spacing between them.")])
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -125,12 +125,12 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Card([Row([
+<pre><code>$app(Card([Row([
   Text("Team members", { variant: "large-heavy" }),
   Spacer(),
   Button("Invite", { variant: "ghost", icon: "user-plus" }),
   Button("New", { variant: "primary", icon: "plus" })
-], { gap: "s" })])</code></pre>
+], { gap: "s" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -142,10 +142,10 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Row([
+<pre><code>$app(Row([
   StackItem(Input("q", { placeholder: "Search the docs…" }), { grow: 1 }),
   Button("Search", { variant: "primary" })
-], { gap: "s" })</code></pre>
+], { gap: "s" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -159,11 +159,11 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "between" })]),
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "center" })]),
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "end" })])
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -181,23 +181,23 @@
       <h3>Auto&#8209;fit &mdash; reflows by itself</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Grid([
+<pre><code>$app(Grid([
   StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%" }),
   StatCard("Users", { value: "2,184", trend: "up", delta: "+184" }),
   StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%" }),
   StatCard("NPS", { value: "62", trend: "up", delta: "+5" })
-], { gap: "m", minChildWidth: "180px" })</code></pre>
+], { gap: "m", minChildWidth: "180px" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
       <h3>Fixed columns</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Grid([
+<pre><code>$app(Grid([
   Card([CardHeader("One")]),
   Card([CardHeader("Two")]),
   Card([CardHeader("Three")])
-], { columns: 3, gap: "m" })</code></pre>
+], { columns: 3, gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -211,10 +211,10 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Grid([
+<pre><code>$app(Grid([
   GridItem(Card([CardHeader("Side"), Text("span 1/4")]), { span: "1/4" }),
   GridItem(Card([CardHeader("Main"), Text("span 3/4")]), { span: "3/4" })
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -227,9 +227,9 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Card([Center([
+<pre><code>$app(Card([Center([
   EmptyState("No messages yet", { description: "Start a conversation to see it here.", icon: "inbox" })
-], { minHeight: "240px" })])</code></pre>
+], { minHeight: "240px" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -246,18 +246,18 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live — resize the window / preview</span>
-<pre><code>aktion = Grid([
+<pre><code>$app(Grid([
   Card([CardHeader("Tile 1")]), Card([CardHeader("Tile 2")]),
   Card([CardHeader("Tile 3")]), Card([CardHeader("Tile 4")])
-], { columns: { base: 1, sm: 2, lg: 4 }, gap: "m" })</code></pre>
+], { columns: { base: 1, sm: 2, lg: 4 }, gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <div class="lay-demo">
         <span class="lay-demo-label">Live — direction flips at md</span>
-<pre><code>aktion = Stack([
+<pre><code>$app(Stack([
   Card([CardHeader("Nav"), Text("Column on mobile, beside the content on desktop.")]),
   Card([CardHeader("Content"), Text("Stack is the escape hatch for responsive direction.")])
-], { direction: { base: "column", md: "row" }, gap: "m" })</code></pre>
+], { direction: { base: "column", md: "row" }, gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -272,10 +272,10 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Box([Text("A subtle inset surface — lighter than a Card.")], { padding: "m", background: "muted", border: "subtle" }),
   Box([Text("Tinted callout-style box.")], { padding: "m", background: "primary" })
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -284,7 +284,7 @@
       <h3>Dashboard &mdash; header, KPI strip, content grid</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   PageHeader("Sales", { subtitle: "Q4 2026", actions: [Button("Export", { variant: "ghost", icon: "download" })] }),
   Grid([
     StatCard("MRR", { value: "$48.2k", trend: "up", delta: "+12%" }),
@@ -295,7 +295,7 @@
     GridItem(Card([CardHeader("Pipeline"), Text("Main chart goes here.")]), { span: "2/3" }),
     GridItem(Card([CardHeader("Tasks"), Text("Side panel.")]), { span: "1/3" })
   ], { gap: "l" })
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -307,7 +307,7 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Card([Row([Text("Acme", { variant: "large-heavy" }), Spacer(), Badge("Pro", { tone: "primary" })])]),
   Grid([
     GridItem(Card([CardHeader("Menu"), Text("Sidebar nav")]), { span: "1/4" }),
@@ -316,21 +316,21 @@
       Card([CardHeader("Recent activity")])
     ], { gap: "m" }), { span: "3/4" })
   ], { gap: "l" })
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
       <h3>Centered auth card</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Center([
+<pre><code>$app(Center([
   Box([Column([
     CardHeader("Sign in", { subtitle: "Welcome back" }),
     Input("email", { placeholder: "you@example.com" }),
     Input("password", { placeholder: "Password", type: "password" }),
     Button("Continue", { variant: "primary" })
   ], { gap: "m" })], { padding: "l", background: "surface", border: "default", maxWidth: "360px" })
-], { minHeight: "70vh" })</code></pre>
+], { minHeight: "70vh" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

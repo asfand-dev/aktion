@@ -68,7 +68,7 @@
           Aktion is a compact <strong>declarative language</strong> &mdash; a strict
           subset of JavaScript &mdash; for building rich UIs, whether an LLM writes
           them token&#8209;by&#8209;token or you write them by hand. A program is a
-          handful of bindings ending in <code>aktion = &hellip;</code>; the
+          handful of bindings ending in a call to <code>$app(&hellip;)</code>; the
           <code>&lt;aktion-app&gt;</code> web component renders it live, in its own
           shadow DOM, the moment it streams in. No build step, no JSX, no flexbox
           bookkeeping &mdash; just composition that runs anywhere HTML runs.
@@ -82,12 +82,12 @@
       <h2 id="hello">Hello, Aktion</h2>
       <p>
         Here is a whole program. Each line is a plain&#8209;data component call; the
-        final <code>aktion = &hellip;</code> is what gets rendered. The preview on the
+        final <code>$app(&hellip;)</code> call is what gets rendered. The preview on the
         right is a real <code>&lt;aktion-app&gt;</code> &mdash; not a screenshot.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   PageHeader("Project Atlas", { subtitle: "12 active · 4 at risk", badge: Badge("On track", { tone: "success" }) }),
   Grid([
     StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12% vs Q2", icon: "sack-dollar" }),
@@ -95,7 +95,7 @@
     StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%" })
   ], { gap: "m", minChildWidth: "180px" }),
   Card([CardHeader("Welcome back"), Text("This dashboard streamed in as plain text and rendered as a live UI.")])
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -120,11 +120,11 @@
         <span class="lay-demo-label">Live</span>
 <pre><code>$count = 0
 function inc() { $count = $count + 1 }
-aktion = Card([
+$app(Card([
   CardHeader("Reactive counter"),
   Text(`You clicked ${$count} times.`, { variant: "large-heavy" }),
   Button("Increment", { variant: "primary", icon: "plus", onClick: inc })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -136,14 +136,14 @@ aktion = Card([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Row([Text("Inbox", { variant: "large-heavy" }), Spacer(), Button("Compose", { variant: "primary", icon: "plus" })], { gap: "s" }),
   Grid([
     Card([CardHeader("Tile A")]),
     Card([CardHeader("Tile B")]),
     Card([CardHeader("Tile C")])
   ], { columns: 3, gap: "m" })
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -158,7 +158,7 @@ aktion = Card([
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$users = [{ name: "Ada Lovelace" }, { name: "Alan Turing" }, { name: "Grace Hopper" }]
-aktion = Card([
+$app(Card([
   CardHeader("Users"),
   Async({ state: "data", data: $users, loading: false }, {
     loading: Skeleton("paragraph", { count: 3 }),
@@ -166,7 +166,7 @@ aktion = Card([
     empty: EmptyState("No users yet"),
     data: Column($users.map(u =&gt; Text(u.name)))
   })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

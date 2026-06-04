@@ -197,7 +197,7 @@
       <h1 style="margin-top:10px">Same UI, six brands.</h1>
       <p>
         Pick a brand below — the preview reskins to GitHub, Apple, Stripe,
-        IONOS, Notion, or Vercel using only a <code>theme = $theme({...})</code>
+        IONOS, Notion, or Vercel using only a bare <code>$theme({...})</code>
         line at the top of the response. No CSS, no host configuration, no
         custom components. Copy any token map into your own LLM response to
         brand a single reply, or feed it through
@@ -266,7 +266,7 @@
       <h2>The shared UI program</h2>
       <p class="lede">
         Every brand renders the same Aktion source. Only the
-        <code>theme = $theme({...})</code> line at the top changes — the
+        <code>$theme({...})</code> line at the top changes — the
         runtime applies the new tokens to the host as CSS custom properties,
         so the existing components instantly pick up the new palette,
         typography, and shape.
@@ -350,7 +350,7 @@ quickForm = Card([
 
 bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], { columns: 2, gap: "l" })
 
-aktion = Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "l" })</code></pre>
+$app(Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "l" }))</code></pre>
     </article>
 
     <article class="example-card">
@@ -361,12 +361,12 @@ aktion = Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap:
         or set CSS variables on the host element.
       </p>
       <pre class="example-source"><code>// 1. Brand a single response from inside the script (structured form).
-el.setResponse(`theme = $theme({
+el.setResponse(`$theme({
   colors: { primary: "#0969da" },
   font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightButton: "500" },
   radius: { button: "6px" }
 })
-aktion = Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])])`);
+$app(Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])]))`);
 
 // 2. Or apply a flat token map programmatically (host-wide).
 //    The host-side setTheme() still accepts the flat token names.
@@ -741,39 +741,20 @@ aktion-app {
     const copyProgBtn  = document.getElementById("copy-program");
 
     // Map a flat-shape token key (e.g. "colorPrimaryHover", "radiusButton",
-    // "fontFamilyHeading", "buttonFontWeight", "shadowMd") to a structured
-    // group/inner-key pair (e.g. { group: "colors", inner: "primaryHover" }).
+    // "fontFamilyHeading") to a structured group/inner-key pair (e.g.
+    // { group: "colors", inner: "primaryHover" }).
     //
     // The in-script `$theme({...})` binding only accepts the structured
-    // groups (`colors`, `radius`, `font`, `motion`, `elevation`) per
-    // §16 — flat keys raise a schema-validator error.
+    // groups `colors` / `radius` / `font` (§16), which flatten back to
+    // `color*` / `radius*` / `font*`. Tokens with no structured-group
+    // spelling that reproduces the real token name — charts, shadows,
+    // border width, button padding, transition timing — are dropped from
+    // the generated snippet rather than emitted as silently-ignored keys.
     function flatToStructured(key) {
-      // Chart palette tokens (chart1…chart6) live under colors.chart1 etc.
-      if (/^chart[1-6]$/.test(key)) {
-        return { group: "colors", inner: key };
-      }
-      // Buttons: buttonFontWeight, buttonPaddingY, etc. live under font/motion/elevation
-      // depending on the suffix. The simplest, prompt-accurate mapping is to
-      // route them into the `font` group as `weightButton` / `paddingButtonY`.
-      const buttonPrefixes = [
-        ["buttonFontWeight",    { group: "font",      inner: "weightButton" }],
-        ["buttonTextTransform", { group: "font",      inner: "textTransformButton" }],
-        ["buttonLetterSpacing", { group: "font",      inner: "letterSpacingButton" }],
-        ["buttonPaddingY",      { group: "elevation", inner: "paddingButtonY" }],
-        ["buttonPaddingX",      { group: "elevation", inner: "paddingButtonX" }],
-      ];
-      for (const [name, target] of buttonPrefixes) {
-        if (key === name) return target;
-      }
-      const shadowAliases = ["shadowSm", "shadowMd", "shadowLg", "borderWidth"];
-      if (shadowAliases.includes(key)) {
-        return { group: "elevation", inner: key };
-      }
       const groups = [
         { prefix: "color",  group: "colors" },
         { prefix: "radius", group: "radius" },
         { prefix: "font",   group: "font" },
-        { prefix: "motion", group: "motion" },
       ];
       for (const { prefix, group } of groups) {
         if (key.startsWith(prefix) && key.length > prefix.length) {
@@ -782,18 +763,18 @@ aktion-app {
           return { group, inner };
         }
       }
-      // Unknown — surface in the `elevation` bucket so the schema validator
-      // can flag it rather than silently dropping the value.
-      return { group: "elevation", inner: key };
+      // Not expressible via the structured form — skip it.
+      return null;
     }
 
     function formatThemeBlock(tokens) {
-      const buckets = { colors: [], radius: [], font: [], motion: [], elevation: [] };
+      const buckets = { colors: [], radius: [], font: [] };
       for (const [key, value] of Object.entries(tokens)) {
-        const { group, inner } = flatToStructured(key);
-        buckets[group].push({ inner, value });
+        const mapped = flatToStructured(key);
+        if (!mapped) continue;
+        buckets[mapped.group].push({ inner: mapped.inner, value });
       }
-      const lines = ["theme = $theme({"];
+      const lines = ["$theme({"];
       const groupKeys = Object.keys(buckets).filter((g) => buckets[g].length > 0);
       groupKeys.forEach((group, gi) => {
         const longest = Math.max(...buckets[group].map((e) => e.inner.length));

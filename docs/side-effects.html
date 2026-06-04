@@ -201,7 +201,7 @@ $effect(() =&gt; {
   let id = setInterval(() =&gt; { $now = $util.now() }, 1000)
   cleanup(() =&gt; clearInterval(id))
 }, ["mount"])
-aktion = Column([ Text(`Ticks: ${$now}`) ])</code></pre>
+$app(Column([ Text(`Ticks: ${$now}`) ]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

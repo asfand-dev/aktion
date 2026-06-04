@@ -84,7 +84,7 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Card([
     CardHeader("Welcome to Aktion", { subtitle: "One web component, every framework" }),
     Text("Feed this element a program string and it renders the UI for you."),
@@ -94,7 +94,7 @@
       Button("Get started", { variant: "primary", icon: "arrow-right" })
     ], { gap: "s" })
   ])
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -112,7 +112,7 @@
         </li>
         <li>
           <strong>Give it a program.</strong> Either set the
-          <code>response</code> attribute (<code>response="aktion = &hellip;"</code>)
+          <code>response</code> attribute (<code>response="$app(&hellip;)"</code>)
           or call <code>setResponse(text)</code> on the element. To stream
           tokens from an LLM, set the <code>streaming</code> attribute and call
           <code>appendChunk(text)</code> as chunks arrive, then drop
@@ -224,7 +224,7 @@ app.mount("#app");</code></pre>
 &lt;script setup lang="ts"&gt;
 import { ref, onMounted, watch } from "vue";
 
-const program = ref(`aktion = Card([CardHeader("Hello from Vue")])`);
+const program = ref(`$app(Card([CardHeader("Hello from Vue")]))`);
 
 // Simplest case: bind the attribute directly.
 // &lt;aktion-app :response="program" theme="light" /&gt;
@@ -258,7 +258,7 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
 &lt;script lang="ts"&gt;
   import "aktion-runtime"; // registers &lt;aktion-app&gt; once
 
-  export let program: string = `aktion = Card([CardHeader("Hello from Svelte")])`;
+  export let program: string = `$app(Card([CardHeader("Hello from Svelte")]))`;
 
   function onAssistantMessage(e: CustomEvent) {
     console.log("follow-up:", e.detail.message);
@@ -309,7 +309,7 @@ $util.component({
   `,
 })
 export class AppComponent {
-  program = `aktion = Card([CardHeader("Hello, Angular")])`;
+  program = `$app(Card([CardHeader("Hello, Angular")]))`;
 
   onMessage(event: Event) {
     console.log("follow-up:", (event as CustomEvent).detail.message);
@@ -333,7 +333,7 @@ export class AppComponent {
       import "https://asfand-dev.github.io/aktion/dist/aktion.js";
 
       const el = document.querySelector("aktion-app");
-      el.setResponse(`aktion = Card([CardHeader("Hello, world")])`);
+      el.setResponse(`$app(Card([CardHeader("Hello, world")]))`);
 
       el.addEventListener("assistant-message", (e) =&gt; {
         console.log("follow-up:", e.detail.message);
@@ -344,7 +344,7 @@ export class AppComponent {
       <p>
         You can also set the program declaratively with the
         <code>response</code> attribute &mdash;
-        <code>&lt;aktion-app response="aktion = Text(&amp;quot;Hi&amp;quot;)"&gt;&lt;/aktion-app&gt;</code>
+        <code>&lt;aktion-app response="$app(Text(&amp;quot;Hi&amp;quot;))"&gt;&lt;/aktion-app&gt;</code>
         &mdash; though the imperative <code>setResponse</code> is easier for
         anything longer than a line.
       </p>

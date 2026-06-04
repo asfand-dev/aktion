@@ -194,13 +194,13 @@ $effect(() =&gt; {
 <pre><code>$msg = "—"
 function ask() { $msg = confirm("Proceed?") ? "confirmed" : "cancelled" }
 function rename() { let n = prompt("New name?", "Atlas"); if (n) { $msg = "renamed to " + n } }
-aktion = Column([
+$app(Column([
   Text($msg, { variant: "large-heavy" }),
   Row([
     Button("Confirm", { onClick: ask }),
     Button("Rename", { variant: "ghost", onClick: rename })
   ], { gap: "s" })
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -293,12 +293,12 @@ function run() {
   $money = Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(1234567)
   $b64 = btoa("hello aktion")
 }
-aktion = Column([
+$app(Column([
   Button("Run", { variant: "primary", onClick: run }),
   Text("id: " + $id),
   Text("money: " + $money),
   Text("base64: " + $b64)
-], { gap: "s" })</code></pre>
+], { gap: "s" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

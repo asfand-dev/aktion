@@ -6,7 +6,7 @@ describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("Aktion");
-    expect(text).toContain("aktion = ...");
+    expect(text).toContain("$app(");
     expect(text).toContain("Stack(children: Node[]");
     expect(text).toContain("CardHeader(title: string");
   });
@@ -167,11 +167,21 @@ describe("generatePrompt", () => {
     }
   });
 
+  it("teaches the bare $theme({...}) construct and no longer lists a Theme component", () => {
+    const text = generatePrompt(defaultLibrary);
+    // The dedicated theming section teaches the bare statement form.
+    expect(text).toContain("$theme({");
+    // The non-functional capitalized `Theme(...)` component entry and its
+    // singleton group header were removed from the catalogue.
+    expect(text).not.toMatch(/\n- Theme\(/);
+    expect(text).not.toContain("### Theming");
+  });
+
   describe("chat mode (read-only UI conversion)", () => {
     it("emits a compact read-only prompt with the expected section structure", () => {
       const text = generatePrompt(defaultLibrary, { mode: "chat" });
       expect(text).toContain("Aktion");
-      expect(text).toContain("aktion = ...");
+      expect(text).toContain("$app(");
       expect(text).toContain("## Syntax (read-only subset)");
       expect(text).toContain("## Component library (read-only)");
       expect(text).toContain("## `$util` — runtime helper namespace");

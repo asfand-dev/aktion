@@ -2685,19 +2685,20 @@ describe("new components — phase 1-4 rollout", () => {
     expect(firstBadge?.textContent).toBe("3");
   });
 
-  it("Button accepts both legacy and canonical size tokens", () => {
-    const a = Button.render(
-      makeNode("Button", ["Save", null, "primary", "button", "small"]),
-      { label: "Save", variant: "primary", size: "small" },
-      helpers,
-    ) as HTMLElement;
-    const b = Button.render(
+  it("Button normalises size tokens to the canonical vocabulary", () => {
+    const sm = Button.render(
       makeNode("Button", ["Save", null, "primary", "button", "sm"]),
       { label: "Save", variant: "primary", size: "sm" },
       helpers,
     ) as HTMLElement;
-    expect(a.getAttribute("data-size")).toBe("sm");
-    expect(b.getAttribute("data-size")).toBe("sm");
+    const unknown = Button.render(
+      makeNode("Button", ["Save", null, "primary", "button", "huge"]),
+      { label: "Save", variant: "primary", size: "huge" },
+      helpers,
+    ) as HTMLElement;
+    expect(sm.getAttribute("data-size")).toBe("sm");
+    // Unrecognised tokens (including the removed `small|normal|large`) fall back to `md`.
+    expect(unknown.getAttribute("data-size")).toBe("md");
   });
 });
 

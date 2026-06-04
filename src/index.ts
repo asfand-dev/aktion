@@ -18,6 +18,12 @@ export * from "./prompt/index.js";
 export * from "./theme/index.js";
 export * from "./language/index.js";
 
+// Multi-file modules: the in-browser linker + `CompiledProgram` helpers
+// (`linkProject`, `linkProgram`, `compileLite`, `defineCompiledProgram`, …).
+// All browser-safe (no `node:*`, no bundler deps), so they ship in the runtime
+// bundle and let a host (or the playground) link a project in-page.
+export * from "./compiler/index.js";
+
 declare global {
   interface HTMLElementTagNameMap {
     "aktion-app": AktionElement;

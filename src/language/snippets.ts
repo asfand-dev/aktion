@@ -18,11 +18,11 @@ export interface SnippetEntry {
 export const snippetCatalog: readonly SnippetEntry[] = [
   {
     name: "App",
-    description: "Top-level `aktion` binding — every program needs one.",
+    description: "Top-level `$app(...)` root — every program needs one.",
     template:
-      'aktion = Column([\n' +
+      '$app(Column([\n' +
       '  ${1:Card([CardHeader("${2:Hello}")])}\n' +
-      '])',
+      ']))',
   },
   {
     name: "Card",
@@ -97,10 +97,10 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'sidebar${1} = Card([CardHeader("${2:Sidebar}")])\n' +
       'main${1}    = Card([CardHeader("${3:Main}")])\n' +
-      'aktion = Grid([\n' +
+      '$app(Grid([\n' +
       '  GridItem(sidebar${1}, { span: "1/4" }),\n' +
       '  GridItem(main${1}, { span: "3/4" })\n' +
-      '], { columns: 12, gap: "l" })',
+      '], { columns: 12, gap: "l" }))',
   },
   {
     name: "KanbanBoard",
@@ -218,7 +218,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     name: "Theme",
     description: "Brand-style theme override applied on top of the base theme.",
     template:
-      'theme = $theme({\n' +
+      '$theme({\n' +
       '  name: "${1:brand}",\n' +
       '  colors: {\n' +
       '    primary:      "${2:#0969da}",\n' +
@@ -227,10 +227,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '    text:         "${5:#1f2328}"\n' +
       '  },\n' +
       '  radius: { button: "${6:6px}", input: "${7:6px}" },\n' +
-      '  font: {\n' +
-      '    family:  "${8:-apple-system, BlinkMacSystemFont, sans-serif}",\n' +
-      '    heading: "${9:-apple-system, BlinkMacSystemFont, sans-serif}"\n' +
-      '  }\n' +
+      '  font: { family: "${8:-apple-system, BlinkMacSystemFont, sans-serif}" }\n' +
       '})',
   },
   {

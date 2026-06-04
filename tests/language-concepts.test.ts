@@ -19,7 +19,7 @@
  *                                          control flow, Router, key:
  *   - `tests/router.test.ts`             — path matching + navigation
  *   - `tests/storage-console.test.ts`    — storage + console namespaces
- *   - `tests/in-script-theme.test.ts`    — Theme({...}) tokenisation
+ *   - `tests/in-script-theme.test.ts`    — $theme({...}) tokenisation
  *   - `tests/javascript-integration.test.ts` — direct JS via lambdas + effects + actions
  *   - `tests/library.test.ts`            — every component renderer
  */
@@ -680,7 +680,7 @@ describe("$i18n({...}) language construct", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
-// Theme({...}) — token map merged on top of the active base theme
+// $theme({...}) — token map merged on top of the active base theme
 // ──────────────────────────────────────────────────────────────────────
 describe("$theme({...}) language construct (smoke)", () => {
   it("a `$theme({...})` declaration evaluates to a ThemeNode marker", () => {
@@ -688,7 +688,7 @@ describe("$theme({...}) language construct (smoke)", () => {
       theme = $theme({
         colors: { primary: "#ff0066" },
         radius: { md: "8px" },
-        font:   { heading: "Inter" }
+        font:   { family: "Inter" }
       })
       aktion = Text("ok")
     `);
@@ -696,7 +696,7 @@ describe("$theme({...}) language construct (smoke)", () => {
     expect(node.kind).toBe("Theme");
     expect(node.tokens.colorPrimary).toBe("#ff0066");
     expect(node.tokens.radiusMd).toBe("8px");
-    expect(node.tokens.fontHeading).toBe("Inter");
+    expect(node.tokens.fontFamily).toBe("Inter");
   });
 });
 

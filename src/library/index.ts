@@ -71,7 +71,6 @@ import {
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
 } from "./components/advanced-patterns.js";
-import { Theme } from "./components/theme.js";
 import { NavLink } from "./components/router.js";
 import {
   IconButton, CommandPalette, FilterChips, FieldRepeater,
@@ -129,7 +128,6 @@ const components: ComponentSpec[] = [
   // Advanced patterns + state cards
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
-  Theme,
   NavLink,
   IconButton, CommandPalette, FilterChips, FieldRepeater,
   VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
@@ -360,20 +358,6 @@ const componentGroups: ComponentGroup[] = [
       "- `AppShell(sidebar, content, topbar?, collapsible?, sidebarOpen?)` — fixed-left navigation + scrollable main area. Pass `collapsible=true` to enable a hamburger that turns the sidebar into a slide-over drawer on mobile; bind `sidebarOpen` to a `$variable` if you want to drive that drawer programmatically.",
       "- `Sidebar(items, brand?, tagline?, footer?, collapsed?)` + `SidebarItem(label, icon?, active?, badge?, action?)` + `SidebarSection(label, items)` — group nav links into sections, mark the current page with `active=true`, attach badges for counts. Pass `collapsed=true` (or bind to a `$variable`) to collapse it to an icon rail.",
       "- `SplitView(primary, detail, primaryWidth?)` — master/detail layout (inboxes, file browsers, contact lists). Both panes are scrollable.",
-    ],
-  },
-  {
-    name: "Theming",
-    components: ["Theme"],
-    notes: [
-      "- `$theme({...})` applies a partial token override **on top of** the base theme set by the host (attribute / `setTheme()`). Use it to brand a single response without changing host configuration.",
-      "- Assign to `aktion.theme` so the runtime picks it up:",
-      "  `theme = $theme({ colors: { primary: \"#0969da\" }, radius: { button: \"6px\" } })`",
-      "- Tokens MUST use the structured form. Top-level groups: `colors`, `radius`, `font`, `motion`, `elevation` (plus metadata: `name`, `direction`).",
-      "- Common tokens (each lives inside its group): `colors.primary`, `colors.primaryHover`, `colors.primaryText`, `colors.accent`, `colors.bg`, `colors.surface`, `colors.text`, `colors.textMuted`, `colors.border`, `colors.focusRing`; `radius.md`, `radius.button`, `radius.input`; `font.family`, `font.familyHeading`, `font.sizeBase`, `font.weightHeading`; `motion.transitionDuration`; `elevation.md`.",
-      "- The legacy flat-shape form (`$theme({colorPrimary: ...})`) and free-form `--css-vars` are removed in Aktion 0.5 — the runtime drops them and the schema validator surfaces a migration warning.",
-      "- Tokens are CSS values (`\"#0969da\"`, `\"'Inter', sans-serif\"`, `\"6px\"`, `\"600\"`). The runtime ignores unknown keys inside a group, so typos fail silent.",
-      "- Removing the `theme = $theme(...)` line snaps the UI back to the base theme without a reload.",
     ],
   },
   {

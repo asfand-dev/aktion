@@ -15,12 +15,23 @@
 import {
   parse,
   getLanguageSpec,
+  linkProject,
+  resolveSpecifier,
+  defineCompiledProgram,
+  COMPILED_PROGRAM_VERSION,
 } from "../../dist/aktion.js";
 
 // Public CDN URL embedded in standalone HTML exports so the downloaded file
 // runs anywhere without a local build step. Mirrors the constant used by
 // `chat-bot.js`.
 const CDN_BUNDLE = "https://asfand-dev.github.io/aktion/dist/aktion.js";
+
+// The DevTools panel ships as a separate, opt-in bundle. We resolve it
+// relative to this module so it works both from the repo root (dev server →
+// `/dist/devtools.js`) and the deployed site, where `build-docs.mjs` rewrites
+// `../../dist/devtools` → `../dist/devtools`. Imported lazily on first use so
+// the panel UI is only fetched when the user actually opens DevTools.
+const DEVTOOLS_BUNDLE = new URL("../../dist/devtools.js", import.meta.url).href;
 
 // ---------------------------------------------------------------------------
 // CodeMirror 6 — dynamic import from esm.sh
@@ -69,7 +80,7 @@ const EXAMPLES = {
   chat: {
     label: "Chat reply",
     code: `// Highlights: one positional + named args everywhere, template literals, FollowUpBlock dispatch.
-aktion = Stack([greeting, sample, follow])
+$app(Stack([greeting, sample, follow]))
 
 greeting = Card([
   CardHeader("Hello, world", { subtitle: "Edit this text and watch it update" })
@@ -90,6 +101,39 @@ follow = FollowUpBlock([
   FollowUpItem("Export as CSV")
 ], { title: "Try editing" })`,
   },
+  modules: {
+    label: "Multi-file modules",
+    // A multi-file example: the entry imports a component from one file and a
+    // shared `$state` store from another. Open the other files in the explorer
+    // on the left — edit any of them and the preview re-links live.
+    files: {
+      "app.aktion": `// Entry file. Imports a component + a shared store from sibling files.
+import { PrimaryButton } from "./Button.aktion"
+import { $count, increment } from "./store.aktion"
+
+$app(Column([
+  Card([
+    CardHeader("Multi-file counter", { subtitle: "Imported button + shared store" }),
+    Text(\`Count: \${$count}\`),
+    PrimaryButton({ label: "Increment", onClick: increment })
+  ])
+], { gap: "l", align: "center", padding: "xl" }))`,
+      "Button.aktion": `// A reusable button. \`icon\` is private to this module — another file can
+// declare its own \`icon\` without clashing (true module scope).
+icon = "bolt"
+
+export function PrimaryButton({ label, onClick }) {
+  return Button(label, { variant: "primary", icon: icon, onClick: onClick })
+}`,
+      "store.aktion": `// A shared reactive store. \`$count\` and \`increment\` are imported by
+// app.aktion; both files read and write the SAME atom after linking.
+export $count = 0
+
+export function increment() {
+  $count = $count + 1
+}`,
+    },
+  },
   dashboard: {
     label: "Project dashboard",
     code: `// Highlights: function declaration, for-loop with destructuring, named args, Badge tone alias.
@@ -106,7 +150,7 @@ function Card2(p) {
   return KanbanCard(p.title, { description: p.description, tags: p.tags, assignee: p.assignee, tone: p.tone, icon: p.icon })
 }
 
-aktion = Stack([
+$app(Stack([
   PageHeader(
     "Engineering Q3",
     {
@@ -127,7 +171,7 @@ aktion = Stack([
     KanbanColumn("Review", { items: $util.filter(projects, "stage", "==", "review").map(p => Card2(p)), tone: "warning" }),
     KanbanColumn("Done",   { items: $util.filter(projects, "stage", "==", "done").map(p => Card2(p)), tone: "success" })
   ])
-])`,
+]))`,
   },
   todo: {
     label: "Reactive todo",
@@ -152,16 +196,16 @@ body = $todos.length > 0
   ? list
   : EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
 
-aktion = Stack([
+$app(Stack([
   Card([CardHeader("Todo list", { subtitle: \`\${$util.count($todos)} \${$util.plural($util.count($todos), "task", "tasks")} · persisted across reloads\` })]),
   Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
   Button("Add", { action: addTodo, variant: "primary" }),
   body
-])`,
+]))`,
   },
   reactiveApp: {
     label: "Reactive app",
-    code: `aktion = Grid([items, addBtn], 2)
+    code: `$app(Grid([items, addBtn], 2))
 
 $events = [
   { title: "Product Sync" },
@@ -210,7 +254,7 @@ nav = Stack([
   NavLink("Alice",     { to: "/users/alice", variant: "ghost" })
 ], { direction: "row", gap: "s" })
 
-aktion = Stack([nav, page])`,
+$app(Stack([nav, page]))`,
   },
   counter: {
     label: "JS counter",
@@ -221,7 +265,7 @@ function inc() { $count = ($count ?? 0) + 1 }
 function dec() { $count = ($count ?? 0) - 1 }
 function reset() { $count = 0 }
 
-aktion = Card([
+$app(Card([
   CardHeader("JS counter", { subtitle: "Three actions, one $atom." }),
   Stack([
     Text(\`Current: \${$util.clamp($count, -99, 99)}\`),
@@ -231,7 +275,7 @@ aktion = Card([
       Button("+",     { action: inc,   variant: "primary" })
     ], { direction: "row", gap: "s" })
   ])
-])`,
+]))`,
   },
   chart: {
     label: "Chart + metrics",
@@ -240,7 +284,7 @@ $range = "7"
 thisWk = [820, 1240, 1500, 1180, 1310, 980, 740]
 lastWk = [780, 1180, 1420, 1090, 1240, 920, 690]
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Analytics", { subtitle: \`Daily traffic last \${$range} days\` }),
   Stats([
     StatCard("Sessions",     { value: \`\${$util.format($util.sum(thisWk), "number")}\`, trend: "up",   delta: \`+\${$util.round(($util.sum(thisWk) / $util.sum(lastWk) - 1) * 100, 1)}%\`, icon: "chart-line" }),
@@ -258,7 +302,7 @@ aktion = Stack([
       PieChart(["Organic","Direct","Referral"], { values: [60, 25, 15] })
     ])
   ], { columns: {sm: 1, md: 2}, gap: "l" })
-])`,
+]))`,
   },
   dataGrid: {
     label: "DataGrid + bulk actions",
@@ -291,7 +335,7 @@ bulkBar = $util.count($selectedIds) > 0
     )
   : null
 
-aktion = Stack([
+$app(Stack([
   PageHeader(
     "Top contributors",
     {
@@ -310,7 +354,7 @@ aktion = Stack([
       Col("Commits", { values: people.commits, align: "right", format: "number", sortable: true })
     ], { rowIds: people.id, sort: $sort, selectedIds: $selectedIds, page: $page, perPage: 5, emptyLabel: "No people match" })
   ])
-])`,
+]))`,
   },
   calendar: {
     label: "CalendarView planner",
@@ -331,7 +375,7 @@ events = [
   {date: "2026-05-22", title: "Retro",           time: "16:00", tone: "info"}
 ]
 
-aktion = Stack([
+$app(Stack([
   PageHeader("May 2026", { subtitle: \`\${$util.count(events)} events · \${$obDone}/3 onboarding\` }),
   Grid([
     Card([
@@ -357,7 +401,7 @@ aktion = Stack([
       ])
     ], { direction: "column", gap: "l" })
   ], { columns: {sm: 1, lg: 2}, gap: "l" })
-])`,
+]))`,
   },
   media: {
     label: "Media gallery + Map",
@@ -377,7 +421,7 @@ photos = [
 
 slides = photos.map(p => ({src: p.src, alt: p.caption, caption: p.caption}))
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Aurora Expedition", { subtitle: "Iceland · Aug 2026", breadcrumbs: ["Trips", "Aurora"] }),
   Card([
     SectionHeader("Highlights"),
@@ -420,7 +464,7 @@ aktion = Stack([
     ], height: "320px" })
   ]),
   Lightbox(photos, { open: $lightboxOpen, index: $lightboxIdx })
-])`,
+]))`,
   },
   wizard: {
     label: "MultiStepForm wizard",
@@ -441,7 +485,7 @@ publishGate = $util.count($errors) > 0
   ? Card([ValidationSummary($errors, { title: "Fix these before publishing" })])
   : Card([Callout("Ready to publish", { tone: "success", description: "All gates passed.", icon: "circle-check", compact: true })])
 
-aktion = Stack([
+$app(Stack([
   PageHeader($title, { subtitle: "Compose, brand, gate, publish.", breadcrumbs: ["Content", "Drafts"] }),
   MultiStepForm([
     {title: "Compose", details: "Title, body, tags", content: [
@@ -469,12 +513,12 @@ aktion = Stack([
       ])
     ]}
   ], { current: $step })
-])`,
+]))`,
   },
   advancedCharts: {
     label: "Gauge, Heatmap, Radar, Scatter",
     code: `// Highlights: every new chart primitive in one dashboard.
-aktion = Stack([
+$app(Stack([
   PageHeader("Engineering analytics", { subtitle: "Quarterly view" }),
   Stats([
     StatCard("SLA",    { value: "99.3%", trend: "up",   delta: "+0.2 pp", icon: "shield-halved" }),
@@ -523,7 +567,7 @@ aktion = Stack([
       Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], { bins: 6 })
     ])
   ], { columns: {sm: 1, md: 2}, gap: "l" })
-])`,
+]))`,
   },
   storageConsole: {
     label: "Storage + console globals",
@@ -560,7 +604,7 @@ function clearAll() {
   $console.error("Cleared every storage namespace (demo only).")
 }
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Storage + console", { subtitle: "All values persist across reloads via the matching browser API." }),
   Card([
     SectionHeader("localStorage", { eyebrow: "PERSISTENT" }),
@@ -584,7 +628,7 @@ aktion = Stack([
       Button("Reset everything", { action: clearAll, variant: "ghost" })
     ], { direction: "row", gap: "s" })
   ])
-])`,
+]))`,
   },
   gridLayout: {
     label: "12-col grid + named args",
@@ -603,10 +647,10 @@ content = Card([
   Text("Use Grid([...], { columns: 12, gap: 'l' }) with GridItem(child, { span: '1/4' }) for sidebar layouts.")
 ])
 
-aktion = Grid([
+$app(Grid([
   GridItem(sidebar, { span: "1/4" }),
   GridItem(content, { span: "3/4" })
-], { columns: 12, gap: "l" })`,
+], { columns: 12, gap: "l" }))`,
   },
 };
 
@@ -629,6 +673,11 @@ function clampSplitRatio(value) {
 
 const LS = {
   code: "rui:playground:code",
+  files: "rui:playground:files",
+  folders: "rui:playground:folders",
+  openTabs: "rui:playground:openTabs",
+  expanded: "rui:playground:expanded",
+  activeFile: "rui:playground:activeFile",
   mode: "rui:playground:mode",
   runMode: "rui:playground:runMode",
   theme: "rui:playground:theme",
@@ -638,6 +687,10 @@ const LS = {
   splitV: "rui:playground:splitV",
   sidebarCollapsed: "rui:playground:sidebarCollapsed",
 };
+
+// The entry module of a playground project. `app.aktion` is always present,
+// is what the linker links from, and is where examples / shared snippets land.
+const ENTRY_FILE = "app.aktion";
 
 const lsRead = (key, fallback) => {
   try {
@@ -652,6 +705,242 @@ const lsWrite = (key, value) => {
     localStorage.setItem(key, value);
   } catch { /* quota / privacy */ }
 };
+
+// ---------------------------------------------------------------------------
+// Multi-file project helpers
+
+/**
+ * Normalize a user-entered file name into a project key: trim, strip leading
+ * slashes, ensure a `.aktion` extension, and reject anything with traversal or
+ * unsafe characters. Returns `null` for an invalid name.
+ */
+function normalizeFileName(raw) {
+  let name = String(raw || "").trim().replace(/^\/+/, "");
+  if (!name) return null;
+  if (!/\.aktion$/i.test(name)) name += ".aktion";
+  if (name.includes("..")) return null;
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_./-]*\.aktion$/i.test(name)) return null;
+  return name;
+}
+
+// CRC-32 (IEEE) table + helper, used by the store-only ZIP writer below.
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Build a ZIP archive (store / no compression) from a `{ path → text }` map.
+ * Dependency-free: just local file headers + a central directory + EOCD, which
+ * every unzip tool accepts. Subdirectory paths (`components/Button.aktion`) are
+ * preserved verbatim as entry names.
+ */
+function buildProjectZip(files) {
+  const enc = new TextEncoder();
+  const names = Object.keys(files).sort();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const name of names) {
+    const nameBytes = enc.encode(name);
+    const data = enc.encode(files[name] ?? "");
+    const crc = crc32(data);
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true); // local file header signature
+    lv.setUint16(4, 20, true); // version needed
+    lv.setUint16(6, 0, true); // flags
+    lv.setUint16(8, 0, true); // method: store
+    lv.setUint16(10, 0, true); // mod time
+    lv.setUint16(12, 0, true); // mod date
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true); // compressed size
+    lv.setUint32(22, data.length, true); // uncompressed size
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true); // extra length
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true); // central dir header signature
+    cv.setUint16(4, 20, true); // version made by
+    cv.setUint16(6, 20, true); // version needed
+    cv.setUint16(8, 0, true); // flags
+    cv.setUint16(10, 0, true); // method: store
+    cv.setUint16(12, 0, true); // mod time
+    cv.setUint16(14, 0, true); // mod date
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true); // extra length
+    cv.setUint16(32, 0, true); // comment length
+    cv.setUint16(34, 0, true); // disk number start
+    cv.setUint16(36, 0, true); // internal attrs
+    cv.setUint32(38, 0, true); // external attrs
+    cv.setUint32(42, offset, true); // local header offset
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, c) => sum + c.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true); // EOCD signature
+  ev.setUint16(4, 0, true); // disk number
+  ev.setUint16(6, 0, true); // disk with central dir
+  ev.setUint16(8, names.length, true); // entries on this disk
+  ev.setUint16(10, names.length, true); // total entries
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true); // central dir offset
+  ev.setUint16(20, 0, true); // comment length
+
+  return new Blob([...localParts, ...centralParts, eocd], { type: "application/zip" });
+}
+
+/**
+ * Map a path to a Font Awesome icon + color class for the explorer/tabs, so the
+ * tree reads like a familiar code editor (different colors per file type).
+ */
+function fileKind(path) {
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  // NOTE: only Font Awesome 6 *free solid* glyphs — brand/Pro names like
+  // `fa-js` / `fa-markdown` / `fa-brackets-curly` render as empty boxes. We
+  // differentiate file types by COLOR (the `cls`), VSCode-style.
+  switch (ext) {
+    case "aktion": return { icon: "fa-cube", cls: "pg-ic-aktion" };
+    case "html": case "htm": return { icon: "fa-file-code", cls: "pg-ic-html" };
+    case "css": case "scss": case "less": return { icon: "fa-file-code", cls: "pg-ic-css" };
+    case "js": case "mjs": case "cjs": return { icon: "fa-file-code", cls: "pg-ic-js" };
+    case "ts": case "tsx": return { icon: "fa-file-code", cls: "pg-ic-ts" };
+    case "json": return { icon: "fa-file-code", cls: "pg-ic-json" };
+    case "md": case "markdown": case "txt": return { icon: "fa-file-lines", cls: "pg-ic-md" };
+    case "svg": case "png": case "jpg": case "jpeg": case "gif": case "webp":
+      return { icon: "fa-file-image", cls: "pg-ic-img" };
+    default: return { icon: "fa-file", cls: "pg-ic-file" };
+  }
+}
+
+/**
+ * Read a ZIP archive (store + deflate) into a `{ path → text }` map. Deflate
+ * entries are inflated with the platform `DecompressionStream("deflate-raw")`;
+ * stored entries are copied. Directory entries and binary-looking files are
+ * skipped (the playground is text-only). No dependency.
+ */
+async function readZipEntries(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const dv = new DataView(arrayBuffer);
+  const out = {};
+  // Find the End Of Central Directory record (scan backwards for its signature).
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Not a valid .zip file");
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true); // central directory offset
+  const decoder = new TextDecoder();
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localOff = dv.getUint32(p + 42, true);
+    const name = decoder.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+    if (name.endsWith("/")) continue; // directory entry
+    // Local header: data starts after its (separately sized) name + extra fields.
+    const lNameLen = dv.getUint16(localOff + 26, true);
+    const lExtraLen = dv.getUint16(localOff + 28, true);
+    const dataStart = localOff + 30 + lNameLen + lExtraLen;
+    const comp = bytes.subarray(dataStart, dataStart + compSize);
+    let raw;
+    if (method === 0) {
+      raw = comp;
+    } else if (method === 8 && typeof DecompressionStream !== "undefined") {
+      const stream = new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      raw = new Uint8Array(await new Response(stream).arrayBuffer());
+    } else {
+      continue; // unsupported compression — skip
+    }
+    out[name.replace(/^\/+/, "")] = decoder.decode(raw);
+  }
+  return out;
+}
+
+/**
+ * Parse a module's source and list its `export`ed top-level bindings, shaped as
+ * editor completion candidates. State atoms and hooks carry the `$` sigil
+ * (that's how they're referenced); components/actions/plain bindings are bare.
+ */
+function collectModuleExports(src) {
+  let program;
+  try {
+    program = parse(src || "");
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const stmt of program.statements || []) {
+    if (!stmt || !stmt.exported) continue;
+    if (stmt.kind === "Assignment") {
+      out.push(stmt.isState
+        ? { label: "$" + stmt.identifier, type: "variable", detail: "exported $state" }
+        : { label: stmt.identifier, type: "variable", detail: "exported binding" });
+    } else if (stmt.kind === "ComponentDeclaration") {
+      out.push({ label: stmt.name, type: "class", detail: "exported component" });
+    } else if (stmt.kind === "ActionDeclaration") {
+      out.push({ label: stmt.name, type: "function", detail: "exported action" });
+    } else if (stmt.kind === "HookDeclaration") {
+      out.push({ label: "$" + stmt.name, type: "function", detail: "exported hook" });
+    }
+  }
+  return out;
+}
+
+/**
+ * When `pos` sits inside the `{ … }` of an `import { … } from "…"` statement,
+ * return the module specifier and the names already listed in the braces (so we
+ * don't re-suggest them). Returns `null` otherwise. Imports are single-line, so
+ * we only inspect the line containing the cursor.
+ */
+function findImportBracketContext(text, pos) {
+  const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+  let lineEnd = text.indexOf("\n", pos);
+  if (lineEnd === -1) lineEnd = text.length;
+  const line = text.slice(lineStart, lineEnd);
+  if (!/^\s*import\b/.test(line)) return null;
+  const col = pos - lineStart;
+  const open = line.indexOf("{");
+  if (open === -1 || col <= open) return null;
+  const close = line.indexOf("}", open + 1);
+  const closeCol = close === -1 ? line.length : close;
+  if (col > closeCol) return null; // cursor is past the closing brace
+  const fromMatch = /from\s*["']([^"']*)["']/.exec(line);
+  const braceContent = line.slice(open + 1, closeCol);
+  const used = new Set((braceContent.match(/\$?[A-Za-z_]\w*/g) || []));
+  return { specifier: fromMatch ? fromMatch[1] : null, used };
+}
 
 // ---------------------------------------------------------------------------
 // Share-link encoding (gzip via CompressionStream when available)
@@ -730,14 +1019,34 @@ function escapeAttr(text) {
   return String(text ?? "").replace(/[<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// The IIFE runtime bundle (exposes a global `Aktion` and registers
+// `<aktion-app>` with a classic <script> — no module loader). Inlined into
+// standalone exports so they run by double-clicking, offline, with no setup.
+const RUNTIME_IIFE_URL = new URL("../../dist/aktion.iife.js", import.meta.url).href;
+let runtimeIifePromise = null;
+function fetchRuntimeIife() {
+  if (!runtimeIifePromise) {
+    runtimeIifePromise = fetch(RUNTIME_IIFE_URL)
+      .then((r) => (r.ok ? r.text() : null))
+      // Drop the trailing sourcemap comment (an inline data: map can be multi-MB,
+      // and an external ref 404s when the file is opened offline).
+      .then((t) => (t ? t.replace(/\n?\/\/[#@]\s*sourceMappingURL=[^\n]*\s*$/, "") : t))
+      .catch(() => null);
+  }
+  return runtimeIifePromise;
+}
+
+const escapeScript = (js) => String(js).replace(/<\/(script)/gi, "<\\/$1");
+
 /**
- * Build a self-contained HTML document that boots `<aktion-app>` from the
- * public CDN bundle and renders the given Aktion source. Mirrors the
- * approach in `chat-bot.js` so links shared with non-developers Just Work.
+ * Build a self-contained HTML document that boots `<aktion-app>` and renders
+ * the given (already-linked) Aktion `source`. When `runtimeJs` is supplied the
+ * runtime is inlined so the file runs offline from `file://` with nothing else;
+ * otherwise it falls back to the public CDN module bundle.
  */
-function buildStandaloneHtml(source, theme, title) {
-  const safeSource = JSON.stringify(source).replace(/<\/(script)/gi, "<\\/$1");
-  return [
+function buildStandaloneHtml(source, theme, title, runtimeJs) {
+  const safeSource = escapeScript(JSON.stringify(source));
+  const head = [
     "<!DOCTYPE html>",
     '<html lang="en">',
     "<head>",
@@ -745,30 +1054,53 @@ function buildStandaloneHtml(source, theme, title) {
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>${escapeHtml(title)}</title>`,
     '  <meta name="generator" content="Aktion playground" />',
-    `  <script type="module" src="${CDN_BUNDLE}"></script>`,
     "  <style>",
     "    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }",
     "    aktion-app { display: block; min-height: 100vh; }",
     "  </style>",
+  ];
+  if (runtimeJs) {
+    // Inlined runtime: a classic script that defines <aktion-app> synchronously.
+    head.push(`  <script>${escapeScript(runtimeJs)}</script>`);
+  } else {
+    head.push(`  <script type="module" src="${CDN_BUNDLE}"></script>`);
+  }
+  const boot = [
+    "  <script>",
+    '    var el = document.querySelector("aktion-app");',
+    `    var SOURCE = ${safeSource};`,
+    '    function mount() {',
+    '      if (typeof el.setResponse === "function") el.setResponse(SOURCE);',
+    '      else el.setAttribute("response", SOURCE);',
+    "    }",
+    '    if (window.customElements && customElements.get("aktion-app")) mount();',
+    '    else customElements.whenDefined("aktion-app").then(mount);',
+    "  </script>",
+  ];
+  return [
+    ...head,
     "</head>",
     "<body>",
     `  <aktion-app theme="${escapeAttr(theme)}"></aktion-app>`,
-    '  <script type="module">',
-    '    const el = document.querySelector("aktion-app");',
-    `    const SOURCE = ${safeSource};`,
-    '    customElements.whenDefined("aktion-app").then(() => {',
-    "      if (typeof el.setResponse === \"function\") el.setResponse(SOURCE);",
-    '      else el.setAttribute("response", SOURCE);',
-    "    });",
-    "  </script>",
+    ...boot,
     "</body>",
     "</html>",
     "",
   ].join("\n");
 }
 
-function downloadStandaloneHtml(source, theme, title) {
-  const html = buildStandaloneHtml(source, theme, title);
+/**
+ * Build the runnable `index.html` for a project export. It loads the library
+ * from the public CDN (kept lean — the bundle is NOT inlined) and renders the
+ * linked program. The separate "Standalone HTML" download inlines everything.
+ */
+function buildIndexHtml(source, theme, title) {
+  return buildStandaloneHtml(source, theme, title); // no runtimeJs → CDN <script>
+}
+
+async function downloadStandaloneHtml(source, theme, title) {
+  const runtimeJs = await fetchRuntimeIife();
+  const html = buildStandaloneHtml(source, theme, title, runtimeJs);
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -836,8 +1168,13 @@ const LANGUAGE_KEYWORDS = [
  */
 const SPECIAL_IDENTIFIERS = [
   {
+    label: "$app",
+    info: "Register the UI root: `$app(node)`, `$app([nodes])`, or `$app(node, …)`. The renderer mounts whatever you pass.",
+    apply: "$app(",
+  },
+  {
     label: "aktion",
-    info: "Top-level entry binding — the renderer reads `aktion` to draw the UI.",
+    info: "Legacy top-level entry binding — prefer `$app(...)`. The renderer still reads an `aktion = ...` assignment to draw the UI.",
     apply: "aktion = ",
   },
   {
@@ -866,7 +1203,7 @@ const SPECIAL_IDENTIFIERS = [
   },
   {
     label: "$theme",
-    info: "Per-response theme override: `theme = $theme({ colors: { primary: … }, radius, font, motion, elevation })`. Assign before `aktion` to brand the response.",
+    info: "Per-response theme override: a bare `$theme({ colors: { primary: … }, radius, font, motion, elevation })` statement (no binding needed) brands the response.",
     apply: "$theme({\n  colors: { primary: \"${1:#6366f1}\" }\n})",
     snippet: true,
   },
@@ -888,7 +1225,7 @@ const SPECIAL_IDENTIFIERS = [
   },
   {
     label: "theme",
-    info: "Per-response theme override binding: `theme = $theme({ colors: { primary: … } })`. Removing it snaps back to the host theme.",
+    info: "Optional theme binding. Prefer a bare `$theme({ colors: { primary: … } })` statement; the legacy `theme = $theme({...})` binding also works. Removing it snaps back to the host theme.",
     apply: "theme",
   },
 ];
@@ -913,7 +1250,7 @@ const LANGUAGE_SNIPPETS = [
       '  NavLink("Home",  { to: "/",      variant: "ghost", exact: true }),\n' +
       '  NavLink("Users", { to: "/users", variant: "ghost" })\n' +
       '], { direction: "row", gap: "s" })\n\n' +
-      'aktion = Stack([nav, pages])',
+      '$app(Stack([nav, pages]))',
   },
   {
     name: "function",
@@ -1562,6 +1899,26 @@ function initPlayground(cm) {
     // on whitespace and the trigger wasn't explicit.
     const word = ctx.matchBefore(/[\w@$_]*/);
     if (!word) return null;
+
+    // ---------- Context: import braces ----------
+    // Inside `import { … } from "./other.aktion"`, suggest the names that
+    // module exports — `$count`, `increment`, components, … — resolved from the
+    // current project files (relative/absolute specifier). We return here so the
+    // general component/global completions never leak into the braces.
+    const importCtx = findImportBracketContext(text, pos);
+    if (importCtx) {
+      let options = [];
+      if (importCtx.specifier) {
+        const resolved = resolveSpecifier(importCtx.specifier, activeFile);
+        const src = resolved != null ? files[resolved] : undefined;
+        if (typeof src === "string") {
+          options = collectModuleExports(src)
+            .filter((e) => !importCtx.used.has(e.label) || e.label === word.text)
+            .map((e) => ({ label: e.label, type: e.type, detail: e.detail, apply: e.label, boost: 60 }));
+        }
+      }
+      return { from: word.from, options, validFor: /[\w$]*/ };
+    }
 
     // ---------- Context: enclosing call ----------
     const call = findEnclosingCall(text, pos);
@@ -2611,12 +2968,67 @@ function initPlayground(cm) {
   let refreshStatusErrors = () => {};
   let refreshStatusArg = () => {};
 
-  const persistCode = () => { if (editorView) lsWrite(LS.code, editorView.state.doc.toString()); };
+  // Multi-file project state. `files` maps a path to its source (folders are
+  // implied by `/` in the path); `folders` holds explicitly-created folder
+  // paths (so empty folders persist). `activeFile` is the file shown in the
+  // editor; `openTabs` is the ordered set of files with a tab. `expanded` is
+  // the set of open folders; `selected` drives multi-select; `clipboard` backs
+  // copy/cut→paste. The linker always links from `ENTRY_FILE`.
+  let files = {};
+  let folders = new Set();
+  let activeFile = ENTRY_FILE;
+  let openTabs = [];
+  let expanded = new Set();
+  let selected = new Set();
+  let lastClicked = null;     // anchor for shift-range selection
+  let clipboard = null;       // { mode: "copy" | "cut", paths: string[] }
+  let visiblePaths = [];      // tree paths in render order (range-select / keyboard nav)
+  let dragPaths = [];         // paths being dragged
+  let projectDiagnostics = [];
+
+  // Persist the whole project. The legacy `LS.code` key is kept in sync with
+  // the entry file so older single-file share/restore paths keep working.
+  function persistFiles() {
+    lsWrite(LS.files, JSON.stringify(files));
+    lsWrite(LS.folders, JSON.stringify([...folders]));
+    lsWrite(LS.openTabs, JSON.stringify(openTabs));
+    lsWrite(LS.expanded, JSON.stringify([...expanded]));
+    lsWrite(LS.activeFile, activeFile);
+    lsWrite(LS.code, files[ENTRY_FILE] ?? "");
+  }
+
+  // Capture the editor's current text into the active file (call before any
+  // read of the whole project — linking, zipping, switching files).
+  function syncActiveFile() {
+    if (editorView) files[activeFile] = editorView.state.doc.toString();
+  }
+
+  const persistCode = () => {
+    syncActiveFile();
+    persistFiles();
+  };
 
   function handleDocChange() {
     persistCode();
     refreshStatusChars();
     if (currentRunMode === "live") scheduleViewerUpdate(false);
+  }
+
+  // Auto-open the export suggestions when the cursor lands inside import braces.
+  // Typing a name already triggers autocomplete (`activateOnTyping`); this also
+  // fires for the separators — `{`, `,`, space — so empty braces pop suggestions
+  // too. Deferred to a microtask so we don't re-dispatch mid-update.
+  function maybeAutostartImportCompletion(u) {
+    let sawSeparator = false;
+    u.changes.iterChanges((_fa, _ta, _fb, _tb, inserted) => {
+      if (/[{,\s]/.test(inserted.toString())) sawSeparator = true;
+    });
+    if (!sawSeparator) return;
+    const pos = u.state.selection.main.head;
+    if (!findImportBracketContext(u.state.doc.toString(), pos)) return;
+    queueMicrotask(() => {
+      try { autocomplete.startCompletion(editorView); } catch { /* noop */ }
+    });
   }
 
   // ---- Build initial state ----
@@ -2673,6 +3085,14 @@ function initPlayground(cm) {
           },
         },
         {
+          key: "Mod-Shift-d",
+          run: () => {
+            toggleDevtools();
+            return true;
+          },
+          preventDefault: true,
+        },
+        {
           key: "Mod-k",
           run: () => {
             toggleRunMode();
@@ -2692,6 +3112,7 @@ function initPlayground(cm) {
       view.EditorView.updateListener.of((u) => {
         if (u.docChanged) {
           handleDocChange();
+          maybeAutostartImportCompletion(u);
         }
         if (u.selectionSet || u.docChanged) {
           refreshStatusCursor();
@@ -2750,8 +3171,9 @@ function initPlayground(cm) {
   applyInspectUI(inspectOn);
   applySidebarCollapsed(lsRead(LS.sidebarCollapsed, "false") === "true");
   $("pg-example").value = currentExample;
-  $("pg-pill-preset").textContent = EXAMPLES[currentExample]?.label ?? "Custom";
   setRendererTheme(lsRead(LS.theme, "light"));
+  renderFileExplorer();
+  renderTabs();
   refreshStatusCursor();
   refreshStatusChars();
   refreshStatusArg();
@@ -2776,6 +3198,7 @@ function initPlayground(cm) {
   $("pg-run-mode").addEventListener("click", toggleRunMode);
   $("pg-run").addEventListener("click", () => doRun(true));
   $("pg-inspect").addEventListener("click", toggleInspect);
+  $("pg-devtools").addEventListener("click", toggleDevtools);
   $("pg-share").addEventListener("click", doShare);
   $("pg-copy").addEventListener("click", doCopy);
   $("pg-download").addEventListener("click", doDownload);
@@ -2791,6 +3214,37 @@ function initPlayground(cm) {
   $("pg-fullscreen").addEventListener("click", toggleFullscreen);
   $("pg-status-errors").addEventListener("click", openErrorModal);
   $("pg-sidebar-toggle").addEventListener("click", toggleSidebarCollapsed);
+
+  // File explorer wiring
+  $("pg-file-new").addEventListener("click", () => createFileAt(""));
+  $("pg-folder-new").addEventListener("click", () => createFolderAt(""));
+  // stopPropagation so this same click doesn't reach the document-level
+  // "click outside → close menu" listener and instantly dismiss the menu.
+  $("pg-import").addEventListener("click", (e) => { e.stopPropagation(); openImportMenu(e.currentTarget); });
+  $("pg-export").addEventListener("click", (e) => { e.stopPropagation(); openExportMenu(e.currentTarget); });
+
+  const tree = $("pg-file-list");
+  tree.addEventListener("click", onTreeClick);
+  tree.addEventListener("dblclick", onTreeDblClick);
+  tree.addEventListener("contextmenu", onTreeContextMenu);
+  tree.addEventListener("keydown", onTreeKeydown);
+  // Drag-and-drop to move files/folders.
+  tree.addEventListener("dragstart", onTreeDragStart);
+  tree.addEventListener("dragover", onTreeDragOver);
+  tree.addEventListener("dragleave", onTreeDragLeave);
+  tree.addEventListener("drop", onTreeDrop);
+
+  // Tabs
+  $("pg-tabs").addEventListener("click", onTabsClick);
+
+  // Hidden import inputs
+  $("pg-import-files").addEventListener("change", (e) => importLocalFiles(e.target.files, ""));
+  $("pg-import-folder").addEventListener("change", (e) => importLocalFiles(e.target.files, "", true));
+  $("pg-import-zip").addEventListener("change", (e) => importZipFile(e.target.files[0]));
+
+  // Dismiss any open menu on outside click / Escape / scroll.
+  document.addEventListener("click", (e) => { if (!e.target.closest(".pg-ctxmenu")) closeContextMenu(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeContextMenu(); });
 
   // Global hotkeys
   document.addEventListener("keydown", (e) => {
@@ -2814,23 +3268,80 @@ function initPlayground(cm) {
 
   // ---- Functions defined within closure ----
 
+  // Reset the folder/tab/expanded model to the defaults for the current
+  // `files`/`activeFile` (one open tab, no extra folders, all collapsed).
+  function freshModel() {
+    folders = new Set();
+    openTabs = [activeFile];
+    expanded = new Set();
+    selected = new Set();
+    clipboard = null;
+  }
+
   function pickInitialCode() {
-    // 1. Shared snippet via `?code=` query string or `#code=` hash. The
-    //    chat-bot opens links as `playground.html?code=...`; older share
-    //    links use the hash. Both formats use the same gzip+base64 codec.
+    // Seeds `files` / `activeFile` (+ the folder/tab model) as a side effect and
+    // returns the doc text + example label for the editor's initial state.
+    // 1. Shared snippet via `?code=` / `#code=` → lands in `app.aktion`.
     const shared = readSharedCode();
     if (shared) {
+      files = { [ENTRY_FILE]: "// Loading shared snippet…" };
+      activeFile = ENTRY_FILE;
+      freshModel();
       scheduleHydrateFromHash(shared);
-      return { code: "// Loading shared snippet…", example: "custom" };
+      return { code: files[ENTRY_FILE], example: "custom" };
     }
-    // 2. Saved code
-    const saved = lsRead(LS.code, null);
-    const savedExample = lsRead(LS.example, DEFAULT_EXAMPLE);
-    if (saved !== null) {
-      return { code: saved, example: savedExample };
+    // 2. Saved multi-file project — restore files, folders, tabs, expansion.
+    const savedFiles = readSavedFiles();
+    if (savedFiles) {
+      files = savedFiles;
+      const saved = lsRead(LS.activeFile, ENTRY_FILE);
+      activeFile = files[saved] !== undefined ? saved : ENTRY_FILE;
+      folders = new Set((readJSON(LS.folders) || []).filter((p) => typeof p === "string"));
+      const tabs = (readJSON(LS.openTabs) || []).filter((p) => files[p] !== undefined);
+      openTabs = tabs.length ? tabs : [activeFile];
+      if (!openTabs.includes(activeFile)) openTabs.push(activeFile);
+      expanded = new Set((readJSON(LS.expanded) || []).filter((p) => typeof p === "string"));
+      selected = new Set();
+      clipboard = null;
+      return { code: files[activeFile] ?? "", example: lsRead(LS.example, "custom") };
     }
-    // 3. Default example
-    return { code: EXAMPLES[DEFAULT_EXAMPLE].code, example: DEFAULT_EXAMPLE };
+    // 3. Legacy single-file code → migrate into `app.aktion`.
+    const legacy = lsRead(LS.code, null);
+    if (legacy !== null) {
+      files = { [ENTRY_FILE]: legacy };
+      activeFile = ENTRY_FILE;
+      freshModel();
+      return { code: legacy, example: lsRead(LS.example, DEFAULT_EXAMPLE) };
+    }
+    // 4. Default example.
+    files = { [ENTRY_FILE]: EXAMPLES[DEFAULT_EXAMPLE].code };
+    activeFile = ENTRY_FILE;
+    freshModel();
+    return { code: files[ENTRY_FILE], example: DEFAULT_EXAMPLE };
+  }
+
+  function readJSON(key) {
+    const raw = lsRead(key, null);
+    if (raw === null) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  // Parse the persisted project; returns a validated `{ path → source }` map
+  // (must be a non-empty object that includes the entry) or `null`.
+  function readSavedFiles() {
+    const raw = lsRead(LS.files, null);
+    if (raw === null) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const keys = Object.keys(parsed);
+      if (keys.length === 0) return null;
+      for (const k of keys) if (typeof parsed[k] !== "string") return null;
+      if (parsed[ENTRY_FILE] === undefined) parsed[ENTRY_FILE] = "";
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
   function readSharedCode() {
@@ -2846,15 +3357,609 @@ function initPlayground(cm) {
   async function scheduleHydrateFromHash(encoded) {
     try {
       const text = await decodeShare(encoded);
+      // Shared snippets are single-file: reset the project to just the entry.
+      files = { [ENTRY_FILE]: text };
+      activeFile = ENTRY_FILE;
+      freshModel();
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: text },
       });
+      persistFiles();
+      renderFileExplorer();
+      renderTabs();
       currentExample = "custom";
-      $("pg-pill-preset").textContent = "Shared snippet";
       showToast("Loaded shared snippet", { icon: "link" });
     } catch (err) {
       console.error(err);
       showToast("Couldn't decode shared link", { icon: "triangle-exclamation" });
+    }
+  }
+
+  // ---- File explorer (tree) ----
+  // NOTE: these are function declarations (not const arrows) so they're hoisted
+  // — `renderFileExplorer()` runs from the init block ABOVE this section.
+
+  function parentOf(p) { const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i); }
+  function baseName(p) { const i = p.lastIndexOf("/"); return i < 0 ? p : p.slice(i + 1); }
+
+  // Every folder path, derived from file paths + explicitly-created folders.
+  function allFolders() {
+    const set = new Set(folders);
+    for (const f of Object.keys(files)) {
+      const parts = f.split("/"); parts.pop();
+      let acc = "";
+      for (const seg of parts) { acc = acc ? `${acc}/${seg}` : seg; set.add(acc); }
+    }
+    return set;
+  }
+  const isFolderPath = (p) => allFolders().has(p);
+  const isDescendant = (p, ancestor) => ancestor !== "" && (p === ancestor || p.startsWith(`${ancestor}/`));
+
+  function renderFileExplorer() {
+    const tree = $("pg-file-list");
+    if (!tree) return;
+    tree.replaceChildren();
+    tree.dataset.rootDrop = "false";
+    visiblePaths = [];
+    const all = allFolders();
+
+    const renderDir = (dir, depth) => {
+      const subs = [...all].filter((p) => parentOf(p) === dir && p !== "").sort((a, b) => baseName(a).localeCompare(baseName(b)));
+      const filePaths = Object.keys(files).filter((p) => parentOf(p) === dir).sort((a, b) => {
+        if (dir === "") { if (a === ENTRY_FILE) return -1; if (b === ENTRY_FILE) return 1; }
+        return baseName(a).localeCompare(baseName(b));
+      });
+      for (const sub of subs) {
+        tree.append(makeRow(sub, "folder", depth));
+        visiblePaths.push(sub);
+        if (expanded.has(sub)) renderDir(sub, depth + 1);
+      }
+      for (const f of filePaths) {
+        tree.append(makeRow(f, "file", depth));
+        visiblePaths.push(f);
+      }
+    };
+    renderDir("", 0);
+  }
+
+  function makeRow(path, kind, depth) {
+    const row = document.createElement("div");
+    row.className = "pg-row";
+    row.dataset.path = path;
+    row.dataset.kind = kind;
+    row.draggable = true;
+    row.style.paddingLeft = `${depth * 14 + 4}px`;
+    if (path === activeFile && kind === "file") row.dataset.active = "true";
+    if (selected.has(path)) row.dataset.selected = "true";
+    // Dim a cut file/folder (and its descendants) until it's pasted.
+    if (clipboard && clipboard.mode === "cut" &&
+        clipboard.paths.some((p) => p === path || path.startsWith(`${p}/`))) {
+      row.dataset.cut = "true";
+    }
+    row.setAttribute("role", "treeitem");
+
+    const twisty = document.createElement("span");
+    twisty.className = "pg-row-twisty";
+    if (kind === "folder") {
+      twisty.innerHTML = `<i class="fa-solid ${expanded.has(path) ? "fa-chevron-down" : "fa-chevron-right"}"></i>`;
+    }
+    const icon = document.createElement("span");
+    icon.className = "pg-row-icon";
+    if (kind === "folder") {
+      icon.innerHTML = `<i class="fa-solid ${expanded.has(path) ? "fa-folder-open" : "fa-folder"} pg-ic-folder"></i>`;
+    } else {
+      const { icon: ic, cls } = fileKind(path);
+      icon.innerHTML = `<i class="fa-solid ${ic} ${cls}"></i>`;
+    }
+    const name = document.createElement("span");
+    name.className = "pg-row-name";
+    name.textContent = baseName(path);
+    name.title = path;
+    row.append(twisty, icon, name);
+    if (path === ENTRY_FILE) {
+      const badge = document.createElement("span");
+      badge.className = "pg-row-badge";
+      badge.textContent = "entry";
+      row.append(badge);
+    }
+    return row;
+  }
+
+  // ---- Tabs ----
+  function renderTabs() {
+    const bar = $("pg-tabs");
+    if (!bar) return;
+    bar.replaceChildren();
+    for (const path of openTabs) {
+      if (files[path] === undefined) continue;
+      const tab = document.createElement("div");
+      tab.className = "pg-tab";
+      tab.dataset.path = path;
+      tab.dataset.active = path === activeFile ? "true" : "false";
+      tab.setAttribute("role", "tab");
+      const { icon, cls } = fileKind(path);
+      const ic = document.createElement("i");
+      ic.className = `fa-solid ${icon} ${cls} pg-tab-icon`;
+      const nm = document.createElement("span");
+      nm.className = "pg-tab-name";
+      nm.textContent = baseName(path);
+      nm.title = path;
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "pg-tab-close";
+      close.dataset.close = path;
+      close.title = `Close ${baseName(path)}`;
+      close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      tab.append(ic, nm, close);
+      bar.append(tab);
+    }
+  }
+
+  function onTabsClick(e) {
+    const closeBtn = e.target.closest("[data-close]");
+    if (closeBtn) { closeTab(closeBtn.dataset.close); return; }
+    const tab = e.target.closest(".pg-tab");
+    if (tab) openFile(tab.dataset.path);
+  }
+
+  function closeTab(path) {
+    const i = openTabs.indexOf(path);
+    if (i < 0) return;
+    openTabs.splice(i, 1);
+    if (activeFile === path) {
+      const next = openTabs[i] || openTabs[i - 1] || openTabs[openTabs.length - 1];
+      if (next) { openFile(next); return; }
+      openFile(ENTRY_FILE); return; // never leave the editor with no file
+    }
+    persistFiles();
+    renderTabs();
+  }
+
+  // Expand every ancestor folder of `path` so it's visible in the tree.
+  function revealPath(path) {
+    let acc = "";
+    for (const seg of parentOf(path).split("/")) {
+      if (!seg) continue;
+      acc = acc ? `${acc}/${seg}` : seg;
+      expanded.add(acc);
+    }
+  }
+
+  // ---- Open / select ----
+  function openFile(path) {
+    if (files[path] === undefined) return;
+    syncActiveFile();
+    activeFile = path;
+    if (!openTabs.includes(path)) openTabs.push(path);
+    selected = new Set([path]);
+    lastClicked = path;
+    revealPath(path);
+    editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: files[path] } });
+    persistFiles();
+    renderFileExplorer();
+    renderTabs();
+    refreshStatusChars();
+    refreshStatusCursor();
+  }
+
+  function onTreeClick(e) {
+    const row = e.target.closest(".pg-row");
+    if (!row) { selected = new Set(); lastClicked = null; renderFileExplorer(); return; }
+    const path = row.dataset.path;
+    const kind = row.dataset.kind;
+    if (e.metaKey || e.ctrlKey) {
+      if (selected.has(path)) selected.delete(path); else selected.add(path);
+      lastClicked = path;
+      renderFileExplorer();
+      return;
+    }
+    if (e.shiftKey && lastClicked) {
+      const a = visiblePaths.indexOf(lastClicked);
+      const b = visiblePaths.indexOf(path);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        selected = new Set(visiblePaths.slice(lo, hi + 1));
+        renderFileExplorer();
+        return;
+      }
+    }
+    selected = new Set([path]);
+    lastClicked = path;
+    if (kind === "folder") {
+      if (expanded.has(path)) expanded.delete(path); else expanded.add(path);
+      persistFiles();
+      renderFileExplorer();
+    } else {
+      openFile(path);
+    }
+  }
+
+  function onTreeDblClick(e) {
+    const row = e.target.closest(".pg-row");
+    if (row) renameOne(row.dataset.path);
+  }
+
+  function onTreeKeydown(e) {
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (selected.size) { e.preventDefault(); deletePaths([...selected]); }
+    } else if (e.key === "F2") {
+      if (selected.size === 1) { e.preventDefault(); renameOne([...selected][0]); }
+    } else if (e.key === "Enter") {
+      if (selected.size === 1) { const p = [...selected][0]; if (files[p] !== undefined) openFile(p); }
+    }
+  }
+
+  // ---- Structure changes ----
+  function afterStructureChange(relink) {
+    persistFiles();
+    renderFileExplorer();
+    renderTabs();
+    if (relink !== false) scheduleViewerUpdate(true);
+  }
+
+  function ensureFolder(path) {
+    if (!path) return;
+    folders.add(path);
+    let acc = "";
+    for (const seg of path.split("/")) { acc = acc ? `${acc}/${seg}` : seg; folders.add(acc); }
+  }
+
+  function cleanPath(raw) {
+    let n = String(raw || "").trim().replace(/^\/+/, "").replace(/\/+$/, "").replace(/\/{2,}/g, "/");
+    if (!n || n.includes("..")) return null;
+    if (!/^[A-Za-z0-9_][A-Za-z0-9_./ -]*$/.test(n)) return null;
+    return n;
+  }
+
+  function createFileAt(parentFolder) {
+    const raw = window.prompt("New file name (e.g. Button.aktion or ui/Card.aktion)", "Component.aktion");
+    if (!raw) return;
+    let rel = cleanPath(raw);
+    if (!rel) { showToast("Invalid file name", { icon: "triangle-exclamation" }); return; }
+    if (!/\.[A-Za-z0-9]+$/.test(rel)) rel += ".aktion"; // default extension
+    const path = parentFolder ? `${parentFolder}/${rel}` : rel;
+    if (files[path] !== undefined) { openFile(path); showToast(`${path} already exists`, { icon: "circle-info" }); return; }
+    const base = baseName(path).replace(/\.[^.]+$/, "");
+    files[path] = /\.aktion$/i.test(path)
+      ? `// ${path}\nexport function ${/^[A-Z]/.test(base) ? base : "Component"}() {\n  return Text("${base}")\n}\n`
+      : "";
+    ensureFolder(parentOf(path));
+    if (parentFolder) expanded.add(parentFolder);
+    afterStructureChange(false);
+    openFile(path);
+    showToast(`Created ${path}`, { icon: "file-circle-plus" });
+  }
+
+  function createFolderAt(parentFolder) {
+    const raw = window.prompt("New folder name", "components");
+    if (!raw) return;
+    const rel = cleanPath(raw);
+    if (!rel) { showToast("Invalid folder name", { icon: "triangle-exclamation" }); return; }
+    const path = parentFolder ? `${parentFolder}/${rel}` : rel;
+    ensureFolder(path);
+    if (parentFolder) expanded.add(parentFolder);
+    expanded.add(path);
+    afterStructureChange(false);
+    showToast(`Created folder ${path}`, { icon: "folder-plus" });
+  }
+
+  // Re-key a file/folder (and a folder's descendants) from one prefix to another.
+  function rekeyPrefix(oldPrefix, newPrefix) {
+    const moves = {};
+    for (const f of Object.keys(files)) {
+      if (f === oldPrefix || f.startsWith(`${oldPrefix}/`)) {
+        moves[newPrefix + f.slice(oldPrefix.length)] = files[f];
+        delete files[f];
+      }
+    }
+    Object.assign(files, moves);
+    folders = new Set([...folders].map((d) => (d === oldPrefix || d.startsWith(`${oldPrefix}/`)) ? newPrefix + d.slice(oldPrefix.length) : d));
+    const remap = (p) => (p === oldPrefix || p.startsWith(`${oldPrefix}/`)) ? newPrefix + p.slice(oldPrefix.length) : p;
+    openTabs = openTabs.map(remap);
+    activeFile = remap(activeFile);
+    expanded = new Set([...expanded].map(remap));
+    selected = new Set([...selected].map(remap));
+  }
+
+  function renameOne(path) {
+    if (path === ENTRY_FILE) { showToast("The entry file must stay app.aktion", { icon: "circle-info" }); return; }
+    const isFolder = isFolderPath(path) && files[path] === undefined;
+    const raw = window.prompt(`Rename ${isFolder ? "folder" : "file"}`, baseName(path));
+    if (!raw) return;
+    const base = cleanPath(raw);
+    if (!base || base.includes("/")) { showToast("Invalid name", { icon: "triangle-exclamation" }); return; }
+    const dest = parentOf(path) ? `${parentOf(path)}/${base}` : base;
+    if (dest === path) return;
+    if (files[dest] !== undefined || isFolderPath(dest)) { showToast(`"${dest}" already exists`, { icon: "triangle-exclamation" }); return; }
+    rekeyPrefix(path, dest);
+    afterStructureChange();
+  }
+
+  function deletePaths(paths) {
+    const targets = paths.filter((p) => p !== ENTRY_FILE);
+    if (!targets.length) { showToast("The entry file can't be deleted", { icon: "circle-info" }); return; }
+    const label = targets.length === 1 ? `"${targets[0]}"` : `${targets.length} items`;
+    if (!window.confirm(`Delete ${label}? This can't be undone.`)) return;
+    for (const p of targets) {
+      for (const f of Object.keys(files)) if (f === p || f.startsWith(`${p}/`)) delete files[f];
+      folders = new Set([...folders].filter((d) => !(d === p || d.startsWith(`${p}/`))));
+      openTabs = openTabs.filter((t) => !(t === p || t.startsWith(`${p}/`)));
+      expanded = new Set([...expanded].filter((d) => !(d === p || d.startsWith(`${p}/`))));
+    }
+    selected = new Set();
+    if (files[activeFile] === undefined) {
+      activeFile = openTabs.find((t) => files[t] !== undefined) || ENTRY_FILE;
+      if (!openTabs.includes(activeFile)) openTabs.push(activeFile);
+      editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: files[activeFile] ?? "" } });
+    }
+    afterStructureChange();
+    showToast(`Deleted ${label}`, { icon: "trash" });
+  }
+
+  function movePaths(paths, targetFolder) {
+    let moved = 0;
+    for (const p of paths) {
+      if (p === ENTRY_FILE) { showToast("The entry file stays at the root", { icon: "circle-info" }); continue; }
+      const dest = targetFolder ? `${targetFolder}/${baseName(p)}` : baseName(p);
+      if (dest === p) continue;
+      if (isFolderPath(p) && files[p] === undefined && isDescendant(targetFolder, p)) continue; // into itself
+      if (files[dest] !== undefined || isFolderPath(dest)) { showToast(`"${dest}" already exists`, { icon: "triangle-exclamation" }); continue; }
+      rekeyPrefix(p, dest);
+      moved++;
+    }
+    if (moved) { ensureFolder(targetFolder); afterStructureChange(); }
+  }
+
+  function uniquePath(path) {
+    if (files[path] === undefined && !isFolderPath(path)) return path;
+    const dir = parentOf(path);
+    const b = baseName(path);
+    const dot = b.lastIndexOf(".");
+    const stem = dot > 0 ? b.slice(0, dot) : b;
+    const ext = dot > 0 ? b.slice(dot) : "";
+    let i = 1, cand;
+    do { cand = `${dir ? `${dir}/` : ""}${stem}-copy${i > 1 ? i : ""}${ext}`; i++; }
+    while (files[cand] !== undefined || isFolderPath(cand));
+    return cand;
+  }
+
+  function pasteInto(targetFolder) {
+    if (!clipboard) return;
+    for (const src of clipboard.paths) {
+      if (clipboard.mode === "cut") {
+        movePaths([src], targetFolder);
+      } else {
+        // Copy: duplicate the file / folder subtree.
+        const destBase = targetFolder ? `${targetFolder}/${baseName(src)}` : baseName(src);
+        const dest = uniquePath(destBase);
+        if (files[src] !== undefined) {
+          files[dest] = files[src];
+        } else {
+          ensureFolder(dest);
+          for (const f of Object.keys(files)) {
+            if (f.startsWith(`${src}/`)) files[dest + f.slice(src.length)] = files[f];
+          }
+        }
+      }
+    }
+    if (clipboard.mode === "cut") clipboard = null;
+    ensureFolder(targetFolder);
+    afterStructureChange();
+  }
+
+  // ---- Clipboard ----
+  function setClipboard(mode, paths) {
+    clipboard = { mode, paths: [...paths] };
+    renderFileExplorer(); // re-render so a cut selection dims immediately
+  }
+
+  // ---- Context menu ----
+  function closeContextMenu() {
+    const m = $("pg-ctxmenu");
+    if (m) { m.hidden = true; m.replaceChildren(); }
+  }
+
+  function showMenu(x, y, items) {
+    const menu = $("pg-ctxmenu");
+    menu.replaceChildren();
+    for (const item of items) {
+      if (item.separator) { const sep = document.createElement("div"); sep.className = "pg-menu-sep"; menu.append(sep); continue; }
+      const el = document.createElement("div");
+      el.className = "pg-menu-item";
+      el.setAttribute("role", "menuitem");
+      if (item.disabled) el.setAttribute("aria-disabled", "true");
+      el.innerHTML = `<i class="fa-solid ${item.icon || "fa-circle"}"></i><span>${item.label}</span>${item.key ? `<span class="pg-menu-key">${item.key}</span>` : ""}`;
+      if (!item.disabled) el.addEventListener("click", () => { closeContextMenu(); item.action(); });
+      menu.append(el);
+    }
+    menu.hidden = false;
+    // Position within the viewport.
+    const r = menu.getBoundingClientRect();
+    menu.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - r.height - 8)}px`;
+  }
+
+  function onTreeContextMenu(e) {
+    e.preventDefault();
+    const row = e.target.closest(".pg-row");
+    const path = row ? row.dataset.path : "";
+    if (row && !selected.has(path)) { selected = new Set([path]); lastClicked = path; renderFileExplorer(); }
+    const multi = selected.size > 1;
+    const isFolder = row && row.dataset.kind === "folder";
+    const targetFolder = !row ? "" : isFolder ? path : parentOf(path);
+    const items = [];
+    if (multi) {
+      items.push({ label: `Delete ${selected.size} items`, icon: "fa-trash", action: () => deletePaths([...selected]) });
+      items.push({ label: "Cut", icon: "fa-scissors", action: () => setClipboard("cut", [...selected]) });
+      items.push({ label: "Copy", icon: "fa-copy", action: () => setClipboard("copy", [...selected]) });
+    } else if (row && isFolder) {
+      items.push({ label: "New File", icon: "fa-file-circle-plus", action: () => createFileAt(path) });
+      items.push({ label: "New Folder", icon: "fa-folder-plus", action: () => createFolderAt(path) });
+      items.push({ separator: true });
+      items.push({ label: "Rename", icon: "fa-pen", key: "F2", action: () => renameOne(path) });
+      items.push({ label: "Delete", icon: "fa-trash", action: () => deletePaths([path]) });
+      items.push({ separator: true });
+      items.push({ label: "Cut", icon: "fa-scissors", action: () => setClipboard("cut", [path]) });
+      items.push({ label: "Copy", icon: "fa-copy", action: () => setClipboard("copy", [path]) });
+      items.push({ label: "Paste", icon: "fa-paste", disabled: !clipboard, action: () => pasteInto(path) });
+    } else if (row) {
+      items.push({ label: "Open", icon: "fa-up-right-from-square", action: () => openFile(path) });
+      items.push({ separator: true });
+      items.push({ label: "Rename", icon: "fa-pen", key: "F2", disabled: path === ENTRY_FILE, action: () => renameOne(path) });
+      items.push({ label: "Delete", icon: "fa-trash", disabled: path === ENTRY_FILE, action: () => deletePaths([path]) });
+      items.push({ separator: true });
+      items.push({ label: "Cut", icon: "fa-scissors", disabled: path === ENTRY_FILE, action: () => setClipboard("cut", [path]) });
+      items.push({ label: "Copy", icon: "fa-copy", action: () => setClipboard("copy", [path]) });
+    } else {
+      items.push({ label: "New File", icon: "fa-file-circle-plus", action: () => createFileAt("") });
+      items.push({ label: "New Folder", icon: "fa-folder-plus", action: () => createFolderAt("") });
+      items.push({ label: "Paste", icon: "fa-paste", disabled: !clipboard, action: () => pasteInto("") });
+    }
+    showMenu(e.clientX, e.clientY, items);
+  }
+
+  // ---- Drag and drop ----
+  function onTreeDragStart(e) {
+    const row = e.target.closest(".pg-row");
+    if (!row) return;
+    const path = row.dataset.path;
+    if (!selected.has(path)) { selected = new Set([path]); lastClicked = path; renderFileExplorer(); }
+    dragPaths = [...selected];
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragPaths.join("\n"));
+  }
+  function clearDropHints() {
+    for (const r of $("pg-file-list").querySelectorAll('[data-drop="true"]')) r.dataset.drop = "false";
+    $("pg-file-list").dataset.rootDrop = "false";
+  }
+  function onTreeDragOver(e) {
+    if (!dragPaths.length) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    clearDropHints();
+    const folderRow = e.target.closest('.pg-row[data-kind="folder"]');
+    if (folderRow) folderRow.dataset.drop = "true";
+    else $("pg-file-list").dataset.rootDrop = "true";
+  }
+  function onTreeDragLeave(e) {
+    if (!e.relatedTarget || !$("pg-file-list").contains(e.relatedTarget)) clearDropHints();
+  }
+  function onTreeDrop(e) {
+    e.preventDefault();
+    clearDropHints();
+    if (!dragPaths.length) return;
+    const folderRow = e.target.closest('.pg-row[data-kind="folder"]');
+    const target = folderRow ? folderRow.dataset.path : "";
+    movePaths(dragPaths, target);
+    dragPaths = [];
+  }
+
+  // ---- Import ----
+  function openImportMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    showMenu(r.left, r.bottom + 4, [
+      { label: "Import files…", icon: "fa-file-arrow-up", action: () => { $("pg-import-files").value = ""; $("pg-import-files").click(); } },
+      { label: "Import folder…", icon: "fa-folder-tree", action: () => { $("pg-import-folder").value = ""; $("pg-import-folder").click(); } },
+      { label: "Import .zip…", icon: "fa-file-zipper", action: () => { $("pg-import-zip").value = ""; $("pg-import-zip").click(); } },
+      { label: "Import from URL…", icon: "fa-link", action: importFromUrl },
+    ]);
+  }
+
+  async function importLocalFiles(fileList, parentFolder, useRelative) {
+    const list = [...(fileList || [])];
+    if (!list.length) return;
+    let added = 0, first = null;
+    for (const file of list) {
+      const rel = (useRelative && file.webkitRelativePath) ? file.webkitRelativePath : file.name;
+      const cleaned = cleanPath(parentFolder ? `${parentFolder}/${rel}` : rel);
+      if (!cleaned) continue;
+      try { files[cleaned] = await file.text(); } catch { continue; }
+      ensureFolder(parentOf(cleaned));
+      added++; first = first || cleaned;
+    }
+    if (added) {
+      afterStructureChange();
+      if (first) openFile(first);
+      showToast(`Imported ${added} file${added === 1 ? "" : "s"}`, { icon: "file-import" });
+    } else {
+      showToast("Nothing imported", { icon: "triangle-exclamation" });
+    }
+  }
+
+  async function importZipFile(file) {
+    if (!file) return;
+    try {
+      const entries = await readZipEntries(await file.arrayBuffer());
+      const names = Object.keys(entries);
+      if (!names.length) { showToast("No text files in that .zip", { icon: "triangle-exclamation" }); return; }
+      let first = null;
+      for (const name of names) {
+        const cleaned = cleanPath(name);
+        if (!cleaned || cleaned === "index.html") continue; // skip the generated runner
+        files[cleaned] = entries[name];
+        ensureFolder(parentOf(cleaned));
+        first = first || cleaned;
+      }
+      afterStructureChange();
+      if (first && files[first] !== undefined) openFile(first);
+      showToast(`Imported ${names.length} file${names.length === 1 ? "" : "s"} from .zip`, { icon: "file-zipper" });
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || "Couldn't read the .zip", { icon: "triangle-exclamation" });
+    }
+  }
+
+  async function importFromUrl() {
+    const url = window.prompt("Import a file from URL", "https://");
+    if (!url) return;
+    try {
+      const text = await fetch(url).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
+      let name = cleanPath((url.split("?")[0].split("#")[0].split("/").pop()) || "imported.aktion") || "imported.aktion";
+      if (!/\.[A-Za-z0-9]+$/.test(name)) name += ".aktion";
+      const path = uniquePath(name);
+      files[path] = text;
+      afterStructureChange();
+      openFile(path);
+      showToast(`Imported ${path}`, { icon: "file-import" });
+    } catch (err) {
+      console.error(err);
+      showToast(`Couldn't fetch: ${err.message || url}`, { icon: "triangle-exclamation" });
+    }
+  }
+
+  // ---- Export ----
+  function openExportMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    showMenu(r.left, r.bottom + 4, [
+      { label: "Project (.zip)", icon: "fa-file-zipper", action: exportProjectZip },
+      { label: "Standalone HTML", icon: "fa-file-code", action: doDownload },
+    ]);
+  }
+
+  async function exportProjectZip() {
+    try {
+      const linked = await linkCurrentProject();
+      const theme = $("pg-target").getAttribute("theme") || "light";
+      const title = `${EXAMPLES[currentExample]?.label ?? "Aktion app"} · Aktion`;
+      const indexHtml = await buildIndexHtml(linked.source || files[ENTRY_FILE] || "", theme, title);
+      // Files in their folder structure + empty-folder entries + a runnable index.html.
+      const bundle = { ...files, "index.html": indexHtml };
+      for (const dir of allFolders()) {
+        if (dir && !Object.keys(files).some((f) => f.startsWith(`${dir}/`))) bundle[`${dir}/`] = "";
+      }
+      const blob = buildProjectZip(bundle);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "aktion-project.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("Project exported (.zip)", { icon: "file-zipper" });
+    } catch (err) {
+      console.error(err);
+      showToast("Couldn't build the zip", { icon: "triangle-exclamation" });
     }
   }
 
@@ -2927,6 +4032,40 @@ function initPlayground(cm) {
     lsWrite(LS.inspect, inspectOn ? "true" : "false");
   }
 
+  // Aktion DevTools — lazily mounted on first use, then toggled. The panel
+  // attaches itself to the viewer's <aktion-app> via the global hook, so we
+  // just mount it once and flip its visibility thereafter.
+  let devtoolsController = null;
+  let devtoolsLoading = false;
+  async function toggleDevtools() {
+    const btn = $("pg-devtools");
+    if (devtoolsLoading) return;
+    try {
+      if (!devtoolsController) {
+        devtoolsLoading = true;
+        btn.disabled = true;
+        const mod = await import(/* @vite-ignore */ DEVTOOLS_BUNDLE);
+        devtoolsController = mod.mountDevtools();
+        btn.disabled = false;
+        devtoolsLoading = false;
+        showToast("DevTools opened", { icon: "bug" });
+      } else {
+        devtoolsController.toggle();
+      }
+      applyDevtoolsUI(!devtoolsController.element.hidden);
+    } catch (err) {
+      devtoolsLoading = false;
+      btn.disabled = false;
+      // eslint-disable-next-line no-console
+      console.error("[playground] failed to open DevTools", err);
+      showToast("Could not load DevTools", { icon: "triangle-exclamation" });
+    }
+  }
+
+  function applyDevtoolsUI(open) {
+    $("pg-devtools").setAttribute("aria-pressed", open ? "true" : "false");
+  }
+
   function toggleSidebarCollapsed() {
     const layout = document.querySelector(".layout");
     if (!layout) return;
@@ -2941,7 +4080,7 @@ function initPlayground(cm) {
     const btn = $("pg-sidebar-toggle");
     if (btn) {
       btn.setAttribute("aria-pressed", collapsed ? "true" : "false");
-      btn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+      btn.title = collapsed ? "Show file explorer" : "Hide file explorer";
     }
     lsWrite(LS.sidebarCollapsed, collapsed ? "true" : "false");
   }
@@ -2952,9 +4091,20 @@ function initPlayground(cm) {
     if (!on) hideInspectOverlay();
   }
 
+  // Link the whole project (entry + every file) into one program, fetching any
+  // URL imports. Shared by run, share, and standalone-HTML download so they all
+  // operate on the linked app, not just the active file.
+  async function linkCurrentProject() {
+    syncActiveFile();
+    return linkProject({ entry: ENTRY_FILE, files });
+  }
+
   async function doShare() {
     try {
-      const code = editorView.state.doc.toString();
+      // Share the linked (single-file) program so the recipient gets a working
+      // app even when it was split across files locally.
+      const linked = await linkCurrentProject();
+      const code = linked.source || files[ENTRY_FILE] || "";
       const encoded = await encodeShare(code);
       const url = `${location.origin}${location.pathname}#code=${encoded}`;
       await navigator.clipboard.writeText(url);
@@ -2975,9 +4125,11 @@ function initPlayground(cm) {
     }
   }
 
-  function doDownload() {
+  async function doDownload() {
     try {
-      const code = editorView.state.doc.toString();
+      // Bundle the linked program into the standalone HTML so it runs anywhere.
+      const linked = await linkCurrentProject();
+      const code = linked.source || files[ENTRY_FILE] || "";
       const theme = $("pg-target").getAttribute("theme") || "light";
       const exampleLabel = EXAMPLES[currentExample]?.label ?? "Aktion app";
       const title = `${exampleLabel} · Aktion`;
@@ -2992,55 +4144,104 @@ function initPlayground(cm) {
   function loadExample(key, force) {
     const ex = EXAMPLES[key];
     if (!ex) return;
-    const cur = editorView.state.doc.toString();
+    // Multi-file examples ship a `files` map; single-file ones ship `code`.
+    const nextFiles = ex.files
+      ? { ...ex.files }
+      : { [ENTRY_FILE]: ex.code };
+    if (nextFiles[ENTRY_FILE] === undefined) nextFiles[ENTRY_FILE] = "";
+
+    syncActiveFile();
     const isDirty =
-      cur !== EXAMPLES[currentExample]?.code &&
-      cur !== ex.code;
+      files[ENTRY_FILE] !== EXAMPLES[currentExample]?.code &&
+      files[ENTRY_FILE] !== nextFiles[ENTRY_FILE];
     if (isDirty && !force) {
-      if (!window.confirm("Replace your current code with this example?")) {
-        // Revert dropdown to current example
+      if (!window.confirm("Replace your current project with this example?")) {
         $("pg-example").value = currentExample;
         return;
       }
     }
+    files = nextFiles;
+    activeFile = ENTRY_FILE;
+    freshModel();
+    // Open every example file as a tab, entry first, so multi-file examples are
+    // immediately explorable.
+    openTabs = [ENTRY_FILE, ...Object.keys(files).filter((p) => p !== ENTRY_FILE).sort()];
     editorView.dispatch({
-      changes: { from: 0, to: editorView.state.doc.length, insert: ex.code },
+      changes: { from: 0, to: editorView.state.doc.length, insert: files[ENTRY_FILE] },
     });
     currentExample = key;
-    $("pg-pill-preset").textContent = ex.label;
     lsWrite(LS.example, key);
+    persistFiles();
+    renderFileExplorer();
+    renderTabs();
   }
 
   function doRun(force) {
     scheduleViewerUpdate(true, force);
   }
 
-  scheduleViewerUpdate = debounce((immediate, force) => {
+  scheduleViewerUpdate = debounce(async (immediate, force) => {
     if (!editorView) return;
+    if (!(force || currentRunMode === "live" || immediate)) return;
     const target = $("pg-target");
-    const code = editorView.state.doc.toString();
-    if (force || currentRunMode === "live" || immediate) {
-      if (typeof target.setResponse === "function") {
-        target.setResponse(code);
-      } else {
-        target.setAttribute("response", code);
-      }
+    let linked;
+    try {
+      linked = await linkCurrentProject();
+    } catch (err) {
+      console.error("[playground] link failed", err);
+      return;
+    }
+    // Surface cross-file diagnostics (unresolved import, missing export, fetch
+    // failure) alongside the active file's parse errors.
+    projectDiagnostics = linked.diagnostics.map((d) => ({
+      line: d.line,
+      column: d.column,
+      message: d.message,
+    }));
+    refreshStatusErrors();
+    if (typeof target.mountCompiled === "function") {
+      target.mountCompiled(
+        defineCompiledProgram({
+          __aktionCompiled: COMPILED_PROGRAM_VERSION,
+          program: linked.program,
+          source: linked.source,
+          path: ENTRY_FILE,
+        }),
+      );
+    } else if (typeof target.setResponse === "function") {
+      // Fallback for an older bundle without mountCompiled.
+      target.setResponse(linked.source);
     }
     // The inspect index gets refreshed by the MutationObserver attached in
     // `initInspect()` once the shadow DOM finishes updating.
   }, 250);
 
+  // Active-file parse errors (from the linter / runtime) plus the last run's
+  // cross-file linker diagnostics, deduped by position + message.
+  function combinedErrors() {
+    const seen = new Set();
+    const out = [];
+    for (const err of [...parseErrors, ...projectDiagnostics]) {
+      const key = `${err.line}:${err.column}:${err.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(err);
+    }
+    return out;
+  }
+
   refreshStatusErrors = () => {
     const btn = $("pg-status-errors");
     const text = $("pg-status-errors-text");
-    if (parseErrors.length === 0) {
+    const errors = combinedErrors();
+    if (errors.length === 0) {
       btn.dataset.tone = "success";
       btn.querySelector("i").className = "fa-solid fa-check";
       text.textContent = "No errors";
     } else {
       btn.dataset.tone = "danger";
       btn.querySelector("i").className = "fa-solid fa-triangle-exclamation";
-      text.textContent = `${parseErrors.length} error${parseErrors.length === 1 ? "" : "s"}`;
+      text.textContent = `${errors.length} error${errors.length === 1 ? "" : "s"}`;
     }
     if ($("pg-errors-backdrop") && !$("pg-errors-backdrop").hidden) {
       renderErrorList();
@@ -3142,7 +4343,8 @@ function initPlayground(cm) {
     const lede = $("pg-errors-lede");
     list.replaceChildren();
 
-    const total = parseErrors.length;
+    const errors = combinedErrors();
+    const total = errors.length;
     title.textContent = total === 0
       ? "No errors"
       : `${total} error${total === 1 ? "" : "s"}`;
@@ -3162,7 +4364,7 @@ function initPlayground(cm) {
     // example: missing `aktion` binding, structural failures, theme-level
     // diagnostics). Showing them up front prevents the "errors with no
     // editor markers" confusion.
-    const sorted = parseErrors
+    const sorted = errors
       .map((err, idx) => ({ ...err, _index: idx }))
       .sort((a, b) => {
         const aGlobal = !Number.isFinite(a.line) || a.line < 1;

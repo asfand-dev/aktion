@@ -12,22 +12,20 @@ import { extractComboboxItems } from "./forms-shared.js";
 import { attachOnChange } from "./wrappers.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
-const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl", "small", "normal", "large"] as const;
+const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 const INPUT_TYPES = ["text", "email", "password", "number", "tel", "url", "date"] as const;
 
 /**
- * Normalise size tokens to the shared `sm|md|lg` vocabulary. The legacy
- * `small|normal|large` triple is preserved (suggestion 4.2) so prompts
- * that mix the old and new names produce consistent visual output.
+ * Normalise a size token to the canonical `xs|sm|md|lg|xl` vocabulary.
+ * `extra-small` / `extra-large` are accepted as verbose spellings of `xs` /
+ * `xl`; anything unrecognised (or empty) falls back to `md`.
  */
 function normaliseButtonSize(value: unknown): string {
   const v = asString(value).trim().toLowerCase();
   if (v === "xs" || v === "extra-small") return "xs";
-  if (v === "small" || v === "sm") return "sm";
-  if (v === "large" || v === "lg") return "lg";
+  if (v === "sm") return "sm";
+  if (v === "lg") return "lg";
   if (v === "xl" || v === "extra-large") return "xl";
-  if (v === "normal" || v === "md" || v === "") return "md";
-  if (v === "xs" || v === "sm" || v === "md" || v === "lg" || v === "xl") return v;
   return "md";
 }
 
@@ -42,7 +40,7 @@ export const Button: ComponentSpec = {
     { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable invoked when the button is clicked" },
     { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
-    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Canonical `xs|sm|md|lg|xl` (legacy `small|normal|large` still accepted)" },
+    { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Size token `xs|sm|md|lg|xl`" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
     { name: "iconPosition", type: "string", optional: true, enum: ["leading", "trailing"], description: "Icon placement (default leading)" },
     { name: "iconOnly", type: "boolean", optional: true, description: "Hide the label visually (keeps aria-label)" },

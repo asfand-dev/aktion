@@ -1,7 +1,8 @@
 /**
- * Behavioural tests for the in-script `Theme({...})` construct.
+ * Behavioural tests for the in-script `$theme({...})` construct.
  *
- * The runtime treats `theme = Theme({...})` as a reserved top-level binding
+ * The runtime treats a bare `$theme({...})` statement (or the equivalent
+ * `theme = $theme({...})` binding) as a reserved top-level theme declaration
  * that writes partial token overrides to the host element as CSS custom
  * properties — without re-rendering the rest of the UI and without leaking
  * across renders.
@@ -52,6 +53,31 @@ aktion = Card([CardHeader("Hello")])`);
     expect(el.style.getPropertyValue("--rui-font-family")).toBe(
       "-apple-system, sans-serif",
     );
+  });
+
+  it("applies a bare $theme({...}) statement with no `theme =` binding", async () => {
+    const el = create();
+    el.setResponse(`$theme({
+  colors: { primary: "#6366f1" },
+  radius: { button: "8px" }
+})
+aktion = Stack([Text("Hello World")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#6366f1");
+    expect(el.style.getPropertyValue("--rui-radius-button")).toBe("8px");
+  });
+
+  it("clears stale tokens when a bare $theme({...}) is removed", async () => {
+    const el = create();
+    el.setResponse(`$theme({colors: { primary: "#6366f1" }})
+aktion = Stack([Text("v1")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#6366f1");
+
+    el.setResponse(`aktion = Stack([Text("v2")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("");
   });
 
   it("layers on top of the base theme; untouched tokens keep base values", async () => {
@@ -165,6 +191,16 @@ aktion = Card([CardHeader("Hello")])`);
     const warnings = validateProgramSchema(program, defaultLibrary);
     expect(warnings.length).toBeGreaterThanOrEqual(1);
     expect(warnings[0]?.message).toMatch(/free-form CSS variable keys/i);
+  });
+
+  it("accepts the bare structured `$theme({...})` form with no warnings", async () => {
+    const { parse, validateProgramSchema, defaultLibrary } = await import(
+      "../src/index.js"
+    );
+    const program = parse(`$theme({ colors: { primary: "#0969da" }, radius: { button: "6px" } })
+aktion = Stack([Text("hi")])`);
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    expect(warnings).toHaveLength(0);
   });
 });
 

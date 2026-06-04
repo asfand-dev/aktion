@@ -32,6 +32,7 @@ import type {
   SwitchCase,
   DestructuringPattern,
   LambdaParam,
+  ImportSpecifier,
 } from "./types.js";
 
 export function parse(source: string): Program {
@@ -77,6 +78,8 @@ function parseStatement(ctx: ParserContext, _topLevel: boolean): Statement | nul
   if (head.type === "Keyword") {
     switch (head.value) {
       case "function": return parseFunctionDecl(ctx);
+      case "import":   return parseImportStatement(ctx);
+      case "export":   return parseExportStatement(ctx);
       case "await":    return parseAwait(ctx);
       case "async": {
         // `async function name(...) { ... }` — the runtime is already
@@ -719,6 +722,157 @@ function parseAssignment(ctx: ParserContext): Statement | null {
     expression,
     loc: { line: eq.line, column: eq.column },
   };
+}
+
+/**
+ * `import { A, B as C, $shared } from "./other.aktion"` — named imports only.
+ * `from`/`as` are contextual identifiers (not keywords). A `$state` import must
+ * keep its `$` across `as`. Resolved + merged by the linker; the streaming
+ * runtime ignores `Import`.
+ */
+function parseImportStatement(ctx: ParserContext): Statement {
+  const start = ctx.expect("Keyword", "import");
+  ctx.expect("Punctuation", "{");
+  const specifiers: ImportSpecifier[] = [];
+  while (!ctx.isEnd() && !(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
+    const importedTok = ctx.peek();
+    let imported: string;
+    let isState = false;
+    if (importedTok.type === "StateIdentifier") {
+      imported = ctx.consume().value;
+      isState = true;
+    } else if (importedTok.type === "Identifier") {
+      imported = ctx.consume().value;
+    } else {
+      throw {
+        message: `Expected an import name, got ${importedTok.type} "${importedTok.value}"`,
+        line: importedTok.line,
+        column: importedTok.column,
+      } satisfies ParseError;
+    }
+
+    let local = imported;
+    // Optional `as alias` — `as` is a contextual identifier here.
+    if (ctx.peek().type === "Identifier" && ctx.peek().value === "as") {
+      ctx.consume();
+      const aliasTok = ctx.peek();
+      let aliasIsState = false;
+      if (aliasTok.type === "StateIdentifier") {
+        local = ctx.consume().value;
+        aliasIsState = true;
+      } else if (aliasTok.type === "Identifier") {
+        local = ctx.consume().value;
+      } else {
+        throw {
+          message: `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`,
+          line: aliasTok.line,
+          column: aliasTok.column,
+        } satisfies ParseError;
+      }
+      if (aliasIsState !== isState) {
+        throw {
+          message:
+            "A `$state` import must keep its `$` across `as` (e.g. `{ $x as $y }`); " +
+            "a non-state import must not gain one.",
+          line: aliasTok.line,
+          column: aliasTok.column,
+        } satisfies ParseError;
+      }
+    }
+
+    specifiers.push(isState ? { imported, local, isState: true } : { imported, local });
+    if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
+      ctx.consume();
+      continue;
+    }
+    break;
+  }
+  ctx.expect("Punctuation", "}");
+
+  const fromTok = ctx.peek();
+  if (!(fromTok.type === "Identifier" && fromTok.value === "from")) {
+    throw {
+      message: `Expected \`from\` after import specifiers, got ${fromTok.type} "${fromTok.value}"`,
+      line: fromTok.line,
+      column: fromTok.column,
+    } satisfies ParseError;
+  }
+  ctx.consume();
+  const sourceTok = ctx.expect("String");
+  skipTerminator(ctx);
+
+  return {
+    kind: "Import",
+    specifiers,
+    source: sourceTok.value,
+    loc: { line: start.line, column: start.column },
+  };
+}
+
+/**
+ * `export <declaration | assignment>` — marks the following top-level binding
+ * importable from another module. `export { … }` lists / re-exports and
+ * `export <destructure>` are intentionally not supported yet (clear errors).
+ */
+function parseExportStatement(ctx: ParserContext): Statement {
+  const start = ctx.expect("Keyword", "export");
+  const next = ctx.peek();
+
+  if (next.type === "Punctuation" && next.value === "{") {
+    throw {
+      message:
+        "`export { … }` lists are not supported yet — use inline `export <declaration>` " +
+        "(e.g. `export function Foo() {…}`, `export $count = 0`).",
+      line: next.line,
+      column: next.column,
+    } satisfies ParseError;
+  }
+
+  let stmt: Statement | null;
+  if (next.type === "Keyword" && next.value === "function") {
+    stmt = parseFunctionDecl(ctx);
+  } else if (
+    next.type === "Keyword" && next.value === "async" &&
+    ctx.peek(1).type === "Keyword" && ctx.peek(1).value === "function"
+  ) {
+    ctx.consume(); // async — accepted as a no-op modifier, mirroring parseStatement
+    stmt = parseFunctionDecl(ctx);
+  } else if (next.type === "Keyword" && (next.value === "let" || next.value === "const" || next.value === "var")) {
+    stmt = parseVarDecl(ctx);
+    if (stmt && stmt.kind === "DestructureStatement") {
+      throw {
+        message: "`export` of a destructuring declaration is not supported — export named bindings individually.",
+        line: next.line,
+        column: next.column,
+      } satisfies ParseError;
+    }
+  } else if (couldStartAssignment(ctx)) {
+    stmt = parseAssignment(ctx);
+  } else {
+    throw {
+      message:
+        "`export` must be followed by a declaration or assignment " +
+        "(`export function …`, `export let x = …`, `export $state = …`).",
+      line: next.line,
+      column: next.column,
+    } satisfies ParseError;
+  }
+
+  if (
+    stmt &&
+    (stmt.kind === "Assignment" ||
+      stmt.kind === "ComponentDeclaration" ||
+      stmt.kind === "ActionDeclaration" ||
+      stmt.kind === "HookDeclaration")
+  ) {
+    stmt.exported = true;
+    return stmt;
+  }
+  throw {
+    message: "`export` must be followed by a declaration or assignment.",
+    line: start.line,
+    column: start.column,
+  } satisfies ParseError;
 }
 
 /** `let foo = expr` ALSO accepts compound assignment operators? No — JS only

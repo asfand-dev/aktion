@@ -105,7 +105,7 @@ follow = FollowUpBlock([
   FollowUpItem("List supported integrations"),
   FollowUpItem("Open the templates gallery")
 ])
-aktion = Stack([intro, steps, follow])</code></pre>
+$app(Stack([intro, steps, follow]))</code></pre>
         </div>
       </div>
 
@@ -147,7 +147,7 @@ status = Card([
   CardHeader("Last saved"),
   Markdown(`\`${$lastSaved}\``)
 ])
-aktion = Stack([form, status])</code></pre>
+$app(Stack([form, status]))</code></pre>
         </div>
       </div>
 
@@ -208,7 +208,7 @@ extras = Card([
 ])
 status = Callout("info", { title: "Status", text: $log, icon: "circle-info" })
 
-aktion = Stack([counter, extras, status], { direction: "column", gap: "l" })</code></pre>
+$app(Stack([counter, extras, status], { direction: "column", gap: "l" }))</code></pre>
         </div>
       </div>
 
@@ -242,7 +242,7 @@ errors = TabItem("errors", { label: "Errors", children: [
     text: "No incidents in the selected range." })
 ] })
 tabs = Tabs([overview, errors])
-aktion = Card([CardHeader("Operations"), filter, tabs])</code></pre>
+$app(Card([CardHeader("Operations"), filter, tabs]))</code></pre>
         </div>
       </div>
 
@@ -267,7 +267,7 @@ group = CheckBoxGroup("notifications", [
   CheckBoxItem("Security alerts", { value: "security", description: "Critical fixes", checked: true }),
   CheckBoxItem("Newsletter", { value: "newsletter", description: "Monthly digest" })
 ])
-aktion = Stack([header, tags, sep, snippet, group])</code></pre>
+$app(Stack([header, tags, sep, snippet, group]))</code></pre>
         </div>
       </div>
 
@@ -343,7 +343,7 @@ projects = Card([
 ])
 
 content = Stack([header, kpis, projects], { direction: "column", gap: "l" })
-aktion = AppShell({ sidebar: nav, content: content, topbar: topbar })</code></pre>
+$app(AppShell({ sidebar: nav, content: content, topbar: topbar }))</code></pre>
         </div>
       </div>
 
@@ -388,7 +388,7 @@ activity = Card([
   ])
 ])
 
-aktion = Stack([header, info, activity], { direction: "column", gap: "l" })</code></pre>
+$app(Stack([header, info, activity], { direction: "column", gap: "l" }))</code></pre>
         </div>
       </div>
 
@@ -442,7 +442,7 @@ faqs = Card([
   ], { showArrow: true })
 ])
 
-aktion = Stack([hero, plans, faqs], { direction: "column", gap: "xl" })</code></pre>
+$app(Stack([hero, plans, faqs], { direction: "column", gap: "xl" }))</code></pre>
         </div>
       </div>
 
@@ -467,12 +467,12 @@ aktion = Stack([hero, plans, faqs], { direction: "column", gap: "xl" })</code></
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">function requestDemo() { $emit("assistant-message", { message: "Book a 15-minute demo" }) }
 
-aktion = Hero("Build assistant UIs in seconds", {
+$app(Hero("Build assistant UIs in seconds", {
   subtitle: "A declarative library for streaming, theme-aware UIs that ship with every LLM response.",
   eyebrow: "Aktion 0.5",
   primary: Button("Book a demo", { action: requestDemo, variant: "primary" }),
   secondary: Button("Read the docs", { variant: "ghost" }),
-  highlights: ["No bundler required", "Capability sandbox", "Seven built-in themes"] })</code></pre>
+  highlights: ["No bundler required", "Capability sandbox", "Seven built-in themes"] }))</code></pre>
         </div>
       </div>
 
@@ -511,10 +511,10 @@ ratings = Stack([
   Rating(4.5, { count: 132, label: "Cenote dive" }),
   Rating(4.9, { count: 412, label: "Kyoto temples" })
 ], { direction: "column", gap: "s" })
-aktion = Stack([
+$app(Stack([
   Grid(cards, { columns: 3, gap: "l" }),
   ratings
-], { direction: "column", gap: "l" })</code></pre>
+], { direction: "column", gap: "l" }))</code></pre>
         </div>
       </div>
 
@@ -530,12 +530,12 @@ aktion = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Stats([
+<pre><code class="example-source">$app(Stats([
   StatCard("Teams", { value: "1,240+", icon: "people-group" }),
   StatCard("Daily messages", { value: $util.format(184000, "number"), icon: "comments" }),
   StatCard("Uptime", { value: "99.99%", icon: "shield-halved" }),
   StatCard("Regions", { value: "12", icon: "globe" })
-], { align: "center" })</code></pre>
+], { align: "center" }))</code></pre>
         </div>
       </div>
 
@@ -551,7 +551,7 @@ aktion = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Grid([
+<pre><code class="example-source">$app(Grid([
   Tile("Create project", { icon: "folder-plus",
     description: "Spin up a fresh workspace.",
     tone: "primary" }),
@@ -562,7 +562,7 @@ aktion = Stack([
     description: "Wire up a 3rd-party source." }),
   Tile("Schedule a sync", { icon: "calendar-days",
     description: "Book time with your CSM." })
-], { columns: 2, gap: "m" })</code></pre>
+], { columns: 2, gap: "m" }))</code></pre>
         </div>
       </div>
 
@@ -578,7 +578,7 @@ aktion = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Card([
+<pre><code class="example-source">$app(Card([
   SectionHeader("Notifications", { subtitle: "Last 24 hours" }),
   Stack([
     Notification("Deployment finished", {
@@ -598,7 +598,7 @@ aktion = Stack([
       icon: "triangle-exclamation",
       tone: "warning" })
   ], { direction: "column", gap: "s" })
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -614,7 +614,7 @@ aktion = Stack([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Stack([
+<pre><code class="example-source">$app(Stack([
   PersonChip("Ada Lovelace", { role: "Engineering Lead", status: "online" }),
   Quote("Aktion lets us ship rich assistant responses without juggling templates.", {
     attribution: "— Engineering Lead, Globex",
@@ -622,7 +622,7 @@ aktion = Stack([
   Comment("Linus Torvalds", {
     text: "Looks good — can we ship this on Friday?",
     time: "2h ago" })
-], { direction: "column", gap: "m" })</code></pre>
+], { direction: "column", gap: "m" }))</code></pre>
         </div>
       </div>
 
@@ -652,7 +652,7 @@ thread = Stack([
   ChatBubble("You", { text: "Send that to Slack #standup.",
     time: "9:02", role: "user" })
 ], { direction: "column", gap: "s" })
-aktion = Stack([bar, ring, thread], { direction: "column", gap: "l" })</code></pre>
+$app(Stack([bar, ring, thread], { direction: "column", gap: "l" }))</code></pre>
         </div>
       </div>
 
@@ -676,7 +676,7 @@ aktion = Stack([bar, ring, thread], { direction: "column", gap: "l" })</code></p
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Stack([
+<pre><code class="example-source">$app(Stack([
   Toast("Deployment finished", {
     description: "Production is live · v2.4.0",
     tone: "success",
@@ -689,7 +689,7 @@ aktion = Stack([bar, ring, thread], { direction: "column", gap: "l" })</code></p
     description: "Retrying in 12 s…",
     tone: "warning",
     icon: "triangle-exclamation" })
-], { direction: "column", gap: "s", position: "bottom-right" })</code></pre>
+], { direction: "column", gap: "s", position: "bottom-right" }))</code></pre>
         </div>
       </div>
 
@@ -716,7 +716,7 @@ aktion = Stack([bar, ring, thread], { direction: "column", gap: "l" })</code></p
 $seats = 5
 $startsOn = "2026-06-01"
 
-aktion = Card([
+$app(Card([
   CardHeader("Trip planner"),
   FormControl("Budget (USD)", Slider("budget", {
     min: 0, max: 5000, step: 50, value: $budget, showValue: true })),
@@ -726,7 +726,7 @@ aktion = Card([
     value: $startsOn,
     min: "2026-01-01",
     max: "2027-01-01" }))
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -744,7 +744,7 @@ aktion = Card([
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">$city = ""
 
-aktion = Card([
+$app(Card([
   CardHeader("Onboarding"),
   FormControl("City", Combobox("city", [
     SelectItem("ams", { label: "Amsterdam" }),
@@ -757,7 +757,7 @@ aktion = Card([
     label: "Drop an image",
     hint: "PNG or JPG up to 2 MB",
     accept: "image/*" }))
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -775,7 +775,7 @@ aktion = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Card([
+<pre><code class="example-source">$app(Card([
   CardHeader("Workspace files"),
   TreeNode("docs", { icon: "folder", expanded: true, children: [
     TreeNode("guides", { icon: "folder", children: [
@@ -784,7 +784,7 @@ aktion = Card([
     ] }),
     TreeNode("api.md", { icon: "file", selected: true })
   ] })
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -802,7 +802,7 @@ aktion = Card([
         <div class="example-panel" data-key="source">
 <pre><code class="example-source">function goPricing() { route.navigate("/pricing") }
 
-aktion = Navbar({
+$app(Navbar({
   brand: "Streaming",
   items: [
     NavbarItem("Product", { to: "/product" }),
@@ -814,7 +814,7 @@ aktion = Navbar({
     Button("Sign in", { variant: "ghost" }),
     Button("Start free trial", { action: goPricing, variant: "primary" })
   ],
-  sticky: true })</code></pre>
+  sticky: true }))</code></pre>
         </div>
       </div>
 
@@ -840,7 +840,7 @@ function register() {
   $emit("assistant-message", { message: `Register ${$email}` })
 }
 
-aktion = Card([
+$app(Card([
   CardHeader("Create your account", { subtitle: "Free for 14 days" }),
   FormControl("Email", Input("email", {
     type: "email", placeholder: "you@example.com", value: $email })),
@@ -851,7 +851,7 @@ aktion = Card([
     checked: $accept }),
   Button("Create account", { action: register, variant: "primary",
     disabled: $email == "" || $password == "" || !$accept })
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -867,7 +867,7 @@ aktion = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = AppShell({ content: [pages] })
+<pre><code class="example-source">$app(AppShell({ content: [pages] }))
 
   // --- Logic & State ---
   $category = "all"
@@ -979,7 +979,7 @@ aktion = Card([
           </div>
         </div>
         <div class="example-panel" data-key="source">
-<pre><code class="example-source">aktion = Card([
+<pre><code class="example-source">$app(Card([
   CardHeader("Frequently asked questions"),
   Accordion([
     AccordionItem("What's included in the free plan?", {
@@ -991,7 +991,7 @@ aktion = Card([
     AccordionItem("Is there a long-term contract?", {
       children: Text("No — month-to-month or yearly plans only.") })
   ])
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -1037,10 +1037,10 @@ summary = Card([
   Button("Checkout", { action: checkout, variant: "primary" })
 ])
 
-aktion = Stack([
+$app(Stack([
   Card([CardHeader("Your cart"), List(items)]),
   summary
-], { direction: "column", gap: "m" })</code></pre>
+], { direction: "column", gap: "m" }))</code></pre>
         </div>
       </div>
 
@@ -1073,13 +1073,13 @@ aktion = Stack([
   
   function reset() { $ticks = 0 }
   
-  aktion = Card([
+  $app(Card([
     CardHeader("Live counter", { subtitle: "Increments once per second" }),
     Stack([
       Text(`Ticks: ${$ticks}`, { variant: "large-heavy" }),
       Button("Reset", { action: reset, variant: "secondary", size: "small" })
     ], { direction: "row", gap: "m", align: "center", justify: "between" })
-  ])</code></pre>
+  ]))</code></pre>
         </div>
       </div>
     </main>

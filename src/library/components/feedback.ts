@@ -17,7 +17,7 @@ import {
 import { initialsFor, installDismissListeners, disposeDismissListeners, dicebearUrlFor } from "./_internal.js";
 import { resolveIconClasses } from "../../icons/index.js";
 
-const AVATAR_SIZES = ["sm", "md", "lg", "xl"] as const;
+const AVATAR_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 
 const AVATAR_FALLBACKS = ["initials", "dicebear"] as const;
 

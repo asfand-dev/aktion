@@ -71,12 +71,12 @@ async function rewriteDeployPaths(siteDir) {
     if (ext === ".html") {
       updated = updated
         .replaceAll("../dist/aktion", "./dist/aktion")
+        .replaceAll("../dist/devtools", "./dist/devtools")
         .replaceAll("../dist/system_prompt", "./dist/system_prompt");
     } else {
-      updated = updated.replaceAll(
-        "../../dist/aktion",
-        "../dist/aktion",
-      );
+      updated = updated
+        .replaceAll("../../dist/aktion", "../dist/aktion")
+        .replaceAll("../../dist/devtools", "../dist/devtools");
     }
 
     if (updated !== original) {

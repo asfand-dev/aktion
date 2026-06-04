@@ -60,7 +60,12 @@ export function formatProgram(source: string): FormatResult {
   return { formatted: out, errors: [] };
 }
 
-function printProgram(program: Program): string {
+/**
+ * Re-emit a parsed `Program` as canonical Aktion source. Exported so the
+ * module linker can serialise a merged (multi-file → single) program back to
+ * text for `mountCompiled`'s round-trip fields (reconnect re-parse, snapshots).
+ */
+export function printProgram(program: Program): string {
   const lines: string[] = [];
   let prev: Statement | null = null;
   for (const stmt of program.statements) {
@@ -85,15 +90,29 @@ function needsBlankLineBetween(prev: Statement, next: Statement): boolean {
 
 function printStatement(stmt: Statement, indent: number): string {
   const pad = INDENT.repeat(indent);
+  // `export` prefix for the declaration/assignment kinds that carry the flag
+  // (multi-file modules). Transparent for every other kind.
+  const exp = "exported" in stmt && stmt.exported ? "export " : "";
   switch (stmt.kind) {
+    case "Import": {
+      const specs = stmt.specifiers
+        .map((s) => {
+          const imported = s.isState ? `$${s.imported}` : s.imported;
+          if (s.local === s.imported) return imported;
+          const local = s.isState ? `$${s.local}` : s.local;
+          return `${imported} as ${local}`;
+        })
+        .join(", ");
+      return `${pad}import { ${specs} } from "${stmt.source}"`;
+    }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       const expr = printExpression(stmt.expression, indent);
-      return `${pad}${lhs} = ${expr}`;
+      return `${pad}${exp}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}function ${stmt.name}(${params}) {`;
+      const head = `${pad}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return body.length > 0
         ? `${head}\n${body}\n${pad}}`
@@ -110,14 +129,14 @@ function printStatement(stmt: Statement, indent: number): string {
     }
     case "ActionDeclaration": {
       const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}function ${stmt.name}(${params}) {`;
+      const head = `${pad}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return `${head}\n${body}\n${pad}}`;
     }
     case "HookDeclaration": {
       // Re-emit the `$` sigil that marks the function as a hook.
       const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}function $${stmt.name}(${params}) {`;
+      const head = `${pad}${exp}function $${stmt.name}(${params}) {`;
       const body = printBlock(stmt.body.body, indent + 1);
       return `${head}\n${body}\n${pad}}`;
     }

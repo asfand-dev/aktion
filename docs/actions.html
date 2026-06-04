@@ -113,13 +113,13 @@
 <pre><code>$count = 0
 function inc() { $count = $count + 1 }
 function dec() { $count -= 1 }
-aktion = Card([Column([
+$app(Card([Column([
   Text(`Count: ${$count}`, { variant: "large-heavy" }),
   Row([
     Button("−", { onClick: dec, variant: "ghost" }),
     Button("Increment", { onClick: inc, variant: "primary" })
   ], { gap: "s" })
-], { gap: "m" })])</code></pre>
+], { gap: "m" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -135,11 +135,11 @@ aktion = Card([Column([
         <span class="lay-demo-label">Live</span>
 <pre><code>$open = false
 function close() { $open = false }
-aktion = Column([
+$app(Column([
   Button("Open", { onClick: () =&gt; $open = true, variant: "primary" }),
   $open ? Callout("info", { title: "Now open", description: "Inline lambda opened me; a named action closes me." }) : Text("Closed."),
   $open ? Button("Close", { onClick: close, variant: "ghost" }) : Spacer()
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -153,11 +153,11 @@ aktion = Column([
         <span class="lay-demo-label">Live</span>
 <pre><code>$items = [{ id: 1, name: "Apples" }, { id: 2, name: "Pears" }, { id: 3, name: "Plums" }]
 function remove(id) { $items = $items.filter(x =&gt; x.id != id) }
-aktion = Card([Column($items.map(item =&gt; Row([
+$app(Card([Column($items.map(item =&gt; Row([
   Text(item.name),
   Spacer(),
   Button("Remove", { onClick: () =&gt; remove(item.id), variant: "ghost", size: "sm" })
-], { gap: "s" })), { gap: "s" })])</code></pre>
+], { gap: "s" })), { gap: "s" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -208,11 +208,11 @@ function del(id) {
   if (!confirm("Delete this item?")) { return }
   $items = $items.filter(x =&gt; x.id != id)
 }
-aktion = Card([Column($items.map(f =&gt; Row([
+$app(Card([Column($items.map(f =&gt; Row([
   Text(f.name),
   Spacer(),
   Button("Delete", { onClick: () =&gt; del(f.id), variant: "danger", size: "sm" })
-], { gap: "s" })), { gap: "s" })])</code></pre>
+], { gap: "s" })), { gap: "s" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

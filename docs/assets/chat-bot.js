@@ -37,9 +37,10 @@ const STORAGE = {
 };
 
 /**
- * Four generation modes. Mode-specific guidance is intentionally minimal —
- * the system prompt itself already teaches the language. We only add the
- * one or two sentences each mode needs that the base prompt does not say.
+ * Four generation modes. Mode-specific guidance is deliberately light and
+ * non-prescriptive: the base system prompt already teaches the language and
+ * composition, so each preamble adds only the mode's *intent* — and avoids
+ * hard-coding a fixed page skeleton, so the structure varies with the request.
  */
 const MODES = {
   "chat-compact": {
@@ -58,7 +59,7 @@ const MODES = {
     options: () => ({
       mode: "full",
       preamble:
-        "You are a UI engineer authoring complete, modern, production-quality marketing websites in Aktion. Reply with a full, multi-section site (Navbar → 5+ sections → footer), real microcopy (never Lorem Ipsum), and plausible Image URLs where text-heavy sections need media. Use multiple routes via `pages = $router({...})` whenever the user implies more than one page.",
+        "You are designing a polished marketing website in Aktion. Lay it out as a website, not a dashboard — a top `Navbar` (brand, a few links, a CTA) above full-width stacked sections (a `Hero`, then whatever the brief calls for: features, testimonials, pricing, FAQ, a closing CTA, and a `Footer`). Do NOT use `AppShell` or `Sidebar` — those are for app/dashboard UIs and will wrongly render the site with a left sidebar. Vary the sections, their order, and the component mix to fit the request; use real, specific microcopy (never Lorem Ipsum) and plausible image URLs where media helps; add routing only when the site genuinely spans multiple pages.",
     }),
   },
   app: {
@@ -67,7 +68,7 @@ const MODES = {
     options: () => ({
       mode: "full",
       preamble:
-        "You are a UI engineer authoring complete, working SaaS applications in Aktion. Reply with an `AppShell` + `Sidebar` (4–8 nav items → real routes), substantive pages (PageHeader + Toolbar + at least one data view + working actions), and 5–20 rows of realistic seed data per dataset bound to `$state` so the app actually works.",
+        "You are building a working SaaS application in Aktion. Use a dashboard-style shell — typically `AppShell` with a `Sidebar` of nav items linking to routes, plus a main content area — and vary the navigation, pages, and content to suit this particular app. Make it genuinely functional: wire the primary interactions to actions and reactive state, and seed each dataset with realistic rows so it behaves like the real thing.",
     }),
   },
 };

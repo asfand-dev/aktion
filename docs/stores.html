@@ -144,7 +144,7 @@ function CounterView() {
     ], { gap: "s" }),
   ], { gap: "m" })
 }
-aktion = CounterView()</code></pre>
+$app(CounterView())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -183,7 +183,7 @@ function Summary() {
     Text(`Total: ${$util.format(cart.total(), "currency")}`, { tone: "primary" }),
   ])
 }
-aktion = Column([Menu(), Summary()], { gap: "m" })</code></pre>
+$app(Column([Menu(), Summary()], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -222,7 +222,7 @@ function SignupForm() {
     Text(`Hello, ${form.name == "" ? "stranger" : form.name}!`, { variant: "large-heavy" }),
   ], { gap: "m" })
 }
-aktion = SignupForm()</code></pre>
+$app(SignupForm())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

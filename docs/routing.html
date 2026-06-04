@@ -88,7 +88,7 @@
   default:         NotFound()
 })
 
-aktion = AppShell(MainSidebar(), pages)</code></pre>
+$app(AppShell(MainSidebar(), pages))</code></pre>
       <p>The keys are matched in order; pick the one that fits the URL:</p>
       <table class="signature-table">
         <thead><tr><th>Pattern</th><th>Matches</th><th>Exposes</th></tr></thead>
@@ -186,7 +186,7 @@ nav = Sidebar([SidebarSection("Workspace", [
   SidebarItem("Calendar", { to: "/calendar", icon: "calendar" })
 ])])
 
-aktion = AppShell(nav, pages)</code></pre>
+$app(AppShell(nav, pages))</code></pre>
 
       <h2 id="tabs">Tabs vs routing</h2>
       <p>
@@ -199,13 +199,13 @@ aktion = AppShell(nav, pages)</code></pre>
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   Tabs([
     TabItem("overview", { label: "Overview", children: [Text("Sections, not pages — the URL never changes.")] }),
     TabItem("activity", { label: "Activity", children: [Text("Switching tabs keeps you on the same route.")] }),
     TabItem("settings", { label: "Settings", children: [Text("Reach for Router when each view needs its own URL.")] })
   ])
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

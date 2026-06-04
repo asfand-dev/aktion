@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Get started · Aktion</title>
-  <meta name="description" content="Get Aktion rendering in under a minute — drop in a CDN script tag or install from npm, mount the &lt;aktion-app&gt; element, and feed it an aktion = Column([...]) program." />
+  <meta name="description" content="Get Aktion rendering in under a minute — drop in a CDN script tag or install from npm, mount the &lt;aktion-app&gt; element, and feed it a $app(Column([...])) program." />
   <script>
     (function () {
       try {
@@ -69,7 +69,7 @@
           a <strong>CDN <code>&lt;script&gt;</code> tag</strong> into any HTML page, or
           <strong>install from npm</strong> and import it in your app. Either way you
           end up with one custom element, <code>&lt;aktion-app&gt;</code>, that turns a
-          compact <code>aktion = Column([&hellip;])</code> program into a real,
+          compact <code>$app(Column([&hellip;]))</code> program into a real,
           interactive UI inside its shadow DOM.
         </p>
       </header>
@@ -82,10 +82,10 @@
       </p>
 <pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
 
-&lt;aktion-app response="aktion = Column([
+&lt;aktion-app response="$app(Column([
   PageHeader('Hello', { subtitle: 'Generative UI in plain HTML' }),
   Card([CardHeader('It works'), Text('No build step required.')])
-])"&gt;&lt;/aktion-app&gt;</code></pre>
+]))"&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
         That single bundle ships the parser, the reactive runtime, every built-in
         component, the themes, and an optional Font Awesome loader. Nothing else to
@@ -103,7 +103,7 @@
 <pre><code>import "aktion-runtime"; // registers &lt;aktion-app&gt;
 
 // then render the element however your framework does it:
-// &lt;aktion-app response="aktion = Column([ Text('Hi from npm') ])"&gt;&lt;/aktion-app&gt;</code></pre>
+// &lt;aktion-app response="$app(Column([ Text('Hi from npm') ]))"&gt;&lt;/aktion-app&gt;</code></pre>
 
       <h2 id="first-program">Your first program</h2>
       <p>
@@ -112,19 +112,19 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>aktion = Column([
+<pre><code>$app(Column([
   PageHeader("Project Atlas", { subtitle: "Updated 2 hours ago" }),
   Card([
     CardHeader("Overview"),
     Text("Every Aktion program is a tree of components.")
   ]),
   Button("Get started", { variant: "primary", icon: "rocket" })
-], { gap: "l" })</code></pre>
+], { gap: "l" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
-        Every program starts with the <strong><code>aktion = &hellip;</code></strong>
-        entry binding &mdash; that expression is the root the element renders. The root
+        Every program must call <strong><code>$app(&hellip;)</code></strong>
+        &mdash; that expression is the root the element renders. The root
         is normally a <strong><code>Column([&hellip;])</code></strong>, the recommended
         layout primitive that stacks children top to bottom; its siblings are
         <code>Row</code>, <code>Center</code>, and <code>Grid</code>. Everything else
@@ -141,10 +141,10 @@
 <pre><code>const app = document.querySelector("aktion-app");
 
 app.setResponse(`
-  aktion = Column([
+  $app(Column([
     CardHeader("Loaded from JavaScript"),
     Text("Call setResponse() to replace the whole program.")
-  ])
+  ]))
 `);</code></pre>
       <p>
         For a streaming source (e.g. an LLM responding token by token), turn on the
@@ -180,11 +180,11 @@ app.removeAttribute("streaming");</code></pre>
         <span class="lay-demo-label">Live</span>
 <pre><code>$count = 0
 function inc() { $count = $count + 1 }
-aktion = Card([
+$app(Card([
   CardHeader("Counter", { subtitle: "Reactive state in a few lines" }),
   Text("Count: " + $count),
   Button("+1", { onClick: inc, variant: "primary" })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -207,11 +207,11 @@ aktion = Card([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live — this demo follows the page theme</span>
-<pre><code>aktion = Card([
+<pre><code>$app(Card([
   CardHeader("Themed surface", { subtitle: "One attribute restyles everything" }),
   Text("Try toggling the doc theme in the top bar."),
   Button("Action", { variant: "primary" })
-])</code></pre>
+]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

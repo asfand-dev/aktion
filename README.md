@@ -13,10 +13,10 @@ renderer for an LLM's response.
 ```html
 <script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"></script>
 <aktion-app theme="light">
-  aktion = Card([
+  $app(Card([
     CardHeader("Hello", { subtitle: "Generative UI in plain HTML" }),
     Markdown("This card was streamed in as **plain text**.")
-  ])
+  ]))
 </aktion-app>
 ```
 
@@ -130,8 +130,8 @@ Everything you need at runtime ships in a single bundle:
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`,
   `brutalist`, `skyline`) plus full custom-token support via CSS custom
   properties. **50+ design tokens** organised into `colors`, `radius`,
-  `font`, `motion`, and `elevation` groups. Brand the UI from inside
-  the script with `theme = $theme({...})`.
+  and `font` groups. Brand the UI from inside the script with
+  `$theme({...})` statement.
 - **`$i18n` factory.** `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })` builds a translation bundle keyed by language, with `{name}` placeholder interpolation.
 - **Font Awesome 6.7.2** auto-loaded — every `icon` prop accepts a Free
   Font Awesome name (no `fa-` prefix). Use `Icon(name, { variant?, size? })`
@@ -211,18 +211,18 @@ Three equivalent ways:
 
 ```html
 <!-- as an attribute -->
-<aktion-app response='aktion = Card([CardHeader("Hi")])'></aktion-app>
+<aktion-app response='$app(Card([CardHeader("Hi")]))'></aktion-app>
 
 <!-- as inner text (rendered on connect) -->
 <aktion-app>
-  aktion = Card([CardHeader("Hi")])
+  $app(Card([CardHeader("Hi")]))
 </aktion-app>
 
 <!-- as a property/method -->
 <script>
   const el = document.querySelector("aktion-app");
   el.setResponse(`
-    aktion = Column([greeting])
+    $app(Column([greeting]))
     greeting = Card([CardHeader("Hello", { subtitle: "Generative UI in plain HTML" })])
   `);
 </script>
@@ -406,13 +406,14 @@ pages = $router({
   default:     NotFound()
 })
 
-aktion = pages
+$app(pages)
 ```
 
 ### Key constructs
 
-- `aktion = …` — the reserved entry point. Every program renders from
-  it.
+- `$app(…)` — the reserved entry point. Every program renders from
+  it. It accepts a single root node, an array of nodes (rendered as
+  siblings), or variadic nodes.
 - `$name = value` — reactive state. One kind. Read or write with the
   same sigil. Inside action / effect / lambda bodies, assignment
   operators (`= += -= *= /= ??= ++ --`) are all allowed.
@@ -536,7 +537,7 @@ aktion = pages
   shadow root. Use only when the standard component library cannot
   express the design.
 - **Hoisting & streaming** — references resolve from the entire
-  top-level scope, not source order. Always emit `aktion = …` first
+  top-level scope, not source order. Always call `$app(…)` first
   so the reconciler has the page shell to attach streamed leaves to.
 - Comments: `//` line comments and `/* block */` comments — standard
   JS style.
@@ -576,7 +577,7 @@ chart  = LineChart({
   series: [Series("Events", $data.data?.daily?.events ?? [])]
 })
 
-aktion = Column([CardHeader("Analytics"), filter, kpi, chart])
+$app(Column([CardHeader("Analytics"), filter, kpi, chart]))
 ```
 
 Highlights:
@@ -591,7 +592,7 @@ Highlights:
   plus pluck (`$rows.title` → `[title1, title2, …]`).
 - Responsive prop maps on layout components:
   `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "l" })`.
-- Forward references are allowed — list `aktion = Column([...])` first
+- Forward references are allowed — call `$app(Column([...]))` first
   and let the children stream in beneath it.
 
 ### Declarative todo app
@@ -615,11 +616,11 @@ row = t => Card([Stack([
 ])])
 
 list  = $todos.map(t => row(t))
-aktion = Stack([
+$app(Stack([
   Input("draft-input", { placeholder: "What needs doing?", value: $draft }),
   Button("Add", { onClick: add, variant: "primary" }),
   list
-])
+]))
 ```
 
 ### Fine-grained reactivity
@@ -704,7 +705,7 @@ function Counter(label) {
 }
 
 // Two independent counters — each holds its own atom.
-aktion = Stack([Counter("A"), Counter("B")])
+$app(Stack([Counter("A"), Counter("B")]))
 ```
 
 Every call site accepts a universal `key` named argument. The renderer
@@ -734,7 +735,7 @@ function Counter() {
   ])
 }
 
-aktion = Counter()
+$app(Counter())
 ```
 
 - `$state(initial)` returns a `[value, setValue]` pair. `setValue(next)`
@@ -791,7 +792,7 @@ cart = $store({
 // Siblings with no relationship both talk to the same cart.
 function AddLatte() { return Button("Add", { onClick: () => cart.add({ price: 4.5 }) }) }
 function MiniCart() { return Text(`${cart.count()} items — ${$util.format(cart.total(), "currency")}`) }
-aktion = Column([AddLatte(), MiniCart()])
+$app(Column([AddLatte(), MiniCart()]))
 ```
 
 Reads are fine-grained and per-component (changing `cart.items` re-renders
@@ -811,7 +812,7 @@ tree. Two `LiveClock()` calls produce two independent intervals — and
 removing one stops only that one:
 
 ```js
-aktion = Stack([LiveClock("UTC"), LiveClock("Local")])
+$app(Stack([LiveClock("UTC"), LiveClock("Local")]))
 
 function LiveClock(label) {
   $now = $util.now()
@@ -952,7 +953,7 @@ board = KanbanBoard([
 ])
 follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2", "Who needs help?"])
 
-aktion = Column([dashHeader, kpis, board, follow])
+$app(Column([dashHeader, kpis, board, follow]))
 ```
 
 ### Adding your own components
@@ -1024,12 +1025,11 @@ el.setTheme({
 
 ### `$theme({...})` from inside a response
 
-A response can brand itself by assigning a `$theme({...})` call to the
-reserved top-level `theme` binding. The tokens land on the host as CSS
-variables on top of the base theme.
+A response can brand itself with a `$theme({...})` statement. The tokens land on the host as CSS variables on top
+of the base theme.
 
 ```js
-theme = $theme({
+$theme({
   colors: {
     primary: "#0969da",
     border:  "#d0d7de",
@@ -1043,12 +1043,12 @@ theme = $theme({
   radius: { button: "6px", input: "6px" }
 })
 
-aktion = Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])])
+$app(Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])]))
 ```
 
 `$theme` expects the **structured** form — top-level groups `colors` /
-`radius` / `font` / `motion` / `elevation` (plus metadata keys `name`
-and `direction`). Removing the `$theme(...)` line snaps the UI back to
+`radius` / `font` (plus metadata keys `name` and `direction`). Removing
+the `$theme(...)` line snaps the UI back to
 the base theme. Unknown keys are ignored silently, so typos in an
 LLM-emitted token map can never break the page.
 
@@ -1102,7 +1102,7 @@ kpis       = Stats([
   StatCard("Orders",  { value: "1,284", trend: "up",   delta: "+8%",  icon: "cart-shopping" }),
   StatCard("Refunds", { value: "12",   trend: "down", delta: "-3",   icon: "rotate-left" })
 ])
-aktion     = Stack([brandIcon, kpis, profileTab])
+$app(Stack([brandIcon, kpis, profileTab]))
 ```
 
 ---
@@ -1128,7 +1128,7 @@ nav = Row([
   NavLink("Users",     { to: "/users" })
 ], { gap: "s" })
 
-aktion = Stack([nav, pages])
+$app(Stack([nav, pages]))
 
 homePage      = Card([CardHeader("Welcome")])
 dashboardPage = Card([CardHeader("Dashboard")])
@@ -1231,10 +1231,10 @@ const i18nInstance = $i18n({
   currentLanguage: $lang,
   translations: { hi: { en: "Hi", fr: "Salut", de: "Hallo" } }
 })
-aktion = Column([
+$app(Column([
   Text(i18nInstance.t("hi")),
   Button("Deutsch", { onClick: () => { $lang = "de" } })
-])
+]))
 ```
 
 ---

@@ -892,10 +892,8 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-button[data-variant="danger"] { background: var(--rui-color-danger); color: #fff; }
 .rui-button[data-variant="danger"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-danger) 80%, black); }
 .rui-button[data-size="xs"] { padding: calc(var(--rui-button-padding-y) * 0.45) calc(var(--rui-button-padding-x) * 0.6); font-size: 11px; }
-.rui-button[data-size="sm"],
-.rui-button[data-size="small"] { padding: calc(var(--rui-button-padding-y) * 0.55) calc(var(--rui-button-padding-x) * 0.7); font-size: var(--rui-font-size-sm); }
-.rui-button[data-size="lg"],
-.rui-button[data-size="large"] { padding: calc(var(--rui-button-padding-y) * 1.4) calc(var(--rui-button-padding-x) * 1.3); font-size: var(--rui-font-size-lg); }
+.rui-button[data-size="sm"] { padding: calc(var(--rui-button-padding-y) * 0.55) calc(var(--rui-button-padding-x) * 0.7); font-size: var(--rui-font-size-sm); }
+.rui-button[data-size="lg"] { padding: calc(var(--rui-button-padding-y) * 1.4) calc(var(--rui-button-padding-x) * 1.3); font-size: var(--rui-font-size-lg); }
 .rui-button[data-size="xl"] { padding: calc(var(--rui-button-padding-y) * 1.6) calc(var(--rui-button-padding-x) * 1.5); font-size: var(--rui-font-size-lg); }
 .rui-button[data-full-width="true"] { width: 100%; }
 .rui-button[data-icon-only="true"] .rui-button-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
@@ -1395,6 +1393,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
     color-mix(in srgb, var(--rui-color-primary) 30%, var(--rui-color-surface-muted)));
   color: color-mix(in srgb, var(--rui-color-primary) 90%, var(--rui-color-text));
 }
+.rui-avatar[data-size="xs"] { width: 18px; height: 18px; font-size: 8px; max-width: 18px; max-height: 18px; }
 .rui-avatar[data-size="sm"] { width: 24px; height: 24px; font-size: 10px; max-width: 24px; max-height: 24px; }
 .rui-avatar[data-size="md"] { width: 36px; height: 36px; font-size: 13px; max-width: 36px; max-height: 36px; }
 .rui-avatar[data-size="lg"] { width: 52px; height: 52px; font-size: 18px; max-width: 52px; max-height: 52px; }

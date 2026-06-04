@@ -6,26 +6,18 @@
  * JavaScript or the `Util` namespace (see `./util.ts`).
  */
 
-export type BuiltinFn = (args: unknown[]) => unknown;
-
-/**
- * Empty registry kept as a structural placeholder so the parser's
- * synthetic `BuiltinCall` nodes (`__rui_assign__`, `__rui_postfix__`,
- * `__rui_prefix__`, `__rui_await__`) flow through the evaluator without
- * a surprise lookup.
- */
-export const dataBuiltins: Record<string, BuiltinFn> = {};
-
 /**
  * Marker emitted by the `Theme({...})` construct. Carries an arbitrary token
  * map that the element applies on top of the base theme between render
  * cycles. Distinct from `ComponentNode` so the renderer can ignore it (it is
  * a side-effect, not a piece of UI to draw).
  *
- * Authors declare a theme like any other top-level binding:
+ * Authors apply a theme with a bare top-level `$theme({...})` statement
+ * (no binding needed); the equivalent `theme = $theme({...})` form also
+ * works and registers the same reserved `theme` binding:
  *
- *   theme = Theme({ colors: { primary: "#0969da" }, radius: { button: "6px" } })
- *   root  = Stack([...])
+ *   $theme({ colors: { primary: "#0969da" }, radius: { button: "6px" } })
+ *   root = Stack([...])
  */
 export interface ThemeNode {
   kind: "Theme";

@@ -69,7 +69,7 @@ export const grammarSpec: GrammarSpec = {
   // …) lex as StateIdentifiers, so they are not in this keyword list. Every
   // entry is documented in `keywordDocs` so the playground can show a popup.
   keywords: [
-    "function", "if", "else", "switch", "case", "break",
+    "function", "import", "export", "if", "else", "switch", "case", "break",
     "continue", "for", "while", "do", "of", "in", "let", "var", "const",
     "await", "async", "return", "default", "try", "catch", "finally",
     "throw", "new", "typeof", "instanceof", "delete", "void",
@@ -119,9 +119,9 @@ export interface KeywordDoc {
  */
 export const keywordDocs: Record<string, KeywordDoc> = {
   aktion: {
-    summary: "Reserved entry-point binding — the root of the rendered UI tree.",
-    syntax: "aktion = Component(...)",
-    example: 'aktion = Stack([Heading("Hi"), Text("Welcome")])',
+    summary: "Legacy entry-point binding — prefer the `$app(...)` builtin to register the root of the rendered UI tree.",
+    syntax: "$app(Component(...))",
+    example: '$app(Stack([Heading("Hi"), Text("Welcome")]))',
   },
   route: {
     summary: "Reactive router handle — exposes path, params, query, and navigate().",
@@ -132,6 +132,16 @@ export const keywordDocs: Record<string, KeywordDoc> = {
     summary: "Dispatch a custom DOM event from the host element.",
     syntax: '$emit("event-name", detail)',
     example: 'Button("Save", () => $emit("saved", { id: $id }))',
+  },
+  import: {
+    summary: "Import named bindings (components, actions, hooks, `$state`) from another `.aktion` file. Multi-file projects are linked in the browser.",
+    syntax: 'import { Name, Other as Alias, $shared } from "./module.aktion"',
+    example: 'import { Button } from "./Button.aktion"\nimport { $count } from "./store.aktion"',
+  },
+  export: {
+    summary: "Mark a top-level declaration importable from another file. Anything not exported is private to its file.",
+    syntax: "export function Name(...) { ... } · export $state = ... · export name = ...",
+    example: 'export function Card2({ title }) {\n  return Card([CardHeader(title)])\n}',
   },
   function: {
     summary: "Declare a component or action — first-letter case does not matter.",

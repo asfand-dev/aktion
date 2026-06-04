@@ -32,6 +32,8 @@
  */
 
 import { parse } from "./parser/index.js";
+import type { Program } from "./parser/types.js";
+import { isCompiledProgram, type CompiledProgram } from "./compiler/runtime.js";
 import { applyDelta, type DeltaOp } from "./tooling/index.js";
 import {
   StateStore,
@@ -70,6 +72,15 @@ import {
 } from "./theme/index.js";
 import { componentStyles } from "./theme/styles.js";
 import { ensureFontAwesomeLoaded } from "./icons/index.js";
+import {
+  emitDevtoolsEvent,
+  getDevtoolsHook,
+  isDevtoolsActive,
+  nowMs,
+  unregisterDevtoolsApp,
+  type DevtoolsAppRecord,
+} from "./devtools/hook.js";
+import type { EffectEventPayload } from "./devtools/protocol.js";
 
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
@@ -168,6 +179,13 @@ function shallowEqualObject(a: Record<string, unknown>, b: Record<string, unknow
 let sharedStyleSheet: CSSStyleSheet | null = null;
 let sharedStyleSheetSupported: boolean | null = null;
 
+/**
+ * Monotonic counter used to mint a stable, human-readable DevTools id per
+ * `<aktion-app>` on the page (`aktion-app-1`, `aktion-app-2`, …). The id
+ * survives reconnects so the inspector keeps a consistent label.
+ */
+let devtoolsAppCounter = 0;
+
 function getSharedStyleSheet(): CSSStyleSheet | null {
   if (sharedStyleSheetSupported === false) return null;
   if (sharedStyleSheet) return sharedStyleSheet;
@@ -219,6 +237,20 @@ export class AktionElement extends HTMLElement {
   private rootEl: HTMLElement;
   private errorEl: HTMLElement;
   private currentResponse = "";
+  /**
+   * Pre-parsed AST injected by `mountCompiled(...)` (the multi-file linker
+   * path). When set, `replan()` consumes it instead of calling
+   * `parse(currentResponse)`, then clears it so a later string update
+   * (`setResponse` / `appendChunk`) re-parses normally. `null` for the
+   * ordinary streamed-string path.
+   */
+  private pendingCompiled: Program | null = null;
+  /**
+   * Module id of the compiled program currently mounted (from
+   * `CompiledProgram.path`), or `null` for the string path. Exposed via the
+   * `sourceId` getter so HMR / host tooling can target the right instances.
+   */
+  private compiledSourceId: string | null = null;
   private renderScheduled = false;
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
@@ -247,12 +279,19 @@ export class AktionElement extends HTMLElement {
   private forceFullRender = false;
   private parseErrors: string[] = [];
   /**
-   * Token keys most recently applied by an in-script `Theme({...})`
+   * Token keys most recently applied by an in-script `$theme({...})`
    * declaration. We remember them so the next render can clear stale
-   * overrides — otherwise switching from a `Theme(...)` block to the
+   * overrides — otherwise switching from a `$theme(...)` block to the
    * base theme would leave the previous tokens stuck on the host.
    */
   private scriptThemeKeys: ReadonlyArray<keyof ThemeTokens> = [];
+
+  /** Stable DevTools id for this element (`aktion-app-N`). */
+  private readonly devtoolsId = `aktion-app-${(devtoolsAppCounter += 1)}`;
+  /** Monotonic commit sequence for the render profiler (0 = initial mount). */
+  private devtoolsCommitId = 0;
+  /** True once this element has been registered with the DevTools hook. */
+  private devtoolsRegistered = false;
 
   constructor() {
     super();
@@ -294,6 +333,7 @@ export class AktionElement extends HTMLElement {
       state: this.state,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
+      onEffectEvent: (payload) => this.emitDevtoolsEffect(payload),
     });
     this.actionDeclRunner = new ActionDeclRunner({
       state: this.state,
@@ -342,6 +382,17 @@ export class AktionElement extends HTMLElement {
       // so the NEXT render sees the full change set — that keeps per-component
       // memoization correct across gated renders.
       for (const p of changedPaths) this.pendingChangedPaths.add(p);
+      // DevTools: stream every state flush to the inspector — even changes the
+      // render-gate skips — so the inspector always mirrors live `$state`.
+      if (isDevtoolsActive()) {
+        emitDevtoolsEvent({
+          kind: "state",
+          appId: this.devtoolsId,
+          snapshot: this.state.snapshot(),
+          changedPaths: [...changedPaths],
+          time: nowMs(),
+        });
+      }
       // Fine-grained render gate: re-render only when a changed reactive path
       // overlaps what the last render actually read. Until a baseline exists
       // (first paint / post-replan) always render. This is the payoff of
@@ -357,6 +408,7 @@ export class AktionElement extends HTMLElement {
 
   connectedCallback(): void {
     ensureFontAwesomeLoaded(this.root);
+    this.registerWithDevtools();
     this.applyThemeFromAttribute();
     this.startRouter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
@@ -383,6 +435,10 @@ export class AktionElement extends HTMLElement {
     this.effectRunner.reset();
     if (this.context) disposeContext(this.context);
     this.router.stop();
+    if (this.devtoolsRegistered) {
+      unregisterDevtoolsApp(this.devtoolsId);
+      this.devtoolsRegistered = false;
+    }
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -417,6 +473,10 @@ export class AktionElement extends HTMLElement {
   setResponse(text: string): void {
     if (text === this.currentResponse) return;
     this.currentResponse = text;
+    // Switching to the string path: drop any compiled artefact + its id so a
+    // not-yet-rendered `mountCompiled` can't win.
+    this.pendingCompiled = null;
+    this.compiledSourceId = null;
     this.programDirty = true;
     this.state.rebind([]);
     // Drop persisted component-local UI state — stale slots from the
@@ -490,6 +550,8 @@ export class AktionElement extends HTMLElement {
    */
   loadSnapshot(payload: { programText: string; state: Record<string, unknown> }): void {
     this.currentResponse = payload.programText;
+    this.pendingCompiled = null;
+    this.compiledSourceId = null;
     this.programDirty = true;
     // Clear *defaults* and any leftover values from the previous program
     // before seeding from the snapshot — without this, atoms declared
@@ -503,6 +565,54 @@ export class AktionElement extends HTMLElement {
     // will leave our hydrated values intact.
     this.state.hydrate(payload.state);
     this.scheduleRender();
+  }
+
+  /**
+   * Mount a linked / compiled program — the artefact produced by `linkProject`
+   * (multi-file modules) or `compileLite`. The pre-parsed AST is rendered
+   * directly, skipping the runtime parser; the runtime still re-validates
+   * against the active library on `replan()`, so a host that has called
+   * `registerComponents(...)` stays correct even if the program was linked
+   * against the default library.
+   *
+   * The string path (`setResponse`, `appendChunk`, `response`) is unaffected.
+   * Pass `state` to seed reactive values before the first render (SSR
+   * hydration; preserving live `$state` across a re-mount / hot edit).
+   */
+  mountCompiled(compiled: CompiledProgram, state?: Record<string, unknown>): void {
+    if (!isCompiledProgram(compiled)) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[aktion] mountCompiled() expected a CompiledProgram (from linkProject() " +
+          "or compileLite()); ignoring the call.",
+      );
+      return;
+    }
+    // Keep the source so `applyDelta`, `serializeState` round-trips, and a
+    // reconnect (which re-parses `currentResponse`) all keep working.
+    this.currentResponse = compiled.source;
+    this.compiledSourceId = compiled.path;
+    // Shallow-clone with a fresh errors array: `replan()` reassigns
+    // `program.errors`, and re-mounting the same artefact (e.g. replaying a
+    // cached payload) must not accumulate diagnostics on the shared object.
+    this.pendingCompiled = { ...compiled.program, errors: [...compiled.program.errors] };
+    this.programDirty = true;
+    this.state.rebind([]);
+    this.renderer.reset();
+    this.parseErrors = [];
+    // Seed values BEFORE the next render plans the program. `state.declare`
+    // only writes defaults for names that don't already exist, so hydrated
+    // values survive the replan (same mechanism as `loadSnapshot`).
+    if (state) this.state.hydrate(state);
+    this.scheduleRender();
+  }
+
+  /**
+   * Module id of the compiled program currently mounted, or `null` when the
+   * element is driven by the streamed-string path.
+   */
+  get sourceId(): string | null {
+    return this.compiledSourceId;
   }
 
   /** Append a streaming chunk and re-render. */
@@ -522,7 +632,7 @@ export class AktionElement extends HTMLElement {
     applyTheme(this, resolveTheme(theme));
     // Setting a new base theme wipes every token CSS variable, so the
     // tracker for in-script overrides starts fresh — the next render will
-    // reapply any `Theme({...})` from the active program on top of the
+    // reapply any `$theme({...})` from the active program on top of the
     // freshly-painted base.
     this.scriptThemeKeys = [];
     this.scheduleRender();
@@ -558,6 +668,8 @@ export class AktionElement extends HTMLElement {
 
   clear(): void {
     this.currentResponse = "";
+    this.pendingCompiled = null;
+    this.compiledSourceId = null;
     this.state.rebind([]);
     this.effectRunner.reset();
     // Drop component-local UI state (Tabs active pane, Popover open flag,
@@ -614,6 +726,81 @@ export class AktionElement extends HTMLElement {
     }));
   }
 
+  /* -------------------------------------------------------------------------- */
+  /*  DevTools bridge                                                           */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * Register this element with the global DevTools hook (idempotent). The
+   * exposed record only grants a debugger the operations it legitimately
+   * needs — read state, push an edit, read the program, force a render —
+   * never the raw runtime internals. A no-op when no hook is installed.
+   */
+  private registerWithDevtools(): void {
+    if (this.devtoolsRegistered) return;
+    // No hook yet? Stay unregistered and try again later (on the next render,
+    // or when a panel explicitly calls `connectDevtools()`). This is the
+    // late-attach path: the page opened DevTools *after* the app mounted.
+    const hook = getDevtoolsHook();
+    if (!hook) return;
+    const record: DevtoolsAppRecord = {
+      id: this.devtoolsId,
+      label: this.getAttribute("data-devtools-label") || this.id || this.devtoolsId,
+      element: this,
+      getState: () => this.state.snapshot(),
+      setState: (path, value) => this.applyDevtoolsStateEdit(path, value),
+      getProgram: () => this.currentResponse,
+      forceRender: () => this.requestFullRender(),
+    };
+    hook.registerApp(record);
+    this.devtoolsRegistered = true;
+  }
+
+  /**
+   * Public DevTools entry point: attach to a hook that was installed *after*
+   * this element mounted. The in-page panel calls this on every
+   * `<aktion-app>` it finds when it opens, so late-attaching DevTools picks up
+   * already-running apps. Idempotent; safe to call repeatedly.
+   */
+  connectDevtools(): void {
+    this.registerWithDevtools();
+    // Push a fresh state snapshot + commit so the just-opened panel has data
+    // immediately, even for an idle app that won't re-render on its own.
+    if (this.devtoolsRegistered) this.requestFullRender();
+  }
+
+  /**
+   * Apply a DevTools-originated edit to a reactive atom. Dotted paths
+   * (`user.name`) write through `setPath` so the root is reconstructed
+   * immutably and dependents wake; bare names go through `set`. Either way the
+   * normal reactive flush → render pipeline runs, so the edit behaves exactly
+   * like one an event handler would make.
+   */
+  private applyDevtoolsStateEdit(path: string, value: unknown): void {
+    const dot = path.indexOf(".");
+    if (dot < 0) {
+      this.state.set(path, value);
+      return;
+    }
+    const root = path.slice(0, dot);
+    const rest = path.slice(dot + 1).split(".");
+    this.state.setPath(root, rest, value);
+  }
+
+  /**
+   * Stamp `appId` + `time` onto an effect-runner payload and forward it to the
+   * hook. The runner already gated on `isDevtoolsActive()` before calling, so
+   * by the time we're here a frontend is listening.
+   */
+  private emitDevtoolsEffect(payload: EffectEventPayload): void {
+    emitDevtoolsEvent({
+      kind: "effect",
+      appId: this.devtoolsId,
+      time: nowMs(),
+      ...payload,
+    });
+  }
+
   private buildInlineStyle(): HTMLStyleElement {
     const style = document.createElement("style");
     style.textContent = componentStyles;
@@ -668,12 +855,13 @@ export class AktionElement extends HTMLElement {
   }
 
   /**
-   * Look for a `theme = Theme({...})` (or any binding returning a
-   * `ThemeNode`) in the active program. If found, write its tokens to the
-   * host as CSS custom properties so the in-script declaration layers on
-   * top of the attribute / `setTheme()` base. The previous render's keys
-   * are cleared first so removing a `Theme(...)` line snaps the renderer
-   * back to the underlying theme without a reload.
+   * Look for the reserved `theme` binding in the active program — set by a
+   * bare `$theme({...})` statement or an explicit `theme = $theme({...})`
+   * assignment (or any binding returning a `ThemeNode`). If found, write
+   * its tokens to the host as CSS custom properties so the in-script
+   * declaration layers on top of the attribute / `setTheme()` base. The
+   * previous render's keys are cleared first so removing a `$theme(...)`
+   * line snaps the renderer back to the underlying theme without a reload.
    */
   private applyScriptThemeOverrides(): void {
     if (this.scriptThemeKeys.length > 0) {
@@ -728,6 +916,18 @@ export class AktionElement extends HTMLElement {
     // could otherwise freeze the whole browser.
     if (this.context.budget) resetRuntimeBudget(this.context.budget);
 
+    // Late-attach: if a DevTools hook appeared after this app mounted, register
+    // now (cheap no-op once registered). Covers apps that re-render on their
+    // own (timers/effects/interaction) after the panel opens.
+    if (!this.devtoolsRegistered) this.registerWithDevtools();
+
+    // DevTools render profiler: only collect per-component records while a
+    // frontend is actually attached. Decide once per commit so the flag stays
+    // consistent across this whole pass, and arm the renderer accordingly.
+    const devtoolsActive = isDevtoolsActive();
+    this.renderer.setProfiling(devtoolsActive);
+    const commitStart = devtoolsActive ? nowMs() : 0;
+
     // Scope a fresh dependency tracker to this render so we learn exactly
     // which state paths the UI read — that read-set becomes the gate that
     // decides whether a future reactive write needs a re-render. Restored in
@@ -742,7 +942,7 @@ export class AktionElement extends HTMLElement {
     // does NOT schedule a re-render, so it can't loop forever.
     this.state.beginRenderPass();
     try {
-      // Apply any in-script `Theme({...})` declaration before render so the
+      // Apply any in-script `$theme({...})` declaration before render so the
       // tokens are in place when components measure themselves or read CSS
       // custom properties (charts that grab `--rui-chart-1`, etc.).
       this.applyScriptThemeOverrides();
@@ -754,7 +954,10 @@ export class AktionElement extends HTMLElement {
       // ordinary JS module variables instead of leaking across renders).
       resetMutableBindings(this.context);
 
-      // The program's entry-point binding is `aktion`.
+      // The program's entry point is the reserved `aktion` binding —
+      // populated by a `$app(...)` statement (or a legacy `aktion = …`
+      // assignment). It resolves to the root node, or an array of nodes the
+      // renderer mounts as sibling roots.
       const appBinding = this.context.bindings.get("aktion");
       let rootValue: unknown = null;
       if (appBinding) {
@@ -805,6 +1008,32 @@ export class AktionElement extends HTMLElement {
       this.renderer.endRender();
       this.restoreFocus(focusSnapshot);
       renderCompleted = true;
+
+      // DevTools: publish this commit (timing + per-component records) to the
+      // render profiler. `changedPaths`/`memoize` are still in scope here.
+      if (devtoolsActive) {
+        const components = this.renderer.drainProfilerRecords();
+        let renderedCount = 0;
+        let memoizedCount = 0;
+        for (const c of components) {
+          if (c.phase === "memo") memoizedCount += 1;
+          else renderedCount += 1;
+        }
+        emitDevtoolsEvent({
+          kind: "commit",
+          appId: this.devtoolsId,
+          commitId: this.devtoolsCommitId,
+          startTime: commitStart,
+          duration: nowMs() - commitStart,
+          changedPaths: [...changedPaths],
+          fullRender: !memoize,
+          initial: this.devtoolsCommitId === 0,
+          components,
+          rendered: renderedCount,
+          memoized: memoizedCount,
+        });
+        this.devtoolsCommitId += 1;
+      }
     } finally {
       this.context.trackedState = prevTracker;
       // A completed render's read-set becomes the new gating baseline. If the
@@ -828,7 +1057,7 @@ export class AktionElement extends HTMLElement {
         "WITHOUT scheduling a re-render, to prevent an infinite render loop. This " +
         "usually means a `$name = …` assignment is running in render position — e.g. " +
         "`$user = {…}` at the top of a lowercase `function` that's invoked to build " +
-        "the UI (`aktion = app()`), where the function runs as an action and re-writes " +
+        "the UI (`$app(page())`), where the function runs as an action and re-writes " +
         "the atom every render. Seed component-local state with a PascalCase component " +
         "(so `$name = …` becomes a set-once per-instance declaration) or the `$state` " +
         "hook, and only write state from event handlers / effects.",
@@ -919,7 +1148,12 @@ export class AktionElement extends HTMLElement {
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
 
-    const program = parse(this.currentResponse);
+    // Linked / compiled programs inject their pre-parsed AST here, skipping the
+    // parser entirely. The streamed-string path falls back to parse(). Consumed
+    // once — `mountCompiled` keeps `currentResponse` in sync so a reconnect /
+    // later string update re-parses the same program correctly.
+    const program = this.pendingCompiled ?? parse(this.currentResponse);
+    this.pendingCompiled = null;
     // Aktion 0.5 — schema validator runs alongside the parser
     // so multi-positional calls, unknown props, enum mismatches, and
     // legacy Theme tokens become fatal errors (mirroring the parser-level

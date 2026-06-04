@@ -31,6 +31,12 @@ export type TokenType =
  */
 export const KEYWORDS_AKTION = new Set([
   "function",
+  // Module syntax for multi-file `.aktion` programs (resolved by the in-browser
+  // linker / `linkProject`; a no-op for the streaming single-file runtime).
+  // `from`/`as` are NOT keywords — they stay usable as ordinary identifiers and
+  // are matched contextually by the import parser.
+  "import",
+  "export",
   // NOTE: `$effect` (the side-effect builtin) is `$`-prefixed, so it lexes as
   // a StateIdentifier and is recognised in the parser — it is NOT a keyword.
   "if",
@@ -323,34 +329,12 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Legacy `@name(...)` builtin sigil — removed. Surface a clear
-    // error so authors get a single squiggle pointing at the migration
-    // site rather than a cascade of confused parse errors.
-    if (ch === "@") {
-      const err = new Error(
-        'Legacy `@name(...)` builtins are removed. Use `$util.<name>(...)` ' +
-        'or the equivalent native JavaScript instead (e.g. `arr.length` for `$util.count(arr)`).',
-      ) as Error & { line?: number; column?: number };
-      err.line = line;
-      err.column = column;
-      throw err;
-    }
-
     // State identifier: $name. Reactive atoms are declared with `$name = value`
     // and referenced as `$name`.
     if (ch === "$") {
       const startLine = line;
       const startCol = column;
       advance();
-      if (peek() === "$") {
-        const err = new Error(
-          'Legacy "$$x" persistent reference is removed. ' +
-            'Reactive state is declared with "$x = value" and referenced as "$x".',
-        ) as Error & { line?: number; column?: number };
-        err.line = startLine;
-        err.column = startCol;
-        throw err;
-      }
       let name = "";
       while (i < source.length && isIdentifierChar(peek() ?? "")) {
         name += advance();

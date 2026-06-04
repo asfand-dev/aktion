@@ -27,7 +27,7 @@ import type { HttpRuntime } from "./http.js";
 import { createHttpResource, isEndpointResource } from "./http.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import type { ActionDeclRunner } from "./effects.js";
-import { dataBuiltins, type ThemeNode } from "./builtins.js";
+import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
 import { matchRoute, type Router } from "./router.js";
 import { findComponent } from "../library/registry.js";
@@ -936,6 +936,34 @@ function isHttpResourceCall(expr: Expression): boolean {
   );
 }
 
+/**
+ * `true` for a `$theme({...})` call — a runtime factory Invoke on the
+ * `theme` StateRef. A bare `$theme({...})` statement (no `theme =`
+ * binding) is treated as the reserved `theme` binding so the element can
+ * layer its tokens onto the host without an explicit assignment.
+ */
+function isThemeCall(expr: Expression): boolean {
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    expr.callee.name === "theme"
+  );
+}
+
+/**
+ * `true` for a `$app(...)` call — the runtime root builtin. A bare
+ * `$app(node)` / `$app([nodes])` / `$app(node, …)` statement registers the
+ * reserved root binding the element renders, replacing the legacy
+ * `aktion = …` root assignment.
+ */
+function isAppCall(expr: Expression): boolean {
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    expr.callee.name === "app"
+  );
+}
+
 function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void {
   switch (stmt.kind) {
     case "ComponentDeclaration": {
@@ -968,8 +996,30 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
       return;
     case "Await":
     case "Return":
-    case "ExpressionStatement":
       return;
+    case "Import":
+      // Module syntax is resolved + merged by the in-browser linker
+      // (`linkProject` / `linkProgram`) before the program reaches the runtime.
+      // The streaming single-file runtime has no module map, so a stray
+      // `import` in a streamed program is intentionally a no-op. The `exported`
+      // flag on declarations is likewise transparent (nothing reads it here).
+      return;
+    case "ExpressionStatement": {
+      // Bare runtime-root / theme statements register the reserved binding
+      // the element reads, so authors don't assign them to a name:
+      //   `$app(...)`    → the UI root      (replaces `aktion = …`)
+      //   `$theme({...})` → in-script theme override
+      // The legacy `aktion = …` / `theme = $theme({...})` assignment forms
+      // keep working via the Assignment case below; whichever appears last
+      // in source wins.
+      const inner = stmt.expression;
+      if (isAppCall(inner)) {
+        ctx.bindings.set("aktion", () => evaluate(inner, ctx));
+      } else if (isThemeCall(inner)) {
+        ctx.bindings.set("theme", () => evaluate(inner, ctx));
+      }
+      return;
+    }
     case "Assignment": {
       if (stmt.isState) return;
       ctx.expressions.set(stmt.identifier, stmt.expression);
@@ -996,9 +1046,14 @@ function isTopLevelImperativeStatement(stmt: Statement): boolean {
     case "DoWhileStatement":
     case "TryStatement":
     case "DestructureStatement":
-    case "ExpressionStatement":
     case "ThrowStatement":
       return true;
+    case "ExpressionStatement":
+      // Bare `$app(...)` / `$theme({...})` statements are reserved-binding
+      // registrations (handled in installStatementBinding), not imperative
+      // side effects — exclude them so they don't force the per-plan
+      // pure-literal `$state` reset that genuine top-level control flow does.
+      return !isAppCall(stmt.expression) && !isThemeCall(stmt.expression);
     default:
       return false;
   }
@@ -2099,6 +2154,16 @@ function evaluateInvoke(
         const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
         return { kind: "Theme", tokens } satisfies ThemeNode;
       }
+      case "app": {
+        // Runtime root. `$app(node)` renders that node; `$app([a, b])` or
+        // `$app(a, b)` render the nodes as sibling roots (the renderer wraps a
+        // list in a document fragment). The collected value populates the
+        // reserved `aktion` binding (see installStatementBinding) that the
+        // element renders each tick.
+        const args = expr.arguments;
+        if (args.length === 1) return evaluate(args[0]!, ctx);
+        return args.map((a) => evaluate(a, ctx));
+      }
       case "i18n": {
         const configArg = expr.arguments[0];
         const config = configArg ? evaluate(configArg, ctx) : null;
@@ -2613,7 +2678,7 @@ function evaluateComponentCall(
   // the callee resolves against *neither* the library nor any user
   // declaration we return a synthetic Skeleton node (§2 — anticipatory
   // skeletons). This handles mid-stream forward references like
-  // `aktion = App()` that arrive before the `function App() { ... }`
+  // `$app(App())` that arrive before the `function App() { ... }`
   // declaration has finished streaming: rather than dumping
   // `[unknown component: App]` into the DOM, the user sees a Skeleton
   // until the next render pass resolves the declaration.
@@ -3107,7 +3172,7 @@ function runActionDeclSync(
  *
  * Name case does NOT decide component-vs-action semantics for state seeding:
  * when this body runs *during a render* (e.g. a lowercase `function app()`
- * invoked via `aktion = app()`), its top-level `$x = expr` assignments are
+ * invoked via `$app(page())`), its top-level `$x = expr` assignments are
  * treated as set-once declarations — exactly like a PascalCase component —
  * so the state seeds once and survives later updates instead of being
  * re-written (and clobbered) on every re-render. Outside render (event
@@ -3412,10 +3477,10 @@ function evaluateBuiltinCall(
     return args[0] ? evaluate(args[0], ctx) : undefined;
   }
 
-  const fn = dataBuiltins[name];
-  if (!fn) return null;
-  const evaluated = args.map((a) => evaluate(a, ctx));
-  return fn(evaluated);
+  // Any other builtin name is unknown: the former `@`-builtin catalog was
+  // removed in favour of native JS / the `Util` namespace, so there is no
+  // registry left to look up.
+  return null;
 }
 
 /**
@@ -3876,20 +3941,17 @@ function toNumber(v: unknown): number {
  *
  * Only the structured form is accepted:
  *
- *   `Theme({ name, colors: {...}, radius: {...}, font: {...},
- *            motion: {...}, elevation: {...}, direction })`
+ *   `$theme({ name, colors: {...}, radius: {...}, font: {...}, direction })`
  *
  * Groups flatten with a stable naming convention:
  *   `colors.primary`     → `colorPrimary`
  *   `radius.md`          → `radiusMd`
- *   `font.heading`       → `fontHeading`
- *   `motion.default`     → `motionDefault`
- *   `elevation.2`        → `elevation2`
+ *   `font.family`        → `fontFamily`
  *
  * Top-level metadata keys (`name`, `direction`) are accepted but never
  * emitted as CSS variables. The legacy flat-shape form
- * (`Theme({colorPrimary: "...", ...})`) and free-form CSS variable
- * keys (`Theme({"--color-x": "..."})`) were removed in SUIS/2: the
+ * (`$theme({colorPrimary: "...", ...})`) and free-form CSS variable
+ * keys (`$theme({"--color-x": "..."})`) were removed in SUIS/2: the
  * runtime ignores unknown top-level keys silently to keep streaming
  * partial themes safe, but the schema validator surfaces them as
  * advisory warnings (§15) so authors can migrate.
@@ -3898,8 +3960,6 @@ const STRUCTURED_THEME_GROUPS = new Set([
   "colors",
   "radius",
   "font",
-  "motion",
-  "elevation",
 ]);
 const THEME_METADATA_KEYS = new Set(["name", "direction"]);
 

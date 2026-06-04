@@ -11,7 +11,6 @@
  *
  *   - `formatProgram(source)` — canonical pretty-printer.
  *   - `applyDelta(source, ops)` — structured edit protocol (§14).
- *   - `migrateV1(source)` — best-effort v1 → 0.5 codemod (Appendix A).
  *   - `inspectAST(source)` — Committed + Drafting AST snapshot.
  *   - `getDiagnostics(source, library)` — language-service diagnostics.
  *   - `getCompletions(source, position, library)` — completions.
@@ -22,8 +21,6 @@ export { formatProgram } from "./formatter.js";
 export type { FormatResult } from "./formatter.js";
 export { applyDelta } from "./delta.js";
 export type { DeltaOp, DeltaResult } from "./delta.js";
-export { migrateV1 } from "./codemod.js";
-export type { MigrateV1Result } from "./codemod.js";
 export { inspectAST, inspectProgram } from "./inspector.js";
 export type { InspectorBinding, InspectorView } from "./inspector.js";
 export {

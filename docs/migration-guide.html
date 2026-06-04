@@ -169,7 +169,7 @@
         <p class="lead">
           Already shipping with React, Vue, Angular, Svelte, Solid, or plain HTML?
           You can keep almost all of your mental model. Aktion is JavaScript with
-          three additions: reactive <code>$</code>variables, <code>aktion = …</code>
+          three additions: reactive <code>$</code>variables, <code>$app(…)</code>
           as the render entry point, and components called with named arguments.
           Pick your framework below for a concept&#8209;by&#8209;concept walkthrough.
         </p>
@@ -207,7 +207,7 @@
       <h2 id="mental-model">The mental model</h2>
       <p>
         Aktion is a thin DSL on top of JavaScript. A program produces a tree of
-        UI by assigning to the reserved binding <code>aktion = …</code>. Reactive
+        UI by calling <code>$app(…)</code>. Reactive
         state is any identifier prefixed with <code>$</code>; whenever it changes
         the runtime re&#8209;renders the smallest part of the tree that depended
         on it. Components are plain JavaScript functions that <code>return</code> a
@@ -217,7 +217,7 @@
       <table class="signature-table">
         <thead><tr><th>You used to&hellip;</th><th>In Aktion&hellip;</th></tr></thead>
         <tbody>
-          <tr><td>Mount a root with <code>createRoot(...).render(&lt;App /&gt;)</code></td><td>Write <code>aktion = App()</code></td></tr>
+          <tr><td>Mount a root with <code>createRoot(...).render(&lt;App /&gt;)</code></td><td>Write <code>$app(App())</code></td></tr>
           <tr><td>Declare a reactive value (<code>useState</code> / <code>ref</code> / <code>signal</code>)</td><td>Just write <code>$count = 0</code></td></tr>
           <tr><td>Wire an event with <code>onClick={...}</code> / <code>@click</code></td><td>Pass a named arg: <code>{ onClick: () =&gt; … }</code></td></tr>
           <tr><td>Render a list with <code>.map(…)</code></td><td>Same: <code>$items.map(x =&gt; …)</code></td></tr>
@@ -255,7 +255,7 @@ export default function App() {
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -277,7 +277,7 @@ defineProps({ name: String })
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -299,7 +299,7 @@ export class Hello {
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -320,7 +320,7 @@ aktion = Hello("Ada")</code></pre>
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -339,7 +339,7 @@ render(() =&gt; &lt;Hello name="Ada" /&gt;, root);</code></pre>
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -360,7 +360,7 @@ document.body.append(hello('Ada'));</code></pre>
 <pre><code>function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</code></pre>
+$app(Hello("Ada"))</code></pre>
           </div>
         </div>
       </div>
@@ -371,7 +371,7 @@ aktion = Hello("Ada")</code></pre>
 <script type="application/x-aktion">function Hello(name) {
   return Text(`Hello, ${name}!`, { variant: "large-heavy" })
 }
-aktion = Hello("Ada")</script>
+$app(Hello("Ada"))</script>
         </div>
       </div>
 
@@ -479,7 +479,7 @@ return &lt;button onClick={() =&gt; setCount(c =&gt; c + 1)}&gt;{count}&lt;/butt
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -493,7 +493,7 @@ aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -508,7 +508,7 @@ aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -522,7 +522,7 @@ aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -536,7 +536,7 @@ aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -552,7 +552,7 @@ btn.addEventListener('click', () =&gt; { count++; btn.textContent = count; });</
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$count = 0
-aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></pre>
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
           </div>
         </div>
       </div>
@@ -560,7 +560,7 @@ aktion = Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 })</code></
         <div class="mig-live-head">Live</div>
         <div class="mig-live-body">
 <script type="application/x-aktion">$count = 0
-aktion = Button(`Count: ${$count}`, { onClick: () => $count = $count + 1, variant: "primary" })</script>
+$app(Button(`Count: ${$count}`, { onClick: () => $count = $count + 1, variant: "primary" }))</script>
         </div>
       </div>
 
@@ -572,7 +572,7 @@ aktion = Button(`Count: ${$count}`, { onClick: () => $count = $count + 1, varian
       <pre><code>$first = "Ada"
 $last  = "Lovelace"
 fullName = `${$first} ${$last}`     // recomputes when either changes
-aktion   = Text(fullName)</code></pre>
+$app(Text(fullName))</code></pre>
 
       <!-- ===================== EVENTS ===================== -->
       <h2 id="events">Event handlers</h2>
@@ -676,11 +676,11 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading
+<pre><code>$app($loading
   ? Spinner()
   : $items.length === 0
     ? EmptyState("Nothing yet")
-    : List($items)</code></pre>
+    : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -694,11 +694,11 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading
+<pre><code>$app($loading
   ? Spinner()
   : $items.length === 0
     ? EmptyState("Nothing yet")
-    : List($items)</code></pre>
+    : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -712,11 +712,11 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading
+<pre><code>$app($loading
   ? Spinner()
   : $items.length === 0
     ? EmptyState("Nothing yet")
-    : List($items)</code></pre>
+    : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -730,11 +730,11 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading
+<pre><code>$app($loading
   ? Spinner()
   : $items.length === 0
     ? EmptyState("Nothing yet")
-    : List($items)</code></pre>
+    : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -748,7 +748,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading ? Spinner() : List($items)</code></pre>
+<pre><code>$app($loading ? Spinner() : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -760,7 +760,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $loading ? Spinner() : List($items)</code></pre>
+<pre><code>$app($loading ? Spinner() : List($items))</code></pre>
           </div>
         </div>
       </div>
@@ -785,7 +785,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -797,7 +797,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -811,7 +811,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -825,7 +825,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -837,7 +837,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -853,7 +853,7 @@ aktion   = Text(fullName)</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = Column($todos.map(t =&gt; Text(t.title)))</code></pre>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
           </div>
         </div>
       </div>
@@ -866,7 +866,7 @@ aktion   = Text(fullName)</code></pre>
   { id: 2, title: "Ship it" },
   { id: 3, title: "Celebrate" }
 ]
-aktion = Column($todos.map(t => Card([Text(t.title)])), { gap: "s" })</script>
+$app(Column($todos.map(t => Card([Text(t.title)])), { gap: "s" }))</script>
         </div>
       </div>
 
@@ -889,7 +889,7 @@ aktion = Column($todos.map(t => Card([Text(t.title)])), { gap: "s" })</script>
         <div class="mig-pane">
           <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$name = ""
-aktion = Input("name", { value: $name, placeholder: "Your name" })</code></pre>
+$app(Input("name", { value: $name, placeholder: "Your name" }))</code></pre>
         </div>
       </div>
 
@@ -1009,12 +1009,12 @@ return isLoading ? &lt;Spinner /&gt; : &lt;List items={data} /&gt;;</code></pre>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$todos = $http({ url: "/api/todos" })
-aktion = Async($todos, {
+$app(Async($todos, {
   loading: Spinner(),
   error:   ErrorState("Couldn't load"),
   empty:   EmptyState("No todos yet"),
   data:    List($todos.data)
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1041,7 +1041,7 @@ aktion = Async($todos, {
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$todos = $http({ url: "/api/todos" })
-aktion = Async($todos, { data: List($todos.data) })</code></pre>
+$app(Async($todos, { data: List($todos.data) }))</code></pre>
           </div>
         </div>
       </div>
@@ -1058,7 +1058,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>$todos = $http({ url: "/api/todos" })
-aktion = Async($todos, { data: List($todos.data) })</code></pre>
+$app(Async($todos, { data: List($todos.data) }))</code></pre>
           </div>
         </div>
       </div>
@@ -1122,11 +1122,11 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1141,11 +1141,11 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1160,11 +1160,11 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1176,11 +1176,11 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1195,11 +1195,11 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   "/users/:id": User({ id: params.id }),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1211,10 +1211,10 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
           </div>
           <div class="mig-pane">
             <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion = $router({
+<pre><code>$app($router({
   "/":          Home(),
   default:      NotFound()
-})</code></pre>
+}))</code></pre>
           </div>
         </div>
       </div>
@@ -1224,7 +1224,7 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
       <p>
         Skip CSS frameworks entirely &mdash; every component already speaks the
         active theme&rsquo;s tokens. Switch themes with
-        <code>aktion.theme = $theme({ … })</code>, override single tokens, or
+        <code>$theme({ … })</code>, override single tokens, or
         attach raw class / style to any component with
         <code>Css(child, { class, style })</code>.
       </p>
@@ -1240,8 +1240,8 @@ aktion = Async($todos, { data: List($todos.data) })</code></pre>
         </div>
         <div class="mig-pane">
           <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
-<pre><code>aktion.theme = $theme({ colors: { primary: "#2563eb" } })
-aktion = Button("Save", { variant: "primary" })
+<pre><code>$theme({ colors: { primary: "#2563eb" } })
+$app(Button("Save", { variant: "primary" }))
 
 // Escape hatch when you really need raw CSS:
 Css(Button("Save"), { class: "my-button", style: "padding: 12px;" })</code></pre>
@@ -1310,10 +1310,10 @@ function Card({ children }) { return &lt;div className="card"&gt;{children}&lt;/
 <pre><code>function MyCard(children) {
   return Box(children, { padding: "m", background: "surface", border: "default" })
 }
-aktion = MyCard([
+$app(MyCard([
   CardHeader("Hi"),
   Text("Body content")
-])</code></pre>
+]))</code></pre>
         </div>
       </div>
 
@@ -1322,7 +1322,7 @@ aktion = MyCard([
       <table class="signature-table">
         <thead><tr><th>Concept</th><th>React / Vue / Angular / Svelte / Solid</th><th>Aktion</th></tr></thead>
         <tbody>
-          <tr><td>Render root</td><td><code>createRoot().render(&lt;App/&gt;)</code></td><td><code>aktion = App()</code></td></tr>
+          <tr><td>Render root</td><td><code>createRoot().render(&lt;App/&gt;)</code></td><td><code>$app(App())</code></td></tr>
           <tr><td>Component</td><td>function / class / SFC</td><td><code>function Name(args) { return … }</code></td></tr>
           <tr><td>Local state</td><td><code>useState</code> / <code>ref</code> / <code>signal</code></td><td><code>$count = 0</code></td></tr>
           <tr><td>Derived</td><td><code>useMemo</code> / <code>computed</code></td><td>Plain expression: <code>full = `${$f} ${$l}`</code></td></tr>
@@ -1334,7 +1334,7 @@ aktion = MyCard([
           <tr><td>HTTP</td><td>TanStack Query / VueUse / HttpClient</td><td><code>$http({ url, method, query, body })</code></td></tr>
           <tr><td>Routing</td><td>React Router / Vue Router / Angular Router</td><td><code>$router({ "/": Home(), default: NotFound() })</code></td></tr>
           <tr><td>Persistence</td><td><code>localStorage</code> / cookies-js</td><td><code>Storage.set / .get / .session / .cookies</code></td></tr>
-          <tr><td>Theme</td><td>ThemeProvider + Tailwind / styled-components</td><td><code>aktion.theme = $theme({ … })</code></td></tr>
+          <tr><td>Theme</td><td>ThemeProvider + Tailwind / styled-components</td><td><code>$theme({ … })</code></td></tr>
           <tr><td>Outbound event</td><td><code>$emit</code> / <code>EventEmitter</code> / dispatcher</td><td><code>$emit("name", { detail })</code></td></tr>
           <tr><td>Children</td><td>JSX children / slots</td><td>Pass an array of nodes as the first positional argument</td></tr>
         </tbody>
@@ -1344,8 +1344,8 @@ aktion = MyCard([
         <strong>Common pitfalls when porting</strong>
         Forgetting the <code>$</code> on state names &mdash; without it the value
         is a plain constant and won&rsquo;t trigger re&#8209;render. Calling a
-        component without parentheses (<code>aktion = App</code>) &mdash; Aktion
-        won&rsquo;t call it for you, write <code>aktion = App()</code>. Using
+        component without parentheses (<code>$app(App)</code>) &mdash; Aktion
+        won&rsquo;t call it for you, write <code>$app(App())</code>. Using
         positional arguments past the first one &mdash; everything after the
         leading positional goes into a single <code>{ options }</code> object.
       </div>

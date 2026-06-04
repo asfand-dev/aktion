@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Themes · Aktion</title>
-  <meta name="description" content="Ship Aktion apps with seven polished built-in themes — light, dark, neon, pastel, glass, brutalist, skyline — switch with one attribute, and override any design token in-program with $theme({...}): colors, radius, typography, motion, elevation." />
+  <meta name="description" content="Ship Aktion apps with seven polished built-in themes — light, dark, neon, pastel, glass, brutalist, skyline — switch with one attribute, and override any design token in-program with $theme({...}): colors, radius, typography." />
   <script>
     (function () {
       try {
@@ -68,8 +68,8 @@
           Aktion ships with polished <strong>built&#8209;in themes</strong> &mdash;
           switch between them with one attribute on <code>&lt;aktion-app&gt;</code>.
           Need a brand of your own? Override any design token in&#8209;program with
-          <strong><code>$theme({&hellip;})</code></strong>: colors, radius, typography,
-          motion. No raw CSS, no stylesheet plumbing &mdash; just a token map.
+          <strong><code>$theme({&hellip;})</code></strong>: colors, radius, and
+          typography. No raw CSS, no stylesheet plumbing &mdash; just a token map.
         </p>
       </header>
 
@@ -104,7 +104,7 @@
       <h2 id="custom-tokens">Custom tokens with <code>$theme({&hellip;})</code></h2>
       <p>
         Assign <code>$theme({&hellip;})</code> to a top&#8209;level binding named
-        <code>theme</code> (alongside your <code>aktion</code> root). The runtime
+        <code>theme</code> (alongside your <code>$app(&hellip;)</code> root). The runtime
         detects it, writes those tokens to the host as CSS custom properties, and
         reskins the rest of the UI instantly. Tokens live in groups: override just
         <code>colors.primary</code> and every button, badge, link, and focus ring
@@ -112,8 +112,8 @@
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = $theme({ colors: { primary: "#7c3aed", primaryHover: "#6d28d9" } })
-aktion = Column([
+<pre><code>$theme({ colors: { primary: "#7c3aed", primaryHover: "#6d28d9" } })
+$app(Column([
   Card([
     CardHeader("Purple brand", { subtitle: "Only colors.primary changed" }),
     Row([
@@ -122,7 +122,7 @@ aktion = Column([
       Badge("New", { tone: "primary" })
     ], { gap: "s" })
   ])
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -132,11 +132,11 @@ aktion = Column([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = $theme({
+<pre><code>$theme({
   colors: { primary: "#0d9488", primaryHover: "#0f766e", accent: "#f59e0b" },
   radius: { md: "18px", button: "999px" }
 })
-aktion = Column([
+$app(Column([
   Card([
     CardHeader("Mint &amp; rounded"),
     Text("Bigger card radius, pill-shaped buttons."),
@@ -146,7 +146,7 @@ aktion = Column([
       Badge("Beta", { tone: "warning" })
     ], { gap: "s" })
   ])
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -156,18 +156,18 @@ aktion = Column([
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
-<pre><code>theme = $theme({
+<pre><code>$theme({
   colors: { primary: "#dc2626", primaryHover: "#b91c1c" },
   font:   { family: "Georgia, 'Times New Roman', serif", familyHeading: "Georgia, serif" },
   radius: { md: "2px", button: "2px" }
 })
-aktion = Column([
+$app(Column([
   Card([
     CardHeader("Editorial", { subtitle: "Serif type, crimson accent, sharp corners" }),
     Text("$theme({...}) overrides only the tokens you pass — everything else inherits the host theme."),
     Row([Button("Read more", { variant: "primary" }), Badge("Featured", { tone: "danger" })], { gap: "s" })
   ])
-], { gap: "m" })</code></pre>
+], { gap: "m" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -185,8 +185,6 @@ aktion = Column([
           <tr><td><code>colors</code></td><td><code>primary</code> · <code>primaryHover</code> · <code>accent</code> · <code>bg</code> · <code>surface</code> · <code>text</code> · <code>border</code> · <code>success</code> · <code>warning</code> · <code>danger</code> · <code>focusRing</code></td><td>Surface, brand, semantic, and focus&#8209;ring colors.</td></tr>
           <tr><td><code>radius</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>pill</code> · <code>button</code> · <code>input</code></td><td>Corner rounding per element class.</td></tr>
           <tr><td><code>font</code></td><td><code>family</code> · <code>familyHeading</code> · <code>familyMono</code> · <code>sizeBase</code> · <code>weightBody</code> · <code>weightHeading</code></td><td>Type families, sizes, weights, and heading treatment.</td></tr>
-          <tr><td><code>motion</code></td><td><code>&hellip;</code></td><td>Transition timing shared by hover / focus animations.</td></tr>
-          <tr><td><code>elevation</code></td><td><code>&hellip;</code></td><td>Shadow depth for raised surfaces.</td></tr>
         </tbody>
       </table>
       <p>
@@ -202,7 +200,7 @@ aktion = Column([
         There are two layers. The <strong>host</strong> picks a base with the
         <code>theme="&hellip;"</code> attribute (one of the seven built&#8209;ins). A
         program can then layer a <strong>per&#8209;response</strong> override on top by
-        binding <code>theme = $theme({&hellip;})</code> &mdash; it applies <em>only</em>
+        writing a bare <code>$theme({&hellip;})</code> statement &mdash; it applies <em>only</em>
         the tokens you pass, so everything else still inherits the host theme. The
         in&#8209;program <code>$theme({&hellip;})</code> wins for the tokens it sets;
         remove the line and the UI snaps back to the host theme. Because the override

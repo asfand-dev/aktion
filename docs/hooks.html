@@ -75,7 +75,7 @@
       <h2 id="what">What is a hook</h2>
       <p>
         Hooks run <strong>inside a component</strong> &mdash; a function used in
-        render position, such as <code>aktion = Counter()</code>. Each time a
+        render position, such as <code>$app(Counter())</code>. Each time a
         component renders, its hooks run in the same order and reconnect to that
         instance&rsquo;s own state slots. Two <code>Counter()</code> siblings
         therefore keep entirely independent state, exactly as two React
@@ -128,7 +128,7 @@
     ], { gap: "s" }),
   ], { gap: "m" })
 }
-aktion = Counter()</code></pre>
+$app(Counter())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -162,7 +162,7 @@ aktion = Counter()</code></pre>
     Text(`Total: ${$util.format(total, "currency")}`, { variant: "large-heavy", tone: "primary" }),
   ], { gap: "m" })
 }
-aktion = Cart()</code></pre>
+$app(Cart())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -195,7 +195,7 @@ function Panel() {
     details.on ? Card([Text("Hooks compose just like they do in React.")]) : null,
   ], { gap: "m" })
 }
-aktion = Panel()</code></pre>
+$app(Panel())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -227,7 +227,7 @@ function Demo() {
     ], { gap: "s" }),
   ], { gap: "m" })
 }
-aktion = Demo()</code></pre>
+$app(Demo())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

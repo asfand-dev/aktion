@@ -161,7 +161,7 @@ pageHeader = PageHeader("Engineering analytics", {
   status: Badge("Realtime", { tone: "success", icon: "circle", size: "sm" })
 })
 
-aktion = Stack([
+$app(Stack([
   pageHeader,
   kpiStrip,
   gaugeGrid,
@@ -169,7 +169,7 @@ aktion = Stack([
   chartGrid,
   chartGrid2,
   bottomGrid
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Media gallery",
@@ -269,7 +269,7 @@ followUps = FollowUpBlock([
   FollowUpItem("Add a 2-day Reykjavík extension")
 ], { label: "Plan your trip" })
 
-aktion = Stack([
+$app(Stack([
   hero,
   kpis,
   Card([SectionHeader("Daily highlights", { subtitle: "Aurora · summer 2026", eyebrow: "PREVIEW",
@@ -279,7 +279,7 @@ aktion = Stack([
   mapCard,
   followUps,
   zoomBox
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Multi-page routing",
@@ -294,7 +294,7 @@ aktion = Stack([
 $visits = 0
 $lastEdited = "—"
 
-aktion = Stack([nav, main])
+$app(Stack([nav, main]))
 
 nav = Card([
   Stack([
@@ -541,7 +541,7 @@ confirmSheet = Drawer("Delete workspace?", {
   ]
 })
 
-aktion = Stack([header, saveBanner, tabs, confirmSheet], { direction: "column", gap: "l" })`,
+$app(Stack([header, saveBanner, tabs, confirmSheet], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Kanban board",
@@ -596,11 +596,11 @@ addForm = Card([
   ], { direction: "row", gap: "m" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Kanban board", { subtitle: "Drag cards between columns — state autosaves", breadcrumbs: ["Workspace", "Board"] }),
   addForm,
   board
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Analytics pulse",
@@ -659,11 +659,11 @@ tabs = Tabs([
   TabItem("feed",     { label: "Feed",     children: [feedTab] })
 ], { defaultValue: $tab })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Analytics pulse", { subtitle: "Realtime event dashboard", breadcrumbs: ["Workspace", "Analytics"],
     actions: [rangeSelector, Button("Export", { variant: "ghost", icon: "file-csv" })] }),
   tabs
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Recipe explorer",
@@ -713,12 +713,12 @@ recipeGrid = Grid(
 
 emptyState = filtered.length == 0 ? EmptyState("No recipes found", { description: "Try a different search or filter.", icon: "utensils" }) : null
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Recipe explorer", { subtitle: \`\${filtered.length} of \${$recipes.length} recipes\`, breadcrumbs: ["Kitchen", "Browse"] }),
   toolbar,
   recipeGrid,
   emptyState
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Expense tracker",
@@ -810,11 +810,11 @@ tabs = Tabs([
   TabItem("settings", { label: "Settings", children: [settingsView] })
 ], { defaultValue: $tab })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Expense tracker", { subtitle: \`\${remaining > 0 ? "On track" : "Over budget"} · $\${remaining} remaining\`, breadcrumbs: ["Finance", "Budget"] }),
   kpis,
   tabs
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
   {
     name: "Todos CRUD",
@@ -906,14 +906,14 @@ list = Card([
   })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Todos", {
     subtitle: "Create, toggle, edit and delete — every action is a real $http({...}) call",
     breadcrumbs: ["Demos", "Todos CRUD"]
   }),
   composer,
   list
-], { direction: "column", gap: "l" })`,
+], { direction: "column", gap: "l" }))`,
   },
 ];
 

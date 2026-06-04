@@ -37,6 +37,8 @@ import {
   type InstanceStateSlot,
   type RenderHelpers,
 } from "../library/types.js";
+import { nowMs } from "../devtools/hook.js";
+import type { ComponentRenderRecord, RenderPhase } from "../devtools/protocol.js";
 
 export interface RenderOptions {
   library: ComponentLibrary;
@@ -169,7 +171,54 @@ export class Renderer {
   /** Whether memoization may apply this render (false on mount / replan / notify). */
   private memoEnabled = false;
 
+  /* ---- DevTools render profiler (dormant unless enabled) ---------------- */
+
+  /**
+   * When `true`, each render appends a {@link ComponentRenderRecord} per
+   * visited instance to {@link profilerRecords}. Toggled by the host element
+   * once a DevTools frontend is actually listening, so a closed inspector
+   * costs nothing. See `setProfiling`.
+   */
+  private profiling = false;
+  /** Per-commit profiler records, drained by the host after each render. */
+  private profilerRecords: ComponentRenderRecord[] = [];
+  /**
+   * Every instance key seen in a *previous* render, so the profiler can label
+   * a record `mount` (first sighting) vs `update`. Pruned in `endRender` so it
+   * tracks exactly the live tree. Only maintained while profiling.
+   */
+  private profiledInstances = new Set<string>();
+
   constructor(private options: RenderOptions) {}
+
+  /**
+   * Enable/disable the render profiler. The host element flips this on when a
+   * DevTools frontend subscribes and off when it disconnects, so the common
+   * (no-DevTools) path never allocates a record or reads the clock.
+   */
+  setProfiling(enabled: boolean): void {
+    this.profiling = enabled;
+    if (!enabled) {
+      this.profilerRecords = [];
+      this.profiledInstances.clear();
+    }
+  }
+
+  /** Hand the current commit's component records to the host, then clear. */
+  drainProfilerRecords(): ComponentRenderRecord[] {
+    const records = this.profilerRecords;
+    this.profilerRecords = [];
+    return records;
+  }
+
+  /** Tree depth for flamegraph indentation — one level per `#instance` segment. */
+  private depthOf(instancePath: string): number {
+    let depth = 0;
+    for (let i = 0; i < instancePath.length; i += 1) {
+      if (instancePath[i] === "#") depth += 1;
+    }
+    return depth;
+  }
 
   /**
    * Swap the component library backing this renderer. Used when the host
@@ -223,6 +272,8 @@ export class Renderer {
     }
     this.instancesWithHooks.clear();
     this.aliveInstances = new Set<string>();
+    this.profilerRecords = [];
+    this.profiledInstances.clear();
   }
 
   /**
@@ -237,6 +288,7 @@ export class Renderer {
     this.aliveInstances = new Set<string>();
     this.changedPaths = opts.changedPaths ?? new Set();
     this.memoEnabled = opts.memoize ?? false;
+    if (this.profiling) this.profilerRecords = [];
   }
 
   /**
@@ -297,6 +349,36 @@ export class Renderer {
     for (const instanceKey of [...this.memoCache.keys()]) {
       if (!alive.has(instanceKey)) this.memoCache.delete(instanceKey);
     }
+    // Prune the profiler's mount/update tracker so a remounted instance is
+    // correctly reported as a fresh `mount`.
+    if (this.profiling) {
+      for (const instanceKey of [...this.profiledInstances]) {
+        if (!alive.has(instanceKey)) this.profiledInstances.delete(instanceKey);
+      }
+    }
+  }
+
+  /** Record one component instance's contribution to the current commit. */
+  private profile(
+    instanceKey: string,
+    name: string,
+    kind: "user" | "library",
+    phase: RenderPhase,
+    selfTime: number,
+    reason: string,
+    deps?: ReadonlySet<string>,
+  ): void {
+    this.profilerRecords.push({
+      instanceKey,
+      name,
+      kind,
+      phase,
+      selfTime,
+      depth: this.depthOf(instanceKey),
+      reason,
+      deps: deps ? [...deps] : undefined,
+    });
+    this.profiledInstances.add(instanceKey);
   }
 
   private safeDispose(dispose: () => void): void {
@@ -389,6 +471,9 @@ export class Renderer {
       // render-gate stays complete, then re-render the cached value tree.
       const tracker = ctx.trackedState;
       for (const dep of memo.deps) tracker.add(dep);
+      if (this.profiling) {
+        this.profile(instancePath, node.decl.name, "user", "memo", 0, "memoized (args + deps unchanged)", memo.deps);
+      }
       enterUserComponent(ctx, node.decl.name);
       try {
         return this.renderAt(memo.value, instancePath);
@@ -396,6 +481,18 @@ export class Renderer {
         leaveUserComponent(ctx);
       }
     }
+    // Profiler: classify why this instance is (re)rendering for the timeline.
+    const profilePhase: RenderPhase = this.profiledInstances.has(instancePath) ? "update" : "mount";
+    const profileReason = !memo
+      ? (profilePhase === "mount" ? "initial mount" : "no memo (full render)")
+      : !positionalEqual(node.positional, memo.positional)
+        ? "positional args changed"
+        : !namedEqual(node.named, memo.named)
+          ? "named args changed"
+          : pathsOverlap(this.changedPaths, memo.deps)
+            ? "state dependency changed"
+            : "full render";
+    const profileStart = this.profiling ? nowMs() : 0;
 
     // Reserve a budget slot before walking the body. The matching
     // `leaveUserComponent` MUST run in a finally that wraps the
@@ -421,6 +518,11 @@ export class Renderer {
         for (const dep of instanceDeps) outerTracker.add(dep);
       }
       const { value, effects, hooks } = evaluated;
+      // Profiler: the body just ran — record its self time (children render
+      // lazily below, so this measures only this component's own work).
+      if (this.profiling) {
+        this.profile(instancePath, node.decl.name, "user", profilePhase, nowMs() - profileStart, profileReason, instanceDeps);
+      }
       // Hand any `effect(() => { … }, [deps])` declarations discovered
       // inside this component's body to the host's effect runner under
       // the stable instance key. The runner is idempotent across re-
@@ -551,9 +653,21 @@ export class Renderer {
       },
       router: this.options.router,
     };
+    // Profiler: library components have no memoization — they re-render on
+    // every commit. Classify mount vs update by first sighting. Their self
+    // time is inclusive of children rendered synchronously inside `render`.
+    const libPhase: RenderPhase = this.profiledInstances.has(instancePath) ? "update" : "mount";
+    const libStart = this.profiling ? nowMs() : 0;
     try {
-      return spec.render(node, props, helpers);
+      const out = spec.render(node, props, helpers);
+      if (this.profiling) {
+        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, libPhase === "mount" ? "mounted" : "re-rendered");
+      }
+      return out;
     } catch (err) {
+      if (this.profiling) {
+        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, "render threw");
+      }
       // eslint-disable-next-line no-console
       console.error(`[aktion] failed to render ${spec.name}`, err);
       const fallback = document.createElement("div");

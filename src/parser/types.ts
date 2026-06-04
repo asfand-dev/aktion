@@ -247,6 +247,39 @@ export interface AssignmentStatement {
   identifier: string;
   isState: boolean;
   expression: Expression;
+  /**
+   * True when prefixed with `export` (multi-file modules). Used by the linker
+   * to decide importability; the streaming runtime ignores it.
+   */
+  exported?: boolean;
+  loc?: SourceLocation;
+}
+
+/**
+ * Single specifier in an `import { … } from "./mod.aktion"`. Names are stored
+ * WITHOUT the leading `$`; `isState` records that the surface syntax used `$`
+ * (so `import { $shared }` and `export $shared = …` line up by bare name).
+ */
+export interface ImportSpecifier {
+  /** Name as exported by the source module (bare, no `$`). */
+  imported: string;
+  /** Local alias bound in this module (bare, no `$`). */
+  local: string;
+  /** True when the binding is a `$state` atom. */
+  isState?: boolean;
+}
+
+/**
+ * `import { A, B as C, $shared } from "./other.aktion"` — named imports for
+ * multi-file `.aktion` programs. Resolved + merged into a single program by the
+ * linker (`linkProgram` / `linkProject`); the streaming runtime treats `Import`
+ * as a no-op (it has no module map to resolve against).
+ */
+export interface ImportStatement {
+  kind: "Import";
+  specifiers: ReadonlyArray<ImportSpecifier>;
+  /** Raw module specifier, e.g. "./components/counter.aktion". */
+  source: string;
   loc?: SourceLocation;
 }
 
@@ -262,6 +295,8 @@ export interface ComponentDeclaration {
   /** Names of the declared slots (from props object convention). */
   slots: ReadonlyArray<string>;
   body: BlockExpr;
+  /** True when prefixed with `export` (multi-file modules). */
+  exported?: boolean;
   loc?: SourceLocation;
 }
 
@@ -341,6 +376,8 @@ export interface ActionDeclaration {
   params: ReadonlyArray<DeclParam>;
   optimistic: boolean;
   body: BlockExpr;
+  /** True when prefixed with `export` (multi-file modules). */
+  exported?: boolean;
   loc?: SourceLocation;
 }
 
@@ -367,6 +404,8 @@ export interface HookDeclaration {
   name: string;
   params: ReadonlyArray<DeclParam>;
   body: BlockExpr;
+  /** True when prefixed with `export` (multi-file modules). */
+  exported?: boolean;
   loc?: SourceLocation;
 }
 
@@ -525,6 +564,7 @@ export interface TryStatement {
 
 export type Statement =
   | AssignmentStatement
+  | ImportStatement
   | ComponentDeclaration
   | EffectDeclaration
   | ActionDeclaration

@@ -53,9 +53,10 @@ Internalize these rules and you will write correct, polished programs:
 
 1. **One statement per line.** `name = Expression`. The renderer commits
    each line as it streams in.
-2. **`aktion = …` is line one.** Anchor the UI shell so users see structure
-   before children arrive. Use forward references
-   (`aktion = Stack([header, list])`) and define `header`, `list` below it.
+2. **`$app(…)` is line one.** Anchor the UI shell so users see structure
+   before children arrive. `$app(...)` accepts a single root node, an array
+   of nodes, or variadic nodes. Use forward references
+   (`$app(Stack([header, list]))`) and define `header`, `list` below it.
 3. **`$variables` are the single reactive atom kind.** Declare with
    `$name = value`; read or write with `$name`. There are no tiers — one
    kind of atom for every use case. Inside function bodies (actions/components)
@@ -255,7 +256,7 @@ function Counter(label) {
     Button("inc", { onClick: () => $n = $n + 1 })
   ])
 }
-aktion = Stack([Counter("A"), Counter("B")])  // two independent counters
+$app(Stack([Counter("A"), Counter("B")]))  // two independent counters
 
 // Content-addressed identity — `key:` survives sibling reorders.
 function TaskRow(task) {
@@ -416,12 +417,12 @@ Rules for theme-friendly authoring:
 ### In-script theming with `$theme({...})`
 
 When the user **explicitly asks for a brand or product feel** ("make it
-look like GitHub", "use our company colours"), emit a `$theme({...})`
-declaration on a top-level binding called `theme`. The runtime evaluates
+look like GitHub", "use our company colours"), emit a bare `$theme({...})`
+statement (no binding needed). The runtime evaluates
 the call and writes the token map to the host as CSS custom properties.
 
 ```javascript
-theme = $theme({
+$theme({
   colors: {
     primary:     "#0969da",
     primaryHover:"#0860c4",
@@ -438,16 +439,16 @@ theme = $theme({
   },
   radius: { button: "6px", input: "6px" }
 })
-aktion = Stack([...])
+$app(Stack([...]))
 ```
 
 **Rules:**
 
 - `$theme(...)` expects the **structured form** — top-level groups must
-  be one of `colors`, `radius`, `font`, `motion`, `elevation` (plus the
-  metadata keys `name` and `direction`). Flat-shape keys
+  be one of `colors`, `radius`, `font` (plus the metadata keys `name`
+  and `direction`). Flat-shape keys
   (`$theme({ colorPrimary: ... })`) raise a schema-validator error.
-- Put `theme = $theme({...})` **before** the `aktion = ...` line so the
+- Put `$theme({...})` **before** the `$app(...)` line so the
   tokens are visible when the rest of the program streams in.
 - Stick to documented keys. The runtime ignores unknown keys inside a
   group, so typos fail silent.
@@ -569,7 +570,7 @@ component call.
 │   render. Lazy: each `name = Expr` is a function of the current │
 │   state, evaluated only when something downstream needs it.     │
 │                                                                 │
-│       aktion = Stack([header, body])                            │
+│       $app(Stack([header, body]))                               │
 │       header = PageHeader("Hi", { subtitle: "Welcome" })        │
 │       body = Card([Text($message)])                             │
 └─────────────────────────────────────────────────────────────────┘
@@ -629,8 +630,8 @@ $identifier = Expression            // reactive state declaration
 
 The renderer commits one statement at a time as text streams in:
 
-1. **`aktion = …` first.** Always.
-2. **Function declarations** that `aktion` references.
+1. **`$app(…)` first.** Always.
+2. **Function declarations** that the `$app(...)` root references.
 3. **State declarations** (`$days = "7"`).
 4. **Leaf data** (long arrays, big strings, generated tables) on their
    own trailing lines.
@@ -638,7 +639,7 @@ The renderer commits one statement at a time as text streams in:
 Example:
 
 ```javascript
-aktion = Stack([hero, kpis, chart, footer])
+$app(Stack([hero, kpis, chart, footer]))
 
 hero    = Card([CardHeader("Q3 Performance", { subtitle: "Revenue and growth" })])
 kpis    = Stats([
@@ -657,14 +658,14 @@ series  = Series("Revenue", { values: [120000, 145000, 162000] })
 ### Forward references (hoisting)
 
 Names are resolved lazily — every identifier reference re-evaluates the
-binding when read. That's why `aktion = Stack([greeting])` works even
+binding when read. That's why `$app(Stack([greeting]))` works even
 when `greeting = Card(...)` is defined later.
 
 **Hoisting and streaming together.** Because identifiers are resolved
 lazily and the renderer commits each statement as soon as it arrives,
-declaring `aktion = ...` first lets the page shell appear instantly:
+calling `$app(...)` first lets the page shell appear instantly:
 
-1. The first chunk parses `aktion = Stack([hero, kpis, chart])` — the
+1. The first chunk parses `$app(Stack([hero, kpis, chart]))` — the
    reconciler installs an empty `Stack` and three skeleton placeholders
    for the named children.
 2. As the rest of the program streams in, each child binding
@@ -759,7 +760,7 @@ function Counter(label) {
   ])
 }
 
-aktion = Stack([Counter("A"), Counter("B")])  // independent counters
+$app(Stack([Counter("A"), Counter("B")]))  // independent counters
 ```
 
 ### Hooks — `$state`, `$memo`, custom `$name`
@@ -782,7 +783,7 @@ function Counter() {
   return Stack([Text(label), Button("+1", { onClick: () => setCount(c => c + 1) })])
 }
 
-aktion = Counter()
+$app(Counter())
 ```
 
 Declare custom hooks with `function $name(...)`. The body runs **inline
@@ -890,8 +891,7 @@ $effect(() => {
 ### Setup bindings
 
 - `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })` — build a translation bundle (§13).
-- `theme = $theme({ colors, radius, font, motion, elevation })` brands
-  the UI (§14).
+- `$theme({ colors, radius, font })` brands the UI (§14).
 
 ---
 
@@ -937,11 +937,11 @@ runtime enforces these:
 ### Call sites
 
 ```javascript
-aktion = Stack([
+$app(Stack([
   UserCard($alice),
   UserCard($bob, { tone: "primary" }),
   UserCard($carol, { tone: "warning" })
-])
+]))
 ```
 
 **Named-props placement.** The named-props object literal is canonically
@@ -1036,7 +1036,7 @@ function Fruit(name) { return Badge(name) }
 function long(name) { return name.length > 5 }
 fruits = ["Apple", "Banana", "Orange"]
 
-aktion = Grid(fruits.filter(long).map(Fruit))   // ✅ equivalent to .map(n => Fruit(n))
+$app(Grid(fruits.filter(long).map(Fruit)))   // ✅ equivalent to .map(n => Fruit(n))
 ```
 
 ### Body grammar
@@ -1193,7 +1193,7 @@ An `effect` can live in **two** places:
 **Top-level effect:**
 
 ```javascript
-aktion = App()
+$app(App())
 $value = 10
 
 $effect(() => {
@@ -1215,7 +1215,7 @@ function App() {
   }, ["every(1000)"])
   return Box([Text("Value: " + $value)])
 }
-aktion = App()
+$app(App())
 ```
 
 ### Cleanup
@@ -1870,10 +1870,10 @@ Notes:
 
 ```javascript
 // Clickable card → opens a detail page
-aktion = OnClick(Card([
+$app(OnClick(Card([
   CardHeader("Order #4821", { subtitle: "$1,240 · 3 items" }),
   Text("Shipped from Berlin · arrives Mon", { tone: "muted" })
-]), { onClick: () => route.navigate("/orders/4821") })
+]), { onClick: () => route.navigate("/orders/4821") }))
 
 // Lazy-load sentinel for infinite scrolling
 sentinel = OnIntersect(Skeleton({ variant: "card" }), {
@@ -1930,7 +1930,7 @@ available:
   to a custom class to avoid leaking into library components.
 
 ```javascript
-aktion = Stack([
+$app(Stack([
   Styles(`
     .hero-callout {
       background: linear-gradient(135deg, #6366f1, #10b981);
@@ -1944,7 +1944,7 @@ aktion = Stack([
     HTMLTag("h2", { children: [Text("Custom block")] }),
     Text("Use HTMLTag + Styles only when the standard catalogue cannot capture the design.")
   ]})
-])
+]))
 ```
 
 **Rules of thumb:**
@@ -2065,7 +2065,7 @@ pages = $router({
   default:         NotFound()
 })
 
-aktion = AppShell(MainSidebar(), pages, TopBar())
+$app(AppShell(MainSidebar(), pages, TopBar()))
 ```
 
 ### Path patterns
@@ -2244,7 +2244,7 @@ theme-neutral.
 When the user **explicitly asks for a brand feel**, emit:
 
 ```javascript
-theme = $theme({
+$theme({
   colors: {
     primary:    "#635bff",
     bg:         "#0a0a23",
@@ -2255,7 +2255,7 @@ theme = $theme({
   font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif" }
 })
 
-aktion = AppShell(...)
+$app(AppShell(...))
 ```
 
 ### Token groups (structured form is mandatory)
@@ -2265,8 +2265,6 @@ aktion = AppShell(...)
 | `colors`       | `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info` |
 | `radius`       | `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`, `borderWidth`                          |
 | `font`         | `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading`, `lineHeightBody`, `lineHeightHeading`, `letterSpacingHeading`, `headingTextTransform` |
-| `motion`       | `transitionDuration`                                                                      |
-| `elevation`    | `shadowSm`, `shadowMd`, `shadowLg`                                                        |
 
 Plus metadata keys `name` and `direction` (`"ltr"` / `"rtl"`).
 
@@ -2290,7 +2288,7 @@ kpis       = Stats([
   StatCard("Orders",  { value: "1,284", trend: "up", delta: "+8%", icon: "cart-shopping" }),
   StatCard("Refunds", { value: "12", trend: "down", delta: "-3", icon: "rotate-left" })
 ])
-aktion = Stack([brandIcon, kpis, profileTab])
+$app(Stack([brandIcon, kpis, profileTab]))
 ```
 
 ---
@@ -2330,7 +2328,7 @@ row = (t) => Card([Stack([
 
 list = $todos.map(t => row(t))
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Todos", { subtitle: `${$util.count($todos)} items`, actions: [Button("Clear all", { onClick: () => $todos = [], variant: "ghost" })] }),
   Card([Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft, onEnter: add }),
@@ -2339,7 +2337,7 @@ aktion = Stack([
   $util.count($todos) == 0
     ? EmptyState("No todos yet", { description: "Add your first task above.", icon: "list-check" })
     : Stack(list, { gap: "s" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern B — Counter with per-instance state
@@ -2357,11 +2355,11 @@ function Counter(label = "Count", { initial = 0 } = {}) {
   ])])
 }
 
-aktion = Grid([
+$app(Grid([
   Counter("A"),
   Counter("B", { initial: 10 }),
   Counter("C", { initial: 100 })
-], { columns: { sm: 1, md: 3 }, gap: "l" })
+], { columns: { sm: 1, md: 3 }, gap: "l" }))
 ```
 
 ### Pattern C — Dashboard with KPIs + chart + table
@@ -2438,7 +2436,7 @@ activity = Card([
 
 follow = FollowUpBlock(["Compare to last quarter", "Show only refunds", "Which products underperformed?"])
 
-aktion = Stack([header, filterBar, kpis, chart, ordersTable, activity, follow], { gap: "l" })
+$app(Stack([header, filterBar, kpis, chart, ordersTable, activity, follow], { gap: "l" }))
 ```
 
 ### Pattern D — Multi-step wizard
@@ -2492,12 +2490,12 @@ navBtns = Buttons([
     : Button("Next", { onClick: next, variant: "primary" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Create account", { subtitle: `Step ${$step + 1} of 3` }),
   Steps(stepLabels, { current: $step }),
   current,
   navBtns
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern E — Settings page (sectioned)
@@ -2542,14 +2540,14 @@ danger = Card([
   Callout("This will permanently delete your account and all associated data.", { variant: "danger", icon: "triangle-exclamation" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Settings", { subtitle: "Configure your account and workspace" }),
   general,
   notify,
   prefs,
   danger,
   Buttons([Button("Save changes", { onClick: save, variant: "primary" })])
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern F — Chat / messaging surface
@@ -2586,10 +2584,10 @@ composer = Card([
   ], { gap: "s" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Support inbox"),
   SplitView(inbox, Stack([thread, composer], { gap: "m" }), { primaryWidth: "320px" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern G — Routed multi-page app
@@ -2646,7 +2644,7 @@ sidebar = Sidebar([
   ]})
 ], { brand: "Acme Co", tagline: "Operations console" })
 
-aktion = AppShell(sidebar, pages, { collapsible: true })
+$app(AppShell(sidebar, pages, { collapsible: true }))
 ```
 
 ### Pattern H — Real-time status page
@@ -2703,12 +2701,12 @@ $effect(() => {
   console.log("refreshing status")
 }, ["every(30000)"])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Status", { subtitle: "Live availability across our services" }),
   healthBar,
   list,
   timeline
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern I — Pricing page
@@ -2749,7 +2747,7 @@ faq = Accordion([
 
 closing = Banner("Need a custom plan?", { description: "We'll help you build a quote.", tone: "primary", icon: "envelope" })
 
-aktion = Stack([hero, picker, table, faq, closing], { gap: "l" })
+$app(Stack([hero, picker, table, faq, closing], { gap: "l" }))
 ```
 
 ### Pattern J — Checkout flow
@@ -2808,11 +2806,11 @@ confirmation = SuccessState("Order placed", { description: "We'll email you a re
 
 content = $step == "details" ? detailsForm : $step == "payment" ? paymentForm : confirmation
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Checkout"),
   steps,
   Grid([content, orderSummary], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern K — File manager
@@ -2867,12 +2865,12 @@ preview = $selected
     ])
   : EmptyState("No file selected", { description: "Pick a file on the left to see details.", icon: "file" })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Files", { subtitle: "Browse and manage your assets" }),
   breadcrumb,
   toolbar,
   SplitView(Stack(rows, { gap: "s" }), preview, { primaryWidth: "60%" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern L — Calendar / scheduler
@@ -2901,10 +2899,10 @@ list = Card([
       ), { gap: "s" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Calendar"),
   Grid([calendar, list], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern M — Docs portal
@@ -2942,10 +2940,10 @@ inner = Grid([
   Card([getContent()])
 ], { columns: { sm: 1, md: 2 }, gap: "l" })
 
-aktion = AppShell(sidebar, Stack([
+$app(AppShell(sidebar, Stack([
   PageHeader("Docs"),
   inner
-], { gap: "l" }))
+], { gap: "l" })))
 ```
 
 ### Pattern N — Onboarding checklist
@@ -2958,11 +2956,11 @@ $tasks = [
   { title: "Customize your theme", description: "Match your brand.",          done: false, onClick: () => route.navigate("/theme") }
 ]
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Welcome to Acme", { subtitle: "Let's get you set up — 4 quick steps." }),
   OnboardingChecklist($tasks, { title: "Setup", description: "Complete these to unlock your full workspace." }),
   Banner("Need help?", { description: "Book a 30-minute call with our team.", action: Button("Schedule", { variant: "primary" }), tone: "info" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern O — Search-driven directory / CRM
@@ -2999,19 +2997,19 @@ cards = Grid(filtered.map(p =>
   ProfileCard(p.name, { role: p.role, team: p.team, avatarSrc: `https://i.pravatar.cc/120?u=${p.name}`, status: p.status })
 ), { columns: { sm: 1, md: 2, lg: 3 }, gap: "l" })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Directory", { subtitle: `${$util.count(filtered)} people` }),
   toolbar,
   $util.count(filtered) == 0
     ? EmptyState("No matches", { description: "Try a different search term.", icon: "magnifying-glass" })
     : cards
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern P — Brand-themed landing page
 
 ```javascript
-theme = $theme({
+$theme({
   colors: { primary: "#0969da", accent: "#1f6feb", bg: "#ffffff", text: "#1f2328", border: "#d0d7de" },
   font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", familyHeading: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightHeading: "600" },
   radius: { button: "6px", input: "6px" }
@@ -3034,7 +3032,7 @@ testimonial = Testimonial("This changed how our team ships.", { author: "Asha Ve
 
 closing = Banner("Start building today", { description: "Free for personal use.", action: Button("Create a repository", { variant: "primary" }), tone: "primary" })
 
-aktion = Stack([hero, features, testimonial, closing], { gap: "l" })
+$app(Stack([hero, features, testimonial, closing], { gap: "l" }))
 ```
 
 ### Pattern Q — Kanban board
@@ -3056,14 +3054,14 @@ columns = [
 
 cardsFor = (colId) => $util.filter($cards, "col", "==", colId)
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Sprint board", { subtitle: `${$util.count($cards)} cards across ${$util.count(columns)} columns` }),
   KanbanBoard(columns.map(c =>
     KanbanColumn(c.title, { items: cardsFor(c.id).map(card =>
       KanbanCard(card.title, { description: card.title, tags: card.tags, assignee: card.assignee, tone: card.tone })
     )})
   ))
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern R — Inbox / split-view
@@ -3089,10 +3087,10 @@ thread = $active
     ])
   : EmptyState("Pick a conversation", { description: "Select a thread on the left.", icon: "inbox" })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Inbox"),
   SplitView(list, thread, { primaryWidth: "360px" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern S — Content studio
@@ -3120,10 +3118,10 @@ snippet = Card([
   CodeEditor("snippet", { language: "javascript", placeholder: "function hello() { return 'world' }" })
 ])
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Studio", { subtitle: "Compose and publish stories" }),
   Grid([Stack([editor, snippet], { gap: "l" }), metadata], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern T — Data explorer
@@ -3156,7 +3154,7 @@ table = DataGrid([
   Col("Message",  $rows.data.message)
 ], { rowIds: $rows.data.id, selectedIds: $selected, selectable: true, sort: { field: $sortField, direction: $sortDir } })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Events", { subtitle: `${$util.count($rows.data)} events` }),
   bulk,
   Async($rows, {
@@ -3165,7 +3163,7 @@ aktion = Stack([
     empty:   EmptyState("No events", { icon: "rectangle-list" }),
     data:    Card([table])
   })
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern U — Media gallery
@@ -3183,11 +3181,11 @@ hero = Carousel(photos.map(p => Image(p.src, { caption: p.caption, ratio: "16:9"
 
 gallery = Gallery(photos.map(p => ({ src: p.src, alt: p.caption })))
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Travel diary", { subtitle: "A photo a day, every day." }),
   hero,
   Card([SectionHeader("All photos"), gallery])
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ### Pattern V — Real-time feed
@@ -3207,12 +3205,12 @@ feed = Stack($messages.map(m =>
   ], { direction: "row", gap: "m" })])
 ), { gap: "s" })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Live feed", { subtitle: "Auto-updating every 2s" }),
   $util.count($messages) == 0
     ? EmptyState("Waiting for events…", { icon: "satellite-dish" })
     : feed
-], { gap: "l" })
+], { gap: "l" }))
 ```
 
 ---
@@ -3224,7 +3222,7 @@ Use only the JS-aligned surface. Common shapes to follow:
 | Use this                                                                                                 | Notes                                                                                |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `$x = 0`                                                                                                 | One reactive-atom kind. No prefix keyword.                                           |
-| `aktion = Stack([...])`                                                                                  | Canonical entry-point binding. The legacy underscore-wrapped entry name is removed.  |
+| `$app(Stack([...]))`                                                                                     | Canonical entry point. Call `$app(...)` with a node, an array of nodes, or variadic nodes. The legacy `aktion = ...` binding is replaced. |
 | `Button("Save", { variant: "primary", loading: true })`                                                  | Multi-positional calls raise a schema error — group options into a trailing object.  |
 | `function User(u) { return Card([...]) }`                                                                | PascalCase function = component. MUST `return` its tree. The DSL `component` keyword is gone. |
 | `function save() { ... }`                                                                                | camelCase function = action. The DSL `action` keyword is gone.                       |
@@ -3237,7 +3235,7 @@ Use only the JS-aligned surface. Common shapes to follow:
 | `navigator.clipboard.writeText(...)`                                                                     | Direct JS — there is no `js`-wrapper block anymore.                                  |
 | `// comment` or `/* … */`                                                                                | Only the two JS comment forms. `#` line comments are no longer parsed.               |
 | `Button("Save", { variant: "primary" })`                                                                 | Named props always live inside a trailing `{ ... }` object literal.                  |
-| `theme = $theme({ colors: { primary: "..." } })`                                                          | Structured tokens only — flat `colorPrimary`-style keys are gone.                    |
+| `$theme({ colors: { primary: "..." } })`                                                          | Structured tokens only — flat `colorPrimary`-style keys are gone.                    |
 | Font Awesome names (`"heart"`, `"triangle-exclamation"`)                                                 | No emoji in `icon:` slots.                                                           |
 | `Series("Name", { values: numbers })`                                                                    | Chart colours come from the theme — don't pass `stroke` / `fill` overrides.          |
 
@@ -3247,10 +3245,10 @@ Use only the JS-aligned surface. Common shapes to follow:
 
 Before finishing, walk your output and verify:
 
-1. `aktion = ...` is the FIRST line.
+1. `$app(...)` is the FIRST line.
 2. Every referenced name is defined somewhere.
-3. Every defined name (other than `aktion`, `theme`)
-   is reachable from `aktion`.
+3. Every defined name (other than the `$app(...)` root and `theme`)
+   is reachable from the `$app(...)` root.
 4. Containers reference their children by name; large data arrays
    live on their own trailing lines.
 5. Components (PascalCase functions) end with an explicit `return`.

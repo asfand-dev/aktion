@@ -125,7 +125,7 @@ $patch.onDone = () =&gt; {
         <code>empty</code> slot is shown when the resolved data is
         <code>null</code> or an empty array.
       </p>
-<pre><code>aktion = Async($todos, {
+<pre><code>$app(Async($todos, {
   loading: LoadingState("Loading todos…"),
   error:   ErrorState("Couldn't fetch todos"),
   empty:   EmptyState("No todos yet"),
@@ -133,7 +133,7 @@ $patch.onDone = () =&gt; {
     Col("Item", $todos.data.title),
     Col("Done", $todos.data.isCompleted)
   ])
-})</code></pre>
+}))</code></pre>
       <p>
         Branching order is: <code>loading</code> (while in-flight) &rarr;
         <code>error</code> (when <code>.error</code> is set) &rarr;
@@ -231,7 +231,7 @@ todoRow = todo =&gt; Stack([
   Button("Delete", { onClick: () =&gt; deleteTodo(todo), variant: "ghost", tone: "danger", size: "sm" })
 ], { direction: "row", gap: "s", align: "center" })
 
-aktion = Stack([
+$app(Stack([
   PageHeader("Todos", { actions: [Button("Refresh", { onClick: $todos.refetch, variant: "ghost" })] }),
   Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft }),
@@ -243,7 +243,7 @@ aktion = Stack([
     empty:   EmptyState("No todos yet"),
     data:    Stack($todos.data.map(todoRow), { direction: "column", gap: "s" })
   })
-], { direction: "column", gap: "l" })</code></pre>
+], { direction: "column", gap: "l" }))</code></pre>
       <p>
         See this exact pattern running live in the
         <a href="live-examples.html">Todos CRUD demo</a>.

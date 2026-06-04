@@ -34,6 +34,8 @@ import {
 } from "./evaluator.js";
 import type { StateStore, StateValue } from "./state.js";
 import { anyPathAffects } from "./state.js";
+import { isDevtoolsActive, nowMs } from "../devtools/hook.js";
+import type { EffectEventPayload, EffectPhase } from "../devtools/protocol.js";
 
 /**
  * `true` for a `$emit("name", detail)` call — an Invoke on the reserved
@@ -54,6 +56,14 @@ export interface EffectRunnerOptions {
   notify: () => void;
   /** Called when the effect/action body emits a CustomEvent via `emit()`. */
   onEmit?: (eventName: string, detail: unknown) => void;
+  /**
+   * DevTools instrumentation sink. Called on every effect lifecycle
+   * transition (mount / run / cleanup / unmount / error) with everything the
+   * runner can compute on its own; the host stamps on `appId` + `time`. Only
+   * invoked while a DevTools frontend is actually attached, so it costs
+   * nothing when the inspector is closed.
+   */
+  onEffectEvent?: (payload: EffectEventPayload) => void;
 }
 
 interface MountedEffect {
@@ -221,16 +231,31 @@ export class EffectRunner {
       capturedLoopVars,
     };
     this.mounted.set(mountKey, mounted);
+    // DevTools: announce the effect registered, before any run, so the
+    // timeline shows even effects that only fire on teardown.
+    this.emitEffect(mountKey, decl, "mount", "mount");
 
-    const rawRunBody = (): void => {
+    // `reason` records WHY the body is running (mount / a `$state` change /
+    // an interval tick) so the effect timeline can attribute each run.
+    const rawRunBody = (reason: string): void => {
       // Reset cleanups before each run — prior cleanups should fire so
       // observers / listeners don't leak across re-fires.
-      for (const fn of mounted.cleanups.splice(0)) {
-        try { fn(); } catch (err) { logCleanupError(mountKey, err); }
+      const prior = mounted.cleanups.splice(0);
+      if (prior.length > 0) {
+        for (const fn of prior) {
+          try { fn(); } catch (err) { logCleanupError(mountKey, err); }
+        }
+        this.emitEffect(mountKey, decl, "cleanup", reason, { cleanups: prior.length });
       }
+      const start = nowMs();
       try {
         runEffectBody(decl, getCtx(), mounted, this.options);
+        this.emitEffect(mountKey, decl, "run", reason, { duration: nowMs() - start });
       } catch (err) {
+        this.emitEffect(mountKey, decl, "error", reason, {
+          duration: nowMs() - start,
+          error: err instanceof Error ? err.message : String(err),
+        });
         // eslint-disable-next-line no-console
         console.error(`[aktion] effect "${mountKey}" failed`, err);
       } finally {
@@ -255,7 +280,8 @@ export class EffectRunner {
           break;
         case "every": {
           hasEveryTrigger = true;
-          const id = setInterval(runBody, trigger.intervalMs);
+          const reason = `every(${trigger.intervalMs})`;
+          const id = setInterval(() => runBody(reason), trigger.intervalMs);
           mounted.intervals.push(id);
           break;
         }
@@ -268,10 +294,12 @@ export class EffectRunner {
           // `<instanceKey>:isDone`, so the subscriber's `has(…)` check
           // would never match and the effect would never fire.
           const targetName = resolveTriggerAlias(trigger.name, capturedAliases);
+          // Display the atom the author wrote (`$count`), not the aliased slot.
+          const reason = `state:${trigger.name}`;
           const unsub = this.options.state.subscribe((changed) => {
             // Fine-grained: a `[$user.name]` trigger fires only when
             // `user.name` (or the whole `user`) changes, not `user.role`.
-            if (anyPathAffects(changed, targetName)) runBody();
+            if (anyPathAffects(changed, targetName)) runBody(reason);
           });
           mounted.unsubscribers.push(unsub);
           break;
@@ -283,13 +311,39 @@ export class EffectRunner {
     // If `on:unmount` is the only trigger, the body is run on teardown
     // instead.
     if (decl.triggers.length === 0 || hasMountTrigger) {
-      runBody();
+      runBody("mount");
     } else if (!hasEveryTrigger && !hasUnmountTrigger && decl.triggers.every((t) => t.kind === "state")) {
       // Pure state-driven effects also run once on mount so the initial
       // state is observed (matches React's `useEffect` and the spec's
       // "first quiescence" rule for stream effects).
-      runBody();
+      runBody("mount");
     }
+  }
+
+  /**
+   * Build and dispatch one DevTools effect event. Returns immediately when no
+   * frontend is attached, so the only cost on the hot path is a single
+   * global-property read.
+   */
+  private emitEffect(
+    mountKey: string,
+    decl: EffectDeclaration,
+    phase: EffectPhase,
+    reason: string,
+    extra: Partial<EffectEventPayload> = {},
+  ): void {
+    const cb = this.options.onEffectEvent;
+    if (!cb || !isDevtoolsActive()) return;
+    const sep = mountKey.lastIndexOf(INSTANCE_KEY_SEPARATOR);
+    cb({
+      effectKey: mountKey,
+      label: effectLabel(decl.name),
+      instanceKey: sep >= 0 ? mountKey.slice(0, sep) : null,
+      phase,
+      reason,
+      triggers: summariseTriggers(decl),
+      ...extra,
+    });
   }
 
   private unmount(name: string): void {
@@ -301,8 +355,12 @@ export class EffectRunner {
     for (const unsub of mounted.unsubscribers) {
       try { unsub(); } catch { /* swallow */ }
     }
-    for (const fn of mounted.cleanups) {
-      try { fn(); } catch (err) { logCleanupError(name, err); }
+    if (mounted.cleanups.length > 0) {
+      const count = mounted.cleanups.length;
+      for (const fn of mounted.cleanups) {
+        try { fn(); } catch (err) { logCleanupError(name, err); }
+      }
+      this.emitEffect(name, mounted.decl, "cleanup", "unmount", { cleanups: count });
     }
 
     // Run `on:unmount` body if declared.
@@ -310,13 +368,19 @@ export class EffectRunner {
       (t) => t.kind === "lifecycle" && t.name === "unmount",
     );
     if (hasUnmountTrigger) {
+      const start = nowMs();
       try {
         runEffectBody(mounted.decl, mounted.ctxRef(), mounted, this.options);
+        this.emitEffect(name, mounted.decl, "run", "unmount", { duration: nowMs() - start });
       } catch (err) {
+        this.emitEffect(name, mounted.decl, "error", "unmount", {
+          error: err instanceof Error ? err.message : String(err),
+        });
         // eslint-disable-next-line no-console
         console.error(`[aktion] effect "${name}" unmount body threw`, err);
       }
     }
+    this.emitEffect(name, mounted.decl, "unmount", "unmount");
   }
 }
 
@@ -327,10 +391,10 @@ export class EffectRunner {
  * fast unmount cancels in-flight calls.
  */
 function wrapRateLimit(
-  run: () => void,
+  run: (reason: string) => void,
   rateLimit: EffectDeclaration["rateLimit"],
   mounted: MountedEffect,
-): () => void {
+): (reason: string) => void {
   if (!rateLimit || rateLimit.ms <= 0) return run;
   if (rateLimit.kind === "debounce") {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -338,30 +402,35 @@ function wrapRateLimit(
       if (timer) { clearTimeout(timer); timer = null; }
     };
     mounted.cleanups.push(cancel);
-    return () => {
+    return (reason: string) => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { timer = null; run(); }, rateLimit.ms);
+      timer = setTimeout(() => { timer = null; run(reason); }, rateLimit.ms);
     };
   }
   // Throttle: fire immediately, then ignore further calls until `ms` elapsed.
   let lastFired = 0;
   let pending: ReturnType<typeof setTimeout> | null = null;
+  let pendingReason = "";
   mounted.cleanups.push(() => {
     if (pending) { clearTimeout(pending); pending = null; }
   });
-  return () => {
+  return (reason: string) => {
     const now = Date.now();
     const elapsed = now - lastFired;
     if (elapsed >= rateLimit.ms) {
       lastFired = now;
-      run();
+      run(reason);
     } else if (!pending) {
       // Schedule a trailing call so the latest state still propagates.
+      pendingReason = reason;
       pending = setTimeout(() => {
         pending = null;
         lastFired = Date.now();
-        run();
+        run(pendingReason);
       }, rateLimit.ms - elapsed);
+    } else {
+      // Keep the most recent reason for the already-scheduled trailing call.
+      pendingReason = reason;
     }
   };
 }
@@ -487,6 +556,31 @@ function runStatement(
 function logCleanupError(name: string, err: unknown): void {
   // eslint-disable-next-line no-console
   console.error(`[aktion] cleanup for effect "${name}" threw`, err);
+}
+
+/**
+ * Turn the auto-generated effect name (`__effect_L3_C1`) into a friendly
+ * label for the DevTools timeline (`effect @ L3:C1`). Falls back to the raw
+ * name for anything that doesn't match the generated shape.
+ */
+function effectLabel(name: string): string {
+  const m = /^__effect_L(\d+)_C(\d+)$/.exec(name);
+  return m ? `effect @ L${m[1]}:C${m[2]}` : name;
+}
+
+/**
+ * Summarise an effect's declared trigger list the way the author wrote it
+ * (`[$count, "mount"]`, `[every(1000)]`, `[debounce(250), $query]`). Used as
+ * a tooltip / subtitle in the DevTools effect lane.
+ */
+function summariseTriggers(decl: EffectDeclaration): string {
+  const parts = decl.triggers.map((t) => {
+    if (t.kind === "lifecycle") return `"${t.name}"`;
+    if (t.kind === "every") return `every(${t.intervalMs})`;
+    return `$${t.name}`;
+  });
+  if (decl.rateLimit) parts.push(`${decl.rateLimit.kind}(${decl.rateLimit.ms})`);
+  return parts.length > 0 ? `[${parts.join(", ")}]` : "[mount]";
 }
 
 /**
