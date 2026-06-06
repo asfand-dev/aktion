@@ -1,0 +1,12 @@
+// Multi-file entry. Imports the Counter component AND the shared `$count`
+// atom from a sibling module — like JS/TS named imports. The Vite plugin
+// resolves the graph at build time and links it into one program; editing
+// either file hot-reloads while preserving the live count.
+
+import { Counter, $count } from "./components/counter.aktion"
+
+aktion = Column([
+  Markdown(`### Multi-file Aktion`),
+  Markdown(`The entry reads the shared count: **${$count}**.`),
+  Counter()
+])

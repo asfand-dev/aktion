@@ -233,7 +233,6 @@ function parseFunctionDecl(ctx: ParserContext): Statement {
     kind: "ActionDeclaration",
     name: nameTok.value,
     params,
-    optimistic: false,
     body,
     loc: { line: start.line, column: start.column },
   };
@@ -1442,7 +1441,7 @@ function parsePrimary(ctx: ParserContext): Expression {
 
   if (tok.type === "Number") {
     ctx.consume();
-    return { kind: "Literal", value: Number(tok.value) };
+    return { kind: "Literal", value: numericLiteralValue(tok.value) };
   }
   if (tok.type === "String") {
     ctx.consume();
@@ -2160,4 +2159,20 @@ function skipTerminator(ctx: ParserContext): void {
   if (!ctx.isEnd()) {
     ctx.match("Newline") || ctx.match("Semicolon");
   }
+}
+
+/**
+ * Convert a `Number` token's raw text into a JS number. Handles every JS
+ * numeric-literal form the lexer can emit: decimals, scientific notation
+ * (`1e6`, `1.5e-3`), hex / binary / octal radix literals (`0xFF`, `0b1010`,
+ * `0o17`), and `_` digit separators (`1_000_000`). The sign is applied
+ * separately so signed radix literals (`-0xFF`) round-trip — `Number()`
+ * alone rejects those.
+ */
+function numericLiteralValue(raw: string): number {
+  let s = raw.replace(/_/g, "");
+  let sign = 1;
+  if (s.startsWith("-")) { sign = -1; s = s.slice(1); }
+  else if (s.startsWith("+")) { s = s.slice(1); }
+  return sign * Number(s);
 }

@@ -1,0 +1,22 @@
+// The message composer. The input two-way-binds to `$input`; Enter or the Send
+// button calls `send()`. An `OnKeyboard` wrapper adds the Enter shortcut without
+// taking focus away from the already-focusable input.
+
+import { $input, $pending, send } from "../store.aktion"
+
+export function Composer() {
+  return Row([
+    StackItem(
+      OnKeyboard(Input("chat-input", { value: $input, placeholder: "Message the assistant…" }), {
+        onKeyDown: onComposerKey,
+        focusable: false
+      }),
+      { grow: 1 }
+    ),
+    Button("Send", { onClick: send, variant: "primary", icon: "paper-plane", loading: $pending, disabled: $pending })
+  ], { gap: "s", align: "center" })
+}
+
+function onComposerKey(event) {
+  if (event.key === "Enter") { send() }
+}

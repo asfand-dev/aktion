@@ -380,6 +380,72 @@ export const OnIntersect: ComponentSpec = {
 };
 
 /* ------------------------------------------------------------------------ *
+ * OnMount — lifecycle / DOM-ref wrapper.
+ *
+ * The Aktion-native way to get a reference to a rendered DOM node and run
+ * imperative code against it. `onMount(node)` fires exactly once, on a
+ * microtask after the wrapped child is attached to the DOM; `onUnmount(node)`
+ * fires when the component leaves the tree. This is the escape hatch for the
+ * things a declarative tree can't express on its own: measuring an element,
+ * imperatively focusing it, or handing it to a third-party library (a chart,
+ * a map, a rich-text engine). Pair it with `$ref(...)` to stash the node:
+ *
+ *   function Chart() {
+ *     const box = $ref(null)
+ *     return OnMount(Box({ height: "240px" }), {
+ *       onMount: node => { box.current = node; drawChart(node) },
+ *       onUnmount: () => destroyChart(box.current)
+ *     })
+ *   }
+ *
+ * The wrapper is transparent (`display: contents`) so layout is unchanged;
+ * `node` is the rendered child element itself.
+ * ------------------------------------------------------------------------ */
+export const OnMount: ComponentSpec = {
+  name: "OnMount",
+  description:
+    "Run imperative code against the wrapped component's rendered DOM node. " +
+    "`onMount(node)` fires once, on a microtask after the child is attached " +
+    "to the DOM — the Aktion way to get a DOM ref (measure an element, focus " +
+    "it, or hand it to an imperative library such as a chart / map / editor). " +
+    "`onUnmount(node)` fires when the component leaves the tree. Pair with " +
+    "`$ref(...)` to stash the node across renders.",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "onMount", type: "callable", optional: true, description: "`(node) => void` — fired once after the wrapped element is attached." },
+    { name: "onUnmount", type: "callable", optional: true, description: "`(node) => void` — fired when the wrapped element leaves the tree." },
+  ],
+  render: (_node, props, helpers) => {
+    const wrapper = el("span", {
+      class: "rui-wrapper rui-on-mount",
+      style: "display: contents;",
+    });
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    const mounted = helpers.useInstanceState("rui-on-mount", false);
+    if (!mounted.get()) {
+      mounted.set(true);
+      const fire = (): void => {
+        const node = wrapper.firstElementChild ?? wrapper;
+        if (props.onMount != null) helpers.invoke(props.onMount, node);
+        if (props.onUnmount != null) {
+          helpers.registerDisposer(() => {
+            // Defer to a microtask so the callback runs after the reconcile
+            // pass completes — a state write inside `onUnmount` then schedules
+            // a clean re-render instead of tripping the render guard.
+            const run = (): void => helpers.invoke(props.onUnmount, node);
+            if (typeof queueMicrotask === "function") queueMicrotask(run);
+            else void Promise.resolve().then(run);
+          }, "rui-on-mount-unmount");
+        }
+      };
+      if (typeof queueMicrotask === "function") queueMicrotask(fire);
+      else void Promise.resolve().then(fire);
+    }
+    return wrapper;
+  },
+};
+
+/* ------------------------------------------------------------------------ *
  * Link — anchor that wraps either a label string or any component.
  *
  * Aktion 0.5 supports two link shapes via the same `Link` call:

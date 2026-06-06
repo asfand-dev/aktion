@@ -18,16 +18,12 @@
  */
 
 import type {
-  ActionDeclaration,
   EffectDeclaration,
   Expression,
   Statement,
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
 import {
-  BreakSignal,
-  ContinueSignal,
-  ReturnSignal,
   evaluate,
   resolveStateAlias,
   runControlFlowStatement,
@@ -476,11 +472,19 @@ function runEffectBody(
     ctx.loopVars.clear();
     for (const [k, v] of mounted.capturedLoopVars) ctx.loopVars.set(k, v);
   }
+  // Expose a real `cleanup` binding for the duration of the body run so it
+  // survives aliasing / nested blocks (feedback §2.5). Saved/restored so
+  // nested effect runs don't leak each other's sink.
+  const priorCleanupSink = ctx.cleanupSink;
+  ctx.cleanupSink = (fn: () => void): void => {
+    mounted.cleanups.push(fn);
+  };
   try {
     for (const stmt of decl.body.body) {
       runStatement(stmt, ctx, mounted, options);
     }
   } finally {
+    ctx.cleanupSink = priorCleanupSink;
     if (restoreAliases) {
       ctx.stateAliases.length = 0;
       for (const frame of restoreAliases) ctx.stateAliases.push(frame);
@@ -613,169 +617,3 @@ function resolveTriggerAlias(
   return name;
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Action runner (§10) — optimistic snapshot/rollback                        */
-/* -------------------------------------------------------------------------- */
-
-export interface ActionRunnerOptions {
-  state: StateStore;
-  notify: () => void;
-  onEmit?: (eventName: string, detail: unknown) => void;
-  onAssistantMessage?: (message: string) => void;
-}
-
-/**
- * Run an `action` declaration. When the declaration is `optimistic` we
- * snapshot every state atom touched before the first `await`; if any
- * subsequent step throws, the snapshot is restored.
- */
-export class ActionDeclRunner {
-  constructor(private readonly options: ActionRunnerOptions) {}
-
-  async run(
-    decl: ActionDeclaration,
-    callArgs: unknown[],
-    ctx: EvaluationContext,
-  ): Promise<unknown> {
-    // Bind parameters into loop vars so the body can reference them.
-    const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
-    for (let i = 0; i < decl.params.length; i += 1) {
-      const param = decl.params[i]!;
-      const value = callArgs[i];
-      restore.push({
-        name: param.name,
-        had: ctx.loopVars.has(param.name),
-        prev: ctx.loopVars.get(param.name),
-      });
-      ctx.loopVars.set(param.name, value);
-    }
-    // Snapshot for optimistic rollback. We snapshot the entire state
-    // store; the spec only requires snapshotting writes-before-first-await
-    // but the simpler whole-store snapshot is always correct (the cost is
-    // a single `Map` clone — negligible).
-    const snapshot: Map<string, StateValue> | null = decl.optimistic
-      ? snapshotState(this.options.state)
-      : null;
-    try {
-      let lastValue: unknown;
-      try {
-        for (const stmt of decl.body.body) {
-          lastValue = await this.runStatement(stmt, ctx);
-        }
-      } catch (err) {
-        if (err instanceof ReturnSignal) {
-          this.options.notify();
-          return err.value;
-        }
-        throw err;
-      }
-      this.options.notify();
-      return lastValue;
-    } catch (err) {
-      // Control-flow signals leaking past the action body are author
-      // bugs (`break` outside a loop, etc.) — surface them but don't
-      // crash the page.
-      if (err instanceof BreakSignal || err instanceof ContinueSignal) {
-        // eslint-disable-next-line no-console
-        console.error(`[aktion] action "${decl.name}" — \`${err.kind}\` outside a loop.`);
-        return undefined;
-      }
-      if (snapshot) {
-        restoreState(this.options.state, snapshot);
-        this.options.notify();
-      }
-      // eslint-disable-next-line no-console
-      console.error(`[aktion] action "${decl.name}" failed`, err);
-      throw err;
-    } finally {
-      for (const slot of restore) {
-        if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
-        else ctx.loopVars.delete(slot.name);
-      }
-    }
-  }
-
-  private async runStatement(
-    stmt: Statement,
-    ctx: EvaluationContext,
-  ): Promise<unknown> {
-    switch (stmt.kind) {
-      case "ExpressionStatement": {
-        const expr = stmt.expression;
-        // `$emit("name", detail)` — dispatch an outbound CustomEvent.
-        if (isEmitCall(expr)) {
-          const args = expr.arguments;
-          const eventName = args[0] ? String(evaluate(args[0], ctx)) : "";
-          const detail = args[1] ? evaluate(args[1], ctx) : undefined;
-          this.options.onEmit?.(eventName, detail);
-          return undefined;
-        }
-        const value = evaluate(expr, ctx);
-        return await unwrapPromise(value);
-      }
-      case "Await": {
-        const value = evaluate(stmt.argument, ctx);
-        return await unwrapPromise(value);
-      }
-      case "Assignment": {
-        const value = await unwrapPromise(evaluate(stmt.expression, ctx));
-        if (stmt.identifier) {
-          if (stmt.isState) {
-            // Resolve through the per-instance alias stack so an `action`
-            // declared inside a function body writes the right slot (§7).
-            const target = resolveStateAlias(ctx, stmt.identifier);
-            this.options.state.set(target, value as StateValue);
-          } else {
-            // `let x = …` inside an action body is a local — keep it in
-            // the per-frame `loopVars` map so the rest of the body can
-            // read it without it leaking into the reactive state store.
-            ctx.loopVars.set(stmt.identifier, value);
-          }
-        }
-        return value;
-      }
-      case "Return": {
-        if (!stmt.argument) throw new ReturnSignal(undefined);
-        const value = await unwrapPromise(evaluate(stmt.argument, ctx));
-        throw new ReturnSignal(value);
-      }
-      case "IfStatement":
-      case "ForOfStatement":
-      case "ForClassicStatement":
-      case "ForInStatement":
-      case "SwitchStatement":
-      case "WhileStatement":
-      case "DoWhileStatement":
-      case "TryStatement":
-      case "BreakStatement":
-      case "ContinueStatement":
-      case "ThrowStatement":
-      case "DestructureStatement":
-        runControlFlowStatement(stmt, ctx);
-        return undefined;
-      default:
-        return undefined;
-    }
-  }
-}
-
-async function unwrapPromise(value: unknown): Promise<unknown> {
-  if (value && typeof (value as { then?: unknown }).then === "function") {
-    return await (value as Promise<unknown>);
-  }
-  return value;
-}
-
-function snapshotState(state: StateStore): Map<string, StateValue> {
-  const out = new Map<string, StateValue>();
-  for (const [name, value] of state.entries()) {
-    out.set(name, value);
-  }
-  return out;
-}
-
-function restoreState(state: StateStore, snapshot: Map<string, StateValue>): void {
-  for (const [name, value] of snapshot) {
-    state.set(name, value);
-  }
-}

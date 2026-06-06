@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM integration · Aktion</title>
+  <meta name="description" content="The point of Aktion: stream LLM output into a live UI. Wire OpenAI, Anthropic, OpenRouter, or Bedrock streams into appendChunk, pick the right system prompt, use interceptors, and handle assistant-message round-trips and the delta protocol." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="llm-integration">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>LLM integration.</h1>
+        <p class="lead">
+          This is what Aktion is <em>for</em>: an LLM emits an Aktion program
+          token-by-token and the user watches a correct, interactive UI appear as
+          it streams. The host&rsquo;s job is to feed those tokens to
+          <code>appendChunk</code>, supply the right system prompt, and shuttle
+          messages back to the model.
+        </p>
+      </header>
+
+      <h2 id="loop">The integration loop</h2>
+      <ol>
+        <li>Build a system prompt that matches the live component library with
+          <code>getSystemPrompt()</code>.</li>
+        <li>Send the system prompt + the user&rsquo;s request to your model
+          (through your own server / edge function so the API key stays private).</li>
+        <li>Stream the response tokens into <code>app.appendChunk(token)</code>.</li>
+        <li>When the user interacts with something that should talk back to the
+          model, the app fires an <code>assistant-message</code> event &mdash;
+          forward it as the next turn.</li>
+      </ol>
+
+      <h2 id="prompt">Choosing the system prompt</h2>
+      <p>
+        <code>getSystemPrompt()</code> emits a prompt that exactly describes the
+        components currently registered (including any you added with
+        <code>registerComponents</code>). Two variants:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Call</th><th>Use for</th></tr></thead>
+        <tbody>
+          <tr><td><code>app.getSystemPrompt()</code></td><td>The full prompt &mdash; one-shot generation of a complete app/page.</td></tr>
+          <tr><td><code>app.getSystemPrompt({ mode: "chat" })</code></td><td>The compact variant &mdash; conversational, multi-turn chat surfaces where prompt budget matters.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The package also ships the prompts as static files
+        (<code>aktion-runtime/system_prompt.txt</code> and
+        <code>system_prompt_chat.txt</code>) for server-side use where you
+        don&rsquo;t have a live element &mdash; but prefer
+        <code>getSystemPrompt()</code> when you register custom components so the
+        prompt stays in sync.
+      </p>
+
+      <h2 id="stream">Streaming tokens with <code>appendChunk</code></h2>
+      <p>
+        <code>appendChunk</code> is incremental: it parses only the new tail and
+        re-renders the affected lines, so it is the cheap path for token-by-token
+        output. Use <code>setResponse</code> only to swap a whole document.
+      </p>
+<pre><code>async function generate(app, prompt) {
+  app.clear(); // reset any previous program & state
+  const res = await fetch("/api/generate", { method: "POST", body: JSON.stringify({ prompt }) });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    app.appendChunk(decoder.decode(value, { stream: true }));
+  }
+}</code></pre>
+      <div class="callout">
+        <p>Don&rsquo;t call <code>setResponse</code> on every token &mdash; it
+          re-parses the entire buffer each time. Stream with
+          <code>appendChunk</code>; see <a href="performance.html#streaming">Performance</a>.</p>
+      </div>
+
+      <h2 id="providers">Provider-specific stream parsing</h2>
+      <p>
+        Most providers send Server-Sent Events; extract the text delta from each
+        chunk before passing it on. Do this in your edge function and emit raw
+        Aktion text to the browser, or parse in the browser:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Provider</th><th>Text delta lives in</th></tr></thead>
+        <tbody>
+          <tr><td>OpenAI (Chat Completions)</td><td><code>choices[0].delta.content</code> per <code>data:</code> SSE line.</td></tr>
+          <tr><td>Anthropic (Messages)</td><td><code>content_block_delta.delta.text</code> events.</td></tr>
+          <tr><td>OpenRouter</td><td>OpenAI-compatible: <code>choices[0].delta.content</code>.</td></tr>
+          <tr><td>AWS Bedrock</td><td>Model-specific payload in the event stream (e.g. Claude&rsquo;s <code>delta.text</code>).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Whatever the provider, the contract with Aktion is the same: concatenate
+        the text deltas and feed them to <code>appendChunk</code>.
+      </p>
+
+      <h2 id="roundtrip">The <code>assistant-message</code> round-trip</h2>
+      <p>
+        Generated UI can ask the model a follow-up &mdash; e.g. a button wired to
+        send a message. That dispatches an <code>assistant-message</code> event on
+        the host; forward its <code>detail.message</code> as the next user turn:
+      </p>
+<pre><code>app.addEventListener("assistant-message", async (e) =&gt; {
+  const text = e.detail.message;
+  history.push({ role: "user", content: text });
+  await generate(app, history); // stream the model's reply back in
+});</code></pre>
+
+      <h2 id="interceptors">Interceptors</h2>
+      <p>
+        Generated programs make their own network calls via <code>$http</code>.
+        Install host interceptors to add auth, retry, or logging without changing
+        the generated code:
+      </p>
+<pre><code>app.registerHttpInterceptors({
+  onRequest: (req) =&gt; ({ ...req, headers: { ...req.headers, Authorization: token } }),
+  onResponse: async (res, retry) =&gt; {
+    if (res.status === 401) { await refresh(); return retry(); } // one-shot retry
+    return res;
+  },
+  onError: (err) =&gt; reportError(err),
+});</code></pre>
+
+      <h2 id="delta">The delta protocol</h2>
+      <p>
+        For applications that persist or replay a session, Aktion can represent UI
+        changes as deltas rather than whole-document swaps &mdash; the same
+        incremental model that powers <code>appendChunk</code>. Persist the program
+        text (and optionally <code>serializeState()</code>) to resume a session;
+        see <a href="deployment.html#ssr">Production &amp; deployment</a>.
+      </p>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="chat-bot.html">
+          <span class="demo-tag">Demo</span>
+          <h3>Chat bot</h3>
+          <p>An end-to-end LLM chat surface wired to a real provider.</p>
+          <span class="demo-arrow">Open the demo &rarr;</span>
+        </a>
+        <a class="demo-card" href="deployment.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Production &amp; deployment</h3>
+          <p>Edge streaming, CSP, and session resumption.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="http.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>HTTP</h3>
+          <p><code>$http</code>, <code>$query</code>, <code>$mutation</code>, and interceptors.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

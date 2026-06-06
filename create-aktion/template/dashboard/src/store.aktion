@@ -1,0 +1,30 @@
+// One $store holds all home state so any component can read it — and call its
+// methods — without prop-drilling. Method entries receive the store handle `s`
+// first; call them as `home.toggle(id)` or `home.activateScene("Away")`.
+
+import { seedDevices, seedScenes, seedAutomations } from "./data/home.aktion"
+import { applyScene } from "./lib/scene.aktion"
+
+export home = $store({
+  devices: seedDevices,
+  scenes: seedScenes,
+  automations: seedAutomations,
+  activeScene: null,
+
+  // --- mutations -----------------------------------------------------------
+  toggle: (s, id) => { s.devices = s.devices.map(d => d.id === id ? { ...d, on: !d.on } : d) },
+  setLevel: (s, id, level) => { s.devices = s.devices.map(d => d.id === id ? { ...d, level: level, on: level > 0 } : d) },
+  setTarget: (s, id, target) => { s.devices = s.devices.map(d => d.id === id ? { ...d, target: target } : d) },
+  toggleAutomation: (s, id) => { s.automations = s.automations.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a) },
+  activateScene: (s, name) => {
+    s.activeScene = name
+    s.devices = s.devices.map(d => applyScene(d, name, s.scenes))
+  },
+
+  // --- derived reads -------------------------------------------------------
+  onCount: (s) => s.devices.filter(d => d.on).length,
+  onlineCount: (s) => s.devices.filter(d => d.online).length,
+  total: (s) => s.devices.length,
+  load: (s) => $util.sum(s.devices.filter(d => d.on).map(d => d.watts)),
+  inRoom: (s, room) => s.devices.filter(d => d.room === room)
+})

@@ -1,0 +1,30 @@
+// Entry program. A dashboard surface → AppShell (left sidebar + topbar + the
+// routed page). Each route arm renders a page component imported from ./pages.
+
+import { AppSidebar } from "./components/app-sidebar.aktion"
+import { HomePage } from "./pages/home.aktion"
+import { DevicesPage } from "./pages/devices.aktion"
+import { EnergyPage } from "./pages/energy.aktion"
+import { AutomationsPage } from "./pages/automations.aktion"
+
+$theme({
+  colors: { primary: "#4f46e5" },
+  radius: { md: "0.8rem" }
+})
+
+pages = $router({
+  "/": HomePage(),
+  "/devices": DevicesPage(),
+  "/energy": EnergyPage(),
+  "/automations": AutomationsPage(),
+  default: HomePage()
+})
+
+topbar = TopBar("Casa", {
+  subtitle: "All systems normal",
+  right: [Button("Add device", { icon: "plus", variant: "primary", size: "sm" })]
+})
+
+// Multi-file entry: assign the root node to `aktion`. A dashboard surface →
+// AppShell (left sidebar + topbar + the routed page).
+aktion = AppShell(AppSidebar(), { content: pages, topbar: [topbar] })

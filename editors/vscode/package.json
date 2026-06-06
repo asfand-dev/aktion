@@ -1,0 +1,102 @@
+{
+  "name": "aktion-vscode",
+  "displayName": "Aktion",
+  "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics, hover, completions, signature help, go-to-definition, find references, rename, document outline, formatting, and snippets.",
+  "version": "0.2.0",
+  "publisher": "AsfandiyarKhan",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "icon": "icon.png",
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "aktion",
+    "generative-ui",
+    "dsl",
+    "web-components"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asfand-dev/aktion.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://asfand-dev.github.io/aktion/",
+  "bugs": {
+    "url": "https://github.com/asfand-dev/aktion/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:aktion"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "aktion",
+        "aliases": [
+          "Aktion"
+        ],
+        "extensions": [
+          ".aktion"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aktion",
+        "scopeName": "source.aktion",
+        "path": "./syntaxes/aktion.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "aktion",
+        "path": "./snippets/aktion.code-snippets"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "namespace": ["entity.name.namespace", "support.type"],
+          "class": ["entity.name.type.class", "support.class"],
+          "function": ["entity.name.function", "support.function"],
+          "variable": ["variable.other.aktion", "variable.other"],
+          "property": ["variable.other.property"],
+          "keyword": ["keyword"],
+          "number": ["constant.numeric"]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "[aktion]": {
+        "editor.semanticHighlighting.enabled": true
+      }
+    }
+  },
+  "scripts": {
+    "gen-snippets": "node scripts/gen-snippets.mjs",
+    "gen-grammar": "node scripts/gen-grammar.mjs",
+    "build": "npm run gen-snippets && npm run gen-grammar && node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "publish:ovsx": "ovsx publish"
+  },
+  "dependencies": {
+    "aktion-runtime": "^0.5.5"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.21.0",
+    "ovsx": "^0.9.0",
+    "typescript": "^5.6.3"
+  }
+}

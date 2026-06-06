@@ -21,12 +21,17 @@ import type {
   SwitchCase,
   DestructuringPattern,
 } from "../parser/types.js";
-import type { StateStore } from "./state.js";
+import type { StateStore, StateValue } from "./state.js";
 import { pathsOverlap } from "./state.js";
 import type { HttpRuntime } from "./http.js";
-import { createHttpResource, isEndpointResource } from "./http.js";
+import {
+  createHttpResource,
+  createMutationResource,
+  createQueryResource,
+  isEndpointResource,
+} from "./http.js";
+import type { EndpointResource } from "./http.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
-import type { ActionDeclRunner } from "./effects.js";
 import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
 import { matchRoute, type Router } from "./router.js";
@@ -35,6 +40,7 @@ import { findPositionalIndex } from "../library/types.js";
 import type { ComponentLibrary } from "../library/types.js";
 import { storage as storageGlobal } from "./storage.js";
 import { consoleNs as consoleGlobal } from "./console.js";
+import { createToastManager, type ToastManager } from "./toast.js";
 
 /**
  * Built-in namespaces injected as top-level identifiers so authors can
@@ -104,6 +110,21 @@ const RESERVED_STATE_NAMESPACES: Record<string, unknown> = {
   console: consoleGlobal,
   storage: storageGlobal,
 };
+
+/**
+ * Reserved namespace roots that are NOT plain constants — they resolve to a
+ * per-context object (so the manager can call `notify()` and be torn down on
+ * replan). `$toast` is the first such namespace. Listed here so the StateRef
+ * resolver and `memberChainRootsAtState` treat them like the static reserved
+ * namespaces (constant root, not fine-grained tracked state).
+ */
+const RESERVED_CONTEXT_NAMESPACES = new Set(["toast"]);
+
+/** Lazily build (and cache on the context) the `$toast` manager singleton. */
+function getToastManager(ctx: EvaluationContext): ToastManager {
+  if (!ctx.toastManager) ctx.toastManager = createToastManager(ctx);
+  return ctx.toastManager;
+}
 
 /**
  * Resolve any host JavaScript global by name (`window`, `document`, `URL`,
@@ -421,7 +442,10 @@ export interface ScopedEffectDecl {
  */
 export type HookCell =
   | { kind: "state"; value: unknown }
-  | { kind: "memo"; deps: ReadonlyArray<unknown> | undefined; value: unknown };
+  | { kind: "memo"; deps: ReadonlyArray<unknown> | undefined; value: unknown }
+  | { kind: "ref"; box: { current: unknown } }
+  | { kind: "reducer"; value: unknown }
+  | { kind: "id"; value: string };
 
 /**
  * Active hook scope — the component instance currently rendering, plus a
@@ -528,12 +552,41 @@ export interface EvaluationContext {
   stores: Map<string, StoreHandle>;
   /** HTTP runtime (`Http({...})` calls + interceptor configuration). */
   http?: HttpRuntime;
-  /** Action runner for function declarations. */
-  actionRunner?: ActionDeclRunner;
+  /**
+   * Shared cache of `$query({...})` resources, keyed by the query's `key`
+   * (or a value derived from method + url + query + body). Lets repeated and
+   * cross-component queries share one in-flight request / cached result.
+   * Lives as long as the program; rebuilt on replan with a fresh context.
+   */
+  queryCache: Map<string, EndpointResource>;
+  /**
+   * Lazily-created singleton backing the reserved `$toast` namespace
+   * (`$toast.show(...)`, `$toast.items`, …). Created on first reference via
+   * `getToastManager`; its auto-dismiss timers are cleared on dispose.
+   */
+  toastManager?: ToastManager;
   /** Notify the host that something changed and a re-render is needed. */
   notify?: () => void;
   /** Dispatch a custom event from an `emit("name", detail)` call. */
   onEmit?: (eventName: string, detail: unknown) => void;
+  /**
+   * Active teardown sink during an effect-body run. When set, a bare
+   * `cleanup` identifier resolves to a real bound function that pushes into
+   * the running effect's cleanup list — so `cleanup(fn)` keeps working even
+   * when aliased (`const c = cleanup; c(fn)`) or used inside a nested block,
+   * rather than being detected only by literal callee name (feedback §2.5).
+   * Unset outside effect runs, where `cleanup` has no meaning.
+   */
+  cleanupSink?: ((fn: () => void) => void) | null;
+  /**
+   * Dev/strict mode (opt-in via the `strict` attribute on `<aktion-app>`).
+   * When set, the evaluator surfaces silent failures — currently unknown
+   * bare identifiers that would otherwise resolve to `null` — as
+   * `console.warn`s. Off by default so production behaviour is unchanged.
+   */
+  strict?: boolean;
+  /** De-dupes strict-mode warnings to one per identifier per program. */
+  strictWarned: Set<string>;
   /**
    * Cleanup callbacks attached to this context. Populated during
    * `planProgram` for resources that outlive a single evaluation pass —
@@ -577,9 +630,10 @@ export interface CreateContextOptions {
   router?: Router;
   library?: ComponentLibrary;
   http?: HttpRuntime;
-  actionRunner?: ActionDeclRunner;
   notify?: () => void;
   onEmit?: (eventName: string, detail: unknown) => void;
+  /** Enable dev/strict-mode warnings for silent failures. */
+  strict?: boolean;
   /**
    * Runtime safety budget for this context.
    *   - omitted (default): a fresh budget with `DEFAULT_RUNTIME_BUDGET` limits.
@@ -616,9 +670,11 @@ export function createContext(
     hookStore: new Map(),
     stores: new Map(),
     http: options.http,
-    actionRunner: options.actionRunner,
+    queryCache: new Map(),
     notify: options.notify,
     onEmit: options.onEmit,
+    strict: options.strict,
+    strictWarned: new Set(),
     disposers: [],
     timers: { timeouts: new Set(), intervals: new Set() },
     budget: options.budget === null ? undefined : (options.budget ?? createRuntimeBudget()),
@@ -979,7 +1035,6 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
         kind: "ActionDeclaration",
         name: stmt.name,
         params: stmt.params,
-        optimistic: false,
         body: stmt.body,
         loc: stmt.loc,
       });
@@ -1271,6 +1326,15 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       if (ctx.library && findComponent(ctx.library, expr.name)) {
         return makeLibraryComponentCallable(expr.name, ctx);
       }
+      // `cleanup` resolves to a real bound function while an effect body is
+      // running, so it survives aliasing / nested blocks rather than being
+      // recognised only by literal callee name (feedback §2.5).
+      if (expr.name === "cleanup" && ctx.cleanupSink) {
+        const sink = ctx.cleanupSink;
+        return (fn: unknown): void => {
+          if (typeof fn === "function") sink(fn as () => void);
+        };
+      }
       // Full JavaScript global surface — any host global (`window`,
       // `document`, `URL`, `crypto`, `navigator`, `Intl`, `alert`, `fetch`,
       // …) not shadowed by an author declaration or library component above.
@@ -1280,6 +1344,17 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       const hostGlobal = lookupHostGlobal(expr.name);
       if (hostGlobal.found) return hostGlobal.value;
       // Unknown identifier — render as null so the parser is forgiving.
+      // In strict mode, surface it as a one-per-name warning so silent
+      // typos (e.g. `couunt` for `count`) are not swallowed.
+      if (ctx.strict && !ctx.strictWarned.has(expr.name)) {
+        ctx.strictWarned.add(expr.name);
+        const where = expr.loc ? ` (line ${expr.loc.line}, col ${expr.loc.column})` : "";
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[aktion] strict: unknown identifier "${expr.name}" resolved to null${where}. ` +
+            `Did you misspell a state atom, action, or component name?`,
+        );
+      }
       return null;
     }
     case "StateRef": {
@@ -1287,6 +1362,21 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // to their namespace object — they are constants, not tracked state.
       if (Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, expr.name)) {
         return RESERVED_STATE_NAMESPACES[expr.name];
+      }
+      // Per-context reserved namespaces (`$toast`) resolve to a lazily-built
+      // singleton rather than a static constant.
+      if (RESERVED_CONTEXT_NAMESPACES.has(expr.name)) {
+        if (expr.name === "toast") return getToastManager(ctx);
+      }
+      // `$emit` read resolves to a real bound dispatcher so it survives
+      // aliasing (`const e = $emit; e("name", detail)`) instead of being
+      // recognised only as a literal `$emit(...)` callee (feedback §2.5).
+      // Direct `$emit(...)` calls still take the dedicated dispatch path.
+      if (expr.name === "emit" && ctx.onEmit) {
+        const onEmit = ctx.onEmit;
+        return (eventName: unknown, detail?: unknown): void => {
+          onEmit(eventName == null ? "" : String(eventName), detail);
+        };
       }
       // Resolve through the per-instance alias stack so `$n` inside a
       // component body picks the right per-instance slot.
@@ -1911,7 +2001,8 @@ function memberChainRootsAtState(expr: Expression): boolean {
   // path so the StateRef resolves to the namespace object and `memberAccess`
   // reads off it.
   if (cursor.kind === "StateRef" &&
-      Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, cursor.name)) {
+      (Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, cursor.name) ||
+        RESERVED_CONTEXT_NAMESPACES.has(cursor.name))) {
     return false;
   }
   return cursor.kind === "StateRef";
@@ -2139,6 +2230,9 @@ function evaluateInvoke(
     // Hooks.
     if (name === "state") return evaluateStateHook(expr.arguments, ctx, expr.loc);
     if (name === "memo") return evaluateMemoHook(expr.arguments, ctx, expr.loc);
+    if (name === "ref") return evaluateRefHook(expr.arguments, ctx, expr.loc);
+    if (name === "reducer") return evaluateReducerHook(expr.arguments, ctx, expr.loc);
+    if (name === "id") return evaluateIdHook(expr.arguments, ctx, expr.loc);
     // Runtime factory builtins.
     switch (name) {
       case "store":
@@ -2148,6 +2242,14 @@ function evaluateInvoke(
       case "http": {
         const optsArg = expr.arguments[0];
         return createHttpResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "query": {
+        const optsArg = expr.arguments[0];
+        return createQueryResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "mutation": {
+        const optsArg = expr.arguments[0];
+        return createMutationResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
       }
       case "theme": {
         const tokensArg = expr.arguments[0];
@@ -2183,6 +2285,8 @@ function evaluateInvoke(
         if (expr.arguments[0]) evaluate(expr.arguments[0], ctx);
         return storageGlobal;
       }
+      case "optimistic":
+        return runOptimistic(expr.arguments[0], ctx);
     }
     const hookDecl = ctx.hookDecls.get(name);
     if (hookDecl) return invokeHookDecl(hookDecl, expr.arguments, ctx);
@@ -2605,6 +2709,16 @@ function evaluateComponentCall(
   // down on dispose (replan / disconnect). The callback fires with the
   // author's scope intact (lambdas capture `ctx`) and a `notify()` follows
   // each tick so state the callback wrote is reflected in the next render.
+  // `cleanup(fn)` — register a teardown callback on the running effect.
+  // Handled here (not only at the effect's statement level) so it also works
+  // inside nested blocks / conditionals and when reached through the normal
+  // call path, rather than being recognised solely by literal callee name
+  // (feedback §2.5). No-op outside an effect run, where there is no sink.
+  if (callee === "cleanup" && ctx.cleanupSink) {
+    const fn = args[0] ? evaluate(args[0], ctx) : undefined;
+    if (typeof fn === "function") ctx.cleanupSink(fn as () => void);
+    return undefined;
+  }
   if (callee === "setTimeout" || callee === "setInterval") {
     return evaluateTimerCall(callee, args, ctx);
   }
@@ -2925,11 +3039,30 @@ function invokeComponentDecl(
   let expandAsNamed = false;
   if (trailingObjArg && trailingObjArg.kind === "Object") {
     const paramNames = new Set(decl.params.map((p) => p.name));
+    const objKeys: string[] = [];
     for (const prop of trailingObjArg.properties) {
       if (prop.spread) continue;
+      objKeys.push(prop.key);
       if (prop.key === "key" || paramNames.has(prop.key)) {
         expandAsNamed = true;
-        break;
+      }
+    }
+    // Strict-mode diagnostic for the silent named→positional flip (feedback
+    // §2.3): the caller passed a `{...}` whose keys match NONE of the
+    // component's params, so it's quietly forwarded as a positional arg. The
+    // usual cause is a renamed parameter. Behaviour is unchanged; we only warn.
+    if (!expandAsNamed && ctx.strict && objKeys.length > 0 && decl.params.length > 0) {
+      const dedupeKey = `trailing:${decl.name}:${objKeys.slice().sort().join(",")}`;
+      if (!ctx.strictWarned.has(dedupeKey)) {
+        ctx.strictWarned.add(dedupeKey);
+        const where = loc ? ` (line ${loc.line}, col ${loc.column})` : "";
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} ` +
+            `is being forwarded as a positional argument because none of its keys match a ` +
+            `parameter (${decl.params.map((p) => p.name).join(", ") || "none"}). ` +
+            `If you meant named props, check for a renamed/misspelled parameter.`,
+        );
       }
     }
   }
@@ -3164,6 +3297,60 @@ function runActionDeclSync(
 }
 
 /**
+ * `$optimistic(() => { … })` — run a callback that writes state optimistically
+ * and automatically roll the reactive store back if it throws (or the promise
+ * it returns rejects). An ordinary `$`-prefixed builtin call (valid JS), so it
+ * composes anywhere an expression does:
+ *
+ *   onClick: () => $optimistic(() => {
+ *     $todos = [...$todos, draft]            // optimistic write
+ *     $save  = $http({ url: "/todos", method: "POST", body: draft })
+ *     if (!draft.title) throw "title required" // → rolls $todos back
+ *   })
+ *
+ * The whole store is snapshotted before the callback; on failure, atoms
+ * created during the callback are reset and pre-existing atoms restored to
+ * their snapshot value, then the error is re-thrown so callers can react.
+ */
+function runOptimistic(fnExpr: Expression | undefined, ctx: EvaluationContext): unknown {
+  const fn = fnExpr ? evaluate(fnExpr, ctx) : undefined;
+  if (typeof fn !== "function") return undefined;
+  const snapshot = new Map<string, StateValue>();
+  for (const [name, value] of ctx.state.entries()) snapshot.set(name, value);
+  const rollback = (): void => {
+    // Atoms created during the callback weren't in the snapshot — clear them.
+    for (const name of [...ctx.state.entries()].map(([n]) => n)) {
+      if (!snapshot.has(name)) ctx.state.set(name, undefined);
+    }
+    // Restore every pre-existing atom to its snapshot value.
+    for (const [name, value] of snapshot) ctx.state.set(name, value);
+    ctx.notify?.();
+  };
+  try {
+    const result = (fn as () => unknown)();
+    // Async callback — roll back if the returned promise rejects.
+    if (result && typeof (result as { then?: unknown }).then === "function") {
+      return (result as Promise<unknown>).catch((err: unknown) => {
+        rollback();
+        throw err;
+      });
+    }
+    return result;
+  } catch (err) {
+    // Control-flow signals are not failures — let them propagate untouched.
+    if (
+      err instanceof ReturnSignal ||
+      err instanceof BreakSignal ||
+      err instanceof ContinueSignal
+    ) {
+      throw err;
+    }
+    rollback();
+    throw err;
+  }
+}
+
+/**
  * Bind `params` (with defaults / destructuring) into `ctx.loopVars`, run
  * `body` via `evaluateBlock`, then restore the previous bindings. Shared by
  * the action runner and the hook runner — the only behavioural difference
@@ -3328,6 +3515,98 @@ function evaluateMemoHook(
   const value = compute();
   cells[slot] = { kind: "memo", deps: depsArr, value };
   return value;
+}
+
+/**
+ * `$ref(initial)` — React's `useRef`. Returns a stable mutable box
+ * `{ current }` whose identity persists across renders. Writing
+ * `ref.current = …` does NOT schedule a re-render (the escape hatch for
+ * holding a DOM node, a previous value, a timer id, or any mutable value
+ * that should survive renders without driving the UI). Pair it with the
+ * `OnMount(child, { onMount: node => ref.current = node })` wrapper to grab
+ * a rendered DOM node.
+ */
+function evaluateRefHook(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const cells = instanceHookCells(ctx);
+  if (!cells) {
+    warnHookOutsideComponent("ref", loc);
+    return { current: args[0] ? evaluate(args[0], ctx) : undefined };
+  }
+  const slot = ctx.hookScope!.cursor++;
+  let cell = cells[slot];
+  if (!cell || cell.kind !== "ref") {
+    cell = { kind: "ref", box: { current: args[0] ? evaluate(args[0], ctx) : undefined } };
+    cells[slot] = cell;
+  }
+  return cell.box;
+}
+
+/**
+ * `$reducer(reducer, initial)` — React's `useReducer`. Returns a
+ * `[state, dispatch]` pair. `dispatch(action)` computes
+ * `reducer(state, action)` and schedules a re-render when the result
+ * differs (`Object.is`). The reducer is a pure `(state, action) => next`
+ * callable — the idiomatic way to manage state with many related
+ * transitions without juggling several `$state` setters.
+ */
+function evaluateReducerHook(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const reducer = args[0] ? evaluate(args[0], ctx) : undefined;
+  const cells = instanceHookCells(ctx);
+  const initial = args[1] ? evaluate(args[1], ctx) : undefined;
+  if (!cells) {
+    warnHookOutsideComponent("reducer", loc);
+    return [initial, () => {}];
+  }
+  const slot = ctx.hookScope!.cursor++;
+  let cell = cells[slot];
+  if (!cell || cell.kind !== "reducer") {
+    cell = { kind: "reducer", value: initial };
+    cells[slot] = cell;
+  }
+  const reducerCell = cell;
+  const dispatch = (action: unknown): void => {
+    if (typeof reducer !== "function") return;
+    const next = (reducer as (s: unknown, a: unknown) => unknown)(reducerCell.value, action);
+    if (Object.is(next, reducerCell.value)) return;
+    reducerCell.value = next;
+    ctx.notify?.();
+  };
+  return [reducerCell.value, dispatch];
+}
+
+let idHookCounter = 0;
+/**
+ * `$id(prefix?)` — React's `useId`. Returns a stable, unique string id for
+ * the lifetime of the component instance (the same value on every render),
+ * for wiring `for`/`id`/`aria-labelledby` pairs without hard-coding ids that
+ * collide when a component is rendered more than once.
+ */
+function evaluateIdHook(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const prefix = args[0] ? String(evaluate(args[0], ctx)) : "rui";
+  const cells = instanceHookCells(ctx);
+  if (!cells) {
+    warnHookOutsideComponent("id", loc);
+    return `${prefix}-${(idHookCounter += 1)}`;
+  }
+  const slot = ctx.hookScope!.cursor++;
+  let cell = cells[slot];
+  if (!cell || cell.kind !== "id") {
+    cell = { kind: "id", value: `${prefix}-${(idHookCounter += 1)}` };
+    cells[slot] = cell;
+  }
+  return cell.value;
 }
 
 /**

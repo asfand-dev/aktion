@@ -1,0 +1,36 @@
+// Energy page: a live load gauge, today's headline numbers, and two charts
+// (usage by hour, usage by room) built from the seed figures.
+
+import { roomEnergy, hourLabels, hourlyUsage } from "../data/home.aktion"
+import { home } from "../store.aktion"
+
+export function EnergyPage() {
+  return Column([
+    PageHeader("Energy", { subtitle: "Where your power is going today.", breadcrumbs: false }),
+    Grid([
+      Card([
+        SectionHeader("Live load", { eyebrow: "NOW" }),
+        Gauge(home.load(), { min: 0, max: 4000, caption: "Watts across on devices", tone: "warning", size: "lg" })
+      ]),
+      Card([
+        SectionHeader("Today", { eyebrow: "ENERGY" }),
+        Stats(energyStats, { layout: "strip" })
+      ])
+    ], { columns: { base: 1, md: 2 }, gap: "m" }),
+    Card([SectionHeader("Usage by hour", { subtitle: "kWh" }), usageChart]),
+    Card([SectionHeader("Usage by room", { subtitle: "kWh today" }), roomChart])
+  ], { gap: "l" })
+}
+
+usageSeries = Series("kWh", { values: hourlyUsage })
+usageChart = LineChart(hourLabels, { series: [usageSeries], filled: true })
+
+roomLabels = roomEnergy.map(r => r.room)
+roomSeries = Series("kWh", { values: roomEnergy.map(r => r.kwh) })
+roomChart = BarChart(roomLabels, { series: [roomSeries] })
+
+energyStats = [
+  { label: "Total", value: "11.2 kWh", tone: "primary" },
+  { label: "Peak", value: "2.4 kWh", hint: "6–9 PM" },
+  { label: "Est. cost", value: "$2.91" }
+]

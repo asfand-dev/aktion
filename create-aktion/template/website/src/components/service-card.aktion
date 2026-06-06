@@ -1,0 +1,17 @@
+// A single service offering. Reused on the home preview and the services page.
+
+export function ServiceCard(service) {
+  return Card([
+    Row([
+      Icon(service.icon, { size: "lg", color: "var(--rui-color-primary)" }),
+      Text(service.name, { variant: "large-heavy" })
+    ], { gap: "m", align: "center" }),
+    Text(service.tagline, { tone: "muted" }),
+    Text(service.description, { variant: "small" }),
+    Separator(),
+    Row([
+      StackItem(Text(service.price, { variant: "body-heavy" }), { grow: 1 }),
+      Badge(service.duration, { tone: "neutral" })
+    ], { align: "center", gap: "m" })
+  ], { variant: "outlined" })
+}

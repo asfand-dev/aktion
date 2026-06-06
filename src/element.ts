@@ -50,7 +50,7 @@ import {
   type RouteChangeDetail,
 } from "./runtime/index.js";
 import { HttpRuntime } from "./runtime/http.js";
-import { EffectRunner, ActionDeclRunner } from "./runtime/effects.js";
+import { EffectRunner } from "./runtime/effects.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
 import { defaultLibrary, validateProgramSchema } from "./library/index.js";
@@ -230,7 +230,6 @@ export class AktionElement extends HTMLElement {
   private library: ComponentLibrary = defaultLibrary;
   private readonly http = new HttpRuntime();
   private readonly effectRunner: EffectRunner;
-  private readonly actionDeclRunner: ActionDeclRunner;
   private renderer: Renderer;
   private context: EvaluationContext;
   private root: ShadowRoot;
@@ -335,18 +334,11 @@ export class AktionElement extends HTMLElement {
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onEffectEvent: (payload) => this.emitDevtoolsEffect(payload),
     });
-    this.actionDeclRunner = new ActionDeclRunner({
-      state: this.state,
-      notify: () => this.requestFullRender(),
-      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
-      onAssistantMessage: dispatchAssistantMessage,
-    });
-
     this.context = createContext(this.state, {
       router: this.router,
       library: this.library,
       http: this.http,
-      actionRunner: this.actionDeclRunner,
+      strict: this.hasAttribute("strict"),
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
@@ -813,6 +805,17 @@ export class AktionElement extends HTMLElement {
    * `connectedCallback`.
    */
   private startRouter(): void {
+    // Apply the URL strategy from attributes before the router attaches its
+    // listeners. `router-mode="history"` opts into clean History-API URLs;
+    // `router-base` sets the sub-directory the SPA is served under.
+    const mode = this.getAttribute("router-mode");
+    const base = this.getAttribute("router-base");
+    if (mode || base) {
+      this.router.configure({
+        mode: mode === "history" ? "history" : mode === "hash" ? "hash" : undefined,
+        ...(base !== null ? { basePath: base } : {}),
+      });
+    }
     this.router.start();
     // Seed `route` immediately so the very first render sees the URL
     // hash (instead of the default "/").
@@ -1143,7 +1146,7 @@ export class AktionElement extends HTMLElement {
       router: this.router,
       library: this.library,
       http: this.http,
-      actionRunner: this.actionDeclRunner,
+      strict: this.hasAttribute("strict"),
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });

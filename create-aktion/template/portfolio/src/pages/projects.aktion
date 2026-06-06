@@ -1,0 +1,24 @@
+// All projects, filterable by tech. The selected tech is a per-instance `$`
+// atom two-way bound to the ToggleGroup; the grid recomputes when it changes.
+
+import { ProjectCard } from "../components/project-card.aktion"
+import { projects, techs } from "../data/portfolio.aktion"
+
+techFilters = ["All", ...techs]
+
+export function ProjectsPage() {
+  $tech = "All"
+  list = filterProjects(projects, $tech)
+  return Column([
+    PageHeader("Projects", { subtitle: "Things I've designed and shipped.", breadcrumbs: false }),
+    Card([ToggleGroup("tech-filter", { items: techFilters, value: $tech })]),
+    list.length > 0
+      ? Grid(list.map(ProjectCard), { minChildWidth: "280px", gap: "m" })
+      : EmptyState("No projects with that tech", { description: "Try a different filter.", icon: "filter-circle-xmark" })
+  ], { gap: "l" })
+}
+
+function filterProjects(items, tech) {
+  if (tech === "All") { return items }
+  return items.filter(p => p.tags.includes(tech))
+}

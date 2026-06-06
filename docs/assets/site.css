@@ -296,7 +296,7 @@ img, svg { max-width: 100%; height: auto; display: block; }
   grid-template-columns: var(--doc-sidebar-w) minmax(0, 1fr);
   align-items: start;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
 }
 
@@ -309,6 +309,10 @@ img, svg { max-width: 100%; height: auto; display: block; }
 .layout[data-wide="true"] {
   grid-template-columns: var(--doc-sidebar-w) minmax(0, 1fr);
   max-width: 1500px;
+}
+
+body[data-page="playground"] .layout {
+  max-width: 100%;
 }
 
 /* --------------------------------------------------------------------------
@@ -585,23 +589,7 @@ main pre code {
   font-size: 14px;
   line-height: 1.6;
 }
-.callout::before {
-  content: "i";
-  position: absolute;
-  top: 14px;
-  left: 16px;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--doc-radius-pill);
-  background: var(--doc-primary);
-  color: #fff;
-  font-weight: 700;
-  font-size: 12px;
-  font-family: var(--doc-mono);
-  font-style: italic;
-}
+
 .callout > *:first-child { margin-top: 0; }
 .callout > *:last-child { margin-bottom: 0; }
 .callout h4 {

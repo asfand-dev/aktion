@@ -1,0 +1,45 @@
+// The data layer. `$todos` is a reactive `$http({...})` resource that loads on
+// mount; every mutation fires its own one-shot `$http` request and refetches
+// the list when it settles (via `.onDone`). Components import the resource +
+// these actions — no prop-drilling.
+
+import { base } from "./api.aktion"
+
+export $todos = $http({ url: base + "/todos" })
+export $draft = ""
+export $editingId = null
+export $editTitle = ""
+
+export function addTodo() {
+  if (!$draft.trim()) { return }
+  $create = $http({ url: base + "/todos", method: "POST", body: { title: $draft.trim() } })
+  $draft = ""
+  $create.onDone = () => { $todos.refetch() }
+}
+
+export function toggleTodo(todo) {
+  $patch = $http({ url: base + "/todos/" + todo.id, method: "PATCH", body: { isCompleted: !todo.isCompleted } })
+  $patch.onDone = () => { $todos.refetch() }
+}
+
+export function startEdit(todo) {
+  $editingId = todo.id
+  $editTitle = todo.title
+}
+
+export function cancelEdit() {
+  $editingId = null
+  $editTitle = ""
+}
+
+export function saveEdit(todo) {
+  $update = $http({ url: base + "/todos/" + todo.id, method: "PUT", body: { title: $editTitle, isCompleted: todo.isCompleted } })
+  $editingId = null
+  $editTitle = ""
+  $update.onDone = () => { $todos.refetch() }
+}
+
+export function deleteTodo(todo) {
+  $del = $http({ url: base + "/todos/" + todo.id, method: "DELETE" })
+  $del.onDone = () => { $todos.refetch() }
+}

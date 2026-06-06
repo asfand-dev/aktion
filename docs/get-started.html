@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Get started · Aktion</title>
-  <meta name="description" content="Get Aktion rendering in under a minute — drop in a CDN script tag or install from npm, mount the &lt;aktion-app&gt; element, and feed it a $app(Column([...])) program." />
+  <meta name="description" content="Get Aktion rendering in under a minute — scaffold a project with create-aktion, drop in a CDN script tag, or install aktion-runtime from npm, then feed the &lt;aktion-app&gt; element a $app(Column([...])) program." />
   <script>
     (function () {
       try {
@@ -65,45 +65,74 @@
         <span class="hero-eyebrow">Getting started</span>
         <h1>Install.</h1>
         <p class="lead">
-          Get Aktion rendering in under a minute. There are two ways in &mdash; drop
-          a <strong>CDN <code>&lt;script&gt;</code> tag</strong> into any HTML page, or
-          <strong>install from npm</strong> and import it in your app. Either way you
-          end up with one custom element, <code>&lt;aktion-app&gt;</code>, that turns a
-          compact <code>$app(Column([&hellip;]))</code> program into a real,
-          interactive UI inside its shadow DOM.
+          Get Aktion rendering in under a minute. The quickest path is to
+          <strong><a href="#scaffold">scaffold a project</a></strong> with
+          <code>create-aktion</code> and
+          <strong><a href="#editor">add the editor extension</a></strong> &mdash; then
+          you write a compact <code>$app(Column([&hellip;]))</code> program and the
+          <code>&lt;aktion-app&gt;</code> element turns it into a real, interactive UI.
+          Prefer no build step? You can also
+          <strong><a href="#cdn">drop in a CDN tag</a></strong> or
+          <strong><a href="#npm">install from npm</a></strong>.
         </p>
       </header>
 
-      <h2 id="cdn">Drop in a script tag (CDN)</h2>
+      <h2 id="scaffold">Scaffold a project with <code>create-aktion</code></h2>
       <p>
-        Zero build, zero bundler. Load the ES module bundle from the CDN &mdash; it
-        registers the <code>&lt;aktion-app&gt;</code> element &mdash; then mount the
-        tag and hand it a program through the <code>response</code> attribute:
+        The fastest way to a real, hot-reloading app is <strong><code>create-aktion</code></strong>
+        (requires <strong>Node&nbsp;18+</strong>). It generates a
+        Vite&nbsp;+&nbsp;TypeScript project with multi-file
+        <code>.aktion</code> modules, the <code>aktion-runtime/vite</code> plugin wired
+        up, and &mdash; for the richer templates &mdash; a Vitest suite:
       </p>
-<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
-
-&lt;aktion-app response="$app(Column([
-  PageHeader('Hello', { subtitle: 'Generative UI in plain HTML' }),
-  Card([CardHeader('It works'), Text('No build step required.')])
-]))"&gt;&lt;/aktion-app&gt;</code></pre>
+<pre><code>npm create aktion@latest my-app
+cd my-app
+npm install
+npm run dev          # http://localhost:5173</code></pre>
       <p>
-        That single bundle ships the parser, the reactive runtime, every built-in
-        component, the themes, and an optional Font Awesome loader. Nothing else to
-        wire up.
+        Run it with no arguments to choose a name and template interactively, or pass
+        <code>--template</code> to pick one up front
+        (<code>pnpm create aktion</code>, <code>yarn create aktion</code>, and
+        <code>npx create-aktion</code> work too):
       </p>
-
-      <h2 id="npm">Install from npm</h2>
-      <p>If you bundle your own assets, install the package:</p>
-<pre><code>npm i aktion-runtime</code></pre>
+<pre><code>npm create aktion@latest my-app -- --template dashboard</code></pre>
+      <p>Six templates ship today:</p>
+      <ul>
+        <li><strong>empty</strong> &mdash; a minimal hello-world starter (no tests).</li>
+        <li><strong>dashboard</strong> &mdash; a home-automation control panel: a <code>$store</code>, device switches/sliders, scenes, and energy charts behind an <code>AppShell</code>&nbsp;+&nbsp;router.</li>
+        <li><strong>website</strong> &mdash; a pet-sitting company site: navbar, hero, services, a pricing table&nbsp;+&nbsp;FAQ, and a validated contact form.</li>
+        <li><strong>todos-app</strong> &mdash; REST CRUD with <code>$http</code> (create / toggle / edit / delete) and <code>Async</code> loading states.</li>
+        <li><strong>chatbot</strong> &mdash; an OpenAI chat UI with an API-key settings popover and an offline echo fallback.</li>
+        <li><strong>portfolio</strong> &mdash; a developer portfolio with a filterable projects grid, an experience timeline, and a contact form.</li>
+      </ul>
       <p>
-        Then import it once, anywhere in your app entry. The import has a side effect:
-        it registers the <code>&lt;aktion-app&gt;</code> custom element. After that the
-        tag works in any framework or in plain HTML.
+        Every template but <code>empty</code> splits its UI across <code>.aktion</code>
+        files the way you would in React (data&nbsp;/&nbsp;store&nbsp;/&nbsp;components&nbsp;/&nbsp;pages)
+        and ships unit tests you run with <code>npm test</code>. Editing any
+        <code>.aktion</code> file hot-reloads the UI while preserving live
+        <code>$state</code>.
       </p>
-<pre><code>import "aktion-runtime"; // registers &lt;aktion-app&gt;
 
-// then render the element however your framework does it:
-// &lt;aktion-app response="$app(Column([ Text('Hi from npm') ]))"&gt;&lt;/aktion-app&gt;</code></pre>
+      <h2 id="editor">Editor support (VS Code &amp; Cursor)</h2>
+      <p>
+        Install the <strong>Aktion</strong> extension for first-class
+        <code>.aktion</code> editing &mdash; syntax&nbsp;+&nbsp;semantic highlighting,
+        inline diagnostics, completions, hover docs, signature help, go-to-definition
+        (including across imported files), find references, rename, an outline view,
+        and format-on-save. Open the <strong>Extensions</strong> view, search
+        <strong>&ldquo;Aktion&rdquo;</strong>, and click <strong>Install</strong> &mdash;
+        or from a terminal:
+      </p>
+<pre><code>code --install-extension AsfandiyarKhan.aktion-vscode</code></pre>
+      <p>
+        It is available on the
+        <a href="https://marketplace.visualstudio.com/items?itemName=AsfandiyarKhan.aktion-vscode">Visual Studio Marketplace</a>
+        (VS Code) and on <a href="https://open-vsx.org/extension/AsfandiyarKhan/aktion-vscode">Open VSX</a>
+        (Cursor, VSCodium, Gitpod, &hellip;). Projects scaffolded with
+        <code>create-aktion</code> already recommend it and enable format-on-save and
+        semantic highlighting for <code>.aktion</code> files, so new contributors get the
+        prompt to install it automatically.
+      </p>
 
       <h2 id="first-program">Your first program</h2>
       <p>
@@ -130,44 +159,6 @@
         <code>Row</code>, <code>Center</code>, and <code>Grid</code>. Everything else
         is just components nested inside, each a function call with an optional props
         object.
-      </p>
-
-      <h2 id="from-javascript">Driving the element from JavaScript</h2>
-      <p>
-        For static UI the <code>response</code> attribute is enough. To swap the
-        program at runtime, grab the element and call <code>setResponse()</code>
-        (the <code>response</code> property does the same thing):
-      </p>
-<pre><code>const app = document.querySelector("aktion-app");
-
-app.setResponse(`
-  $app(Column([
-    CardHeader("Loaded from JavaScript"),
-    Text("Call setResponse() to replace the whole program.")
-  ]))
-`);</code></pre>
-      <p>
-        For a streaming source (e.g. an LLM responding token by token), turn on the
-        <code>streaming</code> attribute and push text with
-        <code>appendChunk()</code>. The UI commits each line as soon as the parser can;
-        <code>streaming</code> simply tells the error banner not to flash on transient
-        mid-line parse errors. Clear it when the stream ends.
-      </p>
-<pre><code>const app = document.querySelector("aktion-app");
-app.setAttribute("streaming", "true");
-
-for await (const chunk of stream) {
-  app.appendChunk(chunk);
-}
-
-app.removeAttribute("streaming");</code></pre>
-      <p>
-        Two more attributes are worth knowing up front: <code>theme</code> selects a
-        built-in theme (see below), and <code>showerrors</code> renders a developer
-        error banner inside the shadow DOM while you iterate. Other methods on the
-        element include <code>setTheme()</code>, <code>registerComponents()</code> to
-        extend the library at runtime, and <code>getSystemPrompt()</code> to build the
-        prompt that teaches an LLM to emit Aktion.
       </p>
 
       <h2 id="reactivity">Add reactivity</h2>
@@ -214,6 +205,85 @@ $app(Card([
 ]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+
+      <h2 id="from-javascript">Driving the element from JavaScript</h2>
+      <p>
+        For static UI the <code>response</code> attribute is enough. To swap the
+        program at runtime, grab the element and call <code>setResponse()</code>
+        (the <code>response</code> property does the same thing):
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+
+app.setResponse(`
+  $app(Column([
+    CardHeader("Loaded from JavaScript"),
+    Text("Call setResponse() to replace the whole program.")
+  ]))
+`);</code></pre>
+      <p>
+        For a streaming source (e.g. an LLM responding token by token), turn on the
+        <code>streaming</code> attribute and push text with
+        <code>appendChunk()</code>. The UI commits each line as soon as the parser can;
+        <code>streaming</code> simply tells the error banner not to flash on transient
+        mid-line parse errors. Clear it when the stream ends.
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.setAttribute("streaming", "true");
+
+for await (const chunk of stream) {
+  app.appendChunk(chunk);
+}
+
+app.removeAttribute("streaming");</code></pre>
+      <p>
+        Two more attributes are worth knowing up front: <code>theme</code> selects a
+        built-in theme (see <a href="#theming">Theming</a> above), and
+        <code>showerrors</code> renders a developer error banner inside the shadow DOM
+        while you iterate. Other methods on the element include <code>setTheme()</code>,
+        <code>registerComponents()</code> to extend the library at runtime, and
+        <code>getSystemPrompt()</code> to build the prompt that teaches an LLM to emit
+        Aktion.
+      </p>
+
+      <h2 id="other-installs">Other ways to install Aktion</h2>
+      <p>
+        <code>create-aktion</code> is the recommended start, but you can also add
+        Aktion to a page or an existing app with no scaffolding.
+      </p>
+
+      <h3 id="cdn">Drop in a script tag (CDN)</h3>
+      <p>
+        Zero build, zero bundler. Load the ES module bundle from the CDN &mdash; it
+        registers the <code>&lt;aktion-app&gt;</code> element &mdash; then mount the
+        tag and hand it a program through the <code>response</code> attribute:
+      </p>
+<pre><code>&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
+
+&lt;aktion-app response="$app(Column([
+  PageHeader('Hello', { subtitle: 'Generative UI in plain HTML' }),
+  Card([CardHeader('It works'), Text('No build step required.')])
+]))"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        That single bundle ships the parser, the reactive runtime, every built-in
+        component, the themes, and an optional Font Awesome loader. Nothing else to
+        wire up.
+      </p>
+
+      <h3 id="npm">Install <code>aktion-runtime</code> from npm</h3>
+      <p>
+        Adding Aktion to an <strong>existing</strong> app (React, Vue, Svelte, plain
+        HTML&hellip;) or bundling it yourself? Install the runtime package directly:
+      </p>
+<pre><code>npm i aktion-runtime</code></pre>
+      <p>
+        Then import it once, anywhere in your app entry. The import has a side effect:
+        it registers the <code>&lt;aktion-app&gt;</code> custom element. After that the
+        tag works in any framework or in plain HTML.
+      </p>
+<pre><code>import "aktion-runtime"; // registers &lt;aktion-app&gt;
+
+// then render the element however your framework does it:
+// &lt;aktion-app response="$app(Column([ Text('Hi from npm') ]))"&gt;&lt;/aktion-app&gt;</code></pre>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">

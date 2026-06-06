@@ -1,0 +1,44 @@
+// Landing page: hero, a skills snapshot, featured projects, and a CTA.
+
+import { ProjectCard } from "../components/project-card.aktion"
+import { profile, skills, projects } from "../data/portfolio.aktion"
+
+featured = projects.filter(p => p.highlight)
+
+export function HomePage() {
+  return Column([
+    Hero(profile.name, {
+      eyebrow: profile.role,
+      subtitle: profile.tagline,
+      primary: Button("View work", { variant: "primary", icon: "briefcase", onClick: () => route.navigate("/projects") }),
+      secondary: Button("Get in touch", { variant: "secondary", onClick: () => route.navigate("/contact") }),
+      highlights: [profile.location, profile.available ? "Open to work" : "Currently booked"]
+    }),
+    Column([
+      SectionHeader("What I do", { eyebrow: "SKILLS" }),
+      Card([SkillBars()])
+    ], { gap: "m" }),
+    Column([
+      SectionHeader("Featured work", { eyebrow: "SELECTED PROJECTS" }),
+      Grid(featured.map(ProjectCard), { minChildWidth: "280px", gap: "m" })
+    ], { gap: "m" }),
+    Card([
+      Center([
+        Text("Let's build something great.", { variant: "title" }),
+        Text("I'm available for freelance and full-time roles.", { tone: "muted" }),
+        Button("Start a conversation", { variant: "primary", icon: "envelope", onClick: () => route.navigate("/contact") })
+      ], { gap: "m" })
+    ])
+  ], { gap: "xl" })
+}
+
+function SkillBars() {
+  return Column(skills.map(skillRow), { gap: "s" })
+}
+
+function skillRow(skill) {
+  return Row([
+    StackItem(Text(skill.name, { variant: "small-heavy" }), { basis: "130px" }),
+    StackItem(Progress({ value: skill.level, tone: "primary" }), { grow: 1 })
+  ], { gap: "m", align: "center" })
+}

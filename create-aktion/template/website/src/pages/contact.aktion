@@ -1,0 +1,81 @@
+// Contact page: a validated booking-request form. Field values live in
+// reactive `$` atoms (two-way bound to the inputs); submitting validates them
+// with plain JS and either shows errors inline or swaps in a success state and
+// emits a `contact-submitted` event the host page can listen for.
+
+import { services, petOptions } from "../data/site.aktion"
+
+$name = ""
+$email = ""
+$message = ""
+$pet = "dog"
+$service = "walking"
+$errors = {}
+$submitted = false
+
+export function ContactPage() {
+  return Column([
+    PageHeader("Get in touch", { subtitle: "Tell us about your pet and we'll reply within a day.", breadcrumbs: false }),
+    $submitted ? Confirmation() : BookingForm()
+  ], { gap: "l" })
+}
+
+function BookingForm() {
+  return Card([
+    Form("contact", {
+      onSubmit: submitContact,
+      fields: [
+        FormControl("Your name", { field: Input("name", { value: $name, placeholder: "Jane Doe" }), hint: $errors.name }),
+        FormControl("Email", { field: Input("email", { type: "email", value: $email, placeholder: "jane@example.com" }), hint: $errors.email }),
+        FormControl("Pet", { field: Select("pet", { items: toItems(petOptions), value: $pet }) }),
+        FormControl("Service", { field: Select("service", { items: serviceItems, value: $service }) }),
+        FormControl("Message", { field: TextArea("message", { value: $message, rows: 4, placeholder: "Tell us about your pet and the dates you need" }), hint: $errors.message })
+      ],
+      buttons: Button("Request booking", { type: "submit", variant: "primary", icon: "paper-plane" })
+    })
+  ])
+}
+
+function Confirmation() {
+  return SuccessState("Request received!", {
+    description: "Thanks — we'll email " + $email + " within a day to confirm.",
+    actions: [Button("Send another", { variant: "secondary", onClick: resetForm })]
+  })
+}
+
+serviceItems = services.map(s => SelectItem(s.id, { label: s.name }))
+
+function toItems(options) {
+  return options.map(o => SelectItem(o.value, { label: o.label }))
+}
+
+function submitContact() {
+  errs = validateContact($name, $email, $message)
+  $errors = errs
+  if (Object.keys(errs).length === 0) {
+    $submitted = true
+    $emit("contact-submitted", { name: $name, email: $email, pet: $pet, service: $service, message: $message })
+  }
+}
+
+function validateContact(name, email, message) {
+  errs = {}
+  if (!name || !name.trim()) { errs.name = "Please tell us your name." }
+  if (!email || !isEmail(email)) { errs.email = "Enter a valid email address." }
+  if (!message || message.trim().length < 10) { errs.message = "A few words about your pet, please." }
+  return errs
+}
+
+function isEmail(value) {
+  at = value.indexOf("@")
+  dot = value.lastIndexOf(".")
+  return at > 0 && dot > at + 1 && dot < value.length - 1
+}
+
+function resetForm() {
+  $submitted = false
+  $name = ""
+  $email = ""
+  $message = ""
+  $errors = {}
+}

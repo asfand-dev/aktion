@@ -1,0 +1,27 @@
+// The scrolling transcript: one ChatBubble per message, plus a "thinking"
+// bubble while a request is in flight and an error callout if one failed.
+
+import { $messages, $pending, $error } from "../store.aktion"
+
+export function MessageList() {
+  bubbles = $messages.map(toBubble)
+  return ScrollArea([
+    Column([...bubbles, pendingNode(), errorNode()], { gap: "m" })
+  ], { maxHeight: "55vh" })
+}
+
+function toBubble(message) {
+  isUser = message.role === "user"
+  return ChatBubble(isUser ? "You" : "Assistant", {
+    body: message.content,
+    from: isUser ? "me" : "agent"
+  })
+}
+
+function pendingNode() {
+  return $pending ? ChatBubble("Assistant", { body: "Thinking…", from: "agent" }) : null
+}
+
+function errorNode() {
+  return $error ? Callout($error, { tone: "danger", icon: "triangle-exclamation" }) : null
+}

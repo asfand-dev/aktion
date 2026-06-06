@@ -1,0 +1,25 @@
+// One todo row. It swaps between a read view (checkbox + title + edit/delete)
+// and an inline edit view based on the shared `$editingId` atom.
+
+import { $editingId, $editTitle, toggleTodo, startEdit, saveEdit, cancelEdit, deleteTodo } from "../store.aktion"
+
+export function TodoItem(todo) {
+  return $editingId === todo.id ? EditRow(todo) : ViewRow(todo)
+}
+
+function ViewRow(todo) {
+  return Row([
+    Checkbox("done-" + todo.id, { value: todo.isCompleted, onChange: () => toggleTodo(todo) }),
+    StackItem(Text(todo.title, { tone: todo.isCompleted ? "muted" : "default" }), { grow: 1 }),
+    IconButton("pen", { label: "Edit", onClick: () => startEdit(todo), variant: "ghost", size: "sm" }),
+    IconButton("trash", { label: "Delete", onClick: () => deleteTodo(todo), variant: "ghost", size: "sm" })
+  ], { gap: "s", align: "center" })
+}
+
+function EditRow(todo) {
+  return Row([
+    StackItem(Input("edit-" + todo.id, { value: $editTitle, placeholder: "Todo title" }), { grow: 1 }),
+    Button("Save", { onClick: () => saveEdit(todo), variant: "primary", size: "sm", icon: "check" }),
+    Button("Cancel", { onClick: cancelEdit, variant: "ghost", size: "sm" })
+  ], { gap: "s", align: "center" })
+}

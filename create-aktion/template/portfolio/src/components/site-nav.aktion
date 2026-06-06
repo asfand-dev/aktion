@@ -1,0 +1,16 @@
+import { profile } from "../data/portfolio.aktion"
+
+export function SiteNav() {
+  return Navbar(profile.name, {
+    items: [
+      NavbarItem("Home", { to: "/" }),
+      NavbarItem("Projects", { to: "/projects" }),
+      NavbarItem("About", { to: "/about" }),
+      NavbarItem("Contact", { to: "/contact" })
+    ],
+    actions: [
+      Button("Hire me", { variant: "primary", size: "sm", icon: "envelope", onClick: () => route.navigate("/contact") })
+    ],
+    sticky: true
+  })
+}

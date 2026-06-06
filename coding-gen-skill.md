@@ -36,7 +36,7 @@ description: >-
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
 - [11. Routing](#11-routing)
-- [12. Globals — `$storage`, `$console`](#12-globals--storage-console)
+- [12. Globals — `$storage`, `$console`, `$toast`](#12-globals--storage-console-toast)
 - [13. Internationalization](#13-internationalization)
 - [14. Theming](#14-theming)
 - [15. Icons (Font Awesome)](#15-icons-font-awesome)
@@ -69,7 +69,9 @@ Internalize these rules and you will write correct, polished programs:
    the callables `.refetch()` / `.cancel()`, and a settable `.onDone`
    callback. Re-run a request via `.refetch()` or by wrapping it in an
    `$effect(..., [$dep])`; use `.onDone` to refresh another resource after a
-   write.
+   write. Two same-config variants build on it: `$query({...})` (cached +
+   deduplicated reads) and `$mutation({...})` (a deferred write that fires
+   only on `.mutate(overrides?)`) — see § 7.
 5. **Components are PascalCase functions that MUST `return`.**
    `function Name(args) { … return Expression }` — PascalCase name signals
    a component. Always end with an explicit `return`.
@@ -117,7 +119,10 @@ Internalize these rules and you will write correct, polished programs:
     `expires`, `maxAge`, `path`, `domain`, `secure`, `sameSite`)
     directly. `console.log/error/warn/info/debug` forwards to the host
     console. Both globals follow the standard `obj.method(args)`
-    method-call syntax and accept object-literal options.
+    method-call syntax and accept object-literal options. `$toast` is a
+    third reserved namespace — `$toast.show(msg, { tone?, duration? })`
+    (and `.success/.error/.dismiss/.clear`) drives notifications from a
+    reactive `$toast.items` list instead of a hand-managed array.
 16. **`pages = $router({ … })` and `NavLink(label, { to })` are always
     available.** The reactive `route.path` / `route.params` /
     `route.query` surface stays live across the whole app; inside a
@@ -736,6 +741,14 @@ Subscriptions are keyed to the **path** you read, not the whole atom.
   inline-lambda prop each render makes the child re-render; hoist the
   handler to a stable binding to skip it. Name case does **not** matter —
   `App` and `app` both seed `$state` once and re-render the same way.
+- **Full-re-render caveat (important).** Path-tracking only applies to
+  top-level `$name = value` atoms. The hook setters (`$state` / `$memo` /
+  `$ref` / `$reducer`), `$http` / `$query` / `$mutation` lifecycle changes,
+  `setTimeout` / `setInterval` ticks, `$effect` writes, and `$emit` cannot be
+  path-tracked and therefore trigger a **full re-render** (every component
+  body re-executes; the morph reconciler still patches only the changed DOM).
+  Prefer plain `$name` atoms for hot-path app state; reach for hooks when you
+  need per-instance isolation and can accept the full-re-render cost.
 
 ### Assignment rules
 
@@ -763,10 +776,10 @@ function Counter(label) {
 $app(Stack([Counter("A"), Counter("B")]))  // independent counters
 ```
 
-### Hooks — `$state`, `$memo`, custom `$name`
+### Hooks — `$state`, `$memo`, `$ref`, `$reducer`, `$id`, custom `$name`
 
 A function whose name starts with `$` is a **hook** (React's `use*`
-convention). Hooks are the composable form of per-instance state. The two
+convention). Hooks are the composable form of per-instance state. The five
 built-ins mirror React exactly:
 
 - `$state(initial)` → `[value, setValue]` (like `useState`). `setValue(v)`
@@ -775,6 +788,17 @@ built-ins mirror React exactly:
 - `$memo(() => compute, [deps])` → a cached value (like `useMemo`) that
   recomputes only when a dependency changes (shallow `Object.is`). Omit the
   deps array to recompute every render.
+- `$ref(initial)` → a stable `{ current }` box (like `useRef`). Its identity
+  persists across renders and writing `ref.current = …` does **not**
+  re-render — use it for a DOM node (via `OnMount`), a timer id, or a
+  previous value you want to remember without driving the UI.
+- `$reducer((state, action) => next, initial)` → `[state, dispatch]` (like
+  `useReducer`). `dispatch(action)` runs the pure reducer and re-renders
+  when the result changes — the clean way to manage many related
+  transitions instead of juggling several `$state` setters.
+- `$id(prefix?)` → a stable, unique id string for the instance's lifetime
+  (like `useId`) — for `for` / `id` / `aria-labelledby` wiring that must not
+  collide when a component renders more than once.
 
 ```javascript
 function Counter() {
@@ -809,8 +833,9 @@ function Panel() {
 in a stable order at the top level of a component / hook body — never
 inside an `if`, loop, or callback (slots are matched by call order across
 renders). Hook state **resets when the instance leaves the tree**; a
-remounted component starts from its initial value again. `$state` and
-`$memo` are reserved names. Prefer the hook form when a component owns
+remounted component starts from its initial value again. `$state`,
+`$memo`, `$ref`, `$reducer`, and `$id` are reserved names. Prefer the hook
+form when a component owns
 local state with explicit setters; the bare `$name = value` form above is
 the lighter option when an atom is written directly by the component's
 actions.
@@ -1051,6 +1076,32 @@ Inside an action body the imperative surface is small:
 - `$storage.set(...)`, `console.log(...)` — global namespaces (§12).
 - Standard JS control flow: `if`/`switch`/`for`.
 - `return` — optionally yields a value to the caller.
+
+### Optimistic updates — `$optimistic(() => { … })`
+
+Wrap optimistic writes in the `$optimistic` builtin — an ordinary
+`$`-prefixed function call (valid JS, no special keyword). It **snapshots
+every reactive atom before the callback runs** and **rolls the store back
+automatically if the callback throws (or the promise it returns rejects)**.
+This is the built-in pattern for optimistic UI: write the change
+immediately so the UI feels instant, then let a failed validation / request
+revert it for you.
+
+```javascript
+$todos = []
+function addTodo(text) {
+  $optimistic(() => {
+    if (text == "") throw new Error("empty")        // guard → rolls back
+    $todos = [...$todos, { id: $todos.length + 1, text: text, pending: true }]
+    $save = $http({ url: "/todos", method: "POST", body: { text: text } })
+  })
+}
+```
+
+If the callback throws, `$todos` (and every other atom) snaps back to its
+pre-call value — no manual rollback bookkeeping. Atoms created inside the
+callback are cleared on rollback; a write made **outside** `$optimistic` is
+never reverted.
 
 ### Optional `return`
 
@@ -1355,6 +1406,43 @@ view = Async($orders, {
 })
 ```
 
+### `$query({...})` — cached + deduplicated reads
+
+Same config as `$http`, but the resource is **cached and deduplicated**. Two
+calls with the same `key` (or the same derived method + url + query + body)
+share one in-flight request and one reactive bag — so the same data fetched
+from several components hits the network once. Pass `ttl` (ms) to auto-refetch
+when the cached data is older than the TTL.
+
+```javascript
+$users = $query({ url: "https://api.example.com/users", key: "users", ttl: 30000 })
+// elsewhere — reuses the cached bag, no second request:
+$alsoUsers = $query({ url: "https://api.example.com/users" })
+```
+
+The bag is identical to `$http` (`.data` / `.loading` / `.error` /
+`.refetch()` / …). `key` and `ttl` are query-layer-only and are never sent to
+`fetch`. Use `$query` for read-heavy data shown in multiple places; use plain
+`$http` for one-off requests.
+
+### `$mutation({...})` — deferred-fire writes
+
+`$http` fires on mount, which is wrong for create/update/delete that should
+run on a click. `$mutation({...})` is the **deferred** variant: it does
+nothing until you call `.mutate(overrides?)`. Method defaults to `POST`.
+
+```javascript
+$save = $mutation({ url: "https://api.example.com/todos" })
+$save.onDone = () => $todos.refetch()
+...
+Button("Add", { onClick: () => $save.mutate({ body: { title: $title } }) })
+```
+
+`.mutate(overrides)` shallow-merges `overrides` over the base config (set
+`body` / `query` / `url` / `method` per call) and resolves with the response
+body. The bag exposes `.loading` / `.error` / `.data`, a `.reset()` to clear
+it, and the same `.onDone` settle hook as `$http`.
+
 ---
 
 ## 8. `$util` — runtime helper namespace
@@ -1401,9 +1489,22 @@ formatting, or skeleton ranges.
 | `$util.slice(arr, start?, end?)`                 | Standard slice.                                                 |
 | `$util.reverse(arr)`                             | Reversed copy.                                                  |
 | `$util.unique(arr, "field"?)`                    | Deduplicate.                                                    |
+| `$util.partition(arr, "field", "op", value)`     | Split into `[matching, rest]`.                                  |
+| `$util.keyBy(arr, "field")`                      | `{ keyValue: item }` lookup map.                                |
+| `$util.chunk(arr, size)`                         | Split into fixed-size groups.                                   |
+| `$util.flatten(arr, depth?)`                     | Flatten nested arrays (depth 1 by default).                     |
+| `$util.zip(...arrays)`                           | Pair up by index, padding short lists with `null`.             |
 | `$util.range(start, end, step?)`                 | Inclusive integer range.                                        |
 | `$util.repeat(value, n)`                         | Repeat a value N times.                                         |
+
+### Object shape
+
+| Function                                    | Purpose                                                         |
+| ------------------------------------------- | --------------------------------------------------------------- |
 | `$util.pick(obj, ["a", "b"])`                    | Keep only the listed keys.                                      |
+| `$util.omit(obj, ["a", "b"])`                    | Drop the listed keys.                                           |
+| `$util.merge(target, ...sources)`                | Deep-merge plain objects (inputs untouched).                   |
+| `$util.cloneDeep(value)`                         | Independent deep copy (arrays / objects / dates).              |
 
 ### Formatting
 
@@ -1825,13 +1926,13 @@ Notes:
 
 ### Behaviour & styling wrappers
 
-`OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `Css`,
-`Link`.
+`OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `OnMount`,
+`Css`, `Link`.
 
-These six wrappers attach **behaviour** (click / mouse / keyboard /
-focus / intersection) or **styling** (class / inline style) onto any
-component without forcing every primitive to grow another prop. They
-render the child via a transparent wrapper (`display: contents`) so
+These wrappers attach **behaviour** (click / mouse / keyboard /
+focus / intersection / lifecycle) or **styling** (class / inline style)
+onto any component without forcing every primitive to grow another prop.
+They render the child via a transparent wrapper (`display: contents`) so
 the visual tree stays identical — only the event / styling layer
 changes.
 
@@ -1858,6 +1959,13 @@ Notes:
   rootMargin?, once? })` — IntersectionObserver wrapper for lazy-load
   sentinels, infinite-scroll triggers, impression analytics, and
   reveal-on-scroll animations. `onChange` receives `{visible, ratio}`.
+- `OnMount(child, { onMount?, onUnmount? })` — the DOM-ref / lifecycle
+  wrapper, and the **only** sanctioned way to touch a raw DOM node.
+  `onMount(node)` fires once, on a microtask after the wrapped element is
+  attached; `onUnmount(node)` fires when it leaves the tree. Use it to
+  measure or focus an element, or to hand the node to an imperative
+  library (a chart, a map, a rich-text editor). Stash the node in a
+  `$ref(...)` so later renders / cleanup can reach it.
 - `Css(child, { style?, class? })` — merge raw class tokens and inline
   style declarations onto the child. Use ONLY when the standard
   component props can't express the styling. Prefer `Box` / `Stack` /
@@ -2081,6 +2189,15 @@ $app(AppShell(MainSidebar(), pages, TopBar()))
 - `params` is bound to the matched route's path captures.
 - Use `route` for cross-cutting reactive reads.
 
+### Hash vs history URLs (host concern, not your code)
+
+The same `$router({…})` / `NavLink` / `route.navigate(...)` code works in
+both URL strategies — the strategy is chosen by the host via the
+`router-mode` attribute on `<aktion-app>` (`"hash"`, the default, or
+`"history"` for clean `/about` URLs). Never hard-code `#/…` prefixes in
+`to` / `navigate(...)` — always pass a clean path (`"/orders/42"`) and let
+the runtime render it correctly for the active mode.
+
 ### Reactive surface
 
 - `route.path` — current path (read-only).
@@ -2124,11 +2241,12 @@ pages = $router({
 
 ---
 
-## 12. Globals — `$storage`, `$console`
+## 12. Globals — `$storage`, `$console`, `$toast`
 
-Two namespace globals are always in scope — no import, no declaration.
-Both names are **lowercase** and follow standard JS `obj.method(args)`
-method-call syntax with object-literal options.
+These namespace globals are always in scope — no import, no declaration.
+`$storage` and `$console` follow standard JS `obj.method(args)` method-call
+syntax with object-literal options; `$toast` is the imperative notification
+manager (below).
 
 ### `$storage` — browser storage
 
@@ -2172,6 +2290,35 @@ console.debug({ days: $days, count: $count })
 
 Both globals can be used inside function bodies, effect callbacks,
 and inline lambdas.
+
+### `$toast` — imperative notifications
+
+A third reserved namespace. Instead of hand-managing a `$toasts = [...]`
+array (push on show, splice on dismiss, a timer per entry), `$toast` owns the
+lifecycle:
+
+```javascript
+$toast.show("Saved!", { tone: "success" })   // returns an id; auto-dismisses after 4000ms
+$toast.error("Could not save", { duration: 0 })  // 0 = sticky until dismissed
+$toast.success(msg)  $toast.info(msg)  $toast.warning(msg)   // tone shortcuts
+$toast.dismiss(id)   // remove one
+$toast.clear()       // remove all
+```
+
+Render the reactive `$toast.items` list with the `Toasts` / `Toast`
+components — the manager owns the timer, so each `Toast` is just a view:
+
+```javascript
+function save() {
+  $save = $http({ url: "https://api.example.com/todos", method: "POST", body: { title: $title } })
+  $save.onDone = () => { if ($save.error) $toast.error("Save failed"); else $toast.success("Saved") }
+}
+
+toaster = Toasts(map($toast.items, t =>
+  Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))
+```
+
+Each `$toast.items` entry is `{ id, message, title?, tone, duration, createdAt }`.
 
 ---
 
@@ -3256,7 +3403,9 @@ Before finishing, walk your output and verify:
 7. State uses the single-sigil `$name = value` form.
 8. HTTP uses `$http({ url, method, ... })` with an absolute `url`; the
    reactive bag exposes `.data` / `.error` / `.loading` / `.status` /
-   `.refetch()` / `.cancel()`.
+   `.refetch()` / `.cancel()`. `$query({...})` (cached/deduped) and
+   `$mutation({...})` (deferred `.mutate()`) are same-config variants; toasts
+   go through the `$toast` manager, not a hand-managed array.
 9. Router uses `$router({...})` and route surface is `route.*`.
 10. Effects use `$effect(() => { ... }, [deps])` syntax.
 11. Named arguments are wrapped in an object: `Button("x", { variant: "primary" })`.
@@ -3290,7 +3439,7 @@ Before finishing, walk your output and verify:
 | Component catalog by group                                             | §9.                                    |
 | JavaScript layer — `$emit`, `cleanup`, browser APIs                     | §10.                                   |
 | Routing — `$router`, `params`, `route`                                  | §11.                                   |
-| Globals — `$storage`, `$console`                                         | §12.                                   |
+| Globals — `$storage`, `$console`, `$toast`                               | §12.                                   |
 | Internationalisation — `$i18n({...})`, `t()`, `setCurrentLanguage()`    | §13.                                   |
 | Theming — `$theme({...})`, structured tokens, brand recipes             | §14.                                   |
 | Icons (Font Awesome)                                                   | §15.                                   |

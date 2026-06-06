@@ -1,0 +1,32 @@
+{
+  "name": "create-aktion",
+  "version": "0.1.2",
+  "description": "Scaffold a new Aktion app — `npm create aktion@latest` / `npx create-aktion`.",
+  "type": "module",
+  "bin": {
+    "create-aktion": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "template"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "aktion",
+    "create",
+    "scaffold",
+    "starter",
+    "generative-ui"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asfand-dev/aktion.git",
+    "directory": "create-aktion"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

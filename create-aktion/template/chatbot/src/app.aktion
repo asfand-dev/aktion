@@ -1,0 +1,18 @@
+// Entry module: a single chat surface — header (with a settings popover), the
+// scrolling transcript, and the composer pinned beneath it.
+
+import { MessageList } from "./components/message-list.aktion"
+import { Composer } from "./components/composer.aktion"
+import { Settings } from "./components/settings.aktion"
+
+$theme({ colors: { primary: "#10a37f" } })
+
+aktion = Column([
+  PageHeader("Assistant", {
+    subtitle: "A chatbot powered by OpenAI",
+    breadcrumbs: false,
+    actions: [Settings()]
+  }),
+  Card([MessageList()]),
+  Composer()
+], { gap: "m", padding: "l" })

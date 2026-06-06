@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TypeScript guide · Aktion</title>
+  <meta name="description" content="Typing your Aktion host integration: public types, the subpath entry points (/test, /devtools, /language, /vite), typing custom components and helpers, host event payloads, and a typed host-wrapper recipe." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="typescript">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>TypeScript guide.</h1>
+        <p class="lead">
+          The <code>.aktion</code> DSL itself is untyped, but everything around it
+          &mdash; the host element, custom components, interceptors, and event
+          payloads &mdash; ships full type declarations. This guide shows how to
+          wire Aktion into a typed host with no <code>any</code> leaks.
+        </p>
+      </header>
+
+      <div class="callout">
+        <p><strong>Scope.</strong> Types cover the <em>integration surface</em>
+          (the code you write in TypeScript around <code>&lt;aktion-app&gt;</code>).
+          The program text the runtime renders is a JS-subset DSL and is not
+          type-checked &mdash; see <a href="language.html">Language</a>.</p>
+      </div>
+
+      <h2 id="entries">Package entry points</h2>
+      <p>
+        The package exposes typed subpath entries. Import from the one that matches
+        your task:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Import</th><th>Provides</th></tr></thead>
+        <tbody>
+          <tr><td><code>aktion-runtime</code></td><td>The runtime: registers <code>&lt;aktion-app&gt;</code>, plus core types and <code>registerComponents</code>.</td></tr>
+          <tr><td><code>aktion-runtime/test</code></td><td>The Testing-Library-style API (<code>render</code>, <code>screen</code>, <code>$http</code> mocks).</td></tr>
+          <tr><td><code>aktion-runtime/devtools</code></td><td>DevTools backend/frontend hooks.</td></tr>
+          <tr><td><code>aktion-runtime/language</code></td><td>DOM-free language + tooling surface (<code>getDiagnostics</code>, <code>getCompletions</code>, <code>getHoverInfo</code>, <code>formatProgram</code>).</td></tr>
+          <tr><td><code>aktion-runtime/vite</code></td><td>The Vite plugin for <code>.aktion</code> files.</td></tr>
+          <tr><td><code>aktion-runtime/style.css</code></td><td>The base stylesheet.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="element">Typing the host element</h2>
+      <p>
+        <code>&lt;aktion-app&gt;</code> is a custom element. Cast the result of
+        <code>document.createElement</code> / <code>querySelector</code> to the
+        exported element type so the streaming methods and properties are typed:
+      </p>
+<pre><code>import type { AktionElement } from "aktion-runtime";
+import "aktion-runtime"; // registers the element
+
+const app = document.querySelector("aktion-app") as AktionElement;
+app.setResponse(source);     // full document
+app.appendChunk(tokenDelta); // streaming tail
+app.setAttribute("theme", "dark");</code></pre>
+
+      <h2 id="events">Host event payloads</h2>
+      <p>
+        The element dispatches typed <code>CustomEvent</code>s. Type the
+        <code>detail</code> when you add listeners:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Event</th><th><code>detail</code> shape</th></tr></thead>
+        <tbody>
+          <tr><td><code>assistant-message</code></td><td><code>{ message: string }</code> &mdash; the app asked the host to send a message back to the LLM.</td></tr>
+          <tr><td><code>route-change</code></td><td><code>{ path: string }</code> &mdash; the router navigated.</td></tr>
+          <tr><td><code>error</code></td><td><code>{ errors: { line: number; column: number; message: string }[] }</code>.</td></tr>
+        </tbody>
+      </table>
+<pre><code>app.addEventListener("assistant-message", (e) =&gt; {
+  const detail = e.detail as { message: string };
+  sendToModel(detail.message);
+});
+
+app.addEventListener("error", (e) =&gt; {
+  const detail = e.detail as { errors: { line: number; column: number; message: string }[] };
+  detail.errors.forEach((err) =&gt; reportError(err));
+});</code></pre>
+
+      <h2 id="components">Typing custom components</h2>
+      <p>
+        A custom built-in is a <code>ComponentSpec</code>. Its <code>render</code>
+        receives the node, resolved props, and the typed <code>helpers</code>
+        surface. Register it with <code>registerComponents</code>:
+      </p>
+<pre><code>import "aktion-runtime";
+import type { AktionElement, ComponentSpec } from "aktion-runtime";
+
+const Sparkline: ComponentSpec = {
+  name: "Sparkline",
+  description: "Inline trend line.",
+  props: [
+    { name: "values", type: "number[]", positional: true, required: true },
+    { name: "stroke", type: "string", optional: true },
+  ],
+  render: (_node, props, helpers) =&gt; {
+    const values = (props.values as number[]) ?? [];
+    const el = document.createElement("svg");
+    // ...build the SVG from `values`...
+    return el;
+  },
+};
+
+const app = document.querySelector("aktion-app") as AktionElement;
+app.registerComponents([Sparkline]); // next getSystemPrompt() includes it</code></pre>
+      <p>
+        The <code>helpers</code> object is fully typed &mdash; <code>renderNode</code>,
+        <code>invoke</code>, <code>setState</code>, <code>useInstanceState</code>,
+        <code>registerDisposer</code>, and <code>router</code> all carry signatures,
+        so authoring a spec stays type-safe.
+      </p>
+
+      <h2 id="interceptors">Typing interceptors &amp; the language surface</h2>
+      <p>
+        The DOM-free <code>aktion-runtime/language</code> entry exports
+        <code>getDiagnostics</code>, <code>getCompletions</code>,
+        <code>getHoverInfo</code>, and <code>formatProgram</code> (with its
+        <code>FormatResult</code> type) for building editor tooling or CI lint
+        steps without a browser:
+      </p>
+<pre><code>import { getDiagnostics, formatProgram } from "aktion-runtime/language";
+
+const diagnostics = getDiagnostics(source); // Diagnostic[]
+const { formatted } = formatProgram(source); // idempotent pretty-print</code></pre>
+
+      <h2 id="wrapper">A typed host-wrapper recipe</h2>
+      <p>
+        A small typed wrapper centralises streaming and event wiring for any
+        framework host:
+      </p>
+<pre><code>import "aktion-runtime";
+import type { AktionElement } from "aktion-runtime";
+
+export interface AktionHost {
+  el: AktionElement;
+  stream(delta: string): void;
+  reset(full: string): void;
+  dispose(): void;
+}
+
+export function mountAktion(parent: HTMLElement): AktionHost {
+  const el = document.createElement("aktion-app") as AktionElement;
+  parent.appendChild(el);
+  const onError = (e: Event) =&gt; {
+    const detail = (e as CustomEvent).detail as { errors: { message: string }[] };
+    detail.errors.forEach((x) =&gt; console.error("[aktion]", x.message));
+  };
+  el.addEventListener("error", onError);
+  return {
+    el,
+    stream: (delta) =&gt; el.appendChunk(delta),
+    reset: (full) =&gt; el.setResponse(full),
+    dispose: () =&gt; { el.removeEventListener("error", onError); el.remove(); },
+  };
+}</code></pre>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Getting started</span>
+          <h3>Frameworks</h3>
+          <p>Embed <code>&lt;aktion-app&gt;</code> in React, Vue, Angular, Svelte, or plain HTML.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="testing.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Testing</h3>
+          <p>The typed Testing-Library-style API.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Library</span>
+          <h3>Components</h3>
+          <p>The built-in component catalog and prop signatures.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

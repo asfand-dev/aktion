@@ -1,0 +1,23 @@
+// Overview page: KPI strip, scene shortcuts, then every device grouped by room.
+
+import { StatStrip } from "../components/stat-strip.aktion"
+import { SceneBar } from "../components/scene-bar.aktion"
+import { DeviceCard } from "../components/device-card.aktion"
+import { home } from "../store.aktion"
+import { rooms } from "../data/home.aktion"
+
+export function HomePage() {
+  return Column([
+    PageHeader("Good evening, Alex", { subtitle: "Here's what's happening at home.", breadcrumbs: false }),
+    StatStrip(),
+    SceneBar(),
+    Column(rooms.map(RoomSection), { gap: "l" })
+  ], { gap: "l" })
+}
+
+function RoomSection(room) {
+  return Column([
+    SectionHeader(room, { eyebrow: "ROOM" }),
+    Grid(home.inRoom(room).map(DeviceCard), { minChildWidth: "260px", gap: "m" })
+  ], { gap: "s" })
+}

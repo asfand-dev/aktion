@@ -247,6 +247,9 @@ Subscriptions track the exact **path** you read. Reading \`$user.name\` subscrib
 For composable local state, use hooks — a function whose name starts with \`$\`, called only at the top level of a component (or another hook) in a stable order:
 - \`$state(initial)\` → \`[value, setValue]\` (like \`useState\`; \`setValue(prev => next)\` supported, \`initial\` runs once).
 - \`$memo(() => value, [deps])\` → a cached value (like \`useMemo\`).
+- \`$ref(initial)\` → a stable \`{ current }\` box (like \`useRef\`; writing \`.current\` does NOT re-render — for DOM nodes, timer ids, previous values).
+- \`$reducer((state, action) => next, initial)\` → \`[state, dispatch]\` (like \`useReducer\`; the clean way to manage many related transitions).
+- \`$id(prefix?)\` → a stable unique id per instance (like \`useId\`; for \`for\`/\`aria-*\` wiring).
 - \`function $name(...)\` declares a custom hook composing the built-ins.
 
 \`\`\`
@@ -305,13 +308,19 @@ $app(Column([UserCard($currentUser), UserCard($other, { tone: "primary" })]))
 - Use a lambda (\`row = item => Row(item)\`) for one-off helpers that don't need a named component.
 
 ### Actions
-A \`function\` whose body runs for side effects is an action — use it as a handler (\`onClick: save\`) or call it for its result. \`return\` is optional; the full JS statement surface applies.
+A \`function\` whose body runs for side effects is an action — use it as a handler (\`onClick: save\`) or call it for its result. \`return\` is optional; the full JS statement surface applies. Wrap optimistic writes in \`$optimistic(() => { … })\` to snapshot state and auto-roll-back if the callback throws (or its promise rejects).
 
 \`\`\`
 function save(item) {
   $items = [...$items, item]
   $save  = $http({ url: "https://api.example.com/save", method: "POST", body: { item } })
   $emit("saved", { id: item.id })
+}
+function addTodo(text) {
+  $optimistic(() => {
+    $todos = [...$todos, { id: $todos.length + 1, text }]   // optimistic write
+    if (text == "") throw new Error("empty")                // → rolls $todos back
+  })
 }
 saveBtn  = Button("Save",  { onClick: save })
 resetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })
@@ -374,7 +383,19 @@ view = Async($orders, {
   empty:   EmptyState("No orders yet"),
   data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])
 })
-\`\`\``;
+\`\`\`
+
+### \`$query({...})\` and \`$mutation({...})\`
+Same config shape as \`$http\`, for two common needs:
+- \`$query({ url, key?, ttl? })\` — a **cached, deduplicated** read. Identical queries (same \`key\`, or same method+url+query+body) share one in-flight request and one cached bag, so calling it from several components fetches once. Pass \`ttl\` (ms) to auto-refetch stale data. Same bag as \`$http\` (\`.data\`/\`.loading\`/\`.error\`/\`.refetch()\`).
+- \`$mutation({ url, method? })\` — a **deferred** write that fires only when you call \`.mutate(overrides?)\`, not on render (method defaults to \`POST\`). Assign it to an atom, then trigger it from a handler:
+\`\`\`
+$save = $mutation({ url: "https://api.example.com/orders" })
+$save.onDone = () => $orders.refetch()
+...
+Button("Save", { onClick: () => $save.mutate({ body: { item: $item } }) })
+\`\`\`
+\`.mutate()\` resolves with the response body; the bag exposes \`.loading\`/\`.error\`/\`.data\` plus \`.reset()\`.`;
 }
 
 function fullRouting(): string {
@@ -399,7 +420,7 @@ $app(AppShell(MainSidebar(), pages))   // app/dashboard shell
 }
 
 function fullGlobals(): string {
-  return `## Built-in globals — \`storage\` & \`console\`
+  return `## Built-in globals — \`storage\`, \`console\` & \`$toast\`
 
 Always in scope, lowercase, no imports.
 
@@ -413,8 +434,16 @@ $console.log("Hello", $user)
 Non-string values JSON-roundtrip; missing keys return \`null\`. Beyond these, every JavaScript global resolves by name — \`Math\`, \`JSON\`, \`Date\`, \`crypto\`, \`fetch\`, \`URL\`, \`navigator\`, \`window\`, \`document\`, dialogs like \`confirm\`, … — and your declarations and components shadow same-named globals. Prefer reactive \`$http({...})\` over raw \`fetch\` for UI data, and keep timers/listeners inside \`$effect\` so they're cleaned up.
 
 \`\`\`
-function copyLink() { navigator.clipboard.writeText(window.location.href); $toast = "Copied" }
+function copyLink() { navigator.clipboard.writeText(window.location.href); $toast.show("Copied", { tone: "success" }) }
 id = crypto.randomUUID()
+\`\`\`
+
+### \`$toast\` — imperative notifications
+Instead of hand-managing a \`$toasts = [...]\` array, use the reserved \`$toast\` namespace. \`$toast.show(message, { tone?, title?, duration? })\` appends a toast (auto-dismisses after \`duration\` ms, default 4000; pass \`0\` to keep it). Shortcuts: \`$toast.success/.error/.info/.warning\`. Remove with \`$toast.dismiss(id)\` / \`$toast.clear()\`. Render the reactive \`$toast.items\` list:
+
+\`\`\`
+function save() { $save = $http({ url, method: "POST", body }); $save.onDone = () => $toast.success("Saved") }
+toaster = Toasts(map($toast.items, t => Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))
 \`\`\``;
 }
 
@@ -427,6 +456,7 @@ These attach behaviour or styling to ANY node via \`display: contents\` (the vis
 - \`OnMouse(child, { enter?, leave?, move?, down?, up?, drag?, drop?, dragOver?, ... })\` — pass only the events you need.
 - \`OnKeyboard(child, { onKeyDown?, onKeyUp?, focusable? })\` and \`OnFocus(child, { onFocus?, onBlur? })\`.
 - \`OnIntersect(child, { onEnter?, onLeave?, threshold?, once? })\` — IntersectionObserver (lazy-load, infinite scroll).
+- \`OnMount(child, { onMount?, onUnmount? })\` — DOM-ref / lifecycle. \`onMount(node)\` fires once after attach (grab a node, focus it, hand it to a chart/map/editor); \`onUnmount(node)\` on teardown. Stash the node in a \`$ref(...)\`.
 - \`Css(child, { class?, style? })\` — last-resort class/style merge.
 - \`Link(childOrLabel, { to?, href?, external?, variant? })\` — anchor; \`to\` for router nav, \`href\`+\`external: true\` for outbound links.
 
@@ -486,7 +516,8 @@ function fullUtil(): string {
 
 Pure helpers (no side effects), available in every expression, action, effect, and lambda. Reach for \`$util\` when plain JS would be verbose (formatting, dates, grouping); use plain JS when it's just as clear (\`arr.length\`, \`arr.slice(0, 5)\`).
 
-- **Collections**: \`$util.sort(arr, field, dir?)\`, \`$util.groupBy(arr, field)\`, \`$util.unique(arr, field?)\`, \`$util.sum / .avg / .min / .max / .count\`, \`.first / .last\`, \`.filter(arr, field, op, value)\`, \`.find\`, \`.range(start, end, step?)\`, \`.pick(obj, keys)\`.
+- **Collections**: \`$util.sort(arr, field, dir?)\`, \`$util.groupBy(arr, field)\`, \`$util.unique(arr, field?)\`, \`$util.sum / .avg / .min / .max / .count\`, \`.first / .last\`, \`.filter(arr, field, op, value)\`, \`.find\`, \`.partition(arr, field, op, value)\`, \`.keyBy(arr, field)\`, \`.chunk(arr, size)\`, \`.flatten(arr, depth?)\`, \`.zip(...arrays)\`, \`.range(start, end, step?)\`.
+- **Objects**: \`$util.pick(obj, keys)\`, \`.omit(obj, keys)\`, \`.merge(target, ...sources)\` (deep), \`.cloneDeep(value)\`.
 - **Strings**: \`$util.capitalize / .titlecase / .uppercase / .lowercase\`, \`.plural(n, singular, plural)\`, \`.trim / .replace / .split / .match\`.
 - **Formatting**: \`$util.format(value, mode, opts?)\` (number, currency, percent, compact) and \`$util.formatDate(value, mode)\` (\`"short" | "long" | "time" | "relative"\` or a token string).
 - **Dates / math**: \`.now / .today / .addDays / .diffDays / .startOfWeek\`; \`.round / .floor / .ceil / .abs / .clamp(v, min, max) / .random\`.
@@ -506,7 +537,7 @@ function fullHelpers(): string {
 | \`Show(when, { fallback?, children })\` | Sugar for \`when ? children : fallback\`. |
 | \`Portal(children, { target? })\` | Render outside the parent subtree. |
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
-| \`Lazy(loader, { fallback?, children })\` | Defer rendering until \`loader\` resolves. |
+| \`Lazy(loader, { fallback?, children })\` | Defer rendering until the async \`loader\` resolves; show \`fallback\` while pending. |
 | \`ErrorBoundary(children, { fallback?, onError? })\` | Catch render errors thrown by descendants. |
 | \`VirtualList(items, { key, render })\` | Virtualised list — preferred for >100 rows. |`;
 }
@@ -684,7 +715,8 @@ function chatUtil(): string {
 Pure helpers — no side effects. Use \`$util\` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (\`arr.length\`, \`arr.slice(0, 5)\`, \`s.toUpperCase()\`).
 
 ### Most useful helpers
-- Collections: \`$util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?)\`.
+- Collections: \`$util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?) / .chunk / .partition / .keyBy\`.
+- Objects: \`$util.pick / .omit / .merge / .cloneDeep\`.
 - Strings: \`$util.capitalize / .titlecase / .plural(n, singular, plural)\`.
 - Formatting: \`$util.format(value, mode, opts?)\` (numbers, currency, percent, compact) and \`$util.formatDate(value, mode)\` (\`"short"\` | \`"long"\` | \`"time"\` | \`"relative"\`).
 

@@ -1,0 +1,29 @@
+// Pricing page: plan comparison and a FAQ accordion.
+
+import { plans, faqs } from "../data/site.aktion"
+
+export function PricingPage() {
+  return Column([
+    PageHeader("Pricing", { subtitle: "Simple plans, no hidden fees. Cancel anytime.", breadcrumbs: false }),
+    PricingTable(plans.map(toPricingCard)),
+    Card([
+      SectionHeader("Frequently asked", { eyebrow: "FAQ" }),
+      Accordion(faqs.map(toFaqItem), { showArrow: true })
+    ])
+  ], { gap: "l" })
+}
+
+function toPricingCard(plan) {
+  return PricingCard(plan.name, {
+    price: plan.price,
+    period: plan.period,
+    description: plan.description,
+    features: plan.features,
+    featured: plan.featured,
+    action: Button(plan.cta, { variant: plan.featured ? "primary" : "secondary", fullWidth: true, onClick: () => route.navigate("/contact") })
+  })
+}
+
+function toFaqItem(faq) {
+  return AccordionItem(faq.q, { children: [Text(faq.a, { tone: "muted" })] })
+}

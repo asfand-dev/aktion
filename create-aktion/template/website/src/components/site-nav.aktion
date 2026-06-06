@@ -1,0 +1,17 @@
+// Top navigation. NavbarItems use `to` so they become router links and track
+// the active route automatically.
+
+export function SiteNav() {
+  return Navbar("PawSitters", {
+    items: [
+      NavbarItem("Home", { to: "/" }),
+      NavbarItem("Services", { to: "/services" }),
+      NavbarItem("Pricing", { to: "/pricing" }),
+      NavbarItem("Contact", { to: "/contact" })
+    ],
+    actions: [
+      Button("Book now", { variant: "primary", size: "sm", icon: "paw", onClick: () => route.navigate("/contact") })
+    ],
+    sticky: true
+  })
+}

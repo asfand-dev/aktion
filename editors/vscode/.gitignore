@@ -1,0 +1,11 @@
+node_modules/
+dist/
+snippets/
+*.vsix
+
+# The repo root ignores `.vscode` globally, but the extension's launch/build
+# config is part of this package — re-include it so F5 works out of the box.
+!.vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
+.env

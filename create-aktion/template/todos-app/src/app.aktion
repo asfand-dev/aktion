@@ -1,0 +1,28 @@
+// Entry module. A focused single-surface app: header, live KPIs, composer, list.
+
+import { Composer } from "./components/composer.aktion"
+import { TodoList } from "./components/todo-list.aktion"
+import { $todos } from "./store.aktion"
+import { remaining } from "./api.aktion"
+
+$theme({ colors: { primary: "#6366f1" } })
+
+aktion = Column([
+  PageHeader("Todos", {
+    subtitle: "Create, toggle, edit and delete — every action is a real REST call.",
+    breadcrumbs: false
+  }),
+  TodoStats(),
+  Composer(),
+  TodoList()
+], { gap: "l" })
+
+function TodoStats() {
+  list = $todos.data || []
+  done = list.length - remaining(list)
+  return Stats([
+    { label: "Total", value: `${list.length}` },
+    { label: "Remaining", value: `${remaining(list)}`, tone: "primary" },
+    { label: "Done", value: `${done}`, tone: "success" }
+  ], { layout: "strip" })
+}

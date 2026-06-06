@@ -1,0 +1,15 @@
+// Left navigation for the AppShell. SidebarItems derive their active state from
+// the current route (`route.path`) automatically via their `to` prop.
+
+export function AppSidebar() {
+  return Sidebar([
+    SidebarItem("Overview", { icon: "house", to: "/" }),
+    SidebarItem("Devices", { icon: "microchip", to: "/devices" }),
+    SidebarItem("Energy", { icon: "bolt", to: "/energy" }),
+    SidebarItem("Automations", { icon: "robot", to: "/automations" })
+  ], {
+    brand: "Casa",
+    tagline: "Home control",
+    footer: [PersonChip("Alex Rivera", { role: "Admin", status: "online" })]
+  })
+}

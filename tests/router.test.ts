@@ -120,6 +120,47 @@ describe("router: navigation", () => {
     router.stop();
   });
 
+  describe("history mode", () => {
+    afterEach(() => {
+      if (typeof window !== "undefined") window.history.pushState({}, "", "/");
+    });
+
+    it("reads pathname on start and navigates via pushState", () => {
+      if (typeof window === "undefined") return;
+      window.history.pushState({}, "", "/about");
+      const router = new Router();
+      router.configure({ mode: "history" });
+      router.start();
+      expect(router.getMode()).toBe("history");
+      expect(router.getPath()).toBe("/about");
+      router.navigate("/contact");
+      expect(router.getPath()).toBe("/contact");
+      expect(window.location.pathname).toBe("/contact");
+      router.stop();
+    });
+
+    it("strips and re-applies basePath", () => {
+      if (typeof window === "undefined") return;
+      window.history.pushState({}, "", "/app/dash");
+      const router = new Router();
+      router.configure({ mode: "history", basePath: "/app/" });
+      router.start();
+      expect(router.getPath()).toBe("/dash");
+      router.navigate("/settings");
+      expect(router.getPath()).toBe("/settings");
+      expect(window.location.pathname).toBe("/app/settings");
+      router.stop();
+    });
+
+    it("configure() is a no-op once the router has started", () => {
+      const router = new Router();
+      router.start();
+      router.configure({ mode: "history" });
+      expect(router.getMode()).toBe("hash");
+      router.stop();
+    });
+  });
+
   it("setActiveMatch records the pattern + params without firing listeners", () => {
     const router = new Router();
     let calls = 0;

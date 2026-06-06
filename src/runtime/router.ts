@@ -39,6 +39,18 @@ export type RouteListener = (detail: RouteChangeDetail) => void;
 export interface RouterOptions {
   /** Initial path when no hash is set. Defaults to `/`. */
   defaultPath?: string;
+  /**
+   * URL strategy. `"hash"` (default) keeps everything after `#/…` and works
+   * on any static host. `"history"` uses the HTML5 History API (clean
+   * `/about` URLs) and requires the server to fall back to `index.html` for
+   * unknown paths.
+   */
+  mode?: "hash" | "history";
+  /**
+   * Optional base path stripped from / prepended to URLs in `"history"` mode
+   * (e.g. `"/app"` when the SPA is served under a sub-directory).
+   */
+  basePath?: string;
 }
 
 /**
@@ -133,13 +145,32 @@ export class Router {
   private hashListener: (() => void) | null = null;
   private listeners = new Set<RouteListener>();
   private readonly defaultPath: string;
-  /** True while we're updating `window.location.hash` ourselves — used to
-   * filter out the resulting `hashchange` echo. */
+  private mode: "hash" | "history";
+  private basePath: string;
+  /** True while we're updating `window.location` ourselves — used to
+   * filter out the resulting `hashchange` / `popstate` echo. */
   private settingHash = false;
 
   constructor(options: RouterOptions = {}) {
     this.defaultPath = normalisePath(options.defaultPath ?? "/");
     this.currentPath = this.defaultPath;
+    this.mode = options.mode === "history" ? "history" : "hash";
+    this.basePath = normaliseBase(options.basePath);
+  }
+
+  /**
+   * Re-configure the URL strategy before `start()` is called. The host
+   * element uses this to apply the `router-mode` / `router-base` attributes
+   * it reads at connect time. No-op once the router is already enabled.
+   */
+  configure(options: { mode?: "hash" | "history"; basePath?: string }): void {
+    if (this.enabled) return;
+    if (options.mode) this.mode = options.mode === "history" ? "history" : "hash";
+    if (options.basePath !== undefined) this.basePath = normaliseBase(options.basePath);
+  }
+
+  getMode(): "hash" | "history" {
+    return this.mode;
   }
 
   /**
@@ -153,14 +184,32 @@ export class Router {
 
     const sync = (source: RouteChangeDetail["source"]): void => {
       if (this.settingHash) return;
-      const hashPath = normalisePath(window.location.hash);
-      this.setPath(hashPath, source);
+      this.setPath(this.readLocation(), source);
     };
 
-    const listener = (): void => sync("hashchange");
-    window.addEventListener("hashchange", listener);
-    this.hashListener = listener;
+    if (this.mode === "history") {
+      const listener = (): void => sync("hashchange");
+      window.addEventListener("popstate", listener);
+      this.hashListener = listener;
+    } else {
+      const listener = (): void => sync("hashchange");
+      window.addEventListener("hashchange", listener);
+      this.hashListener = listener;
+    }
     sync("init");
+  }
+
+  /** Read the active path from `window.location` per the current mode. */
+  private readLocation(): string {
+    if (typeof window === "undefined") return this.currentPath;
+    if (this.mode === "history") {
+      let path = window.location.pathname || "/";
+      if (this.basePath && path.startsWith(this.basePath)) {
+        path = path.slice(this.basePath.length) || "/";
+      }
+      return normalisePath(path);
+    }
+    return normalisePath(window.location.hash);
   }
 
   /**
@@ -172,6 +221,7 @@ export class Router {
     this.enabled = false;
     if (typeof window !== "undefined" && this.hashListener) {
       window.removeEventListener("hashchange", this.hashListener);
+      window.removeEventListener("popstate", this.hashListener);
     }
     this.hashListener = null;
   }
@@ -215,7 +265,11 @@ export class Router {
     if (this.enabled && typeof window !== "undefined") {
       this.settingHash = true;
       try {
-        window.location.hash = "#" + next;
+        if (this.mode === "history" && typeof window.history?.pushState === "function") {
+          window.history.pushState({}, "", (this.basePath || "") + next);
+        } else {
+          window.location.hash = "#" + next;
+        }
       } finally {
         // The `hashchange` listener fires asynchronously, but some browsers
         // (and happy-dom) fire it synchronously. Either way we reset the
@@ -259,6 +313,24 @@ export class Router {
       }
     }
   }
+}
+
+/**
+ * Normalise a base path for history mode: ensure a single leading slash and
+ * no trailing slash. Empty / "/" collapse to "" so concatenation is a no-op.
+ *
+ *   normaliseBase(undefined) → ""
+ *   normaliseBase("/")       → ""
+ *   normaliseBase("app")     → "/app"
+ *   normaliseBase("/app/")   → "/app"
+ */
+function normaliseBase(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let value = String(raw).trim();
+  if (value === "" || value === "/") return "";
+  if (!value.startsWith("/")) value = "/" + value;
+  if (value.endsWith("/")) value = value.slice(0, -1);
+  return value;
 }
 
 function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {

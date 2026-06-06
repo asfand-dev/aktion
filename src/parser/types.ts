@@ -374,7 +374,6 @@ export interface ActionDeclaration {
   kind: "ActionDeclaration";
   name: string;
   params: ReadonlyArray<DeclParam>;
-  optimistic: boolean;
   body: BlockExpr;
   /** True when prefixed with `export` (multi-file modules). */
   exported?: boolean;

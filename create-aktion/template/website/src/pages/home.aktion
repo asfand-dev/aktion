@@ -1,0 +1,35 @@
+// Landing page: hero, a preview of services, social proof, and a closing CTA.
+
+import { ServiceCard } from "../components/service-card.aktion"
+import { services, testimonials } from "../data/site.aktion"
+
+export function HomePage() {
+  return Column([
+    Hero("Loving care for your pets, at home", {
+      eyebrow: "PAWSITTERS",
+      subtitle: "Trusted dog walking, drop-in visits, and overnight boarding from insured local sitters.",
+      primary: Button("Book a sitter", { variant: "primary", icon: "paw", onClick: () => route.navigate("/contact") }),
+      secondary: Button("See services", { variant: "secondary", onClick: () => route.navigate("/services") }),
+      highlights: ["Insured & background-checked", "Daily photo updates", "Cancel anytime"]
+    }),
+    Column([
+      SectionHeader("Our services", { eyebrow: "WHAT WE OFFER", subtitle: "Flexible care for dogs, cats, and small pets." }),
+      Grid(services.map(ServiceCard), { minChildWidth: "240px", gap: "m" })
+    ], { gap: "m" }),
+    Column([
+      SectionHeader("Loved by pet parents", { eyebrow: "REVIEWS" }),
+      Grid(testimonials.map(toTestimonial), { minChildWidth: "260px", gap: "m" })
+    ], { gap: "m" }),
+    Card([
+      Center([
+        Text("Ready to book?", { variant: "title" }),
+        Text("Your pet deserves the best care while you're away.", { tone: "muted" }),
+        Button("Get started", { variant: "primary", icon: "paw", onClick: () => route.navigate("/contact") })
+      ], { gap: "m" })
+    ])
+  ], { gap: "xl" })
+}
+
+function toTestimonial(t) {
+  return Testimonial(t.quote, { author: t.author, role: t.role, rating: t.rating })
+}

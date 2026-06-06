@@ -1,0 +1,10 @@
+{
+  "files.associations": {
+    "*.aktion": "aktion"
+  },
+  "[aktion]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "AsfandiyarKhan.aktion-vscode",
+    "editor.semanticHighlighting.enabled": true
+  }
+}

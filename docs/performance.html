@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Performance &amp; optimization · Aktion</title>
+  <meta name="description" content="How to keep Aktion apps fast: re-render avoidance, the memoization rules, the per-render safety budget, bundle size, and streaming throughput (setResponse vs appendChunk)." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout {
+      border: 1px solid var(--doc-border);
+      border-left: 4px solid var(--doc-accent, #6366f1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: var(--doc-surface-elev);
+    }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="performance">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Performance &amp; optimization.</h1>
+        <p class="lead">
+          Aktion is fast by default &mdash; the morph reconciler patches the live
+          DOM in place and path-tracked atoms only invalidate their readers. The
+          work that remains is avoiding needless full re-renders, helping the
+          memoizer, and feeding the parser efficiently while streaming.
+        </p>
+      </header>
+
+      <h2 id="renders">1. Minimise full re-renders</h2>
+      <p>
+        Read the <a href="reactivity.html">Reactivity &amp; rendering</a> page
+        first: the single biggest lever is keeping updates on the fine-grained
+        path. In short:
+      </p>
+      <ul>
+        <li>Prefer top-level <code>$name = value</code> atoms and <code>$store</code>
+          fields for shared state &mdash; writes invalidate only the readers of
+          the exact path.</li>
+        <li>Write narrow paths (<code>$user.name = &hellip;</code>) instead of
+          reassigning whole objects.</li>
+        <li>Remember that <code>$state</code>/<code>$memo</code>, <code>$http</code>
+          transitions, timers, and <code>$emit</code> each force a full-tree
+          re-render. Use them where the subtree is small or the update is
+          infrequent.</li>
+      </ul>
+
+      <h2 id="memo">2. Help the memoizer</h2>
+      <p>
+        On a fine-grained update, a <code>PascalCase</code> component whose props
+        are unchanged is <strong>skipped entirely</strong> (its previous DOM is
+        reused). To benefit:
+      </p>
+      <ul>
+        <li>Pass <strong>stable prop values</strong>. A fresh object/array literal
+          rebuilt every render (<code>{ style: {&hellip;} }</code>) defeats prop
+          equality &mdash; hoist it or wrap the derivation in <code>$memo</code>.</li>
+        <li>Give list items a <strong><code>key</code></strong> so identity is
+          preserved across reorders; without it, the memoizer and the morph
+          reconciler must fall back to positional matching.</li>
+        <li>Use <code>$memo(() =&gt; expensive(), [deps])</code> for filtering,
+          sorting, and formatting so the work is skipped when inputs are
+          unchanged.</li>
+      </ul>
+      <div class="callout">
+        <p>Full re-renders run with memoization <em>disabled</em> by design (the
+          tree is re-executed top to bottom). So memoization pays off in
+          proportion to how few full re-renders you trigger.</p>
+      </div>
+
+      <h2 id="budget">3. The per-render safety budget</h2>
+      <p>
+        Every render runs under a budget that bounds three dimensions so a partial
+        or accidentally-recursive program can never freeze the tab:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Dimension</th><th>Default</th><th>Trips on</th></tr></thead>
+        <tbody>
+          <tr><td><code>componentDepth</code></td><td>150 levels</td><td>Recursive trees, e.g. <code>function Foo() { return Foo() }</code>.</td></tr>
+          <tr><td><code>iterations</code></td><td>250&nbsp;000 / render</td><td>Unbounded <code>for</code>/<code>while</code> loops in function bodies.</td></tr>
+          <tr><td><code>arrayLength</code></td><td>100&nbsp;000 entries</td><td><code>$util.range(0, 1e9)</code>, <code>$util.repeat(value, 1e9)</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        When a limit trips, the render aborts, an <code>error</code> event fires
+        (<code>{ line: 0, column: 0, message }</code>), and the previous tick&rsquo;s
+        DOM is left intact. The defaults comfortably fit any realistic app; tune
+        them with <code>createRuntimeBudget({ &hellip; })</code> passed through
+        <code>createContext</code>, or pass <code>null</code> to disable
+        enforcement in trusted offline pipelines.
+      </p>
+
+      <h2 id="lists">4. Large lists</h2>
+      <ul>
+        <li>Use <code>VirtualList</code> for long, fixed-height lists so only the
+          visible window is in the DOM.</li>
+        <li>Paginate or window very large datasets before rendering &mdash; a
+          100k-row table renders 100k rows of DOM.</li>
+        <li>Keep per-row work cheap: precompute derived fields with <code>$memo</code>
+          or <code>$util</code> rather than inside the row component.</li>
+      </ul>
+
+      <h2 id="streaming">5. Streaming throughput: <code>setResponse</code> vs <code>appendChunk</code></h2>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>Use when</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>setResponse(full)</code></td>
+            <td>You have the complete program text (a finished message, a saved snippet).</td>
+            <td>Re-parses the whole document once and renders.</td>
+          </tr>
+          <tr>
+            <td><code>appendChunk(delta)</code></td>
+            <td>You are streaming tokens from an LLM as they arrive.</td>
+            <td>Incremental &mdash; parses only the new tail and re-renders the affected lines. This is the cheap path for token-by-token output.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Don&rsquo;t call <code>setResponse</code> on every token (it re-parses the
+        entire buffer each time). Stream with <code>appendChunk</code> and reserve
+        <code>setResponse</code> for whole-document swaps.
+      </p>
+
+      <h2 id="bundle">6. Bundle size</h2>
+      <p>
+        The runtime ships as a single bundle that registers the
+        <code>&lt;aktion-app&gt;</code> element and the full component library.
+        Because library components are resolved by name at runtime (an LLM may
+        emit any of them), the library is intentionally <em>not</em> tree-shaken
+        per app. To trim:
+      </p>
+      <ul>
+        <li>Load the runtime from the CDN so it is cached across pages and apps.</li>
+        <li>For self-hosted builds, import the runtime once and share it across
+          every <code>&lt;aktion-app&gt;</code> on the page rather than per
+          component.</li>
+        <li>Keep your own custom component packs in a separate module so they only
+          load where used.</li>
+      </ul>
+
+      <h2 id="profile">7. Profile with DevTools</h2>
+      <p>
+        The <a href="devtools.html">DevTools</a> panel ships a commit profiler and
+        a per-render &ldquo;why did this render&rdquo; reason. Use it to spot
+        components re-rendering more than expected, then trace the cause back to a
+        full-re-render trigger or an unstable prop.
+      </p>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="reactivity.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Reactivity &amp; rendering</h3>
+          <p>The two render gates and exactly what forces a full re-render.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="troubleshooting.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Troubleshooting / FAQ</h3>
+          <p>Focus loss, effects not firing, memoized-away components, and more.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="devtools.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>DevTools</h3>
+          <p>State inspector, commit profiler, and the effect timeline.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

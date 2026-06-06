@@ -58,6 +58,20 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: "Guides",
+    items: [
+      { href: "reactivity.html", label: "Reactivity & rendering", badge: "New" },
+      { href: "performance.html", label: "Performance", badge: "New" },
+      { href: "troubleshooting.html", label: "Troubleshooting / FAQ", badge: "New" },
+      { href: "errors.html", label: "Error handling", badge: "New" },
+      { href: "typescript.html", label: "TypeScript", badge: "New" },
+      { href: "recipes.html", label: "Recipes & patterns", badge: "New" },
+      { href: "accessibility.html", label: "Accessibility", badge: "New" },
+      { href: "deployment.html", label: "Production & deployment", badge: "New" },
+      { href: "llm-integration.html", label: "LLM integration", badge: "New" },
+    ],
+  },
+  {
     label: "Theming",
     items: [
       { href: "themes.html", label: "Themes & customization" },
@@ -76,7 +90,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "recipes.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -114,6 +128,15 @@ const PAGE_KEYWORDS = {
   "playground.html": "editor preview live",
   "visual-editor.html": "drag drop visual editor canvas inspector palette no-code wysiwyg",
   "chat-bot.html": "chat bot llm openrouter generate website builder app builder files images upload",
+  "reactivity.html": "reactivity rendering path tracking fine-grained full re-render render gate notify memoization atom store declare assign render guard",
+  "performance.html": "performance optimization re-render memoization safety budget bundle size streaming throughput setresponse appendchunk virtuallist lists",
+  "troubleshooting.html": "troubleshooting faq focus loss portal effect not firing memoized away map constructor dropped style missing i18n key silent failure write during render",
+  "errors.html": "error handling debugging parse error runtime error render loop guard safety budget error event strict mode dev mode console warning telemetry",
+  "typescript.html": "typescript types public api componentspec helpers interceptors host event payloads subpath entry test devtools language vite aktionelement typed wrapper",
+  "recipes.html": "recipes patterns anti-patterns cookbook self-check todo dashboard wizard settings chat router kanban inbox crm landing checkout how do i",
+  "accessibility.html": "accessibility a11y wcag aria keyboard screen reader focus trap modal toast role status alert navlink aria-current contrast theme",
+  "deployment.html": "production deployment ssr hydration serializestate hydratestate csp unsafe-eval integrity subresource cdn caching edge function streaming telemetry error reporting",
+  "llm-integration.html": "llm integration openai anthropic openrouter bedrock streaming appendchunk system prompt getsystemprompt chat mode interceptors assistant-message delta protocol",
 };
 
 /* ---------------------------------------------------------------------------

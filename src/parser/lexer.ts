@@ -306,22 +306,65 @@ export function tokenize(source: string): Token[] {
         (lastToken.value === "(" || lastToken.value === "[" ||
           lastToken.value === "," || lastToken.value === ":" ||
           lastToken.value === "?" || lastToken.value === "{"));
-    if (isDigit(ch) || (ch === "-" && isDigit(peek(1) ?? "") && allowSignedNumber)) {
+    if (
+      isDigit(ch) ||
+      (ch === "-" && isDigit(peek(1) ?? "") && allowSignedNumber) ||
+      (ch === "." && isDigit(peek(1) ?? "") && allowSignedNumber)
+    ) {
       const startLine = line;
       const startCol = column;
       let raw = "";
       if (ch === "-") raw += advance();
+
+      // Hex (0x), binary (0b) and octal (0o) integer literals, with optional
+      // `_` digit separators (e.g. 0xFF, 0b1010, 0o17, 0xDEAD_BEEF).
+      const radixMark = peek(1);
+      if (
+        peek() === "0" &&
+        (radixMark === "x" || radixMark === "X" ||
+          radixMark === "b" || radixMark === "B" ||
+          radixMark === "o" || radixMark === "O")
+      ) {
+        raw += advance(); // 0
+        raw += advance(); // x / b / o
+        while (i < source.length) {
+          const next = peek() ?? "";
+          if (isHexDigit(next)) { raw += advance(); continue; }
+          if (next === "_" && isHexDigit(peek(1) ?? "")) { raw += advance(); continue; }
+          break;
+        }
+        push("Number", raw, startLine, startCol);
+        continue;
+      }
+
+      // Decimal literal: integer / fraction with optional scientific-notation
+      // exponent (1e6, 1.5e-3, 2E10) and `_` digit separators (1_000_000).
       let sawDot = false;
+      let sawExp = false;
       while (i < source.length) {
         const next = peek() ?? "";
         if (isDigit(next)) {
           raw += advance();
           continue;
         }
-        if (next === "." && !sawDot && isDigit(peek(1) ?? "")) {
+        if (next === "_" && isDigit(peek(1) ?? "")) {
+          raw += advance();
+          continue;
+        }
+        if (next === "." && !sawDot && !sawExp && isDigit(peek(1) ?? "")) {
           sawDot = true;
           raw += advance();
           continue;
+        }
+        if ((next === "e" || next === "E") && !sawExp) {
+          const afterE = peek(1) ?? "";
+          const afterSign = afterE === "+" || afterE === "-" ? (peek(2) ?? "") : afterE;
+          if (isDigit(afterSign)) {
+            sawExp = true;
+            raw += advance(); // e / E
+            if (peek() === "+" || peek() === "-") raw += advance();
+            continue;
+          }
         }
         break;
       }
@@ -444,6 +487,10 @@ export function tokenize(source: string): Token[] {
 
 function isDigit(ch: string): boolean {
   return ch >= "0" && ch <= "9";
+}
+
+function isHexDigit(ch: string): boolean {
+  return (ch >= "0" && ch <= "9") || (ch >= "a" && ch <= "f") || (ch >= "A" && ch <= "F");
 }
 
 function isIdentifierStart(ch: string): boolean {

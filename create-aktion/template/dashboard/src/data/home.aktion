@@ -1,0 +1,73 @@
+// Seed data for the home-automation dashboard. Plain exported bindings — the
+// store imports these as its initial state. Each device carries enough fields
+// to drive every control (on/off, brightness level, thermostat target, energy).
+
+export rooms = ["Living Room", "Kitchen", "Bedroom", "Office", "Entrance", "Garage"]
+
+export seedDevices = [
+  { id: "lr-ceiling", name: "Ceiling Lights", room: "Living Room", type: "light", icon: "lightbulb", on: true, online: true, level: 70, watts: 60 },
+  { id: "lr-tv", name: "TV Backlight", room: "Living Room", type: "light", icon: "tv", on: false, online: false, level: 40, watts: 12 },
+  { id: "lr-thermostat", name: "Thermostat", room: "Living Room", type: "thermostat", icon: "temperature-half", on: true, online: true, level: 0, target: 21, current: 20, watts: 1500 },
+  { id: "kt-pendant", name: "Pendant Lights", room: "Kitchen", type: "light", icon: "lightbulb", on: true, online: true, level: 90, watts: 45 },
+  { id: "kt-coffee", name: "Coffee Maker", room: "Kitchen", type: "plug", icon: "mug-hot", on: false, online: true, level: 0, watts: 900 },
+  { id: "bd-lamp", name: "Nightstand Lamp", room: "Bedroom", type: "light", icon: "lightbulb", on: false, online: true, level: 30, watts: 9 },
+  { id: "bd-purifier", name: "Air Purifier", room: "Bedroom", type: "plug", icon: "wind", on: true, online: true, level: 0, watts: 30 },
+  { id: "of-desk", name: "Desk Lamp", room: "Office", type: "light", icon: "lightbulb", on: true, online: true, level: 80, watts: 11 },
+  { id: "of-plug", name: "Monitor Plug", room: "Office", type: "plug", icon: "plug", on: true, online: true, level: 0, watts: 120 },
+  { id: "en-lock", name: "Front Door Lock", room: "Entrance", type: "lock", icon: "lock", on: true, online: true, level: 0, watts: 2 },
+  { id: "en-camera", name: "Security Camera", room: "Entrance", type: "camera", icon: "video", on: true, online: true, level: 0, watts: 8 },
+  { id: "gr-door", name: "Garage Door", room: "Garage", type: "lock", icon: "warehouse", on: true, online: true, level: 0, watts: 3 }
+]
+
+// A scene flips a set of devices to a preset in one tap.
+export seedScenes = [
+  { name: "Good Morning", icon: "sun", presets: [
+    { id: "kt-pendant", on: true, level: 90 },
+    { id: "of-desk", on: true, level: 80 },
+    { id: "bd-lamp", on: true, level: 40 },
+    { id: "lr-ceiling", on: true, level: 60 },
+    { id: "kt-coffee", on: true }
+  ] },
+  { name: "Movie Night", icon: "film", presets: [
+    { id: "lr-ceiling", on: true, level: 15 },
+    { id: "lr-tv", on: true, level: 40 },
+    { id: "kt-pendant", on: false },
+    { id: "of-desk", on: false }
+  ] },
+  { name: "Away", icon: "person-walking-arrow-right", presets: [
+    { id: "lr-ceiling", on: false },
+    { id: "kt-pendant", on: false },
+    { id: "of-desk", on: false },
+    { id: "bd-lamp", on: false },
+    { id: "en-lock", on: true },
+    { id: "gr-door", on: true }
+  ] },
+  { name: "Good Night", icon: "moon", presets: [
+    { id: "lr-ceiling", on: false },
+    { id: "kt-pendant", on: false },
+    { id: "of-desk", on: false },
+    { id: "lr-tv", on: false },
+    { id: "bd-lamp", on: true, level: 10 },
+    { id: "en-lock", on: true },
+    { id: "gr-door", on: true }
+  ] }
+]
+
+export seedAutomations = [
+  { id: "sunset", name: "Sunset Lights", description: "Fade on the living room and entrance lights at dusk.", icon: "sun", enabled: true, schedule: "Daily · Sunset" },
+  { id: "autolock", name: "Auto-Lock", description: "Lock every door at night so you never have to check.", icon: "lock", enabled: true, schedule: "Daily · 11:00 PM" },
+  { id: "eco", name: "Eco Thermostat", description: "Drop the thermostat to 18 degrees when everyone is away.", icon: "leaf", enabled: false, schedule: "When Away" },
+  { id: "vacation", name: "Vacation Mode", description: "Randomise lights to look occupied while you travel.", icon: "plane", enabled: false, schedule: "Manual" }
+]
+
+// Pre-computed energy figures for the charts on the Energy page.
+export hourLabels = ["12a", "3a", "6a", "9a", "12p", "3p", "6p", "9p"]
+export hourlyUsage = [0.6, 0.4, 0.7, 1.4, 1.1, 1.3, 2.4, 1.8]
+export roomEnergy = [
+  { room: "Living Room", kwh: 4.2 },
+  { room: "Kitchen", kwh: 3.1 },
+  { room: "Bedroom", kwh: 1.2 },
+  { room: "Office", kwh: 2.0 },
+  { room: "Entrance", kwh: 0.4 },
+  { room: "Garage", kwh: 0.3 }
+]

@@ -1,0 +1,21 @@
+// About: bio, an experience timeline, and a skills radar.
+
+import { bio, experience, skills } from "../data/portfolio.aktion"
+
+skillSeries = Series("Proficiency", { values: skills.map(s => s.level) })
+skillRadar = RadarChart(skills.map(s => s.name), { series: [skillSeries], max: 100 })
+
+export function AboutPage() {
+  return Column([
+    PageHeader("About", { subtitle: "A little more about how I work.", breadcrumbs: false }),
+    Card([SectionHeader("Bio"), Text(bio)]),
+    Grid([
+      Card([SectionHeader("Experience"), Timeline(experience.map(toTimelineItem))]),
+      Card([SectionHeader("Skills"), skillRadar])
+    ], { columns: { base: 1, md: 2 }, gap: "m" })
+  ], { gap: "l" })
+}
+
+function toTimelineItem(item) {
+  return TimelineItem(item.role, { time: item.period, description: item.company + " · " + item.summary })
+}

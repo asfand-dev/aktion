@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accessibility · Aktion</title>
+  <meta name="description" content="Aktion's accessibility posture: conformance target, the keyboard map, screen-reader and streaming behavior, the ARIA built into components, and theme contrast guidance." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout p:last-child { margin-bottom: 0; }
+    kbd { font: inherit; padding: 1px 6px; border: 1px solid var(--doc-border); border-bottom-width: 2px; border-radius: 5px; background: var(--doc-surface); }
+  </style>
+</head>
+<body data-page="accessibility">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Accessibility.</h1>
+        <p class="lead">
+          LLM-generated UI is high-stakes for accessibility &mdash; the markup is
+          produced for the user, not hand-audited. Aktion bakes accessible
+          semantics into its components so generated output is usable by keyboard
+          and screen reader by default. This page documents what&rsquo;s built in
+          and how to keep your own additions conformant.
+        </p>
+      </header>
+
+      <h2 id="target">Conformance target</h2>
+      <p>
+        Components target <strong>WCAG 2.1 AA</strong> semantics: meaningful roles,
+        accessible names, keyboard operability, and visible focus. The runtime
+        renders into a shadow DOM, so component-provided ARIA travels with the
+        element and is exposed to assistive technology like any native control.
+      </p>
+      <div class="callout">
+        <p>Conformance is a property of the <em>final page</em>, not just the
+          library. Custom themes, custom components, and the surrounding host page
+          all affect it &mdash; use the checklist at the end to verify your build.</p>
+      </div>
+
+      <h2 id="built-in">ARIA built into components</h2>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Accessibility behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>Modal</code></td><td>Sets <code>aria-modal</code> and <code>aria-labelledby</code> (from its title), <strong>traps focus</strong> within the dialog, restores focus to the trigger on close, and closes on <kbd>Esc</kbd>.</td></tr>
+          <tr><td><code>Toast</code></td><td>Uses <code>role="alert"</code> for the <code>danger</code> tone (assertive) and <code>role="status"</code> otherwise (polite), so notifications are announced appropriately.</td></tr>
+          <tr><td><code>NavLink</code></td><td>Marks the active route with <code>aria-current="page"</code>.</td></tr>
+          <tr><td>Buttons &amp; controls</td><td>Render as real interactive elements with accessible names, focusable in tab order with visible focus styling.</td></tr>
+          <tr><td>Form controls</td><td><code>FormControl</code> associates labels, help text, and error messages with their input.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="keyboard">Keyboard map</h2>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move focus forward / backward through interactive elements. Inside a <code>Modal</code>, focus wraps within the dialog.</td></tr>
+          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Activate the focused button or control.</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close the open <code>Modal</code> (focus returns to the trigger).</td></tr>
+          <tr><td>Arrow keys</td><td>Move within composite widgets (tabs, menus) where applicable.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="streaming">Screen readers &amp; streaming</h2>
+      <p>
+        Because UI streams in token-by-token, content can change rapidly. To keep
+        the experience calm for assistive tech:
+      </p>
+      <ul>
+        <li>The morph reconciler patches the DOM in place rather than replacing it,
+          so focus, selection, and a screen reader&rsquo;s reading position survive
+          re-renders.</li>
+        <li>Status changes use polite/assertive live regions via <code>Toast</code>
+          roles &mdash; reserve the assertive <code>danger</code> tone for errors
+          that must interrupt.</li>
+        <li>Prefer revealing a region once its content has settled (e.g. an
+          <code>Async</code>/<code>Lazy</code> fallback) over announcing every
+          intermediate token.</li>
+      </ul>
+
+      <h2 id="contrast">Theme contrast</h2>
+      <p>
+        The built-in light and dark themes are designed for readable text/background
+        contrast. When you author a custom theme with <code>$theme({...})</code>:
+      </p>
+      <ul>
+        <li>Keep body text at <strong>4.5:1</strong> contrast against its background
+          and large text / UI affordances at <strong>3:1</strong>.</li>
+        <li>Never encode meaning with colour alone &mdash; pair <code>tone</code>
+          with an icon or text label (the components already do this for status).</li>
+        <li>Verify focus indicators remain visible against your custom surfaces.</li>
+      </ul>
+
+      <h2 id="custom">Keeping custom components accessible</h2>
+      <ul>
+        <li>Build from real interactive elements (<code>button</code>,
+          <code>a</code>, <code>input</code>) rather than click-handler
+          <code>div</code>s.</li>
+        <li>Give every control an accessible name (visible label, <code>aria-label</code>,
+          or <code>aria-labelledby</code>).</li>
+        <li>Use <code>$id</code> to generate unique ids for label/description
+          associations instead of hard-coding them.</li>
+        <li>Manage focus for anything that opens/closes (mirror <code>Modal</code>:
+          trap while open, restore on close).</li>
+      </ul>
+
+      <h2 id="checklist">Pre-ship checklist</h2>
+      <ol>
+        <li>Every interactive element is reachable and operable by keyboard.</li>
+        <li>Focus is visible and never trapped except intentionally (modals).</li>
+        <li>All controls have accessible names.</li>
+        <li>Status/error messages use the correct <code>Toast</code> tone (polite vs assertive).</li>
+        <li>Custom theme contrast meets AA.</li>
+        <li>Meaning isn&rsquo;t conveyed by colour alone.</li>
+      </ol>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Library</span>
+          <h3>Components</h3>
+          <p>The full catalog, including the accessible <code>Modal</code>, <code>Toast</code>, and form controls.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="themes.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Themes</h3>
+          <p>Author custom themes with contrast in mind.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="hooks.html">
+          <span class="demo-tag">Core</span>
+          <h3>Hooks</h3>
+          <p><code>$id</code> for stable label/description associations.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

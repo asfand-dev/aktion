@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Production &amp; deployment · Aktion</title>
+  <meta name="description" content="Shipping Aktion to production: SSR/hydration with serializeState, Content-Security-Policy and unsafe-eval, integrity hashes, CDN caching, edge-function LLM streaming, and error reporting hooks." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="deployment">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Production &amp; deployment.</h1>
+        <p class="lead">
+          Aktion is a self-contained web component, so shipping it is mostly
+          &ldquo;serve a static bundle and mount the element.&rdquo; The wrinkles
+          are SSR/hydration through the shadow DOM, Content-Security-Policy, and
+          wiring an LLM stream from your edge. This guide covers each.
+        </p>
+      </header>
+
+      <h2 id="bundle">Serving the bundle</h2>
+      <p>
+        Run <code>npm run build</code> and serve <code>dist/</code> from any static
+        host &mdash; every artifact in <code>dist/</code> is self-contained,
+        including the CSS (it is injected into each instance&rsquo;s shadow root, so
+        the host page needs no extra stylesheet). Or load it from the CDN so it is
+        cached across pages and apps:
+      </p>
+<pre><code>&lt;script type="module" src="https://cdn.example.com/aktion@0.5/dist/aktion.js"&gt;&lt;/script&gt;
+&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        Pin a version (<code>@0.5.5</code>) for reproducible builds and set a long
+        <code>Cache-Control</code> max-age on the immutable bundle.
+      </p>
+
+      <h2 id="ssr">SSR &amp; hydration</h2>
+      <p>
+        The runtime renders client-side into a shadow DOM, so there is no separate
+        server renderer. What you <em>can</em> do is persist and resume state so a
+        reload (or a server-rendered shell) restores the app without re-running the
+        LLM:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td><code>serializeState()</code></td><td>Returns every reactive atom as a plain JSON-friendly object &mdash; persist it (cookie, KV, localStorage) for SSR / resumption.</td></tr>
+          <tr><td><code>hydrateState(snapshot)</code></td><td>Applies a snapshot to the live store and schedules a re-render. Atoms not in the snapshot are untouched.</td></tr>
+        </tbody>
+      </table>
+<pre><code>// On unload / checkpoint:
+const snapshot = app.serializeState();
+await fetch("/session", { method: "PUT", body: JSON.stringify(snapshot) });
+
+// On next load, after setting the program text:
+app.setResponse(savedProgram);
+app.hydrateState(await loadSnapshot());</code></pre>
+
+      <h2 id="csp">Content-Security-Policy</h2>
+      <p>
+        The bundle does <strong>not</strong> use <code>eval</code>. However, effect
+        and action bodies are evaluated with <code>new Function(...)</code> so that
+        the DSL can run arbitrary JS expressions &mdash; that requires
+        <code>'unsafe-eval'</code> in your <code>script-src</code>.
+      </p>
+      <div class="callout warn">
+        <p>If you cannot relax CSP, you can still run Aktion: avoid emitting complex
+          JS expressions from the LLM. Declarative constructs &mdash; component
+          trees, <code>$http()</code>, and the <code>@</code>-functions &mdash;
+          keep working without <code>'unsafe-eval'</code>.</p>
+      </div>
+<pre><code>Content-Security-Policy:
+  default-src 'self';
+  script-src 'self' 'unsafe-eval' https://cdn.example.com;
+  connect-src 'self' https://api.your-llm.example.com;</code></pre>
+
+      <h2 id="integrity">Integrity &amp; pinning</h2>
+      <ul>
+        <li>Add a Subresource Integrity hash to the CDN <code>&lt;script&gt;</code>
+          (<code>integrity="sha384-…"</code> with <code>crossorigin="anonymous"</code>)
+          when loading from a third party.</li>
+        <li>Pin the exact version in the URL so a CDN update can never change your
+          runtime behaviour without a deploy.</li>
+        <li>External links rendered by the library already get
+          <code>rel="noopener noreferrer"</code>, and the href/image/CSS sanitizers
+          run regardless of CSP.</li>
+      </ul>
+
+      <h2 id="edge">Edge-function LLM streaming</h2>
+      <p>
+        The common production shape is: the browser holds the
+        <code>&lt;aktion-app&gt;</code>, an edge function proxies the LLM (keeping
+        your API key server-side), and tokens are streamed back and fed to
+        <code>appendChunk</code>:
+      </p>
+<pre><code>const res = await fetch("/api/generate", { method: "POST", body: prompt });
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  app.appendChunk(decoder.decode(value, { stream: true }));
+}</code></pre>
+      <p>
+        See the <a href="llm-integration.html">LLM integration guide</a> for
+        provider-specific stream parsing and prompt selection.
+      </p>
+
+      <h2 id="telemetry">Error reporting &amp; telemetry</h2>
+      <ul>
+        <li>Listen for the host <code>error</code> event and forward
+          <code>e.detail.errors</code> to your error tracker (Sentry, etc.). See
+          <a href="errors.html#event">Error handling</a>.</li>
+        <li>Listen for <code>assistant-message</code> to capture round-trips back
+          to the model, and <code>route-change</code> for analytics page views.</li>
+        <li>Install <code>registerHttpInterceptors({ onRequest, onResponse, onError })</code>
+          to add auth headers, retry on 401, and log network timing centrally.</li>
+        <li>Keep the <code>strict</code> attribute on in staging so silent
+          fallbacks surface as console warnings before release.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="llm-integration.html">
+          <span class="demo-tag">Guide</span>
+          <h3>LLM integration</h3>
+          <p>Wire OpenAI / Anthropic / OpenRouter streams into <code>appendChunk</code>.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="errors.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Error handling</h3>
+          <p>The <code>error</code> event and the runtime guards.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="frameworks.html">
+          <span class="demo-tag">Getting started</span>
+          <h3>Frameworks</h3>
+          <p>Embed the element in your host app.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

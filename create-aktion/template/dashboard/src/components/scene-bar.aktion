@@ -1,0 +1,20 @@
+// Scene shortcuts. Tapping a tile applies that scene's presets to every device
+// at once and marks it active. State lives in the shared `home` store.
+
+import { home } from "../store.aktion"
+
+export function SceneBar() {
+  return Card([
+    SectionHeader("Scenes", { eyebrow: "QUICK ACTIONS", subtitle: "Set the mood in every room at once." }),
+    Grid(home.scenes.map(SceneTile), { minChildWidth: "160px", gap: "m" })
+  ])
+}
+
+function SceneTile(scene) {
+  return Tile(scene.name, {
+    icon: scene.icon,
+    description: home.activeScene === scene.name ? "Active" : "Tap to activate",
+    tone: home.activeScene === scene.name ? "primary" : "default",
+    onClick: () => home.activateScene(scene.name)
+  })
+}

@@ -1,0 +1,16 @@
+// The KPI strip at the top of the overview. Every value is derived live from
+// the store, so toggling a device or running a scene updates it instantly.
+
+import { home } from "../store.aktion"
+import { roomEnergy } from "../data/home.aktion"
+
+totalEnergy = $util.sum(roomEnergy.map(r => r.kwh))
+
+export function StatStrip() {
+  return Stats([
+    { label: "Devices On", value: home.onCount() + " / " + home.total(), hint: "Active right now", tone: "primary" },
+    { label: "Current Load", value: $util.format(home.load(), "number") + " W", hint: "Across on devices" },
+    { label: "Online", value: home.onlineCount() + " / " + home.total(), hint: "Reachable", tone: "success" },
+    { label: "Energy Today", value: $util.format(totalEnergy, "number") + " kWh", hint: "Across the home", tone: "warning" }
+  ], { layout: "strip" })
+}

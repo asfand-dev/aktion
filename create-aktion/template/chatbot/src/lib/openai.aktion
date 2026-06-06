@@ -1,0 +1,32 @@
+// Pure helpers for the OpenAI Chat Completions API + an offline fallback.
+// Kept side-effect-free and in `function` declarations (so they can `return`).
+
+export ENDPOINT = "https://api.openai.com/v1/chat/completions"
+export SYSTEM_PROMPT = "You are a friendly, concise assistant embedded in a demo app."
+
+export MODELS = [
+  { value: "gpt-4o-mini", label: "GPT-4o mini" },
+  { value: "gpt-4o", label: "GPT-4o" },
+  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }
+]
+
+// Build the request `messages` array: a system prompt followed by the thread.
+export function apiMessages(messages) {
+  thread = messages.map(m => ({ role: m.role, content: m.content }))
+  return [{ role: "system", content: SYSTEM_PROMPT }, ...thread]
+}
+
+// Safely pull the assistant text out of a Chat Completions response.
+export function extractReply(data) {
+  if (!data) { return "" }
+  if (!data.choices) { return "" }
+  first = data.choices[0]
+  if (!first) { return "" }
+  if (!first.message) { return "" }
+  return first.message.content
+}
+
+// Offline stand-in used when no API key is set, so the demo works immediately.
+export function echoReply(text) {
+  return "You said: " + text + ". Add your OpenAI API key in settings for real answers."
+}

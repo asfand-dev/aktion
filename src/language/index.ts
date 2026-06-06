@@ -33,6 +33,15 @@ import {
   type ComponentParam,
 } from "./components.js";
 import { getSnippets, type SnippetEntry } from "./snippets.js";
+import {
+  builtinCatalog,
+  builtinNames,
+  builtinsByName,
+  findBuiltin,
+  isBuiltinName,
+  type BuiltinEntry,
+  type BuiltinCategory,
+} from "./builtins.js";
 
 export type {
   GrammarSpec,
@@ -42,6 +51,8 @@ export type {
   ComponentEntry,
   ComponentParam,
   SnippetEntry,
+  BuiltinEntry,
+  BuiltinCategory,
 };
 
 export {
@@ -52,6 +63,11 @@ export {
   getComponentCatalog,
   indexCatalog,
   getSnippets,
+  builtinCatalog,
+  builtinNames,
+  builtinsByName,
+  findBuiltin,
+  isBuiltinName,
 };
 
 /**
@@ -69,6 +85,8 @@ export interface LanguageSpec {
   tagMap: Record<GrammarTokenKind, string | null>;
   components: ComponentEntry[];
   componentsByName: Record<string, ComponentEntry>;
+  /** Catalog of `$`-prefixed builtins (hooks, factories, namespaces). */
+  builtins: readonly BuiltinEntry[];
   snippets: readonly SnippetEntry[];
   /**
    * Reserved-keyword documentation (definition + syntax + example),
@@ -100,6 +118,7 @@ export function getLanguageSpec(library: ComponentLibrary = defaultLibrary): Lan
     tagMap: defaultTagMap,
     components,
     componentsByName: indexCatalog(components),
+    builtins: builtinCatalog,
     snippets: getSnippets(),
     keywordDocs,
     themeNames: Object.keys(builtInThemes),

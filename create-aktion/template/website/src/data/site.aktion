@@ -1,0 +1,44 @@
+// Site content as plain exported data. Pages import what they need — keeping
+// copy out of the layout makes it easy to edit without touching components.
+
+export company = { name: "PawSitters", tagline: "Loving pet care, at home." }
+
+export services = [
+  { id: "walking", name: "Dog Walking", icon: "person-walking", tagline: "Daily walks that burn energy.", description: "30 or 60-minute neighborhood walks with GPS-tracked routes and a photo recap.", price: "$22", duration: "per walk" },
+  { id: "dropin", name: "Drop-In Visits", icon: "house-chimney", tagline: "Food, water, play, repeat.", description: "We stop by to feed, refresh water, scoop litter, and give your pet some love.", price: "$25", duration: "per visit" },
+  { id: "boarding", name: "Overnight Boarding", icon: "moon", tagline: "A cozy home away from home.", description: "Your pet stays overnight with a vetted sitter — walks, meals, and cuddles included.", price: "$60", duration: "per night" },
+  { id: "daycare", name: "Doggy Daycare", icon: "sun", tagline: "Supervised daytime fun.", description: "Full-day socialized play and rest in a safe, fenced space with hourly check-ins.", price: "$40", duration: "per day" },
+  { id: "grooming", name: "Grooming", icon: "scissors", tagline: "Fresh, clean, and pampered.", description: "Bath, brush, nail trim, and a tidy-up from mobile groomers who come to you.", price: "$55", duration: "per session" },
+  { id: "vet", name: "Vet Taxi", icon: "car-side", tagline: "Rides to the vet, sorted.", description: "Door-to-door transport to appointments with updates while you work.", price: "$30", duration: "per trip" }
+]
+
+export testimonials = [
+  { quote: "PawSitters walked our anxious rescue every day and sent the sweetest photos. Total peace of mind.", author: "Maya Chen", role: "Dog parent · Luna", rating: 5 },
+  { quote: "Booked overnight boarding last-minute and they were incredible. Our cat actually seemed sad to leave!", author: "Devin Park", role: "Cat parent · Miso", rating: 5 },
+  { quote: "Reliable, insured, and genuinely kind. We won't trust anyone else with Biscuit.", author: "Sam Okoye", role: "Dog parent · Biscuit", rating: 5 }
+]
+
+export plans = [
+  { name: "Casual", price: "$0", period: "/mo", description: "Pay as you go for the occasional booking.", features: ["Standard booking", "Daily photo updates", "Insured sitters", "Email support"], featured: false, cta: "Get started" },
+  { name: "Regular", price: "$29", period: "/mo", description: "For weekly walkers and busy schedules.", features: ["10% off every booking", "Priority scheduling", "Same sitter when possible", "Chat support"], featured: true, cta: "Choose Regular" },
+  { name: "Unlimited", price: "$99", period: "/mo", description: "Daily care, one simple price.", features: ["Unlimited walks & drop-ins", "Dedicated sitter", "Free vet taxi", "24/7 support"], featured: false, cta: "Go Unlimited" }
+]
+
+export faqs = [
+  { q: "Are your sitters insured and vetted?", a: "Every sitter is background-checked, interviewed, and covered by our insurance on each booking." },
+  { q: "What if I need to cancel?", a: "Cancel free up to 12 hours before a booking. Inside 12 hours we charge 50% so your sitter is fairly paid." },
+  { q: "Which pets do you care for?", a: "Dogs and cats mostly, plus rabbits, birds, and other small pets — just tell us about yours when you book." },
+  { q: "How do I meet my sitter?", a: "We arrange a free 15-minute meet-and-greet before your first booking so everyone is comfortable." }
+]
+
+export steps = [
+  { title: "Tell us about your pet", details: "Share your pet's routine, quirks, and the dates you need covered." },
+  { title: "Meet your sitter", details: "We match you with a vetted local sitter for a free meet-and-greet." },
+  { title: "Relax — they're in good hands", details: "Get photo updates after every visit and message your sitter anytime." }
+]
+
+export petOptions = [
+  { value: "dog", label: "Dog" },
+  { value: "cat", label: "Cat" },
+  { value: "other", label: "Other small pet" }
+]

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recipes, patterns &amp; anti-patterns · Aktion</title>
+  <meta name="description" content="A task-oriented index of Aktion application patterns (A–V), the JS-aligned do/don't table, and a final self-check list for hand-authored and LLM-generated apps." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout p:last-child { margin-bottom: 0; }
+    .do-dont td:first-child { white-space: nowrap; }
+  </style>
+</head>
+<body data-page="recipes">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Recipes, patterns &amp; anti-patterns.</h1>
+        <p class="lead">
+          Aktion ships a cookbook of <strong>22 application patterns</strong>
+          (A&ndash;V) plus a strict do/don&rsquo;t table. This page surfaces them
+          for human readers, organised by the task you&rsquo;re trying to
+          accomplish, with a self-check to run before you ship.
+        </p>
+      </header>
+
+      <h2 id="by-task">Patterns by task &mdash; &ldquo;How do I&hellip;?&rdquo;</h2>
+      <table class="signature-table">
+        <thead><tr><th>I want to build&hellip;</th><th>Start from</th></tr></thead>
+        <tbody>
+          <tr><td>A to-do / task list</td><td><strong>Pattern A</strong> &mdash; Todo list</td></tr>
+          <tr><td>A counter or any per-instance local state widget</td><td><strong>Pattern B</strong> &mdash; Counter with per-instance state</td></tr>
+          <tr><td>A dashboard with KPIs, a chart, and a table</td><td><strong>Pattern C</strong> &mdash; Dashboard</td></tr>
+          <tr><td>A multi-step form / wizard</td><td><strong>Pattern D</strong> &mdash; Multi-step wizard</td></tr>
+          <tr><td>A sectioned settings page</td><td><strong>Pattern E</strong> &mdash; Settings page</td></tr>
+          <tr><td>A chat / messaging surface</td><td><strong>Pattern F</strong> &mdash; Chat surface</td></tr>
+          <tr><td>A multi-page app with routes</td><td><strong>Pattern G</strong> &mdash; Routed multi-page app</td></tr>
+          <tr><td>A live status / monitoring page</td><td><strong>Pattern H</strong> &mdash; Real-time status page</td></tr>
+          <tr><td>A pricing page</td><td><strong>Pattern I</strong> &mdash; Pricing page</td></tr>
+          <tr><td>A checkout / payment flow</td><td><strong>Pattern J</strong> &mdash; Checkout flow</td></tr>
+          <tr><td>A file manager / browser</td><td><strong>Pattern K</strong> &mdash; File manager</td></tr>
+          <tr><td>A calendar / scheduler</td><td><strong>Pattern L</strong> &mdash; Calendar</td></tr>
+          <tr><td>A documentation portal</td><td><strong>Pattern M</strong> &mdash; Docs portal</td></tr>
+          <tr><td>An onboarding checklist</td><td><strong>Pattern N</strong> &mdash; Onboarding checklist</td></tr>
+          <tr><td>A search-driven directory / CRM</td><td><strong>Pattern O</strong> &mdash; Directory / CRM</td></tr>
+          <tr><td>A brand-themed landing page</td><td><strong>Pattern P</strong> &mdash; Landing page</td></tr>
+          <tr><td>A Kanban board</td><td><strong>Pattern Q</strong> &mdash; Kanban board</td></tr>
+          <tr><td>An inbox / split-view reader</td><td><strong>Pattern R</strong> &mdash; Inbox / split-view</td></tr>
+          <tr><td>A content studio / editor</td><td><strong>Pattern S</strong> &mdash; Content studio</td></tr>
+          <tr><td>A data explorer with filters</td><td><strong>Pattern T</strong> &mdash; Data explorer</td></tr>
+          <tr><td>A media gallery</td><td><strong>Pattern U</strong> &mdash; Media gallery</td></tr>
+          <tr><td>A real-time feed</td><td><strong>Pattern V</strong> &mdash; Real-time feed</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <p>Each pattern is a complete, runnable Aktion program. Browse the
+          <a href="examples.html">Examples</a> and <a href="live-examples.html">Live
+          demos</a> pages to see them rendered, and the
+          <a href="playground.html">Playground</a> to remix one into your own app.</p>
+      </div>
+
+      <h2 id="do-dont">JS-aligned do / don&rsquo;t</h2>
+      <p>
+        Aktion is a strict subset of JavaScript. Use these shapes and avoid their
+        legacy equivalents:
+      </p>
+      <table class="signature-table do-dont">
+        <thead><tr><th>Use this</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>$app(Stack([...]))</code></td><td>The canonical entry point &mdash; first line of every program. (The legacy <code>aktion = &hellip;</code> binding is gone.)</td></tr>
+          <tr><td><code>$x = 0</code></td><td>One reactive-atom kind. No declaration keyword.</td></tr>
+          <tr><td><code>function User(u) { return Card([...]) }</code></td><td>PascalCase function = component; must <code>return</code> its tree.</td></tr>
+          <tr><td><code>function save() { ... }</code></td><td>camelCase function = action.</td></tr>
+          <tr><td><code>Button("Save", { variant: "primary" })</code></td><td>One positional arg max; named props go in a trailing object. Multi-positional calls raise a schema error.</td></tr>
+          <tr><td><code>items.map(x =&gt; ...)</code> / <code>cond ? a : b</code></td><td>Standard JS iteration and ternaries in expression position.</td></tr>
+          <tr><td><code>switch (v) { case "a": return X; default: return Y }</code></td><td>Standard JS <code>switch</code> (no DSL <code>match</code>).</td></tr>
+          <tr><td><code>$effect(() =&gt; { ... }, [$x])</code></td><td>Callback + deps array.</td></tr>
+          <tr><td><code>$emit("name", { detail })</code></td><td>Function-call syntax for events.</td></tr>
+          <tr><td><code>$toast.show(...)</code></td><td>Use the toast manager &mdash; don&rsquo;t hand-manage a <code>$toasts = [...]</code> array.</td></tr>
+          <tr><td><code>// comment</code> or <code>/* … */</code></td><td>Only the two JS comment forms.</td></tr>
+          <tr><td>Font Awesome names (<code>"heart"</code>)</td><td>No emoji in <code>icon:</code> slots; no <code>fa-</code> prefix.</td></tr>
+          <tr><td><code>tone:</code> / <code>variant:</code> / theme tokens</td><td>No hard-coded colours or gradients.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="self-check">Self-check before you ship</h2>
+      <p>Walk your program and confirm:</p>
+      <ol>
+        <li><code>$app(...)</code> is the first line.</li>
+        <li>Every referenced name is defined somewhere.</li>
+        <li>Every defined name (other than the <code>$app(...)</code> root and <code>theme</code>) is reachable from the root.</li>
+        <li>Containers reference their children by name; large data arrays live on their own trailing lines.</li>
+        <li>Components (PascalCase) end with an explicit <code>return</code>.</li>
+        <li>Actions (camelCase) use the <code>function</code> keyword.</li>
+        <li>State uses the single-sigil <code>$name = value</code> form.</li>
+        <li>HTTP uses <code>$http({ url, method, ... })</code> with an absolute URL; reads that need caching use <code>$query({...})</code>, deferred writes use <code>$mutation({...})</code>, toasts go through <code>$toast</code>.</li>
+        <li>Router uses <code>$router({...})</code> and the route surface is <code>route.*</code>.</li>
+        <li>Effects use <code>$effect(() =&gt; { ... }, [deps])</code>.</li>
+        <li>Named arguments are wrapped in an object.</li>
+        <li>Every visible button is wired to a function or lambda.</li>
+        <li>Icons are Font Awesome names (no emoji).</li>
+        <li>No hard-coded colours; styling uses <code>tone:</code> / <code>variant:</code> / theme tokens.</li>
+        <li>One positional argument max per component call.</li>
+        <li><code>$emit("name", detail)</code> uses function-call syntax.</li>
+      </ol>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="examples.html">
+          <span class="demo-tag">Resources</span>
+          <h3>Examples</h3>
+          <p>Copy-paste recipes and full app snippets.</p>
+          <span class="demo-arrow">Open the gallery &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Resources</span>
+          <h3>Playground</h3>
+          <p>Edit and preview Aktion live in the browser.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="reactivity.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Reactivity &amp; rendering</h3>
+          <p>The semantics behind <code>$x = value</code> and re-renders.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

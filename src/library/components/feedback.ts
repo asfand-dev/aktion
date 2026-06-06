@@ -409,9 +409,10 @@ export const Rating: ComponentSpec = {
   description:
     "Compact 0–5 star rating with optional numeric badge and review " +
     "count. Use in product cards, testimonials, reviews, and KPI rows. " +
-    "Pass `interactive=true` and a `$variable` as `value` to let users " +
-    "rate something; with `halfStep=true` clicking the left half of a " +
-    "star sets a fractional value. `icon` swaps the glyph family — " +
+    "Pass `interactive: true` (or an `onChange` handler) to let users pick " +
+    "a rating; bind `value: $rating` for two-way binding, or read the new " +
+    "value from `onChange: (v) => …`. With `halfStep: true` clicking the " +
+    "left half of a star sets a fractional value. `icon` swaps the glyph family — " +
     "`star` (default), `heart`, `thumb`, `fire`, `bolt`, or any custom " +
     "Font Awesome name.",
   props: [
@@ -428,17 +429,28 @@ export const Rating: ComponentSpec = {
   ],
   render: (node, props, helpers) => {
     const max = Math.max(1, Math.floor(asNumber(props.max, 5)));
-    const raw = Math.max(0, Math.min(max, asNumber(props.value, 0)));
     const size = asString(props.size, "md");
-    const interactive = asBoolean(props.interactive) && !asBoolean(props.readonly);
     const halfStep = asBoolean(props.halfStep);
-    const stateName = node.argMeta?.[0]?.stateRef;
+    const stateName = node.argMeta?.[0]?.stateRef as string | undefined;
+    // Interactive when the author opts in via `interactive: true` OR supplies
+    // an `onChange` handler — `readonly` always forces display mode. A bound
+    // `value: $atom` drives two-way binding; when there is no binding we keep a
+    // local per-instance value so the stars still visibly select (an
+    // uncontrolled input that also fires `onChange`).
+    const interactive =
+      (asBoolean(props.interactive) || props.onChange != null) && !asBoolean(props.readonly);
+    const uncontrolled = interactive && !stateName;
+    const localSlot = uncontrolled
+      ? helpers.useInstanceState<number>("rating-value", asNumber(props.value, 0))
+      : null;
+    const current = localSlot ? asNumber(localSlot.get(), 0) : asNumber(props.value, 0);
+    const raw = Math.max(0, Math.min(max, current));
     const iconChoice = resolveRatingIcons(asString(props.icon));
     const root = el("div", {
       class: "rui-rating",
       "data-size": size,
-      "data-interactive": interactive && stateName ? "true" : "false",
-      "data-half-step": interactive && stateName && halfStep ? "true" : "false",
+      "data-interactive": interactive ? "true" : "false",
+      "data-half-step": interactive && halfStep ? "true" : "false",
       role: "img",
       "aria-label": `${raw} of ${max}`,
     });
@@ -448,30 +460,36 @@ export const Rating: ComponentSpec = {
       const iconName =
         fill >= 1 ? iconChoice.full : fill > 0 ? iconChoice.half : iconChoice.empty;
       const iconClasses = resolveIconClasses(iconName).join(" ");
-      const star = el(interactive && stateName ? "button" : "span", {
+      const star = el(interactive ? "button" : "span", {
         class: `rui-rating-star ${iconClasses}`.trim(),
-        type: interactive && stateName ? "button" : null,
+        type: interactive ? "button" : null,
         "data-fill": fill >= 1 ? "full" : fill > 0 ? "half" : "empty",
-        "aria-label": interactive && stateName ? `Rate ${i}` : null,
-        "aria-hidden": interactive && stateName ? null : "true",
+        "aria-label": interactive ? `Rate ${i}` : null,
+        "aria-hidden": interactive ? null : "true",
       });
-      if (interactive && stateName) {
+      if (interactive) {
         const fullValue = i;
         const halfValue = i - 0.5;
         (star as HTMLButtonElement).onclick = (event) => {
+          // Resolve the clicked element + container from the live event so the
+          // handler still works after the morph reconciler keeps the previous
+          // DOM (same approach as Tabs).
+          const evt = event as MouseEvent;
+          const origin = (evt.currentTarget ?? evt.target) as HTMLElement;
           let next: number = fullValue;
           if (halfStep) {
-            // Determine which half of the star was clicked. Resolve from
-            // the live element via the event so the handler still works
-            // after the morph reconciler keeps the previous DOM.
-            const evt = event as MouseEvent;
-            const target = (evt.currentTarget ?? evt.target) as HTMLElement;
-            const rect = target.getBoundingClientRect();
+            const rect = origin.getBoundingClientRect();
             if (rect.width > 0 && evt.clientX - rect.left < rect.width / 2) {
               next = halfValue;
             }
           }
-          helpers.setState(stateName, next);
+          if (stateName) helpers.setState(stateName, next);
+          if (localSlot) localSlot.set(next);
+          // Reflect the selection immediately in the live DOM. The bound path
+          // also re-renders on the next microtask; the uncontrolled path
+          // relies solely on this paint (instance-state writes do not by
+          // themselves schedule a render).
+          paintRating(origin.closest(".rui-rating"), next, max, iconChoice);
           helpers.invoke(props.onChange, next);
         };
       }
@@ -487,6 +505,28 @@ export const Rating: ComponentSpec = {
     return root;
   },
 };
+
+/**
+ * Repaint a live Rating's stars to reflect `value` without a full re-render.
+ * Used by the interactive click handler so an uncontrolled (unbound) Rating
+ * still visibly selects — instance-state writes alone don't schedule a render.
+ */
+function paintRating(
+  root: Element | null,
+  value: number,
+  max: number,
+  icons: { full: string; half: string; empty: string },
+): void {
+  if (!root) return;
+  const stars = root.querySelectorAll(".rui-rating-star");
+  stars.forEach((star, idx) => {
+    const fill = Math.max(0, Math.min(1, value - idx));
+    const iconName = fill >= 1 ? icons.full : fill > 0 ? icons.half : icons.empty;
+    star.setAttribute("data-fill", fill >= 1 ? "full" : fill > 0 ? "half" : "empty");
+    (star as HTMLElement).className = `rui-rating-star ${resolveIconClasses(iconName).join(" ")}`.trim();
+  });
+  root.setAttribute("aria-label", `${Math.max(0, Math.min(max, value))} of ${max}`);
+}
 
 function resolveRatingIcons(icon: string): { full: string; half: string; empty: string } {
   const key = icon.trim().toLowerCase();
@@ -823,7 +863,9 @@ export const Toast: ComponentSpec = {
     const position = asString(props.position);
     const root = el("div", {
       class: position ? "rui-toast rui-toast-standalone" : "rui-toast",
-      role: "status",
+      // Danger toasts are interruptive — `alert` + `assertive` so screen
+      // readers announce them immediately; others are polite `status`.
+      role: tone === "danger" ? "alert" : "status",
       "aria-live": tone === "danger" ? "assertive" : "polite",
       "data-tone": tone,
       "data-position": position || null,

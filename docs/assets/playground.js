@@ -1157,7 +1157,6 @@ const LANGUAGE_KEYWORDS = [
   { label: "async",     info: "Marks a function as async — accepted as a no-op modifier." },
   { label: "return",    info: "Return from a `function` / `$effect` body." },
   { label: "cleanup",   info: "Register a teardown handler inside a `$effect` body — e.g. `cleanup(() => clearInterval(id))`." },
-  { label: "optimistic",info: "Mark a mutating `function` as optimistic: `function save(...) optimistic { ... }`." },
   { label: "default",   info: "Wildcard arm inside `$router({...})`." },
 ];
 

@@ -29,23 +29,65 @@
  *      are the ones that get applied.
  */
 
+// Every event-handler property that a component might assign with
+// `el.onX = fn`. The morph copies these from the freshly-rendered node onto
+// the kept node so the closure stays current across re-renders. A handler
+// type that is missing here keeps its STALE closure forever once the node is
+// reused — so this list has to track every `on*` property the renderer or a
+// library component actually sets (e.g. `VirtualList` sets `onscroll`,
+// `ContextMenu` sets `oncontextmenu`). Listing extra entries is harmless:
+// for an event nobody wired up, both sides read `null` and the sync is a
+// no-op.
 const EVENT_PROPS = [
+  // Pointer / click
   "onclick",
+  "ondblclick",
+  "oncontextmenu",
+  "onmousedown",
+  "onmouseup",
+  "onmousemove",
+  "onmouseenter",
+  "onmouseleave",
+  "onmouseover",
+  "onmouseout",
+  "onpointerdown",
+  "onpointerup",
+  "onpointermove",
+  "onpointerenter",
+  "onpointerleave",
+  "onpointercancel",
+  // Scroll / wheel
+  "onscroll",
+  "onwheel",
+  // Drag & drop
+  "ondrag",
+  "ondragstart",
+  "ondragend",
+  "ondragenter",
+  "ondragleave",
+  "ondragover",
+  "ondrop",
+  // Touch
+  "ontouchstart",
+  "ontouchmove",
+  "ontouchend",
+  "ontouchcancel",
+  // Form / input
   "oninput",
   "onchange",
   "onsubmit",
-  "onfocus",
-  "onblur",
+  "onreset",
+  "oninvalid",
+  "ontoggle",
+  // Keyboard
   "onkeydown",
   "onkeyup",
   "onkeypress",
+  // Focus
+  "onfocus",
+  "onblur",
+  // Media / misc
   "onerror",
-  "onmouseenter",
-  "onmouseleave",
-  "onmousedown",
-  "onmouseup",
-  "onpointerdown",
-  "onpointerup",
 ] as const;
 
 type EventHandlerKey = (typeof EVENT_PROPS)[number];

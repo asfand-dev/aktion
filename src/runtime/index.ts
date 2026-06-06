@@ -7,8 +7,12 @@ export * from "./i18n.js";
 export { storage, type CookieOptions, type StorageNamespace, type StorageRoot } from "./storage.js";
 export { consoleNs, type ConsoleNamespace } from "./console.js";
 export {
+  createToastManager,
+  type ToastManager,
+  type ToastItem,
+  type ToastOptions,
+} from "./toast.js";
+export {
   EffectRunner,
-  ActionDeclRunner,
   type EffectRunnerOptions,
-  type ActionRunnerOptions,
 } from "./effects.js";

@@ -995,6 +995,19 @@ export const ScrollArea: ComponentSpec = {
 
 const MODAL_SIZES = ["sm", "md", "lg", "xl", "full"] as const;
 
+/** Tab-reachable elements inside a dialog, used by the Modal focus trap. */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), ' +
+  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+let modalIdSeq = 0;
+
+/** The active element within the modal's root (document or shadow root). */
+function activeWithin(el: Element): Element | null {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  return (root as Document).activeElement ?? null;
+}
+
 export const Modal: ComponentSpec = {
   name: "Modal",
   description:
@@ -1003,7 +1016,10 @@ export const Modal: ComponentSpec = {
     "(disable via `closable: false`); the optional `footer` slot is the " +
     "canonical place for action buttons. `closeOnBackdrop=true` opts in " +
     "to backdrop-click dismissal. `onClose` fires every time the modal " +
-    "closes (× button, backdrop, programmatic state write).",
+    "closes (× button, backdrop, programmatic state write). Accessible by " +
+    "default: the dialog is labelled by its title, focus moves into it on " +
+    "open and is restored on close, Tab is trapped inside, and Escape " +
+    "closes it (unless `closable: false`).",
   props: [
     { name: "title", type: "string" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
@@ -1021,14 +1037,21 @@ export const Modal: ComponentSpec = {
       class: "rui-modal-overlay",
       "data-open": asBoolean(props.open) ? "true" : "false",
     });
+    // Stable id so the title can label the dialog for assistive tech.
+    const titleIdSlot = helpers.useInstanceState<string>("rui-modal-title-id", "");
+    if (!titleIdSlot.get()) titleIdSlot.set(`rui-modal-title-${(modalIdSeq += 1)}`);
+    const titleId = titleIdSlot.get();
     const dialog = el("div", {
       class: "rui-modal",
       role: "dialog",
       "aria-modal": "true",
+      "aria-labelledby": titleId,
+      // Focusable so we can move focus into the dialog on open.
+      tabindex: "-1",
       "data-size": size,
     });
     const header = el("header", { class: "rui-modal-header" });
-    header.append(el("h3", { class: "rui-modal-title" }, [asString(props.title)]));
+    header.append(el("h3", { class: "rui-modal-title", id: titleId }, [asString(props.title)]));
     const stateName = node.argMeta?.[1]?.stateRef;
     const closeModal = () => {
       if (stateName) helpers.setState(stateName, false);
@@ -1062,6 +1085,61 @@ export const Modal: ComponentSpec = {
         if (event.target === overlay) closeModal();
       };
     }
+
+    // ── Accessibility: Escape to close + Tab focus trap ──────────────
+    const isOpen = asBoolean(props.open);
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && closable) {
+        event.stopPropagation();
+        closeModal();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = activeWithin(dialog);
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
+    // Move focus into the dialog when it opens; restore it when it closes.
+    // `useInstanceState` survives re-renders so we only react to the
+    // open→closed / closed→open transition, not every commit.
+    const focusSlot = helpers.useInstanceState<{ open: boolean; prev: Element | null }>(
+      "rui-modal-focus",
+      { open: false, prev: null },
+    );
+    const prevState = focusSlot.get();
+    if (isOpen && !prevState.open) {
+      const previouslyFocused = activeWithin(dialog);
+      focusSlot.set({ open: true, prev: previouslyFocused });
+      const focusFirst = (): void => {
+        const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
+        (items[0] ?? dialog).focus();
+      };
+      if (typeof queueMicrotask === "function") queueMicrotask(focusFirst);
+      else void Promise.resolve().then(focusFirst);
+    } else if (!isOpen && prevState.open) {
+      const toRestore = prevState.prev as HTMLElement | null;
+      focusSlot.set({ open: false, prev: null });
+      if (toRestore && typeof toRestore.focus === "function") {
+        const restore = (): void => toRestore.focus();
+        if (typeof queueMicrotask === "function") queueMicrotask(restore);
+        else void Promise.resolve().then(restore);
+      }
+    }
+
     return overlay;
   },
 };

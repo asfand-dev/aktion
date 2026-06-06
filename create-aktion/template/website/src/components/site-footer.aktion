@@ -1,0 +1,18 @@
+import { company } from "../data/site.aktion"
+
+export function SiteFooter() {
+  return Box([
+    Row([
+      StackItem(Column([
+        Text(company.name, { variant: "body-heavy" }),
+        Text(company.tagline, { variant: "small", tone: "muted" })
+      ], { gap: "xs" }), { grow: 1 }),
+      Row([
+        Link("Services", { to: "/services", variant: "subtle" }),
+        Link("Pricing", { to: "/pricing", variant: "subtle" }),
+        Link("Contact", { to: "/contact", variant: "subtle" })
+      ], { gap: "m", wrap: true }),
+      Text("© 2026 " + company.name, { variant: "small", tone: "muted" })
+    ], { align: "center", wrap: true, gap: "l" })
+  ], { padding: "l", border: "subtle" })
+}

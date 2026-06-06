@@ -1,0 +1,28 @@
+// Entry module for a marketing site → a top Navbar + stacked, routed sections
+// inside a Container (never an AppShell, which is for dashboards/apps).
+
+import { SiteNav } from "./components/site-nav.aktion"
+import { SiteFooter } from "./components/site-footer.aktion"
+import { HomePage } from "./pages/home.aktion"
+import { ServicesPage } from "./pages/services.aktion"
+import { PricingPage } from "./pages/pricing.aktion"
+import { ContactPage } from "./pages/contact.aktion"
+
+$theme({
+  colors: { primary: "#0ea5a5" },
+  radius: { md: "0.9rem", button: "999px" }
+})
+
+pages = $router({
+  "/": HomePage(),
+  "/services": ServicesPage(),
+  "/pricing": PricingPage(),
+  "/contact": ContactPage(),
+  default: HomePage()
+})
+
+aktion = Column([
+  SiteNav(),
+  Container([pages], { size: "lg" }),
+  SiteFooter()
+], { gap: "l" })

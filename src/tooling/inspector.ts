@@ -191,7 +191,7 @@ function toBinding(stmt: Statement): InspectorBinding | null {
         kind: "action",
         line: stmt.loc?.line ?? 0,
         column: stmt.loc?.column ?? 0,
-        summary: stmt.optimistic ? "action (optimistic)" : "action",
+        summary: "action",
       };
     case "HookDeclaration":
       return {

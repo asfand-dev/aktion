@@ -1,0 +1,27 @@
+// Automations page: each rule is a card with an enable/disable switch wired to
+// the store.
+
+import { home } from "../store.aktion"
+
+export function AutomationsPage() {
+  return Column([
+    PageHeader("Automations", { subtitle: "Rules that run your home on autopilot.", breadcrumbs: false }),
+    Column(home.automations.map(AutomationRow), { gap: "m" })
+  ], { gap: "l" })
+}
+
+function AutomationRow(rule) {
+  return Card([
+    Row([
+      Icon(rule.icon, { size: "lg", color: rule.enabled ? "var(--rui-color-primary)" : undefined }),
+      StackItem(Column([
+        Row([
+          Text(rule.name, { variant: "body-heavy" }),
+          Badge(rule.schedule, { tone: "neutral", size: "sm" })
+        ], { gap: "s", align: "center" }),
+        Text(rule.description, { variant: "small", tone: "muted" })
+      ], { gap: "xs" }), { grow: 1 }),
+      Switch("auto-" + rule.id, { value: rule.enabled, onChange: () => home.toggleAutomation(rule.id) })
+    ], { gap: "m", align: "center" })
+  ], { variant: "outlined" })
+}

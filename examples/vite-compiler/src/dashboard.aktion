@@ -1,0 +1,12 @@
+// A single-file program (no imports) — the linker is a no-op for these.
+
+$count = 0
+
+aktion = Card([
+  CardHeader("Single-file dashboard"),
+  Button(`Clicked ${$count} times`, { action: bump, variant: "primary" })
+])
+
+function bump() {
+  $count = $count + 1
+}

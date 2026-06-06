@@ -1,0 +1,15 @@
+// Services page: every offering plus a short "how it works" flow.
+
+import { ServiceCard } from "../components/service-card.aktion"
+import { services, steps } from "../data/site.aktion"
+
+export function ServicesPage() {
+  return Column([
+    PageHeader("Services", { subtitle: "Flexible care options for dogs, cats, and small pets.", breadcrumbs: false }),
+    Grid(services.map(ServiceCard), { minChildWidth: "260px", gap: "l" }),
+    Card([
+      SectionHeader("How it works", { eyebrow: "SIMPLE" }),
+      Steps(steps)
+    ])
+  ], { gap: "l" })
+}

@@ -1,0 +1,28 @@
+// Entry module: a personal site → top Navbar + routed sections in a Container,
+// with a footer. (A marketing/portfolio surface, never an AppShell.)
+
+import { SiteNav } from "./components/site-nav.aktion"
+import { SiteFooter } from "./components/site-footer.aktion"
+import { HomePage } from "./pages/home.aktion"
+import { ProjectsPage } from "./pages/projects.aktion"
+import { AboutPage } from "./pages/about.aktion"
+import { ContactPage } from "./pages/contact.aktion"
+
+$theme({
+  colors: { primary: "#8b5cf6" },
+  radius: { md: "0.9rem" }
+})
+
+pages = $router({
+  "/": HomePage(),
+  "/projects": ProjectsPage(),
+  "/about": AboutPage(),
+  "/contact": ContactPage(),
+  default: HomePage()
+})
+
+aktion = Column([
+  SiteNav(),
+  Container([pages], { size: "lg" }),
+  SiteFooter()
+], { gap: "l" })

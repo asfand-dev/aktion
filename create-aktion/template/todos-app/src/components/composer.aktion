@@ -1,0 +1,14 @@
+// The "new todo" composer. The input two-way-binds to the shared `$draft`
+// atom; the button calls the `addTodo` action.
+
+import { $draft, addTodo } from "../store.aktion"
+
+export function Composer() {
+  return Card([
+    SectionHeader("New todo", { eyebrow: "CREATE" }),
+    Row([
+      StackItem(Input("draft", { placeholder: "What needs doing?", value: $draft }), { grow: 1 }),
+      Button("Add", { onClick: addTodo, variant: "primary", icon: "plus" })
+    ], { gap: "s", align: "center" })
+  ])
+}

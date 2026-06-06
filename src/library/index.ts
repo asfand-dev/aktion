@@ -82,7 +82,7 @@ import {
 } from "./components/helpers.js";
 import { HTMLTag, Styles } from "./components/escape-hatch.js";
 import {
-  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css, Link,
+  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
 } from "./components/wrappers.js";
 
 export * from "./types.js";
@@ -135,7 +135,7 @@ const components: ComponentSpec[] = [
   // Aktion 0.5 standard helpers
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
   // Behavioural & styling wrappers
-  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, Css, Link,
+  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
   // Escape hatches for raw HTML / CSS — last-resort primitives
   HTMLTag, Styles,
 ];
@@ -398,14 +398,14 @@ const componentGroups: ComponentGroup[] = [
       "- `Show(when, { fallback?, children })` is sugar over `if (expr) { children } else { fallback }`.",
       "- `Portal(target?, children)` renders into a different DOM subtree (defaults to `document.body`).",
       "- `Redirect(path)` is a router-aware component — see Routing.",
-      "- `Lazy(loader, fallback?)` defers children until `loader` resolves.",
+      "- `Lazy(loader, fallback?)` defers rendering until the async `loader` resolves, showing `fallback` while pending (a synchronous loader value renders immediately).",
       "- `ErrorBoundary(fallback?, onError?, children)` catches rendering errors thrown by descendants.",
     ],
   },
   {
     name: "Behaviour wrappers",
     components: [
-      "OnClick", "OnMouse", "OnKeyboard", "OnFocus", "OnIntersect", "Css", "Link",
+      "OnClick", "OnMouse", "OnKeyboard", "OnFocus", "OnIntersect", "OnMount", "Css", "Link",
     ],
     notes: [
       "- Wrappers compose: any built-in component can be made clickable, hoverable, observable, or restyled by wrapping it in one of these primitives — no need for the underlying component to grow another prop.",
@@ -414,6 +414,7 @@ const componentGroups: ComponentGroup[] = [
       "- `OnKeyboard(child, { onKeyDown?, onKeyUp?, onKeyPress?, focusable? })` attaches keyboard listeners. The wrapper is focusable by default; pass `focusable: false` when the child is already focusable (input, button).",
       "- `OnFocus(child, { onFocus?, onBlur? })` tracks focus moving into or out of a subtree (uses bubbling `focusin` / `focusout` so descendants count).",
       "- `OnIntersect(child, { onEnter?, onLeave?, onChange?, threshold?, rootMargin?, once? })` is the IntersectionObserver wrapper — perfect for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations.",
+      "- `OnMount(child, { onMount?, onUnmount? })` is the DOM-ref / lifecycle wrapper. `onMount(node)` fires once after the wrapped element attaches; `onUnmount(node)` fires when it leaves the tree. Use it to measure or focus an element, or to hand a node to an imperative library (chart / map / editor). Stash the node in a `$ref(...)`.",
       "- `Css(child, { style?, class? })` merges raw class tokens and inline styles onto the wrapped child. Reach for it ONLY when the standard component props can't express the styling — prefer `Box`/`Stack`/`Grid` for layout and `$theme(...)` for tokens.",
       "- `Link(label_or_child, { to?, href?, external?, variant? })` is the anchor primitive — accepts either a plain string label or a wrapped component. Use `to` for client-side router navigation and `href` (with `external: true`) for outbound links.",
     ],

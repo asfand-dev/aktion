@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Error handling &amp; debugging · Aktion</title>
+  <meta name="description" content="How to read Aktion parse and runtime errors, what the render-loop and safety-budget guards mean, the error event contract, strict/dev mode, and DevTools-driven diagnosis." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="errors">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Error handling &amp; debugging.</h1>
+        <p class="lead">
+          Aktion fails <em>safely</em> by design &mdash; partial, mid-stream LLM
+          output should never crash the page. That same design hides bugs from a
+          human developer. This guide explains the failure modes, how to surface
+          them, and how to read each kind of error.
+        </p>
+      </header>
+
+      <h2 id="philosophy">Two audiences, two modes</h2>
+      <p>
+        The runtime serves a streaming LLM (which emits incomplete programs
+        token-by-token) and a human developer (who wants loud feedback). The
+        default is the safe, silent behaviour for streaming; <strong>strict
+        mode</strong> flips on developer-grade diagnostics.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Situation</th><th>Default (streaming-safe)</th><th>Strict mode</th></tr></thead>
+        <tbody>
+          <tr><td>Unknown identifier</td><td>Evaluates to <code>null</code></td><td><code>console.warn</code></td></tr>
+          <tr><td>Non-callable callee</td><td>Returns <code>null</code></td><td><code>console.warn</code></td></tr>
+          <tr><td>Unknown component</td><td>Renders a <code>Skeleton</code></td><td>Warns &amp; still renders the skeleton</td></tr>
+          <tr><td>Rejected inline style</td><td>Dropped silently</td><td><code>console.warn</code></td></tr>
+          <tr><td>Missing i18n key</td><td>Returns the key</td><td><code>console.warn</code></td></tr>
+          <tr><td>Trailing object that matches no parameter</td><td>Treated as a positional arg</td><td>Warns about the likely named&rarr;positional flip</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="strict">Enabling strict mode</h2>
+      <p>
+        Add the <code>strict</code> attribute to the host element. Use it in
+        development and tests; leave it off in the live LLM surface where partial
+        output is expected.
+      </p>
+<pre><code>&lt;aktion-app strict&gt;&lt;/aktion-app&gt;</code></pre>
+      <div class="callout">
+        <p>Strict mode only changes <em>diagnostics</em> &mdash; it never changes
+          rendered output. A program behaves identically with and without it, so
+          you can safely toggle it per environment.</p>
+      </div>
+
+      <h2 id="parse">Parse errors</h2>
+      <p>
+        Parse errors carry a <code>line</code>, <code>column</code>, and a
+        message, and are shown in an error banner on the element. While streaming,
+        parse errors are tolerated (the tail may simply be incomplete); once a
+        full document is set, they surface through the <code>error</code> event.
+      </p>
+
+      <h2 id="event">The <code>error</code> event</h2>
+      <p>
+        The host dispatches a composed, bubbling <code>error</code>
+        <code>CustomEvent</code>. Listen for it to route problems into your own
+        logging / telemetry:
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.addEventListener("error", (e) =&gt; {
+  for (const { line, column, message } of e.detail.errors) {
+    console.error(`[aktion] ${line}:${column} ${message}`);
+    // forward to Sentry / your telemetry here
+  }
+});</code></pre>
+      <p>
+        The same event shape (<code>{ errors: [{ line, column, message }] }</code>)
+        is used for both parse failures and aborted renders &mdash; safety-budget
+        trips report <code>{ line: 0, column: 0, message }</code>.
+      </p>
+
+      <h2 id="guards">The runtime guards</h2>
+      <h3 id="loop">Render-loop guard</h3>
+      <p>
+        If a <code>$name = &hellip;</code> write happens <em>during render</em>, the
+        runtime applies it without scheduling another render (otherwise the render
+        would re-trigger itself forever) and logs a warning. Seeing this warning
+        means you are writing reactive state in render position &mdash; move the
+        write into an event handler or effect, or seed it with a PascalCase
+        component / <code>$state</code>. See
+        <a href="reactivity.html">Reactivity &amp; rendering</a>.
+      </p>
+      <h3 id="budget">Safety-budget guard</h3>
+      <p>
+        Each render runs under a budget (component depth 150, 250&nbsp;000
+        iterations, 100&nbsp;000 array entries). When a limit trips the render is
+        aborted, an <code>error</code> event fires, and the previous tick&rsquo;s
+        DOM is kept so the user still sees something. A budget trip almost always
+        means accidental recursion or an unbounded loop &mdash; check for a
+        component that renders itself, or a range/repeat with a runaway size. See
+        <a href="performance.html#budget">Performance</a>.
+      </p>
+
+      <h2 id="devtools">Diagnose with DevTools</h2>
+      <p>
+        The <a href="devtools.html">DevTools</a> panel gives you a state inspector,
+        a commit profiler, an effect timeline, and a per-render &ldquo;why did this
+        render&rdquo; reason. When something re-renders unexpectedly or a value
+        looks wrong, start there: inspect the live atom values, then read the
+        commit reason to trace the trigger.
+      </p>
+
+      <h2 id="surface">Surfacing errors to end users</h2>
+      <ul>
+        <li>Wrap risky subtrees in the <code>ErrorBoundary</code> component to show
+          a fallback instead of a blank region.</li>
+        <li>Listen for the <code>error</code> event at the host and render your own
+          toast / banner via the <a href="reactivity.html">app state</a> or the
+          <code>$toast</code> manager.</li>
+        <li>Keep <code>strict</code> on in staging so warnings show up in your test
+          and QA consoles before they reach production.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="troubleshooting.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Troubleshooting / FAQ</h3>
+          <p>The most common gotchas with their causes and fixes.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="devtools.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>DevTools</h3>
+          <p>Inspect state and trace renders.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="testing.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Testing</h3>
+          <p>Assert behaviour and mock <code>$http</code> with the testing library.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

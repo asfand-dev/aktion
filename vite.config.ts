@@ -9,7 +9,10 @@ export default defineConfig({
       include: ["src/**/*"],
       entryRoot: "src",
       insertTypesEntry: false,
-      copyDtsFiles: false,
+      // Copy authored `.d.ts` sources (e.g. src/aktion-modules.d.ts — the
+      // ambient `*.aktion` module declarations) into dist/types so the
+      // `aktion-runtime/aktion-modules` export resolves.
+      copyDtsFiles: true,
       rollupTypes: false,
     }),
   ],

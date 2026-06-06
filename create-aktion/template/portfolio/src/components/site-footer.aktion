@@ -1,0 +1,14 @@
+import { profile, socials } from "../data/portfolio.aktion"
+
+export function SiteFooter() {
+  return Box([
+    Row([
+      StackItem(Text("© 2026 " + profile.name, { variant: "small", tone: "muted" }), { grow: 1 }),
+      Row(socials.map(toSocial), { gap: "m", wrap: true })
+    ], { align: "center", wrap: true, gap: "m" })
+  ], { padding: "l", border: "subtle" })
+}
+
+function toSocial(social) {
+  return Link(social.label, { href: social.href, external: true, variant: "subtle" })
+}

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Troubleshooting &amp; FAQ · Aktion</title>
+  <meta name="description" content="Answers to the most common Aktion questions: lost input focus, effects that don't re-run, components memoized away, the Map component vs JS Map, dropped inline styles, and missing i18n keys." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .faq { border: 1px solid var(--doc-border); border-radius: 10px; padding: 16px 18px; margin: 14px 0; background: var(--doc-surface-elev); }
+    .faq h3 { margin-top: 0; }
+    .faq .fix { color: var(--doc-text-muted); }
+  </style>
+</head>
+<body data-page="troubleshooting">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Troubleshooting &amp; FAQ.</h1>
+        <p class="lead">
+          The questions developers hit most often, with the cause and the fix in
+          one place. Most surprising behaviour comes from Aktion&rsquo;s
+          streaming-first defaults &mdash; once you know the rule, the fix is
+          short.
+        </p>
+      </header>
+
+      <div class="faq">
+        <h3 id="focus">My <code>Input</code> loses focus on every keystroke / state change</h3>
+        <p><strong>Cause.</strong> The morph reconciler preserves focus, selection,
+          and input values across re-renders &mdash; but a subtree rendered through
+          <code>Portal</code> is re-created rather than morphed, so a focused field
+          inside a Portal loses focus whenever an unrelated state change re-renders
+          the tree.</p>
+        <p class="fix"><strong>Fix.</strong> Keep focused, editable content out of a
+          <code>Portal</code>. For overlays that must hold a form, prefer
+          <code>Modal</code> (which traps and restores focus). If you must keep an
+          input mounted, bind it to a top-level atom so typing only triggers a
+          path-scoped update rather than a full re-render of the surrounding tree.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="effect">My effect isn&rsquo;t re-running</h3>
+        <p><strong>Cause.</strong> <code>$effect(fn, [deps])</code> only re-runs when
+          one of its <em>tracked</em> dependencies changes: reactive atoms /
+          <code>$store</code> fields read in the dependency array, plus the
+          component lifecycle and timer ticks. A value that isn&rsquo;t a reactive
+          read (a plain local, a prop captured by value) won&rsquo;t re-trigger the
+          effect when it changes.</p>
+        <p class="fix"><strong>Fix.</strong> Put the actual reactive atom(s) the
+          effect depends on into the dependency array. If you need to react to a
+          derived value, derive it from atoms (or a <code>$memo</code>) so the
+          dependency is itself reactive. An empty array <code>[]</code> means
+          &ldquo;run once on mount&rdquo;.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="memoized">My component didn&rsquo;t update &mdash; it was &ldquo;memoized away&rdquo;</h3>
+        <p><strong>Cause.</strong> On a fine-grained update, a PascalCase component
+          whose props are unchanged is skipped and its previous DOM is reused. If
+          the component reads state it didn&rsquo;t receive as a prop and that
+          state changes via a path the component never subscribed to, it can be
+          skipped.</p>
+        <p class="fix"><strong>Fix.</strong> Read the reactive value <em>inside</em>
+          the component (so it subscribes to the path), or pass it in as a prop so a
+          changed value breaks prop equality and forces a re-render. Use DevTools&rsquo;
+          &ldquo;why did this render&rdquo; to confirm whether an instance was
+          skipped.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="map"><code>Map(...)</code> rendered something unexpected (not a JS <code>Map</code>)</h3>
+        <p><strong>Cause.</strong> <code>Map</code> is a built-in <em>component</em>
+          name in Aktion (the geographic map). A bare <code>Map(&hellip;)</code> in
+          render position resolves to that component, not the JavaScript
+          <code>Map</code> constructor.</p>
+        <p class="fix"><strong>Fix.</strong> For a JS hash map use an object literal
+          (<code>{}</code>) or the array/object helpers in <code>$util</code>
+          (<code>$util.keyBy</code>, <code>$util.groupBy</code>). Reserve
+          <code>Map(&hellip;)</code> for the map component.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="style">My inline style was dropped</h3>
+        <p><strong>Cause.</strong> Styles pass through a sanitizer. Declarations that
+          look unsafe (e.g. <code>url(javascript:&hellip;)</code>, expression-based
+          values) are dropped silently so streamed, partial output can never inject
+          script.</p>
+        <p class="fix"><strong>Fix.</strong> Use plain, static CSS values. For
+          anything dynamic, compute the value in an expression and pass a clean
+          string. Turn on <a href="errors.html">strict mode</a> to get a console
+          warning when a declaration is rejected instead of a silent drop.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="i18n">A missing translation shows the key instead of text</h3>
+        <p><strong>Cause.</strong> When an <code>$i18n</code> key has no entry for the
+          active locale, the runtime returns the key itself rather than throwing &mdash;
+          so a partially-translated app still renders.</p>
+        <p class="fix"><strong>Fix.</strong> Add the missing key to the locale table.
+          In <a href="errors.html">strict mode</a>, missing keys are surfaced as
+          console warnings so you can find them during development.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="silent">Nothing rendered and there was no error</h3>
+        <p><strong>Cause.</strong> By design, unknown identifiers evaluate to
+          <code>null</code>, non-callable callees return <code>null</code>, and an
+          unknown component renders a <code>Skeleton</code> &mdash; so mid-stream
+          partial output never crashes.</p>
+        <p class="fix"><strong>Fix.</strong> Enable <strong>strict mode</strong>
+          (<code>strict</code> attribute on <code>&lt;aktion-app&gt;</code>) to turn
+          these silent fallbacks into console warnings. See
+          <a href="errors.html">Error handling &amp; debugging</a>.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="declare">I got a &ldquo;reactive write during render&rdquo; warning</h3>
+        <p><strong>Cause.</strong> A <code>$name = &hellip;</code> assignment ran in
+          render position (commonly a <code>$x = &hellip;</code> at the top of a
+          lowercase function that is invoked to build UI). The runtime applies the
+          write without scheduling a re-render to avoid an infinite loop, and warns.</p>
+        <p class="fix"><strong>Fix.</strong> Seed component-local state with a
+          <em>PascalCase</em> component (so <code>$x = &hellip;</code> becomes a
+          set-once per-instance declaration) or the <code>$state</code> hook, and
+          only write state from event handlers / effects. See
+          <a href="reactivity.html">Reactivity &amp; rendering</a>.</p>
+      </div>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="errors.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Error handling &amp; debugging</h3>
+          <p>Reading parse/runtime errors, the guards, the <code>error</code> event, and strict mode.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="reactivity.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Reactivity &amp; rendering</h3>
+          <p>Why re-renders happen and how to keep them fine-grained.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="devtools.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>DevTools</h3>
+          <p>Diagnose unexpected re-renders with the commit profiler.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

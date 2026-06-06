@@ -1,0 +1,10 @@
+// The entry module. In a multi-file Aktion project the entry assigns the root
+// node to `aktion` (a single inline program would call `$app(...)` instead).
+// Edit this file and the dev server hot-reloads while preserving live `$state`.
+
+aktion = Column([
+  Markdown("# Hello, Aktion"),
+  Text("Edit src/app.aktion to start building. The UI hot-reloads on save.", {
+    tone: "muted"
+  })
+], { gap: "m", padding: "l" })

@@ -1,0 +1,62 @@
+// A single device tile: icon + name + room + online status, plus a control
+// that adapts to the device type (thermostat gets a setpoint, everything else
+// gets an on/off switch, and lights add a brightness slider when they're on).
+// All writes go through the shared `home` store.
+
+import { home } from "../store.aktion"
+
+export function DeviceCard(device) {
+  return Card([
+    Row([
+      Icon(device.icon, { size: "lg", color: device.on ? "var(--rui-color-primary)" : undefined }),
+      StackItem(Column([
+        Text(device.name, { variant: "body-heavy" }),
+        Text(device.room, { variant: "small", tone: "muted" })
+      ], { gap: "xs" }), { grow: 1 }),
+      StatusDot(device.online ? "Online" : "Offline", { tone: device.online ? "success" : "danger" })
+    ], { gap: "m", align: "center" }),
+    Separator(),
+    DeviceControl(device)
+  ], { variant: "outlined" })
+}
+
+function DeviceControl(device) {
+  return device.type === "thermostat" ? ThermostatControl(device) : ToggleControl(device)
+}
+
+function ToggleControl(device) {
+  return Column([
+    Row([
+      StackItem(Text(controlLabel(device), { variant: "small", tone: "muted" }), { grow: 1 }),
+      Switch("sw-" + device.id, { value: device.on, onChange: () => home.toggle(device.id) })
+    ], { align: "center", gap: "m" }),
+    device.type === "light" && device.on ? BrightnessSlider(device) : null
+  ], { gap: "s" })
+}
+
+function BrightnessSlider(device) {
+  return Slider("lvl-" + device.id, {
+    min: 0, max: 100, step: 5, value: device.level,
+    label: "Brightness", showValue: true,
+    onChange: (v) => home.setLevel(device.id, v)
+  })
+}
+
+function ThermostatControl(device) {
+  return Column([
+    Row([
+      StackItem(Text("Now " + device.current + " degrees", { variant: "small", tone: "muted" }), { grow: 1 }),
+      Switch("sw-" + device.id, { value: device.on, onChange: () => home.toggle(device.id) })
+    ], { align: "center", gap: "m" }),
+    NumberInput("temp-" + device.id, {
+      value: device.target, min: 15, max: 28, step: 1,
+      onChange: (v) => home.setTarget(device.id, v)
+    })
+  ], { gap: "s" })
+}
+
+function controlLabel(device) {
+  if (device.type === "lock") { return device.on ? "Locked" : "Unlocked" }
+  if (device.type === "camera") { return device.on ? "Recording" : "Standby" }
+  return device.on ? "On" : "Off"
+}

@@ -17,7 +17,8 @@ export const NavLink: ComponentSpec = {
   name: "NavLink",
   description:
     "Anchor that navigates to a route on click and stays in sync with the URL hash. " +
-    "Reflects `data-active=\"true\"` when the current path matches `to` (set `exact=true` " +
+    "Reflects `data-active=\"true\"` (and `aria-current=\"page\"` for assistive tech) " +
+    "when the current path matches `to` (set `exact=true` " +
     "to require exact equality instead of prefix matching).",
   props: [
     { name: "label", type: "string", description: "Visible link text." },
@@ -62,6 +63,8 @@ export const NavLink: ComponentSpec = {
       class: "rui-nav-link",
       "data-variant": variant,
       "data-active": isActive ? "true" : "false",
+      // Expose the active route to assistive tech, not just CSS.
+      "aria-current": isActive ? "page" : null,
       href: "#" + (to.startsWith("/") ? to : "/" + to),
     });
 

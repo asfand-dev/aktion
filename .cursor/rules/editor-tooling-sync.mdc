@@ -1,0 +1,102 @@
+---
+description: When changing the runtime/library/language surface, keep the VS Code extension (editors/vscode) and the scaffolder (create-aktion) in sync.
+alwaysApply: true
+---
+
+# Keep `editors/vscode` and `create-aktion` in sync with the codebase
+
+Two downstream artifacts ship Aktion to users and **must not drift** when the
+core changes:
+
+- **`editors/vscode`** — the VS Code / Cursor / Open VSX extension. It is a
+  thin in-process client that delegates ALL language intelligence to the
+  DOM-free `aktion-runtime/language` surface (`src/language-api.ts`):
+  diagnostics, hover, completions, formatting, definition, references, rename,
+  document symbols, document highlights, signature help, and semantic tokens.
+  Its TextMate grammar and snippets are **generated** from that surface, never
+  hand-listed.
+- **`create-aktion`** — the `npm create aktion` scaffolder. Its templates are
+  the first code a new user sees, and they recommend + configure the extension.
+
+## The golden rule
+
+The extension owns **no** language logic. If a feature needs new behaviour,
+add a pure, DOM-free function to the language surface (`src/tooling/*` →
+re-exported from `src/language-api.ts`) and have the extension adapt it. Never
+hard-code component names, builtins, keywords, or theme names inside
+`editors/vscode/**` — derive them from the surface.
+
+The one allowed exception is **filesystem-bound work the pure service cannot
+do**: cross-file go-to-definition reads other files. The service stays pure by
+*classifying* the cursor (`getDefinitionTarget` → `local` / `import-binding` /
+`module`) and exposing `findDeclaration(source, name, isState)`; the extension
+performs the relative-path resolution and file reads. Keep that split — the
+analysis stays in the surface, only the I/O lives in the host.
+
+## Before changing anything under `src/`
+
+1. Read `src/language-api.ts` (the published `aktion-runtime/language`
+   surface) and the modules it re-exports: `src/tooling/language-service.ts`,
+   `src/tooling/navigation.ts`, `src/tooling/semantic-tokens.ts`,
+   `src/tooling/signature-help.ts`, `src/tooling/formatter.ts`, and
+   `src/language/{index,grammar,components,snippets,builtins}.ts`.
+2. Note that the extension consumes this surface. Ask: does my change add,
+   rename, or remove something the editor should know about?
+
+## After (or while making) a code change
+
+If your change affects the language surface, update it **and** the two
+artifacts in the same commit. Triggers:
+
+| If you change… | Then also update… |
+|---|---|
+| `src/library/components/*` / `src/library/index.ts` — add/remove/rename a component | Nothing by hand: completions, hover, diagnostics, semantic `class` tokens, snippets, and the TextMate component overlay all derive from the library. Re-run the extension build (`gen-snippets` + `gen-grammar`) and confirm the new component appears. |
+| Add / remove / rename a `$`-builtin (runtime dispatch in `src/runtime/evaluator.ts`) | **`src/language/builtins.ts`** (`builtinCatalog`) — the single source of truth. This automatically flows into completions, hover, semantic `function`/`namespace` tokens, signature help, and the generated TextMate `aktion-builtin` overlay. Re-run `gen-grammar`. |
+| `src/parser/lexer.ts` `KEYWORDS_AKTION` / `src/language/grammar.ts` `grammarSpec` / `keywordDocs` | Keep `grammarSpec.keywords` and `keywordDocs` aligned with the lexer; the extension's hover + completions read `keywordDocs`. |
+| Add a new editor capability (e.g. code actions, folding ranges, inlay hints) | Add a pure function to `src/tooling/*`, export it from `src/language-api.ts` + `src/tooling/index.ts`, then register a provider in `editors/vscode/src/extension.ts`. Add a Vitest in `tests/tooling-*.test.ts`. |
+| The exported shape of any `src/tooling/*` function the extension calls | `editors/vscode/src/extension.ts` (the adapter) and bump `editors/vscode/package.json` `version`. |
+| Add / change a user-visible editor feature | `editors/vscode/README.md` (public-facing: what it does / install / use / update / contribute). Keep build, debug, architecture, and publishing details in `editors/vscode/docs/README.md` (the contributor guide). The two READMEs must not duplicate each other — the public one links to the contributor one. |
+| `src/theme/index.ts` — add/remove a theme | `themeNames` is derived; nothing by hand, but verify theme-name completion still lists it. |
+| Add a new `$`-builtin or component | Consider whether the `create-aktion` templates or their `.vscode` settings should showcase it. |
+
+## Build + verify the extension
+
+The extension bundles the language surface, so rebuild the runtime first when
+`src/` changed:
+
+```bash
+npm run build:language          # repo root → refreshes dist/language.js
+cd editors/vscode && npm run build   # gen-snippets + gen-grammar + esbuild
+```
+
+`gen-snippets` and `gen-grammar` fall back to bundling the TS source when
+`dist/language.js` is missing or stale, so the extension build never depends on
+a fresh root build — but a fresh `dist/language.js` keeps the published types
+(`dist/types/language-api.d.ts`) accurate for in-editor DX.
+
+Add / update tests under `tests/tooling-*.test.ts` for any language-surface
+change, and run `npx vitest run` before finishing.
+
+## `create-aktion`
+
+- Templates live in `create-aktion/template/<name>/`; only `vite-ts` is
+  user-selectable (see `TEMPLATES` in `create-aktion/index.mjs`).
+- Dot-directories/files ship with a leading `_` (npm strips real dot-files):
+  `_gitignore` → `.gitignore`, `_vscode/` → `.vscode/`. The rename happens in
+  `index.mjs`. If you add another dot-file/dir, ship it `_`-prefixed and add
+  the rename.
+- The scaffolded `.vscode/extensions.json` recommends
+  `AsfandiyarKhan.aktion-vscode`. If the extension's **publisher** or **name**
+  changes in `editors/vscode/package.json`, update the recommendation id and
+  the `editor.defaultFormatter` in `_vscode/settings.json` to match.
+- Keep the generated `.aktion` sources valid against the current language: the
+  `tests/_template-scaffold.test.ts` harness links + renders each template.
+
+## Don't
+
+- Don't hand-edit `editors/vscode/syntaxes/aktion.tmLanguage.json` or
+  `editors/vscode/snippets/aktion.code-snippets` — they are generated. Edit the
+  generators / source data and re-run the build.
+- Don't add language logic to the extension that belongs in `src/tooling/*`.
+- Don't let `editors/vscode/package.json` `aktion-runtime` dependency range or
+  the recommended-extension id in `create-aktion` drift from reality.

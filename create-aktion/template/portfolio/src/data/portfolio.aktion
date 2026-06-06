@@ -1,0 +1,45 @@
+// Portfolio content as plain exported data. Edit this file to make the site
+// yours — the pages and components render whatever is here.
+
+export profile = {
+  name: "Jordan Avery",
+  role: "Frontend Developer",
+  tagline: "I build fast, accessible web apps with React, TypeScript, and a love for clean, calm UI.",
+  location: "Berlin, DE",
+  email: "jordan@example.com",
+  available: true
+}
+
+export bio = "Frontend engineer with 7+ years shipping product UIs for startups and design-led teams. I care about performance budgets, accessible components, and design systems that scale. Recently focused on React + TypeScript, Vite tooling, and making complex data feel simple."
+
+export skills = [
+  { name: "React", level: 95 },
+  { name: "TypeScript", level: 90 },
+  { name: "CSS / Tailwind", level: 88 },
+  { name: "Testing", level: 82 },
+  { name: "Accessibility", level: 85 },
+  { name: "Node.js", level: 74 }
+]
+
+export techs = ["React", "TypeScript", "Next.js", "Vue", "Node", "GraphQL"]
+
+export projects = [
+  { id: "atlas", title: "Atlas Analytics", description: "A real-time analytics dashboard with streaming charts and saved views.", tags: ["React", "TypeScript", "GraphQL"], year: "2025", link: "https://example.com/atlas", icon: "chart-line", highlight: true },
+  { id: "pulse", title: "Pulse Design System", description: "A themeable component library and docs site used across 9 products.", tags: ["React", "TypeScript"], year: "2024", link: "https://example.com/pulse", icon: "shapes", highlight: true },
+  { id: "nomad", title: "Nomad Travel Planner", description: "Trip planning PWA with offline maps and collaborative itineraries.", tags: ["Next.js", "TypeScript"], year: "2024", link: "https://example.com/nomad", icon: "plane", highlight: false },
+  { id: "verde", title: "Verde Storefront", description: "Headless e-commerce storefront with a sub-second checkout flow.", tags: ["Vue", "Node"], year: "2023", link: "https://example.com/verde", icon: "bag-shopping", highlight: true },
+  { id: "echo", title: "Echo Chat", description: "End-to-end encrypted team chat with threads and presence.", tags: ["React", "Node", "GraphQL"], year: "2023", link: "https://example.com/echo", icon: "comments", highlight: false },
+  { id: "lumen", title: "Lumen Docs", description: "Markdown-first documentation platform with instant search.", tags: ["Next.js", "React"], year: "2022", link: "https://example.com/lumen", icon: "book-open", highlight: false }
+]
+
+export experience = [
+  { role: "Senior Frontend Engineer", company: "Northwind", period: "2022 — Now", summary: "Lead the design-system team and the migration to Vite + TypeScript." },
+  { role: "Frontend Engineer", company: "Brightline", period: "2019 — 2022", summary: "Built the analytics suite and shipped the first accessible component library." },
+  { role: "UI Developer", company: "Studio Kit", period: "2017 — 2019", summary: "Crafted marketing sites and interactive product demos for launch campaigns." }
+]
+
+export socials = [
+  { label: "GitHub", icon: "brands:github", href: "https://github.com" },
+  { label: "LinkedIn", icon: "brands:linkedin", href: "https://linkedin.com" },
+  { label: "Email", icon: "envelope", href: "mailto:jordan@example.com" }
+]

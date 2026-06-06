@@ -386,3 +386,185 @@ export function createHttpResource(
   void run();
   return resource;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  $query({...}) — cached + deduplicated read                                */
+/* -------------------------------------------------------------------------- */
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** Stable cache key for a query config (used when no explicit `key` given). */
+function deriveQueryKey(cfg: Record<string, unknown>): string {
+  const method = typeof cfg.method === "string" ? cfg.method.toUpperCase() : "GET";
+  const url = typeof cfg.url === "string" ? cfg.url : "";
+  let q = "null";
+  let b = "null";
+  try { q = JSON.stringify(cfg.query ?? null); } catch { /* keep default */ }
+  try { b = JSON.stringify(cfg.body ?? null); } catch { /* keep default */ }
+  return `${method} ${url} ${q} ${b}`;
+}
+
+/**
+ * `$query({ url, key?, ttl?, ... })` — a cached, deduplicated `$http` read.
+ *
+ * Unlike `$http`, which fires a fresh request on every call, `$query` keys
+ * the resource by `key` (or a value derived from method + url + query + body)
+ * and reuses the same reactive bag across renders and across components. The
+ * first caller creates the request; everyone else with the same key shares
+ * the in-flight result (deduplication). Pass `ttl` (ms) to auto-refetch when
+ * the cached data is older than the TTL.
+ */
+export function createQueryResource(
+  config: unknown,
+  ctx: EvaluationContext,
+): EndpointResource {
+  const cfg = asRecord(config);
+  const ttl = typeof cfg.ttl === "number" ? cfg.ttl : 0;
+  const key = cfg.key != null ? String(cfg.key) : deriveQueryKey(cfg);
+  const cache = ctx.queryCache;
+  const existing = cache.get(key);
+  if (existing) {
+    if (
+      ttl > 0 &&
+      existing.lastUpdated != null &&
+      Date.now() - existing.lastUpdated > ttl &&
+      !existing.loading
+    ) {
+      void existing.refetch();
+    }
+    return existing;
+  }
+  // Strip query-layer-only keys so they aren't forwarded to `fetch`.
+  const httpConfig: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (k === "key" || k === "ttl") continue;
+    httpConfig[k] = v;
+  }
+  const resource = createHttpResource(httpConfig, ctx);
+  cache.set(key, resource);
+  return resource;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  $mutation({...}) — deferred-fire write                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Reactive bag returned by `$mutation({...})`. Fires only on `mutate()`. */
+export interface MutationResource {
+  data: unknown;
+  error: unknown;
+  loading: boolean;
+  status?: number;
+  /**
+   * Fire the request. Optionally pass an overrides object (shallow-merged
+   * over the base config) to set the `body` / `query` / `url` for this call:
+   *   $save.mutate({ body: { title: $title } })
+   * Resolves with the response body (or `undefined` on error / supersede).
+   */
+  mutate: (overrides?: unknown) => Promise<unknown>;
+  /** Clear `data` / `error` / `loading` back to the resting state. */
+  reset: () => void;
+  /** Optional completion callback; fires once each time a mutation settles. */
+  onDone?: (resource: MutationResource) => void;
+}
+
+/**
+ * `$mutation({ url, method?, ... })` — a write that fires only when you call
+ * `.mutate(...)`, not on render. The canonical create/update/delete pattern:
+ *
+ *   $save = $mutation({ url: "/todos", method: "POST" })
+ *   ...
+ *   Button("Add", { onClick: () => $save.mutate({ body: { title: $title } }) })
+ *
+ * Method defaults to `POST` when unspecified. The bag exposes reactive
+ * `loading` / `error` / `data` plus `reset()` and an `onDone` hook.
+ */
+export function createMutationResource(
+  baseConfig: unknown,
+  ctx: EvaluationContext,
+): MutationResource {
+  const base = asRecord(baseConfig);
+  let generation = 0;
+  let controller: AbortController | null = null;
+  const notify = () => ctx.notify?.();
+
+  const resource: MutationResource = {
+    data: undefined,
+    error: undefined,
+    loading: false,
+    reset: () => {
+      generation += 1;
+      if (controller) controller.abort();
+      controller = null;
+      resource.data = undefined;
+      resource.error = undefined;
+      resource.status = undefined;
+      resource.loading = false;
+      notify();
+    },
+    mutate: async (overrides?: unknown): Promise<unknown> => {
+      const runId = (generation += 1);
+      if (controller) controller.abort();
+      controller = new AbortController();
+      const localController = controller;
+      resource.loading = true;
+      resource.error = undefined;
+      notify();
+
+      if (!ctx.http) {
+        resource.error = { message: "http runtime not available" };
+        resource.loading = false;
+        notify();
+        return undefined;
+      }
+      try {
+        const merged: Record<string, unknown> = { method: "POST", ...base, ...asRecord(overrides) };
+        const req = buildRequestFromConfig(merged);
+        req.url = ctx.http.resolveUrl(req.url);
+        req.signal = localController.signal;
+        const response = await ctx.http.request(req);
+        if (runId !== generation) return undefined;
+        const ok = response.status >= 200 && response.status < 300;
+        if (ok) {
+          resource.data = response.body;
+          resource.error = undefined;
+        } else {
+          resource.error = { status: response.status, body: response.body };
+        }
+        resource.status = response.status;
+        return ok ? response.body : undefined;
+      } catch (err) {
+        if (runId !== generation) return undefined;
+        if ((err as { name?: string })?.name === "AbortError") return undefined;
+        resource.error = err;
+        return undefined;
+      } finally {
+        if (runId === generation) {
+          resource.loading = false;
+          notify();
+          if (typeof resource.onDone === "function") {
+            try {
+              resource.onDone(resource);
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error("[aktion] $mutation onDone callback threw", err);
+            }
+          }
+        }
+      }
+    },
+  };
+
+  // Brand so the evaluator mutates property writes (`$save.onDone = …`) in
+  // place rather than cloning the bag and detaching the running request.
+  Object.defineProperty(resource, HTTP_RESOURCE_BRAND, {
+    value: true,
+    enumerable: false,
+    writable: false,
+  });
+  return resource;
+}

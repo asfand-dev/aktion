@@ -1,0 +1,54 @@
+// Chat state + actions. The API key is read from (and saved to) the browser's
+// localStorage via `$storage`, so it never lives in your source. When no key is
+// set, `send()` falls back to an offline echo so the app still works.
+
+import { ENDPOINT, apiMessages, extractReply, echoReply } from "./lib/openai.aktion"
+
+export $messages = [
+  { role: "assistant", content: "Hi! I'm your assistant. Ask me anything — add your OpenAI API key in settings to use a real model." }
+]
+export $input = ""
+export $pending = false
+export $error = null
+export $apiKey = $storage.get("openai_key") || ""
+export $model = "gpt-4o-mini"
+
+export function send() {
+  text = $input.trim()
+  if (!text) { return }
+  $messages = [...$messages, { role: "user", content: text }]
+  $input = ""
+  $error = null
+  if (!$apiKey) {
+    $messages = [...$messages, { role: "assistant", content: echoReply(text) }]
+  } else {
+    $pending = true
+    $chat = $http({
+      url: ENDPOINT,
+      method: "POST",
+      headers: { Authorization: "Bearer " + $apiKey, "Content-Type": "application/json" },
+      body: { model: $model, messages: apiMessages($messages) }
+    })
+    $chat.onDone = receiveReply
+  }
+}
+
+function receiveReply() {
+  $pending = false
+  if ($chat.error) {
+    $error = "Request failed — check your API key and model, then try again."
+  } else {
+    reply = extractReply($chat.data)
+    if (reply) { $messages = [...$messages, { role: "assistant", content: reply }] }
+  }
+}
+
+export function persistKey(value) {
+  $apiKey = value
+  $storage.set("openai_key", value)
+}
+
+export function clearChat() {
+  $messages = []
+  $error = null
+}

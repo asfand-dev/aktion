@@ -46,6 +46,7 @@ HTML, or no framework at all.
 - [Internationalization (`$i18n`)](#internationalization)
 - [System prompt generator](#system-prompt-generator)
 - [Tooling](#tooling)
+- [Build-time compiler & multi-file modules](#build-time-compiler--multi-file-modules)
 - [Documentation site](#documentation-site)
 - [Live examples](#live-examples)
 - [Project layout](#project-layout)
@@ -81,8 +82,9 @@ Everything you need at runtime ships in a single bundle:
   `value: $form.email`), and a **`$util` runtime namespace** of pure
   helpers (`$util.filter`, `$util.sort`, `$util.find`, `$util.groupBy`,
   `$util.format`, `$util.formatDate`, `$util.plural`, `$util.case`,
-  `$util.range`, `$util.pick`, …) callable from Aktion expressions and
-  ordinary JavaScript alike.
+  `$util.range`, `$util.pick`, `$util.omit`, `$util.merge`,
+  `$util.cloneDeep`, `$util.chunk`, `$util.partition`, `$util.keyBy`, …)
+  callable from Aktion expressions and ordinary JavaScript alike.
 - **One component-call shape.** Every call follows the trailing-object
   rule — `Component(positionalArg, { prop: value, … })`. At most one
   positional argument; every other argument goes in a trailing
@@ -98,6 +100,13 @@ Everything you need at runtime ships in a single bundle:
   lowercase. `$storage.set/get` (localStorage by default),
   `$storage.session.*`, `$storage.cookies.*` with object-literal options,
   and `console.log/error/warn/info/debug`.
+- **`$toast` — imperative notifications.** A reserved namespace that owns the
+  toast lifecycle so you never hand-manage a `$toasts = [...]` array.
+  `$toast.show(message, { tone?, title?, duration? })` (auto-dismisses after
+  `duration` ms, default `4000`; `0` keeps it), plus shortcuts
+  `$toast.success/.error/.info/.warning`, `$toast.dismiss(id)`,
+  `$toast.clear()`, and a reactive `$toast.items` list to render with
+  `Toasts`/`Toast`.
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -297,6 +306,9 @@ All members live on the `<aktion-app>` element.
 | `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set.   |
 | `response`      | Aktion text                        | Sets the program declaratively. Re-renders whenever the attribute changes.          |
 | `showerrors`    | `true` / unset                                  | If present and `true`, displays parse errors in the rendered UI. Defaults to off.   |
+| `strict`        | `true` / unset                                  | Dev/strict mode. Surfaces silent failures as `console.warn`s — unknown identifiers that would resolve to `null`, and trailing `{...}` objects passed to a user component whose keys match no parameter (the silent named→positional flip). Off by default; enable while developing. |
+| `router-mode`   | `hash` (default) / `history`                    | URL strategy. `history` uses the History API for clean `/about` URLs (needs an `index.html` fallback on the server); `hash` works on any static host. |
+| `router-base`   | path string (e.g. `/app`)                       | Sub-directory the SPA is served under, stripped from / prepended to URLs in `history` mode. |
 
 Routing and JavaScript execution inside `effect` / action bodies are
 always available — no host attribute, no allow-list. To omit those
@@ -440,7 +452,11 @@ $app(pages)
   `props` object — every parameter is a real JS parameter.
 - `function name(args) { body }` — camelCase name means it's an action.
   Callable effects with optional `return`. Used as event handlers
-  (`onClick: save`) or as expressions (`$result = greet("Ada")`).
+  (`onClick: save`) or as expressions (`$result = greet("Ada")`). Wrap
+  optimistic writes in `$optimistic(() => { … })` — it snapshots reactive
+  state, runs the callback, and automatically rolls back if the callback
+  throws (or the promise it returns rejects). An ordinary `$`-prefixed
+  builtin call, so it works anywhere an expression does.
 - `$effect(() => { body }, [...deps])` — declarative, anonymous side
   effects. The dependency array mixes state triggers (`$atom`),
   lifecycle / interval triggers (`"mount"`, `"unmount"`, `"every(N)"`),
@@ -494,6 +510,17 @@ $app(pages)
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
   `.cancel()`, and a settable `.onDone` callback that fires each time the
   request settles (handy for `$todos.refetch()` after a write).
+- `$query({ url, key?, ttl? })` — a **cached, deduplicated** read built on
+  `$http`. Identical queries (same `key`, or same method + url + query +
+  body) share one in-flight request and one cached bag, so the same data
+  fetched from several components hits the network once. Optional `ttl` (ms)
+  auto-refetches stale data. Same reactive bag as `$http`.
+- `$mutation({ url, method? })` — a **deferred** write that fires only when
+  you call `.mutate(overrides?)` (not on render; `method` defaults to
+  `POST`). The bag exposes `.loading` / `.error` / `.data`, plus `.reset()`
+  and a settable `.onDone`. `.mutate()` resolves with the response body.
+  Assign it to an atom and trigger it from a handler:
+  `$save = $mutation({ url }); Button("Save", { onClick: () => $save.mutate({ body: $form }) })`.
 - `pages = $router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
   reactive surface (`route.path`, `route.params`, `route.query`,
@@ -530,8 +557,9 @@ $app(pages)
 - **`$util` runtime namespace** — pure, side-effect-free helpers for data
   shaping, formatting, dates, math, and strings (`$util.filter`, `$util.sort`,
   `$util.groupBy`, `$util.format`, `$util.formatDate`, `$util.plural`, `$util.range`,
-  `$util.addDays`, `$util.pick`, `$util.count`, …). Never carry hidden state —
-  safe to call anywhere.
+  `$util.addDays`, `$util.pick`, `$util.omit`, `$util.merge`, `$util.cloneDeep`,
+  `$util.chunk`, `$util.partition`, `$util.keyBy`, `$util.zip`, `$util.flatten`,
+  `$util.count`, …). Never carry hidden state — safe to call anywhere.
 - **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
   raw HTML elements and `Styles(css)` for raw CSS injected into the
   shadow root. Use only when the standard component library cannot
@@ -548,6 +576,7 @@ $app(pages)
 | --------- | -------------------------------------------------------------------- |
 | `$storage` | Browser persistence — `$storage.set/get`, `$storage.session.*`, `$storage.cookies.*`. |
 | `$console` | Forwards to the host console — `log` / `error` / `warn` / `info` / `debug`. |
+| `$toast`  | Imperative notifications — `$toast.show/.success/.error/.info/.warning`, `.dismiss(id)`, `.clear()`, reactive `.items`. |
 | `route`   | Reactive router handle — `path`, `params`, `query`, `pattern`, `navigate(path)`. |
 | JS stdlib | The JS standard library — `Math`, `JSON`, `Object`, `Array`, `Number`, `String`, `Boolean`, `Date`, `Map`, `Set`, `RegExp`, `Promise`, plus `parseInt` / `parseFloat` / `isNaN` / `isFinite` / `encodeURIComponent` / … Use directly (`Math.max(a, b)`, `JSON.stringify(x)`, `Object.keys(o)`) or with `new` (`new Date()`, `new Map()`). |
 | timers    | `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` — like their JS counterparts, but tracked by the runtime and cleared automatically on re-plan/disconnect. Use inside an `effect` and clear in `cleanup`. |
@@ -693,6 +722,20 @@ binding if you want it skipped. State changes the path-tracker can't see
 > component does re-execute, Aktion rebuilds its render tree and the morph
 > reconciler patches only the DOM that actually differs.
 
+> [!IMPORTANT]
+> **Path-tracking applies to `$name = value` atoms only.** The other state
+> sources — the `$state` / `$memo` / `$ref` / `$reducer` hook setters, `$http`
+> / `$query` / `$mutation` lifecycle changes, `setTimeout` / `setInterval`
+> ticks, `$effect` writes, and `$emit` — cannot be path-tracked, so each of
+> them triggers a **full re-render** (the morph reconciler still patches only
+> the changed DOM, but every component body re-executes). This is the single
+> most important performance characteristic to internalise: a hook-heavy
+> component tree loses the fine-grained skipping you get from plain atoms.
+> Prefer top-level `$name = value` atoms for app state on the hot path, and
+> reach for hooks when you specifically need per-instance isolation, accepting
+> the full-re-render cost. See the "Reactivity" section of
+> [`coding-gen-skill.md`](./coding-gen-skill.md) for the full model.
+
 ### Per-instance state & content-addressed identity
 
 ```js
@@ -718,12 +761,21 @@ function TaskRow(task) {
 }
 ```
 
-### Hooks — `$state`, `$memo`, and custom `$name`
+### Hooks — `$state`, `$memo`, `$ref`, `$reducer`, `$id`, and custom `$name`
 
 A function whose name starts with `$` is a **hook**, mirroring React's
 `use*` convention. Hooks are the composable way to manage per-instance
-state. Built-in `$state` and `$memo` mirror React's `useState` and
-`useMemo`:
+state. The built-in hooks mirror their React counterparts one-to-one:
+
+| Hook | React equivalent | Returns |
+| --- | --- | --- |
+| `$state(initial)` | `useState` | `[value, setValue]` |
+| `$memo(() => v, [deps])` | `useMemo` | cached value |
+| `$ref(initial)` | `useRef` | stable `{ current }` box (writes don't re-render) |
+| `$reducer((state, action) => next, initial)` | `useReducer` | `[state, dispatch]` |
+| `$id(prefix?)` | `useId` | stable unique id per instance |
+
+`$state` and `$memo` are the everyday pair:
 
 ```js
 function Counter() {
@@ -744,6 +796,17 @@ $app(Counter())
 - `$memo(() => compute, [deps])` returns a cached value and recomputes
   only when a dependency changes (shallow `Object.is` compare). Omit the
   deps array to recompute every render.
+- `$ref(initial)` returns a stable mutable `{ current }` box whose identity
+  persists across renders. Writing `ref.current = …` does **not** schedule
+  a re-render — the escape hatch for holding a DOM node, a timer id, or a
+  previous value. Pair it with `OnMount(child, { onMount: node => ref.current = node })`
+  to grab a rendered DOM node.
+- `$reducer((state, action) => next, initial)` returns `[state, dispatch]`.
+  `dispatch(action)` runs the reducer and re-renders when the result
+  changes — the clean way to manage many related state transitions.
+- `$id(prefix?)` returns a stable, unique string id for the instance's
+  lifetime — for wiring `for` / `id` / `aria-labelledby` pairs without
+  hard-coding ids that collide across multiple instances.
 
 Declare your own hooks with `function $name(...)`. A custom hook's
 body runs **inline in the calling component's hook scope**, so its
@@ -766,7 +829,8 @@ Two rules, both inherited from React: call hooks **unconditionally and in
 a stable order** at the top level of a component / hook body (slots are
 matched by call order across renders), and remember that hook state
 **resets when the instance leaves the tree** — a remounted component
-starts again from its initial value. `$state` and `$memo` are reserved
+starts again from its initial value. `$state`, `$memo`, `$ref`,
+`$reducer`, and `$id` are reserved
 names. The lighter `$name = value` per-instance form above remains
 available when an atom is written directly by the component's actions.
 
@@ -879,7 +943,7 @@ production-quality SaaS UI in a single line.
 | **App shell**      | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem` (supports `to` for router navigation), `SplitView` |
 | **Advanced UI**    | `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`, `Truncate`, `InlineEdit`, `NotificationBell` |
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
-| **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection listeners or raw class / style to ANY component without it needing a dedicated prop. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
+| **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `OnMount`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection / lifecycle listeners or raw class / style to ANY component without it needing a dedicated prop. `OnMount(child, { onMount, onUnmount })` is the DOM-ref escape hatch — `onMount(node)` fires once after attach so you can measure, focus, or hand the node to an imperative library. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
 | **Theming**        | `$theme` |
 | **Routing**        | `$router({ … })`, `NavLink` |
@@ -1114,6 +1178,16 @@ stay in sync with the URL (`#/dashboard`, `#/users/42`). Browser
 back/forward, bookmarks, and deep links all work — and the host page
 never reloads.
 
+Routing defaults to **hash mode**, which works on any static host with no
+server configuration. To opt into clean History-API URLs (`/dashboard`
+instead of `#/dashboard`), set `router-mode="history"` on the element (and
+`router-base` if the app is served under a sub-directory). History mode
+requires the server to fall back to `index.html` for unknown paths:
+
+```html
+<aktion-app router-mode="history" router-base="/app"></aktion-app>
+```
+
 ```js
 pages = $router({
   "/":          homePage,
@@ -1301,7 +1375,114 @@ import {
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
   layer a real LSP server would wrap. The
   [playground](https://asfand-dev.github.io/aktion/playground.html)
-  uses them under the hood.
+  uses them under the hood. `getCompletions` is **scope-aware**: alongside
+  the library + reserved words it surfaces the symbols declared in the
+  current document — your own reactive atoms, components, and actions.
+
+---
+
+## Build-time compiler & multi-file modules
+
+> **Optional.** The CDN bundle and the streamed-string path
+> (`<aktion-app response="...">`, `setResponse`, `appendChunk`) work exactly as
+> before. This is an opt-in enhancement for NPM consumers who author UI by hand.
+
+Author UI in `.aktion` files that `import`/`export` from one another like JS/TS
+modules, then mount the pre-parsed, linked program with
+`el.mountCompiled(program)` — the runtime parser never runs in the browser. The
+runtime stays fully reactive (`$state`, `$http`, effects, routing run as usual);
+only parsing + linking move ahead of time.
+
+### Multi-file modules
+
+Named `import`/`export` with **true module scope** — a file's non-exported
+top-level names are private:
+
+```js
+// src/components/counter.aktion
+export $count = 0
+export function Counter() { return Button(`Clicked ${$count}`, { action: bump }) }
+function bump() { $count = $count + 1 }      // private to this module
+
+// src/app.aktion  (entry — must define `aktion`)
+import { Counter, $count } from "./components/counter.aktion"
+aktion = Column([Markdown(`Shared count: ${$count}`), Counter()])
+```
+
+The linker merges the graph into one program, renaming each module's private
+names so two files can reuse a name without clashing; the entry keeps its own
+names canonical (the `aktion` binding + the `$state` names that `serializeState`
+/ `applyDelta` target).
+
+### Vite plugin
+
+The `aktion-runtime/vite` plugin compiles `.aktion` files at build time so you
+can import them directly, with HMR that preserves live `$state`:
+
+```ts
+// vite.config.ts
+import aktion from "aktion-runtime/vite";
+export default { plugins: [aktion()] };
+```
+
+The plugin emits a source map that carries the original `.aktion` path and its
+contents (`sourcesContent`), so the file shows up in the browser's Sources
+panel and runtime frames resolve to your `.aktion` module rather than the
+generated JSON blob.
+
+```jsonc
+// tsconfig.json — resolve `import app from "./app.aktion"`
+{ "compilerOptions": { "types": ["aktion-runtime/aktion-modules"] } }
+```
+
+```ts
+import "aktion-runtime";
+import app from "./app.aktion"; // a typed CompiledProgram (the linked graph)
+document.querySelector("aktion-app").mountCompiled(app);
+```
+
+Scaffold a ready-made Vite + TypeScript project with **`npm create aktion@latest`**
+(see [`create-aktion`](./create-aktion/)). A runnable example lives in
+[`examples/vite-compiler/`](./examples/vite-compiler/).
+
+### Link in the browser (no bundler)
+
+The linker is browser-safe and re-exported from the package root, so a host (or
+the playground) can link a project in-page from raw sources:
+
+```ts
+import { linkProject, defineCompiledProgram } from "aktion-runtime";
+const { program, source } = await linkProject({
+  entry: "app.aktion",
+  files: { "app.aktion": "…", "components/counter.aktion": "…" },
+});
+el.mountCompiled(defineCompiledProgram({ __aktionCompiled: 1, program, source, path: "app.aktion" }));
+```
+
+### Editor support
+
+The [Aktion VS Code extension](./editors/vscode/) treats `.aktion` as
+TypeScript (highlighting) and layers full language intelligence on top —
+semantic highlighting, inline diagnostics, hover, scope-aware completions,
+signature help, **cross-file** go-to-definition (jump to an imported binding's
+declaration or open the module specifier's file), find-all-references, rename,
+document outline, document highlights, document formatting (format-on-save), and
+snippets — all via the DOM-free `aktion-runtime/language` API. Its public
+[README](./editors/vscode/README.md) covers install / use / update; the
+[contributor guide](./editors/vscode/docs/README.md) covers local F5 debugging,
+architecture, **and** publishing to the VS Code Marketplace + Open VSX.
+
+### Package entry points
+
+| Import                          | Runs in | Purpose                                                                     |
+| ------------------------------- | ------- | --------------------------------------------------------------------------- |
+| `aktion-runtime`                | browser | `<aktion-app>` + `mountCompiled` + the browser-safe linker (`linkProject`)  |
+| `aktion-runtime/vite`           | Node    | the Vite/Rollup plugin (`aktion()`)                                         |
+| `aktion-runtime/language`       | Node    | DOM-free diagnostics / hover / completions / signature help / definition / references / rename / document symbols / semantic tokens / formatting / snippets (editors, LSP) |
+| `aktion-runtime/aktion-modules` | types   | ambient `*.aktion` module declarations                                      |
+
+The plugin + language service ship as separate entries and never enter the
+browser bundle, so `dist/aktion.js` is unchanged.
 
 ---
 
@@ -1324,6 +1505,15 @@ consumes from the CDN.
 | `side-effects.html`                 | `$effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
 | `javascript-interactions.html`      | Effect + action bodies — the JavaScript execution surface.                               |
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
+| `reactivity.html`                   | Reactivity & rendering deep-dive — path tracking, the two render gates, exactly what forces a full re-render, and how to stay fine-grained. |
+| `performance.html`                  | Performance & optimization — re-render avoidance, memoization rules, the safety budget, bundle size, and `setResponse` vs `appendChunk`. |
+| `troubleshooting.html`              | Troubleshooting / FAQ — focus loss, effects not firing, memoized-away components, the `Map` component vs JS `Map`, dropped styles, missing i18n keys. |
+| `errors.html`                       | Error handling & debugging — reading parse/runtime errors, the render-loop and budget guards, the `error` event, and strict mode. |
+| `typescript.html`                   | TypeScript guide — public types, subpath entry points, typing custom components/helpers/interceptors, host event payloads, a typed host-wrapper recipe. |
+| `recipes.html`                      | Recipes, patterns & anti-patterns — the A–V application patterns by task, the JS-aligned do/don't table, and the pre-ship self-check. |
+| `accessibility.html`                | Accessibility guide — conformance target, keyboard map, screen-reader/streaming behaviour, built-in ARIA, and theme contrast. |
+| `deployment.html`                   | Production & deployment — SSR/hydration via `serializeState`, CSP and `unsafe-eval`, integrity hashes, CDN caching, edge-function LLM streaming. |
+| `llm-integration.html`              | LLM integration — wiring OpenAI/Anthropic/OpenRouter/Bedrock streams into `appendChunk`, prompt selection, interceptors, the `assistant-message` round-trip. |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
 | `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
@@ -1524,6 +1714,16 @@ To ship your own copy, run `npm run build` and serve `dist/` from any
 static host — every artifact in `dist/` is self-contained. Push to
 `main` and [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)
 builds, tests, and publishes.
+
+---
+
+## Versioning & stability
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for what changed between versions and a
+**Stability & versioning** matrix (which APIs are stable vs experimental, the
+pre-1.0 SemVer policy, and how the generated `system_prompt.txt` is versioned).
+Aktion is pre-1.0: minor versions may include behavioural changes, always
+flagged in the changelog.
 
 ---
 

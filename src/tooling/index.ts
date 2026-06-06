@@ -34,3 +34,38 @@ export type {
   CompletionItem,
   HoverInfo,
 } from "./language-service.js";
+export {
+  getDefinition,
+  getDefinitionTarget,
+  findDeclaration,
+  getReferences,
+  getDocumentHighlights,
+  getDocumentSymbols,
+  getRenameEdits,
+} from "./navigation.js";
+export type {
+  Range,
+  TextEdit,
+  RenameResult,
+  DocumentSymbol,
+  SymbolKind,
+  DefinitionTarget,
+} from "./navigation.js";
+export {
+  getSemanticTokens,
+  semanticTokenTypes,
+  semanticTokenModifiers,
+} from "./semantic-tokens.js";
+export type {
+  SemanticToken,
+  SemanticTokenType,
+  SemanticTokenModifier,
+} from "./semantic-tokens.js";
+export {
+  getSignatureHelp,
+} from "./signature-help.js";
+export type {
+  SignatureHelp,
+  SignatureInfo,
+  ParameterInfo,
+} from "./signature-help.js";

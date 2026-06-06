@@ -1,0 +1,35 @@
+// All devices in one place, filterable by room and searchable by name. The
+// filter + query are per-instance `$` atoms (declared once at the top of the
+// component body) wired through two-way binding; the device list itself is the
+// shared store.
+
+import { DeviceCard } from "../components/device-card.aktion"
+import { home } from "../store.aktion"
+import { rooms } from "../data/home.aktion"
+
+roomFilters = ["All", ...rooms]
+
+export function DevicesPage() {
+  $room = "All"
+  $query = ""
+  list = filterDevices(home.devices, $room, $query)
+  return Column([
+    PageHeader("Devices", { subtitle: home.total() + " connected devices", breadcrumbs: false }),
+    Card([
+      Row([
+        StackItem(ToggleGroup("room-filter", { items: roomFilters, value: $room }), { grow: 1 }),
+        SearchBar("device-search", { placeholder: "Search devices", value: $query })
+      ], { gap: "m", align: "center", wrap: true })
+    ]),
+    list.length > 0
+      ? Grid(list.map(DeviceCard), { minChildWidth: "260px", gap: "m" })
+      : EmptyState("No devices match", { description: "Try another room or clear the search.", icon: "magnifying-glass" })
+  ], { gap: "l" })
+}
+
+function filterDevices(devices, room, query) {
+  byRoom = room === "All" ? devices : devices.filter(d => d.room === room)
+  q = query.trim().toLowerCase()
+  if (!q) { return byRoom }
+  return byRoom.filter(d => d.name.toLowerCase().includes(q))
+}

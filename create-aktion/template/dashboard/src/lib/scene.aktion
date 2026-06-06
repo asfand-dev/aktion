@@ -1,0 +1,12 @@
+// Pure helper: given a device, a scene name, and the scene list, return the
+// device with that scene's preset applied (unchanged if the scene doesn't
+// touch it). Lives in a `function` declaration so it can use `return` —
+// arrow-function callbacks in Aktion can't.
+
+export function applyScene(device, sceneName, scenes) {
+  scene = scenes.find(s => s.name === sceneName)
+  if (!scene) { return device }
+  preset = scene.presets.find(p => p.id === device.id)
+  if (!preset) { return device }
+  return { ...device, on: preset.on, level: preset.level ?? device.level }
+}

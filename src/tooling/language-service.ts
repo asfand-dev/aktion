@@ -29,6 +29,7 @@ import { findComponent } from "../library/registry.js";
 import { validateProgramSchema } from "../library/validate.js";
 import { findPositionalProp } from "../library/types.js";
 import { keywordDocs, type KeywordDoc } from "../language/grammar.js";
+import { builtinCatalog, findBuiltin } from "../language/builtins.js";
 
 export interface Position {
   /** 1-indexed line number. */
@@ -118,11 +119,16 @@ export function getDiagnostics(
  * intentionally simple — the prompt + the closed schema (§16) make
  * deep static analysis unnecessary:
  *
- *   - Inside `(...)` after a known component name → the spec's prop
- *     names (filtered to unconsumed props).
- *   - After `$` → state-tier keywords (`$state`, `$persist`, …).
- *   - At top of line / inside a block → top-level keywords + the
- *     full library component list.
+ *   - After `$` → the reactive-atom hint + the `$`-builtin catalog.
+ *   - Inside a component call's trailing `{ … }` props object → that
+ *     component's prop names, FOLLOWED BY the general list (so you can
+ *     still reference components / atoms / actions in prop values).
+ *   - Everywhere else (top of line, inside a `[ … ]` children array, a
+ *     `( … )` argument list) → the general list: author-declared symbols,
+ *     keywords, and the full component library. Components are ALWAYS
+ *     offered here — a children array like `Column([ Sidebar() ])` is the
+ *     most common authoring position, so suppressing components there
+ *     (the old behaviour) broke the headline autocomplete.
  */
 export function getCompletions(
   source: string,
@@ -130,39 +136,54 @@ export function getCompletions(
   library: ComponentLibrary,
 ): CompletionItem[] {
   const ctx = analyseCursor(source, position);
+  // Scope-aware symbols declared in THIS document — the author's own atoms,
+  // components, and actions. Without these, autocomplete only ever knew the
+  // library + reserved words (feedback §3.2 — the biggest hand-authoring
+  // papercut). Parsing is cheap and tolerant: a partial/erroring program
+  // still yields whatever declarations have streamed in so far.
+  const user = collectUserSymbols(source);
 
-  // After `$` — surface the reactive-atom hint plus the built-in hooks
-  // (`$state` / `$memo`), which also start with the `$` sigil.
+  // After `$` — surface the reactive-atom hint plus the built-in catalog
+  // (hooks, factories, namespaces), which also start with the `$` sigil.
+  // Sourced from the single builtin catalog so new builtins appear here
+  // automatically (`src/language/builtins.ts`).
   if (ctx.afterDollar) {
     return [
+      ...user.atoms.map((name) => ({
+        label: `$${name}`,
+        kind: "state" as const,
+        detail: "Reactive atom declared in this file",
+      })),
       { label: "$name = value", kind: "state" as const, detail: "Declare or assign a reactive atom" },
-      { label: "$state(initial)", kind: "builtin" as const, detail: "Hook: per-instance state → [value, setValue] (like useState)" },
-      { label: "$memo(() => value, [deps])", kind: "builtin" as const, detail: "Hook: value recomputed only when deps change (like useMemo)" },
-      { label: "$effect(() => {}, [deps])", kind: "builtin" as const, detail: "Declarative side effect" },
-      { label: "$store({ ...state, ...methods })", kind: "builtin" as const, detail: "Global store: shared state + actions" },
-      { label: "$http({ url, method, ... })", kind: "builtin" as const, detail: "Reactive HTTP resource" },
-      { label: "$router({ '/': Home(), default: NotFound() })", kind: "builtin" as const, detail: "Outlet-first router" },
-      { label: "$util", kind: "builtin" as const, detail: "Runtime helper namespace ($util.format, $util.sum, …)" },
-      { label: "$emit('name', detail)", kind: "builtin" as const, detail: "Dispatch a CustomEvent" },
-      { label: "$theme({ colors, radius, ... })", kind: "builtin" as const, detail: "In-script theme override" },
-      { label: "$storage", kind: "builtin" as const, detail: "Persistent storage namespace ($storage.local, …)" },
-      { label: "$console", kind: "builtin" as const, detail: "Console namespace ($console.log, …)" },
-      { label: "$i18n({ translations, ... })", kind: "builtin" as const, detail: "Translation bundle" },
+      ...builtinCatalog.map((b) => ({
+        label: b.signature,
+        kind: "builtin" as const,
+        detail: b.summary,
+      })),
     ];
   }
 
-  // Inside a call's `(...)` argument list for a known component.
-  if (ctx.insideCall && ctx.callee) {
-    const spec = findComponent(library, ctx.callee);
-    if (spec) {
-      return propCompletions(spec);
-    }
+  const general = generalCompletions(library, user);
+
+  // Inside a component call's trailing props object `{ … }` — offer the
+  // spec's prop names first, then the general list.
+  if (ctx.objectCallee) {
+    const spec = findComponent(library, ctx.objectCallee);
+    if (spec) return [...propCompletions(spec), ...general];
   }
 
-  // Default: top-level keywords + all library component names. We merge
-  // the curated `KEYWORDS` (which include non-reserved helpers like
-  // `Router` / `cleanup`) with the full reserved-word set from
-  // `keywordDocs`, de-duplicated by label.
+  return general;
+}
+
+/**
+ * The "general" completion set: author-declared symbols, reserved keywords,
+ * and the full component library. Offered at every position that is not after
+ * a `$` and not inside a props object.
+ */
+function generalCompletions(library: ComponentLibrary, user: UserSymbols): CompletionItem[] {
+  // Merge the curated `KEYWORDS` (which include non-reserved helpers like
+  // `cleanup`) with the full reserved-word set from `keywordDocs`,
+  // de-duplicated by label.
   const keywordItems = new Map<string, CompletionItem>();
   for (const [label, doc] of Object.entries(keywordDocs)) {
     keywordItems.set(label, {
@@ -178,6 +199,23 @@ export function getCompletions(
     }
   }
   return [
+    // Author-declared symbols first so they rank above the large library
+    // list in editors that preserve provider order.
+    ...user.components.map((name) => ({
+      label: name,
+      kind: "component" as const,
+      detail: "Component declared in this file",
+    })),
+    ...user.actions.map((name) => ({
+      label: name,
+      kind: "builtin" as const,
+      detail: "Action declared in this file",
+    })),
+    ...user.atoms.map((name) => ({
+      label: `$${name}`,
+      kind: "state" as const,
+      detail: "Reactive atom declared in this file",
+    })),
     ...keywordItems.values(),
     ...library.components.map((c) => ({
       label: c.name,
@@ -186,6 +224,41 @@ export function getCompletions(
       documentation: c.description,
     })),
   ];
+}
+
+/** Symbols declared in the current document, for scope-aware completions. */
+interface UserSymbols {
+  atoms: string[];
+  components: string[];
+  actions: string[];
+}
+
+/**
+ * Parse `source` and collect the author's top-level reactive atoms,
+ * component declarations (PascalCase functions), and action declarations
+ * (camelCase functions). Tolerant of parse errors — the parser returns
+ * whatever statements it recovered, which is exactly what we want while the
+ * user is mid-edit.
+ */
+function collectUserSymbols(source: string): UserSymbols {
+  const atoms = new Set<string>();
+  const components = new Set<string>();
+  const actions = new Set<string>();
+  try {
+    const program = parse(source);
+    for (const stmt of program.statements) {
+      if (stmt.kind === "Assignment" && stmt.isState && stmt.identifier) {
+        atoms.add(stmt.identifier);
+      } else if (stmt.kind === "ComponentDeclaration" && stmt.name) {
+        components.add(stmt.name);
+      } else if (stmt.kind === "ActionDeclaration" && stmt.name) {
+        actions.add(stmt.name);
+      }
+    }
+  } catch {
+    // Never let completion crash the editor — fall back to no user symbols.
+  }
+  return { atoms: [...atoms], components: [...components], actions: [...actions] };
 }
 
 /**
@@ -208,13 +281,16 @@ export function getHoverInfo(
         `Signature: \`${signaturePreview(spec)}\``,
     };
   }
-  if (word === "$state") {
-    return { kind: "builtin", contents: "**$state(initial)** — hook returning `[value, setValue]` (per-instance state, like React's useState)" };
-  }
-  if (word === "$memo") {
-    return { kind: "builtin", contents: "**$memo(() => value, [deps])** — hook returning a value recomputed only when a dependency changes (like React's useMemo)" };
-  }
   if (word.startsWith("$")) {
+    // Runtime builtin (hook / factory / namespace) — rich signature + summary
+    // sourced from the shared catalog (`src/language/builtins.ts`).
+    const builtin = findBuiltin(word.slice(1));
+    if (builtin) {
+      return {
+        kind: "builtin",
+        contents: `**${builtin.sigil}** — ${builtin.summary}\n\nSignature: \`${builtin.signature}\``,
+      };
+    }
     return { kind: "state", contents: `**${word}** — reactive state atom` };
   }
   // Reserved-word hover: rich definition + syntax + example from the
@@ -244,43 +320,92 @@ function formatKeywordHover(word: string, doc: KeywordDoc): string {
 // ---------------------------------------------------------------------------
 
 interface CursorContext {
-  /** Caller name when the cursor sits inside `Caller(...)`. */
-  callee?: string;
-  /** True when the cursor is past `(` and before the matching `)`. */
-  insideCall: boolean;
+  /**
+   * The component call whose trailing props object `{ … }` the cursor sits
+   * inside, if any. Drives prop-name completions.
+   */
+  objectCallee?: string;
   /** True when the previous non-whitespace token is `$` — user typing a tier. */
   afterDollar: boolean;
 }
 
+interface BracketFrame {
+  bracket: "(" | "[" | "{";
+  /** Identifier preceding a `(` — the callee. Empty for grouping/`[`/`{`. */
+  callee: string;
+}
+
+/**
+ * Analyse the text before the cursor with a bracket stack (skipping strings
+ * and comments). The cursor is in a props object when the innermost open
+ * bracket is `{` and there is an enclosing `(` call — the callee of that call
+ * is the component whose props we complete.
+ */
 function analyseCursor(source: string, position: Position): CursorContext {
   const offset = lineColumnToOffset(source, position);
   const prefix = source.slice(0, offset);
-
   const afterDollar = /\$[A-Za-z_]*$/.test(prefix);
 
-  // Walk backwards from the cursor to find an unbalanced `(`. If we
-  // find one, capture the identifier (or `Caller(`-style) that
-  // precedes it.
-  let depth = 0;
-  let openCallIdx = -1;
-  for (let i = prefix.length - 1; i >= 0; i -= 1) {
+  const stack: BracketFrame[] = [];
+  for (let i = 0; i < prefix.length; i += 1) {
     const ch = prefix[i]!;
-    if (ch === ")") depth += 1;
-    else if (ch === "(") {
-      if (depth === 0) { openCallIdx = i; break; }
-      depth -= 1;
+    if (ch === "/" && prefix[i + 1] === "/") {
+      while (i < prefix.length && prefix[i] !== "\n") i += 1;
+      continue;
+    }
+    if (ch === "/" && prefix[i + 1] === "*") {
+      i += 2;
+      while (i < prefix.length && !(prefix[i] === "*" && prefix[i + 1] === "/")) i += 1;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      i = skipStringLiteral(prefix, i, ch);
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{") {
+      stack.push({ bracket: ch, callee: ch === "(" ? identifierBefore(prefix, i) : "" });
+    } else if (ch === ")" || ch === "]" || ch === "}") {
+      stack.pop();
     }
   }
-  let callee: string | undefined;
-  let insideCall = false;
-  if (openCallIdx > 0) {
-    insideCall = true;
-    const upto = prefix.slice(0, openCallIdx);
-    const m = /([A-Za-z_][\w]*)\s*$/.exec(upto);
-    if (m) callee = m[1];
+
+  let objectCallee: string | undefined;
+  const top = stack[stack.length - 1];
+  if (top && top.bracket === "{") {
+    for (let i = stack.length - 1; i >= 0; i -= 1) {
+      if (stack[i]!.bracket === "(") {
+        const callee = stack[i]!.callee;
+        if (callee) objectCallee = callee;
+        break;
+      }
+    }
   }
 
-  return { callee, insideCall, afterDollar };
+  return { objectCallee, afterDollar };
+}
+
+/** Returns the index of the closing quote (or the last index if unterminated). */
+function skipStringLiteral(source: string, start: number, quote: string): number {
+  let i = start + 1;
+  while (i < source.length) {
+    const ch = source[i]!;
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (ch === quote) return i;
+    i += 1;
+  }
+  return source.length - 1;
+}
+
+function identifierBefore(source: string, openIndex: number): string {
+  let end = openIndex;
+  while (end > 0 && /\s/.test(source[end - 1]!)) end -= 1;
+  let start = end;
+  while (start > 0 && /[\w$]/.test(source[start - 1]!)) start -= 1;
+  return source.slice(start, end);
 }
 
 function propCompletions(spec: ComponentSpec): CompletionItem[] {

@@ -1,0 +1,68 @@
+// Contact page: a small validated form. Values live in reactive `$` atoms;
+// submitting validates with plain JS, then shows a success state and emits a
+// `contact-submitted` event the host page can wire to a backend.
+
+$cname = ""
+$cemail = ""
+$cmessage = ""
+$cerrors = {}
+$csent = false
+
+export function ContactPage() {
+  return Column([
+    PageHeader("Contact", { subtitle: "Have a project in mind? Let's talk.", breadcrumbs: false }),
+    $csent ? Sent() : ContactForm()
+  ], { gap: "l" })
+}
+
+function ContactForm() {
+  return Card([
+    Form("contact", {
+      onSubmit: submitMessage,
+      fields: [
+        FormControl("Name", { field: Input("cname", { value: $cname, placeholder: "Your name" }), hint: $cerrors.name }),
+        FormControl("Email", { field: Input("cemail", { type: "email", value: $cemail, placeholder: "you@company.com" }), hint: $cerrors.email }),
+        FormControl("Message", { field: TextArea("cmessage", { value: $cmessage, rows: 5, placeholder: "Tell me about your project" }), hint: $cerrors.message })
+      ],
+      buttons: Button("Send message", { type: "submit", variant: "primary", icon: "paper-plane" })
+    })
+  ])
+}
+
+function Sent() {
+  return SuccessState("Thanks for reaching out!", {
+    description: "I'll get back to you at " + $cemail + " soon.",
+    actions: [Button("Send another", { variant: "secondary", onClick: resetMessage })]
+  })
+}
+
+function submitMessage() {
+  errs = validateMessage($cname, $cemail, $cmessage)
+  $cerrors = errs
+  if (Object.keys(errs).length === 0) {
+    $csent = true
+    $emit("contact-submitted", { name: $cname, email: $cemail, message: $cmessage })
+  }
+}
+
+function validateMessage(name, email, message) {
+  errs = {}
+  if (!name || !name.trim()) { errs.name = "Please enter your name." }
+  if (!email || !isEmail(email)) { errs.email = "Enter a valid email address." }
+  if (!message || message.trim().length < 10) { errs.message = "Tell me a little more (10+ characters)." }
+  return errs
+}
+
+function isEmail(value) {
+  at = value.indexOf("@")
+  dot = value.lastIndexOf(".")
+  return at > 0 && dot > at + 1 && dot < value.length - 1
+}
+
+function resetMessage() {
+  $csent = false
+  $cname = ""
+  $cemail = ""
+  $cmessage = ""
+  $cerrors = {}
+}

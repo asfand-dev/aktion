@@ -1,0 +1,22 @@
+// A single project card. Reused on the home (featured) and projects pages.
+
+export function ProjectCard(project) {
+  return Card([
+    Row([
+      Icon(project.icon, { size: "lg", color: "var(--rui-color-primary)" }),
+      StackItem(Column([
+        Row([
+          Text(project.title, { variant: "large-heavy" }),
+          project.highlight ? Badge("Featured", { tone: "primary", size: "sm" }) : null
+        ], { gap: "s", align: "center" }),
+        Text(project.year, { variant: "small", tone: "muted" })
+      ], { gap: "xs" }), { grow: 1 })
+    ], { gap: "m", align: "center" }),
+    Text(project.description, { variant: "small" }),
+    BadgeList(project.tags, { tone: "neutral", size: "sm" }),
+    Row([
+      Spacer(),
+      Link("View project", { href: project.link, external: true, variant: "subtle" })
+    ], { align: "center" })
+  ], { variant: "outlined" })
+}

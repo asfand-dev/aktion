@@ -35,8 +35,23 @@ const compare = (op: string, a: unknown, b: unknown): boolean => {
       const needle = String(b ?? "").toLowerCase();
       return haystack.includes(needle);
     }
+    case "startsWith": return String(a ?? "").toLowerCase().startsWith(String(b ?? "").toLowerCase());
+    case "endsWith": return String(a ?? "").toLowerCase().endsWith(String(b ?? "").toLowerCase());
     default: return false;
   }
+};
+
+const cloneDeepValue = <T>(value: T): T => {
+  if (Array.isArray(value)) return value.map((v) => cloneDeepValue(v)) as unknown as T;
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      out[k] = cloneDeepValue((value as Record<string, unknown>)[k]);
+    }
+    return out as unknown as T;
+  }
+  return value;
 };
 
 const getField = (item: unknown, field: string): unknown => {
@@ -173,7 +188,9 @@ const recase = (input: unknown, kind: "camel" | "pascal" | "snake" | "kebab"): s
  *   text  = Util.plural(items.length, "item")
  *
  * Comparators for `filter` / `find` accept the operator strings
- * `"=="`, `"!="`, `">"`, `"<"`, `">="`, `"<="`, `"contains"`.
+ * `"=="`, `"!="`, `">"`, `"<"`, `">="`, `"<="`, `"contains"`,
+ * `"startsWith"`, `"endsWith"`. The string operators (`contains` /
+ * `startsWith` / `endsWith`) match case-insensitively.
  */
 export const Util = {
   // ── Aggregation ───────────────────────────────────────────
@@ -271,6 +288,70 @@ export const Util = {
     const out: Record<string, unknown> = {};
     for (const k of ks) {
       if (k in obj) out[k] = obj[k];
+    }
+    return out;
+  },
+  omit: (obj: unknown, keys: unknown): Record<string, unknown> => {
+    if (!isObject(obj)) return {};
+    const drop = new Set(toArray(keys).map((k) => String(k ?? "")));
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(obj)) if (!drop.has(k)) out[k] = obj[k];
+    return out;
+  },
+  chunk: (arr: unknown, size: number): unknown[][] => {
+    const xs = toArray(arr);
+    const n = Math.max(1, Math.floor(toNumber(size)));
+    const out: unknown[][] = [];
+    for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+    return out;
+  },
+  flatten: (arr: unknown, depth: number = 1): unknown[] => {
+    const walk = (xs: unknown[], left: number): unknown[] =>
+      left <= 0
+        ? xs.slice()
+        : xs.reduce<unknown[]>((acc, v) => {
+            if (Array.isArray(v)) acc.push(...walk(v, left - 1));
+            else acc.push(v);
+            return acc;
+          }, []);
+    return walk(toArray(arr), Math.max(0, Math.floor(toNumber(depth))));
+  },
+  zip: (...arrays: unknown[]): unknown[][] => {
+    const lists = arrays.map(toArray);
+    const len = lists.reduce((m, l) => Math.max(m, l.length), 0);
+    const out: unknown[][] = [];
+    for (let i = 0; i < len; i += 1) out.push(lists.map((l) => l[i] ?? null));
+    return out;
+  },
+  partition: (arr: unknown, field = "", op = "==", value?: unknown): [unknown[], unknown[]] => {
+    const pass: unknown[] = [];
+    const fail: unknown[] = [];
+    for (const item of toArray(arr)) {
+      (compare(op, getField(item, String(field)), value) ? pass : fail).push(item);
+    }
+    return [pass, fail];
+  },
+  keyBy: (arr: unknown, field = ""): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const item of toArray(arr)) {
+      out[String(getField(item, String(field)) ?? "")] = item;
+    }
+    return out;
+  },
+  cloneDeep: <T>(value: T): T => cloneDeepValue(value),
+  merge: (target: unknown, ...sources: unknown[]): Record<string, unknown> => {
+    const out: Record<string, unknown> = isObject(target) ? cloneDeepValue(target) : {};
+    for (const src of sources) {
+      if (!isObject(src)) continue;
+      for (const k of Object.keys(src)) {
+        const sv = src[k];
+        const tv = out[k];
+        out[k] = isObject(tv) && isObject(sv)
+          ? Util.merge(tv, sv)
+          : isObject(sv) || Array.isArray(sv)
+            ? cloneDeepValue(sv)
+            : sv;
+      }
     }
     return out;
   },

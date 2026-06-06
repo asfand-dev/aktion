@@ -153,35 +153,96 @@ export const Redirect: ComponentSpec = {
 };
 
 /**
- * `Lazy(loader, fallback?)` — Defer the children until the `loader`
- * promise resolves. The `loader` can be either a function returning a
- * promise or a promise directly.
+ * `Lazy(loader, fallback?, children?)` — Defer rendering until an async
+ * `loader` resolves. `loader` is a function returning a promise (or a promise
+ * directly). While the promise is pending, the `fallback` is shown; when it
+ * resolves, its value renders (or `children` if the resolved value is null);
+ * if it rejects, the fallback stays. A synchronous (non-promise) loader value
+ * renders immediately.
+ *
+ * The loader runs **once per instance** — its result is held in per-instance
+ * state, and the resolved value triggers a single re-render (the same
+ * mechanism `Toast`'s auto-dismiss uses). A disposer cancels the pending
+ * resolution if the instance unmounts first, so a late settle never writes to
+ * a detached instance.
  */
+type LazyState =
+  | { status: "init" }
+  | { status: "pending" }
+  | { status: "resolved"; value: unknown }
+  | { status: "error" };
+
 export const Lazy: ComponentSpec = {
   name: "Lazy",
-  description: "Defer rendering `children` until `loader` resolves.",
+  description:
+    "Defer rendering until an async `loader` resolves: show `fallback` while " +
+    "pending, then render the resolved value (or `children`). A synchronous " +
+    "loader value renders immediately.",
   props: [
     { name: "loader", type: "any", positional: true, required: true },
     { name: "fallback", type: "Node", optional: true },
     { name: "children", type: "Node[]", optional: true },
   ],
   render: (_node, props, helpers) => {
-    // Best-effort static rendering: invoke the loader if it's a function;
-    // if it returns a promise, render the fallback. The full streaming
-    // resolution belongs to the runtime — see status file §24.
     const loader = props.loader;
-    if (typeof loader === "function") {
-      try {
-        const result = (loader as () => unknown)();
-        if (result && typeof (result as { then?: unknown }).then === "function") {
-          return renderChild(helpers, props.fallback ?? null);
-        }
-        return renderChild(helpers, result ?? props.children ?? null);
-      } catch {
-        return renderChild(helpers, props.fallback ?? null);
-      }
+    // Per-instance state remembers the settled result across re-renders; the
+    // loader therefore runs exactly once per instance. The live promise
+    // resolution swaps the wrapper's content imperatively (the same approach
+    // `Toast`'s auto-dismiss uses) so it works without a host re-render.
+    const slot = helpers.useInstanceState<LazyState>("rui-lazy", { status: "init" });
+
+    // `display: contents` keeps the wrapper out of the layout/box model.
+    const wrapper = el("span", { class: "rui-lazy", style: "display: contents;" });
+    const paint = (value: unknown): void => {
+      wrapper.replaceChildren(renderChild(helpers, value));
+    };
+    const fallback = (): unknown => props.fallback ?? null;
+    const resolvedContent = (value: unknown): unknown => value ?? props.children ?? null;
+
+    const state = slot.get();
+    if (state.status === "resolved") {
+      paint(resolvedContent(state.value));
+      return wrapper;
     }
-    return renderChild(helpers, props.children ?? null);
+    if (state.status === "pending" || state.status === "error") {
+      paint(fallback());
+      return wrapper;
+    }
+
+    // First render for this instance — run the loader once.
+    let result: unknown;
+    try {
+      result = typeof loader === "function" ? (loader as () => unknown)() : loader;
+    } catch {
+      slot.set({ status: "error" });
+      paint(fallback());
+      return wrapper;
+    }
+
+    if (result && typeof (result as { then?: unknown }).then === "function") {
+      slot.set({ status: "pending" });
+      paint(fallback());
+      let cancelled = false;
+      helpers.registerDisposer(() => { cancelled = true; }, "rui-lazy-cancel");
+      void (result as Promise<unknown>).then(
+        (value) => {
+          if (cancelled) return;
+          slot.set({ status: "resolved", value });
+          paint(resolvedContent(value));
+        },
+        () => {
+          if (cancelled) return;
+          slot.set({ status: "error" });
+          paint(fallback());
+        },
+      );
+      return wrapper;
+    }
+
+    // Synchronous value — record and render immediately.
+    slot.set({ status: "resolved", value: result });
+    paint(resolvedContent(result));
+    return wrapper;
   },
 };
 

@@ -1,0 +1,27 @@
+// A gear button that opens a Popover for the OpenAI API key + model. The key is
+// persisted to localStorage by `persistKey`; the popover content is stable so
+// the input never unmounts mid-edit.
+
+import { $apiKey, $model, persistKey } from "../store.aktion"
+import { MODELS } from "../lib/openai.aktion"
+
+modelItems = MODELS.map(m => SelectItem(m.value, { label: m.label }))
+
+export function Settings() {
+  return Popover(IconButton("gear", { label: "Settings", variant: "ghost" }), {
+    title: "Connection",
+    width: "320px",
+    content: [
+      Column([
+        FormControl("OpenAI API key", {
+          field: PasswordInput("api-key", { value: $apiKey, onChange: persistKey, placeholder: "sk-…" }),
+          hint: "Stored only in this browser (localStorage)."
+        }),
+        FormControl("Model", { field: Select("model", { items: modelItems, value: $model }) }),
+        $apiKey
+          ? StatusDot("Connected to OpenAI", { tone: "success" })
+          : StatusDot("Offline echo mode", { tone: "warning" })
+      ], { gap: "m" })
+    ]
+  })
+}
