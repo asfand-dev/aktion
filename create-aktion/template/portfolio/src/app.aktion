@@ -21,8 +21,12 @@ pages = $router({
   default: HomePage()
 })
 
-aktion = Column([
-  SiteNav(),
-  pages,
-  SiteFooter()
-], { gap: "l" })
+function App() {
+  return Column([
+    SiteNav(),
+    pages,
+    SiteFooter()
+  ], { gap: "l" })
+}
+
+$app(App())

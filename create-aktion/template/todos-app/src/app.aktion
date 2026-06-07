@@ -7,22 +7,27 @@ import { remaining } from "./api.aktion"
 
 $theme({ colors: { primary: "#6366f1" } })
 
-aktion = Column([
-  PageHeader("Todos", {
-    subtitle: "Create, toggle, edit and delete — every action is a real REST call.",
-    breadcrumbs: false
-  }),
-  TodoStats(),
-  Composer(),
-  TodoList()
-], { gap: "l" })
-
 function TodoStats() {
   list = $todos.data || []
   done = list.length - remaining(list)
+
   return Stats([
     { label: "Total", value: `${list.length}` },
     { label: "Remaining", value: `${remaining(list)}`, tone: "primary" },
     { label: "Done", value: `${done}`, tone: "success" }
   ], { layout: "strip" })
 }
+
+function App() {
+  return Column([
+    PageHeader("Todos", {
+      subtitle: "Create, toggle, edit and delete — every action is a real REST call.",
+      breadcrumbs: false
+    }),
+    TodoStats(),
+    Composer(),
+    TodoList()
+  ], { gap: "l" })
+}
+
+$app(App())

@@ -7,12 +7,16 @@ import { Settings } from "./components/settings.aktion"
 
 $theme({ colors: { primary: "#10a37f" } })
 
-aktion = Column([
-  PageHeader("Assistant", {
-    subtitle: "A chatbot powered by OpenAI",
-    breadcrumbs: false,
-    actions: [Settings()]
-  }),
-  Card([MessageList()]),
-  Composer()
-], { gap: "m", padding: "l" })
+function App() {
+  return Column([
+    PageHeader("Assistant", {
+      subtitle: "A chatbot powered by OpenAI",
+      breadcrumbs: false,
+      actions: [Settings()]
+    }),
+    Card([MessageList()]),
+    Composer()
+  ], { gap: "m", padding: "l" })
+}
+
+$app(App())

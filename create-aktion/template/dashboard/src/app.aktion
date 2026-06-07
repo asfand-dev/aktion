@@ -27,4 +27,8 @@ topbar = TopBar("Casa", {
 
 // Multi-file entry: assign the root node to `aktion`. A dashboard surface →
 // AppShell (left sidebar + topbar + the routed page).
-aktion = AppShell(AppSidebar(), { content: pages, topbar: [topbar] })
+function App() {
+  return AppShell(AppSidebar(), { content: pages, topbar: [topbar] })
+}
+
+$app(App())
