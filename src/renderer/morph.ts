@@ -191,7 +191,10 @@ function syncFormState(oldEl: Element, newEl: Element): void {
     return;
   }
   if (oldEl instanceof HTMLSelectElement && newEl instanceof HTMLSelectElement) {
-    if (!isFocused(oldEl) && oldEl.value !== newEl.value) {
+    // Same rule as inputs: the value-difference check keeps user selection
+    // intact (state mirrors the DOM after a `change`), so this only fires for
+    // a programmatic value change, which must apply even when focused.
+    if (oldEl.value !== newEl.value) {
       oldEl.value = newEl.value;
     }
     return;
@@ -203,25 +206,70 @@ function syncFormState(oldEl: Element, newEl: Element): void {
 function syncInput(oldEl: HTMLInputElement, newEl: HTMLInputElement): void {
   if (oldEl.type === "checkbox" || oldEl.type === "radio") {
     const desired = newEl.hasAttribute("checked") || newEl.checked;
-    if (oldEl.checked !== desired && !isFocused(oldEl)) {
+    if (oldEl.checked !== desired) {
       oldEl.checked = desired;
     }
     return;
   }
-  // For text-like inputs, only overwrite `.value` when the user isn't
-  // actively focused (otherwise we'd nuke an in-flight keystroke / IME
-  // composition). When focused, two-way binding has already pushed the
-  // freshest characters into the DOM property anyway.
+  // Reflect the bound value into the live DOM. The value-difference guard
+  // below is what keeps live typing intact: during normal two-way binding the
+  // state mirrors the DOM, so `oldEl.value === desired` and this is a no-op —
+  // we never clobber an in-flight keystroke or IME composition. The guard
+  // only fires when the program changed the bound value to something the DOM
+  // does NOT already hold (a clear-after-submit, a controlled transform, …),
+  // which must be applied even while the field is focused. (On macOS, clicking
+  // a button does not blur the input, so a focus-gated sync would silently
+  // drop a programmatic `$input = ""`.)
   const desired = newEl.getAttribute("value") ?? newEl.value ?? "";
-  if (!isFocused(oldEl) && oldEl.value !== desired) {
-    oldEl.value = desired;
+  if (oldEl.value !== desired) {
+    assignValuePreservingCaret(oldEl, desired);
   }
 }
 
 function syncTextArea(oldEl: HTMLTextAreaElement, newEl: HTMLTextAreaElement): void {
   const desired = newEl.value ?? newEl.textContent ?? "";
-  if (!isFocused(oldEl) && oldEl.value !== desired) {
-    oldEl.value = desired;
+  if (oldEl.value !== desired) {
+    assignValuePreservingCaret(oldEl, desired);
+  }
+}
+
+/**
+ * Write `desired` into a text field, preserving the caret / selection when the
+ * field is focused so a programmatic value change doesn't bounce the cursor to
+ * the end. When the field isn't focused the assignment is a plain write.
+ *
+ * The caret heuristic keeps the cursor at the end when it was already there
+ * (the common case while typing or after a clear → end of an empty string),
+ * and otherwise clamps the previous offsets into the new length so a
+ * controlled transform (e.g. uppercasing as you type) keeps a sensible
+ * position instead of jumping.
+ */
+function assignValuePreservingCaret(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  desired: string,
+): void {
+  if (!isFocused(el)) {
+    el.value = desired;
+    return;
+  }
+  let start: number | null = null;
+  let end: number | null = null;
+  try {
+    start = el.selectionStart;
+    end = el.selectionEnd;
+  } catch {
+    // Some input types (number/email/url/…) throw when reading selection.
+  }
+  const prevLen = el.value.length;
+  el.value = desired;
+  if (start == null || end == null) return;
+  const atEnd = start >= prevLen && end >= prevLen;
+  const nextStart = atEnd ? desired.length : Math.min(start, desired.length);
+  const nextEnd = atEnd ? desired.length : Math.min(end, desired.length);
+  try {
+    el.setSelectionRange(nextStart, nextEnd);
+  } catch {
+    // Selection unsupported for this input type; the value was still applied.
   }
 }
 

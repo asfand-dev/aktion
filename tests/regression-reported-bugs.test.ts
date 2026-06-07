@@ -214,3 +214,97 @@ describe("#6 reconcileChildren removes the right nodes on keyed reorders", () =>
     expect(container.contains(filler)).toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  #7 — a programmatic value change must reach a FOCUSED controlled input     */
+/*       (e.g. clearing $input after Send; on macOS clicking a button does     */
+/*       not blur the field, so a focus-gated sync would silently drop it).    */
+/* -------------------------------------------------------------------------- */
+
+describe("#7 morph syncs programmatic value changes into focused fields", () => {
+  function freshInput(id: string, value: string): HTMLInputElement {
+    const input = document.createElement("input");
+    input.id = id;
+    // Mirror how the library renders `value` — as an attribute.
+    input.setAttribute("value", value);
+    return input;
+  }
+
+  it("clears a focused text input when the bound value becomes empty", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    try {
+      const live = freshInput("chat", "");
+      container.appendChild(live);
+      // Simulate the user typing (dirties the property, not the attribute).
+      live.value = "Hello there";
+      live.focus();
+      expect(document.activeElement).toBe(live);
+
+      // Re-render after `$input = ""`: the fresh node carries value="".
+      const f = document.createDocumentFragment();
+      f.appendChild(freshInput("chat", ""));
+      morphChildren(container, f);
+
+      // Same node is reused AND its value reflects the programmatic clear,
+      // even though the field is still focused.
+      expect(container.children[0]).toBe(live);
+      expect(live.value).toBe("");
+      expect(document.activeElement).toBe(live);
+    } finally {
+      container.remove();
+    }
+  });
+
+  it("does not clobber an in-flight keystroke (state mirrors the DOM)", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    try {
+      const live = freshInput("name", "ab");
+      container.appendChild(live);
+      live.value = "ab";
+      live.focus();
+      live.setSelectionRange(1, 1); // caret in the middle
+
+      // A re-render where the bound value equals what the user already typed.
+      const f = document.createDocumentFragment();
+      f.appendChild(freshInput("name", "ab"));
+      morphChildren(container, f);
+
+      expect(live.value).toBe("ab");
+      // Caret is untouched because the sync was a no-op.
+      expect(live.selectionStart).toBe(1);
+    } finally {
+      container.remove();
+    }
+  });
+
+  it("applies a programmatic value change to a focused <select>", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    try {
+      const buildSelect = (value: string): HTMLSelectElement => {
+        const select = document.createElement("select");
+        for (const v of ["a", "b"]) {
+          const opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = v;
+          select.appendChild(opt);
+        }
+        select.value = value;
+        return select;
+      };
+      const live = buildSelect("a");
+      container.appendChild(live);
+      live.focus();
+
+      const f = document.createDocumentFragment();
+      f.appendChild(buildSelect("b"));
+      morphChildren(container, f);
+
+      expect(live.value).toBe("b");
+    } finally {
+      container.remove();
+    }
+  });
+});
