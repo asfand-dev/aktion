@@ -2,7 +2,7 @@
   "name": "aktion-vscode",
   "displayName": "Aktion",
   "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics, hover, completions, signature help, go-to-definition, find references, rename, document outline, formatting, and snippets.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "AsfandiyarKhan",
   "license": "MIT",
   "engines": {
@@ -63,13 +63,31 @@
     "semanticTokenScopes": [
       {
         "scopes": {
-          "namespace": ["entity.name.namespace", "support.type"],
-          "class": ["entity.name.type.class", "support.class"],
-          "function": ["entity.name.function", "support.function"],
-          "variable": ["variable.other.aktion", "variable.other"],
-          "property": ["variable.other.property"],
-          "keyword": ["keyword"],
-          "number": ["constant.numeric"]
+          "namespace": [
+            "entity.name.namespace",
+            "support.type"
+          ],
+          "class": [
+            "entity.name.type.class",
+            "support.class"
+          ],
+          "function": [
+            "entity.name.function",
+            "support.function"
+          ],
+          "variable": [
+            "variable.other.aktion",
+            "variable.other"
+          ],
+          "property": [
+            "variable.other.property"
+          ],
+          "keyword": [
+            "keyword"
+          ],
+          "number": [
+            "constant.numeric"
+          ]
         }
       }
     ],
