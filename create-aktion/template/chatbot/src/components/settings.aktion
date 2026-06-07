@@ -22,6 +22,7 @@ export function Settings() {
           ? StatusDot("Connected to OpenAI", { tone: "success" })
           : StatusDot("Offline echo mode", { tone: "warning" })
       ], { gap: "m" })
-    ]
+    ],
+    side: "left"
   })
 }

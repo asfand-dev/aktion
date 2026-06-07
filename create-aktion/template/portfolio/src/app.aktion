@@ -23,6 +23,6 @@ pages = $router({
 
 aktion = Column([
   SiteNav(),
-  Container([pages], { size: "lg" }),
+  pages,
   SiteFooter()
 ], { gap: "l" })
