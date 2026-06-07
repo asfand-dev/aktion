@@ -35,6 +35,19 @@ completions, go-to-definition, rename, and more.
   mid-edit document is never mangled.
 - **Snippets** — generated from the component library (type `Card`, `App`,
   `Hero`, … and accept).
+- **Embedded highlighting in HTML** — Aktion code written directly inside an
+  `<aktion-app> … </aktion-app>` tag in a `.html` file is highlighted with the
+  exact same grammar as a `.aktion` file, so an inline program reads identically
+  whether it lives in a tag or a file:
+
+  ```html
+  <aktion-app>
+  $app(Column([
+    PageHeader('Hello', { subtitle: 'Generative UI in plain HTML' }),
+    Card([CardHeader('It works'), Text('No build step required.')])
+  ]))
+  </aktion-app>
+  ```
 
 Everything runs in-process — there is no separate language server to install or
 manage.

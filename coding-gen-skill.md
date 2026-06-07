@@ -899,6 +899,22 @@ sendToClient({ programText: el.response, state: snapshot });
 target.loadSnapshot({ programText, state: snapshot });
 ```
 
+The host can supply the program three ways, in precedence order: the
+`response` attribute / `setResponse()`, the `src` attribute, then inner
+text. `src` loads an external `.aktion` file resolved relative to the
+document and links it through the in-browser project linker, so an entry
+that `import`s other modules fetches its whole graph:
+
+```html
+<!-- Mounts ./app.aktion (and anything it imports) on connect. -->
+<aktion-app src="./app.aktion"></aktion-app>
+```
+
+This is a **host** concern: the authored `.aktion` source is identical
+whether it is inlined, set via `setResponse`, or loaded from `src`.
+Fetch / link failures surface through the same error banner and `error`
+event as parse errors.
+
 For ad-hoc per-tab / per-browser persistence from inside the script,
 use the `$storage` global (§12):
 

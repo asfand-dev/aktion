@@ -6,6 +6,9 @@
  *       `theme`                  — "light" | "dark" | JSON token map
  *       `streaming`              — "true" while text is still arriving from the LLM
  *       `response`               — Aktion program (string)
+ *       `src`                    — URL of an external `.aktion` entry file to
+ *                                  fetch + link (resolves its `import` graph)
+ *                                  and render, e.g. `src="./app.aktion"`
  *       `showerrors`             — "true" to render parse errors in the UI
  *                                  (defaults to off; the `error` event still fires)
  *   - Properties:
@@ -33,7 +36,13 @@
 
 import { parse } from "./parser/index.js";
 import type { Program } from "./parser/types.js";
-import { isCompiledProgram, type CompiledProgram } from "./compiler/runtime.js";
+import {
+  isCompiledProgram,
+  defineCompiledProgram,
+  COMPILED_PROGRAM_VERSION,
+  type CompiledProgram,
+} from "./compiler/runtime.js";
+import { linkProject } from "./compiler/project.js";
 import { applyDelta, type DeltaOp } from "./tooling/index.js";
 import {
   StateStore,
@@ -86,6 +95,7 @@ const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
+const ATTRIBUTE_SRC = "src";
 
 // Re-exported from `runtime/http.ts` so consumers can import them from
 // `./element.js` (the legacy public surface) without reaching into the
@@ -222,6 +232,7 @@ export class AktionElement extends HTMLElement {
       ATTRIBUTE_STREAMING,
       ATTRIBUTE_RESPONSE,
       ATTRIBUTE_SHOW_ERRORS,
+      ATTRIBUTE_SRC,
     ];
   }
 
@@ -277,6 +288,25 @@ export class AktionElement extends HTMLElement {
    */
   private forceFullRender = false;
   private parseErrors: string[] = [];
+  /**
+   * Diagnostics raised while loading a program from the `src` attribute
+   * (fetch / link failures, unresolved imports). Tracked separately from
+   * `parseErrors` so they survive the `replan()` that mounting the linked
+   * program triggers, and are merged into the error banner + `error` event.
+   */
+  private srcDiagnostics: string[] = [];
+  /**
+   * Monotonic token guarding overlapping `src` loads. A rapid `src` change
+   * (or a reconnect mid-fetch) bumps the token so a stale in-flight load
+   * resolves into a no-op instead of clobbering the current program.
+   */
+  private srcLoadToken = 0;
+  /**
+   * True once `connectedCallback` has run at least once. Lets
+   * `attributeChangedCallback` distinguish the initial attribute upgrade
+   * (handled by `connectedCallback`) from a genuine later `src` change.
+   */
+  private hasConnected = false;
   /**
    * Token keys most recently applied by an in-script `$theme({...})`
    * declaration. We remember them so the next render can clear stale
@@ -399,6 +429,7 @@ export class AktionElement extends HTMLElement {
   }
 
   connectedCallback(): void {
+    this.hasConnected = true;
     ensureFontAwesomeLoaded(this.root);
     this.registerWithDevtools();
     this.applyThemeFromAttribute();
@@ -406,6 +437,14 @@ export class AktionElement extends HTMLElement {
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
       this.setResponse(responseAttr);
+      return;
+    }
+    // `src` loads an external `.aktion` file (and any modules it imports). It
+    // sits below the explicit `response` attribute but above the inner-text
+    // fallback, so `<aktion-app src="./app.aktion"></aktion-app>` just works.
+    const srcAttr = this.getAttribute(ATTRIBUTE_SRC);
+    if (srcAttr && !this.currentResponse) {
+      void this.loadFromSrc(srcAttr);
       return;
     }
     if (!this.currentResponse) {
@@ -448,6 +487,11 @@ export class AktionElement extends HTMLElement {
       const next = value ?? "";
       if (next !== this.currentResponse) this.setResponse(next);
     }
+    if (name === ATTRIBUTE_SRC) {
+      // Ignore the initial attribute upgrade — `connectedCallback` owns the
+      // first load so we don't fetch twice on mount.
+      if (this.hasConnected && value) void this.loadFromSrc(value);
+    }
   }
 
   /**
@@ -476,6 +520,7 @@ export class AktionElement extends HTMLElement {
     // components rendered at the same tree position.
     this.renderer.reset();
     this.parseErrors = [];
+    this.srcDiagnostics = [];
     this.scheduleRender();
   }
 
@@ -552,6 +597,7 @@ export class AktionElement extends HTMLElement {
     this.state.rebind([]);
     this.renderer.reset();
     this.parseErrors = [];
+    this.srcDiagnostics = [];
     // Seed values BEFORE the next render plans the new program. Declare
     // only writes defaults when `has(name) === false`, so the planner
     // will leave our hydrated values intact.
@@ -592,6 +638,10 @@ export class AktionElement extends HTMLElement {
     this.state.rebind([]);
     this.renderer.reset();
     this.parseErrors = [];
+    // Clear stale src diagnostics. `loadFromSrc` re-seeds them *after* this
+    // call returns (mountCompiled only schedules a render), so they still
+    // reach the replan microtask for the `src` path.
+    this.srcDiagnostics = [];
     // Seed values BEFORE the next render plans the program. `state.declare`
     // only writes defaults for names that don't already exist, so hydrated
     // values survive the replan (same mechanism as `loadSnapshot`).
@@ -605,6 +655,102 @@ export class AktionElement extends HTMLElement {
    */
   get sourceId(): string | null {
     return this.compiledSourceId;
+  }
+
+  /** Current `src` attribute value, or `null` when none is set. */
+  get src(): string | null {
+    return this.getAttribute(ATTRIBUTE_SRC);
+  }
+
+  set src(value: string | null) {
+    if (value === null) this.removeAttribute(ATTRIBUTE_SRC);
+    else this.setAttribute(ATTRIBUTE_SRC, value);
+  }
+
+  /**
+   * Load the program from an external `.aktion` file referenced by the `src`
+   * attribute. The entry is fetched relative to the document, linked through
+   * the in-browser project linker (so an entry that `import`s other modules
+   * resolves and fetches its whole graph), and mounted as a compiled program.
+   *
+   * A monotonic token guards against overlapping loads: a rapid `src` change
+   * or a reconnect mid-fetch bumps the token, so a stale in-flight load
+   * resolves into a no-op instead of clobbering the current program. Fetch /
+   * link failures and unresolved imports surface through the same error banner
+   * and `error` event as parse errors.
+   */
+  async loadFromSrc(src: string): Promise<void> {
+    const token = (this.srcLoadToken += 1);
+    this.srcDiagnostics = [];
+
+    let entryUrl: string;
+    try {
+      const base = typeof document !== "undefined" ? document.baseURI : undefined;
+      entryUrl = new URL(src, base).href;
+    } catch {
+      this.reportSrcError(`Invalid src "${src}".`);
+      return;
+    }
+
+    let entryText: string;
+    try {
+      if (typeof fetch !== "function") throw new Error("global fetch is unavailable");
+      const response = await fetch(entryUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      entryText = await response.text();
+    } catch (err) {
+      if (this.isStaleSrcLoad(token)) return;
+      this.reportSrcError(`Failed to load "${src}": ${errorMessage(err)}`);
+      return;
+    }
+    if (this.isStaleSrcLoad(token)) return;
+
+    let result;
+    try {
+      result = await linkProject({ entry: entryUrl, files: { [entryUrl]: entryText } });
+    } catch (err) {
+      if (this.isStaleSrcLoad(token)) return;
+      this.reportSrcError(`Failed to link "${src}": ${errorMessage(err)}`);
+      return;
+    }
+    if (this.isStaleSrcLoad(token)) return;
+
+    this.mountCompiled(
+      defineCompiledProgram({
+        __aktionCompiled: COMPILED_PROGRAM_VERSION,
+        program: result.program,
+        source: result.source,
+        path: entryUrl,
+      }),
+    );
+    // `mountCompiled` only *schedules* a render, so seeding the link/fetch
+    // diagnostics right after it still lands before the replan microtask
+    // runs — the banner + `error` event surface them with any parse errors.
+    this.srcDiagnostics = result.diagnostics
+      .filter((d) => d.severity !== "warning")
+      .map((d) => (d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message));
+  }
+
+  /** A `src` load is stale if a newer one started or the element detached. */
+  private isStaleSrcLoad(token: number): boolean {
+    return token !== this.srcLoadToken || !this.isConnected;
+  }
+
+  /**
+   * Surface a `src`-loading failure: record it, refresh the banner, and
+   * bubble an `error` event so host pages can react (mirrors how parse
+   * errors are reported).
+   */
+  private reportSrcError(message: string): void {
+    if (!this.srcDiagnostics.includes(message)) {
+      this.srcDiagnostics = [...this.srcDiagnostics, message];
+    }
+    this.updateErrorBanner();
+    this.dispatchEvent(new CustomEvent("error", {
+      detail: { errors: [{ line: 0, column: 0, message }] },
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   /** Append a streaming chunk and re-render. */
@@ -671,6 +817,7 @@ export class AktionElement extends HTMLElement {
     this.renderer.reset();
     this.programDirty = true;
     this.parseErrors = [];
+    this.srcDiagnostics = [];
     this.errorEl.hidden = true;
     this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
@@ -1219,25 +1366,24 @@ export class AktionElement extends HTMLElement {
   }
 
   private updateErrorBanner(): void {
-    // The banner is additional attributes via the `showerrors` attribute. While the response
+    // The banner is gated by the `showerrors` attribute. While the response
     // is still streaming, the in-flight last line is almost always mid-token
     // and will fail to parse, so we also suppress the banner during streaming
     // even when errors are explicitly enabled. Errors are still dispatched via
     // the `error` event for host apps that want to observe them programmatically.
-    if (
-      !this.showErrors ||
-      this.streaming ||
-      this.parseErrors.length === 0
-    ) {
+    // `src` load diagnostics are merged in so a failed external program is
+    // reported the same way as an inline parse error.
+    const messages = [...this.parseErrors, ...this.srcDiagnostics];
+    if (!this.showErrors || this.streaming || messages.length === 0) {
       this.errorEl.hidden = true;
       this.errorEl.replaceChildren();
       return;
     }
     this.errorEl.hidden = false;
     const title = document.createElement("div");
-    title.textContent = `${this.parseErrors.length} parse issue${this.parseErrors.length === 1 ? "" : "s"} (rendered partial UI):`;
+    title.textContent = `${messages.length} parse issue${messages.length === 1 ? "" : "s"} (rendered partial UI):`;
     const list = document.createElement("ul");
-    for (const message of this.parseErrors.slice(0, 5)) {
+    for (const message of messages.slice(0, 5)) {
       const li = document.createElement("li");
       li.textContent = message;
       list.append(li);
@@ -1328,6 +1474,12 @@ function parseBooleanAttribute(value: string | null): boolean {
   }
   if (normalized === ATTRIBUTE_SHOW_ERRORS) return true;
   return false;
+}
+
+/** Best-effort message extraction for a caught `unknown` error. */
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  return String(err);
 }
 
 export function defineElement(): void {

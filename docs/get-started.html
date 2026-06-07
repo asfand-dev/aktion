@@ -236,6 +236,18 @@ for await (const chunk of stream) {
 
 app.removeAttribute("streaming");</code></pre>
       <p>
+        To keep your program in its own file instead of inline markup, point the
+        <code>src</code> attribute at an <code>.aktion</code> file. It is resolved
+        relative to the page and linked through the in-browser project linker, so an
+        entry that <code>import</code>s other modules fetches its whole graph on connect:
+      </p>
+<pre><code>&lt;aktion-app src="./app.aktion"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        Precedence is <code>response</code> (attribute or <code>setResponse()</code>),
+        then <code>src</code>, then inner text. Fetch or link failures surface through the
+        same error banner and <code>error</code> event as parse errors.
+      </p>
+      <p>
         Two more attributes are worth knowing up front: <code>theme</code> selects a
         built-in theme (see <a href="#theming">Theming</a> above), and
         <code>showerrors</code> renders a developer error banner inside the shadow DOM

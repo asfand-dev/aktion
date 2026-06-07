@@ -348,6 +348,14 @@ export class AppComponent {
         &mdash; though the imperative <code>setResponse</code> is easier for
         anything longer than a line.
       </p>
+      <p>
+        For anything larger, keep the program in its own file and load it with the
+        <code>src</code> attribute &mdash;
+        <code>&lt;aktion-app src="./app.aktion"&gt;&lt;/aktion-app&gt;</code>. The file is
+        resolved relative to the page and linked through the in&#8209;browser project
+        linker, so an entry that <code>import</code>s other modules fetches its whole
+        graph on connect.
+      </p>
 
       <hr />
 

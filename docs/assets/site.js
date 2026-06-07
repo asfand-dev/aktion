@@ -31,18 +31,19 @@ const NAV_GROUPS = [
       { href: "index.html", label: "Introduction" },
       { href: "get-started.html", label: "Installation" },
       { href: "frameworks.html", label: "Frameworks" },
-      { href: "migration-guide.html", label: "Migration guide", badge: "New" },
+      { href: "migration-guide.html", label: "Migration guide" },
     ],
   },
   {
     label: "Core Concepts",
     items: [
       { href: "language.html", label: "Language" },
-      { href: "modules.html", label: "Modules", badge: "New" },
+      { href: "language-reference.html", label: "Language reference" },
+      { href: "modules.html", label: "Modules" },
       { href: "layout.html", label: "Layout" },
       { href: "components.html", label: "Components" },
-      { href: "hooks.html", label: "Hooks", badge: "New" },
-      { href: "stores.html", label: "Global state", badge: "New" },
+      { href: "hooks.html", label: "Hooks" },
+      { href: "stores.html", label: "Global state" },
     ],
   },
   {
@@ -53,22 +54,22 @@ const NAV_GROUPS = [
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "side-effects.html", label: "Side effects" },
       { href: "routing.html", label: "Routing" },
-      { href: "testing.html", label: "Testing", badge: "New" },
-      { href: "devtools.html", label: "DevTools", badge: "New" },
+      { href: "testing.html", label: "Testing" },
+      { href: "devtools.html", label: "DevTools" },
     ],
   },
   {
     label: "Guides",
     items: [
-      { href: "reactivity.html", label: "Reactivity & rendering", badge: "New" },
-      { href: "performance.html", label: "Performance", badge: "New" },
-      { href: "troubleshooting.html", label: "Troubleshooting / FAQ", badge: "New" },
-      { href: "errors.html", label: "Error handling", badge: "New" },
-      { href: "typescript.html", label: "TypeScript", badge: "New" },
-      { href: "recipes.html", label: "Recipes & patterns", badge: "New" },
-      { href: "accessibility.html", label: "Accessibility", badge: "New" },
-      { href: "deployment.html", label: "Production & deployment", badge: "New" },
-      { href: "llm-integration.html", label: "LLM integration", badge: "New" },
+      { href: "reactivity.html", label: "Reactivity & rendering" },
+      { href: "performance.html", label: "Performance" },
+      { href: "troubleshooting.html", label: "Troubleshooting / FAQ" },
+      { href: "errors.html", label: "Error handling" },
+      { href: "typescript.html", label: "TypeScript" },
+      { href: "recipes.html", label: "Recipes & patterns" },
+      { href: "accessibility.html", label: "Accessibility" },
+      { href: "deployment.html", label: "Production & deployment" },
+      { href: "llm-integration.html", label: "LLM integration" },
     ],
   },
   {
@@ -83,14 +84,14 @@ const NAV_GROUPS = [
       { href: "examples.html", label: "Examples" },
       { href: "live-examples.html", label: "Live demos" },
       { href: "playground.html", label: "Playground" },
-      { href: "visual-editor.html", label: "Visual editor", badge: "New" },
+      { href: "visual-editor.html", label: "Visual editor" },
       { href: "chat-bot.html", label: "Chat bot", badge: "AI" },
     ],
   },
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "recipes.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "recipes.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-examples.html", label: "Demos",    matches: ["live-examples.html", "examples.html"] },
@@ -111,6 +112,7 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "migration-guide.html": "migrate react vue angular svelte solid preact nextjs jsx tsx hooks composition api signals stores props state",
   "language.html": "syntax expressions state queries mutations builtins",
+  "language-reference.html": "language reference keywords builtins hooks globals operators $util namespace $state $effect $http $memo $store $router $theme $emit util storage console toast i18n reserved handles route aktion literals atoms ternary spread optional chaining nullish template literals fetch math json date intl crypto navigator settimeout setinterval cheatsheet api",
   "modules.html": "modules import export multi-file multifile code-splitting code splitting link linker file project component reuse private scope shared state url remote dependency app.aktion entry playground zip",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
   "components.html": "props library catalog signatures",
@@ -663,6 +665,105 @@ function buildSearchIndex() {
   return items;
 }
 
+/* ---------------------------------------------------------------------------
+   Deep search index: per-page section headings + the dynamic component and
+   language-reference catalogs. Built lazily (and cached) the first time the
+   palette opens so typing a component name, a `$`-builtin, a keyword, or any
+   inner heading jumps straight to that section on the right page.
+   --------------------------------------------------------------------------- */
+
+let deepIndex = null;
+let deepIndexPromise = null;
+// Pages whose sections are generated client-side at runtime — their headings
+// aren't in the static HTML, so they're indexed from the runtime catalogs
+// (components from the library, builtins/keywords from the language surface).
+const RUNTIME_RENDERED_PAGES = new Set(["components.html", "language-reference.html"]);
+
+function ensureDeepIndex() {
+  if (deepIndex) return Promise.resolve(deepIndex);
+  if (!deepIndexPromise) deepIndexPromise = buildDeepIndex();
+  return deepIndexPromise;
+}
+
+async function buildDeepIndex() {
+  const entries = [];
+
+  // 1. Inner headings of every static doc page.
+  const pages = NAV_GROUPS.flatMap((group) =>
+    group.items.map((item) => ({ href: item.href, title: item.label })),
+  );
+  await Promise.all(
+    pages.map(async (page) => {
+      if (RUNTIME_RENDERED_PAGES.has(page.href)) return;
+      try {
+        const res = await fetch(page.href);
+        if (!res.ok) return;
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const main = doc.querySelector("main");
+        if (!main) return;
+        const seen = new Set();
+        for (const heading of main.querySelectorAll("h2, h3")) {
+          const text = (heading.textContent || "").replace(/#+\s*$/, "").trim();
+          if (!text || text.length > 90) continue;
+          const id = heading.id || slugify(text);
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          entries.push({
+            href: `${page.href}#${id}`,
+            title: text,
+            group: page.title,
+            keywords: `${page.title} ${text}`.toLowerCase(),
+            section: true,
+          });
+        }
+      } catch {
+        /* a page that fails to load just contributes no sections */
+      }
+    }),
+  );
+
+  // 2. Runtime catalogs for the dynamically-rendered pages.
+  try {
+    const mod = await importLibrary();
+    for (const component of mod?.defaultLibrary?.components ?? []) {
+      entries.push({
+        href: `components.html#${slugify(component.name)}`,
+        title: component.name,
+        group: "Components",
+        keywords: `component ${component.name} ${component.description || ""}`.toLowerCase(),
+        section: true,
+      });
+    }
+    if (Array.isArray(mod?.builtinCatalog)) {
+      for (const builtin of mod.builtinCatalog) {
+        entries.push({
+          href: `language-reference.html#builtin-${builtin.name}`,
+          title: builtin.sigil,
+          group: "Language reference",
+          keywords: `${builtin.sigil} ${builtin.category} ${builtin.summary || ""}`.toLowerCase(),
+          section: true,
+        });
+      }
+    }
+    for (const keyword of Object.keys(mod?.keywordDocs ?? {})) {
+      if (keyword.startsWith("$")) continue; // $-forms live in builtinCatalog
+      entries.push({
+        href: `language-reference.html#keyword-${keyword}`,
+        title: keyword,
+        group: "Language reference",
+        keywords: `keyword ${keyword} ${mod.keywordDocs[keyword].summary || ""}`.toLowerCase(),
+        section: true,
+      });
+    }
+  } catch {
+    /* runtime bundle unavailable — page-level results still work */
+  }
+
+  deepIndex = entries;
+  return entries;
+}
+
 function buildSearchPalette() {
   if (searchOverlay) return;
 
@@ -720,15 +821,30 @@ function buildSearchPalette() {
   document.body.appendChild(searchOverlay);
 }
 
+const SEARCH_RESULT_LIMIT = 60;
+
 function renderSearchResults(query) {
   if (!searchResults) return;
   const q = String(query || "").trim().toLowerCase();
-  const all = buildSearchIndex();
+
+  // With no query, show just the clean list of pages. Once the user types,
+  // search across page sections, components, builtins, and keywords too.
+  const pages = buildSearchIndex();
+  const all = q ? pages.concat(deepIndex || []) : pages;
   const matches = q
     ? all.filter((item) =>
         (item.title + " " + item.group + " " + item.keywords).toLowerCase().includes(q),
       )
     : all;
+
+  // While the deep index is still loading, kick it off and re-render with the
+  // same query once it resolves so section/component matches stream in.
+  if (q && !deepIndex) {
+    ensureDeepIndex().then(() => {
+      const open = searchOverlay && searchOverlay.classList.contains("is-open");
+      if (open && searchInput) renderSearchResults(searchInput.value);
+    });
+  }
 
   searchResults.replaceChildren();
   searchItems = [];
@@ -738,8 +854,9 @@ function renderSearchResults(query) {
     return;
   }
 
+  const limited = matches.slice(0, SEARCH_RESULT_LIMIT);
   let currentGroup = null;
-  for (const item of matches) {
+  for (const item of limited) {
     if (item.group !== currentGroup) {
       currentGroup = item.group;
       searchResults.appendChild(el("div", { class: "search-group" }, currentGroup));
@@ -754,6 +871,12 @@ function renderSearchResults(query) {
     link.addEventListener("click", () => closeSearch());
     searchResults.appendChild(link);
     searchItems.push(link);
+  }
+
+  if (matches.length > limited.length) {
+    searchResults.appendChild(
+      el("div", { class: "search-empty" }, `Showing ${limited.length} of ${matches.length} matches — keep typing to narrow.`),
+    );
   }
 
   focusedIndex = 0;
@@ -785,6 +908,9 @@ function activateFocused() {
 function openSearch() {
   buildSearchPalette();
   searchOverlay.classList.add("is-open");
+  // Warm the deep index (sections + component / language catalogs) so the
+  // first keystroke can already match inner headings and symbol names.
+  ensureDeepIndex();
   renderSearchResults("");
   searchInput.value = "";
   setTimeout(() => searchInput.focus(), 10);
@@ -792,6 +918,37 @@ function openSearch() {
 
 function closeSearch() {
   if (searchOverlay) searchOverlay.classList.remove("is-open");
+}
+
+/**
+ * Scroll to the URL hash even when the target section is rendered
+ * asynchronously (the Components and Language-reference pages build their
+ * sections client-side, so a `#anchor` from search navigation may not exist
+ * at first paint). Falls back to a short-lived MutationObserver.
+ */
+function setupHashScroll() {
+  const raw = location.hash.slice(1);
+  if (!raw) return;
+  let id;
+  try { id = decodeURIComponent(raw); } catch { id = raw; }
+  if (!id) return;
+
+  const scrollToTarget = () => {
+    const target = document.getElementById(id);
+    if (!target) return false;
+    target.scrollIntoView({ block: "start" });
+    return true;
+  };
+
+  if (scrollToTarget()) return;
+
+  const main = document.querySelector("main") || document.body;
+  const observer = new MutationObserver(() => {
+    if (scrollToTarget()) observer.disconnect();
+  });
+  observer.observe(main, { childList: true, subtree: true });
+  // Stop watching after a sensible delay so we don't leak the observer.
+  setTimeout(() => observer.disconnect(), 8000);
 }
 
 function setupSearchShortcut() {
@@ -836,6 +993,7 @@ function init() {
   safely("examples", setupExamples);
   safely("playground", setupPlayground);
   safely("search-shortcut", setupSearchShortcut);
+  safely("hash-scroll", setupHashScroll);
 
   window.addEventListener("resize", () => {
     if (window.innerWidth > 760) toggleSidebar(false);

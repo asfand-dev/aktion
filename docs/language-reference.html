@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Language reference · Aktion</title>
+  <meta name="description" content="The complete Aktion language reference — every hook, effect, data primitive, namespace, $util helper, reserved keyword, JavaScript global, and operator, each with a signature, full parameter and return-value tables, a description, and a runnable example." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        window.theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', window.theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* A single live search box (no category chips) keeps the page focused —
+       type to narrow every section at once. */
+    .lr-toolbar {
+      position: sticky;
+      top: calc(var(--doc-topbar-h, 56px) + 4px);
+      z-index: 5;
+      margin: 18px 0 6px;
+    }
+    .lr-search {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-pill);
+      box-shadow: var(--doc-shadow-sm);
+      backdrop-filter: saturate(140%) blur(6px);
+    }
+    .lr-search i { color: var(--doc-text-muted); font-size: 14px; }
+    .lr-search input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--doc-text);
+      font: inherit;
+      font-size: 15px;
+    }
+    .lr-search kbd {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      padding: 2px 7px;
+    }
+
+    /* "On this page" jump links — plain anchors, not toggles. */
+    .lr-toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 4px;
+    }
+    .lr-toc a {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-text-muted);
+      text-decoration: none;
+      padding: 6px 13px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-pill);
+      background: var(--doc-surface);
+      transition: color var(--doc-transition), border-color var(--doc-transition), background var(--doc-transition);
+    }
+    .lr-toc a:hover {
+      color: var(--doc-primary-hover);
+      border-color: rgba(99, 102, 241, 0.35);
+      background: var(--doc-primary-soft);
+    }
+
+    /* Sections stack vertically; each is a column of full-width rows. */
+    .lr-section { margin-top: 52px; scroll-margin-top: calc(var(--doc-topbar-h, 56px) + 16px); }
+    .lr-section[hidden] { display: none; }
+    .lr-section-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .lr-section-head h2 { margin: 0; font-size: 23px; letter-spacing: -0.01em; }
+    .lr-section-count {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--doc-primary-hover);
+      background: var(--doc-primary-soft);
+      border-radius: var(--doc-radius-pill);
+      padding: 3px 10px;
+    }
+    .lr-section-lead {
+      color: var(--doc-text-muted);
+      margin: 8px 0 4px;
+      font-size: 15px;
+      line-height: 1.6;
+      max-width: 70ch;
+    }
+    .lr-list { display: flex; flex-direction: column; gap: 16px; margin-top: 22px; }
+
+    /* A sub-group label inside a section (e.g. $util "Aggregation"). */
+    .lr-divider {
+      margin: 14px 0 2px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+    }
+    .lr-divider[hidden] { display: none; }
+    .lr-divider:first-child { margin-top: 0; }
+
+    /* One reference entry = one full-width row. */
+    .lr-entry {
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      padding: 20px 22px;
+      box-shadow: var(--doc-shadow-sm);
+      scroll-margin-top: calc(var(--doc-topbar-h, 56px) + 90px);
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+    .lr-entry:hover { border-color: rgba(99, 102, 241, 0.3); box-shadow: var(--doc-shadow); }
+    .lr-entry[hidden] { display: none; }
+
+    .lr-entry-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .lr-name {
+      font-family: var(--doc-mono);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--doc-primary-hover);
+      background: var(--doc-primary-soft);
+      padding: 4px 13px;
+      border-radius: var(--doc-radius-pill);
+    }
+    .lr-kind {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-pill);
+      padding: 3px 10px;
+    }
+    .lr-anchor {
+      margin-left: auto;
+      color: var(--doc-text-muted);
+      opacity: 0;
+      text-decoration: none;
+      font-size: 13px;
+      transition: opacity 150ms ease, color 150ms ease;
+    }
+    .lr-entry:hover .lr-anchor { opacity: 1; }
+    .lr-anchor:hover { color: var(--doc-primary-hover); }
+
+    .lr-sig {
+      font-family: var(--doc-mono);
+      font-size: 13px;
+      color: var(--doc-text);
+      background: var(--doc-bg);
+      border: 1px solid var(--doc-border-subtle);
+      border-radius: var(--doc-radius-sm);
+      padding: 9px 13px;
+      margin: 13px 0 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .lr-desc {
+      color: var(--doc-text);
+      font-size: 14.5px;
+      line-height: 1.65;
+      margin: 14px 0 0;
+      max-width: 74ch;
+    }
+
+    .lr-block { margin-top: 18px; }
+    .lr-block-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      margin: 0 0 8px;
+    }
+    .lr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .lr-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      padding: 0 14px 7px 0;
+      border-bottom: 1px solid var(--doc-border);
+    }
+    .lr-table td {
+      padding: 9px 14px 9px 0;
+      border-bottom: 1px solid var(--doc-border-subtle);
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    .lr-table tr:last-child td { border-bottom: none; }
+    .lr-table td:last-child, .lr-table th:last-child { padding-right: 0; }
+    .lr-pname { font-family: var(--doc-mono); font-weight: 600; color: var(--doc-text); white-space: nowrap; }
+    .lr-ptype { font-family: var(--doc-mono); color: var(--doc-accent-hover, var(--doc-primary-hover)); white-space: nowrap; }
+    .lr-pdesc { color: var(--doc-text-muted); }
+    .lr-opt {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .lr-returns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+    .lr-returns .lr-ptype { flex: none; }
+    .lr-returns span { color: var(--doc-text-muted); }
+
+    .lr-example { margin-top: 18px; }
+    .lr-example pre {
+      margin: 0;
+      background: var(--doc-bg);
+      border: 1px solid var(--doc-border-subtle);
+      border-radius: var(--doc-radius-sm);
+      padding: 13px 15px;
+      overflow-x: auto;
+    }
+    .lr-example code {
+      font-family: var(--doc-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--doc-text);
+      white-space: pre;
+    }
+    .lr-notes { margin: 16px 0 0; padding-left: 18px; }
+    .lr-notes li { color: var(--doc-text-muted); font-size: 13.5px; line-height: 1.6; margin: 4px 0; }
+    .lr-notes code, .lr-desc code, .lr-section-lead code {
+      font-family: var(--doc-mono);
+      font-size: 0.9em;
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-sm);
+      padding: 1px 5px;
+    }
+
+    .lr-status {
+      padding: 30px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 14px;
+      background: var(--doc-surface);
+      border: 1px dashed var(--doc-border);
+      border-radius: var(--doc-radius);
+      margin-top: 24px;
+    }
+    .lr-status[hidden] { display: none; }
+  </style>
+</head>
+<body data-page="language-reference">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Reference</span>
+        <h1>Language reference.</h1>
+        <p class="lead">
+          The complete surface of the Aktion language &mdash; every hook,
+          effect, data primitive, namespace, <code>$util</code> helper, reserved
+          keyword, JavaScript global, and operator. Each entry lists its
+          signature, a full <strong>parameter</strong> and
+          <strong>return&#8209;value</strong> table with types and descriptions,
+          and a runnable example.
+        </p>
+        <p class="lead" style="font-size: 14px;">
+          New to Aktion? Start with the conceptual
+          <a href="language.html">Language guide</a>. For the visual catalog of
+          UI components, see the <a href="components.html">Component reference</a>.
+        </p>
+      </header>
+
+      <div class="lr-toolbar" role="search">
+        <label class="lr-search">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <input
+            id="lr-filter"
+            type="text"
+            placeholder="Search the reference — try $effect, route, groupBy, ternary…"
+            aria-label="Search the language reference"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <kbd>esc</kbd>
+        </label>
+      </div>
+
+      <nav class="lr-toc" id="lr-toc" aria-label="On this page"></nav>
+
+      <div id="lr-content">
+        <div class="lr-status">Loading the language reference…</div>
+      </div>
+      <div class="lr-status" id="lr-empty" hidden>No matches. Try a different term or clear the search.</div>
+    </main>
+  </div>
+
+  <script type="module">
+    /* ----------------------------------------------------------------------
+       The reference content is authored here as structured data so every
+       entry can carry a full parameter / return-value table. The runtime
+       catalogs (builtinCatalog / keywordDocs) are imported only to keep the
+       keyword list and builtin anchors in lock-step with the language — the
+       rich descriptions, param types, and examples live below.
+
+       Anchor scheme (kept stable for the site-wide search index):
+         builtins  → #builtin-<name>      keywords → #keyword-<word>
+         $util     → #util-<name>         globals  → #global-<name>
+         operators → #operator-<slug>
+       ---------------------------------------------------------------------- */
+    import { keywordDocs } from "../dist/aktion.js";
+
+    const content = document.getElementById("lr-content");
+    const tocHost = document.getElementById("lr-toc");
+    const filterInput = document.getElementById("lr-filter");
+    const emptyEl = document.getElementById("lr-empty");
+
+    const esc = (s) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // ---- Core builtins: hooks, effects, data, app/routing/theming ----------
+    const SECTIONS = [
+      {
+        id: "hooks",
+        title: "Reactive state & hooks",
+        lead:
+          "Aktion has one reactive atom — declare it with <code>$name = value</code>, read or write it with <code>$name</code>. For per-instance state with explicit setters, reach for the five React-style hooks below. Call hooks unconditionally at the top of a component body.",
+        entries: [
+          {
+            anchor: "builtin-state",
+            name: "$state",
+            kind: "Hook",
+            signature: "$state(initial) → [value, setValue]",
+            description:
+              "Per-instance state with an explicit setter — Aktion's equivalent of React's useState. The initial value is evaluated once, on first render.",
+            params: [
+              { name: "initial", type: "any", desc: "The starting value. Evaluated once, on the instance's first render." },
+            ],
+            returns: {
+              type: "[value, setValue]",
+              desc: "A tuple. setValue(next) replaces the value; setValue(prev => next) derives it from the previous value. Either form re-renders the component.",
+            },
+            example: 'function Counter() {\n  const [n, setN] = $state(0)\n  return Button(`Clicked ${n}`, { onClick: () => setN(c => c + 1) })\n}',
+            notes: [
+              "State resets when the instance leaves the tree — a remounted component starts from <code>initial</code> again.",
+            ],
+          },
+          {
+            anchor: "builtin-memo",
+            name: "$memo",
+            kind: "Hook",
+            signature: "$memo(() => value, [deps]) → value",
+            description:
+              "A cached value that recomputes only when one of its dependencies changes (shallow Object.is comparison) — like React's useMemo. Omit the deps array to recompute on every render.",
+            params: [
+              { name: "factory", type: "() => T", desc: "Function returning the value to cache." },
+              { name: "deps", type: "any[]", optional: true, desc: "Dependency list; the value recomputes when any entry changes. Omit to recompute every render." },
+            ],
+            returns: { type: "T", desc: "The most recently computed (memoized) value." },
+            example: 'const total = $memo(() => $util.sum($cart), [$cart])',
+          },
+          {
+            anchor: "builtin-ref",
+            name: "$ref",
+            kind: "Hook",
+            signature: "$ref(initial) → { current }",
+            description:
+              "A stable { current } box (like useRef) whose identity persists across renders. Writing .current does not trigger a re-render — use it for a DOM node, a timer id, or a remembered previous value.",
+            params: [
+              { name: "initial", type: "any", desc: "Initial value stored at .current." },
+            ],
+            returns: { type: "{ current: T }", desc: "A stable box. Read and write box.current without re-rendering." },
+            example: 'const box = $ref(null)\n// box.current persists across renders without re-rendering',
+          },
+          {
+            anchor: "builtin-reducer",
+            name: "$reducer",
+            kind: "Hook",
+            signature: "$reducer((state, action) => next, initial) → [state, dispatch]",
+            description:
+              "State managed through a pure reducer (like useReducer) — the clean way to coordinate many related transitions instead of juggling several setters.",
+            params: [
+              { name: "reducer", type: "(state, action) => next", desc: "Pure function computing the next state from the current state and a dispatched action." },
+              { name: "initial", type: "any", desc: "The initial state." },
+            ],
+            returns: {
+              type: "[state, dispatch]",
+              desc: "state is the current value; dispatch(action) runs the reducer and re-renders when the result changes.",
+            },
+            example: 'const [count, dispatch] = $reducer(\n  (c, a) => a === "inc" ? c + 1 : c,\n  0\n)',
+          },
+          {
+            anchor: "builtin-id",
+            name: "$id",
+            kind: "Hook",
+            signature: "$id(prefix?) → string",
+            description:
+              "A stable, unique id string for the instance's lifetime (like useId) — for for / id / aria-labelledby wiring that must not collide when a component renders more than once.",
+            params: [
+              { name: "prefix", type: "string", optional: true, desc: "Optional prefix prepended to the generated id." },
+            ],
+            returns: { type: "string", desc: "A unique id, stable across the instance's renders." },
+            example: 'const fieldId = $id("email")',
+          },
+        ],
+      },
+
+      {
+        id: "effects",
+        title: "Effects & reactivity",
+        lead:
+          "Side effects and shared state. Effects run in response to dependency changes; <code>$store</code> holds app-global state with reference-stable methods so distant components never prop-drill.",
+        entries: [
+          {
+            anchor: "builtin-effect",
+            name: "$effect",
+            kind: "Effect",
+            signature: "$effect(() => { … }, [deps])",
+            description:
+              "A declarative side effect — timers, fetches, analytics, subscriptions — re-run when its dependencies change. Lives either next to top-level bindings (mounts once) or inside a component body (mounts per instance). With no deps it runs once on mount.",
+            params: [
+              { name: "callback", type: "() => void", desc: "The effect body. Call cleanup(fn) inside it to register teardown for intervals, listeners, and observers." },
+              { name: "deps", type: "Array<$atom | string>", optional: true, desc: 'Dependencies: reactive atoms plus lifecycle tokens "mount", "unmount", "every(N)", "debounce(N)", "throttle(N)". Defaults to ["mount"].' },
+            ],
+            returns: { type: "void", desc: "Nothing; effects act by side effect." },
+            example: 'function LiveClock() {\n  $now = $util.now()\n  $effect(() => { $now = $util.now() }, ["every(1000)"])\n  return Text($util.formatDate($now, "time"))\n}',
+            notes: [
+              "Combine deps freely: <code>[$query, $page, \"debounce(250)\"]</code> re-runs on either atom, trailing-edge debounced.",
+              "<code>cleanup(fn)</code> teardown runs before the next re-run and on unmount.",
+            ],
+          },
+          {
+            anchor: "builtin-optimistic",
+            name: "$optimistic",
+            kind: "Effect",
+            signature: "$optimistic(() => { … })",
+            description:
+              "Run optimistic writes that automatically roll back if the callback throws or its promise rejects. Apply the happy-path state immediately, then perform the request inside; on failure the runtime restores the prior state (including atoms created during the callback).",
+            params: [
+              { name: "callback", type: "() => void | Promise<void>", desc: "Body that applies the optimistic update and performs the server call." },
+            ],
+            returns: { type: "void", desc: "Nothing; state is committed or rolled back automatically." },
+            example: 'function like() {\n  $optimistic(() => {\n    $liked = true\n    $save = $http({ url: API + "/like", method: "POST" })\n  })\n}',
+          },
+          {
+            anchor: "builtin-store",
+            name: "$store",
+            kind: "State",
+            signature: "$store({ ...state, ...methods }) → store",
+            description:
+              "A global store of shared state plus actions (like Zustand / Pinia). Non-function entries are reactive state; function entries are methods or getters that receive the store handle as their first argument. The handle is an app-global singleton with reference-stable methods — read store.field, call store.method(args).",
+            params: [
+              { name: "definition", type: "object", desc: "State fields (any non-function value) and method/getter functions. Each function receives the store handle s as its first parameter; mutate with s.field = …." },
+            ],
+            returns: { type: "store", desc: "A singleton handle. State reads are fine-grained (store.field); methods are reference-stable across renders." },
+            example: 'cart = $store({\n  items: [],\n  count: (s) => s.items.length,\n  add: (s, item) => { s.items = [...s.items, item] }\n})\n// cart.add(item) · cart.count()',
+          },
+        ],
+      },
+
+      {
+        id: "data",
+        title: "Data layer",
+        lead:
+          "The network and localization primitives. <code>$http</code> is the single fetch function; <code>$query</code> and <code>$mutation</code> are its cached-read and deferred-write variants; <code>$i18n</code> builds a translation bundle.",
+        entries: [
+          {
+            anchor: "builtin-http",
+            name: "$http",
+            kind: "Data",
+            signature: "$http({ url, method, query, headers, body, … }) → resource",
+            description:
+              "The single HTTP primitive. Each call is self-contained — pass a full absolute url; there are no host-wide defaults. A request fires once when its binding mounts and returns a reactive resource bag. Re-run it with .refetch() or by wrapping the call in an $effect(..., [$dep]).",
+            params: [
+              { name: "url", type: "string", desc: "Required. Full absolute URL." },
+              { name: "method", type: "string", optional: true, desc: '"GET" (default), "POST", "PUT", "PATCH", "DELETE", …' },
+              { name: "query", type: "object", optional: true, desc: "Serialised into the querystring ({ limit: 5 } → ?limit=5)." },
+              { name: "headers", type: "object", optional: true, desc: "Plain object of request headers." },
+              { name: "body", type: "any", optional: true, desc: "Request body. Objects are JSON-encoded (sets Content-Type: application/json unless you provide one)." },
+              { name: "...rest", type: "RequestInit", optional: true, desc: "Any other fetch option (credentials, mode, cache, redirect, …) is forwarded verbatim." },
+            ],
+            returns: {
+              type: "resource",
+              desc: "A reactive bag whose fields update as the request settles:",
+              members: [
+                { name: ".data", type: "any", desc: "Parsed response body; null until resolved." },
+                { name: ".error", type: "any", desc: "null on success." },
+                { name: ".status", type: "number", desc: "HTTP status code, e.g. 200." },
+                { name: ".loading", type: "boolean", desc: "true while the request is in flight." },
+                { name: ".headers", type: "object", desc: "Response headers as a plain object." },
+                { name: ".lastUpdated", type: "number", desc: "ms-epoch of the last success." },
+                { name: ".refetch()", type: "() => void", desc: "Re-issue the request." },
+                { name: ".cancel()", type: "() => void", desc: "Abort the in-flight request." },
+                { name: ".onDone", type: "(bag) => void", desc: "Settable callback fired each time the request settles (success or error)." },
+              ],
+            },
+            example: '$orders = $http({\n  url: "https://api.example.com/orders",\n  query: { limit: 5, status: "open" }\n})\n// $orders.data · $orders.loading · $orders.refetch()',
+          },
+          {
+            anchor: "builtin-query",
+            name: "$query",
+            kind: "Data",
+            signature: "$query({ url, key, ttl, … }) → resource",
+            description:
+              "A cached and deduplicated read. Same config as $http, but calls sharing a key (or the same derived method + url + query + body) share one in-flight request and one reactive bag — so data fetched from several components hits the network once.",
+            params: [
+              { name: "url", type: "string", desc: "Required. Full absolute URL." },
+              { name: "key", type: "string", optional: true, desc: "Explicit cache key. Calls with the same key share one bag. Never sent to fetch." },
+              { name: "ttl", type: "number", optional: true, desc: "Milliseconds. Auto-refetch when cached data is older than the TTL. Never sent to fetch." },
+              { name: "...rest", type: "$http config", optional: true, desc: "Every $http config key (method, query, headers, body, …) is accepted." },
+            ],
+            returns: { type: "resource", desc: "The same bag shape as $http (.data, .loading, .error, .refetch(), …)." },
+            example: '$users = $query({ url: API + "/users", key: "users", ttl: 30000 })\n// reused elsewhere — no second request:\n$alsoUsers = $query({ url: API + "/users" })',
+          },
+          {
+            anchor: "builtin-mutation",
+            name: "$mutation",
+            kind: "Data",
+            signature: "$mutation({ url, method, … }) → mutation",
+            description:
+              "The deferred write variant — it does nothing until you call .mutate(overrides?). Use it for create / update / delete that should run on a click, not on mount. Method defaults to POST.",
+            params: [
+              { name: "url", type: "string", desc: "Required. Full absolute URL." },
+              { name: "method", type: "string", optional: true, desc: 'Defaults to "POST".' },
+              { name: "...rest", type: "$http config", optional: true, desc: "Any $http config key (body, query, headers, …)." },
+            ],
+            returns: {
+              type: "mutation",
+              desc: "A deferred bag:",
+              members: [
+                { name: ".mutate(overrides?)", type: "(object?) => Promise", desc: "Fire the write. Shallow-merges overrides over the base config and resolves with the response body." },
+                { name: ".data", type: "any", desc: "Last response body." },
+                { name: ".loading", type: "boolean", desc: "true while a mutate() is in flight." },
+                { name: ".error", type: "any", desc: "null on success." },
+                { name: ".reset()", type: "() => void", desc: "Clear the bag." },
+                { name: ".onDone", type: "(bag) => void", desc: "Settle hook, as on $http." },
+              ],
+            },
+            example: '$save = $mutation({ url: API + "/todos" })\n$save.onDone = () => $todos.refetch()\nButton("Add", { onClick: () => $save.mutate({ body: { title: $title } }) })',
+          },
+          {
+            anchor: "builtin-i18n",
+            name: "$i18n",
+            kind: "Data",
+            signature: "$i18n({ translations, defaultLanguage, currentLanguage }) → bundle",
+            description:
+              "Build a translation bundle. Look up a key with t(key, vars?); placeholders use {name} syntax and fall back through currentLanguage → defaultLanguage → the bare key.",
+            params: [
+              { name: "translations", type: "object", desc: "Map of key → { lang: string }. e.g. { hi: { en: \"Hello\", fr: \"Bonjour\" } }." },
+              { name: "defaultLanguage", type: "string", optional: true, desc: "Fallback language tag." },
+              { name: "currentLanguage", type: "string", optional: true, desc: "Active language tag — drive it from a $atom for reactive switching." },
+            ],
+            returns: {
+              type: "bundle",
+              desc: "A translation handle:",
+              members: [
+                { name: "t(key, vars?)", type: "(string, object?) => string", desc: "Resolve a key, interpolating {placeholders} from vars." },
+                { name: "setCurrentLanguage(lang)", type: "(string) => void", desc: "Switch the active language." },
+                { name: "getCurrentLanguage()", type: "() => string", desc: "Return the active language tag." },
+              ],
+            },
+            example: 'const { t } = $i18n({\n  defaultLanguage: "en",\n  translations: { hi: { en: "Hello", fr: "Bonjour" } }\n})\nText(t("hi"))',
+          },
+        ],
+      },
+
+      {
+        id: "app",
+        title: "App, routing & theming",
+        lead:
+          "The program-level registrations: mount the UI root, map URLs to trees, brand the theme in-script, and emit events to the host page.",
+        entries: [
+          {
+            anchor: "builtin-app",
+            name: "$app",
+            kind: "App",
+            signature: "$app(root)",
+            description:
+              "Register the root of the rendered UI tree. Every program needs exactly one $app(…), ideally on line one so users see structure before children stream in. Accepts a single node, an array of nodes, or variadic nodes.",
+            params: [
+              { name: "root", type: "Node | Node[]", desc: "The top-level component tree. Use forward references and define the pieces below." },
+            ],
+            returns: { type: "void", desc: "Nothing; it registers the render root." },
+            example: '$app(Column([\n  PageHeader("Hello"),\n  Card([Text("Hi")])\n]))',
+          },
+          {
+            anchor: "builtin-router",
+            name: "$router",
+            kind: "Routing",
+            signature: "$router({ '/path': Tree(), default: Fallback() }) → outlet",
+            description:
+              "An outlet-first router mapping path patterns to component trees. Patterns support params (/users/:id) and a default arm for unmatched paths. Read the active route via the reserved route handle.",
+            params: [
+              { name: "routes", type: "object", desc: "Map of path pattern → component tree. Include a default: arm for unmatched paths. Patterns may contain :params." },
+            ],
+            returns: { type: "outlet", desc: "A router outlet node — place it in the tree where the matched route should render." },
+            example: 'pages = $router({\n  "/": Home(),\n  "/users/:id": UserPage(),\n  default: NotFound()\n})\n// route.path · route.params.id · route.navigate("/")',
+          },
+          {
+            anchor: "builtin-theme",
+            name: "$theme",
+            kind: "Theming",
+            signature: "$theme({ colors, radius, font, … })",
+            description:
+              "An in-script theme override merged on top of the active base theme. Use it only when a brand feel is explicitly requested — otherwise keep programs theme-neutral and let the host's theme attribute decide.",
+            params: [
+              { name: "tokens", type: "object", desc: "Token groups: colors, radius, font (each a flat object of token → value), plus metadata keys name and direction (\"ltr\" / \"rtl\")." },
+            ],
+            returns: { type: "void", desc: "Nothing; it merges tokens into the active theme." },
+            example: '$theme({\n  colors: { primary: "#635bff", bg: "#0a0a23" },\n  radius: { button: "999px" },\n  font: { family: "Inter, sans-serif" }\n})',
+          },
+          {
+            anchor: "builtin-emit",
+            name: "$emit",
+            kind: "Events",
+            signature: "$emit('name', detail?)",
+            description:
+              "Dispatch a CustomEvent from the host <aktion-app> element so the embedding page can react. The payload arrives on event.detail.",
+            params: [
+              { name: "name", type: "string", desc: "Event name (e.g. \"saved\", \"assistant-message\")." },
+              { name: "detail", type: "any", optional: true, desc: "Payload attached to event.detail." },
+            ],
+            returns: { type: "void", desc: "Nothing; it fires a DOM event." },
+            example: 'Button("Save", { onClick: () => $emit("saved", { id: $id }) })',
+          },
+        ],
+      },
+
+      {
+        id: "namespaces",
+        title: "Namespaces",
+        lead:
+          "Always-in-scope namespace objects whose members are reached with <code>.</code> — no import, no declaration. The large <code>$util</code> namespace has its own section below.",
+        entries: [
+          {
+            anchor: "builtin-util",
+            name: "$util",
+            kind: "Namespace",
+            signature: "$util.<helper>(…)",
+            description:
+              "A single global object of pure, side-effect-free helpers for aggregation, reshaping, formatting, dates, math, and strings. See the dedicated $util helpers section below for every function with its parameters and return type.",
+            members: [
+              { name: "Aggregation", desc: "count · sum · avg · min · max · first · last" },
+              { name: "Array shape", desc: "filter · sort · find · groupBy · unique · chunk · zip · range · …" },
+              { name: "Formatting", desc: "format · formatDate · plural" },
+              { name: "Strings & dates", desc: "capitalize · case · join · now · addDays · diffDays · …" },
+            ],
+            membersTitle: "Helper groups",
+            example: 'total = $util.sum($cart)\nlabel = $util.plural($n, "item")',
+          },
+          {
+            anchor: "builtin-storage",
+            name: "$storage",
+            kind: "Namespace",
+            signature: "$storage.set(key, value) · $storage.get(key)",
+            description:
+              "Browser storage. localStorage is the default; .session targets sessionStorage and .cookies manages cookies. Non-string values round-trip through JSON; missing keys return null and failures are swallowed silently.",
+            members: [
+              { name: "set(key, value)", type: "(string, any) => void", desc: "Write a value (JSON-encoded if non-string) to localStorage." },
+              { name: "get(key)", type: "(string) => any", desc: "Read and parse a value; null if missing." },
+              { name: "remove(key)", type: "(string) => void", desc: "Delete a key." },
+              { name: "clear()", type: "() => void", desc: "Clear localStorage." },
+              { name: ".session", type: "namespace", desc: "Same API backed by sessionStorage (per-tab)." },
+              { name: ".cookies", type: "namespace", desc: "set(key, value, opts?) / get / remove / clear. Options: expires, maxAge, path, domain, secure, sameSite." },
+            ],
+            membersTitle: "Members",
+            example: '$storage.set("draft", $form)\nlet draft = $storage.get("draft")\n$storage.session.set("tab", $tab)',
+          },
+          {
+            anchor: "builtin-console",
+            name: "$console",
+            kind: "Namespace",
+            signature: "$console.log(…) · console.log(…)",
+            description:
+              "Host console forwarder. Usable inside function bodies, effect callbacks, and inline lambdas. The plain console global resolves to the same methods.",
+            members: [
+              { name: "log(...args)", type: "(...any) => void", desc: "Standard log." },
+              { name: "warn(...args)", type: "(...any) => void", desc: "Warning." },
+              { name: "error(...args)", type: "(...any) => void", desc: "Error." },
+              { name: "info(...args)", type: "(...any) => void", desc: "Informational." },
+              { name: "debug(...args)", type: "(...any) => void", desc: "Debug." },
+            ],
+            membersTitle: "Members",
+            example: '$console.log("value", $state)\nconsole.error("Failed", $error)',
+          },
+          {
+            anchor: "builtin-toast",
+            name: "$toast",
+            kind: "Namespace",
+            signature: "$toast.show(message, options?) → id",
+            description:
+              "An imperative notification manager that owns the toast lifecycle (timers included). Render the reactive .items list with the Toasts / Toast components.",
+            members: [
+              { name: "show(msg, opts?)", type: "(string, object?) => id", desc: "Show a toast; options include tone and duration (0 = sticky). Auto-dismisses after 4000ms by default." },
+              { name: "success / error / info / warning", type: "(string) => id", desc: "Tone shortcuts for show()." },
+              { name: "dismiss(id)", type: "(id) => void", desc: "Remove one toast." },
+              { name: "clear()", type: "() => void", desc: "Remove all toasts." },
+              { name: ".items", type: "array", desc: "Reactive list of { id, message, title?, tone, duration, createdAt }." },
+            ],
+            membersTitle: "Members",
+            example: '$toast.success("Saved!")\n$toast.error("Could not save", { duration: 0 })\ntoaster = Toasts($toast.items.map(t =>\n  Toast({ message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))',
+          },
+        ],
+      },
+    ];
+
+    // ---- $util helpers (full list, grouped) --------------------------------
+    // [name, signature, returnType, description, params[], example]
+    const UTIL_GROUPS = [
+      ["Aggregation", [
+        ["count", "$util.count(array)", "number", "Number of items in an array or collection.", [["array", "any[]", "The array to measure."]], '$util.count($todos)  // 3'],
+        ["sum", "$util.sum(array)", "number", "Sum of the numeric items in an array.", [["array", "number[]", "Numbers to add."]], '$util.sum([12, 8, 30])  // 50'],
+        ["avg", "$util.avg(array)", "number", "Arithmetic mean of the numeric items.", [["array", "number[]", "Numbers to average."]], '$util.avg([4, 8, 12])  // 8'],
+        ["min", "$util.min(array)", "number", "Smallest numeric value.", [["array", "number[]", "Numbers to scan."]], '$util.min([4, 8, 12])  // 4'],
+        ["max", "$util.max(array)", "number", "Largest numeric value.", [["array", "number[]", "Numbers to scan."]], '$util.max([4, 8, 12])  // 12'],
+        ["first", "$util.first(array)", "any", "First item, or null when empty.", [["array", "any[]", "The array."]], '$util.first($rows)'],
+        ["last", "$util.last(array)", "any", "Last item, or null when empty.", [["array", "any[]", "The array."]], '$util.last($rows)'],
+      ]],
+      ["Numeric", [
+        ["round", "$util.round(n, decimals?)", "number", "Round to N decimal places.", [["n", "number", "The value."], ["decimals", "number", "Decimal places (default 0).", true]], '$util.round(3.14159, 2)  // 3.14'],
+        ["abs", "$util.abs(n)", "number", "Absolute value.", [["n", "number", "The value."]], '$util.abs(-5)  // 5'],
+        ["floor", "$util.floor(n)", "number", "Round down to the nearest integer.", [["n", "number", "The value."]], '$util.floor(4.9)  // 4'],
+        ["ceil", "$util.ceil(n)", "number", "Round up to the nearest integer.", [["n", "number", "The value."]], '$util.ceil(4.1)  // 5'],
+        ["clamp", "$util.clamp(n, min, max)", "number", "Constrain a number into a range.", [["n", "number", "The value."], ["min", "number", "Lower bound."], ["max", "number", "Upper bound."]], '$util.clamp(120, 0, 100)  // 100'],
+        ["pow", "$util.pow(base, exp)", "number", "Base raised to an exponent.", [["base", "number", "The base."], ["exp", "number", "The exponent."]], '$util.pow(2, 8)  // 256'],
+        ["sqrt", "$util.sqrt(n)", "number", "Square root.", [["n", "number", "The value."]], '$util.sqrt(81)  // 9'],
+        ["log", "$util.log(n)", "number", "Natural logarithm.", [["n", "number", "The value."]], '$util.log(Math.E)  // 1'],
+        ["random", "$util.random()", "number", "Random number in [0, 1).", [], 'let r = $util.random()'],
+      ]],
+      ["Array shape", [
+        ["filter", "$util.filter(array, field, op, value)", "any[]", "Keep items whose field matches a comparator operator.", [["array", "any[]", "Rows to filter."], ["field", "string", "Field to compare."], ["op", "string", 'Comparator: "==", "!=", ">", "<", ">=", "<=".'], ["value", "any", "Value to compare against."]], '$util.filter($rows, "status", "==", "open")'],
+        ["sort", "$util.sort(array, field, dir?)", "any[]", "Stable sort by a field.", [["array", "any[]", "Rows to sort."], ["field", "string", "Field to sort by."], ["dir", "string", '"asc" (default) or "desc".', true]], '$util.sort($rows, "score", "desc")'],
+        ["find", "$util.find(array, field, op, value)", "any", "First item matching a comparator (or null).", [["array", "any[]", "Rows to scan."], ["field", "string", "Field to compare."], ["op", "string", "Comparator operator."], ["value", "any", "Value to compare against."]], '$util.find($rows, "id", "==", 42)'],
+        ["groupBy", "$util.groupBy(array, field)", "object", "Bucket rows into { groupKey: [items…] }.", [["array", "any[]", "Rows to group."], ["field", "string", "Field to group by."]], '$util.groupBy($rows, "team")'],
+        ["slice", "$util.slice(array, start?, end?)", "any[]", "A shallow slice of the array.", [["array", "any[]", "The array."], ["start", "number", "Start index.", true], ["end", "number", "End index (exclusive).", true]], '$util.slice($rows, 0, 10)'],
+        ["reverse", "$util.reverse(array)", "any[]", "A reversed copy (input untouched).", [["array", "any[]", "The array."]], '$util.reverse([1, 2, 3])  // [3, 2, 1]'],
+        ["unique", "$util.unique(array, field?)", "any[]", "Drop duplicate values, optionally by a field.", [["array", "any[]", "The array."], ["field", "string", "Dedupe by this field.", true]], '$util.unique([1, 1, 2])  // [1, 2]'],
+        ["partition", "$util.partition(array, field, op, value)", "[any[], any[]]", "Split into [matching, rest] by a comparator.", [["array", "any[]", "Rows to split."], ["field", "string", "Field to compare."], ["op", "string", "Comparator operator."], ["value", "any", "Value to compare against."]], 'let [open, done] = $util.partition($todos, "done", "==", false)'],
+        ["keyBy", "$util.keyBy(array, field)", "object", "Build a { keyValue: item } lookup map.", [["array", "any[]", "Rows to index."], ["field", "string", "Field used as the key."]], '$util.keyBy($users, "id")'],
+        ["chunk", "$util.chunk(array, size)", "any[][]", "Split into fixed-size groups.", [["array", "any[]", "The array."], ["size", "number", "Group size."]], '$util.chunk([1,2,3,4], 2)  // [[1,2],[3,4]]'],
+        ["flatten", "$util.flatten(array, depth?)", "any[]", "Flatten nested arrays.", [["array", "any[]", "The array."], ["depth", "number", "Levels to flatten (default 1).", true]], '$util.flatten([[1],[2,3]])  // [1, 2, 3]'],
+        ["zip", "$util.zip(...arrays)", "any[][]", "Pair up by index, padding short lists with null.", [["...arrays", "any[][]", "Two or more arrays."]], '$util.zip([1,2], ["a","b"])  // [[1,"a"],[2,"b"]]'],
+        ["range", "$util.range(start, end, step?)", "number[]", "Inclusive integer range — handy for skeletons.", [["start", "number", "First value."], ["end", "number", "Last value (inclusive)."], ["step", "number", "Increment (default 1).", true]], '$util.range(1, 3)  // [1, 2, 3]'],
+        ["repeat", "$util.repeat(value, n)", "any[]", "Repeat a value N times.", [["value", "any", "Value to repeat."], ["n", "number", "Repeat count."]], '$util.repeat("•", 3)  // ["•","•","•"]'],
+      ]],
+      ["Object shape", [
+        ["pick", "$util.pick(obj, keys)", "object", "Keep only the listed keys.", [["obj", "object", "Source object."], ["keys", "string[]", "Keys to keep."]], '$util.pick($user, ["id", "name"])'],
+        ["omit", "$util.omit(obj, keys)", "object", "Drop the listed keys.", [["obj", "object", "Source object."], ["keys", "string[]", "Keys to drop."]], '$util.omit($user, ["password"])'],
+        ["merge", "$util.merge(target, ...sources)", "object", "Deep-merge plain objects (inputs untouched).", [["target", "object", "Base object."], ["...sources", "object", "Objects merged on top, left to right."]], '$util.merge($defaults, $overrides)'],
+        ["cloneDeep", "$util.cloneDeep(value)", "any", "An independent deep copy (arrays / objects / dates).", [["value", "any", "Value to clone."]], 'let copy = $util.cloneDeep($state)'],
+      ]],
+      ["Formatting", [
+        ["format", "$util.format(value, mode?, options?)", "string", "Locale-aware number formatter.", [["value", "number", "The number."], ["mode", "string", '"number", "currency", "percent", "compact".', true], ["options", "object", "Intl.NumberFormat options (e.g. { currency }).", true]], '$util.format(48230, "currency", { currency: "USD" })'],
+        ["formatDate", "$util.formatDate(value, format?)", "string", "Format a date.", [["value", "Date | number | string", "The date."], ["format", "string", 'Named mode ("relative", "date", "time", "datetime", "iso") or a pattern.', true]], '$util.formatDate($order.date, "relative")'],
+        ["plural", "$util.plural(n, singular, plural?)", "string", "Pick singular / plural form for a count.", [["n", "number", "The count."], ["singular", "string", "Singular noun."], ["plural", "string", "Plural noun (default: singular + \"s\").", true]], '$util.plural(2, "order")  // "2 orders"'],
+      ]],
+      ["Date & time", [
+        ["now", "$util.now()", "number", "Current moment as epoch milliseconds.", [], 'let t = $util.now()'],
+        ["today", "$util.today()", "string", "Today's date at midnight, as an ISO string.", [], 'let d = $util.today()'],
+        ["addDays", "$util.addDays(date, n)", "Date", "Shift a date by N days.", [["date", "Date | string", "Base date."], ["n", "number", "Days to add (may be negative)."]], '$util.addDays($util.today(), 7)'],
+        ["addHours", "$util.addHours(date, n)", "Date", "Shift a date by N hours.", [["date", "Date | number", "Base date."], ["n", "number", "Hours to add."]], '$util.addHours($util.now(), 3)'],
+        ["diffDays", "$util.diffDays(start, end)", "number", "Whole-day difference between two dates.", [["start", "Date | string", "Start date."], ["end", "Date | string", "End date."]], '$util.diffDays(a, b)'],
+        ["startOfWeek", "$util.startOfWeek(date)", "Date", "UTC Sunday 00:00:00 for the week of a date.", [["date", "Date | string", "Any date in the week."]], '$util.startOfWeek($util.today())'],
+        ["endOfMonth", "$util.endOfMonth(date)", "Date", "Last moment of the calendar month.", [["date", "Date | string", "Any date in the month."]], '$util.endOfMonth($util.today())'],
+      ]],
+      ["String", [
+        ["capitalize", "$util.capitalize(s)", "string", "Uppercase the first character.", [["s", "string", "Input string."]], '$util.capitalize("hello")  // "Hello"'],
+        ["lowercase", "$util.lowercase(s)", "string", "Lowercase the whole string.", [["s", "string", "Input string."]], '$util.lowercase("HI")  // "hi"'],
+        ["uppercase", "$util.uppercase(s)", "string", "Uppercase the whole string.", [["s", "string", "Input string."]], '$util.uppercase("hi")  // "HI"'],
+        ["titlecase", "$util.titlecase(s)", "string", "Title-case each word.", [["s", "string", "Input string."]], '$util.titlecase("hello world")  // "Hello World"'],
+        ["case", "$util.case(value, style)", "string", "Re-case a value.", [["value", "string", "Input string."], ["style", "string", '"camel", "snake", "kebab", or "pascal".']], '$util.case("helloWorld", "kebab")  // "hello-world"'],
+        ["join", "$util.join(array, sep?)", "string", "Join an array into a string.", [["array", "any[]", "The array."], ["sep", "string", "Separator (default \",\").", true]], '$util.join(["a","b"], ", ")  // "a, b"'],
+        ["split", "$util.split(s, sep?)", "string[]", "Split a string on a separator.", [["s", "string", "Input string."], ["sep", "string", "Separator.", true]], '$util.split("a,b", ",")  // ["a","b"]'],
+        ["trim", "$util.trim(s)", "string", "Strip leading and trailing whitespace.", [["s", "string", "Input string."]], '$util.trim("  hi  ")  // "hi"'],
+        ["startsWith", "$util.startsWith(s, prefix)", "boolean", "Test a prefix.", [["s", "string", "Input string."], ["prefix", "string", "Prefix to test."]], '$util.startsWith("hello", "he")  // true'],
+        ["endsWith", "$util.endsWith(s, suffix)", "boolean", "Test a suffix.", [["s", "string", "Input string."], ["suffix", "string", "Suffix to test."]], '$util.endsWith("hello", "lo")  // true'],
+        ["contains", "$util.contains(s, sub)", "boolean", "Substring membership test.", [["s", "string", "Input string."], ["sub", "string", "Substring to find."]], '$util.contains("hello", "ell")  // true'],
+        ["replace", "$util.replace(s, search, replacement?)", "string", "Replace all occurrences.", [["s", "string", "Input string."], ["search", "string", "Text to find."], ["replacement", "string", "Replacement (default \"\").", true]], '$util.replace("a-a", "-", "_")  // "a_a"'],
+        ["substring", "$util.substring(s, start, end?)", "string", "Extract a substring by index.", [["s", "string", "Input string."], ["start", "number", "Start index."], ["end", "number", "End index (exclusive).", true]], '$util.substring("hello", 0, 2)  // "he"'],
+        ["match", "$util.match(s, pattern)", "boolean", "Boolean regular-expression match.", [["s", "string", "Input string."], ["pattern", "string", "Regex pattern source."]], '$util.match("abc123", "[0-9]+")  // true'],
+      ]],
+    ];
+
+    // ---- JavaScript globals ------------------------------------------------
+    const GLOBALS = [
+      ["Math", "object", "Standard math object — Math.max, Math.round, Math.PI, etc.", 'let pct = Math.round(ratio * 100)'],
+      ["JSON", "object", "Parse and serialise JSON.", 'let data = JSON.parse(text)'],
+      ["Object", "object", "Object utilities — keys, values, entries, assign, freeze.", 'Object.keys($config)'],
+      ["Array", "object", "Array constructor and statics — Array.from, Array.isArray.", 'Array.from({ length: 3 }, (_, i) => i)'],
+      ["Date", "object", "Date object for timestamps and formatting.", 'let now = new Date()'],
+      ["Intl", "object", "Internationalisation — NumberFormat, DateTimeFormat.", 'new Intl.NumberFormat("en-US").format(1234)'],
+      ["fetch", "function", "Raw network request — prefer $http for reactive data.", 'let res = await fetch("/api/ping")'],
+      ["crypto", "object", "Web Crypto — random UUIDs and more.", 'let id = crypto.randomUUID()'],
+      ["navigator", "object", "Browser navigator — clipboard, language, online status.", 'navigator.clipboard.writeText(url)'],
+      ["alert / confirm / prompt", "function", "Browser dialogs.", 'if (confirm("Delete this?")) remove()'],
+      ["setTimeout / setInterval", "function", "Timers — create in an effect, clear in its cleanup. Runtime-tracked and cleared on re-plan / disconnect.", 'let t = setTimeout(() => $done = true, 500)'],
+      ["URL / URLSearchParams", "object", "Parse and build URLs.", 'new URL(location.href).searchParams.get("q")'],
+      ["localStorage", "object", "Persistent key/value storage — prefer the $storage namespace.", 'localStorage.setItem("k", "v")'],
+      ["window / document", "object", "The host window and document objects (available inside bodies).", 'document.addEventListener("keydown", onKey)'],
+    ];
+
+    // ---- Operators & literals ----------------------------------------------
+    const OPERATORS = [
+      ["Literals", "true · false · null · undefined", "The literal atoms the grammar recognises.", 'let ok = true\nlet missing = null'],
+      ["Arithmetic", "+  -  *  /  %  **", "Standard arithmetic operators, including exponentiation.", 'let area = w * h'],
+      ["Comparison", "==  !=  ===  !==  <  <=  >  >=", "Equality and ordering comparisons.", '$value > 0 ? "up" : "down"'],
+      ["Logical", "&&  ||  !", "Boolean logic and short-circuit operators.", '$user && $user.name'],
+      ["Bitwise & shift", "&  |  ^  ~  <<  >>  >>>", "Bitwise and shift operators.", 'let flags = a | b'],
+      ["Ternary", "cond ? a : b", "The branching expression — the only one (there is no if-expression). Only the chosen branch evaluates.", 'tone = $ok ? "success" : "danger"'],
+      ["Nullish coalescing", "a ?? b", "Fall back when the left side is null or undefined.", '$user.name ?? "stranger"'],
+      ["Optional chaining", "a?.b   a?.[i]   a?.()", "Safely read through possibly-missing values.", '$user?.profile?.name'],
+      ["Spread", "...array   ...object", "Expand arrays / objects in literals and calls.", 'next = [...$items, item]'],
+      ["Template literals", "`text ${expr}`", "String interpolation — preferred over + concatenation.", '`Hi ${$user.name}`'],
+      ["Relational keywords", "instanceof   in", "Type and membership tests.", '"id" in $row'],
+    ];
+
+    // ---- Rendering ---------------------------------------------------------
+    function codeBlock(code) {
+      return `<div class="lr-example"><pre><code>${esc(code)}</code></pre></div>`;
+    }
+
+    function paramsTable(params) {
+      if (!params || params.length === 0) return "";
+      const rows = params
+        .map(
+          (p) => `<tr>
+            <td class="lr-pname">${esc(p.name)}${p.optional ? '<span class="lr-opt">optional</span>' : ""}</td>
+            <td class="lr-ptype">${esc(p.type)}</td>
+            <td class="lr-pdesc">${esc(p.desc)}</td>
+          </tr>`,
+        )
+        .join("");
+      return `<div class="lr-block">
+        <p class="lr-block-label">Parameters</p>
+        <table class="lr-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    function returnsBlock(ret) {
+      if (!ret) return "";
+      let html = `<div class="lr-block"><p class="lr-block-label">Returns</p>`;
+      html += `<div class="lr-returns"><span class="lr-ptype">${esc(ret.type)}</span><span>${esc(ret.desc)}</span></div>`;
+      if (ret.members && ret.members.length) {
+        const rows = ret.members
+          .map(
+            (m) => `<tr>
+              <td class="lr-pname">${esc(m.name)}</td>
+              <td class="lr-ptype">${esc(m.type || "")}</td>
+              <td class="lr-pdesc">${esc(m.desc)}</td>
+            </tr>`,
+          )
+          .join("");
+        html += `<table class="lr-table" style="margin-top:10px">
+          <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+      }
+      return html + `</div>`;
+    }
+
+    function membersBlock(members, title) {
+      if (!members || members.length === 0) return "";
+      const rows = members
+        .map(
+          (m) => `<tr>
+            <td class="lr-pname">${esc(m.name)}</td>
+            ${m.type !== undefined ? `<td class="lr-ptype">${esc(m.type)}</td>` : `<td class="lr-ptype"></td>`}
+            <td class="lr-pdesc">${esc(m.desc)}</td>
+          </tr>`,
+        )
+        .join("");
+      return `<div class="lr-block">
+        <p class="lr-block-label">${esc(title || "Members")}</p>
+        <table class="lr-table"><tbody>${rows}</tbody></table>
+      </div>`;
+    }
+
+    function entryEl(entry) {
+      const el = document.createElement("article");
+      el.className = "lr-entry";
+      el.id = entry.anchor;
+      el.dataset.search = [
+        entry.name,
+        entry.kind,
+        entry.signature,
+        entry.description,
+        (entry.params || []).map((p) => p.name + " " + p.type).join(" "),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      el.innerHTML = `
+        <div class="lr-entry-head">
+          <span class="lr-name">${esc(entry.name)}</span>
+          <span class="lr-kind">${esc(entry.kind)}</span>
+          <a class="lr-anchor" href="#${entry.anchor}" aria-label="Link to ${esc(entry.name)}"><i class="fa-solid fa-link"></i></a>
+        </div>
+        ${entry.signature ? `<div class="lr-sig">${esc(entry.signature)}</div>` : ""}
+        ${entry.description ? `<p class="lr-desc">${esc(entry.description)}</p>` : ""}
+        ${paramsTable(entry.params)}
+        ${returnsBlock(entry.returns)}
+        ${membersBlock(entry.members, entry.membersTitle)}
+        ${entry.example ? codeBlock(entry.example) : ""}
+        ${
+          entry.notes && entry.notes.length
+            ? `<ul class="lr-notes">${entry.notes.map((n) => `<li>${n}</li>`).join("")}</ul>`
+            : ""
+        }
+      `;
+      return el;
+    }
+
+    function sectionEl({ id, title, lead, entries }) {
+      const section = document.createElement("section");
+      section.className = "lr-section";
+      section.id = id;
+
+      const count = entries.filter((e) => !e.divider).length;
+      const head = document.createElement("div");
+      head.className = "lr-section-head";
+      head.innerHTML = `<h2>${esc(title)}</h2><span class="lr-section-count">${count} ${count === 1 ? "entry" : "entries"}</span>`;
+      section.appendChild(head);
+
+      if (lead) {
+        const p = document.createElement("p");
+        p.className = "lr-section-lead";
+        p.innerHTML = lead;
+        section.appendChild(p);
+      }
+
+      const list = document.createElement("div");
+      list.className = "lr-list";
+      for (const entry of entries) {
+        if (entry.divider) {
+          const d = document.createElement("p");
+          d.className = "lr-divider";
+          d.textContent = entry.divider;
+          list.appendChild(d);
+        } else {
+          list.appendChild(entryEl(entry));
+        }
+      }
+      section.appendChild(list);
+      return section;
+    }
+
+    function build() {
+      const sections = SECTIONS.slice();
+
+      // $util helpers — one section with sub-group dividers.
+      const utilEntries = [];
+      for (const [group, helpers] of UTIL_GROUPS) {
+        utilEntries.push({ divider: group });
+        for (const [name, sig, retType, desc, params, example] of helpers) {
+          utilEntries.push({
+            anchor: `util-${name}`,
+            name: `$util.${name}`,
+            kind: "Helper",
+            signature: sig,
+            description: desc,
+            params: params.map(([pn, pt, pd, opt]) => ({ name: pn, type: pt, desc: pd, optional: !!opt })),
+            returns: { type: retType, desc: "" },
+            example,
+          });
+        }
+      }
+      sections.push({
+        id: "util",
+        title: "$util helper namespace",
+        lead:
+          "A single global <code>$util</code> object of pure, side-effect-free helpers. Many overlap with native JavaScript (<code>arr.length</code>, <code>Math.round</code>) — reach for <code>$util</code> for field-based comparators, locale-aware formatting, and skeleton ranges.",
+        entries: utilEntries,
+      });
+
+      // Keywords & reserved handles — from the runtime keywordDocs catalog.
+      const keywordEntries = Object.keys(keywordDocs)
+        .filter((k) => !k.startsWith("$"))
+        .sort()
+        .map((kw) => {
+          const doc = keywordDocs[kw];
+          return {
+            anchor: `keyword-${kw}`,
+            name: kw,
+            kind: kw === "aktion" || kw === "route" ? "Reserved handle" : "Keyword",
+            signature: doc.syntax,
+            description: doc.summary,
+            example: doc.example,
+          };
+        });
+      sections.push({
+        id: "keywords",
+        title: "Keywords & reserved handles",
+        lead:
+          "Control-flow and declaration keywords — a strict subset of JavaScript — plus the reserved top-level handles <code>aktion</code> and <code>route</code>.",
+        entries: keywordEntries,
+      });
+
+      // JavaScript globals.
+      sections.push({
+        id: "globals",
+        title: "JavaScript globals",
+        lead:
+          "The full JavaScript global surface resolves by name inside <code>function</code> / <code>$effect</code> / lambda bodies — no import, no escape hatch. Your own declarations always win over a same-named global.",
+        entries: GLOBALS.map(([name, type, desc, example]) => ({
+          anchor: `global-${name.split(" ")[0].toLowerCase()}`,
+          name,
+          kind: "Global",
+          signature: "",
+          description: desc,
+          returns: { type, desc: "" },
+          example,
+        })),
+      });
+
+      // Operators & literals.
+      sections.push({
+        id: "operators",
+        title: "Operators & literals",
+        lead:
+          "Aktion's surface syntax is a strict subset of JavaScript, so the full operator set is available. Statements (<code>if</code>, <code>for</code>, <code>switch</code>) never produce a value — use the expression forms below to pick values.",
+        entries: OPERATORS.map(([name, sig, desc, example]) => ({
+          anchor: `operator-${name.split(" ")[0].toLowerCase()}`,
+          name,
+          kind: "Syntax",
+          signature: sig,
+          description: desc,
+          example,
+        })),
+      });
+
+      content.replaceChildren();
+      for (const section of sections) content.appendChild(sectionEl(section));
+      buildToc(sections);
+      applyFilter();
+    }
+
+    function buildToc(sections) {
+      tocHost.replaceChildren();
+      for (const s of sections) {
+        const a = document.createElement("a");
+        a.href = `#${s.id}`;
+        a.textContent = s.title;
+        tocHost.appendChild(a);
+      }
+    }
+
+    // ---- Search ------------------------------------------------------------
+    function applyFilter() {
+      const q = filterInput.value.trim().toLowerCase();
+      let anyVisible = false;
+
+      for (const section of content.querySelectorAll(".lr-section")) {
+        let sectionVisible = false;
+        // First pass: show / hide entries.
+        for (const entry of section.querySelectorAll(".lr-entry")) {
+          const show = !q || entry.dataset.search.includes(q);
+          entry.hidden = !show;
+          if (show) sectionVisible = true;
+        }
+        // Second pass: a divider is visible only if a following entry (before
+        // the next divider) is visible.
+        const children = Array.from(section.querySelector(".lr-list").children);
+        for (let i = 0; i < children.length; i++) {
+          const node = children[i];
+          if (!node.classList.contains("lr-divider")) continue;
+          let groupVisible = false;
+          for (let j = i + 1; j < children.length; j++) {
+            if (children[j].classList.contains("lr-divider")) break;
+            if (!children[j].hidden) { groupVisible = true; break; }
+          }
+          node.hidden = !groupVisible;
+        }
+        section.hidden = !sectionVisible;
+        if (sectionVisible) anyVisible = true;
+      }
+      emptyEl.hidden = anyVisible || !q;
+    }
+
+    filterInput.addEventListener("input", applyFilter);
+    filterInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { filterInput.value = ""; applyFilter(); filterInput.blur(); }
+    });
+
+    build();
+  </script>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

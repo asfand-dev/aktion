@@ -6,10 +6,18 @@
  * reactive state does NOT trigger an infinite render loop.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "../src/index.js";
 
 const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+/** Await a few microtask + macrotask turns so async `src` loads settle. */
+const settle = async (turns = 10) => {
+  for (let i = 0; i < turns; i += 1) {
+    await flush();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+};
 
 const PROGRAM_WITH_STATE = `$rows = [{name: "alpha", stars: 12}, {name: "beta", stars: 7}]
 info = Card([CardHeader("Repos"), Markdown("Loading...")])
@@ -583,6 +591,69 @@ $todos = [
     } finally {
       console.log = originalLog;
     }
+  });
+
+  describe("src attribute", () => {
+    const mockFetch = (files: Record<string, string>) => {
+      const fetchMock = vi.fn(async (input: unknown) => {
+        const url = String(input);
+        const key = Object.keys(files).find((f) => url.endsWith(f));
+        if (key === undefined) {
+          return { ok: false, status: 404, text: async () => "" } as unknown as Response;
+        }
+        return { ok: true, status: 200, text: async () => files[key]! } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    };
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("loads and renders a single-file program from src", async () => {
+      mockFetch({ "app.aktion": `$app(Card([CardHeader("From src")]))` });
+      document.body.innerHTML = `<aktion-app src="./app.aktion"></aktion-app>`;
+      await settle();
+      const el = document.querySelector("aktion-app")!;
+      expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("From src");
+    });
+
+    it("links and renders a multi-file project referenced by src", async () => {
+      mockFetch({
+        "app.aktion": `import { Hello } from "./hello.aktion"\n$app(Hello())`,
+        "hello.aktion": `export function Hello() { return Card([CardHeader("Linked module")]) }`,
+      });
+      document.body.innerHTML = `<aktion-app src="./app.aktion"></aktion-app>`;
+      await settle();
+      const el = document.querySelector("aktion-app")!;
+      expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Linked module");
+    });
+
+    it("surfaces a fetch failure through the error event and banner", async () => {
+      mockFetch({}); // every request 404s
+      const el = create() as HTMLElement & {
+        loadFromSrc(src: string): Promise<void>;
+        showErrors: boolean;
+      };
+      el.showErrors = true;
+      let errorFired = false;
+      el.addEventListener("error", () => { errorFired = true; });
+      await el.loadFromSrc("./missing.aktion");
+      await settle();
+      expect(errorFired).toBe(true);
+      const banner = el.shadowRoot!.querySelector(".rui-error-banner") as HTMLElement;
+      expect(banner.hidden).toBe(false);
+    });
+
+    it("the response attribute takes precedence over src", async () => {
+      mockFetch({ "app.aktion": `$app(Card([CardHeader("From src")]))` });
+      document.body.innerHTML =
+        `<aktion-app src="./app.aktion" response='$app(Card([CardHeader(\"From attribute\")]))'></aktion-app>`;
+      await settle();
+      const el = document.querySelector("aktion-app")!;
+      expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("From attribute");
+    });
   });
 
   it("appendChunk safely ignores empty / non-string chunks", async () => {

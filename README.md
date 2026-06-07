@@ -227,6 +227,9 @@ Three equivalent ways:
   $app(Card([CardHeader("Hi")]))
 </aktion-app>
 
+<!-- from an external file (linked with its imports) -->
+<aktion-app src="./app.aktion"></aktion-app>
+
 <!-- as a property/method -->
 <script>
   const el = document.querySelector("aktion-app");
@@ -305,6 +308,7 @@ All members live on the `<aktion-app>` element.
 | `theme`         | Theme name or JSON token map                    | Switches the theme. JSON objects are merged on top of the default `light` tokens.   |
 | `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set.   |
 | `response`      | Aktion text                        | Sets the program declaratively. Re-renders whenever the attribute changes.          |
+| `src`           | URL to an `.aktion` file                        | Loads the program from an external file resolved relative to the document. The file is linked through the in-browser project linker, so an entry that `import`s other modules resolves and fetches its whole graph. `response` (and any inner text) takes precedence; changing `src` reloads. |
 | `showerrors`    | `true` / unset                                  | If present and `true`, displays parse errors in the rendered UI. Defaults to off.   |
 | `strict`        | `true` / unset                                  | Dev/strict mode. Surfaces silent failures as `console.warn`s — unknown identifiers that would resolve to `null`, and trailing `{...}` objects passed to a user component whose keys match no parameter (the silent named→positional flip). Off by default; enable while developing. |
 | `router-mode`   | `hash` (default) / `history`                    | URL strategy. `history` uses the History API for clean `/about` URLs (needs an `index.html` fallback on the server); `hash` works on any static host. |
@@ -320,6 +324,7 @@ surfaces from the *generated prompt*, build it via
 | Property      | Type                          | Description                                                                            |
 | ------------- | ----------------------------- | -------------------------------------------------------------------------------------- |
 | `response`    | `string`                      | Get or set the current program text. Setter is equivalent to `setResponse(text)`.       |
+| `src`         | `string \| null`              | Reflects the `src` attribute. Setting it loads (or reloads) the program from that URL.  |
 | `streaming`   | `boolean`                     | Reflects the `streaming` attribute.                                                    |
 | `showErrors`  | `boolean`                     | Reflects the `showerrors` attribute.                                                   |
 | `route`       | `string` (read-only)          | Current path tracked by the router (e.g. `"/users/42"`).                               |
@@ -1498,7 +1503,8 @@ consumes from the CDN.
 | `index.html`                        | Overview, drop-in install, live theme picker.                                           |
 | `get-started.html`                  | Step-by-step integration walkthrough.                                                   |
 | `frameworks.html`                   | Integration recipes for React, Next.js, Vue, Angular, Svelte, plain HTML.               |
-| `language.html`                     | Full Aktion language reference.                                            |
+| `language.html`                     | Full Aktion language guide — the conceptual walkthrough of syntax and semantics. |
+| `language-reference.html`           | Searchable reference of every language symbol — keywords, `$`-builtins & hooks, the `$util` namespace, JavaScript globals, and operators/literals, each with a one-line description and copy-paste example. Filter by category or type to jump straight to an entry. |
 | `http.html`                         | HTTP guide — the `$http({...})` primitive, config options, the reactive resource bag, `Async`, refetch/cancel patterns, and a full CRUD walkthrough. |
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |

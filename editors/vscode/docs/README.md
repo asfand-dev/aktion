@@ -70,8 +70,13 @@ npm run build          # 1) generates snippets, 2) generates grammar, 3) bundles
 `npm run build` runs three steps:
 
 - `gen-snippets` — reads `getSnippets()` and writes `snippets/aktion.code-snippets`.
-- `gen-grammar` — reads `builtinCatalog` and writes `syntaxes/aktion.tmLanguage.json`
-  (the `$`-builtin overlay stays in lockstep with the runtime).
+- `gen-grammar` — reads `builtinCatalog` and writes two TextMate grammars:
+  `syntaxes/aktion.tmLanguage.json` (the `.aktion` grammar; its `$`-builtin
+  overlay stays in lockstep with the runtime) and
+  `syntaxes/aktion-html-injection.tmLanguage.json` (an injection grammar that
+  embeds `source.aktion` inside `<aktion-app> … </aktion-app>` tags in HTML
+  files — contributed via `injectTo` in `package.json`). Both are generated;
+  do not hand-edit them.
 - `esbuild.mjs` — bundles `src/extension.ts` → `dist/extension.js` (CJS, Node
   target, `vscode` external). It aliases `aktion-runtime/language` to the repo's
   local build (or the TS source if you skipped step 1).
