@@ -406,6 +406,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 
 .rui-badge {
   display: inline-flex;
+  width: fit-content;
   align-items: center;
   border-radius: var(--rui-radius-pill);
   padding: 2px 10px;
@@ -422,6 +423,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 
 .rui-tag {
   display: inline-flex;
+  width: fit-content;
   align-items: center;
   gap: 4px;
   border-radius: var(--rui-radius-pill);
