@@ -300,6 +300,9 @@ el.registerComponents([ProductCard]);</code></pre>
     </main>
   </div>
 
+  <!-- lottie-web so the Lottie component preview actually animates
+       (the component falls back to its poster when window.lottie is absent). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
   <script type="module">
     import { defaultLibrary } from "../dist/aktion.js";
 
@@ -477,7 +480,7 @@ $app(Card([
   "Aktion took our recap email from 4k lines of glue to 40.",
   { attribution: "Naomi · last QBR", tone: "primary" }
 ))`,
-      CodeBlock: `$app(CodeBlock("bash", { code: "npm install aktion" }))`,
+      CodeBlock: `$app(CodeBlock("npm install aktion", { language: "bash" }))`,
       Skeleton: `$app(Skeleton(4, { count: 14 }))`,
       Markdown: `$app(Markdown("**Bold text**, *italic text*, and [a link](https://example.com).\n\n- First bullet\n- Second bullet\n- Third bullet"))`,
       Kbd: `$app(Stack([
@@ -1210,7 +1213,11 @@ $app(DateRangePicker("range", { from: $from, to: $to, label: "Reporting window" 
   Callout("warning", { title: "Heads up", text: "Compact note style", compact: true })
 ]))`,
       Markdown: `$app(Markdown("# Aktion\\n\\nA **compact**, *declarative* DSL.\\n\\n- Headings\\n- Fenced code\\n- Auto-linked URLs: https://example.com"))`,
-      CodeBlock: `$app(CodeBlock("typescript", { code: "function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", copy: true, highlight: "1-3" }))`,
+      CodeBlock: `$app(Stack([
+  CodeBlock("function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", { language: "ts", showLineNumbers: true, highlightLines: "1-3" }),
+  Text("header: false — chromeless, sized, and scrollable:", { variant: "small", tone: "muted" }),
+  CodeBlock("$total = 0\\nfor (const line of $items) {\\n  $total = $total + line.price * line.qty\\n}\\n$app(Text(\\"Total: \\" + $total))", { language: "aktion", header: false, height: "96px" })
+], { gap: "m" }))`,
       Image: `$app(Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
 { alt: "Hero photo", caption: "Self-constrained 16:9 image", ratio: "16:9", fit: "cover" }))`,
       Skeleton: `$app(Stack([
@@ -1703,6 +1710,483 @@ $app(pages)`,
     Markdown("Use **Styles** + **HTMLTag** together to scope custom CSS to your own selectors.")
   ] })
 ]))`,
+
+      // ── Marketing & landing typography (suggestions-global Parts I, VIII.1) ──
+      Display: `$app(Display(["Build in ", GradientText("record time")], { size: "hero", align: "center", balance: true }))`,
+      Heading: `$app(Stack([
+  Heading("Section heading", { size: "section" }),
+  Heading("Large heading", { size: "lg" }),
+  Heading("Medium heading", { size: "md" })
+], { gap: "s" }))`,
+      Eyebrow: `$app(Stack([
+  Eyebrow("New in v0.6"),
+  Display("Headline that follows the eyebrow", { size: "lg" })
+], { gap: "xs" }))`,
+      GradientText: `$app(Display(["Ship ", GradientText("beautiful", { gradient: "brand" }), " products"], { size: "xl", align: "center" }))`,
+      Brand: `$app(Brand("Aktion", { version: "v0.6", href: "/" }))`,
+      Swatch: `$app(Grid([
+  Swatch("Light",    { background: "#ffffff", foreground: "#14102b", colors: ["#6366f1", "#10b981", "#f59e0b"] }),
+  Swatch("Dark",     { background: "#0e0b1c", foreground: "#f3f1ff", colors: ["#8b5cf6", "#22d3ee", "#ec4899"] }),
+  Swatch("Neon",     { background: "#0a0118", foreground: "#39ff14", colors: ["#39ff14", "#ff00ff", "#00ffff"] }),
+  Swatch("Pastel",   { background: "#fff5fb", foreground: "#7c3aed", colors: ["#c4b5fd", "#fbcfe8", "#a7f3d0"] }),
+  Swatch("Skyline",  { background: "linear-gradient(160deg, #0f172a, #1e3a8a)", foreground: "#bae6fd", colors: ["#38bdf8", "#818cf8", "#0ea5e9"] }),
+  Swatch("Brand",    { background: "linear-gradient(120deg, #6366f1, #8b5cf6 45%, #ec4899)", foreground: "#ffffff", colors: ["#ffffff", "#fde68a", "#fbcfe8"] })
+], { minChildWidth: "160px", gap: "m" }))`,
+      ThemeToggle: `$app(Row([Text("Toggle the theme:"), ThemeToggle()], { gap: "m", align: "center" }))`,
+
+      // ── Page bands & advanced layout (Part II) ──
+      Section: `$app(Section([
+  MetricStrip([
+    Metric("12k", { label: "Stars" }),
+    Metric("98%", { label: "Uptime" }),
+    Metric("4.9", { label: "Rating" })
+  ])
+], { eyebrow: "Loved by teams", title: "Numbers that matter", subtitle: "A page band with eyebrow, title, and subtitle.", background: "soft", align: "center" }))`,
+      Split: `$app(Split(
+  Card([CardHeader("Left pane"), Text("Primary content.")]),
+  Card([CardHeader("Right pane"), Text("Secondary content.")]),
+  { ratio: "3/2", gap: "l", divider: true }
+))`,
+      Bento: `$app(Bento([
+  BentoCell(Card([CardHeader("Hero", { subtitle: "span: hero (2×2)" }), Text("The marquee cell — give it your headline feature.")], { gap: "s" }), { span: "hero" }),
+  BentoCell(Card([CardHeader("Wide", { subtitle: "span: 2x1" })]), { span: "2x1" }),
+  BentoCell(Card([CardHeader("Tile A")])),
+  BentoCell(Card([CardHeader("Tile B")])),
+  BentoCell(Card([CardHeader("Tall", { subtitle: "span: tall (1×2)" }), Text("Grows two rows.")], { gap: "s" }), { span: "tall" }),
+  BentoCell(Card([CardHeader("Tile C")])),
+  BentoCell(Card([CardHeader("Full-width strip", { subtitle: "span: full" })]), { span: "full" })
+], { columns: 4, gap: "m", rowHeight: "minmax(96px, auto)" }))`,
+      BentoCell: `$app(Bento([
+  BentoCell(Card([CardHeader("Featured", { subtitle: "2 columns wide" })]), { span: "2x1" }),
+  BentoCell(Card([CardHeader("Side")])),
+  BentoCell(Card([CardHeader("Banner", { subtitle: "always full row" })]), { span: "full" })
+], { columns: 3 }))`,
+      Overlay: `$app(Overlay(
+  Image("https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=640", { alt: "Cover", aspectRatio: "16:9" }),
+  [
+    OverlayItem(Badge("New", { tone: "primary" }), { anchor: "top-left", offset: "12px" }),
+    OverlayItem(Button("Play", { variant: "primary", size: "small" }), { anchor: "center" })
+  ]
+))`,
+      OverlayItem: `$app(Overlay(
+  Card([CardHeader("Base content"), Text("The OverlayItem floats on top.")]),
+  [OverlayItem(Badge("99+", { tone: "danger" }), { anchor: "top-right", offset: "8px" })]
+))`,
+      Fragment: `$app(Grid([
+  Fragment([Card([CardHeader("A")]), Card([CardHeader("B")])]),
+  Card([CardHeader("C")])
+], { columns: 3, gap: "m" }))`,
+
+      // ── App chrome: nav, footer, tab bars (Parts VIII.1, XII.1) ──
+      NavBar: `$app(NavBar({
+  brand: Brand("Acme"),
+  links: [NavLink("Home", { to: "/" }), NavLink("Docs", { to: "/docs" }), NavLink("Pricing", { to: "/pricing" })],
+  actions: [Button("Sign in", { variant: "ghost", size: "small" }), Button("Get started", { variant: "primary", size: "small" })],
+  blur: true
+}))`,
+      Footer: `$app(Footer({
+  brand: Brand("Acme"),
+  tagline: "The fastest way to ship.",
+  columns: [
+    FooterColumn("Product", [Link("Features", { href: "#" }), Link("Pricing", { href: "#" })]),
+    FooterColumn("Company", [Link("About", { href: "#" }), Link("Careers", { href: "#" })])
+  ],
+  legal: "© 2026 Acme, Inc."
+}))`,
+      FooterColumn: `$app(Footer({
+  columns: [
+    FooterColumn("Resources", [Link("Docs", { href: "#" }), Link("Guides", { href: "#" }), Link("Support", { href: "#" })])
+  ]
+}))`,
+      TabBar: `$tab = "home"
+$app(TabBar([
+  { id: "home",    label: "Home",    icon: "house" },
+  { id: "search",  label: "Search",  icon: "magnifying-glass" },
+  { id: "profile", label: "Profile", icon: "user", badge: "3" }
+], { active: $tab, onChange: (id) => { $tab = id } }))`,
+      BackToTop: `$app(Stack([
+  Text("Scroll the page — a Back-to-top button appears bottom-right."),
+  BackToTop({ label: "Top" })
+]))`,
+
+      // ── Marketing widgets (Parts VIII.1, III) ──
+      LogoCloud: `$app(LogoCloud([
+  LogoChip("Vercel", { icon: "bolt" }),
+  LogoChip("Linear", { icon: "diagram-project" }),
+  LogoChip("Stripe", { icon: "credit-card" }),
+  LogoChip("Figma",  { icon: "pen-nib" })
+], { label: "Trusted by leading teams" }))`,
+      LogoChip: `$app(Row([
+  LogoChip("Acme", { icon: "cube" }),
+  LogoChip("Globex", { icon: "globe" })
+], { gap: "m" }))`,
+      CountUp: `$app(Row([
+  Stack([CountUp(12500, { suffix: "+" }), Text("Customers", { variant: "small", tone: "muted" })], { align: "center" }),
+  Stack([CountUp(99, { suffix: "%" }), Text("Uptime", { variant: "small", tone: "muted" })], { align: "center" })
+], { gap: "xl" }))`,
+      Metric: `$app(Row([
+  Metric("$48k", { label: "MRR", gradient: true }),
+  Metric(1280, { label: "Signups", countUp: true })
+], { gap: "l" }))`,
+      MetricStrip: `$app(MetricStrip([
+  Metric("12k", { label: "Stars" }),
+  Metric("98%", { label: "Uptime" }),
+  Metric("4.9", { label: "Rating" }),
+  Metric("24/7", { label: "Support" })
+], { columns: 4 }))`,
+      CodeWindow: `$app(CodeWindow(
+  "$count = 0\\n$app(Card([\\n  CardHeader(\\"Counter\\"),\\n  Text(\\"Count: \\" + $count, { variant: \\"heading\\" }),\\n  Button(\\"Increment\\", { variant: \\"primary\\", onClick: () => { $count = $count + 1 } })\\n], { gap: \\"m\\" }))",
+  { file: "counter.aktion", preview: true }
+))`,
+      BrowserFrame: `$app(BrowserFrame(
+  Stack([Text("Page content rendered inside a browser chrome.")], { gap: "s" }),
+  { url: "https://acme.com/dashboard" }
+))`,
+      Terminal: `$app(Terminal([
+  "$ npm install aktion-runtime",
+  "added 1 package in 1.2s",
+  "$ npm run build",
+  "✓ built in 120ms"
+], { file: "zsh" }))`,
+      Backdrop: `$type = "network"
+$app(Stack([
+  SegmentedControl(["network", "drift", "snow", "stars", "bubbles"], { value: $type, onChange: (v) => { $type = v } }),
+  Box([
+    Backdrop({ grid: true, blobs: ["#6366f1", "#ec4899", "#22d3ee"], particles: 60, type: $type, speed: 1 }),
+    Center([Display("Animated hero backdrop", { size: "lg", align: "center" })], { minHeight: "32vh" })
+  ], { padding: "none", style: "position: relative; overflow: hidden; border-radius: 16px" })
+], { gap: "m" }))`,
+      CopyButton: `$app(Stack([
+  Row([
+    CodeBlock("npm i aktion-runtime", { copy: false }),
+    CopyButton("npm i aktion-runtime", { label: "Copy" })
+  ], { gap: "m", align: "center" }),
+  Row([
+    Text("Custom confirmation:", { tone: "muted" }),
+    CopyButton("https://aktion.dev", { label: "Copy link", copiedLabel: "Link copied ✓" })
+  ], { gap: "m", align: "center" })
+], { gap: "m" }))`,
+      SegmentedControl: `$view = "grid"
+$app(Stack([
+  SegmentedControl(["grid", "list", "board"], { value: $view, onChange: (v) => { $view = v } }),
+  Text("Selected view: " + $view, { tone: "muted" })
+], { gap: "m" }))`,
+      FloatingActionButton: `$app(Box([
+  Text("A floating action button is pinned to the corner."),
+  FloatingActionButton("plus", { label: "New item" })
+], { padding: "l" }))`,
+      Prose: `$app(Prose([
+  Markdown("## Writing with Prose\\n\\nThe **Prose** container applies typographic rhythm to long-form text — headings, paragraphs, lists, quotes, links, and inline \`code\` all get consistent spacing and sizing.\\n\\n### What you get\\n\\n- Comfortable line length and leading\\n- Styled lists, like this one\\n- [Links](https://example.com) with sensible accents\\n\\n> Wrap any Markdown(...) or rich nodes — blog posts, docs bodies, product descriptions.\\n\\nUse the \`size\` prop (sm | md | lg) to scale the whole reading experience.")
+], { size: "md" }))`,
+      RelativeTime: `$app(Stack([
+  Row([Text("Posted: "), RelativeTime("2026-06-08T10:00:00Z")], { gap: "xs" }),
+  Row([Text("Updated: "), RelativeTime("2026-06-09T09:30:00Z")], { gap: "xs" })
+]))`,
+      CountdownTimer: `$app(Stack([
+  Text("Launch in:"),
+  CountdownTimer("2026-12-31T23:59:59Z", { endLabel: "We are live!" })
+], { gap: "s" }))`,
+      TypingIndicator: `$app(Stack([
+  ChatBubble("Hey, are you there?", { from: "them" }),
+  TypingIndicator("Ada")
+], { gap: "s" }))`,
+
+      // ── E-commerce (Part VIII.2) ──
+      PriceTag: `$app(Row([
+  PriceTag(49, { compareAt: 79, currency: "USD", size: "lg" }),
+  PriceTag(12.5, { currency: "EUR" })
+], { gap: "xl", align: "center" }))`,
+      QuantityStepper: `$qty = 1
+$app(Stack([
+  QuantityStepper($qty, { min: 1, max: 9, onChange: (n) => { $qty = n } }),
+  Text("Quantity: " + $qty, { tone: "muted" })
+], { gap: "m" }))`,
+      ProductCard: `$app(ProductCard("Wireless Headphones", {
+  image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480",
+  price: 199,
+  compareAt: 249,
+  currency: "USD",
+  rating: 4.5,
+  badge: "Sale",
+  onAdd: () => $toast.success("Added to cart")
+}))`,
+      VariantSelector: `$size = "m"
+$color = "indigo"
+$app(Stack([
+  VariantSelector(["s", "m", "l", "xl"], { value: $size, kind: "pill", label: "Size", onChange: (v) => { $size = v } }),
+  VariantSelector([
+    { label: "Indigo", value: "indigo", color: "#6366f1" },
+    { label: "Pink",   value: "pink",   color: "#ec4899" },
+    { label: "Teal",   value: "teal",   color: "#14b8a6" }
+  ], { value: $color, kind: "swatch", label: "Color", onChange: (v) => { $color = v } })
+], { gap: "l" }))`,
+      OrderSummary: `$app(OrderSummary([
+  { label: "Wireless Headphones", amount: "199.00" },
+  { label: "USB-C Cable",         amount: "12.00" }
+], { subtotal: "211.00", shipping: "5.00", tax: "17.28", total: "233.28", currency: "$" }))`,
+      Cart: `$cart = [
+  { id: "a", name: "Wireless Mouse", price: 29, qty: 1 },
+  { id: "b", name: "Mechanical Keyboard", price: 89, qty: 2 }
+]
+$app(Cart($cart, {
+  currency: "USD",
+  onQty: (id, qty) => { $cart = $cart.map(i => i.id === id ? { ...i, qty: qty } : i) },
+  onRemove: (id) => { $cart = $cart.filter(i => i.id !== id) }
+}))`,
+
+      // ── Content & docs (Part VIII.3) ──
+      TableOfContents: `$app(TableOfContents([
+  { label: "Introduction", href: "#intro", level: 1 },
+  { label: "Installation",  href: "#install", level: 1 },
+  { label: "Configuration", href: "#config", level: 2 },
+  { label: "Deployment",    href: "#deploy", level: 1 }
+], { title: "On this page" }))`,
+      ScrollSpy: `$app(ScrollSpy([
+  { label: "Overview", id: "overview" },
+  { label: "Features", id: "features" },
+  { label: "Pricing",  id: "pricing" }
+], { title: "Sections" }))`,
+      AuthorByline: `$app(AuthorByline("Ada Lovelace", {
+  avatar: "https://i.pravatar.cc/64?img=5",
+  role: "Staff Engineer",
+  date: "Jun 9, 2026"
+}))`,
+      ShareButtons: `$app(ShareButtons("https://acme.com/post/launch", {
+  title: "We just launched!",
+  networks: ["twitter", "linkedin", "facebook", "email"]
+}))`,
+
+      // ── Real-time & social (Part VIII.4) ──
+      PresenceAvatars: `$app(PresenceAvatars([
+  { name: "Ada Lovelace", online: true },
+  { name: "Alan Turing", src: "https://i.pravatar.cc/48?img=12", online: true },
+  { name: "Grace Hopper", online: false },
+  { name: "Linus T", online: true },
+  { name: "Margaret H", online: true }
+], { max: 4 }))`,
+      ReactionPicker: `$reactions = [
+  { emoji: "👍", count: 12, active: true },
+  { emoji: "❤️", count: 4 },
+  { emoji: "🎉", count: 7 },
+  { emoji: "🚀", count: 2 }
+]
+$app(ReactionPicker($reactions, {
+  onReact: (emoji) => $toast.show("You reacted " + emoji)
+}))`,
+      LiveCursor: `$app(Box([
+  Text("Collaborator cursors float over the canvas."),
+  LiveCursor({ x: 60, y: 30, label: "Ada", color: "#6366f1" }),
+  LiveCursor({ x: 160, y: 64, label: "Alan", color: "#ec4899" })
+], { padding: "l", style: "position: relative; min-height: 120px" }))`,
+
+      // ── Motion & gestures (Part III) ──
+      Reveal: `$app(Stack([
+  Reveal(Card([CardHeader("Fades up on scroll")]), { animation: "fade-up" }),
+  Reveal(Card([CardHeader("Zooms in (delayed)")]), { animation: "zoom", delay: 150 })
+], { gap: "m" }))`,
+      Transition: `$open = true
+$app(Stack([
+  Switch("open", { value: $open, label: "Show panel", onChange: (v) => { $open = v } }),
+  Transition(Card([CardHeader("Animated panel"), Text("Toggles in and out with a scale transition.")]), { show: $open, preset: "scale" })
+], { gap: "m" }))`,
+      FlipList: `$items = ["Apple", "Banana", "Cherry", "Date"]
+$app(Stack([
+  Button("Shuffle", { variant: "primary", size: "small", onClick: () => { $items = [$items[3], $items[0], $items[2], $items[1]] } }),
+  FlipList($items.map(x => Card([Text(x)], { key: x })), { duration: 300 })
+], { gap: "m" }))`,
+      Parallax: `$app(Stack([
+  Text("Scroll — the card drifts at a different rate."),
+  Parallax(Card([CardHeader("Parallax layer")]), { speed: 0.3 })
+], { gap: "m" }))`,
+      ReadingProgress: `$app(Stack([
+  ReadingProgress({ gradient: true, height: "4px" }),
+  Text("A reading-progress bar fills as the page scrolls (pinned to the top).")
+]))`,
+      RouteView: `$app(RouteView(
+  $router({ "/": Card([CardHeader("Home page")]), "/about": Card([CardHeader("About page")]), default: Card([CardHeader("Not found")]) }),
+  { routeKey: route.path, animation: "fade-up", duration: 280 }
+))`,
+      OnGesture: `$last = "none yet"
+$app(Stack([
+  OnGesture(
+    Card([
+      CardHeader("Gesture surface", { subtitle: "swipe · long-press · double-tap" }),
+      Text("Drag across me, hold me down, or tap twice — works with touch and mouse.")
+    ], { gap: "s" }),
+    {
+      swipe: (dir) => { $last = "swiped " + dir },
+      longPress: () => { $last = "long pressed" },
+      doubleTap: () => { $last = "double tapped" }
+    }
+  ),
+  Row([Text("Last gesture:", { tone: "muted" }), Badge($last, { tone: "primary" })], { gap: "s", align: "center" })
+], { gap: "m" }))`,
+      Sortable: `$tasks = ["Design", "Build", "Test", "Ship"]
+function moveTask(from, to) {
+  let next = [...$tasks]
+  let item = next.splice(from, 1)[0]
+  next.splice(to, 0, item)
+  $tasks = next
+}
+$app(Stack([
+  Sortable(
+    $tasks.map(t => Card([Text(t, { variant: "body-heavy" })], { padding: "s", key: t })),
+    { handle: true, onReorder: (from, to) => moveTask(from, to) }
+  ),
+  Text("Order: " + $tasks.join(" → "), { tone: "muted", variant: "small" })
+], { gap: "m" }))`,
+      Draggable: `$app(Row([
+  Draggable(Badge("Drag me", { tone: "primary" }), { data: "card-1" }),
+  DropZone(EmptyState("Drop here", { description: "Release a draggable item." }), { label: "Drop target", onDrop: (data) => $toast.show("Dropped " + data) })
+], { gap: "l", align: "center" }))`,
+      DropZone: `$app(DropZone(
+  EmptyState("Drop files or items here", { description: "A bounded drop target." }),
+  { label: "Upload zone", onDrop: (data) => $toast.success("Dropped") }
+))`,
+
+      // ── Overlays & sheets (Parts VIII.9, XII.1) ──
+      Sheet: `$open = false
+$app(Stack([
+  Button("Open sheet", { variant: "primary", onClick: () => { $open = true } }),
+  Sheet([CardHeader("Slide-in sheet"), Text("Anchored to the right edge."), Button("Close", { size: "small", onClick: () => { $open = false } })], { open: $open, side: "right", title: "Details", onClose: () => { $open = false } })
+], { gap: "m" }))`,
+      BottomSheet: `$open = false
+$app(Stack([
+  Button("Open bottom sheet", { variant: "primary", onClick: () => { $open = true } }),
+  BottomSheet([Text("A mobile-style bottom sheet."), Button("Done", { size: "small", onClick: () => { $open = false } })], { open: $open, title: "Options", onClose: () => { $open = false } })
+], { gap: "m" }))`,
+      ConfirmDialog: `$open = false
+$app(Stack([
+  Button("Delete item", { variant: "danger", onClick: () => { $open = true } }),
+  ConfirmDialog("Delete this item?", {
+    open: $open,
+    message: "This action cannot be undone.",
+    confirmLabel: "Delete",
+    cancelLabel: "Keep",
+    tone: "danger",
+    onConfirm: () => { $open = false; $toast.success("Deleted") },
+    onCancel: () => { $open = false }
+  })
+], { gap: "m" }))`,
+      SpeedDial: `$action = "none yet"
+$app(Box([
+  Stack([
+    Text("Click the + button (bottom-right) to expand the quick actions."),
+    Row([Text("Last action:", { tone: "muted" }), Badge($action, { tone: "primary" })], { gap: "s", align: "center" })
+  ], { gap: "s" }),
+  SpeedDial([
+    { label: "New doc", icon: "file",      onClick: () => { $action = "New doc" } },
+    { label: "Upload",  icon: "upload",    onClick: () => { $action = "Upload" } },
+    { label: "Invite",  icon: "user-plus", onClick: () => { $action = "Invite" } }
+  ], { icon: "plus" })
+], { padding: "l" }))`,
+
+      // ── Utility & feedback (Parts VIII.8, III) ──
+      Confetti: `$fire = false
+$app(Stack([
+  Row([
+    Button("Celebrate 🎉", { variant: "primary", onClick: () => { $fire = true } }),
+    Button("Reset", { variant: "ghost", onClick: () => { $fire = false } })
+  ], { gap: "s" }),
+  Confetti({ fire: $fire, count: 90 })
+], { gap: "m" }))`,
+      KbdShortcut: `$app(Row([
+  Text("Open the command palette:"),
+  KbdShortcut(["Cmd", "K"]),
+  Text("or"),
+  KbdShortcut("Ctrl+Shift+P")
+], { gap: "m", align: "center", wrap: true }))`,
+      Svg: `$app(Row([
+  Svg("<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='2'/><path d='M8 12l3 3 5-6' fill='none' stroke='currentColor' stroke-width='2'/>", { viewBox: "0 0 24 24", width: "48px", height: "48px", fill: "var(--rui-color-success)" }),
+  Text("Inline, sanitised SVG.")
+], { gap: "m", align: "center" }))`,
+      QRCode: `$app(Stack([
+  QRCode("https://aktion.dev", { size: 140, ecc: "M" }),
+  Text("Scannable offline QR — encoded in the browser.", { variant: "small", tone: "muted" })
+], { gap: "s", align: "center" }))`,
+      Calendar: `$picked = "2026-06-14"
+$app(Stack([
+  Calendar({
+    month: 5, year: 2026, selected: $picked,
+    events: [
+      { date: "2026-06-09", label: "Design review", color: "primary", time: "10:00" },
+      { date: "2026-06-09", label: "1:1 with Sam",  color: "success", time: "14:00" },
+      { date: "2026-06-09", label: "Retro",         color: "warning", time: "16:30" },
+      { date: "2026-06-14", label: "Sprint demo",   color: "danger" },
+      { date: "2026-06-22", label: "Offsite",       color: "#0ea5e9" },
+      "2026-06-03", "2026-06-26"
+    ],
+    onSelect: (iso) => { $picked = iso },
+    onNavigate: (y, m) => $toast.show("Viewing " + (m + 1) + "/" + y)
+  }),
+  Text("Selected: " + $picked, { tone: "muted" })
+], { gap: "m" }))`,
+
+      // ── Interactive canvas / editors (Part VIII.7) ──
+      DrawingCanvas: `$strokes = 0
+$app(Stack([
+  DrawingCanvas({ width: 320, height: 180, color: "#6366f1", lineWidth: 3, onChange: (n) => { $strokes = n } }),
+  Text("Strokes: " + $strokes, { tone: "muted" })
+], { gap: "s" }))`,
+      SignaturePad: `$app(Stack([
+  Text("Sign below:", { variant: "small", tone: "muted" }),
+  SignaturePad({ width: 360, height: 150, onChange: (png) => $toast.show(png ? "Captured" : "Cleared") })
+], { gap: "s" }))`,
+
+      // ── Media (Part III.8) ──
+      Lottie: `$app(Stack([
+  Lottie({
+    src: "https://assets9.lottiefiles.com/packages/lf20_x62chJ.json",
+    poster: "https://images.unsplash.com/photo-1551434678-e076c223a692?w=320",
+    width: "240px",
+    height: "180px",
+    loop: true
+  }),
+  Text("Plays via lottie-web when window.lottie is present; otherwise the poster keeps the layout intact.", { variant: "small", tone: "muted" })
+], { gap: "s" }))`,
+
+      // ── Accessibility primitives (Part X.3) ──
+      VisuallyHidden: `$app(Button([
+  Icon("magnifying-glass"),
+  VisuallyHidden([Text("Search")])
+], { variant: "ghost" }))`,
+      SkipLink: `$app(Stack([
+  SkipLink("main-content", { label: "Skip to content" }),
+  Text("Press Tab to reveal the link, then Enter to jump past this filler…"),
+  Card([Text("…some long navigation a keyboard user would rather skip…", { tone: "muted" })], { padding: "s" }),
+  Card([
+    CardHeader("Main content"),
+    Text("Activating the skip link moves focus here — even inside the shadow DOM.")
+  ], { id: "main-content", gap: "s" })
+], { gap: "s" }))`,
+      LiveRegion: `$status = "Saving…"
+$app(Stack([
+  Row([Button("Save", { variant: "primary", size: "small", onClick: () => { $status = "Saved ✓" } }), Text($status)], { gap: "m", align: "center" }),
+  LiveRegion($status, { politeness: "polite" })
+], { gap: "m" }))`,
+      FocusTrap: `$app(FocusTrap([
+  Card([
+    CardHeader("Focus is trapped here"),
+    Input("name", { placeholder: "Tab cycles within this box" }),
+    Button("Submit", { variant: "primary", size: "small" })
+  ])
+], { active: true }))`,
+
+      // ── Virtualization (Part XI.3) ──
+      VirtualGrid: `$app(VirtualGrid(
+  $util.range(0, 240).map(i => Card([Center([Text("#" + i)])])),
+  { columns: 4, itemHeight: 80, gap: 8, height: 320 }
+))`,
+
+      // ── Lifecycle wrapper ──
+      OnMount: `$app(OnMount(
+  Card([CardHeader("Mounted"), Text("onMount fires once after this node attaches.")]),
+  { onMount: () => $toast.show("Mounted"), onUnmount: () => $toast.show("Unmounted") }
+))`,
+      TextContent: `$app(Stack([
+  TextContent("Body text (TextContent is the legacy alias of Text).", { variant: "body" }),
+  TextContent("Muted small text", { variant: "small", tone: "muted" })
+], { gap: "xs" }))`,
     };
 
     /**
@@ -1729,6 +2213,12 @@ $app(pages)`,
       "HoverCard",
       "NotificationBell",
       "MentionInput",
+      "Sheet",
+      "BottomSheet",
+      "ConfirmDialog",
+      "SpeedDial",
+      "FloatingActionButton",
+      "BackToTop",
     ]);
 
     function formatSignature(spec) {

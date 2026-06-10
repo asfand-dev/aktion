@@ -86,6 +86,9 @@ const EVENT_PROPS = [
   // Focus
   "onfocus",
   "onblur",
+  // Animation / transition lifecycle (self-cleaning decorations, exit hooks)
+  "onanimationend",
+  "ontransitionend",
   // Media / misc
   "onerror",
 ] as const;
@@ -157,6 +160,12 @@ function syncAttributes(oldEl: Element, newEl: Element): void {
     // fresh render didn't emit it (it usually never does — the LLM only
     // sets the initial value via the `open` prop).
     if (attr.name === "open" && oldEl.tagName === "DETAILS") continue;
+    // A <canvas> drawing buffer (width/height) may be sized after mount by
+    // the component that owns it (e.g. Backdrop's particle engine measures
+    // its container). Removing the attribute would reset the buffer to
+    // 300×150 AND erase the bitmap, so the dimensions are element-owned
+    // state unless the fresh render explicitly sets different ones.
+    if (oldEl.tagName === "CANVAS" && (attr.name === "width" || attr.name === "height")) continue;
     oldEl.removeAttribute(attr.name);
   }
   const newAttrs = newEl.attributes;

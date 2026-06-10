@@ -94,7 +94,7 @@ export default defineConfig({
   test: { environment: "happy-dom" },   // or "jsdom"
 });</code></pre>
       <p>Then import the helpers from <code>aktion/test</code>:</p>
-<pre><code>import { render, renderComponent, cleanup, flush, json } from "aktion/test";</code></pre>
+<pre><code>import { render, renderComponent, cleanup, flush, json } from "aktion-runtime/test";</code></pre>
       <p>
         <code>render</code> returns a <strong>Screen</strong> scoped to that
         instance&rsquo;s shadow root (there is no single global <code>screen</code>
@@ -103,7 +103,7 @@ export default defineConfig({
         <code>afterEach</code> so each test starts clean:
       </p>
 <pre><code>import { afterEach } from "vitest";
-import { cleanup } from "aktion/test";
+import { cleanup } from "aktion-runtime/test";
 
 afterEach(cleanup);   // unmounts every screen + restores any mocked fetch</code></pre>
 
@@ -114,7 +114,7 @@ afterEach(cleanup);   // unmounts every screen + restores any mocked fetch</code
         re-rendered DOM.
       </p>
 <pre><code>import { describe, it, expect, afterEach } from "vitest";
-import { render, cleanup, flush } from "aktion/test";
+import { render, cleanup, flush } from "aktion-runtime/test";
 
 afterEach(cleanup);
 
@@ -184,6 +184,17 @@ it("increments the counter", async () =&gt; {
         <code>findBy*</code> to assert something that appears <em>after</em> an
         effect, timer, or network request resolves.
       </p>
+      <h3>Scoped queries with <code>within</code></h3>
+      <p>
+        When a page has several similar regions (cards, rows, list items), scope a
+        query to one subtree with <code>within(node)</code>. It returns the same query
+        suite, but rooted at <code>node</code> instead of the whole shadow tree.
+      </p>
+<pre><code>import { render, within } from "aktion-runtime/test"
+
+const { getByTestId } = render(program)
+const row = getByTestId("row-7")
+expect(within(row).getByRole("button", { name: "Delete" })).toBeTruthy()</code></pre>
 
       <h2 id="interactions">Interactions</h2>
       <p>
@@ -304,7 +315,7 @@ it("ticks every second", async () =&gt; {
         and lets you prepend a <code>setup</code> block of helper DSL (component
         definitions, seed state).
       </p>
-<pre><code>import { renderComponent, flush } from "aktion/test";
+<pre><code>import { renderComponent, flush } from "aktion-runtime/test";
 
 it("colours a PriceTag by amount", async () =&gt; {
   const screen = renderComponent(`PriceTag(42)`, {
@@ -375,7 +386,7 @@ it("colours a PriceTag by amount", async () =&gt; {
         object &mdash; the <code>json(data, status?)</code> helper builds a JSON
         response for you.
       </p>
-<pre><code>import { render, json, flush } from "aktion/test";
+<pre><code>import { render, json, flush } from "aktion-runtime/test";
 
 it("loads and renders the user list", async () =&gt; {
   const screen = render(`
@@ -474,7 +485,7 @@ expect(screen.state.snapshot()).toMatchSnapshot();    // every reactive atom</co
         <code>registerComponents(...)</code>, pass them to <code>render</code>
         through the <code>components</code> option so your program can call them.
       </p>
-<pre><code>import { render } from "aktion/test";
+<pre><code>import { render } from "aktion-runtime/test";
 import { ProductCard } from "../src/components/product-card";
 
 const screen = render(`$app(ProductCard("Widget", { price: 9.99 }))`, {
@@ -482,6 +493,41 @@ const screen = render(`$app(ProductCard("Widget", { price: 9.99 }))`, {
 });
 await flush();
 expect(screen.getByText("Widget", { exact: false })).toBeTruthy();</code></pre>
+
+      <h2 id="a11y">Accessibility audits with <code>axe</code></h2>
+      <p>
+        Run a lightweight a11y audit on any rendered subtree with
+        <code>axe(node)</code>. It returns an array of violations &mdash; missing
+        image <code>alt</code> text, buttons without an accessible name, inputs
+        without a label, duplicate ids, and invalid <code>tabindex</code> &mdash; so
+        you can fail a test the moment a regression slips in.
+      </p>
+<pre><code>import { render, axe } from "aktion-runtime/test"
+
+test("dashboard has no obvious a11y violations", () =&gt; {
+  const { container } = render(program)
+  expect(axe(container)).toHaveLength(0)
+})</code></pre>
+
+      <h2 id="ssr">Testing SSR output</h2>
+      <p>
+        Assert on server&#8209;rendered markup with <code>renderToString</code> from the
+        runtime entry. It returns <code>{ html, state }</code>; check that critical
+        content is present in the string (no client mount required) and that the
+        hydration <code>state</code> carries what the page needs.
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime"
+
+test("renders the headline on the server", () =&gt; {
+  const { html, state } = renderToString(program, { path: "/" })
+  expect(html).toContain("Welcome back")
+  expect(state.user).toBeDefined()
+})</code></pre>
+      <p>
+        In Node, register a DOM shim (<code>happy-dom</code> / <code>jsdom</code>) on
+        <code>globalThis</code> first &mdash; the same setup described in
+        <a href="#setup">Setup</a>.
+      </p>
 
       <h2 id="api">API reference</h2>
       <h3><code>render(program, options?)</code> &amp; <code>renderComponent(expression, options?)</code></h3>
@@ -518,6 +564,8 @@ expect(screen.getByText("Widget", { exact: false })).toBeTruthy();</code></pre>
         <tbody>
           <tr><td><code>render(program, options?)</code></td><td>Mount a full program; returns a <code>Screen</code>.</td></tr>
           <tr><td><code>renderComponent(expr, options?)</code></td><td>Mount one component expression in isolation.</td></tr>
+          <tr><td><code>within(node)</code></td><td>Return the query suite scoped to a subtree.</td></tr>
+          <tr><td><code>axe(node)</code></td><td>Audit a subtree and return an array of a11y violations.</td></tr>
           <tr><td><code>cleanup()</code></td><td>Unmount every screen + restore mocked <code>fetch</code> (wire into <code>afterEach</code>).</td></tr>
           <tr><td><code>flush(times?)</code></td><td>Drain the microtask queue so the render cascade settles.</td></tr>
           <tr><td><code>act(fn)</code></td><td>Run a reactive-write block, then flush.</td></tr>

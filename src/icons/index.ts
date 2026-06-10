@@ -125,3 +125,55 @@ export type IconSize = (typeof ICON_SIZES)[number];
 export function isIconSize(value: unknown): value is IconSize {
   return typeof value === "string" && (ICON_SIZES as readonly string[]).includes(value);
 }
+
+/* ------------------------------------------------------------------------ *
+ * Custom icon sets (suggestions-global IX.2)
+ *
+ * Authors can register their own named icons (inline SVG markup) so brand
+ * glyphs aren't limited to Font Awesome. Registered via
+ * `$theme({ icons: { logo: "<path …/>" } })` or the host method
+ * `el.registerIcons({...})`. A registered name wins over the FA lookup.
+ * Values are sanitised (script / event-handler / external-entity payloads
+ * stripped) before they ever reach the DOM.
+ * ------------------------------------------------------------------------ */
+
+const customIcons = new Map<string, string>();
+const CUSTOM_ICON_BLOCK_RE = /<script|<foreignObject|on\w+\s*=|javascript\s*:|<!ENTITY|<iframe|<embed|<object/i;
+const CUSTOM_ICON_NAME_RE = /^[a-zA-Z0-9:_-]+$/;
+
+function sanitiseIconMarkup(raw: unknown): string {
+  const s = typeof raw === "string" ? raw : "";
+  if (!s || s.length > 16 * 1024) return "";
+  if (CUSTOM_ICON_BLOCK_RE.test(s)) return "";
+  return s;
+}
+
+/**
+ * Register one or more custom icons. Each value is inline SVG markup — either
+ * a full `<svg>…</svg>` element or just its inner shapes (wrapped in a
+ * 24×24 `viewBox` svg automatically). Returns the names successfully added.
+ */
+export function registerIcons(record: unknown): string[] {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return [];
+  const added: string[] = [];
+  for (const [name, markup] of Object.entries(record as Record<string, unknown>)) {
+    if (!CUSTOM_ICON_NAME_RE.test(name)) continue;
+    const safe = sanitiseIconMarkup(markup);
+    if (!safe) continue;
+    customIcons.set(name, safe);
+    added.push(name);
+  }
+  return added;
+}
+
+/** Look up a registered custom icon's sanitised SVG markup, or null. */
+export function getCustomIcon(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  return customIcons.get(name.trim()) ?? null;
+}
+
+/** True when `name` resolves to a registered custom icon. */
+export function hasCustomIcon(name: unknown): boolean {
+  return typeof name === "string" && customIcons.has(name.trim());
+}
+

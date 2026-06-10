@@ -106,7 +106,14 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     sigil: "$store",
     category: "effect",
     signature: "$store({ ...state, ...methods })",
-    summary: "Global store: shared state + actions (like Zustand/Pinia).",
+    summary: "Global store: shared state + actions (like Zustand/Pinia). persist: \"key\" mirrors data to localStorage (persistIn: \"session\" for sessionStorage); history: true|depth adds undo()/redo()/clearHistory() + reactive canUndo/canRedo.",
+  },
+  {
+    name: "form",
+    sigil: "$form",
+    category: "effect",
+    signature: "$form({ values, rules, onSubmit })",
+    summary: "Reactive form engine: values/errors/touched/dirty/valid/submitting/validating + field()/validate()/touch()/setField()/submit() (alias handleSubmit())/reset(). Async rules ($util.rules.asyncCustom) are awaited before submit; submitting stays true until an async onSubmit settles.",
   },
 
   // Data layer.
@@ -122,14 +129,28 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     sigil: "$query",
     category: "data",
     signature: "$query({ url, key, ttl })",
-    summary: "Cached + deduplicated HTTP read.",
+    summary: "Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refetchOnReconnect; pagination via infinite: { param, limit, mode } (→ .loadMore()/.hasMore/.loadingMore); GraphQL via gql + variables.",
   },
   {
     name: "mutation",
     sigil: "$mutation",
     category: "data",
     signature: "$mutation({ url, method })",
-    summary: "Deferred write; fires on .mutate(overrides?).",
+    summary: "Deferred write; fires on .mutate(overrides?). optimistic: (vars) => {…} applies instantly (auto-rollback on failure); invalidates: [keys] refetches matching cached queries; gql for GraphQL.",
+  },
+  {
+    name: "socket",
+    sigil: "$socket",
+    category: "data",
+    signature: "$socket({ url, reconnect? })",
+    summary: "Reactive WebSocket — { status: \"connecting\"|\"open\"|\"closed\", connected, last, messages, attempts, send, close }. reconnect: true|n retries with exponential backoff; sends queue while connecting and flush on open; close() stops for good.",
+  },
+  {
+    name: "sse",
+    sigil: "$sse",
+    category: "data",
+    signature: "$sse({ url, event })",
+    summary: "Reactive Server-Sent Events stream — { status, connected, last, messages, close }. EventSource reconnects natively (status reads \"connecting\" while it does).",
   },
 
   // App / routing / theming / events.
@@ -152,7 +173,7 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     sigil: "$theme",
     category: "theme",
     signature: "$theme({ colors, radius, font, … })",
-    summary: "In-script theme override merged on top of the active base theme.",
+    summary: "In-script theme override merged on top of the active base theme. Structured groups: colors/radius/font/spacing/shadows/gradients/zIndex/motion/fonts (web-font import)/icons (custom inline SVG), plus name/direction metadata.",
   },
   {
     name: "emit",
@@ -168,7 +189,7 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     sigil: "$util",
     category: "namespace",
     signature: "$util",
-    summary: "Runtime helper namespace ($util.format, $util.sum, $util.range, …).",
+    summary: "Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.minLength/.maxLength/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), and platform ($util.worker/.registerServiceWorker/.webManifest).",
     namespace: true,
   },
   {

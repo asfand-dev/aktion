@@ -497,6 +497,272 @@ export const Util = {
   sqrt: (value: unknown): number => Math.sqrt(toNumber(value)),
   random: (): number => Math.random(),
   log: (value: unknown): number => Math.log(toNumber(value)),
+
+  // ── Formatting & misc convenience (suggestions-global XIII.6) ─────────
+  slugify: (text: unknown): string => String(text ?? "")
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, ""),
+  truncate: (text: unknown, length: unknown = 80, ellipsis = "…"): string => {
+    const t = String(text ?? "");
+    const n = toNumber(length);
+    return t.length <= n ? t : t.slice(0, Math.max(0, n - 1)).trimEnd() + String(ellipsis);
+  },
+  initials: (name: unknown, max: unknown = 2): string => String(name ?? "")
+    .split(/\s+/).filter(Boolean).slice(0, toNumber(max))
+    .map((w) => w.charAt(0).toUpperCase()).join(""),
+  currency: (value: unknown, code = "USD", locale?: string): string => {
+    try { return new Intl.NumberFormat(locale, { style: "currency", currency: String(code) }).format(toNumber(value)); }
+    catch { return `${code} ${toNumber(value).toFixed(2)}`; }
+  },
+  percent: (value: unknown, decimals: unknown = 0): string => {
+    const v = toNumber(value);
+    return `${(v * 100).toFixed(toNumber(decimals))}%`;
+  },
+  bytes: (value: unknown): string => {
+    let n = toNumber(value);
+    const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
+    return `${i === 0 ? n : n.toFixed(1)} ${units[i]}`;
+  },
+  relativeTime: (value: unknown): string => {
+    const d = toDate(value);
+    const diff = d.getTime() - Date.now();
+    const abs = Math.abs(diff);
+    const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+      ["year", 31536e6], ["month", 2592e6], ["week", 6048e5],
+      ["day", 864e5], ["hour", 36e5], ["minute", 6e4], ["second", 1e3],
+    ];
+    try {
+      const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+      for (const [unit, ms] of units) {
+        if (abs >= ms || unit === "second") return rtf.format(Math.round(diff / ms), unit);
+      }
+    } catch { /* fall through */ }
+    return d.toLocaleString();
+  },
+  /**
+   * Copy text to the clipboard. Resolves `true` only once the async Clipboard
+   * API write actually succeeds (permission can deny it), `false` otherwise.
+   * `await $util.copy(x)` in an action; plain truthy checks keep working.
+   */
+  copy: (text: unknown): Promise<boolean> => {
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { clipboard?: { writeText?: (t: string) => Promise<void> } }) : null;
+      const write = nav?.clipboard?.writeText?.(String(text ?? ""));
+      if (write && typeof write.then === "function") {
+        return write.then(() => true, () => false);
+      }
+      return Promise.resolve(false);
+    } catch { return Promise.resolve(false); }
+  },
+  /** Await a pause: `await $util.sleep(300)`. Capped at 60s. */
+  sleep: (ms: unknown = 0): Promise<void> => {
+    const parsed = toNumber(ms);
+    const delay = Number.isFinite(parsed) ? Math.max(0, Math.min(60_000, parsed)) : 0;
+    return new Promise((resolve) => setTimeout(resolve, delay));
+  },
+  uuid: (): string => {
+    try {
+      const c = (typeof crypto !== "undefined" ? crypto : null) as (Crypto & { randomUUID?: () => string }) | null;
+      if (c?.randomUUID) return c.randomUUID();
+    } catch { /* fall through */ }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+      const r = (Math.random() * 16) | 0;
+      const v = ch === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  },
+  /** Wrap a function so it only fires `wait` ms after the last call. */
+  debounceFn: (fn: unknown, wait: unknown = 250): ((...args: unknown[]) => void) => {
+    const parsed = toNumber(wait);
+    const ms = Number.isFinite(parsed) && parsed > 0 ? parsed : 250;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return (...args: unknown[]) => {
+      if (typeof fn !== "function") return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { (fn as (...a: unknown[]) => unknown)(...args); }, ms);
+    };
+  },
+  /**
+   * Wrap a function so it fires at most once per `wait` ms. Leading edge
+   * fires immediately; calls landing inside the window schedule one trailing
+   * fire with the latest arguments, so the final value is never dropped.
+   */
+  throttleFn: (fn: unknown, wait: unknown = 250): ((...args: unknown[]) => void) => {
+    const parsed = toNumber(wait);
+    const ms = Number.isFinite(parsed) && parsed > 0 ? parsed : 250;
+    let last = 0;
+    let trailing: ReturnType<typeof setTimeout> | null = null;
+    let lastArgs: unknown[] = [];
+    return (...args: unknown[]) => {
+      if (typeof fn !== "function") return;
+      const now = Date.now();
+      if (now - last >= ms) {
+        last = now;
+        (fn as (...a: unknown[]) => unknown)(...args);
+        return;
+      }
+      lastArgs = args;
+      if (trailing) return;
+      trailing = setTimeout(() => {
+        trailing = null;
+        last = Date.now();
+        (fn as (...a: unknown[]) => unknown)(...lastArgs);
+      }, ms - (now - last));
+    };
+  },
+  // ── Device / sensor APIs (suggestions-global XII.3) ──────────────────────
+  /** Trigger device haptics. `pattern` is ms or an array of on/off ms. */
+  vibrate: (pattern: unknown = 10): boolean => {
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { vibrate?: (p: number | number[]) => boolean }) : null;
+      if (!nav?.vibrate) return false;
+      const p = Array.isArray(pattern) ? (pattern as number[]).map((n) => Number(n) || 0) : (Number(pattern) || 0);
+      return nav.vibrate(p);
+    } catch { return false; }
+  },
+  /** Native share sheet. `data` = { title?, text?, url? }. Returns a promise. */
+  share: (data: unknown): Promise<boolean> => {
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { share?: (d: unknown) => Promise<void> }) : null;
+      if (!nav?.share) return Promise.resolve(false);
+      const d = (data && typeof data === "object") ? data as Record<string, unknown> : { text: String(data ?? "") };
+      return nav.share(d).then(() => true).catch(() => false);
+    } catch { return Promise.resolve(false); }
+  },
+  /** Read text from the clipboard (async). Returns "" when unavailable/denied. */
+  readClipboard: (): Promise<string> => {
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { clipboard?: { readText?: () => Promise<string> } }) : null;
+      if (!nav?.clipboard?.readText) return Promise.resolve("");
+      return nav.clipboard.readText().catch(() => "");
+    } catch { return Promise.resolve(""); }
+  },
+  /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
+  geolocate: (options?: unknown): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
+    return new Promise((resolve) => {
+      try {
+        const nav = typeof navigator !== "undefined" ? (navigator as Navigator) : null;
+        if (!nav?.geolocation) { resolve(null); return; }
+        nav.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+          () => resolve(null),
+          (options && typeof options === "object") ? options as PositionOptions : undefined,
+        );
+      } catch { resolve(null); }
+    });
+  },
+  /** `true` when the device is currently online. */
+  isOnline: (): boolean => {
+    try { return typeof navigator !== "undefined" ? navigator.onLine !== false : true; }
+    catch { return true; }
+  },
+  /** Best-effort device class from the user agent: "mobile" | "tablet" | "desktop". */
+  deviceType: (): string => {
+    try {
+      const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+      if (/iPad|Tablet|PlayBook|Silk/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua))) return "tablet";
+      if (/Mobi|Android|iPhone|iPod|Windows Phone/.test(ua)) return "mobile";
+      return "desktop";
+    } catch { return "desktop"; }
+  },
+  // ── Web Worker offload (suggestions-global XI.5) ─────────────────────────
+  /**
+   * Run a PURE function off the main thread in a Web Worker, resolving with its
+   * result. `fn` is serialised via `toString()`, so it must not close over
+   * outer variables (pass everything it needs as arguments). Falls back to
+   * running inline (still async) when Workers aren't available.
+   *   $util.worker((n) => heavyCompute(n), 1000).then(r => $result = r)
+   */
+  worker: (fn: unknown, ...args: unknown[]): Promise<unknown> => {
+    if (typeof fn !== "function") return Promise.resolve(undefined);
+    const fallback = (): Promise<unknown> =>
+      Promise.resolve().then(() => (fn as (...a: unknown[]) => unknown)(...args));
+    const canWorker =
+      typeof Worker !== "undefined" && typeof Blob !== "undefined" &&
+      typeof URL !== "undefined" && typeof URL.createObjectURL === "function";
+    if (!canWorker) return fallback();
+    try {
+      const src =
+        `self.onmessage=function(e){` +
+        `var fn=(${(fn as () => unknown).toString()});` +
+        `Promise.resolve().then(function(){return fn.apply(null,e.data);})` +
+        `.then(function(r){self.postMessage({ok:true,value:r});})` +
+        `.catch(function(err){self.postMessage({ok:false,error:String(err)});});};`;
+      const url = URL.createObjectURL(new Blob([src], { type: "application/javascript" }));
+      const w = new Worker(url);
+      return new Promise((resolve, reject) => {
+        w.onmessage = (e: MessageEvent) => {
+          URL.revokeObjectURL(url); w.terminate();
+          const data = e.data as { ok?: boolean; value?: unknown; error?: string };
+          if (data?.ok) resolve(data.value);
+          else reject(new Error(data?.error || "worker error"));
+        };
+        w.onerror = (err) => { URL.revokeObjectURL(url); w.terminate(); reject(err); };
+        w.postMessage(args);
+      });
+    } catch {
+      return fallback();
+    }
+  },
+  // ── PWA helpers (suggestions-global XII.2) ───────────────────────────────
+  /** Register a service worker. Resolves true on success, false otherwise. */
+  registerServiceWorker: (url: unknown, scope?: unknown): Promise<boolean> => {
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator) : null;
+      if (!nav?.serviceWorker || typeof url !== "string" || !url) return Promise.resolve(false);
+      const opts = typeof scope === "string" && scope ? { scope } : undefined;
+      return nav.serviceWorker.register(url, opts).then(() => true).catch(() => false);
+    } catch { return Promise.resolve(false); }
+  },
+  /**
+   * Build a sanitised Web App Manifest object from a config (XII.2). Use it to
+   * inline a manifest (`<link rel="manifest" href="data:...">`) or write one at
+   * build time. Unknown/unsafe keys are dropped.
+   */
+  webManifest: (config: unknown): Record<string, unknown> => {
+    const cfg = (config && typeof config === "object" && !Array.isArray(config)) ? config as Record<string, unknown> : {};
+    const out: Record<string, unknown> = {
+      name: typeof cfg.name === "string" ? cfg.name : "App",
+      short_name: typeof cfg.shortName === "string" ? cfg.shortName : (typeof cfg.name === "string" ? cfg.name : "App"),
+      start_url: typeof cfg.startUrl === "string" ? cfg.startUrl : "/",
+      display: typeof cfg.display === "string" ? cfg.display : "standalone",
+      background_color: typeof cfg.backgroundColor === "string" ? cfg.backgroundColor : "#ffffff",
+      theme_color: typeof cfg.themeColor === "string" ? cfg.themeColor : "#000000",
+    };
+    if (typeof cfg.description === "string") out.description = cfg.description;
+    if (Array.isArray(cfg.icons)) {
+      out.icons = cfg.icons
+        .filter((i): i is Record<string, unknown> => Boolean(i) && typeof i === "object")
+        .map((i) => ({ src: String(i.src ?? ""), sizes: String(i.sizes ?? "512x512"), type: String(i.type ?? "image/png") }));
+    }
+    return out;
+  },
+  // ── Native shell detection (suggestions-global XII.4) ────────────────────
+  /**
+   * Detect the native shell the app is running inside (Capacitor / Cordova /
+   * Tauri / Electron / React Native WebView), or "web" when it's a plain
+   * browser. Lets a program branch on the host (e.g. hide a download button in
+   * a native shell, or call a bridge when present).
+   */
+  nativeShell: (): string => {
+    try {
+      const w = typeof window !== "undefined" ? (window as unknown as Record<string, unknown>) : {};
+      const nav = typeof navigator !== "undefined" ? navigator : ({ userAgent: "" } as Navigator);
+      if (w.__TAURI__ || w.__TAURI_IPC__) return "tauri";
+      if (w.Capacitor) return "capacitor";
+      if (w.cordova || w.PhoneGap) return "cordova";
+      if (w.ReactNativeWebView) return "react-native";
+      if (/Electron\//.test(nav.userAgent)) return "electron";
+      return "web";
+    } catch { return "web"; }
+  },
+  /** True when running inside any native shell (not a plain browser). */
+  isNativeApp: (): boolean => Util.nativeShell() !== "web",
 } as const;
 
 // Soft cap on `Util.range` / `Util.repeat` allocations so a stray

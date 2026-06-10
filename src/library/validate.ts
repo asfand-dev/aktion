@@ -23,6 +23,7 @@ import { parse } from "../parser/index.js";
 import type { ComponentLibrary } from "./types.js";
 import { findPositionalProp } from "./types.js";
 import { findComponent } from "./registry.js";
+import { UNIVERSAL_PROP_NAMES } from "./sx.js";
 
 /**
  * Combined entry point for hosts: parse the source and merge any
@@ -307,6 +308,10 @@ function validateCall(
 
   for (const entry of namedEntries) {
     if (!propNames.has(entry.name)) {
+      // Universal style/behaviour channel (`sx`, `animate`, `id`, …):
+      // accepted by every component at the runtime layer, so it is never
+      // an "unknown prop" even when the spec declares no such slot.
+      if (UNIVERSAL_PROP_NAMES.has(entry.name)) continue;
       out.push({
         message: `Unknown prop "${entry.name}" on <${expr.callee}>. Known props: ${spec.props.map((p) => p.name).join(", ")}.`,
         line: entry.loc?.line ?? expr.loc?.line ?? 0,
@@ -355,7 +360,7 @@ function collectNamedPropNames(
  * (`--color-x`). Both forms surface as advisory warnings so the runtime
  * can keep streaming partial themes without crashing.
  */
-const STRUCTURED_THEME_GROUPS = new Set(["colors", "radius", "font"]);
+const STRUCTURED_THEME_GROUPS = new Set(["colors", "radius", "font", "fonts", "spacing", "shadows", "gradients", "icons", "zIndex", "motion"]);
 const THEME_METADATA_KEYS = new Set(["name", "direction"]);
 
 function validateThemeCall(

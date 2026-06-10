@@ -12,6 +12,21 @@ import {
   sanitiseCssLength, sanitiseImageSrc,
 } from "../utils.js";
 import { ICON_SIZES } from "../../icons/index.js";
+import { highlightLine, isHighlightable } from "../highlight.js";
+
+/** Build a line's content as highlighted token spans (VIII.3). */
+function appendHighlightedLine(
+  container: HTMLElement,
+  lineText: string,
+  lang: string,
+  state: { inBlockComment: boolean },
+): void {
+  const tokens = highlightLine(lineText, lang, state);
+  for (const tok of tokens) {
+    if (tok.cls) container.append(el("span", { class: `rui-hl-${tok.cls}` }, [tok.text]));
+    else container.append(document.createTextNode(tok.text));
+  }
+}
 
 const ICON_VARIANTS = ["solid", "regular", "brands"] as const;
 
@@ -141,16 +156,23 @@ export const Image: ComponentSpec = {
   name: "Image",
   description:
     "Inline image. `ratio` constrains the box to a fixed aspect ratio (e.g. " +
-    "`16:9`, `1:1`) so callers do not need an outer `AspectRatio`. `fit` " +
-    "controls how the image fills that box. When `src` is missing or " +
-    "unsafe the component renders a placeholder (or `fallback` text/icon).",
+    "`16:9`, `1:1`) so callers do not need an outer `AspectRatio` (and it " +
+    "reserves space to avoid layout shift). `fit` controls how the image " +
+    "fills that box. `placeholder: \"blur\"` fades the image in once loaded; " +
+    "`sizes`/`srcset` enable responsive loading; `loading: \"eager\"` opts out " +
+    "of lazy-loading. When `src` is missing/unsafe or fails to load it shows " +
+    "the `fallback` text/icon.",
   props: [
     { name: "src", type: "string" },
     { name: "alt", type: "string", optional: true },
     { name: "caption", type: "string", optional: true },
     { name: "ratio", type: "string", optional: true, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`)" },
     { name: "fit", type: "string", optional: true, enum: IMAGE_FIT, description: "object-fit value (default `cover`)" },
-    { name: "fallback", type: "string", optional: true, description: "Text label or Font Awesome icon shown when src is missing/unsafe" },
+    { name: "fallback", type: "string", optional: true, description: "Text label or Font Awesome icon shown when src is missing/unsafe/errored" },
+    { name: "placeholder", type: "string", optional: true, enum: ["blur", "none"], description: "`blur` fades the image in on load" },
+    { name: "loading", type: "string", optional: true, enum: ["lazy", "eager"], description: "Native loading strategy (default lazy)" },
+    { name: "sizes", type: "string", optional: true, description: "Responsive `sizes` attribute" },
+    { name: "srcset", type: "string", optional: true, aliases: ["srcSet"], description: "Responsive `srcset` candidates" },
   ],
   render: (_node, props) => {
     const wrapper = el("figure", {
@@ -159,27 +181,38 @@ export const Image: ComponentSpec = {
       style: props.ratio ? `aspect-ratio:${parseImageRatio(asString(props.ratio))};` : null,
     });
     const safeSrc = sanitiseImageSrc(props.src);
-    if (safeSrc) {
-      wrapper.append(el("img", {
-        src: safeSrc,
-        alt: asString(props.alt),
-        loading: "lazy",
-      }));
-    } else {
-      // Rendering a broken/hostile src is worse than rendering nothing —
-      // keep the layout slot but skip the network request.
-      const placeholder = el("div", {
-        class: "rui-image-placeholder",
-        role: "presentation",
-        "aria-hidden": "true",
-      });
+    const renderFallback = (): HTMLElement => {
+      const placeholder = el("div", { class: "rui-image-placeholder", role: "presentation", "aria-hidden": "true" });
       const fallback = asString(props.fallback);
       if (fallback) {
         const iconNode = renderIcon(fallback, { className: "rui-image-fallback-icon" });
         if (iconNode) placeholder.append(iconNode);
         else placeholder.append(el("span", { class: "rui-image-fallback-text" }, [fallback]));
       }
-      wrapper.append(placeholder);
+      return placeholder;
+    };
+    if (safeSrc) {
+      const blur = asString(props.placeholder) === "blur";
+      const img = el("img", {
+        src: safeSrc,
+        alt: asString(props.alt),
+        loading: asString(props.loading, "lazy") === "eager" ? "eager" : "lazy",
+        decoding: "async",
+        sizes: asString(props.sizes) || null,
+        srcset: asString(props.srcset) || null,
+        "data-blur": blur ? "true" : null,
+      }) as HTMLImageElement;
+      if (blur) {
+        if (img.complete) img.setAttribute("data-loaded", "true");
+        else img.addEventListener("load", () => img.setAttribute("data-loaded", "true"), { once: true });
+      }
+      // Swap to the fallback placeholder if the image fails to load.
+      img.addEventListener("error", () => { img.replaceWith(renderFallback()); }, { once: true });
+      wrapper.append(img);
+    } else {
+      // Rendering a broken/hostile src is worse than rendering nothing —
+      // keep the layout slot but skip the network request.
+      wrapper.append(renderFallback());
     }
     const cap = asString(props.caption);
     if (cap) wrapper.append(el("figcaption", { class: "rui-image-caption" }, [cap]));
@@ -298,13 +331,21 @@ export const CodeBlock: ComponentSpec = {
   description:
     "Read-only code block with a language label and a copy-to-clipboard " +
     "button. Pass `showLineNumbers=true` to render a gutter; `highlightLines` " +
-    "accepts a string like `\"3-5,8\"` to emphasise specific lines.",
+    "accepts a string like `\"3-5,8\"` to emphasise specific lines. " +
+    "`header=false` renders a chromeless variant — no language label or copy " +
+    "button, no border or rounding — that fills its container (100%×100%), " +
+    "for embedding in your own frame (CodeWindow uses it). `width`/`height` " +
+    "set an explicit size; overflowing code scrolls either way.",
   props: [
-    { name: "language", type: "string", optional: true, description: "Display label (e.g. ts, bash)" },
+    { name: "language", type: "string", optional: true, description: "Display label + syntax highlighting (e.g. aktion, ts, bash)" },
     { name: "codeString", type: "string", positional: true, required: true, aliases: ["code"], description: "Raw source text" },
     { name: "showLineNumbers", type: "boolean", optional: true, description: "Render a left-side line-number gutter" },
-    { name: "highlightLines", type: "string", optional: true, aliases: ["highlight"], description: "Highlight ranges, e.g. \"3-5,8\"" },
+    { name: "highlightLines", type: "string", optional: true, description: "Highlight ranges, e.g. \"3-5,8\"" },
+    { name: "highlight", type: "boolean", optional: true, description: "Syntax-highlight tokens when a language is set (default true)" },
     { name: "copy", type: "boolean", optional: true, description: "Show the copy-to-clipboard button (default true)" },
+    { name: "header", type: "boolean", optional: true, description: "Show the header bar (default true); false = chromeless, fills its container" },
+    { name: "width", type: "string", optional: true, description: "Explicit width (CSS length)" },
+    { name: "height", type: "string", optional: true, description: "Explicit height (CSS length); overflowing code scrolls" },
   ],
   render: (_node, props) => {
     const language = asString(props.language);
@@ -312,9 +353,17 @@ export const CodeBlock: ComponentSpec = {
     const showLineNumbers = asBoolean(props.showLineNumbers);
     const highlights = parseLineRanges(asString(props.highlightLines));
     const showCopy = props.copy === undefined ? true : asBoolean(props.copy);
-    const root = el("div", { class: "rui-code-block" });
+    const showHeader = props.header === undefined ? true : asBoolean(props.header);
+    const width = sanitiseCssLength(props.width, "");
+    const height = sanitiseCssLength(props.height, "");
+    const sizeStyle = [width ? `width:${width}` : "", height ? `height:${height}` : ""].filter(Boolean).join(";");
+    const root = el("div", {
+      class: "rui-code-block",
+      "data-headerless": showHeader ? null : "true",
+      style: sizeStyle || null,
+    });
 
-    if (language || showCopy) {
+    if (showHeader && (language || showCopy)) {
       const head = el("div", { class: "rui-code-block-head" });
       if (language) head.append(el("span", { class: "rui-code-block-language" }, [language]));
       if (showCopy) {
@@ -351,9 +400,13 @@ export const CodeBlock: ComponentSpec = {
     }
 
     const pre = el("pre", { class: "rui-code-block-pre", "data-line-numbers": showLineNumbers ? "true" : "false" });
+    // Syntax highlighting (VIII.3): when a known `language` is set we tokenise
+    // each line into coloured spans. Disable with `highlight={false}`.
+    const wantHighlight = (props.highlight === undefined ? true : asBoolean(props.highlight)) && !!language && isHighlightable(language);
     if (showLineNumbers || highlights.size > 0) {
       const lines = code.split(/\r?\n/);
       const codeEl = el("code", {});
+      const hlState = { inBlockComment: false };
       lines.forEach((lineText, idx) => {
         const lineNumber = idx + 1;
         const line = el("span", {
@@ -364,8 +417,20 @@ export const CodeBlock: ComponentSpec = {
         if (showLineNumbers) {
           line.append(el("span", { class: "rui-code-block-gutter" }, [String(lineNumber)]));
         }
-        line.append(el("span", { class: "rui-code-block-code" }, [lineText]));
+        const codeSpan = el("span", { class: "rui-code-block-code" });
+        if (wantHighlight) appendHighlightedLine(codeSpan, lineText, language, hlState);
+        else codeSpan.append(document.createTextNode(lineText));
+        line.append(codeSpan);
         codeEl.append(line);
+      });
+      pre.append(codeEl);
+    } else if (wantHighlight) {
+      const codeEl = el("code", {});
+      const hlState = { inBlockComment: false };
+      const lines = code.split(/\r?\n/);
+      lines.forEach((lineText, idx) => {
+        appendHighlightedLine(codeEl, lineText, language, hlState);
+        if (idx < lines.length - 1) codeEl.append(document.createTextNode("\n"));
       });
       pre.append(codeEl);
     } else {

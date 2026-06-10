@@ -323,11 +323,43 @@ function onType(q) {
         </tbody>
       </table>
 
+      <h2 id="errors">Catching action errors with <code>$util.onError</code></h2>
+      <p>
+        Register a program&#8209;level error sink with <code>$util.onError(fn)</code>.
+        When an action throws, the runtime calls <code>fn({ error, source })</code>
+        <em>before</em> its default logging &mdash; the place to surface a toast,
+        report to analytics, or set a fallback flag. Pass <code>null</code> to clear.
+      </p>
+<pre><code>$util.onError(({ error, source }) =&gt; {
+  $toast.error("Something went wrong")
+  $console.warn("action failed in", source, error)
+})</code></pre>
+      <p>
+        For render&#8209;time failures inside a subtree, wrap it in an
+        <a href="components.html#ErrorBoundary"><code>ErrorBoundary</code></a>, which
+        renders a friendly fallback card instead of breaking the page.
+      </p>
+
+      <h2 id="realtime">Subscriptions &amp; realtime streams</h2>
+      <p>
+        Long&#8209;lived subscriptions usually don&rsquo;t need a hand&#8209;written
+        effect: the realtime primitives <code>$socket</code> (WebSocket) and
+        <code>$sse</code> (Server&#8209;Sent Events) open a connection, expose a
+        reactive bag (<code>.connected</code> / <code>.last</code> /
+        <code>.messages</code>), and tear themselves down on re&#8209;plan or
+        disconnect &mdash; no manual <code>cleanup(fn)</code> required.
+      </p>
+<pre><code>$feed = $socket({ url: "wss://example.com/live" })
+// react to pushes:
+$effect(() =&gt; { if ($feed.last) $items = [...$items, $feed.last] }, [$feed.last])</code></pre>
+      <p>
+        See the <a href="http.html#realtime">HTTP guide</a> for the full
+        <code>$socket</code> / <code>$sse</code> API. When you <em>do</em> roll your own
+        subscription in an effect, always return teardown via
+        <code>cleanup(fn)</code>, as shown above.
+      </p>
+
       <h2 id="next">Next</h2>
-      <div class="demo-grid">
-        <a class="demo-card" href="actions.html">
-          <span class="demo-tag">Behaviour</span>
-          <h3>Actions</h3>
           <p>Imperative functions triggered by events &mdash; the user-driven counterpart to <code>effect</code>.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>

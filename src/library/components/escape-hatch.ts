@@ -180,6 +180,65 @@ function sanitiseStyleSheet(input: unknown): string {
   return raw;
 }
 
+/**
+ * Token interpolation (I.6): replace `{group.key}` placeholders in CSS with
+ * the matching `var(--rui-*)`, so `padding: {spacing.l}` → `var(--rui-spacing-l)`.
+ * Unknown shapes are left untouched.
+ */
+function interpolateTokens(css: string): string {
+  return css.replace(/\{\s*([a-zA-Z]+)\.([a-zA-Z0-9-]+)\s*\}/g, (whole, group: string, rawKey: string) => {
+    const key = rawKey.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+    const prefix = group === "colors" || group === "color" ? "color"
+      : group === "spacing" ? "spacing"
+      : group === "radius" ? "radius"
+      : group === "shadows" || group === "shadow" ? "shadow"
+      : group === "gradients" || group === "gradient" ? "gradient"
+      : group === "font" || group === "fonts" ? "font"
+      : null;
+    if (!prefix) return whole;
+    return `var(--rui-${prefix}-${key})`;
+  });
+}
+
+/**
+ * Lightweight CSS scoping (I.6): prefix every top-level rule selector with
+ * `scopeSel` so the rules only apply inside that wrapper. `@media`/`@supports`
+ * blocks are recursed into; `@keyframes`/`@font-face` are left untouched.
+ * This is a heuristic (no full CSS parse) that handles the flat-rule common
+ * case authors reach for.
+ */
+function scopeCss(css: string, scopeSel: string): string {
+  const out: string[] = [];
+  let i = 0;
+  const n = css.length;
+  while (i < n) {
+    const brace = css.indexOf("{", i);
+    if (brace === -1) { out.push(css.slice(i)); break; }
+    const prelude = css.slice(i, brace).trim();
+    // Find matching close brace.
+    let depth = 1; let j = brace + 1;
+    for (; j < n && depth > 0; j += 1) {
+      if (css[j] === "{") depth += 1;
+      else if (css[j] === "}") depth -= 1;
+    }
+    const body = css.slice(brace + 1, j - 1);
+    if (prelude.startsWith("@media") || prelude.startsWith("@supports")) {
+      out.push(`${prelude} { ${scopeCss(body, scopeSel)} }`);
+    } else if (prelude.startsWith("@")) {
+      out.push(`${prelude} { ${body} }`); // keyframes / font-face etc.
+    } else {
+      const scoped = prelude.split(",").map((sel) => {
+        const s = sel.trim();
+        if (!s) return s;
+        return s.startsWith(":root") ? s : `${scopeSel} ${s}`;
+      }).join(", ");
+      out.push(`${scoped} { ${body} }`);
+    }
+    i = j;
+  }
+  return out.join("\n");
+}
+
 export const Styles: ComponentSpec = {
   name: "Styles",
   description:
@@ -192,9 +251,16 @@ export const Styles: ComponentSpec = {
     "`behavior:`, or `@import` are dropped for safety.",
   props: [
     { name: "css", type: "string", positional: true, required: true, aliases: ["content", "rules"], description: "Raw CSS text (e.g. `\".hero { color: red; }\"`)." },
+    { name: "scope", type: "string", optional: true, description: "Selector to scope every rule under, e.g. `\".my-widget\"` (I.6)" },
+    { name: "tokens", type: "boolean", optional: true, description: "Interpolate `{group.key}` token refs to CSS vars (default true)" },
   ],
   render: (_node, props) => {
-    const css = sanitiseStyleSheet(props.css);
+    let css = sanitiseStyleSheet(props.css);
+    if (css && (props.tokens === undefined || props.tokens === true || props.tokens === "true")) {
+      css = interpolateTokens(css);
+    }
+    const scope = asString(props.scope).trim();
+    if (css && scope) css = scopeCss(css, scope);
     const node = document.createElement("style");
     node.setAttribute("class", "rui-styles");
     if (css) node.textContent = css;

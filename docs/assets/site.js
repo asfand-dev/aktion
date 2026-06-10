@@ -13,6 +13,7 @@
  */
 
 const LIB_PATH = new URL("../../dist/aktion.js", import.meta.url).href;
+const LOGO_URL = new URL("logo.png", import.meta.url).href;
 
 let importPromise = null;
 function importLibrary() {
@@ -280,7 +281,7 @@ function buildTopbar() {
   const brand = el(
     "a",
     { class: "topbar-brand", href: "index.html" },
-    el("span", { class: "topbar-brand-mark", "aria-hidden": "true" }, "A"),
+    el("img", { class: "topbar-brand-mark", src: LOGO_URL, alt: "", "aria-hidden": "true", width: "28", height: "28" }),
     el("span", {}, "Aktion"),
     el("span", { class: "topbar-version" }, "v0.5"),
   );
@@ -977,8 +978,18 @@ function safely(name, fn) {
   catch (err) { console.warn(`[docs] ${name} failed:`, err); }
 }
 
+function ensureFavicon() {
+  if (document.querySelector('link[rel~="icon"]')) return;
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.type = "image/png";
+  link.href = LOGO_URL;
+  document.head.appendChild(link);
+}
+
 function init() {
   applyDocTheme(resolveInitialDocTheme());
+  safely("favicon", ensureFavicon);
 
   if (!window.location.pathname.includes("chat-bot.html")) {
     safely("topbar", buildTopbar);

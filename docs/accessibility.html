@@ -119,6 +119,73 @@
           trap while open, restore on close).</li>
       </ul>
 
+      <h2 id="primitives">Accessibility primitives</h2>
+      <p>
+        Four components cover the most common screen&#8209;reader and
+        focus&#8209;management needs. They render the right ARIA and behaviour so you
+        don&rsquo;t hand&#8209;roll it.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>VisuallyHidden(child)</code></td><td>Hides content visually but keeps it in the accessibility tree &mdash; for extra context a sighted user doesn&rsquo;t need.</td></tr>
+          <tr><td><code>SkipLink({ to, label })</code></td><td>A &ldquo;skip to main content&rdquo; link that appears on focus &mdash; the first thing a keyboard user tabs to.</td></tr>
+          <tr><td><code>LiveRegion(child, { mode })</code></td><td>An <code>aria-live</code> region. <code>mode: "polite"</code> (default) or <code>"assertive"</code> announces dynamic changes.</td></tr>
+          <tr><td><code>FocusTrap(child, { active })</code></td><td>Cycles <kbd>Tab</kbd> within its subtree and autofocuses the first control &mdash; the mechanism behind accessible dialogs.</td></tr>
+        </tbody>
+      </table>
+<pre><code>$app(Column([
+  SkipLink({ to: "#main", label: "Skip to content" }),
+  Button("Save", { onClick: () =&gt; { save(); $status = "Saved" } }),
+  LiveRegion(Text($status), { mode: "polite" }),     // announced to screen readers
+  VisuallyHidden(Text("Press Escape to close")),
+]))</code></pre>
+
+      <h2 id="rtl">RTL &amp; logical layout</h2>
+      <p>
+        Set <code>dir</code> on the host <code>&lt;aktion-app&gt;</code> element to flip
+        the whole tree for right&#8209;to&#8209;left languages. The runtime reflects it
+        onto the render root, so <code>direction</code> and CSS logical properties
+        mirror text, flex order, and logical spacing automatically.
+      </p>
+<pre><code>&lt;aktion-app dir="rtl"&gt;&lt;/aktion-app&gt;
+&lt;!-- "rtl" | "ltr" | "auto" --&gt;</code></pre>
+      <p>
+        Because spacing and layout primitives use logical properties, most programs
+        need no changes &mdash; the same tree lays out correctly in both directions.
+      </p>
+
+      <h2 id="motion">Reduced motion &amp; forced colors</h2>
+      <p>
+        Motion is suppressed automatically under
+        <code>prefers-reduced-motion: reduce</code>: a global rule disables every
+        <code>animate</code> preset and hover utility, and motion components
+        (<code>Reveal</code>, <code>Parallax</code>, <code>Confetti</code>,
+        <code>Backdrop</code>, <code>TypingIndicator</code>, <code>Sheet</code>&hellip;)
+        guard themselves with <code>matchMedia</code>. You can branch on it directly:
+      </p>
+<pre><code>anim = $util.media.prefersReducedMotion ? "none" : "fade-up"
+Card([Text("Respectful by default")], { animate: anim })</code></pre>
+      <p>
+        A global <code>@media (forced-colors: active)</code> block keeps components
+        legible in Windows High Contrast mode &mdash; borders and focus rings switch
+        to system colors so nothing disappears.
+      </p>
+
+      <h2 id="audit">Auditing with <code>axe()</code></h2>
+      <p>
+        The <a href="testing.html">testing utilities</a> ship an
+        <code>axe(node)</code> audit that flags the most common violations &mdash;
+        missing <code>alt</code> text, unnamed buttons, unlabelled inputs, duplicate
+        ids, and bad <code>tabindex</code> &mdash; plus <code>within(node)</code> for
+        scoped queries. Run it in a test to keep regressions out.
+      </p>
+<pre><code>import { render, axe } from "aktion-runtime/test"
+
+const { container } = render(program)
+const issues = axe(container)
+expect(issues).toHaveLength(0)</code></pre>
+
       <h2 id="checklist">Pre-ship checklist</h2>
       <ol>
         <li>Every interactive element is reachable and operable by keyboard.</li>

@@ -36,6 +36,24 @@ export interface RouteChangeDetail {
 
 export type RouteListener = (detail: RouteChangeDetail) => void;
 
+/** Payload handed to a navigation guard before a path change commits. */
+export interface NavigationInfo {
+  /** The path the user is trying to reach (normalised). */
+  to: string;
+  /** The path being left (null on the very first navigation). */
+  from: string | null;
+}
+
+/**
+ * A navigation guard decides whether a pending navigation may proceed.
+ * Return `false` to block it, a path string to redirect, or `true` /
+ * `undefined` to allow it.
+ */
+export type NavigationGuard = (info: NavigationInfo) => boolean | string | void;
+
+/** Cap on consecutive guard redirects, so an A→B→A guard can't loop forever. */
+const MAX_GUARD_REDIRECTS = 8;
+
 export interface RouterOptions {
   /** Initial path when no hash is set. Defaults to `/`. */
   defaultPath?: string;
@@ -132,11 +150,40 @@ export function matchRoute(pattern: string, path: string): RouteMatch {
   return wildcard ? { matched: true, params, wildcard: true } : { matched: true, params };
 }
 
+/** Result of a prefix match — the captured params plus the unmatched tail. */
+export interface PrefixMatch {
+  matched: boolean;
+  params: RouteParams;
+  /** The remaining path after the matched prefix, normalised (e.g. `/settings`). */
+  rest: string;
+}
+
 /**
- * Singleton-per-element router. Owns the current path, listens for
- * `hashchange` events when enabled, and notifies subscribers when the path
- * changes for any reason.
+ * Match a route pattern as a PREFIX of `path` (suggestions-global IV.1 — nested
+ * routes / layout routes). `/app` prefix-matches `/app`, `/app/x`, `/app/x/y`.
+ * Returns the captured `:params` plus the unmatched tail (`rest`) so a nested
+ * router can resolve the child route. A pure-segment pattern only matches on
+ * segment boundaries (so `/app` does not match `/application`).
  */
+export function matchRoutePrefix(pattern: string, path: string): PrefixMatch {
+  if (!pattern || pattern === "*") return { matched: true, params: {}, rest: normalisePath(path) };
+  const normPattern = normalisePath(pattern);
+  const normPath = normalisePath(path);
+  const patternSegments = normPattern === "/" ? [] : normPattern.slice(1).split("/");
+  const pathSegments = normPath === "/" ? [] : normPath.slice(1).split("/");
+  if (pathSegments.length < patternSegments.length) return { matched: false, params: {}, rest: "/" };
+
+  const params: RouteParams = {};
+  for (let i = 0; i < patternSegments.length; i += 1) {
+    const ps = patternSegments[i]!;
+    const seg = pathSegments[i]!;
+    if (ps.startsWith(":")) { params[ps.slice(1)] = decodeURIComponent(seg); continue; }
+    if (ps !== seg) return { matched: false, params: {}, rest: "/" };
+  }
+  const restSegments = pathSegments.slice(patternSegments.length);
+  const rest = restSegments.length === 0 ? "/" : "/" + restSegments.join("/");
+  return { matched: true, params, rest };
+}
 export class Router {
   private currentPath: string;
   private currentParams: RouteParams = {};
@@ -150,6 +197,8 @@ export class Router {
   /** True while we're updating `window.location` ourselves — used to
    * filter out the resulting `hashchange` / `popstate` echo. */
   private settingHash = false;
+  /** Optional navigation guard registered via `$util.onNavigate(fn)`. */
+  private guard: NavigationGuard | null = null;
 
   constructor(options: RouterOptions = {}) {
     this.defaultPath = normalisePath(options.defaultPath ?? "/");
@@ -184,7 +233,21 @@ export class Router {
 
     const sync = (source: RouteChangeDetail["source"]): void => {
       if (this.settingHash) return;
-      this.setPath(this.readLocation(), source);
+      const next = normalisePath(this.readLocation());
+      if (next === this.currentPath) return;
+      // Consult the guard for URL-driven navigations (back/forward, manual
+      // edits). A block reverts the URL; a redirect rewinds then re-navigates.
+      const decision = this.runGuard(next);
+      if (decision === false) {
+        this.restoreUrl();
+        return;
+      }
+      if (typeof decision === "string") {
+        this.restoreUrl();
+        this.navigateInternal(normalisePath(decision), 0);
+        return;
+      }
+      this.setPath(next, source);
     };
 
     if (this.mode === "history") {
@@ -256,11 +319,60 @@ export class Router {
   /**
    * Navigate to the given path. When enabled, this updates the URL hash and
    * relies on `hashchange` to notify listeners (so browser history works).
-   * When disabled, the navigation stays in-memory.
+   * When disabled, the navigation stays in-memory. A registered navigation
+   * guard may block (`false`) or redirect (path string) the change.
    */
   navigate(path: string): void {
+    this.navigateInternal(normalisePath(path), 0);
+  }
+
+  /**
+   * Register (or clear, with `null`) the navigation guard. The guard runs
+   * before every in-app `navigate(...)` and every URL-driven change once the
+   * router is started. Set via `$util.onNavigate(fn)`.
+   */
+  setGuard(guard: NavigationGuard | null): void {
+    this.guard = guard;
+  }
+
+  /** Run the guard for a pending navigation, failing open on error. */
+  private runGuard(to: string): boolean | string | void {
+    if (!this.guard) return true;
+    try {
+      return this.guard({ to, from: this.currentPath });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[aktion] navigation guard threw", err);
+      return true; // fail open — never trap the user on a broken guard
+    }
+  }
+
+  /** Rewind `window.location` to the current path (used when a guard blocks). */
+  private restoreUrl(): void {
+    if (typeof window === "undefined") return;
+    this.settingHash = true;
+    try {
+      if (this.mode === "history" && typeof window.history?.replaceState === "function") {
+        window.history.replaceState({}, "", (this.basePath || "") + this.currentPath);
+      } else {
+        window.location.hash = "#" + this.currentPath;
+      }
+    } finally {
+      queueMicrotask(() => { this.settingHash = false; });
+    }
+  }
+
+  /** Commit a navigation after the guard has approved it (with redirect cap). */
+  private navigateInternal(path: string, redirectDepth: number): void {
     const next = normalisePath(path);
     if (next === this.currentPath) return;
+
+    const decision = this.runGuard(next);
+    if (decision === false) return;
+    if (typeof decision === "string" && redirectDepth < MAX_GUARD_REDIRECTS) {
+      this.navigateInternal(normalisePath(decision), redirectDepth + 1);
+      return;
+    }
 
     if (this.enabled && typeof window !== "undefined") {
       this.settingHash = true;

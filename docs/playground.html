@@ -672,6 +672,10 @@
       color: var(--doc-text-subtle); border: 1px solid var(--doc-border);
       border-radius: 999px; padding: 0 6px; flex: none;
     }
+    .pg-row-badge[data-entry="true"] {
+      color: var(--doc-primary);
+      border-color: var(--doc-primary);
+    }
     /* File-type icon colors (VSCode-ish palette). */
     .pg-ic-aktion { color: #a78bfa; }
     .pg-ic-html   { color: #e44d26; }
@@ -942,8 +946,9 @@
       </div>
       <div class="pg-file-tree" id="pg-file-list" role="tree" aria-label="Project files" tabindex="0"></div>
       <p class="pg-files-hint">
-        <code>app.aktion</code> is the entry. Right-click for actions; drag to move.
-        Import folders with <code>import { X } from "./components/X.aktion"</code>.
+        <code>app.aktion</code> is the default entry. Right-click any file →
+        <strong>Set as entry point</strong> to run and link from it instead.
+        Drag to move; import folders with <code>import { X } from "./components/X.aktion"</code>.
         <a href="modules.html">Learn more →</a>
       </p>
     </aside>
@@ -980,7 +985,7 @@
               <option value="dashboard">Project dashboard</option>
               <option value="todo">Reactive todo</option>
               <option value="reactiveApp">Reactive app</option>
-              <option value="routing">Routing app</option>
+              <option value="routing">Routing demo</option>
               <option value="counter">JS counter</option>
               <option value="chart">Chart + metrics</option>
               <option value="dataGrid">DataGrid + bulk actions</option>
@@ -989,6 +994,14 @@
               <option value="wizard">MultiStepForm wizard</option>
               <option value="advancedCharts">Gauge, Heatmap, Radar, Scatter</option>
               <option value="gridLayout">12-col grid + named args</option>
+              <optgroup label="── New features ──">
+                <option value="realtime">Realtime — $socket + $sse</option>
+                <option value="forms">Forms + validation ($form)</option>
+                <option value="persistUndo">Persist + undo/redo ($store)</option>
+                <option value="sxLayout">sx + layout (Section/Split/Bento)</option>
+                <option value="infiniteScroll">Infinite scroll ($query infinite)</option>
+                <option value="dialogs">Dialogs, Calendar &amp; a11y</option>
+              </optgroup>
             </select>
           </div>
 
@@ -1157,30 +1170,52 @@
           </table>
           <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Smart autocomplete.</strong> At the top level, tab through
-            components, <code>@</code>-builtins, language keywords
+            components, builtins, language keywords
             (<code>if</code>, <code>for</code>, <code>function</code>,
             <code>effect</code>, <code>try</code>…), the runtime globals
-            (<code>$http</code>, <code>setTimeout</code>, <code>setInterval</code>,
-            <code>$storage</code>, <code>$console</code>, <code>Math</code>,
-            <code>JSON</code>, <code>Object</code>, <code>Array</code>,
-            <code>Date</code>…), and snippets (<code>router…</code>,
-            <code>function…</code>, <code>http…</code>). Inside a call like
+            (<code>$http</code>, <code>$query</code>, <code>$mutation</code>,
+            <code>$socket</code>, <code>$sse</code>, <code>$form</code>,
+            <code>$store</code>, <code>$router</code>,
+            <code>setTimeout</code>, <code>$storage</code>, <code>$console</code>,
+            <code>Math</code>, <code>JSON</code>, <code>Object</code>,
+            <code>Array</code>, <code>Date</code>…), and snippets (<code>router…</code>,
+            <code>function…</code>, <code>http…</code>, <code>form…</code>,
+            <code>socket…</code>). Inside a call like
             <code>Button("Save", { <em>cursor</em> })</code> the editor surfaces
             <strong>named-arg names</strong> with their types
-            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>…);
-            after the colon, enum-typed args (e.g.
-            <code>variant: "primary"|"secondary"|…</code>) show their allowed
-            values inline so you can pick one with a single tab.
+            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>,
+            <code>sx:</code>, <code>animate:</code>…); after the colon, enum-typed
+            args show their allowed values inline so you can pick one with a
+            single tab.
           </p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Member completion.</strong> Type a dot after an object to
-            see its members: a <code>$todos</code> assigned from
-            <code>$http({…})</code> completes to <code>.data</code>,
-            <code>.error</code>, <code>.loading</code>, <code>.status</code>,
-            <code>.refetch()</code>, <code>.cancel()</code>, and the settable
-            <code>.onDone</code>; <code>route.</code> lists
-            <code>path</code> / <code>params</code> / <code>query</code> /
-            <code>navigate()</code>; and <code>Math.</code>,
+            see its members: <code>$todos</code> from <code>$http({…})</code>
+            completes to <code>.data</code>, <code>.error</code>,
+            <code>.loading</code>, <code>.refetch()</code>,
+            <code>.cancel()</code>, <code>.onDone</code>; a <code>$query</code>
+            resource adds <code>.loadMore()</code>, <code>.hasMore</code>,
+            <code>.loadingMore</code>; a <code>$socket</code> bag adds
+            <code>.send()</code>, <code>.close()</code>, <code>.status</code>
+            (<code>"connecting" | "open" | "closed"</code>),
+            <code>.connected</code>, <code>.last</code>, <code>.messages</code>,
+            <code>.attempts</code>; a <code>$form</code>
+            handle lists <code>.values</code>, <code>.errors</code>,
+            <code>.touched</code>, <code>.dirty</code>, <code>.valid</code>,
+            <code>.submitting</code>, <code>.validating</code>,
+            <code>.submit()</code>, <code>.setField()</code>,
+            <code>.reset()</code>; a <code>$store</code> with
+            <code>history: true</code> adds <code>.undo()</code>,
+            <code>.redo()</code>, <code>.canUndo</code>, <code>.canRedo</code>;
+            <code>$util.</code> lists every helper group including the reactive
+            env getters (<code>.scroll</code>, <code>.viewport</code>,
+            <code>.breakpoint</code>, <code>.media</code>, <code>.url</code>)
+            and the new helpers
+            (<code>.style.cx</code>, <code>.rules.required</code>,
+            <code>.derived</code>, <code>.worker</code>,
+            <code>.registerServiceWorker</code>, <code>.vibrate</code>, …);
+            <code>route.</code> lists <code>path</code> / <code>params</code> /
+            <code>query</code> / <code>navigate()</code>; and <code>Math.</code>,
             <code>JSON.</code>, <code>$storage.</code>, … list their methods.
           </p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">

@@ -206,14 +206,71 @@ $app(Profile())</code></pre>
           component / the <code>$state</code> hook instead.</p>
       </div>
 
+      <h2 id="derived">Derived values with <code>$util.derived</code></h2>
+      <p>
+        A top&#8209;level <code>$x = expr</code> with a non&#8209;literal right&#8209;hand
+        side is already a computed derivation. When you want that same
+        recompute&#8209;from&#8209;inputs behaviour <em>inside a component body</em> &mdash;
+        without an explicit dependency list &mdash; reach for
+        <code>$util.derived(fn)</code>. It re&#8209;evaluates whenever the atoms its
+        function reads change, and memoizes within the component.
+      </p>
+<pre><code>function CartSummary() {
+  subtotal = $util.derived(() =&gt; $util.sum($cart.map(i =&gt; i.price * i.qty)))
+  shipping = $util.derived(() =&gt; subtotal &gt; 50 ? 0 : 6)
+  return Column([
+    Text(`Subtotal: ${$util.currency(subtotal)}`),
+    Text(`Shipping: ${$util.currency(shipping)}`),
+  ])
+}</code></pre>
+      <p>
+        Use <a href="hooks.html#memo"><code>$memo</code></a> when you need an explicit
+        dependency array or want to cache an expensive pure computation;
+        <code>$util.derived</code> is the lighter choice for plain read&#8209;through
+        values.
+      </p>
+
+      <h2 id="env">Reactive environment globals</h2>
+      <p>
+        <code>$util</code> exposes a set of <strong>reactive getters</strong> that let
+        the UI respond to the browser environment without manual listeners or host
+        glue. Reading one re&#8209;renders the component when it changes; listeners
+        attach lazily on first read (a program that never touches them pays nothing)
+        and updates are <code>requestAnimationFrame</code>&#8209;coalesced.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Getter</th><th>Shape</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td><code>$util.scroll</code></td><td><code>{ x, y, progress, direction }</code></td><td>Scroll progress bars, show/hide on scroll. <code>progress</code> is 0&ndash;1.</td></tr>
+          <tr><td><code>$util.viewport</code></td><td><code>{ width, height }</code></td><td>Pixel&#8209;exact responsive decisions.</td></tr>
+          <tr><td><code>$util.breakpoint</code></td><td><code>{ active, width, sm, md, lg, xl }</code></td><td>Named breakpoints (640/768/1024/1280). Flags are cumulative.</td></tr>
+          <tr><td><code>$util.media</code></td><td><code>{ prefersDark, prefersReducedMotion, online, pointer, portrait }</code></td><td>Honour user preferences and connection state.</td></tr>
+          <tr><td><code>$util.mouse</code></td><td><code>{ x, y }</code></td><td>Spotlight / cursor&#8209;follow effects.</td></tr>
+          <tr><td><code>$util.url</code></td><td><code>{ path, params, query, hash, … }</code></td><td>Reactive URL (see <a href="routing.html#query">Routing</a>).</td></tr>
+        </tbody>
+      </table>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; resize the window</span>
+<pre><code>function Responsive() {
+  bp = $util.breakpoint
+  return Column([
+    Text(`Active breakpoint: ${bp.active}`, { variant: "large-heavy" }),
+    Text(`Viewport: ${$util.viewport.width} × ${$util.viewport.height}`),
+    Grid($util.range(1, bp.lg ? 4 : (bp.md ? 2 : 1)).map(n =&gt;
+      Card([Text(`Cell ${n}`)])
+    ), { columns: bp.lg ? 4 : (bp.md ? 2 : 1) }),
+  ], { gap: "m" })
+}
+$app(Responsive())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Branch animations on <code>$util.media.prefersReducedMotion</code> and layout
+        on <code>$util.breakpoint.active</code> to keep a single program adaptive
+        across devices.
+      </p>
+
       <h2 id="next">Next</h2>
-      <div class="demo-grid">
-        <a class="demo-card" href="performance.html">
-          <span class="demo-tag">Guide</span>
-          <h3>Performance</h3>
-          <p>Re-render avoidance, memoization rules, the safety budget, and streaming throughput.</p>
-          <span class="demo-arrow">Read the guide &rarr;</span>
-        </a>
         <a class="demo-card" href="hooks.html">
           <span class="demo-tag">Core</span>
           <h3>Hooks</h3>

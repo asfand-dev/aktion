@@ -150,6 +150,16 @@ $app(Counter())</code></pre>
         <li><strong>Omit the array</strong> to recompute on every render
           (<code>$memo(() =&gt; &hellip;)</code>) &mdash; matching React.</li>
       </ul>
+      <div class="callout">
+        <p>
+          For a derived value that should simply track whatever atoms it reads &mdash;
+          no dependency array to maintain &mdash; reach for
+          <code>$util.derived(() =&gt; &hellip;)</code> instead. Use <code>$memo</code> when you
+          want an explicit dependency list or to cache a genuinely expensive
+          computation. See <a href="reactivity.html#derived">Reactivity &rarr; Derived
+          values</a>.
+        </p>
+      </div>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>function Cart() {

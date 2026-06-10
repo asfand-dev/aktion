@@ -129,12 +129,28 @@
       </ol>
       <p>
         Other useful methods on the element: <code>setTheme(name | tokens)</code>,
-        <code>registerComponents([&hellip;])</code> to extend the library, and
-        <code>getSystemPrompt()</code> to build the LLM system prompt for the
-        active component set. The four observed attributes are
-        <code>response</code>, <code>theme</code>, <code>streaming</code>, and
-        <code>showerrors</code>.
+        <code>registerComponents([&hellip;])</code> to extend the library,
+        <code>registerHttpInterceptors([&hellip;])</code> for host&#8209;wide
+        auth/logging, and <code>getSystemPrompt()</code> to build the LLM system
+        prompt for the active component set. The observed attributes are
+        <code>response</code>, <code>theme</code>, <code>streaming</code>,
+        <code>showerrors</code>, <code>dir</code>
+        (<code>"ltr"</code>&nbsp;/&nbsp;<code>"rtl"</code>&nbsp;/&nbsp;<code>"auto"</code> &mdash;
+        flips the whole tree for RTL), and <code>scroll-restoration</code>
+        (<code>"auto"</code>&nbsp;/&nbsp;<code>"top"</code> &mdash; restore scroll across
+        in&#8209;app navigation).
       </p>
+      <div class="callout">
+        <p>
+          <strong>Server&#8209;side rendering.</strong> For SSR/SSG, import
+          <code>renderToString(program, opts)</code> from <code>aktion-runtime</code>
+          to get <code>{ html, state }</code> on the server, embed the markup in your
+          page shell, and serialise <code>state</code> for client hydration. The
+          renderer needs a DOM, so in Node register <code>happy-dom</code> /
+          <code>jsdom</code> on <code>globalThis</code> first. See
+          <a href="performance.html#ssr">Performance &rarr; SSR</a>.
+        </p>
+      </div>
 
       <h2 id="install">Installing the bundle</h2>
       <p>The package is published to npm as <code>aktion-runtime</code>; the same bundle is served from the docs CDN for no&#8209;build pages:</p>

@@ -31,6 +31,7 @@ import { pathsOverlap } from "../runtime/state.js";
 import type { Router } from "../runtime/router.js";
 import { sanitiseHref } from "../library/utils.js";
 import { findComponent } from "../library/registry.js";
+import { applyUniversal } from "../library/sx.js";
 import {
   mapPositionalArgs,
   type ComponentLibrary,
@@ -542,7 +543,15 @@ export class Renderer {
         deps: instanceDeps,
         value,
       });
-      return this.renderAt(value, instancePath);
+      const rendered = this.renderAt(value, instancePath);
+      // Stamp the author `key:` onto the rendered root so the morph reconciler
+      // MOVES the same DOM node when siblings reorder (not just patches it in
+      // place) — preserving focus / media / animation state and enabling
+      // FLIP-style reorder animations (III.4).
+      if (node.explicitKey != null && rendered instanceof Element && !(rendered as Element).hasAttribute("data-rui-key")) {
+        (rendered as Element).setAttribute("data-rui-key", String(node.explicitKey));
+      }
+      return rendered;
     } finally {
       leaveUserComponent(ctx);
     }
@@ -660,6 +669,12 @@ export class Renderer {
     const libStart = this.profiling ? nowMs() : 0;
     try {
       const out = spec.render(node, props, helpers);
+      if (node.universal) applyUniversal(out, node.universal);
+      // Stamp the author `key:` so the morph reconciler moves this node on a
+      // sibling reorder (preserves DOM identity + enables FLIP — III.4).
+      if (node.explicitKey != null && out instanceof Element && !(out as Element).hasAttribute("data-rui-key")) {
+        (out as Element).setAttribute("data-rui-key", String(node.explicitKey));
+      }
       if (this.profiling) {
         this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, libPhase === "mount" ? "mounted" : "re-rendered");
       }

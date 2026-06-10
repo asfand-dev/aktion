@@ -892,6 +892,18 @@ $app(Column($todos.map(t => Card([Text(t.title)])), { gap: "s" }))</script>
 $app(Input("name", { value: $name, placeholder: "Your name" }))</code></pre>
         </div>
       </div>
+      <p>
+        For a whole form with validation &mdash; the job of Formik / React Hook Form /
+        VeeValidate &mdash; reach for <code>$form</code>: managed values, per&#8209;field
+        <code>$util.rules</code> validators, touched&#8209;tracking, and a
+        <code>handleSubmit()</code> that only fires when valid. See
+        <a href="stores.html#forms">Global state &rarr; Forms</a>.
+      </p>
+<pre><code>signup = $form({
+  values: { email: "" },
+  rules:  { email: [$util.rules.required(), $util.rules.email()] },
+  onSubmit: (v) =&gt; $save.mutate({ body: v })
+})</code></pre>
 
       <!-- ===================== EFFECTS ===================== -->
       <h2 id="effects">Side effects</h2>
@@ -1218,6 +1230,17 @@ $app(Async($todos, { data: List($todos.data) }))</code></pre>
           </div>
         </div>
       </div>
+      <p>
+        The router scales up to the patterns you reach for libraries to provide:
+        <strong>nested layouts</strong> (<code>"/app": { layout, routes }</code> &mdash;
+        a shared shell with an <code>outlet</code>), <strong>guards</strong>
+        (<code>$util.onNavigate(({ to, from }) =&gt; &hellip;)</code> to block/redirect),
+        <strong>query&#8209;param state</strong> (<code>$util.url.setQuery(&hellip;)</code>),
+        <strong>lazy routes</strong> (<code>Lazy(() =&gt; import(&hellip;))</code>), and
+        <strong>scroll restoration</strong> (the
+        <code>scroll-restoration</code> attribute). See the
+        <a href="routing.html#nested">Routing guide</a>.
+      </p>
 
       <!-- ===================== STYLING ===================== -->
       <h2 id="styling">Styling &amp; theme</h2>
@@ -1269,6 +1292,16 @@ Storage.session.set("draft", $draft)     // sessionStorage
 Storage.cookies.set("uid", id, { expires: 7 })</code></pre>
         </div>
       </div>
+      <p>
+        For whole&#8209;store persistence, skip the manual round&#8209;trip entirely:
+        add <code>persist</code> to a <code>$store({&hellip;})</code> and its data
+        hydrates on mount and writes back on every change (the equivalent of a
+        Redux&#8209;persist setup, built in). It also offers undo/redo via
+        <code>history: true</code> &mdash; see <a href="stores.html#persist">Global
+        state &rarr; Persistence</a>.
+      </p>
+<pre><code>prefs = $store({ theme: "system", persist: "prefs", history: true })
+// survives reload · prefs.undo() / prefs.redo()</code></pre>
 
       <!-- ===================== EVENTS OUT ===================== -->
       <h2 id="events-out">Outbound events (host integration)</h2>

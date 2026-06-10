@@ -430,7 +430,9 @@ export const Sticky: ComponentSpec = {
   description:
     "Wraps content in a `position: sticky` container so it pins to the " +
     "top (or bottom) of the nearest scrollable ancestor. Use for " +
-    "toolbar action rows above tables, in-page navs, status banners.",
+    "toolbar action rows above tables, in-page navs, status banners. " +
+    "Sets `data-stuck=\"true\"` on itself once pinned, so a CSS hook (a " +
+    "shadow/border) can flag the pinned state.",
   props: [
     { name: "children", type: "Node[]" },
     { name: "side", type: "string", optional: true, enum: ["top", "bottom"] },
@@ -444,6 +446,29 @@ export const Sticky: ComponentSpec = {
     const styles = `position:sticky;${side}:${offset};z-index:${z};`;
     const root = el("div", { class: "rui-sticky", style: styles });
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    // Stuck detection (II.4): a sentinel rootMargin equal to the pin offset
+    // makes the element's intersection ratio drop below 1 exactly when it
+    // pins, with no extra sentinel node. Toggle `data-stuck` for CSS hooks.
+    if (typeof IntersectionObserver !== "undefined") {
+      // Parse a px offset for the rootMargin; non-px offsets fall back to 0
+      // (the stuck flag still flips, just at the viewport edge).
+      const offsetPx = /^(\d+(?:\.\d+)?)px$/.exec(offset)?.[1] ?? "0";
+      const margin = side === "bottom"
+        ? `0px 0px -${Number(offsetPx) + 1}px 0px`
+        : `-${Number(offsetPx) + 1}px 0px 0px 0px`;
+      setTimeout(() => {
+        const io = new IntersectionObserver(
+          ([entry]) => {
+            if (entry) root.setAttribute("data-stuck", entry.intersectionRatio < 1 ? "true" : "false");
+          },
+          { threshold: [1], rootMargin: margin },
+        );
+        io.observe(root);
+        // Keyed: a re-render replaces the previous observer instead of
+        // stacking one per render (anonymous disposers only run on unmount).
+        helpers.registerDisposer(() => io.disconnect(), "rui-sticky-io");
+      }, 0);
+    }
     return root;
   },
 };

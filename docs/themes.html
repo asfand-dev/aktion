@@ -101,6 +101,7 @@
         background.
       </p>
 
+      <span id="customization"></span>
       <h2 id="custom-tokens">Custom tokens with <code>$theme({&hellip;})</code></h2>
       <p>
         Assign <code>$theme({&hellip;})</code> to a top&#8209;level binding named
@@ -185,14 +186,56 @@ $app(Column([
           <tr><td><code>colors</code></td><td><code>primary</code> · <code>primaryHover</code> · <code>accent</code> · <code>bg</code> · <code>surface</code> · <code>text</code> · <code>border</code> · <code>success</code> · <code>warning</code> · <code>danger</code> · <code>focusRing</code></td><td>Surface, brand, semantic, and focus&#8209;ring colors.</td></tr>
           <tr><td><code>radius</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>pill</code> · <code>button</code> · <code>input</code></td><td>Corner rounding per element class.</td></tr>
           <tr><td><code>font</code></td><td><code>family</code> · <code>familyHeading</code> · <code>familyMono</code> · <code>sizeBase</code> · <code>weightBody</code> · <code>weightHeading</code></td><td>Type families, sizes, weights, and heading treatment.</td></tr>
+          <tr><td><code>spacing</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code> · <code>2xl</code> · <code>3xl</code></td><td>The spacing scale used by <code>gap</code> / <code>padding</code> props and <code>sx</code>.</td></tr>
+          <tr><td><code>shadows</code></td><td><code>sm</code> · <code>md</code> · <code>lg</code></td><td>Elevation shadow tokens.</td></tr>
+          <tr><td><code>gradients</code></td><td><code>brand</code> · <code>accent</code> · <code>warm</code> · <code>cool</code> · <code>success</code> · <code>danger</code></td><td>Named gradients &rarr; <code>--rui-gradient-*</code>. Power <code>GradientText</code> and <code>sx.bg: "gradient.brand"</code>.</td></tr>
+          <tr><td><code>zIndex</code></td><td><code>base</code> · <code>raised</code> · <code>dropdown</code> · <code>sticky</code> · <code>banner</code> · <code>overlay</code> · <code>modal</code> · <code>popover</code> · <code>toast</code> · <code>tooltip</code></td><td>Layer tokens &rarr; <code>--rui-z-*</code>. Consumed by <code>sx.zIndex</code> tokens — one override (<code>zIndex: { modal: 2000 }</code>) restyles the whole layering stack.</td></tr>
+          <tr><td><code>motion</code></td><td><code>fast</code> · <code>base</code> · <code>slow</code> · <code>ease</code></td><td>Motion tokens &rarr; <code>--rui-motion-*</code> — brandable durations and easing.</td></tr>
+          <tr><td><code>fonts</code></td><td><code>import: ["Inter:400,700", &hellip;]</code></td><td>Load web fonts &mdash; injects a sanitised Google Fonts link.</td></tr>
+          <tr><td><code>icons</code></td><td><code>{ name: "&lt;svg&hellip;&gt;" }</code></td><td>Register custom inline SVG icons usable anywhere a Font Awesome name works.</td></tr>
         </tbody>
       </table>
       <p>
         Two metadata keys are also accepted at the top level: <code>name</code> and
-        <code>direction</code>. They are never emitted as CSS variables. Flat&#8209;shape
-        tokens (<code>colorPrimary</code>) and free&#8209;form CSS variables raise a
-        schema warning inside <code>$theme({&hellip;})</code> and are dropped &mdash;
-        always use the structured groups here.
+        <code>direction</code>. <code>name</code> selects one of the seven built&#8209;in
+        themes as the base palette, then your structured overrides layer on top. They
+        are never emitted as CSS variables. Flat&#8209;shape tokens
+        (<code>colorPrimary</code>) and free&#8209;form CSS variables raise a schema
+        warning inside <code>$theme({&hellip;})</code> and are dropped &mdash; always use
+        the structured groups here.
+      </p>
+
+      <h2 id="gradients-fonts-icons">Gradients, fonts &amp; custom icons</h2>
+      <p>
+        Three groups go beyond colors and radii. <strong>Gradients</strong> are named
+        and reusable &mdash; each value is an array of color stops, an object
+        <code>{ stops, angle }</code>, or a safe gradient string &mdash; and they power
+        <code>GradientText</code> and the <code>sx.bg: "gradient.brand"</code> intent.
+        <strong>Fonts</strong> load on demand from a shorthand list.
+        <strong>Icons</strong> register inline SVG under a name you can use anywhere an
+        icon name is accepted.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({
+  gradients: { brand: ["#6366f1", "#ec4899"], cool: ["#0ea5e9", "#22d3ee"] },
+  icons: { spark: "&lt;svg viewBox='0 0 24 24'&gt;&lt;path d='M12 2l2 7 7 2-7 2-2 7-2-7-7-2 7-2z'/&gt;&lt;/svg&gt;" }
+})
+$app(Column([
+  GradientText("Brandable gradients", { gradient: "brand", variant: "display" }),
+  Row([
+    Button("Custom icon", { icon: "spark", variant: "primary" }),
+    Badge("New", { tone: "primary" })
+  ], { gap: "s" }),
+  Card([Text("sx gradient background")], { sx: { bg: "gradient.cool", p: "l", color: "#fff" } })
+], { gap: "m" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        To pull in a web font, add a <code>fonts</code> group &mdash;
+        <code>$theme({ fonts: { import: ["Inter:400,600,700"] } })</code> injects a
+        single sanitised stylesheet link, after which <code>font.family: "Inter,
+        sans-serif"</code> just works.
       </p>
 
       <h2 id="precedence">Per-response vs host theme</h2>

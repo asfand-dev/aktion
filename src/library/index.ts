@@ -8,7 +8,7 @@
 import { assertOnePositionalMax } from "./types.js";
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
 import {
-  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
@@ -32,7 +32,7 @@ import {
 } from "./components/chat.js";
 import {
   Avatar, AvatarGroup, Progress, Switch, ToggleGroup,
-  Tooltip, HoverCard, Popover, Toast, Kbd, Rating, ProgressRing, ChatBubble,
+  Tooltip, HoverCard, Popover, Toast, Toasts, Kbd, Rating, ProgressRing, ChatBubble,
 } from "./components/feedback.js";
 import {
   Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem,
@@ -74,7 +74,7 @@ import {
 import { NavLink } from "./components/router.js";
 import {
   IconButton, CommandPalette, FilterChips, FieldRepeater,
-  VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
+  VirtualList, VirtualGrid, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
 } from "./components/new-components.js";
 import {
@@ -84,13 +84,41 @@ import { HTMLTag, Styles } from "./components/escape-hatch.js";
 import {
   OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
 } from "./components/wrappers.js";
+import {
+  GradientText, Display, Heading, Eyebrow, Section, Overlay, OverlayItem,
+  Brand, NavBar, Footer, FooterColumn, LogoCloud, LogoChip,
+  CountUp, Metric, MetricStrip, CodeWindow, BrowserFrame, Terminal,
+  Backdrop, ThemeToggle, Swatch, CopyButton, SegmentedControl,
+  FloatingActionButton, Prose, RelativeTime,
+  PriceTag, QuantityStepper, ProductCard, TableOfContents, TypingIndicator,
+  CountdownTimer, BackToTop,
+} from "./components/marketing.js";
+import {
+  Split, Bento, BentoCell, Reveal, OnGesture, Sortable, Draggable, DropZone,
+  Parallax, ReadingProgress, Transition, FlipList, RouteView,
+} from "./components/layout-motion.js";
+import {
+  VisuallyHidden, SkipLink, LiveRegion, FocusTrap,
+} from "./components/a11y.js";
+import {
+  QRCode, ReactionPicker, LiveCursor, TabBar, Cart,
+} from "./components/wave3.js";
+import { Calendar } from "./components/scheduling.js";
+import {
+  DrawingCanvas, SignaturePad,
+} from "./components/canvas.js";
+import {
+  Svg, Sheet, BottomSheet, ConfirmDialog, PresenceAvatars, ShareButtons,
+  AuthorByline, VariantSelector, OrderSummary, ScrollSpy, SpeedDial, Confetti,
+  KbdShortcut, Lottie,
+} from "./components/extras.js";
 
 export * from "./types.js";
 export * from "./registry.js";
 export { validateProgramSchema, validateProgram } from "./validate.js";
 
 const components: ComponentSpec[] = [
-  Row, Column, Center, Stack, StackItem, Grid, GridItem, Box, Card, CardHeader, CardFooter, Separator,
+  Row, Column, Center, Stack, StackItem, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea, Container, Spacer,
   Text, TextContent, Image, Link, Badge, BadgeList,
@@ -103,7 +131,7 @@ const components: ComponentSpec[] = [
   BarChart, LineChart, PieChart, Series,
   SectionBlock, ListBlock, FollowUpBlock, FollowUpItem, ActionLink, ChatBubble,
   Avatar, AvatarGroup, Progress, ProgressRing, Switch, ToggleGroup,
-  Tooltip, HoverCard, Popover, Toast, Kbd, Rating,
+  Tooltip, HoverCard, Popover, Toast, Toasts, Kbd, Rating,
   Breadcrumb, BreadcrumbItem, Pagination, Navbar, NavbarItem,
   DropdownMenu, MenuItem, MenuSeparator, MenuLabel,
   Hero, PageHeader, Stats, Tile, EmptyState,
@@ -130,12 +158,35 @@ const components: ComponentSpec[] = [
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
   NavLink,
   IconButton, CommandPalette, FilterChips, FieldRepeater,
-  VirtualList, QueryBuilder, DiffViewer, JsonTree, Gantt,
+  VirtualList, VirtualGrid, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
   // Aktion 0.5 standard helpers
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
   // Behavioural & styling wrappers
   OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
+  // Marketing / landing / utility composites (suggestions-global Parts II, VIII)
+  GradientText, Display, Heading, Eyebrow, Section, Overlay, OverlayItem,
+  Brand, NavBar, Footer, FooterColumn, LogoCloud, LogoChip,
+  CountUp, Metric, MetricStrip, CodeWindow, BrowserFrame, Terminal,
+  Backdrop, ThemeToggle, Swatch, CopyButton, SegmentedControl,
+  FloatingActionButton, Prose, RelativeTime,
+  PriceTag, QuantityStepper, ProductCard, TableOfContents, TypingIndicator,
+  CountdownTimer, BackToTop,
+  // Layout & motion (suggestions-global Parts II.2, III.2/3/4/5/6/7, IV.4)
+  Split, Bento, BentoCell, Reveal, OnGesture, Sortable, Draggable, DropZone,
+  Parallax, ReadingProgress, Transition, FlipList, RouteView,
+  // Media / overlay / social / e-commerce / utility extras (Parts VIII, IX)
+  Svg, Sheet, BottomSheet, ConfirmDialog, PresenceAvatars, ShareButtons,
+  AuthorByline, VariantSelector, OrderSummary, ScrollSpy, SpeedDial, Confetti,
+  KbdShortcut, Lottie,
+  // Accessibility primitives (suggestions-global X.3)
+  VisuallyHidden, SkipLink, LiveRegion, FocusTrap,
+  // Wave-3: QR, reactions, presence, mobile tab bar, cart (VIII.2/4/8, XII.1)
+  QRCode, ReactionPicker, LiveCursor, TabBar, Cart,
+  // Scheduling (VIII.6)
+  Calendar,
+  // Interactive canvas / editor (VIII.7)
+  DrawingCanvas, SignaturePad,
   // Escape hatches for raw HTML / CSS — last-resort primitives
   HTMLTag, Styles,
 ];
@@ -266,7 +317,7 @@ const componentGroups: ComponentGroup[] = [
     name: "Feedback & Media",
     components: [
       "Avatar", "AvatarGroup", "PersonChip", "Tooltip", "HoverCard", "Popover",
-      "Rating", "Toast",
+      "Rating", "Toast", "Toasts",
       "VideoPlayer", "AudioPlayer", "Carousel", "Gallery", "Lightbox", "Map",
     ],
     notes: [
@@ -277,7 +328,8 @@ const componentGroups: ComponentGroup[] = [
       "- Use `HoverCard(trigger, content)` when the popover needs rich content (profile preview, link target) and the trigger should open on hover.",
       "- `Popover(trigger, content, title?, side?, align?, width?)` is the click-triggered counterpart of `HoverCard` — use for filter panels, color pickers, share menus, and small settings flyouts. Always renders an × close button in the header; clicking the trigger again, clicking outside, or pressing Escape also closes it.",
       "- `Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)` renders stars for product reviews, testimonials, and ranked lists. Pass a `$variable` as `value` with `interactive=true` to let users rate; add `halfStep=true` so clicking the left half of a star sets a half-value. Set `icon=\"heart\"|\"thumb\"|\"fire\"|\"bolt\"` (or any FA name) to swap glyphs.",
-      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Drive lists from an `action` body: `$toasts = [...$toasts, item]` to append and `$toasts = $toasts.filter((t) => t.id !== id)` to dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
+      "- `Toasts(children, position?)` stacks toasts in a viewport corner. Pair it with the `$toast` namespace: `Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))`.",
       "- `NotificationBell(count?, items?, onOpen?)` — compact inbox trigger; `CommandPalette` for Cmd-K action search.",
     ],
   },

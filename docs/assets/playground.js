@@ -652,6 +652,414 @@ $app(Grid([
   GridItem(content, { span: "3/4" })
 ], { columns: 12, gap: "l" }))`,
   },
+
+  // ── NEW: realtime / websocket ─────────────────────────────────────────────
+  realtime: {
+    label: "Realtime — $socket + $sse",
+    code: `// Highlights: $socket reactive WebSocket (status + auto-reconnect + send queue),
+// $sse SSE stream, polling $query, $mutation with optimistic update + invalidation.
+
+// Live order channel: reconnect:true retries dropped connections with backoff;
+// sends made while "connecting" queue and flush once the socket opens.
+$orders = $socket({ url: "wss://stream.example.com/orders", reconnect: true })
+
+// Simulated realtime feed: $sse listens for price-tick events.
+$prices = $sse({ url: "https://stream.example.com/prices", event: "tick" })
+
+// Cached query with polling.
+$leaderboard = $query({
+  url: "https://api.example.com/leaderboard",
+  key: "lb",
+  refetchInterval: 8000,
+  refetchOnFocus: true
+})
+
+// Mutation with optimistic update so the UI responds instantly.
+$add = $mutation({
+  url: "https://api.example.com/bets",
+  optimistic: (o) => { $bets = [...$bets, { amount: o.body?.amount ?? 0 }] },
+  invalidates: ["lb"]
+})
+$bets = []
+$betAmt = 50
+
+function placeBet() {
+  $add.mutate({ body: { amount: $betAmt, symbol: $symbol } })
+  $orders.send({ amount: $betAmt, symbol: $symbol })   // queues until open
+}
+
+$symbol = "BTC"
+
+$app(Stack([
+  PageHeader("Live trading", {
+    // $socket.status walks "connecting" → "open" → "closed".
+    subtitle: \`Orders channel: \${$orders.status}\`,
+    status: Badge($prices.connected ? "Live" : "Offline", { tone: $prices.connected ? "success" : "muted", icon: "circle", animate: $prices.connected ? "pulse" : "none" })
+  }),
+  Stats([
+    StatCard("Last price", { value: $prices.last ? $util.format($prices.last.price ?? 0, "currency") : "—", trend: "up", icon: "chart-line" }),
+    StatCard("My bets",    { value: \`\${$util.count($bets)}\`,                                               trend: "flat", icon: "coins" }),
+    StatCard("Socket",     { value: $orders.status, trend: "flat", icon: "wifi" })
+  ]),
+  Grid([
+    Card([
+      CardHeader("Market stream", { subtitle: "Last 5 ticks" }),
+      Table([
+        Col("Price",  $prices.messages.slice(-5).map(m => $util.format(m.price ?? 0, "currency"))),
+        Col("Volume", $prices.messages.slice(-5).map(m => m.volume ?? "—"))
+      ])
+    ]),
+    Card([
+      CardHeader("Place a bet"),
+      FormSection("Order", { children: [
+        FormControl("Symbol",  { field: Select("sym", { items: [SelectItem("BTC","BTC/USD"), SelectItem("ETH","ETH/USD")], value: $symbol }) }),
+        FormControl("Amount",  { field: NumberInput("amt", { value: $betAmt, min: 1, max: 10000 }) })
+      ] }),
+      Button("Place bet", { onClick: placeBet, variant: "primary", loading: $add.loading }),
+      $add.error ? Alert("Order failed", { tone: "danger" }) : null
+    ])
+  ], { columns: { sm: 1, md: 2 }, gap: "l" }),
+  Card([
+    CardHeader("Leaderboard"),
+    Async($leaderboard, {
+      loading: LoadingState("Loading…"),
+      error:   ErrorState("Fetch failed"),
+      empty:   EmptyState("No data yet"),
+      data:    Table([
+        Col("Trader", $leaderboard.data?.map(r => r.name) ?? []),
+        Col("P&L",    $leaderboard.data?.map(r => $util.format(r.pnl ?? 0, "currency")) ?? [])
+      ])
+    })
+  ])
+]))`,
+  },
+
+  // ── NEW: $form + $util.rules ──────────────────────────────────────────────
+  forms: {
+    label: "Forms + validation ($form)",
+    code: `// Highlights: $form engine (values / errors / touched / dirty / validating /
+// submitting / submit()), $util.rules validators incl. async uniqueness checks.
+
+form = $form({
+  values: {
+    name:     "",
+    email:    "",
+    role:     "viewer",
+    age:      "",
+    password: "",
+    confirm:  ""
+  },
+  rules: {
+    name:     [$util.rules.required("Name is required"), $util.rules.minLength(2)],
+    // asyncCustom awaits a Promise — perfect for server-side uniqueness checks.
+    // form.validating reads true while it runs; submit() waits for it.
+    email:    [$util.rules.required(), $util.rules.email(),
+               $util.rules.asyncCustom((v) => $util.sleep(500).then(() => !v.endsWith("@taken.com")), "Email already registered")],
+    role:     [$util.rules.oneOf(["admin","editor","viewer"])],
+    age:      [$util.rules.required(), $util.rules.min(18, "Must be 18+"), $util.rules.max(120)],
+    password: [$util.rules.required(), $util.rules.minLength(8, "Min 8 characters")],
+    confirm:  [$util.rules.matches(() => form.values.password, "Passwords do not match")]
+  },
+  onSubmit: (v) => { $submitted = v.email; $done = true }
+})
+$submitted = ""
+$done = false
+
+$app(Stack([
+  PageHeader("Registration", {
+    subtitle: "Validated on blur · try an email ending in @taken.com",
+    status: form.dirty ? Badge("Unsaved changes", { tone: "warning", icon: "pen" }) : null
+  }),
+  Card([
+    SectionHeader("Account details"),
+    Column([
+      Input("name",  { label: "Full name",  value: form.values.name,  error: form.errors.name,  onBlur: () => form.touch("name") }),
+      Input("email", { label: "Email",      value: form.values.email, error: form.errors.email, onBlur: () => form.touch("email"), type: "email",
+                       hint: form.validating ? "Checking availability…" : "" }),
+      Select("role", { label: "Role", value: form.values.role, error: form.errors.role,
+        items: [SelectItem("admin","Admin"), SelectItem("editor","Editor"), SelectItem("viewer","Viewer")]
+      }),
+      NumberInput("age", { label: "Age", value: form.values.age, error: form.errors.age, onBlur: () => form.touch("age") }),
+      Input("password", { label: "Password",        value: form.values.password, error: form.errors.password, type: "password", onBlur: () => form.touch("password") }),
+      Input("confirm",  { label: "Confirm password", value: form.values.confirm,  error: form.errors.confirm,  type: "password", onBlur: () => form.touch("confirm") })
+    ], { gap: "m" }),
+    Row([
+      // submit() (alias handleSubmit) awaits async rules, then onSubmit;
+      // submitting stays true until an async onSubmit settles.
+      Button("Submit", { onClick: () => form.submit(), variant: "primary", loading: form.submitting, disabled: form.submitting || form.validating }),
+      Button("Reset",  { onClick: () => form.reset(), variant: "ghost", disabled: !form.dirty })
+    ], { gap: "s" }),
+    $done ? Alert(\`Welcome, \${$submitted}!\`, { tone: "success", icon: "circle-check" }) : null,
+    Badge(\`\${Object.keys(form.errors).length} errors\`, { tone: Object.keys(form.errors).length === 0 ? "success" : "danger" })
+  ])
+]))`,
+  },
+
+  // ── NEW: $store persist + undo/redo ───────────────────────────────────────
+  persistUndo: {
+    label: "Persist + undo/redo ($store)",
+    code: `// Highlights: $store({ persist, history }) — survives reload + full undo/redo.
+
+doc = $store({
+  persist: "pg-doc-demo",     // hydrates from localStorage on reload
+  history: 25,                // undo/redo up to 25 steps
+  title:   "Untitled",
+  body:    "Start typing…",
+  tags:    ["draft"],
+  setTitle: (s, v)  => { s.title = v },
+  setBody:  (s, v)  => { s.body = v },
+  addTag:   (s, tag) => { if (tag && !s.tags.includes(tag)) s.tags = [...s.tags, tag] },
+  removeTag:(s, t)  => { s.tags = s.tags.filter(x => x !== t) }
+})
+
+$newTag = ""
+
+$app(Stack([
+  PageHeader("Document editor", {
+    subtitle: "Changes survive page reload · full undo/redo",
+    actions: [
+      Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo, variant: "ghost", icon: "rotate-left",  size: "sm" }),
+      Button("Redo", { onClick: () => doc.redo(), disabled: !doc.canRedo, variant: "ghost", icon: "rotate-right", size: "sm" })
+    ]
+  }),
+  Grid([
+    Card([
+      SectionHeader("Editor"),
+      Column([
+        Input("title", { label: "Title",         value: doc.title, onInput: (v) => doc.setTitle(v) }),
+        TextArea("body", { label: "Body",         value: doc.body,  onInput: (v) => doc.setBody(v),  rows: 6 }),
+        Row([
+          Input("tag-input", { placeholder: "Add tag…", value: $newTag, size: "sm" }),
+          Button("Add", { onClick: () => { doc.addTag($newTag); $newTag = "" }, size: "sm", variant: "secondary" })
+        ], { gap: "s" }),
+        Row(doc.tags.map(t => Tag(t, { onRemove: () => doc.removeTag(t) })), { gap: "xs", wrap: true })
+      ], { gap: "m" })
+    ]),
+    Card([
+      SectionHeader("Preview"),
+      CardHeader(doc.title, { subtitle: \`\${doc.body.length} chars · \${$util.count(doc.tags)} tags\` }),
+      Markdown(doc.body),
+      BadgeList(doc.tags.map(t => Badge(t, { tone: "primary", size: "sm" })))
+    ])
+  ], { columns: { sm: 1, md: 2 }, gap: "l" })
+]))`,
+  },
+
+  // ── NEW: sx + layout primitives ───────────────────────────────────────────
+  sxLayout: {
+    label: "sx + layout (Section/Split/Bento)",
+    code: `// Highlights: Section page band, Split two-pane, Bento editorial grid,
+// sx with responsive maps + interaction states + gradients.
+
+$theme({
+  gradients: { brand: ["#6366f1", "#ec4899"], cool: ["#0ea5e9", "#22d3ee"] }
+})
+
+hero = Section([
+  Display(["Build UIs in ", GradientText("record time", { gradient: "brand" })], { size: "hero", align: "center" }),
+  Text("Compose, theme, and ship — one language.", { align: "center", tone: "muted" }),
+  Row([
+    Button("Get started", { variant: "primary", icon: "rocket", size: "lg" }),
+    Button("View docs",   { variant: "ghost",   icon: "book",   size: "lg" })
+  ], { gap: "m", justify: "center" })
+], { background: "brand", eyebrow: "New in v0.6" })
+
+features = Section([
+  Bento([
+    BentoCell(Card([
+      CardHeader("$query + infinite scroll", { subtitle: "Load more as users scroll" }),
+      Text("$query({ url, infinite: { param: 'page', limit: 20 } }) returns .loadMore() and .hasMore.")
+    ]), { span: 2 }),
+    BentoCell(Card([
+      CardHeader("$socket / $sse"),
+      Text("Reactive WebSocket and SSE — no boilerplate teardown.")
+    ])),
+    BentoCell(Card([
+      CardHeader("$form engine"),
+      Text("Managed values, $util.rules validators, handleSubmit().")
+    ])),
+    BentoCell(Card([
+      CardHeader("persist + undo", { subtitle: "$store({ persist, history })" }),
+      Text("localStorage hydration on mount, undo()/redo() out of the box.")
+    ]))
+  ])
+], { background: "soft", title: "New features" })
+
+sxDemo = Section([
+  SectionHeader("sx — bounded style channel"),
+  Grid([
+    Card([Text("Hover me")], {
+      sx: { p: "l", radius: "lg", bg: "surface", shadow: "md",
+            states: { hover: { scale: 1.04, shadow: "lg", bg: "primary" } } }
+    }),
+    Card([Text("Gradient bg")], {
+      sx: { p: "l", bg: "gradient.brand", radius: "lg", color: "#fff" }
+    }),
+    Card([Text("Responsive")], {
+      sx: { p: "l", width: { base: "100%", md: "66%" } }
+    })
+  ], { columns: { sm: 1, md: 3 }, gap: "m" })
+], { background: "muted", title: "sx styling" })
+
+$app(Column([hero, features, sxDemo]))`,
+  },
+
+  // ── NEW: infinite scroll ──────────────────────────────────────────────────
+  infiniteScroll: {
+    label: "Infinite scroll ($query infinite)",
+    code: `// Highlights: $query infinite mode — loadMore on intersect,
+// $util.url.setQuery for query-param state, $util.onNavigate guard,
+// $util.derived computed value.
+
+$feed = $query({
+  url: "https://api.example.com/posts",
+  key: "posts-feed",
+  infinite: { param: "page", limit: 10, mode: "page", select: b => b.items ?? b }
+})
+
+$search = $util.url.query.q ?? ""
+$sort   = $util.url.query.sort ?? "newest"
+
+// Reactive computed — rebuilds whenever $feed.data or $search change.
+visiblePosts = $util.derived(() =>
+  $search
+    ? $feed.data.filter(p => p.title?.toLowerCase().includes($search.toLowerCase()))
+    : $feed.data
+)
+
+function updateSearch(v) {
+  $search = v
+  $util.url.setQuery("q", v || null)
+}
+function updateSort(v) {
+  $sort = v
+  $util.url.setQuery("sort", v)
+  $feed.refetch()
+}
+
+// Navigation guard: confirm leaving if a post is being drafted.
+$drafting = false
+$util.onNavigate(({ to }) =>
+  $drafting && to !== "/" ? (confirm("Leave without saving?") ? true : false) : true
+)
+
+$app(Stack([
+  PageHeader("Posts", {
+    subtitle: \`\${$util.count(visiblePosts)} of \${$util.count($feed.data)} loaded\`,
+    actions: [
+      Button("New post", { onClick: () => { $drafting = true }, variant: "primary", icon: "plus" })
+    ]
+  }),
+  Toolbar({
+    left: [
+      Input("search", { placeholder: "Search posts…", value: $search, onInput: updateSearch, size: "sm" })
+    ],
+    right: [
+      Select("sort", { value: $sort, size: "sm", items: [
+        SelectItem("newest","Newest"),
+        SelectItem("popular","Most popular"),
+        SelectItem("comments","Most comments")
+      ], onChange: updateSort })
+    ]
+  }),
+  Async($feed, {
+    loading: LoadingState("Loading posts…"),
+    error:   ErrorState("Feed unavailable"),
+    empty:   EmptyState("No posts yet", { icon: "newspaper" }),
+    data:    Column([
+      Column(visiblePosts.map(p =>
+        Card([
+          Row([
+            Avatar(p.author ?? "?", { size: "sm" }),
+            Column([
+              Text(p.title ?? "(Untitled)", { variant: "large-heavy" }),
+              Row([
+                Badge(p.category ?? "general", { size: "sm" }),
+                Text($util.relativeTime(p.createdAt ?? $util.now()), { tone: "muted", variant: "small" })
+              ], { gap: "s" })
+            ], { gap: "xs" })
+          ], { gap: "m", align: "center" }),
+          Text(p.excerpt ?? "", { tone: "muted" })
+        ])
+      ), { gap: "m" }),
+      $feed.hasMore
+        ? OnIntersect(
+            Button($feed.loadingMore ? "Loading…" : "Load more", {
+              onClick: () => $feed.loadMore(), variant: "ghost", loading: $feed.loadingMore
+            }),
+            { onEnter: () => $feed.loadMore(), once: false }
+          )
+        : Text("All posts loaded", { align: "center", tone: "muted" })
+    ])
+  })
+]))`,
+  },
+
+  // ── NEW: dialogs, calendar & a11y ─────────────────────────────────────────
+  dialogs: {
+    label: "Dialogs, Calendar & a11y",
+    code: `// Highlights: Sheet / BottomSheet / ConfirmDialog (Escape closes, focus is
+// trapped in the panel and restored on close), Calendar month grid with
+// arrow-key navigation, ThemeToggle, CopyButton, KbdShortcut.
+
+$sheetOpen = false
+$bottomOpen = false
+$confirmOpen = false
+$picked = ""
+$items = ["Quarterly report.pdf", "Roadmap.fig", "Budget.xlsx"]
+
+function removeFirst() {
+  $items = $items.slice(1)
+  $confirmOpen = false
+}
+
+$app(Stack([
+  PageHeader("Overlays & scheduling", {
+    subtitle: "Open a dialog, then press Escape or Tab around — focus stays inside",
+    actions: [ThemeToggle()]
+  }),
+  Row([
+    Button("Open sheet",        { onClick: () => { $sheetOpen = true },  variant: "primary", icon: "panel-right" }),
+    Button("Open bottom sheet", { onClick: () => { $bottomOpen = true }, variant: "secondary" }),
+    Button("Delete first file", { onClick: () => { $confirmOpen = true }, tone: "danger", icon: "trash", disabled: $util.count($items) === 0 })
+  ], { gap: "s", wrap: true }),
+  Card([
+    SectionHeader("Files"),
+    List($items.map(f => ListItem(f, { icon: "file" }))),
+    Row([
+      CopyButton(\`\${$util.count($items)} files\`, { label: "Copy summary" }),
+      KbdShortcut(["Esc"]), Text("closes any open dialog", { tone: "muted", variant: "small" })
+    ], { gap: "s", align: "center" })
+  ]),
+  Card([
+    SectionHeader("Pick a review date", { subtitle: "Click a day — or focus the grid and use the arrow keys" }),
+    Calendar({
+      selected: $picked,
+      events: [{ date: $util.formatDate($util.addDays($util.today(), 3), "YYYY-MM-DD"), label: "Sprint review", color: "success" }],
+      onSelect: (iso) => { $picked = iso }
+    }),
+    $picked ? Callout(\`Review scheduled for \${$picked}\`, { tone: "info", icon: "calendar-check" }) : null
+  ]),
+
+  Sheet([
+    Text("Side panels trap Tab focus while open and hand it back on close."),
+    Input("note", { label: "Add a note", placeholder: "Type, then press Escape…" })
+  ], { open: $sheetOpen, title: "Details", side: "right" }),
+
+  BottomSheet([
+    Text("Mobile-friendly bottom variant — same Escape + focus behaviour.")
+  ], { open: $bottomOpen, title: "Quick actions" }),
+
+  ConfirmDialog("Delete this file?", {
+    open: $confirmOpen,
+    message: "Escape cancels; focus lands on Cancel (the safe action) first.",
+    tone: "danger",
+    confirmLabel: "Delete",
+    onConfirm: removeFirst,
+    onCancel: () => { $confirmOpen = false }
+  })
+]))`,
+  },
 };
 
 const DEFAULT_EXAMPLE = "chat";
@@ -678,6 +1086,7 @@ const LS = {
   openTabs: "rui:playground:openTabs",
   expanded: "rui:playground:expanded",
   activeFile: "rui:playground:activeFile",
+  entryFile: "rui:playground:entryFile",
   mode: "rui:playground:mode",
   runMode: "rui:playground:runMode",
   theme: "rui:playground:theme",
@@ -688,8 +1097,10 @@ const LS = {
   sidebarCollapsed: "rui:playground:sidebarCollapsed",
 };
 
-// The entry module of a playground project. `app.aktion` is always present,
-// is what the linker links from, and is where examples / shared snippets land.
+// The default entry module of a playground project. `app.aktion` is always
+// present and is where examples / shared snippets land. The file the linker
+// actually links from is the mutable `entryFile` (see below), which the user
+// can repoint to any `.aktion` file via the explorer context menu.
 const ENTRY_FILE = "app.aktion";
 
 const lsRead = (key, fallback) => {
@@ -1202,8 +1613,38 @@ const SPECIAL_IDENTIFIERS = [
   },
   {
     label: "$theme",
-    info: "Per-response theme override: a bare `$theme({ colors: { primary: … }, radius, font, motion, elevation })` statement (no binding needed) brands the response.",
+    info: "Per-response theme override: a bare `$theme({ … })` statement (no binding needed) brands the response. Structured groups: `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients` (→ `gradient.brand` refs), `zIndex` (layer tokens for `sx.zIndex`), `motion`, `fonts` (web-font import), `icons` (custom inline SVG), plus `name`/`direction`.",
     apply: "$theme({\n  colors: { primary: \"${1:#6366f1}\" }\n})",
+    snippet: true,
+  },
+  {
+    label: "$form",
+    info: "Managed form factory: `form = $form({ values, rules, onSubmit })`. The bag exposes reactive `values`/`errors`/`touched`/`dirty`/`valid`/`submitting`/`validating` plus `field()`, `touch()`, `setField()`, `validate()`, `submit()` (alias `handleSubmit()`), `reset()`. Rules come from `$util.rules.*` — async ones (`asyncCustom`) are awaited before submit.",
+    apply: "$form({\n  values: { ${1:email}: \"\" },\n  rules: { ${1:email}: [$util.rules.required(), $util.rules.email()] },\n  onSubmit: (values) => { ${2} }\n})",
+    snippet: true,
+  },
+  {
+    label: "$query",
+    info: "Cached, deduplicated HTTP read: `$data = $query({ url, key?, ttl? })`. Polling via `refetchInterval`/`refetchOnFocus`/`refetchOnReconnect`; pagination via `infinite: { param, limit, mode }` (→ `.loadMore()`, `.hasMore`, `.loadingMore`); GraphQL via `gql` + `variables`.",
+    apply: "$query({\n  url: \"${1:https://api.example.com/items}\",\n  key: \"${2:items}\"\n})",
+    snippet: true,
+  },
+  {
+    label: "$mutation",
+    info: "Deferred write: `$save = $mutation({ url, method })` fires on `.mutate(overrides?)`. `optimistic: (vars) => { … }` applies state instantly (auto-rollback on failure); `invalidates: [keys]` refetches matching cached queries.",
+    apply: "$mutation({\n  url: \"${1:https://api.example.com/items}\",\n  method: \"${2:POST}\"\n})",
+    snippet: true,
+  },
+  {
+    label: "$socket",
+    info: "Reactive WebSocket: `$chat = $socket({ url, reconnect? })`. Read `.status` (\"connecting\"|\"open\"|\"closed\"), `.connected`, `.last`, `.messages`; `.send(data)` queues while connecting and flushes on open; `reconnect: true|n` retries with backoff; `.close()` stops for good.",
+    apply: "$socket({ url: \"${1:wss://example.com/room}\", reconnect: true })",
+    snippet: true,
+  },
+  {
+    label: "$sse",
+    info: "Reactive Server-Sent Events stream: `$feed = $sse({ url, event? })` with the same `.status`/`.connected`/`.last`/`.messages`/`.close()` surface (EventSource reconnects natively).",
+    apply: "$sse({ url: \"${1:https://api.example.com/events}\" })",
     snippet: true,
   },
   {
@@ -1401,6 +1842,69 @@ const GLOBAL_NAMESPACES = [
       { name: "sqrt",   apply: "sqrt(${1:value})",  info: "Square root." },
       { name: "random", apply: "random()",          info: "Pseudo-random number in [0, 1)." },
       { name: "log",    apply: "log(${1:value})",   info: "Natural logarithm." },
+      // Formatting / misc additions
+      { name: "slugify",      apply: "slugify(${1:text})",        info: "URL-safe slug: \"Hello World\" → \"hello-world\"." },
+      { name: "truncate",     apply: "truncate(${1:text}, ${2:80})", info: "Cut text to n chars with an ellipsis." },
+      { name: "initials",     apply: "initials(${1:name})",       info: "Two-letter initials from a full name." },
+      { name: "currency",     apply: "currency(${1:value}, \"${2:USD}\")", info: "Locale currency string." },
+      { name: "percent",      apply: "percent(${1:value})",       info: "Locale percent string (0.42 → \"42%\")." },
+      { name: "bytes",        apply: "bytes(${1:value})",         info: "Human-readable byte size (1536 → \"1.5 KB\")." },
+      { name: "relativeTime", apply: "relativeTime(${1:date})",   info: "\"3 minutes ago\" / \"in 2 days\" via Intl." },
+      { name: "copy",         apply: "copy(${1:text})",           info: "Copy to the clipboard — async; resolves true only when the write actually succeeds (`await $util.copy(x)`)." },
+      { name: "sleep",        apply: "sleep(${1:300})",           info: "Awaitable pause: `await $util.sleep(ms)` (capped at 60s)." },
+      { name: "uuid",         apply: "uuid()",                    info: "Random UUID v4 string." },
+      { name: "debounceFn",   apply: "debounceFn(${1:fn}, ${2:250})", info: "Wrap a function so it fires `wait` ms after the LAST call." },
+      { name: "throttleFn",   apply: "throttleFn(${1:fn}, ${2:250})", info: "Wrap a function to fire at most once per `wait` ms — leading edge + one trailing fire with the latest args." },
+      // Computed + hooks
+      { name: "derived",    apply: "derived(() => ${1:expression})", info: "Computed reactive value — recomputes from the atoms the lambda reads." },
+      { name: "onError",    apply: "onError((e) => { ${1} })",       info: "Program-level error sink — fires with { error, source } when an action throws." },
+      { name: "onNavigate", apply: "onNavigate(({ to, from }) => ${1:true})", info: "Navigation guard: return false to block, a path string to redirect, anything else to allow." },
+      { name: "onRequest",  apply: "onRequest((req) => ({ headers: { ${1} } }))", info: "HTTP request interceptor — partial returns merge over every outgoing request." },
+      { name: "onResponse", apply: "onResponse((res, retry) => ${1:res})", info: "HTTP response interceptor — replace the response or `await retry()`." },
+      { name: "invalidate", apply: "invalidate([\"${1:key}\"])",     info: "Refetch every cached $query whose key contains one of the substrings." },
+      // Reactive environment (listeners attach lazily on first read)
+      { name: "scroll",     apply: "scroll",     info: "Reactive scroll: .x / .y / .progress (0–1) / .direction (\"up\"|\"down\")." },
+      { name: "viewport",   apply: "viewport",   info: "Reactive viewport: .width / .height." },
+      { name: "breakpoint", apply: "breakpoint", info: "Reactive breakpoint: .active (\"base\"|\"sm\"|\"md\"|\"lg\"|\"xl\") + boolean .sm/.md/.lg/.xl." },
+      { name: "media",      apply: "media",      info: "Reactive media flags: .prefersDark / .prefersReducedMotion / .online / .pointer / .portrait." },
+      { name: "mouse",      apply: "mouse",      info: "Reactive pointer position: .x / .y." },
+      // URL + query-param state
+      { name: "url",             apply: "url",                                    info: "Reactive URL snapshot: .path / .params / .query / .hash + .navigate(to)." },
+      { name: "url.setQuery",    apply: "url.setQuery(\"${1:key}\", ${2:value})", info: "Write a query param in place (null/\"\" drops it) — shareable filter/tab state." },
+      { name: "url.removeQuery", apply: "url.removeQuery(\"${1:key}\")",          info: "Drop a query param from the URL." },
+      // Styling helpers
+      { name: "style.cx",       apply: "style.cx(${1:\"base\"}, { ${2:active}: ${3:cond} })", info: "clsx-style class composer — strings, arrays, { name: cond } objects." },
+      { name: "style.gradient", apply: "style.gradient([${1:\"#6366f1\", \"#ec4899\"}], ${2:120})", info: "Safe linear-gradient() from color stops + angle." },
+      { name: "style.alpha",    apply: "style.alpha(\"${1:primary}\", ${2:0.12})", info: "color-mix transparency: token or color at 0–1 alpha." },
+      { name: "style.clamp",    apply: "style.clamp(\"${1:16px}\", \"${2:2vw}\", \"${3:24px}\")", info: "Responsive clamp(min, preferred, max) size." },
+      { name: "style.token",    apply: "style.token(\"${1:spacing.l}\")",          info: "Resolve a theme token path to its CSS var: \"colors.primary\" → var(--rui-color-primary)." },
+      // Validators (compose per field; run with validate/validateAll or hand to $form)
+      { name: "rules.required",    apply: "rules.required(${1:})",                 info: "Non-empty value." },
+      { name: "rules.email",      apply: "rules.email()",                          info: "Valid email address." },
+      { name: "rules.url",        apply: "rules.url()",                            info: "Valid http(s) URL." },
+      { name: "rules.min",        apply: "rules.min(${1:0})",                      info: "Number ≥ n." },
+      { name: "rules.max",        apply: "rules.max(${1:100})",                    info: "Number ≤ n." },
+      { name: "rules.minLength",  apply: "rules.minLength(${1:3})",                info: "String length ≥ n." },
+      { name: "rules.maxLength",  apply: "rules.maxLength(${1:80})",               info: "String length ≤ n." },
+      { name: "rules.pattern",    apply: "rules.pattern(${1:/^[a-z]+$/})",         info: "Match a regular expression." },
+      { name: "rules.oneOf",      apply: "rules.oneOf([${1:\"a\", \"b\"}])",       info: "Value is in the allowed list." },
+      { name: "rules.matches",    apply: "rules.matches(${1:other})",              info: "Equals another value (password confirmation)." },
+      { name: "rules.custom",     apply: "rules.custom((v) => ${1:true})",         info: "Custom sync rule — return true/null (valid), false, or an error string." },
+      { name: "rules.asyncCustom", apply: "rules.asyncCustom((v) => ${1:check}(v), \"${2:Already taken}\")", info: "Async rule (Promise) — server-side checks; $form awaits it before submitting." },
+      { name: "rules.validate",    apply: "rules.validate(${1:value}, [${2:validators}])", info: "Run validators — first error message or null (a Promise when an async rule is hit)." },
+      { name: "rules.validateAll", apply: "rules.validateAll(${1:values}, ${2:schema})",   info: "Validate an object against { field: [validators] } → { field: message }." },
+      // Device / platform
+      { name: "vibrate",       apply: "vibrate(${1:10})",        info: "Haptic pulse (ms or pattern array) on supporting devices." },
+      { name: "share",         apply: "share({ title: \"${1}\", url: \"${2}\" })", info: "Native share sheet (Web Share API) — resolves true on share." },
+      { name: "readClipboard", apply: "readClipboard()",         info: "Read clipboard text (async, permission-gated)." },
+      { name: "geolocate",     apply: "geolocate()",             info: "Resolve { lat, lng } via the Geolocation API." },
+      { name: "isOnline",      apply: "isOnline()",              info: "Current navigator.onLine flag." },
+      { name: "deviceType",    apply: "deviceType()",            info: "\"mobile\" | \"tablet\" | \"desktop\" heuristic." },
+      { name: "worker",        apply: "worker(${1:fn}, ${2:args})", info: "Run a closure-free function in a Web Worker; resolves its return value." },
+      { name: "registerServiceWorker", apply: "registerServiceWorker(\"${1:/sw.js}\")", info: "Register a service worker for PWA/offline." },
+      { name: "webManifest",   apply: "webManifest({ name: \"${1:App}\" })", info: "Inject a sanitised web-app manifest (name, icons, themeColor…)." },
+      { name: "nativeShell",   apply: "nativeShell()",           info: "Detect the wrapper: capacitor/cordova/tauri/electron/react-native or \"web\"." },
+      { name: "isNativeApp",   apply: "isNativeApp()",           info: "True when running inside a native shell." },
     ],
   },
   {
@@ -1527,6 +2031,91 @@ const HTTP_RESOURCE_MEMBERS = [
   { name: "cancel",      apply: "cancel()",    info: "Abort the in-flight request." },
   { name: "onDone",      apply: "onDone = () => {\n  ${1}\n}", snippet: true, info: "Settable callback fired each time the request settles (initial load + every refetch, on success or error). Not fired for superseded/cancelled requests — e.g. `$patch.onDone = () => $todos.refetch()`." },
 ];
+
+/** `$query({...})` bag — HTTP resource + pagination extras (infinite mode). */
+const QUERY_RESOURCE_MEMBERS = [
+  ...HTTP_RESOURCE_MEMBERS,
+  { name: "loadMore",    apply: "loadMore()",  info: "Fetch the next page (infinite mode)." },
+  { name: "hasMore",     apply: "hasMore",     info: "`true` while more pages are available (infinite mode)." },
+  { name: "loadingMore", apply: "loadingMore", info: "`true` while a `loadMore()` page is in flight." },
+  { name: "pages",       apply: "pages",       info: "Raw page bodies loaded so far (infinite mode); `.data` is the flattened items." },
+];
+
+/** `$mutation({...})` bag — fires on `.mutate()`. */
+const MUTATION_RESOURCE_MEMBERS = [
+  { name: "mutate",  apply: "mutate(${1:{ body: payload }})", snippet: true, info: "Fire the request; optional overrides shallow-merge over the config. With `optimistic` the state applies instantly and rolls back on failure." },
+  { name: "data",    apply: "data",    info: "Response body of the last successful mutation." },
+  { name: "error",   apply: "error",   info: "`null` on success; error details on failure." },
+  { name: "loading", apply: "loading", info: "`true` while the mutation request is in flight." },
+  { name: "status",  apply: "status",  info: "HTTP status code of the last response." },
+  { name: "onDone",  apply: "onDone = () => {\n  ${1}\n}", snippet: true, info: "Settable callback fired when the mutation settles." },
+];
+
+/** `$socket({...})` bag — reactive WebSocket (VI.3). */
+const SOCKET_RESOURCE_MEMBERS = [
+  { name: "status",    apply: "status",    info: "Connection lifecycle: \"connecting\" | \"open\" | \"closed\"." },
+  { name: "connected", apply: "connected", info: "`true` while status is \"open\"." },
+  { name: "last",      apply: "last",      info: "Most recent message (JSON auto-parsed), or null." },
+  { name: "messages",  apply: "messages",  info: "Buffered messages, newest last (capped to bufferSize)." },
+  { name: "attempts",  apply: "attempts",  info: "Reconnect attempts in the current streak (resets on success)." },
+  { name: "error",     apply: "error",     info: "Last socket error event, if any." },
+  { name: "send",      apply: "send(${1:data})", snippet: true, info: "Send a message (objects JSON-stringified). Queues while connecting; flushes on open." },
+  { name: "close",     apply: "close()",   info: "Close for good — disables auto-reconnect." },
+];
+
+/** `$sse({...})` bag — reactive Server-Sent Events stream. */
+const SSE_RESOURCE_MEMBERS = [
+  { name: "status",    apply: "status",    info: "\"connecting\" | \"open\" | \"closed\" (EventSource retries natively)." },
+  { name: "connected", apply: "connected", info: "`true` while the stream is open." },
+  { name: "last",      apply: "last",      info: "Most recent event payload (JSON auto-parsed)." },
+  { name: "messages",  apply: "messages",  info: "Buffered events, newest last (capped to bufferSize)." },
+  { name: "error",     apply: "error",     info: "Last stream error, if any." },
+  { name: "close",     apply: "close()",   info: "Close the stream." },
+];
+
+/** `$form({...})` bag — the managed form engine (V.1). */
+const FORM_RESOURCE_MEMBERS = [
+  { name: "values",     apply: "values",     info: "Reactive field values — two-way bind with `Input(\"email\", { value: form.values.email })`." },
+  { name: "errors",     apply: "errors",     info: "Per-field error messages (set after validate/touch/submit)." },
+  { name: "touched",    apply: "touched",    info: "Per-field booleans — true once the user has interacted." },
+  { name: "dirty",      apply: "dirty",      info: "`true` once any value differs from the clean snapshot; clears on reset() or when values return to clean." },
+  { name: "valid",      apply: "valid",      info: "`true` when the last validation pass found no errors." },
+  { name: "submitting", apply: "submitting", info: "`true` from submit() until an async onSubmit settles." },
+  { name: "validating", apply: "validating", info: "`true` while async rules (`$util.rules.asyncCustom`) are in flight." },
+  { name: "field",      apply: "field(\"${1:name}\")", snippet: true, info: "Controlled prop bag: { value, error, name, onChange, onBlur } — spread onto an input." },
+  { name: "touch",      apply: "touch(\"${1:name}\")", snippet: true, info: "Mark a field touched + validate it (wire to `onBlur`)." },
+  { name: "setField",   apply: "setField(\"${1:name}\", ${2:value})", snippet: true, info: "Set one field value (clears its error)." },
+  { name: "setValues",  apply: "setValues({ ${1} })", snippet: true, info: "Merge several field values at once." },
+  { name: "validate",   apply: "validate()",   info: "Validate every field → boolean (a Promise when async rules exist)." },
+  { name: "validateField", apply: "validateField(\"${1:name}\")", snippet: true, info: "Validate one field → message | null (Promise for async rules)." },
+  { name: "submit",     apply: "submit()",     info: "Touch all → validate (awaiting async rules) → onSubmit(values) when valid. Alias: handleSubmit()." },
+  { name: "handleSubmit", apply: "handleSubmit()", info: "Alias of submit()." },
+  { name: "reset",      apply: "reset()",      info: "Restore initial values; clears errors/touched/dirty." },
+];
+
+/** `$store({...})` handles — built-in methods (user fields/methods add to these). */
+const STORE_RESOURCE_MEMBERS = [
+  { name: "undo",         apply: "undo()",       info: "Undo the last change (`history: true|depth` stores)." },
+  { name: "redo",         apply: "redo()",       info: "Redo the last undone change." },
+  { name: "canUndo",      apply: "canUndo",      info: "Reactive — `true` when an undo step is available." },
+  { name: "canRedo",      apply: "canRedo",      info: "Reactive — `true` when a redo step is available." },
+  { name: "clearHistory", apply: "clearHistory()", info: "Drop the undo/redo stacks." },
+];
+
+/**
+ * Factory primitive → the member list its returned bag completes with.
+ * `scanFactoryResources` maps every `name = $factory(` / `$name = $factory(`
+ * assignment to one of these tables.
+ */
+const FACTORY_RESOURCE_MEMBERS = {
+  http: HTTP_RESOURCE_MEMBERS,
+  query: QUERY_RESOURCE_MEMBERS,
+  mutation: MUTATION_RESOURCE_MEMBERS,
+  socket: SOCKET_RESOURCE_MEMBERS,
+  sse: SSE_RESOURCE_MEMBERS,
+  form: FORM_RESOURCE_MEMBERS,
+  store: STORE_RESOURCE_MEMBERS,
+};
 
 /**
  * Members of the reserved reactive `route` handle — surfaced after `route.`.
@@ -2273,16 +2862,18 @@ function initPlayground(cm) {
   }
 
   /**
-   * Find every `$name` whose value comes from an `$http({...})` call
-   * (`$todos = $http(`, `$x = await $http(`). Those names carry the reactive
-   * resource bag, so `$name.` should complete to `.data` / `.refetch()` /
-   * `.onDone` / … rather than nothing.
+   * Find every binding whose value comes from a factory primitive —
+   * `$todos = $http(`, `form = $form(`, `$chat = await $socket(`, … — and
+   * map the receiver (exactly as typed, with or without the `$` sigil) to
+   * the factory's member table so `receiver.` completes to the right bag
+   * (`.data` / `.refetch()` for $http, `.values` / `.submit()` for $form,
+   * `.status` / `.send()` for $socket, …).
    */
-  function scanHttpResources(source) {
-    const out = new Set();
-    const re = /\$([A-Za-z_][\w]*)\s*=\s*(?:await\s+)?\$http\s*\(/g;
+  function scanFactoryResources(source) {
+    const out = new Map();
+    const re = /(\$?[A-Za-z_][\w]*)\s*=\s*(?:await\s+)?\$(http|query|mutation|socket|sse|form|store)\s*\(/g;
     let m;
-    while ((m = re.exec(source))) out.add(m[1]);
+    while ((m = re.exec(source))) out.set(m[1], FACTORY_RESOURCE_MEMBERS[m[2]]);
     return out;
   }
 
@@ -2300,10 +2891,11 @@ function initPlayground(cm) {
   /**
    * Resolve member completions for a `receiver.` position. Handles the JS
    * namespace globals (and their nested sub-namespaces like
-   * `storage.local`), the reserved `route` handle, and any `$variable`
-   * assigned from `$http({...})` (→ the reactive resource bag). Returns
-   * `null` when the receiver isn't a known object so general completions
-   * can take over.
+   * `storage.local` / `util.rules`), the reserved `route` handle, and any
+   * binding assigned from a factory primitive — `$http`/`$query`/`$mutation`/
+   * `$socket`/`$sse`/`$form`/`$store` — which completes with that factory's
+   * resource-bag members. Returns `null` when the receiver isn't a known
+   * object so general completions can take over.
    */
   function memberCompletionsFor(receiver, source) {
     for (const ns of GLOBAL_NAMESPACES) {
@@ -2324,8 +2916,9 @@ function initPlayground(cm) {
     if (receiver === "route") {
       return ROUTE_MEMBERS.map((m) => memberOption(m, "route"));
     }
-    if (receiver.startsWith("$") && scanHttpResources(source).has(receiver.slice(1))) {
-      return HTTP_RESOURCE_MEMBERS.map((m) => memberOption(m, receiver));
+    const factoryMembers = scanFactoryResources(source).get(receiver);
+    if (factoryMembers) {
+      return factoryMembers.map((m) => memberOption(m, receiver));
     }
     return null;
   }
@@ -2972,10 +3565,12 @@ function initPlayground(cm) {
   // paths (so empty folders persist). `activeFile` is the file shown in the
   // editor; `openTabs` is the ordered set of files with a tab. `expanded` is
   // the set of open folders; `selected` drives multi-select; `clipboard` backs
-  // copy/cut→paste. The linker always links from `ENTRY_FILE`.
+  // copy/cut→paste. The linker links from `entryFile`, which defaults to
+  // `ENTRY_FILE` but can be repointed to any project file by the user.
   let files = {};
   let folders = new Set();
   let activeFile = ENTRY_FILE;
+  let entryFile = ENTRY_FILE;
   let openTabs = [];
   let expanded = new Set();
   let selected = new Set();
@@ -2993,7 +3588,8 @@ function initPlayground(cm) {
     lsWrite(LS.openTabs, JSON.stringify(openTabs));
     lsWrite(LS.expanded, JSON.stringify([...expanded]));
     lsWrite(LS.activeFile, activeFile);
-    lsWrite(LS.code, files[ENTRY_FILE] ?? "");
+    lsWrite(LS.entryFile, entryFile);
+    lsWrite(LS.code, files[entryFile] ?? files[ENTRY_FILE] ?? "");
   }
 
   // Capture the editor's current text into the active file (call before any
@@ -3275,6 +3871,7 @@ function initPlayground(cm) {
     expanded = new Set();
     selected = new Set();
     clipboard = null;
+    entryFile = ENTRY_FILE;
   }
 
   function pickInitialCode() {
@@ -3295,6 +3892,8 @@ function initPlayground(cm) {
       files = savedFiles;
       const saved = lsRead(LS.activeFile, ENTRY_FILE);
       activeFile = files[saved] !== undefined ? saved : ENTRY_FILE;
+      const savedEntry = lsRead(LS.entryFile, ENTRY_FILE);
+      entryFile = files[savedEntry] !== undefined ? savedEntry : ENTRY_FILE;
       folders = new Set((readJSON(LS.folders) || []).filter((p) => typeof p === "string"));
       const tabs = (readJSON(LS.openTabs) || []).filter((p) => files[p] !== undefined);
       openTabs = tabs.length ? tabs : [activeFile];
@@ -3405,7 +4004,10 @@ function initPlayground(cm) {
     const renderDir = (dir, depth) => {
       const subs = [...all].filter((p) => parentOf(p) === dir && p !== "").sort((a, b) => baseName(a).localeCompare(baseName(b)));
       const filePaths = Object.keys(files).filter((p) => parentOf(p) === dir).sort((a, b) => {
-        if (dir === "") { if (a === ENTRY_FILE) return -1; if (b === ENTRY_FILE) return 1; }
+        if (dir === "") {
+          if (a === entryFile) return -1; if (b === entryFile) return 1;
+          if (a === ENTRY_FILE) return -1; if (b === ENTRY_FILE) return 1;
+        }
         return baseName(a).localeCompare(baseName(b));
       });
       for (const sub of subs) {
@@ -3455,10 +4057,12 @@ function initPlayground(cm) {
     name.textContent = baseName(path);
     name.title = path;
     row.append(twisty, icon, name);
-    if (path === ENTRY_FILE) {
+    if (path === entryFile) {
       const badge = document.createElement("span");
       badge.className = "pg-row-badge";
+      badge.dataset.entry = "true";
       badge.textContent = "entry";
+      badge.title = "This file is the entry point the playground runs and links from";
       row.append(badge);
     }
     return row;
@@ -3656,6 +4260,7 @@ function initPlayground(cm) {
     const remap = (p) => (p === oldPrefix || p.startsWith(`${oldPrefix}/`)) ? newPrefix + p.slice(oldPrefix.length) : p;
     openTabs = openTabs.map(remap);
     activeFile = remap(activeFile);
+    entryFile = remap(entryFile);
     expanded = new Set([...expanded].map(remap));
     selected = new Set([...selected].map(remap));
   }
@@ -3691,6 +4296,8 @@ function initPlayground(cm) {
       if (!openTabs.includes(activeFile)) openTabs.push(activeFile);
       editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: files[activeFile] ?? "" } });
     }
+    // A deleted entry falls back to the always-present default file.
+    if (files[entryFile] === undefined) entryFile = ENTRY_FILE;
     afterStructureChange();
     showToast(`Deleted ${label}`, { icon: "trash" });
   }
@@ -3752,6 +4359,18 @@ function initPlayground(cm) {
     renderFileExplorer(); // re-render so a cut selection dims immediately
   }
 
+  // Repoint the linker's entry to any project file. The new entry must exist;
+  // the choice is persisted and the viewer re-runs from it immediately.
+  function setEntryFile(path) {
+    if (files[path] === undefined) { showToast("Pick an existing file as the entry", { icon: "triangle-exclamation" }); return; }
+    if (path === entryFile) return;
+    entryFile = path;
+    persistFiles();
+    renderFileExplorer();
+    doRun(true);
+    showToast(`Entry point set to ${baseName(path)}`, { icon: "play" });
+  }
+
   // ---- Context menu ----
   function closeContextMenu() {
     const m = $("pg-ctxmenu");
@@ -3803,6 +4422,8 @@ function initPlayground(cm) {
       items.push({ label: "Paste", icon: "fa-paste", disabled: !clipboard, action: () => pasteInto(path) });
     } else if (row) {
       items.push({ label: "Open", icon: "fa-up-right-from-square", action: () => openFile(path) });
+      items.push({ separator: true });
+      items.push({ label: "Set as entry point", icon: "fa-play", disabled: path === entryFile, action: () => setEntryFile(path) });
       items.push({ separator: true });
       items.push({ label: "Rename", icon: "fa-pen", key: "F2", disabled: path === ENTRY_FILE, action: () => renameOne(path) });
       items.push({ label: "Delete", icon: "fa-trash", disabled: path === ENTRY_FILE, action: () => deletePaths([path]) });
@@ -4095,7 +4716,7 @@ function initPlayground(cm) {
   // operate on the linked app, not just the active file.
   async function linkCurrentProject() {
     syncActiveFile();
-    return linkProject({ entry: ENTRY_FILE, files });
+    return linkProject({ entry: entryFile, files });
   }
 
   async function doShare() {
@@ -4103,7 +4724,7 @@ function initPlayground(cm) {
       // Share the linked (single-file) program so the recipient gets a working
       // app even when it was split across files locally.
       const linked = await linkCurrentProject();
-      const code = linked.source || files[ENTRY_FILE] || "";
+      const code = linked.source || files[entryFile] || files[ENTRY_FILE] || "";
       const encoded = await encodeShare(code);
       const url = `${location.origin}${location.pathname}#code=${encoded}`;
       await navigator.clipboard.writeText(url);
@@ -4128,7 +4749,7 @@ function initPlayground(cm) {
     try {
       // Bundle the linked program into the standalone HTML so it runs anywhere.
       const linked = await linkCurrentProject();
-      const code = linked.source || files[ENTRY_FILE] || "";
+      const code = linked.source || files[entryFile] || files[ENTRY_FILE] || "";
       const theme = $("pg-target").getAttribute("theme") || "light";
       const exampleLabel = EXAMPLES[currentExample]?.label ?? "Aktion app";
       const title = `${exampleLabel} · Aktion`;
@@ -4204,7 +4825,7 @@ function initPlayground(cm) {
           __aktionCompiled: COMPILED_PROGRAM_VERSION,
           program: linked.program,
           source: linked.source,
-          path: ENTRY_FILE,
+          path: entryFile,
         }),
       );
     } else if (typeof target.setResponse === "function") {

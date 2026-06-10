@@ -80,7 +80,8 @@ import {
   type ThemeTokens,
 } from "./theme/index.js";
 import { componentStyles } from "./theme/styles.js";
-import { ensureFontAwesomeLoaded } from "./icons/index.js";
+import { getResponsiveSheet } from "./library/responsive-style.js";
+import { ensureFontAwesomeLoaded, registerIcons } from "./icons/index.js";
 import {
   emitDevtoolsEvent,
   getDevtoolsHook,
@@ -96,6 +97,21 @@ const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
 const ATTRIBUTE_SHOW_ERRORS = "showerrors";
 const ATTRIBUTE_SRC = "src";
+/**
+ * Opt-in scroll restoration across route changes (suggestions-global IV.5).
+ *   - `"auto"` — save each page's scroll on leave; restore it on back/forward,
+ *     scroll to top on a fresh navigation.
+ *   - `"top"`  — always scroll to top on every navigation.
+ *   - absent   — no scroll management (default; matches prior behaviour).
+ */
+const ATTRIBUTE_SCROLL_RESTORATION = "scroll-restoration";
+/**
+ * Text/layout direction (suggestions-global X.1). `"rtl"` flips the rendered
+ * tree to right-to-left; `"ltr"` forces left-to-right; `"auto"` defers to the
+ * content. Reflected onto the render root so `direction` + CSS logical
+ * properties cascade to every component.
+ */
+const ATTRIBUTE_DIR = "dir";
 
 // Re-exported from `runtime/http.ts` so consumers can import them from
 // `./element.js` (the legacy public surface) without reaching into the
@@ -233,6 +249,7 @@ export class AktionElement extends HTMLElement {
       ATTRIBUTE_RESPONSE,
       ATTRIBUTE_SHOW_ERRORS,
       ATTRIBUTE_SRC,
+      ATTRIBUTE_DIR,
     ];
   }
 
@@ -280,6 +297,11 @@ export class AktionElement extends HTMLElement {
    * overlap this set.
    */
   private pendingChangedPaths = new Set<string>();
+  /**
+   * Per-path scroll positions saved for `scroll-restoration="auto"`, so
+   * back/forward navigation can return the user to where they were.
+   */
+  private routeScrollPositions = new Map<string, { x: number; y: number }>();
   /**
    * Set when a re-render was requested via `notify()` (async resolution,
    * timer, HTTP, hook, effect) rather than a tracked `$state` write. The
@@ -340,8 +362,12 @@ export class AktionElement extends HTMLElement {
     if (sheet) {
       try {
         // `as CSSStyleSheet[]` keeps the typing predictable across DOM lib
-        // versions where `adoptedStyleSheets` is typed as readonly.
-        (this.root as ShadowRoot & { adoptedStyleSheets: CSSStyleSheet[] }).adoptedStyleSheets = [sheet];
+        // versions where `adoptedStyleSheets` is typed as readonly. The
+        // shared dynamic sheet (responsive `sx` atomic rules) is adopted
+        // alongside so breakpoint-mapped styles apply inside every root.
+        const respSheet = getResponsiveSheet();
+        const sheets = respSheet ? [sheet, respSheet] : [sheet];
+        (this.root as ShadowRoot & { adoptedStyleSheets: CSSStyleSheet[] }).adoptedStyleSheets = sheets;
         this.root.append(this.errorEl, this.rootEl);
       } catch {
         this.root.append(this.buildInlineStyle(), this.errorEl, this.rootEl);
@@ -433,6 +459,7 @@ export class AktionElement extends HTMLElement {
     ensureFontAwesomeLoaded(this.root);
     this.registerWithDevtools();
     this.applyThemeFromAttribute();
+    this.applyDir();
     this.startRouter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
@@ -474,6 +501,7 @@ export class AktionElement extends HTMLElement {
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === ATTRIBUTE_THEME) this.applyThemeFromAttribute();
+    if (name === ATTRIBUTE_DIR) this.applyDir();
     if (name === ATTRIBUTE_STREAMING) {
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
@@ -786,6 +814,17 @@ export class AktionElement extends HTMLElement {
   }
 
   /**
+   * Register custom icons (inline SVG markup keyed by name) so authored code
+   * can use brand glyphs anywhere a Font Awesome name is accepted. Equivalent
+   * to `$theme({ icons: {...} })` from inside a program. Re-renders so any
+   * already-rendered icons pick up the new set.
+   */
+  registerIcons(icons: Record<string, string>): void {
+    registerIcons(icons);
+    this.scheduleRender();
+  }
+
+  /**
    * Build a system prompt for the active library. Pass `{ mode: "chat" }`
    * for the compact chat-focused prompt; omit `mode` (or pass `"full"`)
    * for the complete prompt.
@@ -993,6 +1032,41 @@ export class AktionElement extends HTMLElement {
       composed: true,
     }));
     this.scheduleRender();
+    this.handleScrollRestoration(detail);
+  }
+
+  /**
+   * Save / restore window scroll across route changes when the
+   * `scroll-restoration` attribute opts in (IV.5). The outgoing page's scroll
+   * is captured synchronously (the DOM hasn't morphed yet); the target scroll
+   * is applied in a `requestAnimationFrame` so the incoming page has laid out.
+   */
+  private handleScrollRestoration(detail: RouteChangeDetail): void {
+    if (typeof window === "undefined") return;
+    const mode = (this.getAttribute(ATTRIBUTE_SCROLL_RESTORATION) || "").toLowerCase();
+    if (mode !== "auto" && mode !== "top") return;
+    // Leave the very first paint to the browser's native restoration.
+    if (detail.source === "init") return;
+
+    // Capture where we were on the page we're leaving.
+    if (mode === "auto" && detail.previousPath != null) {
+      this.routeScrollPositions.set(detail.previousPath, {
+        x: window.scrollX || 0,
+        y: window.scrollY || 0,
+      });
+    }
+
+    // Back/forward returns to the saved position; a fresh navigation (or
+    // `"top"` mode) starts at the top.
+    const isPop = detail.source === "hashchange" || detail.source === "external";
+    const saved = mode === "auto" && isPop ? this.routeScrollPositions.get(detail.path) : undefined;
+    const target = saved ?? { x: 0, y: 0 };
+
+    const apply = (): void => {
+      try { window.scrollTo(target.x, target.y); } catch { /* noop in SSR / jsdom */ }
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(apply);
+    else apply();
   }
 
   private applyThemeFromAttribute(): void {
@@ -1002,6 +1076,21 @@ export class AktionElement extends HTMLElement {
     // tracker for in-script overrides has to start fresh — the variables
     // it was tracking just got rewritten by the base layer.
     this.scriptThemeKeys = [];
+  }
+
+  /**
+   * Reflect the host `dir` attribute onto the render root (X.1). Setting
+   * `dir` on `rootEl` makes `direction` + CSS logical properties cascade to
+   * every rendered component, so an RTL locale flips the whole tree. An
+   * absent / empty attribute clears it so the element inherits page direction.
+   */
+  private applyDir(): void {
+    const value = (this.getAttribute(ATTRIBUTE_DIR) || "").toLowerCase();
+    if (value === "rtl" || value === "ltr" || value === "auto") {
+      this.rootEl.setAttribute("dir", value);
+    } else {
+      this.rootEl.removeAttribute("dir");
+    }
   }
 
   /**

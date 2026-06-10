@@ -139,6 +139,38 @@ app.addEventListener("error", (e) =&gt; {
           and QA consoles before they reach production.</li>
       </ul>
 
+      <h2 id="boundary">ErrorBoundary &amp; <code>$util.onError</code></h2>
+      <p>
+        <code>ErrorBoundary(child, { fallback?, showDetails? })</code> catches a render
+        error in its subtree and shows a friendly card instead of breaking the page.
+        Pass <code>showDetails: true</code> in development to include the message.
+      </p>
+<pre><code>ErrorBoundary(
+  RiskyWidget(),
+  { fallback: Alert("This widget is unavailable.", { tone: "danger" }), showDetails: true }
+)</code></pre>
+      <p>
+        For <em>action</em> failures (a throw inside an <code>onClick</code> or effect),
+        register a program&#8209;level sink with <code>$util.onError(fn)</code>. It runs
+        <code>fn({ error, source })</code> before the default logging &mdash; ideal for a
+        toast or analytics report:
+      </p>
+<pre><code>$util.onError(({ error, source }) =&gt; {
+  $toast.error("Something went wrong")
+  reportToAnalytics(source, String(error))
+})</code></pre>
+
+      <h2 id="suggest">Typo suggestions with <code>suggestComponent</code></h2>
+      <p>
+        When a program references a component that doesn&rsquo;t exist, the runtime can
+        suggest the closest matches. The tooling export
+        <code>suggestComponent(name, library)</code> returns &ldquo;did you mean&rdquo;
+        candidates &mdash; useful in a build/lint step or a custom editor.
+      </p>
+<pre><code>import { suggestComponent } from "aktion-runtime";
+
+suggestComponent("Buttn");   // → ["Button", ...]</code></pre>
+
       <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="troubleshooting.html">

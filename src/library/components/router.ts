@@ -42,6 +42,12 @@ export const NavLink: ComponentSpec = {
       optional: true,
       description: "Optional Font Awesome icon name shown before the label.",
     },
+    {
+      name: "prefetch",
+      type: "callable",
+      optional: true,
+      description: "Called once on first hover/focus (warm a `$query` cache for the target route).",
+    },
   ],
   render: (_node, props, helpers) => {
     const label = asString(props.label, "");
@@ -71,6 +77,20 @@ export const NavLink: ComponentSpec = {
     const iconNode = renderIcon(props.icon, { className: "rui-nav-link-icon" });
     if (iconNode) anchor.append(iconNode);
     anchor.append(el("span", { class: "rui-nav-link-label" }, [label]));
+
+    // Prefetch-on-hover (IV.7): fire the author's `prefetch` callable once on
+    // the first pointer-enter / focus so a `$query` for the target route can
+    // warm its cache before the user clicks (the click then renders instantly).
+    if (typeof props.prefetch === "function") {
+      let warmed = false;
+      const warm = (): void => {
+        if (warmed) return;
+        warmed = true;
+        helpers.invoke(props.prefetch, to);
+      };
+      anchor.addEventListener("pointerenter", warm, { once: true });
+      anchor.addEventListener("focus", warm, { once: true });
+    }
 
     anchor.onclick = (event) => {
       if (event.defaultPrevented) return;

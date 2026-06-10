@@ -374,7 +374,9 @@ export const OnIntersect: ComponentSpec = {
       ...(rootMargin ? { rootMargin } : {}),
     });
     observer.observe(wrapper);
-    helpers.registerDisposer(() => observer.disconnect());
+    // Keyed: a re-render replaces the previous observer instead of stacking
+    // one per render (anonymous disposers only run on unmount).
+    helpers.registerDisposer(() => observer.disconnect(), "rui-onintersect-io");
     return wrapper;
   },
 };

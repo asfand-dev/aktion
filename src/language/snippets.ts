@@ -323,6 +323,175 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     description: "Grid with a responsive column map per breakpoint.",
     template: 'cards${1} = Grid(${2:items}, { columns: {sm: 1, md: 2, lg: 4}, gap: "${3:l}" })',
   },
+  // ── New feature snippets ──────────────────────────────────────────────────
+  {
+    name: "Query",
+    description: "$query — cached + deduplicated read with TTL and polling.",
+    template:
+      '${1:$data} = $query({\n' +
+      '  url: "${2:https://api.example.com/items}",\n' +
+      '  key: "${3:items}",\n' +
+      '  ttl: ${4:30000}\n' +
+      '})',
+  },
+  {
+    name: "InfiniteQuery",
+    description: "$query infinite mode — paginated list with .loadMore() and .hasMore.",
+    template:
+      '${1:$feed} = $query({\n' +
+      '  url: "${2:https://api.example.com/posts}",\n' +
+      '  key: "${3:feed}",\n' +
+      '  infinite: { param: "${4:page}", limit: ${5:20}, mode: "${6:page}", select: b => b.${7:items} }\n' +
+      '})\n\n' +
+      'Button("Load more", { onClick: () => ${1:$feed}.loadMore(), disabled: !${1:$feed}.hasMore })',
+  },
+  {
+    name: "Mutation",
+    description: "$mutation — deferred write with optimistic update and cache invalidation.",
+    template:
+      '${1:$save} = $mutation({\n' +
+      '  url: "${2:https://api.example.com/items}",\n' +
+      '  optimistic: (o) => { ${3:$items} = [...${3:$items}, o.body] },\n' +
+      '  invalidates: ["${4:items}"]\n' +
+      '})\n\n' +
+      'Button("${5:Save}", { onClick: () => ${1:$save}.mutate({ body: { ${6:title}: ${7:$title} } }) })',
+  },
+  {
+    name: "Form",
+    description: "$form — managed form with $util.rules validators and handleSubmit().",
+    template:
+      '${1:form} = $form({\n' +
+      '  values: { ${2:email}: "", ${3:password}: "" },\n' +
+      '  rules: {\n' +
+      '    ${2:email}:    [$util.rules.required(), $util.rules.email()],\n' +
+      '    ${3:password}: [$util.rules.required(), $util.rules.minLength(8)]\n' +
+      '  },\n' +
+      '  onSubmit: (v) => { ${4:// handle submit} }\n' +
+      '})\n\n' +
+      'Column([\n' +
+      '  Input("${2:email}", { label: "${5:Email}", value: ${1:form}.values.${2:email}, error: ${1:form}.errors.${2:email}, onBlur: () => ${1:form}.touch("${2:email}") }),\n' +
+      '  Button("${6:Submit}", { onClick: () => ${1:form}.handleSubmit(), disabled: ${1:form}.submitting })\n' +
+      '])',
+  },
+  {
+    name: "Socket",
+    description: "$socket — reactive WebSocket bag (.connected / .last / .messages / .send()).",
+    template:
+      '${1:$chat} = $socket({\n' +
+      '  url: "${2:wss://example.com/room/42}",\n' +
+      '  bufferSize: ${3:50}\n' +
+      '})\n\n' +
+      'Button("Send", { onClick: () => ${1:$chat}.send({ text: ${4:$draft} }) })',
+  },
+  {
+    name: "Sse",
+    description: "$sse — reactive Server-Sent Events stream (.connected / .last / .messages).",
+    template:
+      '${1:$stream} = $sse({\n' +
+      '  url: "${2:https://api.example.com/events}",\n' +
+      '  event: "${3:message}"\n' +
+      '})',
+  },
+  {
+    name: "Persist",
+    description: "$store with persist + history — survives reload with undo/redo.",
+    template:
+      '${1:doc} = $store({\n' +
+      '  persist: "${2:my-doc}",\n' +
+      '  history: true,\n' +
+      '  ${3:title}: "",\n' +
+      '  set${4:Title}: (s, v) => { s.${3:title} = v }\n' +
+      '})\n\n' +
+      'Button("Undo", { onClick: () => ${1:doc}.undo(), disabled: !${1:doc}.canUndo })',
+  },
+  {
+    name: "SxCard",
+    description: "Card using the sx styling channel — responsive, interaction states, gradient.",
+    template:
+      'Card([Text("${1:Content}")], {\n' +
+      '  sx: {\n' +
+      '    p: "${2:l}",\n' +
+      '    radius: "${3:lg}",\n' +
+      '    bg: "${4:surface}",\n' +
+      '    shadow: "${5:md}",\n' +
+      '    states: { hover: { scale: ${6:1.03}, shadow: "${7:lg}" } }\n' +
+      '  }\n' +
+      '})',
+  },
+  {
+    name: "SxResponsive",
+    description: "sx with responsive breakpoint maps + logical spacing (RTL-safe).",
+    template:
+      'Box([${1:children}], {\n' +
+      '  sx: {\n' +
+      '    p: { base: "${2:m}", md: "${3:xl}" },\n' +
+      '    direction: { base: "column", lg: "row" },\n' +
+      '    px: "${4:l}",\n' +
+      '    fontSize: "${5:lg}",\n' +
+      '    weight: "${6:600}"\n' +
+      '  }\n' +
+      '})',
+  },
+  {
+    name: "FormAsync",
+    description: "$form with an async uniqueness rule + validating/submitting states.",
+    template:
+      '${1:form} = $form({\n' +
+      '  values: { ${2:user}: "" },\n' +
+      '  rules: { ${2:user}: [$util.rules.required(), $util.rules.asyncCustom((v) => ${3:checkAvailable}(v), "${4:Already taken}")] },\n' +
+      '  onSubmit: (values) => ${5:save}(values)\n' +
+      '})\n\n' +
+      'Column([\n' +
+      '  Input("${2:user}", { value: ${1:form}.values.${2:user}, error: ${1:form}.errors.${2:user}, label: "${6:Username}", onBlur: () => ${1:form}.touch("${2:user}") }),\n' +
+      '  Button("Submit", { onClick: () => ${1:form}.submit(), disabled: ${1:form}.submitting || ${1:form}.validating, loading: ${1:form}.submitting })\n' +
+      '])',
+  },
+  {
+    name: "SocketReconnect",
+    description: "$socket with auto-reconnect + status-driven UI.",
+    template:
+      '${1:$chat} = $socket({ url: "${2:wss://example.com/room}", reconnect: true })\n\n' +
+      'Column([\n' +
+      '  Badge(${1:$chat}.status, { tone: ${1:$chat}.status == "open" ? "success" : "warning" }),\n' +
+      '  List(${1:$chat}.messages.map((m) => ListItem(m.text))),\n' +
+      '  Row([\n' +
+      '    Input("draft", { value: ${3:$draft} }),\n' +
+      '    Button("Send", { onClick: () => { ${1:$chat}.send({ text: ${3:$draft} }); ${3:$draft} = "" } })\n' +
+      '  ], { gap: "s" })\n' +
+      '])',
+  },
+  {
+    name: "MarketingSection",
+    description: "Landing-page band: Section + eyebrow/title/subtitle + Metric strip.",
+    template:
+      'Section([\n' +
+      '  MetricStrip([\n' +
+      '    Metric("${1:170+}", { label: "${2:Components}", countUp: true }),\n' +
+      '    Metric("${3:7}", { label: "${4:Themes}", countUp: true })\n' +
+      '  ], { columns: ${5:2} })\n' +
+      '], {\n' +
+      '  eyebrow: "${6:Why teams switch}",\n' +
+      '  title: "${7:Everything a frontend needs}",\n' +
+      '  subtitle: "${8:Components, state, routing, theming and data — built in.}",\n' +
+      '  background: "${9:soft}", align: "center"\n' +
+      '})',
+  },
+  {
+    name: "ConfirmDanger",
+    description: "ConfirmDialog gated destructive action (Escape cancels, focus lands on Cancel).",
+    template:
+      '$confirmOpen = false\n\n' +
+      'Column([\n' +
+      '  Button("${1:Delete}", { tone: "danger", onClick: () => { $confirmOpen = true } }),\n' +
+      '  ConfirmDialog("${2:Delete item?}", {\n' +
+      '    open: $confirmOpen,\n' +
+      '    message: "${3:This cannot be undone.}",\n' +
+      '    tone: "danger",\n' +
+      '    onConfirm: () => ${4:remove}(),\n' +
+      '    onCancel: () => {}\n' +
+      '  })\n' +
+      '])',
+  },
 ];
 
 export function getSnippets(): readonly SnippetEntry[] {

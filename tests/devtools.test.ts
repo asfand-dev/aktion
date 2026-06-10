@@ -280,3 +280,102 @@ describe("panel", () => {
     controller.destroy();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/** Click a panel tab button by its leading label text. */
+function clickTab(el: AktionDevtoolsElement, label: string): void {
+  const tabs = [...el.shadowRoot!.querySelectorAll(".tab")] as HTMLElement[];
+  const btn = tabs.find((t) => (t.textContent ?? "").startsWith(label));
+  if (!btn) throw new Error(`devtools tab not found: ${label}`);
+  btn.click();
+}
+
+describe("panel — insights & visualizations", () => {
+  it("tracks per-atom reactivity heat (change counts) in the model", async () => {
+    const controller = mountDevtools();
+    const screen = render(`
+      $count = 0
+      $app(Column([
+        Text(\`\${$count}\`),
+        Button("inc", { onClick: () => $count = $count + 1 })
+      ]))
+    `);
+    await flush();
+    await screen.click("inc");
+    await screen.click("inc");
+    await flush();
+
+    const model = controller.element.getModel()!;
+    expect(model.changeCounts.get("count")).toBeGreaterThanOrEqual(2);
+    controller.destroy();
+  });
+
+  it("renders the State tab with a reactivity-heat badge and activity sort", async () => {
+    const controller = mountDevtools();
+    const screen = render(`
+      $count = 0
+      $app(Column([
+        Text(\`\${$count}\`),
+        Button("inc", { onClick: () => $count = $count + 1 })
+      ]))
+    `);
+    await flush();
+    await screen.click("inc");
+    await flush();
+
+    const text = controller.element.shadowRoot!.textContent ?? "";
+    expect(text).toContain("changes");
+    expect(text).toContain("Sort by activity");
+    controller.destroy();
+  });
+
+  it("renders the profiler summary, reactivity hot-atoms, and ranked table", async () => {
+    const controller = mountDevtools();
+    const screen = render(`
+      $count = 0
+      function Row(label) { return Text(\`\${label}:\${$count}\`) }
+      $app(Column([
+        Row("A"),
+        Button("inc", { onClick: () => $count = $count + 1 })
+      ]))
+    `);
+    await flush();
+    await screen.click("inc");
+    await flush();
+
+    clickTab(controller.element, "Profiler");
+    await flush();
+
+    const text = controller.element.shadowRoot!.textContent ?? "";
+    expect(text).toContain("Performance summary");
+    expect(text).toContain("Reactivity");
+    expect(text).toContain("Components");
+    // The hot-atoms panel attributes a commit to the `count` path.
+    expect(text).toContain("count");
+    controller.destroy();
+  });
+
+  it("renders the effect summary and visual timeline", async () => {
+    const controller = mountDevtools();
+    const screen = render(`
+      $count = 0
+      $effect(() => { cleanup(() => {}) }, [$count])
+      $app(Column([
+        Text(\`\${$count}\`),
+        Button("inc", { onClick: () => $count = $count + 1 })
+      ]))
+    `);
+    await flush();
+    await screen.click("inc");
+    await flush();
+
+    clickTab(controller.element, "Effects");
+    await flush();
+
+    const text = controller.element.shadowRoot!.textContent ?? "";
+    expect(text).toContain("Effect summary");
+    expect(text).toContain("Timeline");
+    controller.destroy();
+  });
+});

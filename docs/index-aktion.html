@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aktion — A new language for building UIs. Less code, any framework.</title>
+  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 270+ built-in components, 7 themes, fine-grained reactivity, full JS interop. This very homepage is built in Aktion itself." />
+
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="apple-touch-icon" href="assets/logo.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Aktion — A new language for building UIs" />
+  <meta property="og:description" content="A reactive UI language and runtime — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. This page is built in Aktion itself." />
+  <meta property="og:image" content="assets/logo.png" />
+
+  <script>
+    // Shared dark/light bootstrap with the docs (same localStorage key).
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* Host chrome only — the page itself is the Aktion program in
+       index.aktion, styled entirely by the component library. */
+    html, body { margin: 0; padding: 0; }
+    html[data-doc-theme='light'] body { background: #fbfaff; }
+    html[data-doc-theme='dark'] body { background: #07060f; }
+    body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; }
+
+    aktion-app#home {
+      display: block;
+      min-height: 100vh;
+      opacity: 0;
+      transition: opacity .4s ease;
+    }
+    aktion-app#home.ready { opacity: 1; }
+
+    /* Boot splash shown until the Aktion program is parsed and mounted. */
+    #boot {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 9999;
+      transition: opacity .4s ease;
+    }
+    html[data-doc-theme='light'] #boot { background: #fbfaff; }
+    html[data-doc-theme='dark']  #boot { background: #07060f; }
+    #boot.hide { opacity: 0; pointer-events: none; }
+    #boot .b-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    #boot img { width: 54px; height: 54px; border-radius: 14px; box-shadow: 0 10px 30px rgba(99,102,241,.45); animation: bootpulse 1.6s ease-in-out infinite; }
+    #boot .b-spin {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 3px solid rgba(139,92,246,.25);
+      border-top-color: #8b5cf6;
+      animation: bootspin .8s linear infinite;
+    }
+    #boot .b-text { font-size: 13px; color: #8b87b3; font-weight: 600; letter-spacing: .02em; }
+    @keyframes bootspin { to { transform: rotate(360deg); } }
+    @keyframes bootpulse { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @media (prefers-reduced-motion: reduce) {
+      #boot img, #boot .b-spin { animation: none; }
+      aktion-app#home { transition: none; }
+    }
+
+    /* Fallback shown only if the program fails to load. */
+    #boot .b-error { display: none; max-width: 460px; text-align: center; color: #ef4444; font-size: 14px; }
+    #boot.error .b-spin, #boot.error .b-text { display: none; }
+    #boot.error .b-error { display: block; }
+    #boot.error { pointer-events: auto; opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <div class="b-inner">
+      <img src="assets/logo.png" alt="Aktion" />
+      <div class="b-spin" role="status" aria-label="Loading"></div>
+      <div class="b-text">Rendering this page with Aktion…</div>
+      <div class="b-error">
+        Couldn't load the Aktion program.
+        <a href="index.static.html" style="color:#8b5cf6;">Open the static version →</a>
+      </div>
+    </div>
+  </div>
+
+  <aktion-app id="home"></aktion-app>
+
+  <script type="module">
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+
+    const root = document.documentElement;
+    const app = document.getElementById("home");
+    const boot = document.getElementById("boot");
+
+    const docTheme = () => root.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    app.setAttribute("theme", docTheme());
+
+    (async () => {
+      try {
+        const res = await fetch("index.aktion", { cache: "no-cache" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const src = await res.text();
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+
+        // Reveal once the first render has committed. A plain timeout (not
+        // requestAnimationFrame) so background/throttled tabs still reveal.
+        setTimeout(() => {
+          app.classList.add("ready");
+          boot.classList.add("hide");
+          setTimeout(() => { boot.style.display = "none"; }, 450);
+        }, 50);
+      } catch (err) {
+        console.error("[home] failed to load Aktion program", err);
+        boot.classList.add("error");
+      }
+    })();
+
+    // The ThemeToggle component inside the program flips the <aktion-app>
+    // `theme` attribute itself and dispatches `theme-change` — the host only
+    // persists the choice and mirrors it onto the document for the docs.
+    app.addEventListener("theme-change", (e) => {
+      const next = (e.detail && e.detail.theme) === "dark" ? "dark" : "light";
+      root.setAttribute("data-doc-theme", next);
+      try { localStorage.setItem("doc-theme", next); } catch (_) {}
+    });
+
+    // Keep the renderer in sync if the OS / another tab flips the theme.
+    new MutationObserver(() => {
+      if (app.getAttribute("theme") !== docTheme()) app.setAttribute("theme", docTheme());
+    }).observe(root, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

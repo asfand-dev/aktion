@@ -5,7 +5,7 @@
  * the hash between cases to avoid bleed.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { normalisePath, matchRoute, Router } from "../src/runtime/router.js";
 import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
@@ -169,6 +169,72 @@ describe("router: navigation", () => {
     expect(router.getActivePattern()).toBe("/users/:id");
     expect(router.getParams()).toEqual({ id: "42" });
     expect(calls).toBe(0);
+  });
+});
+
+describe("router: navigation guards (IV.2)", () => {
+  beforeEach(() => {
+    if (typeof window !== "undefined") window.location.hash = "";
+  });
+
+  it("a guard returning false blocks the navigation", () => {
+    const router = new Router();
+    const seen: string[] = [];
+    router.subscribe((d) => seen.push(d.path));
+    router.setGuard(({ to }) => to !== "/private");
+    router.navigate("/private");
+    expect(router.getPath()).toBe("/");
+    expect(seen).toEqual([]);
+  });
+
+  it("a guard returning a path string redirects", () => {
+    const router = new Router();
+    router.setGuard(({ to }) => (to === "/admin" ? "/login" : true));
+    router.navigate("/admin");
+    expect(router.getPath()).toBe("/login");
+  });
+
+  it("a guard receives { to, from }", () => {
+    const router = new Router();
+    const calls: Array<{ to: string; from: string | null }> = [];
+    router.navigate("/a");
+    router.setGuard((info) => { calls.push(info); return true; });
+    router.navigate("/b");
+    expect(calls).toEqual([{ to: "/b", from: "/a" }]);
+  });
+
+  it("an allowing guard (true / undefined) lets navigation through", () => {
+    const router = new Router();
+    router.setGuard(() => undefined);
+    router.navigate("/ok");
+    expect(router.getPath()).toBe("/ok");
+  });
+
+  it("setGuard(null) clears the guard", () => {
+    const router = new Router();
+    router.setGuard(() => false);
+    router.navigate("/blocked");
+    expect(router.getPath()).toBe("/");
+    router.setGuard(null);
+    router.navigate("/now-allowed");
+    expect(router.getPath()).toBe("/now-allowed");
+  });
+
+  it("a redirect loop terminates (does not hang) thanks to the cap", () => {
+    const router = new Router();
+    // /a ↔ /b ping-pong; the redirect cap stops the recursion.
+    router.setGuard(({ to }) => (to === "/a" ? "/b" : to === "/b" ? "/a" : true));
+    router.navigate("/a");
+    expect(["/a", "/b"]).toContain(router.getPath());
+  });
+
+  it("a throwing guard fails open (navigation proceeds)", () => {
+    const router = new Router();
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    router.setGuard(() => { throw new Error("boom"); });
+    router.navigate("/despite-error");
+    expect(router.getPath()).toBe("/despite-error");
+    spy.mockRestore();
   });
 });
 
@@ -420,6 +486,200 @@ aktion = Stack([pages])`);
     await waitForRenders();
     expect(events.length).toBeGreaterThan(0);
     expect(events[events.length - 1]!.path).toBe("/b");
+  });
+});
+
+describe("<aktion-app>: $util.url query + onNavigate + scroll restoration (IV.2/IV.5/IV.6)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    if (typeof window !== "undefined") window.location.hash = "";
+  });
+
+  const create = (): RoutingElement => {
+    if (typeof window !== "undefined") window.location.hash = "";
+    const el = document.createElement("aktion-app") as unknown as RoutingElement;
+    document.body.appendChild(el);
+    return el;
+  };
+
+  it("$util.url.setQuery writes the query string and re-renders the reactive read", async () => {
+    const el = create();
+    el.setResponse(`function pick(name) { $util.url.setQuery("tab", name) }
+aktion = Stack([
+  Text(\`tab=\${$util.url.query.tab ?? "none"}\`),
+  Button("Billing", { onClick: () => pick("billing") })
+])`);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("tab=none");
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".rui-button")!.click();
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("tab=billing");
+    expect(window.location.hash).toContain("tab=billing");
+  });
+
+  it("$util.url.removeQuery drops a key", async () => {
+    const el = create();
+    window.location.hash = "#/?tab=billing&sort=name";
+    await flush();
+    el.setResponse(`aktion = Stack([
+  Text(\`tab=\${$util.url.query.tab ?? "none"}|sort=\${$util.url.query.sort ?? "none"}\`),
+  Button("Clear tab", { onClick: () => $util.url.removeQuery("tab") })
+])`);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("tab=billing|sort=name");
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".rui-button")!.click();
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("tab=none|sort=name");
+    expect(window.location.hash).not.toContain("tab=billing");
+    expect(window.location.hash).toContain("sort=name");
+  });
+
+  it("$util.onNavigate blocks navigation when the guard returns false", async () => {
+    const el = create();
+    el.setResponse(`$util.onNavigate(({ to }) => to !== "/locked")
+pages = $router({ "/": Text("HOME"), "/locked": Text("LOCKED"), default: Text("NF") })
+aktion = Stack([Button("Go", { onClick: () => route.navigate("/locked") }), pages])`);
+    await waitForRenders();
+    expect(el.route).toBe("/");
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".rui-button")!.click();
+    await waitForRenders();
+    expect(el.route).toBe("/");
+    expect(el.shadowRoot!.textContent).toContain("HOME");
+    expect(el.shadowRoot!.textContent).not.toContain("LOCKED");
+  });
+
+  it("$util.onNavigate redirects when the guard returns a path", async () => {
+    const el = create();
+    el.setResponse(`$util.onNavigate(({ to }) => to === "/admin" ? "/login" : true)
+pages = $router({ "/": Text("HOME"), "/admin": Text("ADMIN"), "/login": Text("LOGIN"), default: Text("NF") })
+aktion = Stack([Button("Go", { onClick: () => route.navigate("/admin") }), pages])`);
+    await waitForRenders();
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".rui-button")!.click();
+    await waitForRenders();
+    expect(el.route).toBe("/login");
+    expect(el.shadowRoot!.textContent).toContain("LOGIN");
+  });
+
+  it("scroll-restoration=\"auto\" scrolls to top on a fresh navigation", async () => {
+    const el = create();
+    el.setAttribute("scroll-restoration", "auto");
+    el.setResponse(`pages = $router({ "/": Text("HOME"), "/about": Text("ABOUT"), default: Text("NF") })
+aktion = Stack([pages])`);
+    await waitForRenders();
+
+    const spy = vi.fn();
+    const original = window.scrollTo;
+    (window as unknown as { scrollTo: unknown }).scrollTo = spy;
+    el.navigate("/about");
+    await waitForRenders();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    (window as unknown as { scrollTo: unknown }).scrollTo = original;
+
+    expect(el.route).toBe("/about");
+    expect(spy).toHaveBeenCalledWith(0, 0);
+  });
+
+  it("no scroll management without the attribute", async () => {
+    const el = create();
+    el.setResponse(`pages = $router({ "/": Text("HOME"), "/about": Text("ABOUT"), default: Text("NF") })
+aktion = Stack([pages])`);
+    await waitForRenders();
+
+    const spy = vi.fn();
+    const original = window.scrollTo;
+    (window as unknown as { scrollTo: unknown }).scrollTo = spy;
+    el.navigate("/about");
+    await waitForRenders();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    (window as unknown as { scrollTo: unknown }).scrollTo = original;
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("<aktion-app>: nested / layout routes (IV.1)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    if (typeof window !== "undefined") window.location.hash = "";
+  });
+
+  const create = (): RoutingElement => {
+    if (typeof window !== "undefined") window.location.hash = "";
+    const el = document.createElement("aktion-app") as unknown as RoutingElement;
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const PROGRAM = `pages = $router({
+  "/app": {
+    layout: Stack([Text("SHELL"), outlet]),
+    routes: {
+      "/": Text("APP-HOME"),
+      "/settings": Text("SETTINGS"),
+      "/users/:id": Text(\`USER-\${params.id}\`)
+    }
+  },
+  default: Text("LANDING")
+})
+aktion = Stack([pages])`;
+
+  it("renders the layout shell with the index child", async () => {
+    const el = create();
+    window.location.hash = "#/app";
+    await flush();
+    el.setResponse(PROGRAM);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("SHELL");
+    expect(el.shadowRoot!.textContent).toContain("APP-HOME");
+  });
+
+  it("slots a child route into the outlet on a deeper path", async () => {
+    const el = create();
+    window.location.hash = "#/app/settings";
+    await flush();
+    el.setResponse(PROGRAM);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("SHELL");
+    expect(el.shadowRoot!.textContent).toContain("SETTINGS");
+    expect(el.shadowRoot!.textContent).not.toContain("APP-HOME");
+  });
+
+  it("captures child params and keeps the shell", async () => {
+    const el = create();
+    window.location.hash = "#/app/users/42";
+    await flush();
+    el.setResponse(PROGRAM);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("SHELL");
+    expect(el.shadowRoot!.textContent).toContain("USER-42");
+  });
+
+  it("falls back to the top-level default outside the prefix", async () => {
+    const el = create();
+    window.location.hash = "#/elsewhere";
+    await flush();
+    el.setResponse(PROGRAM);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("LANDING");
+    expect(el.shadowRoot!.textContent).not.toContain("SHELL");
+  });
+
+  it("switches the outlet child live on navigation", async () => {
+    const el = create();
+    window.location.hash = "#/app";
+    await flush();
+    el.setResponse(PROGRAM);
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("APP-HOME");
+
+    el.navigate("/app/settings");
+    await waitForRenders();
+    expect(el.shadowRoot!.textContent).toContain("SETTINGS");
+    expect(el.shadowRoot!.textContent).toContain("SHELL");
   });
 });
 

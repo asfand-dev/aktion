@@ -145,6 +145,35 @@ app.registerComponents([Sparkline]); // next getSystemPrompt() includes it</code
 const diagnostics = getDiagnostics(source); // Diagnostic[]
 const { formatted } = formatProgram(source); // idempotent pretty-print</code></pre>
 
+      <h2 id="ssr-tooling">SSR, importer &amp; DX tooling exports</h2>
+      <p>
+        The main <code>aktion-runtime</code> entry also exports server&#8209;rendering
+        and authoring&#8209;tool helpers, all fully typed:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Export</th><th>Signature</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>renderToString</code></td><td><code>(program, opts?) =&gt; { html, state }</code></td><td>SSR — render to HTML + a hydration state snapshot.</td></tr>
+          <tr><td><code>renderToStaticMarkup</code></td><td><code>(program, opts?) =&gt; string</code></td><td>SSG — markup only, no hydration state.</td></tr>
+          <tr><td><code>htmlToAktion</code></td><td><code>(html) =&gt; string</code></td><td>Importer — map common HTML/JSX tags to an Aktion program.</td></tr>
+          <tr><td><code>tailwindToSx</code></td><td><code>(classString) =&gt; object</code></td><td>Map Tailwind utility classes to an <code>sx</code> object (unmapped surfaced in <code>_unmapped</code>).</td></tr>
+          <tr><td><code>componentSchema</code></td><td><code>(library) =&gt; object</code></td><td>Stable JSON of every component&rsquo;s props/types/enums for editor autocomplete.</td></tr>
+          <tr><td><code>buildGallery</code></td><td><code>(library) =&gt; string</code></td><td>Self&#8209;contained HTML component gallery (Storybook&#8209;style explorer).</td></tr>
+          <tr><td><code>suggestComponent</code></td><td><code>(name, library) =&gt; string[]</code></td><td>&ldquo;Did you mean&rdquo; typo suggestions for an unknown component.</td></tr>
+        </tbody>
+      </table>
+<pre><code>import { renderToString, componentSchema, tailwindToSx } from "aktion-runtime";
+
+const { html, state } = renderToString(source, { path: "/" });
+const schema = componentSchema();            // for editor tooling
+const sx = tailwindToSx("p-4 bg-white rounded-lg shadow"); // → { p: "m", bg: "surface", ... }</code></pre>
+      <p>
+        The Testing entry (<code>aktion-runtime/test</code>) additionally exports
+        <code>within(node)</code> for scoped queries and <code>axe(node)</code> for an
+        accessibility audit &mdash; both typed (see the
+        <a href="testing.html#a11y">Testing guide</a>).
+      </p>
+
       <h2 id="wrapper">A typed host-wrapper recipe</h2>
       <p>
         A small typed wrapper centralises streaming and event wiring for any

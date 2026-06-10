@@ -113,11 +113,52 @@
       <ul>
         <li>Use <code>VirtualList</code> for long, fixed-height lists so only the
           visible window is in the DOM.</li>
+        <li>Use <code>VirtualGrid</code> for large 2&#8209;D grids &mdash; it mounts only
+          the visible rows of cells, the same windowing idea applied to a grid
+          (verified scrolling 300 items to keep just the on&#8209;screen rows mounted).</li>
         <li>Paginate or window very large datasets before rendering &mdash; a
-          100k-row table renders 100k rows of DOM.</li>
+          100k-row table renders 100k rows of DOM. For server&#8209;paged data, reach
+          for <a href="http.html#infinite"><code>$query</code> infinite mode</a>.</li>
         <li>Keep per-row work cheap: precompute derived fields with <code>$memo</code>
           or <code>$util</code> rather than inside the row component.</li>
       </ul>
+<pre><code>// Only the visible rows of a 10,000-cell grid are ever in the DOM.
+VirtualGrid($cells, {
+  columns: 4,
+  rowHeight: 120,
+  render: (cell) =&gt; Card([Text(cell.label)])
+})</code></pre>
+
+      <h2 id="worker">4b. Offload heavy work to a Web Worker</h2>
+      <p>
+        Long synchronous computations block the main thread and stall rendering.
+        Move a <strong>pure</strong> function off&#8209;thread with
+        <code>$util.worker(fn, ...args)</code> &mdash; it runs in a Blob&#8209;URL Web
+        Worker and resolves with the result (falling back to an inline async run when
+        Workers aren&rsquo;t available). The function is serialised, so it must not
+        close over outer variables &mdash; pass everything it needs as arguments.
+      </p>
+<pre><code>function crunch() {
+  $util.worker((n) =&gt; {
+    let total = 0
+    for (let i = 0; i &lt; n; i++) total += Math.sqrt(i)
+    return total
+  }, 5e7).then(r =&gt; { $result = r })
+}</code></pre>
+
+      <h2 id="lazy">4c. Lazy loading &amp; code-splitting</h2>
+      <p>
+        Defer code you don&rsquo;t need up front. Router arms already evaluate lazily;
+        wrap a dynamically&#8209;imported chunk in
+        <code>Lazy(loader, fallback?)</code> to keep it out of the initial bundle and
+        render it on resolve. See <a href="modules.html#lazy">Modules</a> and
+        <a href="routing.html#lazy">Routing</a>.
+      </p>
+<pre><code>pages = $router({
+  "/":       Home(),
+  "/report": Lazy(() =&gt; import("./report.aktion"), Spinner()),
+  default:   NotFound()
+})</code></pre>
 
       <h2 id="streaming">5. Streaming throughput: <code>setResponse</code> vs <code>appendChunk</code></h2>
       <table class="signature-table">
@@ -164,6 +205,27 @@
         a per-render &ldquo;why did this render&rdquo; reason. Use it to spot
         components re-rendering more than expected, then trace the cause back to a
         full-re-render trigger or an unstable prop.
+      </p>
+
+      <h2 id="ssr">8. Server-side rendering &amp; SSG</h2>
+      <p>
+        Render a program to HTML ahead of time to cut time&#8209;to&#8209;first&#8209;paint
+        and improve SEO. <code>renderToString(program, opts)</code> returns
+        <code>{ html, state }</code>; embed the <code>html</code> in your page shell and
+        serialise <code>state</code> into a <code>&lt;script&gt;</code> so the client can
+        hydrate without a flash of empty content. For fully static pages,
+        <code>renderToStaticMarkup(program)</code> returns just the markup.
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime"
+
+const { html, state } = renderToString(programSource, { path: "/" })
+// → inject `html` into the shell, ship `state` for hydration</code></pre>
+      <p>
+        The renderer is DOM&#8209;based, so in Node you register a DOM shim
+        (<code>happy-dom</code> / <code>jsdom</code>) on <code>globalThis</code> before
+        calling it &mdash; the same setup the test suite uses. Pair the returned
+        <code>state</code> with the client&rsquo;s hydration seam to avoid re&#8209;fetching
+        on load.
       </p>
 
       <h2 id="next">Next</h2>

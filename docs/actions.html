@@ -193,6 +193,22 @@ addBtn = Button("Add", { onClick: save, variant: "primary" })</code></pre>
         Render the resource's states with <code>Async($res, { loading, error, data })</code>,
         and see the <a href="http.html">Http guide</a> for the full resource API.
       </p>
+      <div class="callout">
+        <p>
+          For create/update/delete that should fire on a click (not on mount), prefer
+          <code>$mutation({ url, method })</code> &mdash; a deferred write you trigger with
+          <code>.mutate(overrides?)</code>. It also supports <strong>optimistic
+          updates</strong> (apply state instantly, auto&#8209;rollback on failure) and
+          <strong>cache invalidation</strong>. See
+          <a href="http.html#mutation">Http &rarr; Mutations</a>.
+        </p>
+<pre><code>$addTodo = $mutation({
+  url: "https://api.example.com/todos",
+  optimistic: o =&gt; { $todos = [...$todos, o.body] },
+  invalidates: ["todos"]
+})
+Button("Add", { onClick: () =&gt; $addTodo.mutate({ body: { title: $draft } }) })</code></pre>
+      </div>
 
       <h2 id="confirm">Confirming destructive actions</h2>
       <p>

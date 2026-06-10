@@ -142,6 +142,95 @@ export function disposeDismissListeners(liveRoot: HTMLElement | null | undefined
   if (existing) existing.dispose();
 }
 
+/* ------------------------------------------------------------------------ *
+ * Modal dialog a11y (Sheet / BottomSheet / ConfirmDialog — VIII.9, X.3)
+ * ------------------------------------------------------------------------ */
+
+const FOCUSABLE_SELECTOR =
+  "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), " +
+  "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+/**
+ * Keyboard handler for state-bound dialogs: Escape closes, Tab cycles within
+ * the panel (focus trap). Assign to `root.onkeydown` (a property, so the
+ * morph keeps the closure fresh); `close` receives the live origin element.
+ */
+export function dialogKeydownHandler(
+  panelSelector: string,
+  close: (origin: HTMLElement) => void,
+): (event: KeyboardEvent) => void {
+  return (event: KeyboardEvent): void => {
+    const origin = (event.currentTarget ?? event.target) as HTMLElement | null;
+    if (!origin) return;
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      close(origin);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const panel = origin.querySelector(panelSelector) as HTMLElement | null;
+    if (!panel) return;
+    const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    if (focusables.length === 0) { event.preventDefault(); return; }
+    const doc = origin.getRootNode() as Document | ShadowRoot;
+    const active = doc.activeElement;
+    const first = focusables[0]!;
+    const last = focusables[focusables.length - 1]!;
+    if (event.shiftKey && (active === first || !panel.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+}
+
+interface DisposerHelpers {
+  registerDisposer: (cleanup: () => void, key?: string) => void;
+}
+
+/**
+ * Watch a state-bound dialog's `data-open` attribute on the LIVE node and
+ * manage focus: on open, move focus to the panel's first focusable element
+ * (remembering what had it); on close, restore it. Installed once per
+ * instance — re-render snapshots that the morph discards skip themselves via
+ * the `isConnected` check, and the observer is torn down through a keyed
+ * disposer when the dialog unmounts.
+ */
+export function wireDialogFocus(
+  root: HTMLElement,
+  panelSelector: string,
+  helpers: DisposerHelpers,
+): void {
+  if (typeof MutationObserver === "undefined") return;
+  setTimeout(() => {
+    if (!root.isConnected) return; // discarded snapshot — the mounted render owns the watcher
+    let lastFocus: HTMLElement | null = null;
+    const onFlip = (isOpen: boolean): void => {
+      const doc = root.getRootNode() as Document | ShadowRoot;
+      if (isOpen) {
+        lastFocus = (doc.activeElement as HTMLElement | null) ?? null;
+        const panel = root.querySelector(panelSelector) as HTMLElement | null;
+        if (panel && !panel.contains(doc.activeElement)) {
+          (panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ?? panel).focus?.();
+        }
+      } else {
+        lastFocus?.focus?.();
+        lastFocus = null;
+      }
+    };
+    let prevOpen = root.getAttribute("data-open") === "true";
+    if (prevOpen) onFlip(true);
+    const observer = new MutationObserver(() => {
+      const nowOpen = root.getAttribute("data-open") === "true";
+      if (nowOpen !== prevOpen) { prevOpen = nowOpen; onFlip(nowOpen); }
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-open"] });
+    helpers.registerDisposer(() => observer.disconnect(), "rui-dialog-focus");
+  }, 0);
+}
+
 /**
  * Map a free-text label to a sensible Font Awesome icon. Used by
  * "self-decorating" defaults — e.g. StatCard auto-pick from label,

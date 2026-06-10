@@ -82,6 +82,36 @@ function formatCellValue(value: unknown, format: string): string {
   }
 }
 
+/** Escape one CSV field per RFC 4180 (quote when it contains `,`/`"`/newline). */
+function csvField(value: string): string {
+  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+/** Build a CSV string from the grid columns + the visible row indices (VIII.5). */
+function buildDataGridCsv(cols: ColDef[], indices: number[]): string {
+  const header = cols.map((c) => csvField(c.header)).join(",");
+  const rows = indices.map((r) =>
+    cols.map((c) => csvField(formatCellValue(c.values[r], c.format))).join(","),
+  );
+  return [header, ...rows].join("\r\n");
+}
+
+/** Trigger a client-side CSV download via a temporary object URL. */
+function downloadCsv(csv: string, filename: string): void {
+  try {
+    if (typeof Blob === "undefined" || typeof URL === "undefined" || typeof document === "undefined") return;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch { /* download blocked — noop */ }
+}
+
 export const DataGrid: ComponentSpec = {
   name: "DataGrid",
   description:
@@ -108,6 +138,8 @@ export const DataGrid: ComponentSpec = {
     { name: "striped", type: "boolean", optional: true },
     { name: "stickyHeader", type: "boolean", optional: true, description: "Pin the header row (default true)" },
     { name: "stickyFirstColumn", type: "boolean", optional: true, description: "Pin the first column horizontally" },
+    { name: "exportable", type: "boolean", optional: true, description: "Show an Export CSV button that downloads the filtered rows" },
+    { name: "exportFilename", type: "string", optional: true, description: "CSV download filename (default `data.csv`)" },
   ],
   render: (node, props, helpers) => {
     const cols = readDataGridCols(props.columns);
@@ -189,6 +221,22 @@ export const DataGrid: ComponentSpec = {
       for (const child of toolbarChildren) tools.append(helpers.renderNode(child));
       bar.append(tools);
       wrapper.append(bar);
+    }
+
+    // Export-to-CSV button (VIII.5). Exports every filtered+sorted row (not
+    // just the current page), using the column headers + formatted values.
+    if (asBoolean(props.exportable)) {
+      const exportBar = el("div", { class: "rui-data-grid-toolbar" });
+      const btn = el("button", { type: "button", class: "rui-data-grid-export" });
+      const icon = renderIcon("download", { className: "rui-data-grid-export-icon" });
+      if (icon) btn.append(icon);
+      btn.append(el("span", {}, ["Export CSV"]));
+      btn.onclick = () => {
+        const csv = buildDataGridCsv(cols, indices);
+        downloadCsv(csv, asString(props.exportFilename, "data.csv") || "data.csv");
+      };
+      exportBar.append(btn);
+      wrapper.append(exportBar);
     }
 
     const tableWrap = el("div", { class: "rui-data-grid-scroll" });

@@ -825,6 +825,24 @@ export const Box: ComponentSpec = {
   },
 };
 
+export const Fragment: ComponentSpec = {
+  name: "Fragment",
+  description:
+    "Groups several siblings into one value WITHOUT adding a layout box — " +
+    "the wrapper is `display: contents`, so the children participate in the " +
+    "parent's flex/grid layout directly. Use to return multiple nodes from a " +
+    "component, or to conditionally group siblings, without a stray `div` " +
+    "that would break a Grid/Stack's spacing.",
+  props: [
+    { name: "children", type: "Node[]", description: "Sibling nodes to group" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", { class: "rui-fragment", style: "display:contents;" });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
 export const Grid: ComponentSpec = {
   name: "Grid",
   description:

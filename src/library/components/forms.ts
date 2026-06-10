@@ -8,7 +8,7 @@ import type { ComponentSpec, RenderHelpers } from "../types.js";
 import type { ComponentNode } from "../../runtime/evaluator.js";
 import { el, asArray, asString, asBoolean, asNumber, renderIcon } from "../utils.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
-import { extractComboboxItems } from "./forms-shared.js";
+import { extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers } from "./forms-shared.js";
 import { attachOnChange } from "./wrappers.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
@@ -27,6 +27,16 @@ function normaliseButtonSize(value: unknown): string {
   if (v === "lg") return "lg";
   if (v === "xl" || v === "extra-large") return "xl";
   return "md";
+}
+
+/** Human-readable file size for upload previews (V.5). */
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
+  return `${n >= 10 || i === 0 ? Math.round(n) : n.toFixed(1)} ${units[i]}`;
 }
 
 export const Button: ComponentSpec = {
@@ -105,7 +115,7 @@ export const Buttons: ComponentSpec = {
 
 export const Input: ComponentSpec = {
   name: "Input",
-  description: "Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string.",
+  description: "Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string. Pass `label`/`hint`/`error`/`required` to render a labelled field shell with validation messaging.",
   props: [
     { name: "id", type: "string", description: "Input identifier" },
     { name: "placeholder", type: "string", optional: true },
@@ -113,6 +123,7 @@ export const Input: ComponentSpec = {
     { name: "validations", type: "any", optional: true, description: "Array or object of validation hints" },
     { name: "value", type: "any", optional: true, description: "Bound value (typically $variable)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
+    ...FIELD_SHELL_PROPS,
   ],
   render: (node, props, helpers) => {
     const input = el("input", {
@@ -128,20 +139,22 @@ export const Input: ComponentSpec = {
       event: "input",
       getValue: (n) => (n as HTMLInputElement).value,
     });
+    attachFocusHandlers(input, props, helpers);
     applyValidations(input, props.validations);
-    return input;
+    return withFieldShell(input, props);
   },
 };
 
 export const TextArea: ComponentSpec = {
   name: "TextArea",
-  description: "Multi-line text input. `onChange(value)` fires on every keystroke with the current text.",
+  description: "Multi-line text input. `onChange(value)` fires on every keystroke with the current text. Pass `label`/`hint`/`error`/`required` for a labelled field shell.",
   props: [
     { name: "id", type: "string" },
     { name: "placeholder", type: "string", optional: true },
     { name: "rows", type: "number", optional: true },
     { name: "value", type: "any", optional: true },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
+    ...FIELD_SHELL_PROPS,
   ],
   render: (node, props, helpers) => {
     const textarea = el("textarea", {
@@ -157,7 +170,8 @@ export const TextArea: ComponentSpec = {
       event: "input",
       getValue: (n) => (n as HTMLTextAreaElement).value,
     });
-    return textarea;
+    attachFocusHandlers(textarea, props, helpers, (n) => (n as HTMLTextAreaElement).value);
+    return withFieldShell(textarea, props);
   },
 };
 
@@ -187,6 +201,9 @@ export const Select: ComponentSpec = {
     { name: "value", type: "any", optional: true },
     { name: "searchable", type: "boolean", optional: true, description: "Render as a filterable combobox" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected value" },
+    { name: "hint", type: "string", optional: true, description: "Helper text rendered below the control" },
+    { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
+    { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
   ],
   render: (node, props, helpers) => {
     if (asBoolean(props.searchable)) {
@@ -210,7 +227,8 @@ export const Select: ComponentSpec = {
       event: "change",
       getValue: (n) => (n as HTMLSelectElement).value,
     });
-    return select;
+    attachFocusHandlers(select, props, helpers, (n) => (n as HTMLSelectElement).value);
+    return withFieldShell(select, props);
   },
 };
 
@@ -574,6 +592,7 @@ export const NumberInput: ComponentSpec = {
     { name: "placeholder", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank)" },
+    ...FIELD_SHELL_PROPS,
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -639,8 +658,9 @@ export const NumberInput: ComponentSpec = {
     };
     decBtn.onclick = (event) => adjust((event.currentTarget ?? event.target) as Element, -step);
     incBtn.onclick = (event) => adjust((event.currentTarget ?? event.target) as Element, step);
+    attachFocusHandlers(input, props, helpers, readNumberValue);
     root.append(decBtn, input, incBtn);
-    return root;
+    return withFieldShell(root, props, { idKey: "id" });
   },
 };
 
@@ -738,40 +758,55 @@ export const FileUpload: ComponentSpec = {
       file.type.startsWith("image/") ||
       /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(file.name);
 
-    input.onchange = (event) => {
-      const fileInput = event.currentTarget as HTMLInputElement;
-      // Pass the FileList as the first argument so handlers can read it
-      // directly: `(files) => uploadAll(files)`. Older handlers that
-      // ignore arguments keep working unchanged.
-      helpers.invoke(props.onSelect, fileInput.files);
-      const uploadRoot = fileInput.closest(".rui-file-upload") as HTMLElement | null;
-      if (!uploadRoot) return;
-      const files = fileInput.files;
+    // Shared preview renderer used by both the native picker and drag-drop.
+    const showPreview = (uploadRoot: HTMLElement, files: FileList | File[] | null): void => {
       const existing = uploadRoot.querySelector(".rui-file-upload-preview");
       if (existing) existing.remove();
-      if (!files || files.length === 0) return;
+      const list = files ? Array.from(files) : [];
+      if (list.length === 0) return;
       const accept = asString(props.accept);
       const preview = el("div", { class: "rui-file-upload-preview" });
-      Array.from(files).forEach((file) => {
+      list.forEach((file) => {
         const row = el("div", { class: "rui-file-upload-preview-item" });
         if (isImageFile(file, accept)) {
           const objectUrl = URL.createObjectURL(file);
-          const img = el("img", {
-            src: objectUrl,
-            alt: file.name,
-            class: "rui-file-upload-thumbnail",
-          }) as HTMLImageElement;
-          // Revoke the object URL when the image has rendered so memory is
-          // released. Browsers keep the bitmap cached after decode so the
-          // src can be safely revoked once `load` fires.
+          const img = el("img", { src: objectUrl, alt: file.name, class: "rui-file-upload-thumbnail" }) as HTMLImageElement;
           img.onload = () => URL.revokeObjectURL(objectUrl);
           row.append(img);
         }
         row.append(el("span", { class: "rui-file-upload-filename" }, [file.name]));
+        const size = formatFileSize(file.size);
+        if (size) row.append(el("span", { class: "rui-file-upload-filesize" }, [size]));
         preview.append(row);
       });
       uploadRoot.append(preview);
     };
+
+    input.onchange = (event) => {
+      const fileInput = event.currentTarget as HTMLInputElement;
+      helpers.invoke(props.onSelect, fileInput.files);
+      const uploadRoot = fileInput.closest(".rui-file-upload") as HTMLElement | null;
+      if (uploadRoot) showPreview(uploadRoot, fileInput.files);
+    };
+
+    // Real drag-and-drop (V.5): highlight on dragover, accept dropped files,
+    // assign them to the hidden input, then fire onSelect + preview.
+    if (!disabled) {
+      const stop = (e: Event): void => { e.preventDefault(); e.stopPropagation(); };
+      dropZone.addEventListener("dragenter", (e) => { stop(e); dropZone.classList.add("is-dragover"); });
+      dropZone.addEventListener("dragover", (e) => { stop(e); dropZone.classList.add("is-dragover"); });
+      dropZone.addEventListener("dragleave", (e) => { stop(e); dropZone.classList.remove("is-dragover"); });
+      dropZone.addEventListener("drop", (event) => {
+        stop(event);
+        dropZone.classList.remove("is-dragover");
+        const dt = (event as DragEvent).dataTransfer;
+        if (!dt || dt.files.length === 0) return;
+        try { input.files = dt.files; } catch { /* some browsers disallow setting .files */ }
+        helpers.invoke(props.onSelect, dt.files);
+        const uploadRoot = dropZone.closest(".rui-file-upload") as HTMLElement | null;
+        if (uploadRoot) showPreview(uploadRoot, dt.files);
+      });
+    }
     return root;
   },
 };

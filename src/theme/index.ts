@@ -94,6 +94,17 @@ export interface ThemeTokens {
   spacingM: string;
   spacingL: string;
   spacingXl: string;
+  /** Extra-large spacing steps for marketing/section rhythm. */
+  spacing2xl: string;
+  spacing3xl: string;
+  /* ----- Gradients (named, brandable) ------------------------------ */
+  /** Primary brand gradient — used by `fill: "gradient.brand"`, GradientText, etc. */
+  gradientBrand: string;
+  gradientAccent: string;
+  gradientWarm: string;
+  gradientCool: string;
+  gradientSuccess: string;
+  gradientDanger: string;
   /* ----- Buttons ---------------------------------------------------- */
   buttonFontWeight: string;
   buttonTextTransform: string;
@@ -102,6 +113,25 @@ export interface ThemeTokens {
   buttonPaddingX: string;
   /* ----- Motion ----------------------------------------------------- */
   transitionDuration: string;
+  /** Motion tokens (I.2) — `$theme({ motion: { fast, base, slow, ease } })`.
+   *  Optional: components fall back to their built-in timings. */
+  motionFast?: string;
+  motionBase?: string;
+  motionSlow?: string;
+  motionEase?: string;
+  /* ----- Layers (I.2) ------------------------------------------------ */
+  /** z-index tokens — `$theme({ zIndex: { modal: 2000, ... } })`. Optional:
+   *  `sx.zIndex` tokens fall back to the documented defaults. */
+  zBase?: string;
+  zRaised?: string;
+  zDropdown?: string;
+  zSticky?: string;
+  zBanner?: string;
+  zOverlay?: string;
+  zModal?: string;
+  zPopover?: string;
+  zToast?: string;
+  zTooltip?: string;
   /* ----- Chart palette --------------------------------------------- */
   chart1: string;
   chart2: string;
@@ -137,6 +167,17 @@ const baseSpacing = {
   spacingM: "12px",
   spacingL: "20px",
   spacingXl: "32px",
+  spacing2xl: "48px",
+  spacing3xl: "80px",
+} as const;
+
+const baseGradients = {
+  gradientBrand: "linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)",
+  gradientAccent: "linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)",
+  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)",
+  gradientCool: "linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)",
+  gradientSuccess: "linear-gradient(120deg, #10b981 0%, #22d3ee 100%)",
+  gradientDanger: "linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)",
 } as const;
 
 const baseRadii = {
@@ -194,6 +235,7 @@ export const lightTheme: ThemeTokens = {
   ...baseFonts,
   ...baseFontScale,
   ...baseSpacing,
+  ...baseGradients,
   ...baseRadii,
   ...baseButtons,
   ...baseMotion,
@@ -545,12 +587,34 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   spacingM: "--rui-spacing-m",
   spacingL: "--rui-spacing-l",
   spacingXl: "--rui-spacing-xl",
+  spacing2xl: "--rui-spacing-2xl",
+  spacing3xl: "--rui-spacing-3xl",
+  gradientBrand: "--rui-gradient-brand",
+  gradientAccent: "--rui-gradient-accent",
+  gradientWarm: "--rui-gradient-warm",
+  gradientCool: "--rui-gradient-cool",
+  gradientSuccess: "--rui-gradient-success",
+  gradientDanger: "--rui-gradient-danger",
   buttonFontWeight: "--rui-button-font-weight",
   buttonTextTransform: "--rui-button-text-transform",
   buttonLetterSpacing: "--rui-button-letter-spacing",
   buttonPaddingY: "--rui-button-padding-y",
   buttonPaddingX: "--rui-button-padding-x",
   transitionDuration: "--rui-transition-duration",
+  motionFast: "--rui-motion-fast",
+  motionBase: "--rui-motion-base",
+  motionSlow: "--rui-motion-slow",
+  motionEase: "--rui-motion-ease",
+  zBase: "--rui-z-base",
+  zRaised: "--rui-z-raised",
+  zDropdown: "--rui-z-dropdown",
+  zSticky: "--rui-z-sticky",
+  zBanner: "--rui-z-banner",
+  zOverlay: "--rui-z-overlay",
+  zModal: "--rui-z-modal",
+  zPopover: "--rui-z-popover",
+  zToast: "--rui-z-toast",
+  zTooltip: "--rui-z-tooltip",
   chart1: "--rui-chart-1",
   chart2: "--rui-chart-2",
   chart3: "--rui-chart-3",
@@ -594,7 +658,11 @@ export function applyTheme(host: HTMLElement, theme: ResolvedTheme | ThemeTokens
   const resolved: ResolvedTheme =
     "tokens" in theme ? theme : { name: "custom", tokens: theme };
   for (const [key, cssVar] of Object.entries(TOKEN_TO_CSS) as Array<[keyof ThemeTokens, string]>) {
-    host.style.setProperty(cssVar, resolved.tokens[key]);
+    const value = resolved.tokens[key];
+    // Optional tokens (motion/z-index) may be absent — clear instead of
+    // writing the string "undefined" so `var(--…, fallback)` still works.
+    if (value == null) host.style.removeProperty(cssVar);
+    else host.style.setProperty(cssVar, value);
   }
   host.setAttribute("data-rui-theme", resolved.name);
 }

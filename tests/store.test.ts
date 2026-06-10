@@ -227,3 +227,161 @@ describe("Store — reactivity end-to-end", () => {
     expect(textOf(el)).toContain("hello:Ada");
   });
 });
+
+describe("Store — persistence (VII.2)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.restoreAllMocks();
+    try { localStorage.clear(); sessionStorage.clear(); } catch { /* ignore */ }
+  });
+
+  it("writes the store snapshot to localStorage on mutation (and `persist` is not a field)", async () => {
+    localStorage.clear();
+    const el = create();
+    el.setResponse(`
+      cart = $store({
+        persist: "test-cart",
+        items: [],
+        add: (s, item) => { s.items = [...s.items, item] },
+      })
+      function Cart() {
+        return Column([
+          Text(\`count:\${cart.items.length}\`),
+          Text(\`persist:\${cart.persist}\`),
+          Button("Add", { onClick: () => cart.add({ price: 10 }) }),
+        ])
+      }
+      aktion = Cart()
+    `);
+    await settle();
+    // `persist` was consumed as config, not exposed as state.
+    expect(textOf(el)).toContain("persist:");
+    expect(textOf(el)).not.toContain("persist:test-cart");
+
+    await clickButton(el, "Add");
+    const raw = localStorage.getItem("test-cart");
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw as string);
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.items[0].price).toBe(10);
+    expect("persist" in parsed).toBe(false);
+  });
+
+  it("hydrates declared fields from a persisted snapshot on first render", async () => {
+    localStorage.setItem("test-cart2", JSON.stringify({ items: [{ price: 7 }, { price: 3 }], unknownField: 1 }));
+    const el = create();
+    el.setResponse(`
+      cart = $store({
+        persist: "test-cart2",
+        items: [],
+        add: (s, item) => { s.items = [...s.items, item] },
+      })
+      function Cart() { return Text(\`count:\${cart.items.length}\`) }
+      aktion = Cart()
+    `);
+    await settle();
+    expect(textOf(el)).toContain("count:2");
+  });
+
+  it("honours persistIn: \"session\" (sessionStorage, not localStorage)", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const el = create();
+    el.setResponse(`
+      counter = $store({
+        persist: "sess-counter",
+        persistIn: "session",
+        n: 0,
+        inc: (s) => { s.n = s.n + 1 },
+      })
+      function View() {
+        return Column([
+          Text(\`n:\${counter.n}\`),
+          Button("Inc", { onClick: () => counter.inc() }),
+        ])
+      }
+      aktion = View()
+    `);
+    await settle();
+    await clickButton(el, "Inc");
+    expect(sessionStorage.getItem("sess-counter")).toBeTruthy();
+    expect(localStorage.getItem("sess-counter")).toBeNull();
+    expect(JSON.parse(sessionStorage.getItem("sess-counter") as string).n).toBe(1);
+  });
+});
+
+describe("Store — undo/redo history (VII.3)", () => {
+  afterEach(() => { document.body.innerHTML = ""; vi.restoreAllMocks(); });
+
+  const HISTORY_PROGRAM = `
+    doc = $store({
+      history: true,
+      title: "",
+      setTitle: (s, t) => { s.title = t },
+    })
+    function Editor() {
+      return Column([
+        Text(\`title:\${doc.title}\`),
+        Text(\`canUndo:\${doc.canUndo}\`),
+        Text(\`canRedo:\${doc.canRedo}\`),
+        Button("A", { onClick: () => doc.setTitle("A") }),
+        Button("B", { onClick: () => doc.setTitle("B") }),
+        Button("Undo", { onClick: () => doc.undo() }),
+        Button("Redo", { onClick: () => doc.redo() }),
+      ])
+    }
+    aktion = Editor()
+  `;
+
+  it("undo and redo move through edit history with reactive flags", async () => {
+    const el = create();
+    el.setResponse(HISTORY_PROGRAM);
+    await settle();
+    expect(textOf(el)).toContain("title:");
+    expect(textOf(el)).toContain("canUndo:false");
+    expect(textOf(el)).toContain("canRedo:false");
+
+    await clickButton(el, "A");
+    expect(textOf(el)).toContain("title:A");
+    expect(textOf(el)).toContain("canUndo:true");
+
+    await clickButton(el, "B");
+    expect(textOf(el)).toContain("title:B");
+
+    await clickButton(el, "Undo");
+    expect(textOf(el)).toContain("title:A");
+    expect(textOf(el)).toContain("canRedo:true");
+
+    await clickButton(el, "Undo");
+    expect(textOf(el)).toContain("title:");
+    expect(textOf(el)).toContain("canUndo:false");
+
+    await clickButton(el, "Redo");
+    expect(textOf(el)).toContain("title:A");
+  });
+
+  it("a new edit after undo clears the redo stack", async () => {
+    const el = create();
+    el.setResponse(HISTORY_PROGRAM);
+    await settle();
+    await clickButton(el, "A");
+    await clickButton(el, "B");
+    await clickButton(el, "Undo");          // back to A, canRedo:true
+    expect(textOf(el)).toContain("title:A");
+    expect(textOf(el)).toContain("canRedo:true");
+    await clickButton(el, "B");              // fresh edit — must drop the redo branch
+    expect(textOf(el)).toContain("title:B");
+    expect(textOf(el)).toContain("canRedo:false");
+  });
+
+  it("undo is a no-op at the start of history", async () => {
+    const el = create();
+    el.setResponse(HISTORY_PROGRAM);
+    await settle();
+    await clickButton(el, "Undo");
+    expect(textOf(el)).toContain("title:");
+    expect(textOf(el)).toContain("canUndo:false");
+  });
+});
+
+

@@ -193,14 +193,8 @@ img, svg { max-width: 100%; height: auto; display: block; }
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6 60%, #ec4899);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.32);
+  object-fit: contain;
+  display: block;
 }
 
 .topbar-version {

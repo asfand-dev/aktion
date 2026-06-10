@@ -86,6 +86,7 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(fullGlobals());
   sections.push(fullEmitAndWrappers());
   sections.push(fullEscapeHatches());
+  sections.push(fullUniversalProps());
   sections.push(fullThemingI18nIcons());
   sections.push(fullUtil());
   sections.push(fullHelpers());
@@ -283,7 +284,28 @@ cart = $store({
 function CartBadge() { return Badge(\`\${cart.items.length} items\`) }
 \`\`\`
 
-Use a store for shared state; use a component's local \`$state\` / \`$name\` for state one component owns.`;
+Use a store for shared state; use a component's local \`$state\` / \`$name\` for state one component owns.
+
+Add \`persist: "key"\` to mirror the store's data to \`localStorage\` (or \`persistIn: "session"\` for \`sessionStorage\`): declared fields hydrate from the saved snapshot on first render and every change writes back. \`persist\` / \`persistIn\` are config, not state fields.
+
+\`\`\`
+prefs = $store({
+  persist: "user-prefs",          // restored on reload, saved on every change
+  theme: "system",
+  setTheme: (s, t) => { s.theme = t },
+})
+\`\`\`
+
+Add \`history: true\` (or \`history: 50\` for a depth cap) for **undo/redo**: the store gains \`store.undo()\` / \`store.redo()\` / \`store.clearHistory()\` methods and reactive \`store.canUndo\` / \`store.canRedo\` flags (wire them to button \`disabled\`). Each user mutation records a snapshot; a fresh edit after undo clears the redo branch.
+
+\`\`\`
+doc = $store({
+  history: true,
+  title: "", body: "",
+  setTitle: (s, t) => { s.title = t },
+})
+undoBtn = Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })
+\`\`\``;
 }
 
 function fullComponentsAndActions(): string {
@@ -306,6 +328,8 @@ $app(Column([UserCard($currentUser), UserCard($other, { tone: "primary" })]))
 - The positional argument lands in the component's first parameter (the \`children\` slot for container-style components).
 - User components shadow built-ins of the same name — wrap a library component to add telemetry or styling.
 - Use a lambda (\`row = item => Row(item)\`) for one-off helpers that don't need a named component.
+- **Named slots** (XIII.1): once positional args fill the params, extra named props become both a \`slots\` object and direct bindings — \`function Panel(children) { return Column([slots.header, children, footer]) }\` called as \`Panel(body, { header: H, footer: F })\`.
+- **Component-local helpers** (XIII.4): a \`function Row() {…}\` declared inside another component's body is scoped to it (callable by siblings, not leaked globally).
 
 ### Actions
 A \`function\` whose body runs for side effects is an action — use it as a handler (\`onClick: save\`) or call it for its result. \`return\` is optional; the full JS statement surface applies. Wrap optimistic writes in \`$optimistic(() => { … })\` to snapshot state and auto-roll-back if the callback throws (or its promise rejects).
@@ -327,7 +351,30 @@ resetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })
 \`\`\`
 
 ### \`$emit("name", { detail })\`
-From any action / effect / lambda, \`$emit\` dispatches a \`CustomEvent\` on the host \`<aktion-app>\` (listen with \`el.addEventListener\`). Reserved names: \`assistant-message\`, \`error\`, \`route-change\`.`;
+From any action / effect / lambda, \`$emit\` dispatches a \`CustomEvent\` on the host \`<aktion-app>\` (listen with \`el.addEventListener\`). Reserved names: \`assistant-message\`, \`error\`, \`route-change\`.
+
+### Reactive environment globals (under \`$util\`)
+Read-only reactive namespaces the UI branches on without manual listeners (listeners attach lazily on first read, re-render on change). They live under \`$util\` so the top-level \`$\`-name space stays free for your own atoms:
+- \`$util.viewport.width\` / \`.height\`
+- \`$util.breakpoint.active\` (\`base|sm|md|lg|xl\`) + \`.sm\` / \`.md\` / \`.lg\` / \`.xl\` booleans
+- \`$util.scroll.y\` / \`.x\` / \`.progress\` (0–1) / \`.direction\` (\`up|down\`)
+- \`$util.media.prefersDark\` / \`.prefersReducedMotion\` / \`.online\` / \`.pointer\` (\`coarse|fine\`) / \`.portrait\`
+- \`$util.mouse.x\` / \`.y\`
+- \`$util.url.path\` / \`.params\` (route params) / \`.query\` (parsed object) / \`.hash\` + \`.navigate(to)\` / \`.setQuery(name, value)\` / \`.setQuery({…})\` / \`.removeQuery(name)\` — a reactive snapshot of the current URL plus query-param writers (IV.6).
+
+\`\`\`
+Show($util.breakpoint.md, { children: Sidebar(), fallback: Drawer() })
+NavBar({ blur: $util.scroll.y > 12 })
+\`\`\`
+
+### \`$util.onError(fn)\`
+Register a program-level error sink: \`fn({ error, source })\` fires when a user action body throws (before the default logging) — report to a telemetry sink or surface a toast so a bad row never blanks the page.
+
+### \`$util.onNavigate(fn)\`
+Register a navigation guard: \`fn({ to, from })\` runs before every route change (in-app \`navigate(...)\` and browser back/forward). Return \`false\` to block, a path string to redirect, or nothing to allow. \`$util.onNavigate(null)\` clears it.
+
+### \`$util.onRequest(fn)\` / \`$util.onResponse(fn)\`
+Cross-cutting HTTP interceptors for every \`$http\` / \`$query\` / \`$mutation\` request (VI.5). \`$util.onRequest(req => ({ headers: { Authorization: "Bearer " + $token } }))\` returns a partial that is merged over the request (headers shallow-merged) — ideal for auth tokens. \`$util.onResponse(async (res, retry) => …)\` can inspect/replace the response or \`await retry()\` to re-issue once (e.g. after refreshing a token on a 401). They reset on each new program.`;
 }
 
 function fullEffects(): string {
@@ -387,7 +434,7 @@ view = Async($orders, {
 
 ### \`$query({...})\` and \`$mutation({...})\`
 Same config shape as \`$http\`, for two common needs:
-- \`$query({ url, key?, ttl? })\` — a **cached, deduplicated** read. Identical queries (same \`key\`, or same method+url+query+body) share one in-flight request and one cached bag, so calling it from several components fetches once. Pass \`ttl\` (ms) to auto-refetch stale data. Same bag as \`$http\` (\`.data\`/\`.loading\`/\`.error\`/\`.refetch()\`).
+- \`$query({ url, key?, ttl?, refetchInterval?, refetchOnFocus?, refetchOnReconnect? })\` — a **cached, deduplicated** read. Identical queries (same \`key\`, or same method+url+query+body) share one in-flight request and one cached bag, so calling it from several components fetches once. Pass \`ttl\` (ms) to auto-refetch stale data, \`refetchInterval\` (ms) to poll a live dashboard, and \`refetchOnFocus\` / \`refetchOnReconnect\` to refresh on tab focus / network reconnect. Same bag as \`$http\` (\`.data\`/\`.loading\`/\`.error\`/\`.refetch()\`).
 - \`$mutation({ url, method? })\` — a **deferred** write that fires only when you call \`.mutate(overrides?)\`, not on render (method defaults to \`POST\`). Assign it to an atom, then trigger it from a handler:
 \`\`\`
 $save = $mutation({ url: "https://api.example.com/orders" })
@@ -395,7 +442,26 @@ $save.onDone = () => $orders.refetch()
 ...
 Button("Save", { onClick: () => $save.mutate({ body: { item: $item } }) })
 \`\`\`
-\`.mutate()\` resolves with the response body; the bag exposes \`.loading\`/\`.error\`/\`.data\` plus \`.reset()\`.`;
+\`.mutate()\` resolves with the response body; the bag exposes \`.loading\`/\`.error\`/\`.data\` plus \`.reset()\`.
+
+**Optimistic + invalidation (VI.2):** \`$mutation({ url, optimistic: () => { … }, invalidates: ["key"] })\` — \`optimistic\` runs synchronously before the request so the UI updates instantly (auto-rolled-back if it fails); \`invalidates\` refetches every cached \`$query\` whose key contains a listed substring once the write succeeds. \`$util.invalidate("key")\` does the same on demand.
+
+**Infinite / paginated reads (VI.1):** \`$feed = $query({ url, infinite: { param?: "page", start?: 1, limit?: 20, mode?: "page"|"offset", select?: body => body.items } })\` — \`.data\` is the flattened item list across loaded pages; call \`.loadMore()\` (often from \`OnIntersect\`) while \`.hasMore\` is true; \`.loadingMore\` flags the in-flight next page.
+
+**GraphQL (VI.6):** add \`gql\` (+ optional \`variables\`) to any \`$http\`/\`$query\`/\`$mutation\`: it POSTs \`{ query, variables }\` and \`.data\` is the unwrapped GraphQL \`data\` (a GraphQL \`errors\` array surfaces through \`.error\`).
+
+\`\`\`
+$repos = $query({ url: "/graphql", gql: "query($n:Int){ repos(first:$n){ name } }", variables: { n: 10 } })
+\`\`\`
+
+### Realtime — \`$socket({...})\` and \`$sse({...})\` (VI.3)
+- \`$socket({ url, protocols?, bufferSize?, onMessage?, reconnect? })\` — a reactive WebSocket. Read \`.status\` (\`"connecting"|"open"|"closed"\`), \`.connected\`, \`.last\`, \`.messages\` (re-render on change); \`.send(data)\` (objects auto-JSON; messages sent while connecting queue and flush on open); \`.close()\` (stops for good). \`reconnect: true\` (or a max-attempt number) retries dropped connections with exponential backoff — \`.attempts\` counts the current streak.
+- \`$sse({ url, event?, withCredentials?, bufferSize? })\` — a reactive Server-Sent Events stream with the same \`.status\`/\`.connected\`/\`.last\`/\`.messages\`/\`.close()\` surface (EventSource reconnects natively). Both tear down automatically on the next program.
+\`\`\`
+$chat = $socket({ url: "wss://example.com/room/42" })
+send = () => { $chat.send({ text: $draft }); $draft = "" }
+feed = Column(map($chat.messages, m => Bubble(m.text)))
+\`\`\``;
 }
 
 function fullRouting(): string {
@@ -415,8 +481,31 @@ $app(AppShell(MainSidebar(), pages))   // app/dashboard shell
 
 - **Pick the shell for the surface.** \`AppShell(Sidebar(...), pages)\` for an app/dashboard (left sidebar + optional topbar); a top \`Navbar(...)\` above the pages inside a \`Column\` for a website / marketing / docs layout (no sidebar) — never wrap a website in \`AppShell\`. The router result is just a node, so it drops into either.
 - Patterns: literal, \`:param\` (read \`params.id\`), trailing \`*\` (read \`params._\`), and \`default:\` for the catch-all (unknown paths render \`null\` without it).
-- The read-only \`route\` handle: \`route.path\`, \`route.params.x\`, \`route.query.tab\`; navigate with \`route.navigate("/path")\` from an action/effect.
-- \`NavLink(label, { to, exact?, icon? })\` and \`SidebarItem(label, { to, icon?, badge? })\` derive active state from \`route.path\`. Never declare \`route\` yourself.`;
+- The read-only \`route\` handle: \`route.path\`, \`route.params.x\`, \`route.query.tab\`; navigate with \`route.navigate("/path")\` from an action/effect. \`$util.url\` mirrors this (\`$util.url.path\` / \`.params\` / \`.query\` / \`.hash\`).
+- **Query-param ↔ state** (IV.6): write the URL query without leaving the page — \`$util.url.setQuery("tab", "billing")\`, \`$util.url.setQuery({ sort: "name", page: 2 })\` (a \`null\`/\`""\` value drops the key), or \`$util.url.removeQuery("tab")\`. Read it back reactively via \`$util.url.query.tab\` (or \`route.query.tab\`), so a tab/sort/filter survives reload and is shareable.
+- **Navigation guards** (IV.2): \`$util.onNavigate(fn)\` registers a guard. \`fn({ to, from })\` returns \`false\` to block, a path string to redirect, or nothing to allow — covers in-app \`navigate(...)\` and browser back/forward. Call \`$util.onNavigate(null)\` to clear.
+- **Scroll restoration** (IV.5): set \`scroll-restoration="auto"\` on \`<aktion-app>\` to restore scroll on back/forward and jump to top on a fresh navigation (\`"top"\` always jumps to top).
+- **Nested / layout routes** (IV.1): an arm whose value is \`{ layout, routes }\` matches as a path PREFIX and slots the matched child into the \`outlet\` identifier — so a shell (sidebar/topbar) stays mounted while only the inner page swaps. Child route keys are matched against the remaining path; \`params\` merges parent + child captures.
+\`\`\`
+pages = $router({
+  "/app": {
+    layout: AppShell(MainSidebar(), outlet),     // \`outlet\` = the matched child
+    routes: {
+      "/":            Dashboard(),
+      "/orders/:id":  OrderDetail({ id: params.id }),
+      default:        AppHome()
+    }
+  },
+  default: Landing()
+})
+\`\`\`
+- \`NavLink(label, { to, exact?, icon? })\` and \`SidebarItem(label, { to, icon?, badge? })\` derive active state from \`route.path\`. Never declare \`route\` yourself.
+
+\`\`\`
+$util.onNavigate(({ to }) => $isLoggedIn || to === "/login" ? true : "/login")   // auth gate
+function selectTab(name) { $util.url.setQuery("tab", name) }                       // shareable tab
+activeTab = $util.url.query.tab ?? "overview"
+\`\`\``;
 }
 
 function fullGlobals(): string {
@@ -485,13 +574,20 @@ function fullThemingI18nIcons(): string {
   return `## Theming, i18n & icons
 
 ### \`$theme({ ... })\`
-A bare \`$theme({...})\` statement (near the top) brands the response. Structured groups: \`colors\`, \`radius\`, \`font\` (plus metadata \`name\`, \`direction\`). Omit it to inherit the host theme.
+A bare \`$theme({...})\` statement (near the top) brands the response. Only the **structured form** is accepted — top-level keys must be a token group (\`colors\`, \`radius\`, \`font\`, \`spacing\`, \`shadows\`, \`gradients\`, \`zIndex\`, \`motion\`, \`fonts\`, \`icons\`) or a metadata key (\`name\`, \`direction\`). Flat-shape keys like \`$theme({ colorPrimary: ... })\` raise a schema error; unknown keys inside a group are silently ignored. **Every token value is a string.** Omit the whole call to inherit the host theme. \`zIndex\` layer tokens (\`{ modal: 2000, toast: 2100, … }\`) feed \`sx.zIndex\`; \`motion\` (\`{ fast, base, slow, ease }\`) → \`--rui-motion-*\`. Gradients accept color-stop arrays (\`gradients: { brand: ["#6366f1", "#ec4899"] }\`) and are referenced as \`gradient.brand\` in \`sx\`/\`GradientText\`. Custom icons register inline SVG by name (\`icons: { logo: "<path …/>" }\`) and are then usable anywhere a Font Awesome name is — \`Icon("logo")\`. Load web fonts with \`fonts: { import: ["Inter:400,700", "JetBrains Mono"] }\` (Google Fonts shorthand) alongside the \`font.family\` token.
+
+Core group keys (all optional):
+- \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"neon"\`, …; unknown names are ignored).
+- \`direction?: "ltr" | "rtl"\` — reading direction (metadata; not applied as a token).
+- \`colors?: { ... }\` — CSS color strings. Keys: \`bg\`, \`bgSubtle\`, \`surface\`, \`surfaceMuted\`, \`border\`, \`borderSubtle\`, \`text\`, \`textMuted\`, \`primary\`, \`primaryHover\`, \`primaryText\`, \`accent\`, \`accentHover\`, \`accentText\`, \`focusRing\`, \`success\`, \`warning\`, \`danger\`, \`info\`.
+- \`radius?: { ... }\` — CSS length strings. Keys: \`xs\`, \`sm\`, \`md\`, \`lg\`, \`pill\`, \`button\`, \`input\`.
+- \`font?: { ... }\` — CSS strings. Keys: \`family\`, \`familyHeading\`, \`familyMono\`, \`sizeBase\`, \`sizeSm\`, \`sizeLg\`, \`sizeHeading\`, \`sizeTitle\`, \`weightBody\`, \`weightHeading\`.
 
 \`\`\`
 $theme({
-  colors: { primary: "#635bff", bg: "#0a0a23", surface: "#10103a", text: "#fff" },
-  radius: { md: "0.5rem", button: "999px" },
-  font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif" }
+  colors: { primary: "#635bff", primaryHover: "#4f46e5", accent: "#1f6feb", bg: "#0a0a23", surface: "#10103a", text: "#fff", textMuted: "#a5b4fc", focusRing: "#635bff" },
+  radius: { md: "0.5rem", button: "999px", input: "8px" },
+  font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif", weightHeading: "600" }
 })
 \`\`\`
 
@@ -505,10 +601,47 @@ const { t, setCurrentLanguage } = $i18n({
 })
 welcome = Text(t("greeting", { name: $user.name }))
 \`\`\`
-\`t(key, vars?)\` resolves \`translations[key][currentLanguage]\`, falling back to the default language then the bare key; \`{name}\` placeholders interpolate. Drive \`currentLanguage\` from a reactive atom for live switching.
+\`t(key, vars?)\` resolves \`translations[key][currentLanguage]\`, falling back to the default language then the bare key; \`{name}\` placeholders interpolate. Drive \`currentLanguage\` from a reactive atom for live switching. ICU plural and select forms are supported: \`{ n, plural, =0{No items} one{1 item} other{# items} }\`.
+
+### RTL / bidirectional text
+Set \`dir="rtl"\` / \`"ltr"\` / \`"auto"\` on the host \`<aktion-app>\` element (not in code). The runtime reflects it onto the render root so the whole tree — text direction, flex order, logical spacing — flips automatically. Programs do not need any code change; use logical CSS properties (no hard-coded \`left\`/\`right\`) in raw CSS.
+
+### Accessibility primitives
+- \`VisuallyHidden(child)\` — hides content visually, keeps it in the a11y tree.
+- \`SkipLink({ to: "#main", label: "Skip to content" })\` — first tab stop for keyboard users.
+- \`LiveRegion(Text($status), { mode: "polite" })\` — announces dynamic changes (\`"polite"\` queues; \`"assertive"\` interrupts).
+- \`FocusTrap(child, { active: $isOpen })\` — Tab cycles within the subtree; required for dialogs.
+- Pass \`aria: { label, labelledBy, describedBy, ... }\` to any component via the universal props channel.
 
 ### Icons
 Icon props take a Font Awesome name (no \`fa-\` prefix, never an emoji): \`"house"\`, \`"chart-line"\`, \`"regular:star"\`, \`"brands:github"\`. \`Icon(name, { variant?, size? })\` renders a standalone glyph.`;
+}
+
+function fullUniversalProps(): string {
+  return `## Universal style props (\`sx\` / \`animate\`) — every component
+
+EVERY component accepts a universal style/behaviour channel as named props, in addition to its own props. These are **bounded** (tokens & enums, never raw CSS) so they stay theme-safe — prefer them over the \`Css\`/\`Styles\`/\`HTMLTag\` escape hatches.
+
+- **\`sx: { … }\`** — token-aware inline styling. Keys (all optional):
+  - Spacing (\`xs|s|m|l|xl|2xl|3xl|none|auto\`, the \`safe\`/\`safe-top\`/\`safe-right\`/\`safe-bottom\`/\`safe-left\` notch insets, or a CSS length): \`p px py pt pr pb pl\`, \`m mx my mt mr mb ml\`, \`gap\`. \`px\`/\`mx\` are logical (\`padding-inline\`) and \`ps pe ms me\` set the inline start/end sides, so RTL apps mirror automatically.
+  - Sizing (\`full|half|screen|dvh|min|max|fit|auto\` or length): \`w h minW maxW minH maxH\`.
+  - Color (token \`surface|bg|text|text-muted|primary|accent|success|warning|danger|border\`, a gradient ref \`gradient.brand|accent|warm|cool|success|danger\`, or a raw color): \`bg color borderColor\`.
+  - Surface: \`border: none|subtle|strong|<color>\`, \`radius: xs|sm|md|lg|pill|full\`, \`shadow: sm|md|lg|none\`, \`opacity\`, \`backdrop: "blur"\`, \`bgImage\` (http(s)/relative/data:image only) + \`bgOverlay\` (color or \`gradient.*\` wash over the image), \`bgSize: cover|contain\`.
+  - Typography: \`fontSize: xs|sm|base|lg|xl|2xl|3xl|4xl\` (or a length), \`weight: 100…900|bold|normal\`, \`textDecoration: underline|line-through|none\`, \`textAlign\`.
+  - Flex/grid: \`display direction align justify wrap grow shrink basis columns\`.
+  - Position: \`position top right bottom left inset zIndex(base|dropdown|sticky|modal|toast|…)\`, \`overflow cursor\`. Layer tokens resolve through \`--rui-z-*\` so \`$theme({ zIndex: {...} })\` rebrands them.
+  - Interaction: \`hover: { lift|grow|glow|bright|border|scale }\`, \`focus: { glow|border }\` (mapped to bounded utility classes). For arbitrary state CSS use \`states: { hover|focus|active|disabled|focus-visible|checked|group-hover: { bg, color, borderColor, shadow, radius, opacity, scale, translateX, translateY, rotate, cursor } }\` — compiled to scoped \`:state\` rules in the adopted stylesheet. Example: \`sx: { states: { hover: { scale: 1.04, shadow: "lg" }, focus: { borderColor: "primary" } } }\` (I.4).
+  - Responsive: any value may be \`{ base, sm, md, lg, xl }\` (resolves to \`base\`).
+- **\`animate: "fade-up"\`** (or \`{ preset, delay?, duration?, repeat? }\`) — entrance/loop motion. Presets: \`fade fade-up/down/left/right zoom slide-up/down/left/right pulse float shimmer bounce spin ping wiggle\`. Auto-respects \`prefers-reduced-motion\`.
+- **\`id\` / \`anchor\`** — set the element id (smooth-scroll targets).
+- **\`className\` / \`style\`** — extra classes / a sanitised inline style string.
+- **\`aria: {…}\` / \`data: {…}\` / \`tooltip\` / \`hidden\`** — accessibility & metadata passthrough.
+
+\`\`\`
+Card([Text("Lift on hover")], { sx: { p: "l", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })
+Badge("Live", { tone: "success", animate: "pulse" })
+Display(["Build in ", GradientText("record time")], { size: "hero", align: "center", animate: "fade-up" })
+\`\`\``;
 }
 
 function fullUtil(): string {
@@ -521,10 +654,45 @@ Pure helpers (no side effects), available in every expression, action, effect, a
 - **Strings**: \`$util.capitalize / .titlecase / .uppercase / .lowercase\`, \`.plural(n, singular, plural)\`, \`.trim / .replace / .split / .match\`.
 - **Formatting**: \`$util.format(value, mode, opts?)\` (number, currency, percent, compact) and \`$util.formatDate(value, mode)\` (\`"short" | "long" | "time" | "relative"\` or a token string).
 - **Dates / math**: \`.now / .today / .addDays / .diffDays / .startOfWeek\`; \`.round / .floor / .ceil / .abs / .clamp(v, min, max) / .random\`.
+- **Formatting / misc**: \`.slugify / .truncate(text, len) / .initials / .currency(v, code?) / .percent(v) / .bytes(v) / .relativeTime(date) / .copy(text)\` (async — resolves \`true\` once the clipboard write succeeds) \`/ .sleep(ms) / .uuid() / .debounceFn(fn, ms) / .throttleFn(fn, ms)\` (leading + trailing edge).
+- **Device / platform**: \`.vibrate(pattern) / .share({ title, text, url }) / .readClipboard() / .geolocate() / .isOnline() / .deviceType()\` (XII.3); \`.worker(pureFn, ...args)\` runs a closure-free function off the main thread, resolving its result (XI.5); \`.registerServiceWorker(url) / .webManifest({ name, icons, … })\` for PWA setup (XII.2).
+- **Reactive env getters**: \`$util.scroll\`, \`$util.viewport\`, \`$util.breakpoint\`, \`$util.media\`, \`$util.mouse\`, \`$util.url\` (listeners attach lazily on first read, re-render on change).
 
 \`\`\`
 sorted  = $util.sort($users.filter(u => u.team === $team), "joinedAt", "desc")
 summary = \`\${rows.length} \${$util.plural(rows.length, "order", "orders")} · \${$util.format($util.sum(rows.amount), "currency")}\`
+\`\`\`
+
+## \`$util.style\`, \`$util.rules\` and \`$util.derived\` — styling, validation & computed helpers
+
+- **\`$util.style\`** — bounded, sanitised CSS helpers (return safe strings for the \`sx.style\` / inline use): \`$util.style.cx("a", { active: cond })\` (classnames), \`$util.style.gradient(["#6366f1", "#ec4899"], 120)\`, \`$util.style.alpha("primary", 0.12)\` (color-mix), \`$util.style.clamp("16px", "2vw", "24px")\`, \`$util.style.token("spacing.l")\` → \`var(--rui-spacing-l)\`, \`$util.style.toStyle({ padding: "8px" })\`.
+- **\`$util.rules\`** — composable validators that return \`(value) => message | null\`: \`$util.rules.required() / .email() / .url() / .min(n) / .max(n) / .minLength(n) / .maxLength(n) / .pattern(re) / .oneOf([...]) / .matches(other) / .custom(fn) / .asyncCustom(fn)\` (\`fn\` may return a Promise — server-side checks like username uniqueness; \`$form\` awaits it before submitting). Run them with \`$util.rules.validate(value, [..])\` (first error or null; a Promise when an async rule is hit) or \`$util.rules.validateAll(values, schema)\` (→ \`{ field: message }\`).
+- **\`$util.derived(fn)\`** — a computed value: \`total = $util.derived(() => $util.sum($cart.map(i => i.price)))\` recomputes reactively from the atoms \`fn\` reads.
+
+\`\`\`
+$email = ""
+error = $util.rules.validate($email, [$util.rules.required(), $util.rules.email()])
+Input("email", { value: $email, error: error })
+\`\`\`
+
+### \`$form({...})\` — the form engine (managed forms)
+For anything beyond one or two fields, reach for \`$form\` instead of wiring atoms by hand. \`$form({ values: {...initial}, rules: { field: [validators] }, onSubmit: (values) => {...} })\` returns a managed bag:
+- \`form.values.x\` — two-way binds straight onto an input (\`Input("email", { value: form.values.email })\`).
+- \`form.errors.x\` / \`form.touched.x\` / \`form.dirty\` / \`form.valid\` / \`form.submitting\` / \`form.validating\` — reactive reads (\`dirty\` flips on the first edit and clears on \`reset()\`; \`validating\` is true while async rules are in flight).
+- \`form.field("email")\` — returns \`{ value, error, name, onChange, onBlur }\` to spread for a controlled, validated field.
+- \`form.validate()\` (all) / \`form.validateField(name)\` / \`form.touch(name)\` / \`form.setField(name, v)\` / \`form.setValues({...})\` / \`form.reset()\`.
+- \`form.submit()\` (alias \`form.handleSubmit()\`) — marks fields touched, validates (awaiting async rules), then calls \`onSubmit(values)\` only when valid. \`form.submitting\` stays true until an async \`onSubmit\` settles.
+
+\`\`\`
+form = $form({
+  values: { email: "", age: "" },
+  rules: { email: [$util.rules.required(), $util.rules.email()], age: [$util.rules.min(18)] },
+  onSubmit: (v) => { $saved = $mutation({ url: "/signup", body: v }); $saved.mutate() }
+})
+$app(Column([
+  Input("email", { value: form.values.email, error: form.errors.email, onBlur: () => form.touch("email") }),
+  Button("Submit", { onClick: () => form.handleSubmit(), disabled: form.submitting })
+]))
 \`\`\``;
 }
 
@@ -539,7 +707,15 @@ function fullHelpers(): string {
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
 | \`Lazy(loader, { fallback?, children })\` | Defer rendering until the async \`loader\` resolves; show \`fallback\` while pending. |
 | \`ErrorBoundary(children, { fallback?, onError? })\` | Catch render errors thrown by descendants. |
-| \`VirtualList(items, { key, render })\` | Virtualised list — preferred for >100 rows. |`;
+| \`VirtualList(items, { key, render })\` | Virtualised 1-D list — preferred for >100 rows. |
+| \`VirtualGrid(items, { columns, rowHeight, render })\` | Virtualised 2-D grid — only visible rows mount; essential for tables/grids >100 rows. |
+| \`VisuallyHidden(child)\` | Hides content visually but keeps it in the accessibility tree (extra context for screen readers). |
+| \`SkipLink({ to, label })\` | "Skip to main content" link that appears on focus — the first tab stop for keyboard users. |
+| \`LiveRegion(child, { mode? })\` | \`aria-live\` region (\`mode: "polite"\` default or \`"assertive"\`). Announces dynamic changes to screen readers. |
+| \`FocusTrap(child, { active })\` | Cycles Tab within its subtree and autofocuses the first control — required for accessible dialogs. |
+| \`Fragment(children)\` | Groups siblings without a layout box (\`display:contents\`) so a component can return several nodes into a parent Grid/Stack. |
+| \`Transition(child, { show, preset, duration? })\` | Enter/exit transition — keeps child mounted through exit animation; reduced-motion safe. |
+| \`FlipList(children, { duration? })\` | FLIP reorder animation — keyed children physically move to their new positions. |`;
 }
 
 function fullComponentLibrary(library: ComponentLibrary): string {

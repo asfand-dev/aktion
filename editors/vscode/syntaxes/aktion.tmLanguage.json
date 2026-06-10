@@ -23,7 +23,7 @@
   "repository": {
     "aktion-builtin": {
       "comment": "Runtime $-builtins (hooks, factories, namespaces) — kept in sync with src/language/builtins.ts.",
-      "match": "\\$(?:state|memo|ref|reducer|id|effect|optimistic|store|http|query|mutation|app|router|theme|emit|util|storage|console|toast|i18n)\\b",
+      "match": "\\$(?:state|memo|ref|reducer|id|effect|optimistic|store|form|http|query|mutation|socket|sse|app|router|theme|emit|util|storage|console|toast|i18n)\\b",
       "name": "support.function.builtin.aktion"
     },
     "aktion-state": {

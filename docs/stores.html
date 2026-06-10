@@ -226,6 +226,106 @@ $app(SignupForm())</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
+      <h2 id="persist">Persistence</h2>
+      <p>
+        Add a <code>persist</code> key and the store mirrors its data to storage &mdash;
+        declared fields hydrate from the saved snapshot on mount, and every change
+        writes back. A string is the storage key; <code>true</code> derives one.
+        <code>persistIn: "session"</code> swaps <code>localStorage</code> for
+        per&#8209;tab <code>sessionStorage</code>.
+      </p>
+<pre><code>prefs = $store({
+  theme: "system",
+  density: "comfortable",
+  persist: "prefs",        // ← survives a page reload
+  persistIn: "local"       // "local" (default) | "session"
+})</code></pre>
+      <p>
+        Methods and unknown/renamed keys are never written; new fields keep their
+        code defaults when an older snapshot loads, so it&rsquo;s safe to evolve the
+        shape over time.
+      </p>
+
+      <h2 id="history">Undo &amp; redo</h2>
+      <p>
+        Set <code>history: true</code> (or a number to cap the depth) and the store
+        records a snapshot before each user&#8209;driven change. That adds
+        <code>undo()</code> / <code>redo()</code> / <code>clearHistory()</code> methods
+        and reactive <code>canUndo</code> / <code>canRedo</code> flags &mdash; perfect
+        for an editor or a form wizard. A fresh edit clears the redo stack.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>doc = $store({
+  title: "Untitled",
+  history: true,
+})
+
+function Editor() {
+  return Column([
+    Input("title", { value: doc.title }),
+    Row([
+      Button("Undo", { onClick: () =&gt; doc.undo(), disabled: !doc.canUndo, variant: "ghost" }),
+      Button("Redo", { onClick: () =&gt; doc.redo(), disabled: !doc.canRedo, variant: "ghost" }),
+    ], { gap: "s" }),
+    Text(`Now: ${doc.title}`, { variant: "small-soft" }),
+  ], { gap: "m" })
+}
+$app(Editor())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Persistence and history compose: a store can both survive reloads and offer
+        undo. Snapshots cover only declared user fields, so the two features never
+        step on each other.
+      </p>
+
+      <h2 id="forms">Forms with <code>$form</code></h2>
+      <p>
+        <code>$form</code> is a store&#8209;backed form engine &mdash; managed values,
+        validation, touched&#8209;tracking, and submit handling in one handle.
+        Two&#8209;way bind inputs to <code>form.values.&lt;field&gt;</code>, declare
+        per&#8209;field <code>rules</code> using the
+        <a href="language-reference.html#util-rt-rules"><code>$util.rules</code></a>
+        validators, and let <code>handleSubmit()</code> touch&#8209;all, validate, and
+        call <code>onSubmit</code> only when valid.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>signup = $form({
+  values: { email: "", password: "" },
+  rules: {
+    email: [$util.rules.required(), $util.rules.email()],
+    password: [$util.rules.required(), $util.rules.minLength(8)],
+  },
+  onSubmit: (v) =&gt; { $done = v.email },
+})
+
+function Signup() {
+  return Column([
+    Input("email", { label: "Email", value: signup.values.email, error: signup.errors.email }),
+    Input("password", { label: "Password", type: "password", value: signup.values.password, error: signup.errors.password }),
+    Button("Create account", { onClick: () =&gt; signup.handleSubmit() }),
+    $done ? Alert(`Welcome, ${$done}!`, { tone: "success" }) : Text(""),
+  ], { gap: "m" })
+}
+$app(Signup())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>.values</code></td><td><code>object</code></td><td>Current field values (two&#8209;way bindable).</td></tr>
+          <tr><td><code>.errors</code> · <code>.touched</code></td><td><code>object</code></td><td>Per&#8209;field error messages and touched flags.</td></tr>
+          <tr><td><code>.valid</code> · <code>.submitting</code></td><td><code>boolean</code></td><td>Whole&#8209;form status.</td></tr>
+          <tr><td><code>.setField(name, value)</code></td><td><code>fn</code></td><td>Set one field and clear its error.</td></tr>
+          <tr><td><code>.validate()</code> · <code>.validateField(name)</code></td><td><code>fn</code></td><td>Run validation now.</td></tr>
+          <tr><td><code>.touch(name)</code></td><td><code>fn</code></td><td>Mark touched + validate that field.</td></tr>
+          <tr><td><code>.handleSubmit(extra?)</code></td><td><code>fn</code></td><td>Touch&#8209;all &rarr; validate &rarr; <code>onSubmit(values)</code> when valid.</td></tr>
+          <tr><td><code>.reset()</code></td><td><code>fn</code></td><td>Restore initial values, clear errors/touched.</td></tr>
+        </tbody>
+      </table>
+
       <h2 id="vs-local">Store vs. local state</h2>
       <p>
         Stores and component-local state share one reactive engine; choose by

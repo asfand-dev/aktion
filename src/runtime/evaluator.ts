@@ -18,6 +18,7 @@ import type {
   HookDeclaration,
   BlockExpr,
   ObjectProperty,
+  ObjectExpr,
   SwitchCase,
   DestructuringPattern,
 } from "../parser/types.js";
@@ -28,19 +29,27 @@ import {
   createHttpResource,
   createMutationResource,
   createQueryResource,
+  invalidateQueries,
   isEndpointResource,
 } from "./http.js";
 import type { EndpointResource } from "./http.js";
+import { createSocketResource, createSseResource } from "./realtime.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
-import { matchRoute, type Router } from "./router.js";
+import { Style, Rules } from "./namespaces-extra.js";
+import { registerIcons } from "../icons/index.js";
+import { loadFonts } from "../theme/fonts.js";
+import { builtInThemes } from "../theme/index.js";
+import { matchRoute, matchRoutePrefix, type Router, type NavigationGuard } from "./router.js";
 import { findComponent } from "../library/registry.js";
 import { findPositionalIndex } from "../library/types.js";
+import { UNIVERSAL_PROP_NAMES } from "../library/sx.js";
 import type { ComponentLibrary } from "../library/types.js";
 import { storage as storageGlobal } from "./storage.js";
 import { consoleNs as consoleGlobal } from "./console.js";
 import { createToastManager, type ToastManager } from "./toast.js";
+import { createEnvManager, type EnvManager } from "./env.js";
 
 /**
  * Built-in namespaces injected as top-level identifiers so authors can
@@ -124,6 +133,212 @@ const RESERVED_CONTEXT_NAMESPACES = new Set(["toast"]);
 function getToastManager(ctx: EvaluationContext): ToastManager {
   if (!ctx.toastManager) ctx.toastManager = createToastManager(ctx);
   return ctx.toastManager;
+}
+
+/** Lazily build (and cache on the context) the reactive env-globals manager. */
+function getEnvManager(ctx: EvaluationContext): EnvManager {
+  if (!ctx.envManager) ctx.envManager = createEnvManager(ctx);
+  return ctx.envManager;
+}
+
+/**
+ * Per-context `$util` facade. Everything Aktion adds as a "global" lives here
+ * rather than at the top level, so the bare `$`-name space stays small and
+ * never collides with author state. It inherits every static `Util.*` helper
+ * through its prototype, and adds:
+ *
+ *   - Reactive environment globals as getters: `$util.scroll`,
+ *     `$util.viewport`, `$util.breakpoint`, `$util.media`, `$util.mouse`
+ *     (each lazily activates its listener and re-renders on change).
+ *   - The styling + validation helper namespaces: `$util.style`, `$util.rules`.
+ *   - `$util.derived(fn)` — a reactive computed value (re-evaluates each render,
+ *     tracking the atoms `fn` reads).
+ *   - `$util.onError(fn)` — register a program-level error sink.
+ *   - `$util.url` — a reactive snapshot of the current route path/params/query/hash.
+ *
+ * The `$util.$scroll` sigil form also works because the lexer strips the `$`,
+ * so the property key is the same bare `scroll`.
+ */
+function getUtilFacade(ctx: EvaluationContext): Record<string, unknown> {
+  if (ctx.utilFacade) return ctx.utilFacade;
+  const facade = Object.create(Util as object) as Record<string, unknown>;
+  const env = () => getEnvManager(ctx);
+  Object.defineProperties(facade, {
+    scroll: { get: () => env().scroll, enumerable: true },
+    viewport: { get: () => env().viewport, enumerable: true },
+    breakpoint: { get: () => env().breakpoint, enumerable: true },
+    media: { get: () => env().media, enumerable: true },
+    mouse: { get: () => env().mouse, enumerable: true },
+    url: { get: () => readUrlSnapshot(ctx), enumerable: true },
+    style: { value: Style, enumerable: true },
+    rules: { value: Rules, enumerable: true },
+    derived: {
+      value: (fn: unknown): unknown => (typeof fn === "function" ? (fn as () => unknown)() : fn),
+      enumerable: true,
+    },
+    onError: {
+      value: (fn: unknown): void => {
+        ctx.errorHook = typeof fn === "function"
+          ? (info) => { (fn as (i: unknown) => void)(info); }
+          : undefined;
+      },
+      enumerable: true,
+    },
+    onNavigate: {
+      value: (fn: unknown): void => {
+        // Register (or clear) a navigation guard on the host router. The guard
+        // receives `{ to, from }` and may return `false` to block or a path
+        // string to redirect; anything else allows the navigation.
+        ctx.router?.setGuard(typeof fn === "function" ? (fn as NavigationGuard) : null);
+      },
+      enumerable: true,
+    },
+    onRequest: {
+      value: (fn: unknown): void => {
+        // Register an in-program request interceptor. `fn(request)` may mutate
+        // and return the request, or return a partial that is merged over it
+        // (headers shallow-merged) — ergonomic for auth-token injection.
+        if (typeof fn !== "function") return;
+        ctx.http?.registerProgramInterceptors({
+          onRequest: (request) => {
+            const out = (fn as (r: unknown) => unknown)(request);
+            if (out && typeof out === "object") {
+              const patch = out as Record<string, unknown>;
+              return {
+                ...request,
+                ...patch,
+                headers: { ...request.headers, ...((patch.headers as Record<string, string>) ?? {}) },
+              };
+            }
+            return request;
+          },
+        });
+      },
+      enumerable: true,
+    },
+    onResponse: {
+      value: (fn: unknown): void => {
+        // Register an in-program response interceptor. `fn(response, retry)`
+        // may return a replacement/patched response, or nothing to pass the
+        // original through. `await retry()` re-issues the request once (e.g.
+        // after refreshing an auth token on a 401).
+        if (typeof fn !== "function") return;
+        ctx.http?.registerProgramInterceptors({
+          onResponse: async (response, retry) => {
+            const out = await (fn as (r: unknown, retry: unknown) => unknown)(response, retry);
+            return out && typeof out === "object" ? (out as typeof response) : response;
+          },
+        });
+      },
+      enumerable: true,
+    },
+    invalidate: {
+      value: (keys: unknown): void => {
+        // Refetch every cached `$query` whose key contains any given substring
+        // (VI.2) — call after a manual write to pull fresh server state.
+        invalidateQueries(ctx, keys);
+      },
+      enumerable: true,
+    },
+  });
+  ctx.utilFacade = facade;
+  return facade;
+}
+
+/**
+ * Reactive snapshot of the current URL, surfaced as `$util.url`. Reading it
+ * subscribes the render to route changes (via the shared `route` state slot,
+ * which the host rewrites on every navigation). Exposes `path`, `params`
+ * (route path params, e.g. `/users/:id`), `query` (parsed query object),
+ * `hash` (fragment after `#`), and a `navigate(to)` callable.
+ */
+function readUrlSnapshot(ctx: EvaluationContext): Record<string, unknown> {
+  // Subscribe to the route slot so the render re-runs on navigation — same
+  // dependency the bare `route` identifier and `$route` namespace record.
+  ctx.trackedState.add("route");
+  const router = ctx.router;
+  const path = readRoutePath(ctx);
+  const params: Record<string, unknown> = router ? { ...router.getParams() } : {};
+  const query: Record<string, string> = {};
+  let hash = "";
+  if (typeof globalThis !== "undefined" && (globalThis as { location?: Location }).location) {
+    const loc = (globalThis as { location?: Location }).location as Location;
+    // History router: `?a=b` lives in `location.search`, fragment in `location.hash`.
+    // Hash router: the whole route (`#/path?a=b`) lives in `location.hash`.
+    let search = loc.search ?? "";
+    const rawHash = loc.hash ? loc.hash.replace(/^#/, "") : "";
+    const qInHash = rawHash.indexOf("?");
+    if (!search && qInHash >= 0) {
+      search = rawHash.slice(qInHash);
+    } else if (search) {
+      hash = rawHash;
+    }
+    if (search) {
+      const usp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      for (const [k, v] of usp) query[k] = v;
+    }
+  }
+  return {
+    path,
+    params,
+    query,
+    hash,
+    navigate: (to: unknown): void => {
+      if (typeof to === "string" && to) router?.navigate(to);
+    },
+    setQuery: (nameOrObject: unknown, value?: unknown): void => {
+      const next: Record<string, string> = { ...query };
+      if (nameOrObject && typeof nameOrObject === "object" && !Array.isArray(nameOrObject)) {
+        for (const [k, v] of Object.entries(nameOrObject as Record<string, unknown>)) {
+          if (v == null || v === "") delete next[k];
+          else next[k] = String(v);
+        }
+      } else if (typeof nameOrObject === "string") {
+        if (value == null || value === "") delete next[nameOrObject];
+        else next[nameOrObject] = String(value);
+      }
+      writeUrlQuery(ctx, next);
+    },
+    removeQuery: (name: unknown): void => {
+      if (typeof name !== "string") return;
+      const next: Record<string, string> = { ...query };
+      delete next[name];
+      writeUrlQuery(ctx, next);
+    },
+    toString() {
+      return path;
+    },
+  };
+}
+
+/**
+ * Write a query-parameter object back into `window.location`, preserving the
+ * current route path, and trigger a re-render. In history mode the existing
+ * `pathname` + fragment are kept and only the `?search` is swapped (so a
+ * configured `basePath` survives); in hash mode the query rides after the
+ * route inside the hash (`#/path?a=b`). Used by `$util.url.setQuery` /
+ * `.removeQuery` (IV.6 — query-param ↔ state sync).
+ */
+function writeUrlQuery(ctx: EvaluationContext, params: Record<string, string>): void {
+  if (typeof window === "undefined" || !window.location) return;
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v == null || v === "") continue;
+    usp.set(k, String(v));
+  }
+  const search = usp.toString();
+  const mode = ctx.router?.getMode ? ctx.router.getMode() : "hash";
+  if (mode === "history" && typeof window.history?.replaceState === "function") {
+    const path = window.location.pathname || "/";
+    const frag = window.location.hash || "";
+    window.history.replaceState({}, "", path + (search ? `?${search}` : "") + frag);
+  } else {
+    const path = ctx.router ? ctx.router.getPath() : readRoutePath(ctx);
+    window.location.hash = `#${path}${search ? `?${search}` : ""}`;
+  }
+  // The hash write may re-fire `hashchange`, but the router collapses it to the
+  // same path (no notify), so re-render explicitly to reflect the new query.
+  ctx.notify?.();
 }
 
 /**
@@ -328,6 +543,14 @@ export interface ComponentNode {
    * per-instance state attached to the right node.
    */
   explicitKey?: unknown;
+  /**
+   * Universal style/behaviour channel (suggestions-global Part I). Named
+   * props (`sx`, `animate`, `id`, `anchor`, `className`, `style`, `aria`,
+   * `data`, `tooltip`, `hidden`) that every component implicitly accepts.
+   * They match no declared slot, so the evaluator collects them here and
+   * the renderer applies them to the rendered element after `render(...)`.
+   */
+  universal?: Record<string, unknown>;
   /** Original AST for debugging/introspection. */
   source?: { line: number; column: number };
 }
@@ -565,8 +788,26 @@ export interface EvaluationContext {
    * `getToastManager`; its auto-dismiss timers are cleared on dispose.
    */
   toastManager?: ToastManager;
+  /**
+   * Lazily-created singleton backing the reactive environment namespaces
+   * (`$viewport`, `$breakpoint`, `$scroll`, `$media`, `$mouse`). Listeners
+   * attach on first access and are torn down via `disposers` on replan.
+   */
+  envManager?: EnvManager;
+  /**
+   * Per-context `$util` facade (static helpers + reactive env-global getters),
+   * built lazily on first `$util` reference and reused across the render.
+   */
+  utilFacade?: Record<string, unknown>;
   /** Notify the host that something changed and a re-render is needed. */
   notify?: () => void;
+  /**
+   * Program-level error sink registered via `$onError(fn)` (suggestions-global
+   * XIII.7). Invoked with `{ error, source }` when a user action body throws,
+   * before the default console logging. Lets a program report to a Sentry-style
+   * sink or surface a toast without a bad row blanking the page.
+   */
+  errorHook?: (info: { error: unknown; source: string }) => void;
   /** Dispatch a custom event from an `emit("name", detail)` call. */
   onEmit?: (eventName: string, detail: unknown) => void;
   /**
@@ -688,6 +929,11 @@ export function createContext(
     ctx.timers.timeouts.clear();
     ctx.timers.intervals.clear();
   });
+  // Wipe any in-program HTTP interceptors (`$util.onRequest`/`onResponse`)
+  // registered by the previous program — the runtime is shared across
+  // replans, so program interceptors must not leak into the next program.
+  options.http?.clearProgramInterceptors();
+  ctx.disposers.push(() => options.http?.clearProgramInterceptors());
   return ctx;
 }
 
@@ -1198,6 +1444,15 @@ function evaluateRouterCall(
       wildcardArm = prop;
       continue;
     }
+    // Nested / layout route (IV.1): an arm whose value is an object literal
+    // with a `layout` key matches as a PREFIX and resolves a child route from
+    // its `routes` map, binding the child node as the `outlet` identifier.
+    const layoutArm = asLayoutArm(prop.value);
+    if (layoutArm) {
+      const pm = matchRoutePrefix(pattern, path);
+      if (!pm.matched) continue;
+      return runLayoutArm(pattern, layoutArm, pm.params, pm.rest, ctx);
+    }
     const result = matchRoute(pattern, path);
     if (!result.matched) continue;
     return runRouterArm(pattern, prop.value, result.params, ctx);
@@ -1207,6 +1462,93 @@ function evaluateRouterCall(
   }
   ctx.router?.setActiveMatch(null, {});
   return null;
+}
+
+/**
+ * Detect a layout-route arm: an object literal with a `layout` property (and
+ * optionally a `routes` map). Returns the two sub-expressions, or null when the
+ * value is an ordinary route node.
+ */
+function asLayoutArm(value: Expression): { layout: Expression; routes: ObjectExpr | null } | null {
+  if (value.kind !== "Object") return null;
+  let layout: Expression | null = null;
+  let routes: ObjectExpr | null = null;
+  for (const prop of value.properties) {
+    if (prop.spread) continue;
+    if (prop.key === "layout") layout = prop.value;
+    else if (prop.key === "routes" && prop.value.kind === "Object") routes = prop.value;
+  }
+  return layout ? { layout, routes } : null;
+}
+
+/**
+ * Render a layout route: resolve the child route from `routes` against the
+ * remaining path `rest`, bind it as the `outlet` identifier (+ `params`), then
+ * evaluate the `layout` expression so `AppShell(Sidebar(), outlet)` slots the
+ * child in. Nested layouts compose because the child resolution recurses
+ * through the same matching.
+ */
+function runLayoutArm(
+  pattern: string,
+  arm: { layout: Expression; routes: ObjectExpr | null },
+  params: Record<string, string>,
+  rest: string,
+  ctx: EvaluationContext,
+): unknown {
+  // Resolve the child node from the nested `routes` map against `rest`.
+  let child: unknown = null;
+  let childPattern: string | null = null;
+  let childParams: Record<string, string> = {};
+  if (arm.routes) {
+    let childWildcard: ObjectProperty | null = null;
+    for (const prop of arm.routes.properties) {
+      if (prop.spread) continue;
+      if (prop.key === "default" || prop.key === "*") { childWildcard = prop; continue; }
+      const nested = asLayoutArm(prop.value);
+      if (nested) {
+        const pm = matchRoutePrefix(prop.key, rest);
+        if (!pm.matched) continue;
+        childPattern = prop.key;
+        childParams = pm.params;
+        child = runLayoutArm(prop.key, nested, pm.params, pm.rest, ctx);
+        break;
+      }
+      const m = matchRoute(prop.key, rest);
+      if (!m.matched) continue;
+      childPattern = prop.key;
+      childParams = m.params;
+      child = evaluateWithBindings(prop.value, ctx, { params: m.params });
+      break;
+    }
+    if (child === null && childPattern === null && childWildcard) {
+      child = evaluateWithBindings(childWildcard.value, ctx, { params: {} });
+    }
+  }
+  // The combined params (parent prefix + child) are exposed to the layout.
+  const merged = { ...params, ...childParams };
+  ctx.router?.setActiveMatch(childPattern ? `${pattern}${childPattern}` : pattern, merged);
+  return evaluateWithBindings(arm.layout, ctx, { params: merged, outlet: child });
+}
+
+/** Evaluate `expr` with extra loop-var bindings restored afterward. */
+function evaluateWithBindings(
+  expr: Expression,
+  ctx: EvaluationContext,
+  bindings: Record<string, unknown>,
+): unknown {
+  const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
+  for (const [name, value] of Object.entries(bindings)) {
+    restore.push({ name, had: ctx.loopVars.has(name), prev: ctx.loopVars.get(name) });
+    ctx.loopVars.set(name, value);
+  }
+  try {
+    return evaluate(expr, ctx);
+  } finally {
+    for (const r of restore) {
+      if (r.had) ctx.loopVars.set(r.name, r.prev);
+      else ctx.loopVars.delete(r.name);
+    }
+  }
 }
 
 function runRouterArm(
@@ -1361,6 +1703,10 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // Reserved Aktion namespaces (`$util`, `$console`, `$storage`) resolve
       // to their namespace object — they are constants, not tracked state.
       if (Object.prototype.hasOwnProperty.call(RESERVED_STATE_NAMESPACES, expr.name)) {
+        // `$util` resolves to a per-context facade so `$util.scroll` /
+        // `$util.viewport` / … reach the reactive env globals in addition to
+        // the static `$util.*` helpers.
+        if (expr.name === "util") return getUtilFacade(ctx);
         return RESERVED_STATE_NAMESPACES[expr.name];
       }
       // Per-context reserved namespaces (`$toast`) resolve to a lazily-built
@@ -2161,14 +2507,57 @@ function evaluateStoreCall(
   const config = args[0] ? evaluate(args[0], ctx) : {};
   const state: Record<string, unknown> = {};
   const rawMethods: Record<string, (...a: unknown[]) => unknown> = {};
+  // `persist` (string key or `true`) and `persistIn` ("local" | "session")
+  // are configuration, not state fields or methods — pull them out first so
+  // they never leak into the store's reactive data or method surface.
+  let persistKey: string | null = null;
+  let persistArea: "local" | "session" = "local";
+  // `history` (true | depth number) opts into undo/redo (VII.3).
+  let historyEnabled = false;
+  let historyDepth = 50;
   if (config && typeof config === "object" && !Array.isArray(config)) {
     for (const [name, value] of Object.entries(config as Record<string, unknown>)) {
+      if (name === "persist") {
+        if (value === true) persistKey = `aktion:store:${key}`;
+        else if (typeof value === "string" && value) persistKey = value;
+        continue;
+      }
+      if (name === "persistIn") {
+        if (value === "session") persistArea = "session";
+        continue;
+      }
+      if (name === "history") {
+        if (value === true) historyEnabled = true;
+        else if (typeof value === "number" && value > 0) { historyEnabled = true; historyDepth = Math.floor(value); }
+        continue;
+      }
       if (typeof value === "function") rawMethods[name] = value as (...a: unknown[]) => unknown;
       else state[name] = value;
     }
   }
+  // The user-declared field keys (before any meta fields) — used for both
+  // persistence hydration and history snapshots so meta never round-trips.
+  const userFieldKeys = Object.keys(state);
 
   const atom = loc ? `__store_${loc.line}_${loc.column}` : `__store_anon_${ctx.stores.size}`;
+  // Hydrate persisted fields over the declared defaults BEFORE declaring the
+  // atom, so the first render already shows the restored values. Only keys the
+  // store declares are restored — a renamed/removed field in storage is
+  // ignored, and a newly-added field keeps its code default.
+  if (persistKey) {
+    const stored = readPersistedStore(persistKey, persistArea);
+    if (stored) {
+      for (const k of userFieldKeys) {
+        if (Object.prototype.hasOwnProperty.call(stored, k)) state[k] = stored[k];
+      }
+    }
+  }
+  // Seed the reactive undo/redo flags so `store.canUndo` / `.canRedo` are
+  // readable from the first render.
+  if (historyEnabled) {
+    state.canUndo = false;
+    state.canRedo = false;
+  }
   ctx.state.declare(atom, state);
 
   const methods: Record<string, (...args: unknown[]) => unknown> = {};
@@ -2179,9 +2568,342 @@ function evaluateStoreCall(
     methods[name] = (...callArgs: unknown[]) => raw(handle, ...callArgs);
   }
 
+  // Persist on every change to this store's atom (or any nested path under it).
+  if (persistKey) {
+    const prefix = `${atom}.`;
+    const unsub = ctx.state.subscribe((changed) => {
+      let hit = false;
+      for (const path of changed) {
+        if (path === atom || path.startsWith(prefix)) { hit = true; break; }
+      }
+      if (hit) writePersistedStore(persistKey as string, persistArea, ctx.state.get(atom));
+    });
+    ctx.disposers.push(unsub);
+  }
+
+  // Undo/redo history (VII.3). Snapshots capture ONLY the user fields; the
+  // `canUndo`/`canRedo` flags are kept in sync as reactive state so a disabled
+  // toolbar button updates automatically.
+  if (historyEnabled) {
+    attachStoreHistory(ctx, atom, userFieldKeys, historyDepth, methods);
+  }
+
   ctx.stores.set(key, handle);
   return handle;
 }
+
+/**
+ * Wire undo/redo onto a store atom. Maintains `past` / `future` snapshot
+ * stacks of the user fields, pushing the previous snapshot on each user-driven
+ * mutation and clearing the redo stack. Adds `undo` / `redo` / `clearHistory`
+ * methods to the store and keeps the reactive `canUndo` / `canRedo` flags in
+ * sync. Programmatic restores are flagged so they aren't recorded as new edits.
+ */
+function attachStoreHistory(
+  ctx: EvaluationContext,
+  atom: string,
+  userFieldKeys: string[],
+  depth: number,
+  methods: Record<string, (...args: unknown[]) => unknown>,
+): void {
+  const prefix = `${atom}.`;
+  const past: Array<Record<string, unknown>> = [];
+  const future: Array<Record<string, unknown>> = [];
+  let programmatic = false;
+
+  const snap = (): Record<string, unknown> => {
+    const v = ctx.state.get(atom) as Record<string, unknown> | undefined;
+    const out: Record<string, unknown> = {};
+    for (const k of userFieldKeys) out[k] = v ? v[k] : undefined;
+    return out;
+  };
+  let lastSnap = snap();
+
+  const applySnap = (s: Record<string, unknown>): void => {
+    for (const k of userFieldKeys) ctx.state.setPath(atom, [k], s[k] as never);
+  };
+  const updateFlags = (): void => {
+    ctx.state.setPath(atom, ["canUndo"], (past.length > 0) as never);
+    ctx.state.setPath(atom, ["canRedo"], (future.length > 0) as never);
+  };
+  const isUserChange = (changed: ReadonlySet<string>): boolean => {
+    for (const p of changed) {
+      if (p === atom) return true;
+      if (p.startsWith(prefix)) {
+        const top = p.slice(prefix.length).split(".")[0];
+        if (top !== "canUndo" && top !== "canRedo") return true;
+      }
+    }
+    return false;
+  };
+
+  const unsub = ctx.state.subscribe((changed) => {
+    if (!isUserChange(changed)) return;
+    if (programmatic) {
+      // Our own undo/redo restore — refresh the baseline, don't record it.
+      programmatic = false;
+      lastSnap = snap();
+      return;
+    }
+    past.push(lastSnap);
+    if (past.length > depth) past.shift();
+    future.length = 0;
+    lastSnap = snap();
+    updateFlags();
+  });
+  ctx.disposers.push(unsub);
+
+  methods.undo = (): void => {
+    if (past.length === 0) return;
+    future.push(snap());
+    const prev = past.pop() as Record<string, unknown>;
+    programmatic = true;
+    applySnap(prev);
+    lastSnap = prev;
+    updateFlags();
+  };
+  methods.redo = (): void => {
+    if (future.length === 0) return;
+    past.push(snap());
+    const next = future.pop() as Record<string, unknown>;
+    programmatic = true;
+    applySnap(next);
+    lastSnap = next;
+    updateFlags();
+  };
+  methods.clearHistory = (): void => {
+    past.length = 0;
+    future.length = 0;
+    updateFlags();
+  };
+}
+
+/**
+ * `$form({ values, rules?, onSubmit? })` — a reactive form engine (V.1).
+ *
+ * Backed by a store atom (so it gets fine-grained reads + two-way binding for
+ * free) holding `{ values, errors, touched, valid, submitting }`. Returns a
+ * branded store handle, so `form.values.email` two-way binds and
+ * `form.errors.email` / `form.valid` read reactively. Methods:
+ *   - `form.field(name)` → `{ value, error, name, onChange, onBlur }` to spread
+ *     onto an `Input(...)` for a fully controlled, validated field.
+ *   - `form.setField(name, value)` / `form.setValues({...})`
+ *   - `form.validate()` (all fields) / `form.validateField(name)`
+ *   - `form.touch(name)` (mark touched + validate that field)
+ *   - `form.handleSubmit(extra?)` → validate, then call `onSubmit(values)` if valid
+ *   - `form.reset()`
+ *
+ * `rules` is `{ field: [validators] }` using the `$util.rules.*` validators.
+ */
+function evaluateFormCall(
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): unknown {
+  const key = loc ? `${loc.line}:${loc.column}` : `form:${ctx.stores.size}`;
+  const cached = ctx.stores.get(key);
+  if (cached) return cached;
+
+  const cfg = (args[0] ? evaluate(args[0], ctx) : {}) as Record<string, unknown>;
+  const config = (cfg && typeof cfg === "object" && !Array.isArray(cfg)) ? cfg : {};
+  const initialValues = (config.values && typeof config.values === "object" && !Array.isArray(config.values))
+    ? { ...config.values as Record<string, unknown> } : {};
+  const rules = (config.rules && typeof config.rules === "object" && !Array.isArray(config.rules))
+    ? config.rules as Record<string, unknown> : {};
+  const onSubmit = typeof config.onSubmit === "function" ? config.onSubmit as (...a: unknown[]) => unknown : null;
+
+  const atom = loc ? `__form_${loc.line}_${loc.column}` : `__form_anon_${ctx.stores.size}`;
+  const freshState = (): Record<string, unknown> => ({ values: { ...initialValues }, errors: {}, touched: {}, dirty: false, valid: true, submitting: false, validating: false });
+  ctx.state.declare(atom, freshState());
+
+  const methods: Record<string, (...a: unknown[]) => unknown> = {};
+  const handle: StoreHandle = { __kind: "Store", __atom: atom, __methods: methods };
+
+  const stateOf = (): Record<string, unknown> => (ctx.state.get(atom) as Record<string, unknown>) ?? {};
+  const valuesOf = (): Record<string, unknown> => {
+    const v = stateOf().values;
+    return (v && typeof v === "object") ? v as Record<string, unknown> : {};
+  };
+  const isThenable = (v: unknown): v is Promise<unknown> =>
+    Boolean(v) && typeof (v as { then?: unknown }).then === "function";
+  // Track in-flight async validations so `validating` reads true while any
+  // `asyncCustom` rule is pending (and stale resolutions can be ignored).
+  let pendingValidations = 0;
+  const beginValidation = (): void => {
+    pendingValidations += 1;
+    ctx.state.setPath(atom, ["validating"], true as never);
+  };
+  const endValidation = (): void => {
+    pendingValidations = Math.max(0, pendingValidations - 1);
+    if (pendingValidations === 0) ctx.state.setPath(atom, ["validating"], false as never);
+  };
+
+  // `dirty` derives from comparing live values to the last clean snapshot —
+  // a store subscription means it also flips on two-way binding writes
+  // (`Input("email", { value: form.values.email })`), not just setField().
+  let cleanSnapshot = JSON.stringify(initialValues);
+  const safeStringify = (v: unknown): string => { try { return JSON.stringify(v) ?? ""; } catch { return ""; } };
+  const valuesPrefix = `${atom}.values`;
+  const unsubscribeDirty = ctx.state.subscribe((changed) => {
+    let relevant = false;
+    for (const p of changed) {
+      if (p === atom || p === valuesPrefix || p.startsWith(`${valuesPrefix}.`)) { relevant = true; break; }
+    }
+    if (!relevant) return;
+    const isDirty = safeStringify(valuesOf()) !== cleanSnapshot;
+    if (stateOf().dirty !== isDirty) ctx.state.setPath(atom, ["dirty"], isDirty as never);
+  });
+  ctx.disposers.push(unsubscribeDirty);
+
+  methods.setField = (name: unknown, value: unknown): void => {
+    const n = String(name);
+    ctx.state.setPath(atom, ["values", n], value as never);
+    ctx.state.setPath(atom, ["errors", n], undefined as never);
+    ctx.state.setPath(atom, ["dirty"], true as never);
+  };
+  methods.setValues = (obj: unknown): void => {
+    const merged = { ...valuesOf(), ...((obj && typeof obj === "object") ? obj as Record<string, unknown> : {}) };
+    ctx.state.setPath(atom, ["values"], merged as never);
+    ctx.state.setPath(atom, ["dirty"], true as never);
+  };
+  methods.validateField = (name: unknown): string | null | Promise<string | null> => {
+    const n = String(name);
+    const valueAtCheck = valuesOf()[n];
+    const msg = Rules.validate(valueAtCheck, rules[n]);
+    if (isThenable(msg)) {
+      beginValidation();
+      return (msg as Promise<string | null>).then((m) => {
+        endValidation();
+        // Ignore a stale resolution if the field changed while validating.
+        if (valuesOf()[n] !== valueAtCheck) return m ?? null;
+        ctx.state.setPath(atom, ["errors", n], (m ?? undefined) as never);
+        return m ?? null;
+      });
+    }
+    ctx.state.setPath(atom, ["errors", n], (msg ?? undefined) as never);
+    return msg ?? null;
+  };
+  methods.touch = (name: unknown): void => {
+    const n = String(name);
+    ctx.state.setPath(atom, ["touched", n], true as never);
+    void methods.validateField!(n);
+  };
+  const applyErrors = (errors: Record<string, string>): boolean => {
+    ctx.state.setPath(atom, ["errors"], errors as never);
+    const valid = Object.keys(errors).length === 0;
+    ctx.state.setPath(atom, ["valid"], valid as never);
+    return valid;
+  };
+  methods.validate = (): boolean | Promise<boolean> => {
+    const errors = Rules.validateAll(valuesOf(), rules);
+    if (isThenable(errors)) {
+      beginValidation();
+      return (errors as Promise<Record<string, string>>).then((e) => { endValidation(); return applyErrors(e); });
+    }
+    return applyErrors(errors as Record<string, string>);
+  };
+  methods.handleSubmit = (extra?: unknown): unknown => {
+    const touched: Record<string, boolean> = {};
+    for (const k of Object.keys(rules)) touched[k] = true;
+    const prevTouched = stateOf().touched;
+    ctx.state.setPath(atom, ["touched"], { ...((prevTouched && typeof prevTouched === "object") ? prevTouched as Record<string, unknown> : {}), ...touched } as never);
+    const submitWhenValid = (valid: boolean): unknown => {
+      if (!valid || !onSubmit) return valid;
+      ctx.state.setPath(atom, ["submitting"], true as never);
+      let result: unknown;
+      try {
+        result = onSubmit(valuesOf(), extra);
+      } catch (err) {
+        ctx.state.setPath(atom, ["submitting"], false as never);
+        throw err;
+      }
+      // Keep `submitting` true for the whole async submit — it only clears
+      // once the returned promise settles (sync submits clear immediately).
+      if (isThenable(result)) {
+        return (result as Promise<unknown>).finally(() => ctx.state.setPath(atom, ["submitting"], false as never));
+      }
+      ctx.state.setPath(atom, ["submitting"], false as never);
+      return valid;
+    };
+    const validity = methods.validate!();
+    if (isThenable(validity)) return (validity as Promise<boolean>).then(submitWhenValid);
+    return submitWhenValid(validity as boolean);
+  };
+  // Spec V.1 names this `.submit()` — keep both spellings.
+  methods.submit = (extra?: unknown): unknown => methods.handleSubmit!(extra);
+  methods.reset = (): void => {
+    const fresh = freshState();
+    cleanSnapshot = safeStringify(fresh.values); // new clean baseline
+    ctx.state.setPath(atom, ["values"], fresh.values as never);
+    ctx.state.setPath(atom, ["errors"], {} as never);
+    ctx.state.setPath(atom, ["touched"], {} as never);
+    ctx.state.setPath(atom, ["dirty"], false as never);
+    ctx.state.setPath(atom, ["valid"], true as never);
+    ctx.state.setPath(atom, ["submitting"], false as never);
+    ctx.state.setPath(atom, ["validating"], false as never);
+  };
+  methods.field = (name: unknown): Record<string, unknown> => {
+    const n = String(name);
+    // Subscribe the current render to this field's slices so it re-renders
+    // when the value / error / touched flag changes.
+    ctx.trackedState.add(`${atom}.values.${n}`);
+    ctx.trackedState.add(`${atom}.errors.${n}`);
+    ctx.trackedState.add(`${atom}.touched.${n}`);
+    const st = stateOf();
+    const errors = (st.errors && typeof st.errors === "object") ? st.errors as Record<string, unknown> : {};
+    const touched = (st.touched && typeof st.touched === "object") ? st.touched as Record<string, unknown> : {};
+    return {
+      name: n,
+      value: valuesOf()[n] ?? "",
+      error: touched[n] ? errors[n] : undefined,
+      onChange: (v: unknown) => methods.setField!(n, v),
+      onBlur: () => methods.touch!(n),
+    };
+  };
+
+  ctx.stores.set(key, handle);
+  return handle;
+}
+
+/** Resolve the Web Storage backend for store persistence, or null in SSR. */
+function persistBackend(area: "local" | "session"): Storage | null {
+  if (typeof globalThis === "undefined") return null;
+  const g = globalThis as { localStorage?: Storage; sessionStorage?: Storage };
+  try {
+    return (area === "session" ? g.sessionStorage : g.localStorage) ?? null;
+  } catch {
+    // Accessing storage can throw in sandboxed/blocked contexts.
+    return null;
+  }
+}
+
+/** Read + parse a persisted store snapshot. Returns null on any failure. */
+function readPersistedStore(key: string, area: "local" | "session"): Record<string, unknown> | null {
+  const backend = persistBackend(area);
+  if (!backend) return null;
+  try {
+    const raw = backend.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Serialise + write a store snapshot. Silently no-ops on any failure. */
+function writePersistedStore(key: string, area: "local" | "session", value: unknown): void {
+  const backend = persistBackend(area);
+  if (!backend) return;
+  try {
+    backend.setItem(key, JSON.stringify(value));
+  } catch {
+    // Quota exceeded / unserialisable value — drop the write rather than throw.
+  }
+}
+
 
 /**
  * Like `extractStatePath`, but for a member chain rooted at a `Store` handle.
@@ -2237,6 +2959,8 @@ function evaluateInvoke(
     switch (name) {
       case "store":
         return evaluateStoreCall(expr.arguments, ctx, expr.loc);
+      case "form":
+        return evaluateFormCall(expr.arguments, ctx, expr.loc);
       case "router":
         return evaluateRouterCall(expr.arguments, ctx, expr.loc);
       case "http": {
@@ -2251,10 +2975,37 @@ function evaluateInvoke(
         const optsArg = expr.arguments[0];
         return createMutationResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
       }
+      case "socket": {
+        const optsArg = expr.arguments[0];
+        return createSocketResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "sse": {
+        const optsArg = expr.arguments[0];
+        return createSseResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
       case "theme": {
         const tokensArg = expr.arguments[0];
-        const tokens = collectThemeTokens(tokensArg ? evaluate(tokensArg, ctx) : null);
-        return { kind: "Theme", tokens } satisfies ThemeNode;
+        const themeInput = tokensArg ? evaluate(tokensArg, ctx) : null;
+        // Side effects: register custom icons declared via
+        // `$theme({ icons: { name: "<svg markup>" } })` (IX.2) and load any
+        // web fonts declared via `$theme({ fonts: { import: [...] } })` (I.7).
+        if (themeInput && typeof themeInput === "object" && !Array.isArray(themeInput)) {
+          const obj = themeInput as Record<string, unknown>;
+          if (obj.icons) registerIcons(obj.icons);
+          // `import` may live under the `fonts` group or the existing `font`
+          // group — accept both shapes.
+          if (obj.fonts) loadFonts(obj.fonts);
+          if (obj.font) loadFonts(obj.font);
+        }
+        // A `name` property selects a built-in theme (e.g.
+        // `$theme({ name: "neon" })`) — seed the full token set from that
+        // theme so the whole palette applies, then let any structured
+        // overrides (`colors`, `radius`, ...) layer on top.
+        const tokens = collectThemeTokens(themeInput);
+        const themeName = resolveBuiltInThemeName(themeInput);
+        const baseTokens = themeName ? builtInThemes[themeName] : null;
+        const merged = baseTokens ? { ...baseTokens, ...tokens } : tokens;
+        return { kind: "Theme", tokens: merged } satisfies ThemeNode;
       }
       case "app": {
         // Runtime root. `$app(node)` renders that node; `$app([a, b])` or
@@ -2364,6 +3115,41 @@ interface BlockEvalOptions {
   stateAsDeclaration?: boolean;
 }
 
+/** A component-local declaration's prior registration, for block-scoped restore. */
+interface LocalDeclSnapshot {
+  kind: "component" | "action" | "hook";
+  name: string;
+  had: boolean;
+  prev: unknown;
+}
+
+/** Snapshot the current registration of a soon-to-be-shadowed local decl. */
+function rememberLocalDecl(
+  stmt: ComponentDeclaration | ActionDeclaration | HookDeclaration,
+  ctx: EvaluationContext,
+  out: LocalDeclSnapshot[],
+): void {
+  if (stmt.kind === "ComponentDeclaration") {
+    out.push({ kind: "component", name: stmt.name, had: ctx.componentDecls.has(stmt.name), prev: ctx.componentDecls.get(stmt.name) });
+  } else if (stmt.kind === "ActionDeclaration") {
+    out.push({ kind: "action", name: stmt.name, had: ctx.actionDecls.has(stmt.name), prev: ctx.actionDecls.get(stmt.name) });
+  } else {
+    out.push({ kind: "hook", name: stmt.name, had: ctx.hookDecls.has(stmt.name), prev: ctx.hookDecls.get(stmt.name) });
+  }
+}
+
+/** Restore (or remove) component-local declarations when a block unwinds. */
+function restoreLocalDecls(ctx: EvaluationContext, snapshots: LocalDeclSnapshot[]): void {
+  for (let i = snapshots.length - 1; i >= 0; i -= 1) {
+    const s = snapshots[i]!;
+    const map = s.kind === "component" ? ctx.componentDecls
+      : s.kind === "action" ? ctx.actionDecls
+      : ctx.hookDecls;
+    if (s.had) (map as Map<string, unknown>).set(s.name, s.prev);
+    else (map as Map<string, unknown>).delete(s.name);
+  }
+}
+
 /**
  * Evaluate a block: run every declaration / statement sequentially and
  * return the value of the last expression statement (last-expression-wins
@@ -2381,6 +3167,9 @@ function evaluateBlock(
   // names (component params, $state declarations, etc.). We only restore
   // names introduced by THIS block.
   const introduced: string[] = [];
+  // Component/action/hook declarations introduced by THIS block, with their
+  // prior registration (if any) so they can be restored when the block exits.
+  const localDecls: LocalDeclSnapshot[] = [];
   try {
     for (const stmt of block.body) {
       switch (stmt.kind) {
@@ -2470,9 +3259,13 @@ function evaluateBlock(
         case "ComponentDeclaration":
         case "ActionDeclaration":
         case "HookDeclaration":
-          // Top-level constructs that may legally appear inside a block;
-          // register them on the context so they're discoverable from
-          // sibling statements without mutating outer scope.
+          // Component-local declarations (XIII.4): a `function Row() {...}`
+          // nested inside a component / action body is registered so sibling
+          // statements can call it, then restored when the block unwinds so it
+          // doesn't leak into the global scope (or shadow an outer same-named
+          // declaration permanently). We snapshot any prior registration under
+          // the same name and reinstate it in `finally`.
+          rememberLocalDecl(stmt, ctx, localDecls);
           installStatementBinding(stmt, ctx);
           continue;
         case "Await":
@@ -2506,6 +3299,8 @@ function evaluateBlock(
   } finally {
     // Restore introduced names so block-local bindings don't leak.
     for (const name of introduced) ctx.loopVars.delete(name);
+    // Restore (or remove) component-local declarations introduced by this block.
+    restoreLocalDecls(ctx, localDecls);
   }
   return result;
 }
@@ -2855,13 +3650,14 @@ function evaluateComponentCall(
       }
     }
   }
-  const { args: evaluated, argMeta } = resolveLibraryCallArgs(ctx, callee, propArgs);
+  const { args: evaluated, argMeta, universal } = resolveLibraryCallArgs(ctx, callee, propArgs);
   const node: ComponentNode = {
     __kind: "Component",
     name: callee,
     args: evaluated,
     argMeta,
     explicitKey,
+    universal,
     source: loc,
   };
   return node;
@@ -2895,7 +3691,7 @@ function resolveLibraryCallArgs(
   ctx: EvaluationContext,
   callee: string,
   propArgs: Expression[],
-): { args: unknown[]; argMeta: ArgMeta[] } {
+): { args: unknown[]; argMeta: ArgMeta[]; universal?: Record<string, unknown> } {
   const spec = ctx.library ? findComponent(ctx.library, callee) : undefined;
   if (!spec) {
     const args = propArgs.map((arg) => evaluate(arg, ctx));
@@ -2921,6 +3717,7 @@ function resolveLibraryCallArgs(
     meta: {},
     filled: false,
   }));
+  let universal: Record<string, unknown> | undefined;
 
   // Split the named-props ObjectExpr from positional args. The named-props
   // block is the *last* ObjectExpr in `propArgs` — so `Foo("hi", {x: 1})`
@@ -2949,7 +3746,17 @@ function resolveLibraryCallArgs(
       for (const prop of trailingObj.properties) {
         if (prop.spread) continue;
         const slot = slotByName.get(prop.key);
-        if (slot === undefined) continue;
+        if (slot === undefined) {
+          // Universal style/behaviour channel — props every component
+          // accepts (`sx`, `animate`, `id`, …). They match no declared
+          // slot; collect them so the renderer can apply them to the
+          // rendered element. A real slot of the same name always wins.
+          if (UNIVERSAL_PROP_NAMES.has(prop.key)) {
+            if (!universal) universal = {};
+            universal[prop.key] = evaluate(prop.value, ctx);
+          }
+          continue;
+        }
         const value = evaluate(prop.value, ctx);
         slots[slot]!.value = value;
         slots[slot]!.filled = true;
@@ -2994,7 +3801,7 @@ function resolveLibraryCallArgs(
     args.pop();
     argMeta.pop();
   }
-  return { args, argMeta };
+  return { args, argMeta, universal };
 }
 
 /**
@@ -3040,12 +3847,23 @@ function invokeComponentDecl(
   if (trailingObjArg && trailingObjArg.kind === "Object") {
     const paramNames = new Set(decl.params.map((p) => p.name));
     const objKeys: string[] = [];
+    let allIdentifierKeys = true;
     for (const prop of trailingObjArg.properties) {
       if (prop.spread) continue;
       objKeys.push(prop.key);
       if (prop.key === "key" || paramNames.has(prop.key)) {
         expandAsNamed = true;
       }
+      if (!/^[A-Za-z_$][\w$]*$/.test(prop.key)) allIdentifierKeys = false;
+    }
+    // Named slots (XIII.1): when the positional args BEFORE the trailing object
+    // already satisfy every declared param, the object can't be a positional
+    // param value — so treat it as named props / slots (`Panel(body, { header,
+    // footer })`). Guarded to identifier keys so an opaque data payload passed
+    // as the sole/only-remaining positional (`Foo({ data })`) stays positional.
+    if (!expandAsNamed && allIdentifierKeys && objKeys.length > 0) {
+      const positionalBefore = args.length - 1; // every arg except the trailing object
+      if (positionalBefore >= decl.params.length) expandAsNamed = true;
     }
     // Strict-mode diagnostic for the silent named→positional flip (feedback
     // §2.3): the caller passed a `{...}` whose keys match NONE of the
@@ -3215,13 +4033,32 @@ export function evaluateUserComponent(
     ctx.loopVars.set("children", childrenValue);
   }
   // Named slots: declared as `slots: { name? }` on the component.
-  if (decl.slots.length > 0) {
-    const slotsValue: Record<string, unknown> = {};
-    for (const slotName of decl.slots) {
-      if (named[slotName] !== undefined) {
-        slotsValue[slotName] = named[slotName];
-      }
+  // Named slots (XIII.1): every named prop that did NOT bind to a declared
+  // param is exposed two ways so authors can compose slotted layouts without
+  // any special declaration syntax:
+  //   1. as a `slots` object (`slots.header`, `slots.footer`), and
+  //   2. as a direct binding (`header`, `footer`) when the name is a safe
+  //      identifier and doesn't collide with a param.
+  // This makes `Panel(body, { header: H, footer: F })` →
+  // `function Panel(children) { return Column([slots.header, children, slots.footer]) }`
+  // work, alongside the pre-existing `decl.slots` convention.
+  const paramNames = new Set<string>();
+  for (const p of decl.params) {
+    if (p.name) paramNames.add(p.name);
+  }
+  const slotsValue: Record<string, unknown> = {};
+  for (const slotName of decl.slots) {
+    if (named[slotName] !== undefined) slotsValue[slotName] = named[slotName];
+  }
+  for (const [key, value] of Object.entries(named)) {
+    if (paramNames.has(key) || value === undefined) continue;
+    slotsValue[key] = value;
+    // Also bind as a direct loop var when it's a safe, non-colliding name.
+    if (/^[A-Za-z_$][\w$]*$/.test(key) && key !== "children" && key !== "slots" && !ctx.componentDecls.has(key)) {
+      bindComponentLocal(key, value);
     }
+  }
+  if (Object.keys(slotsValue).length > 0 || decl.slots.length > 0) {
     restoreLoopVars.push({
       name: "slots",
       had: ctx.loopVars.has("slots"),
@@ -3293,7 +4130,16 @@ function runActionDeclSync(
   args: unknown[],
   ctx: EvaluationContext,
 ): unknown {
-  return runDeclBodySync(decl.params, decl.body, args, ctx);
+  // Route genuine errors (not control-flow signals) through the program's
+  // `$onError(fn)` hook before they propagate to the default logging.
+  if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx);
+  try {
+    return runDeclBodySync(decl.params, decl.body, args, ctx);
+  } catch (err) {
+    if (err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal) throw err;
+    try { ctx.errorHook({ error: err, source: decl.name ?? "action" }); } catch { /* hook must never crash the runner */ }
+    throw err;
+  }
 }
 
 /**
@@ -4239,8 +5085,41 @@ const STRUCTURED_THEME_GROUPS = new Set([
   "colors",
   "radius",
   "font",
+  "fonts",
+  "spacing",
+  "shadows",
+  "gradients",
+  "zIndex",
+  "motion",
 ]);
 const THEME_METADATA_KEYS = new Set(["name", "direction"]);
+
+/** Group name → flat-token prefix (e.g. `shadows.md` → `shadowMd`). */
+const THEME_GROUP_PREFIX: Record<string, string> = {
+  colors: "color",
+  radius: "radius",
+  font: "font",
+  spacing: "spacing",
+  shadows: "shadow",
+  gradients: "gradient",
+  zIndex: "z",
+  motion: "motion",
+};
+
+/**
+ * Read the `name` metadata key off a `$theme({...})` config and return the
+ * matching built-in theme key (`dark`, `neon`, `pastel`, `glass`,
+ * `brutalist`, `skyline`, ...) when it names a real registered theme.
+ * Returns `null` for an absent / unknown name so the runtime falls back to
+ * the active base theme rather than wiping it.
+ */
+function resolveBuiltInThemeName(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const name = (value as Record<string, unknown>).name;
+  if (typeof name !== "string") return null;
+  const key = name.trim().toLowerCase();
+  return key in builtInThemes ? key : null;
+}
 
 function collectThemeTokens(value: unknown): Record<string, string> {
   const out: Record<string, string> = {};
@@ -4258,15 +5137,53 @@ function collectThemeTokens(value: unknown): Record<string, string> {
       continue;
     }
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      const prefix = key === "colors" ? "color" : key;
+      const prefix = THEME_GROUP_PREFIX[key] ?? key;
+      const isGradient = key === "gradients";
       for (const [innerKey, innerValue] of Object.entries(raw as Record<string, unknown>)) {
         if (innerValue == null) continue;
         const flatKey = prefix + capitalise(innerKey);
-        out[flatKey] = stringifyTokenValue(innerValue);
+        const str = isGradient ? gradientToCss(innerValue) : stringifyTokenValue(innerValue);
+        if (str) out[flatKey] = str;
       }
     }
   }
   return out;
+}
+
+/**
+ * Convert a gradient token value into a safe CSS `linear-gradient(...)`.
+ * Accepts: an array of colors (`["#6366f1", "#ec4899"]`), an object
+ * `{ stops: [...], angle?: number }`, or a raw gradient/color string.
+ * Color stops are validated; anything unsafe collapses the gradient to "".
+ */
+function gradientToCss(value: unknown): string {
+  const colorOk = (c: unknown): string => {
+    const s = typeof c === "string" ? c.trim() : "";
+    if (!s || s.length > 64) return "";
+    // hex / rgb / hsl / named — no separators that break out of the function
+    if (!/^[a-zA-Z0-9#%.,()\s+-]+$/.test(s)) return "";
+    if (/url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(s)) return "";
+    return s;
+  };
+  if (Array.isArray(value)) {
+    const stops = value.map(colorOk).filter(Boolean);
+    if (stops.length < 2) return "";
+    return `linear-gradient(120deg, ${stops.join(", ")})`;
+  }
+  if (value && typeof value === "object") {
+    const o = value as { stops?: unknown; angle?: unknown };
+    const stops = Array.isArray(o.stops) ? o.stops.map(colorOk).filter(Boolean) : [];
+    if (stops.length < 2) return "";
+    const angle = typeof o.angle === "number" && Number.isFinite(o.angle) ? `${Math.round(o.angle)}deg` : "120deg";
+    return `linear-gradient(${angle}, ${stops.join(", ")})`;
+  }
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (/^(linear|radial|conic)-gradient\(/.test(s) && !/expression\s*\(|javascript\s*:|@import|<\/?\w/i.test(s) && s.length <= 256) {
+      return s;
+    }
+  }
+  return "";
 }
 
 function capitalise(value: string): string {

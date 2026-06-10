@@ -15,7 +15,7 @@
  */
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
-import { el, asArray, asString } from "../utils.js";
+import { el, asArray, asString, renderIcon } from "../utils.js";
 
 const renderChild = (helpers: RenderHelpers, value: unknown): Node => {
   if (value == null) return document.createDocumentFragment();
@@ -118,10 +118,13 @@ export const Portal: ComponentSpec = {
     }
     if (mount) {
       mount.append(container);
-      // Schedule removal on next render — the renderer owns the lifecycle.
+      // Keyed disposer: registering the new container's removal disposes the
+      // PREVIOUS one first, so a re-render swaps the portalled DOM instead of
+      // stacking a duplicate container in the target per render. The final
+      // container is removed on unmount.
       helpers.registerDisposer(() => {
         if (container.parentNode) container.parentNode.removeChild(container);
-      });
+      }, "rui-portal-container");
     }
     // Render an empty placeholder in the original position so morph
     // diffing keeps a stable node identity.
@@ -252,10 +255,15 @@ export const Lazy: ComponentSpec = {
  */
 export const ErrorBoundary: ComponentSpec = {
   name: "ErrorBoundary",
-  description: "Render a fallback subtree when rendering children throws.",
+  description:
+    "Render a fallback subtree when rendering children throws. Pass a " +
+    "`fallback` node (or omit it for a built-in friendly error card showing " +
+    "the message + a Retry button); `onError(err)` fires with the error. Set " +
+    "`showDetails=true` to reveal the message inline (great in dev).",
   props: [
     { name: "fallback", type: "Node", optional: true },
     { name: "onError", type: "callable", optional: true },
+    { name: "showDetails", type: "boolean", optional: true, description: "Show the error message inline (default false)" },
     { name: "children", type: "Node[]", positional: true },
   ],
   render: (_node, props, helpers) => {
@@ -267,11 +275,24 @@ export const ErrorBoundary: ComponentSpec = {
       return wrapper;
     } catch (err) {
       try { helpers.invoke(props.onError, err); } catch { /* swallow */ }
-      const fallback = renderChild(helpers, props.fallback ?? null);
+      const message = err instanceof Error ? err.message : String(err);
       const errorWrapper = el("div", { class: "rui-error-boundary rui-error-boundary--fallback" });
-      errorWrapper.append(fallback);
+      errorWrapper.setAttribute("role", "alert");
+      if (props.fallback != null) {
+        errorWrapper.append(renderChild(helpers, props.fallback));
+      } else {
+        // Built-in friendly error card (XIV.4) when no fallback is supplied.
+        const card = el("div", { class: "rui-error-card" });
+        const icon = renderIcon("triangle-exclamation", { className: "rui-error-card-icon" });
+        if (icon) card.append(icon);
+        card.append(el("div", { class: "rui-error-card-title" }, ["Something went wrong"]));
+        if (props.showDetails === true || props.showDetails === "true") {
+          card.append(el("div", { class: "rui-error-card-message" }, [message]));
+        }
+        errorWrapper.append(card);
+      }
       // Surface the error message in a hidden attribute for diagnostics.
-      errorWrapper.setAttribute("data-error", err instanceof Error ? err.message : String(err));
+      errorWrapper.setAttribute("data-error", message);
       return errorWrapper;
     }
   },

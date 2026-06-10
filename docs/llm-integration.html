@@ -72,6 +72,18 @@
         <code>getSystemPrompt()</code> when you register custom components so the
         prompt stays in sync.
       </p>
+      <div class="callout">
+        <p>
+          The generated prompt covers the <strong>full language surface</strong> &mdash;
+          every component plus the data layer (<code>$query</code> infinite/polling/GraphQL,
+          <code>$mutation</code> optimistic/invalidation, <code>$socket</code>/<code>$sse</code>),
+          <code>$form</code>, nested routes, the <code>$util</code> runtime members
+          (reactive env, <code>url</code>, <code>style</code>, <code>rules</code>, device
+          &amp; worker helpers), the <code>sx</code> styling channel, and the expanded
+          theme tokens. Because it&rsquo;s generated from the live registry, models always
+          see the current API &mdash; no manual prompt maintenance.
+        </p>
+      </div>
 
       <h2 id="stream">Streaming tokens with <code>appendChunk</code></h2>
       <p>

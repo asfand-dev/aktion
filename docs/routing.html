@@ -188,6 +188,149 @@ nav = Sidebar([SidebarSection("Workspace", [
 
 $app(AppShell(nav, pages))</code></pre>
 
+      <h2 id="nested">Nested &amp; layout routes</h2>
+      <p>
+        Real apps share chrome across a group of pages &mdash; a settings shell, a
+        dashboard with a secondary nav. Instead of repeating that frame in every
+        arm, give the router a <strong>layout arm</strong>: an object shaped
+        <code>{ layout, routes }</code>. The key matches as a <strong>prefix</strong>;
+        the <code>layout</code> function receives an <code>outlet</code> (the matched
+        child) and renders it wherever it likes; <code>routes</code> is a nested map
+        matched against the <em>remaining</em> path. Parent and child params merge,
+        and layouts nest arbitrarily deep.
+      </p>
+<pre><code>function SettingsShell(outlet) {
+  return Row([
+    Sidebar([SidebarSection("Settings", [
+      SidebarItem("Profile", { to: "/settings/profile" }),
+      SidebarItem("Billing", { to: "/settings/billing" })
+    ])]),
+    Column([ outlet ])          // ← matched child renders here
+  ], { gap: "l" })
+}
+
+pages = $router({
+  "/": Home(),
+  "/settings": {
+    layout: SettingsShell,
+    routes: {
+      "/profile":      ProfilePage(),
+      "/billing/:id":  BillingPage(params.id)   // params merge parent + child
+    }
+  },
+  default: NotFound()
+})</code></pre>
+      <p>
+        Navigating between <code>/settings/profile</code> and
+        <code>/settings/billing/42</code> keeps <code>SettingsShell</code> mounted &mdash;
+        only the <code>outlet</code> swaps. This is the composition behind multi&#8209;level
+        navs without prop&#8209;drilling a &ldquo;current section&rdquo; flag.
+      </p>
+
+      <h2 id="guards">Navigation guards</h2>
+      <p>
+        Register a guard with <code>$util.onNavigate(fn)</code>. The guard receives
+        <code>{ to, from }</code> and returns one of three things:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Return</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>false</code></td><td><strong>Block</strong> the navigation &mdash; the URL stays put.</td></tr>
+          <tr><td>a path <code>string</code></td><td><strong>Redirect</strong> to that path instead.</td></tr>
+          <tr><td>anything else</td><td><strong>Allow</strong> the navigation.</td></tr>
+        </tbody>
+      </table>
+<pre><code>$util.onNavigate(({ to, from }) =&gt; {
+  if (to.startsWith("/admin") &amp;&amp; !$user.isAdmin) return "/login"   // redirect
+  if (to === "/checkout" &amp;&amp; $cart.length === 0)   return false      // block
+  return true                                                       // allow
+})</code></pre>
+      <p>
+        Guards are enforced everywhere navigation can originate: in&#8209;app
+        <code>route.navigate(&hellip;)</code> / <code>NavLink</code>, the browser
+        back/forward buttons, and manual edits to the URL (a blocked or redirected
+        change rewinds the address bar). Guards <strong>fail open</strong> &mdash; if
+        yours throws, navigation proceeds &mdash; and a redirect loop is capped.
+        Call <code>$util.onNavigate(null)</code> to clear.
+      </p>
+
+      <h2 id="query">Query params &harr; state</h2>
+      <p>
+        Read query parameters reactively through <code>route.query</code> or
+        <code>$util.url.query</code>. To <em>write</em> them &mdash; so a filter,
+        tab, or sort survives a refresh and is shareable &mdash; use the
+        <code>$util.url</code> helpers, which update the URL in place (history and
+        hash modes both supported) and re&#8209;render:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Call</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>$util.url.setQuery("tab", "billing")</code></td><td>Set one param. A <code>null</code> / <code>""</code> value drops the key.</td></tr>
+          <tr><td><code>$util.url.setQuery({ sort: "name", page: 2 })</code></td><td>Set several at once.</td></tr>
+          <tr><td><code>$util.url.removeQuery("page")</code></td><td>Drop a key.</td></tr>
+          <tr><td><code>$util.url.navigate("/path")</code></td><td>Imperative navigation (same as <code>route.navigate</code>).</td></tr>
+        </tbody>
+      </table>
+<pre><code>$tab = route.query.tab || "overview"
+
+nav = Row([
+  Button("Overview", { onClick: () =&gt; $util.url.setQuery("tab", "overview") }),
+  Button("Billing",  { onClick: () =&gt; $util.url.setQuery("tab", "billing") })
+])
+// the URL becomes ?tab=billing — reload-safe and shareable</code></pre>
+
+      <h2 id="transitions">Route transitions</h2>
+      <p>
+        Wrap your routed pages in <code>RouteView</code> to replay a CSS entrance
+        animation on every navigation. It swaps a keyed wrapper keyed on
+        <code>route.path</code>, so the fresh page re&#8209;runs its entrance &mdash;
+        no JavaScript timing, and it respects <code>prefers-reduced-motion</code>.
+      </p>
+<pre><code>pages = $router({ "/": Home(), "/about": About(), default: NotFound() })
+
+$app(AppShell(nav,
+  RouteView(pages, { routeKey: route.path, animation: "fade", duration: 250 })
+))
+// animation: "fade" | "zoom" | "slide"</code></pre>
+
+      <h2 id="prefetch">Prefetch on hover</h2>
+      <p>
+        Warm a route&rsquo;s data before the click. Pass a <code>prefetch</code>
+        callable to <code>NavLink</code> &mdash; it fires once on the first
+        pointer&#8209;enter or focus, priming the target route&rsquo;s
+        <code>$query</code> cache so the page paints instantly when the user commits.
+      </p>
+<pre><code>NavLink("Reports", {
+  to: "/reports",
+  prefetch: () =&gt; $query({ url: API + "/reports", key: "reports" })
+})</code></pre>
+
+      <h2 id="lazy">Lazy route loading</h2>
+      <p>
+        Router arms evaluate lazily &mdash; an arm&rsquo;s tree is only built when its
+        path matches. For code that should be <em>downloaded</em> on demand, wrap an
+        async chunk in <code>Lazy(loader, fallback?)</code>: it renders the
+        <code>fallback</code> until the dynamic import resolves, then swaps in the
+        real view. Combine with the <a href="modules.html#lazy">module loader</a> to
+        split large pages out of the initial bundle.
+      </p>
+<pre><code>pages = $router({
+  "/":        Home(),
+  "/reports": Lazy(() =&gt; import("./reports.aktion"), Spinner()),
+  default:    NotFound()
+})</code></pre>
+
+      <h2 id="scroll">Scroll restoration</h2>
+      <p>
+        Opt in with the <code>scroll-restoration</code> attribute on the host
+        <code>&lt;aktion-app&gt;</code> element. The runtime saves each page&rsquo;s
+        scroll position on the way out and restores it on back/forward, while a fresh
+        forward navigation scrolls to the top.
+      </p>
+<pre><code>&lt;aktion-app scroll-restoration="auto"&gt;&lt;/aktion-app&gt;
+&lt;!-- "auto" → restore on back/forward, top on fresh nav
+     "top"  → always scroll to top on every navigation --&gt;</code></pre>
+
       <h2 id="tabs">Tabs vs routing</h2>
       <p>
         Routing is for distinct <em>pages</em> with their own URLs &mdash; things

@@ -401,6 +401,179 @@ table.dt-table tr:hover td { background: rgba(255,255,255,0.03); }
 }
 .filter-chip.is-on { color: var(--dt-text); border-color: var(--dt-border-strong); background: var(--dt-bg-raised); }
 
+/* ---- Stat grid (perf / effect summaries) ---- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 6px;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  background: var(--dt-bg-inset);
+  border: 1px solid var(--dt-border);
+  border-radius: 7px;
+}
+.stat.is-link { cursor: pointer; }
+.stat.is-link:hover { border-color: var(--dt-accent); }
+.stat-val {
+  font-family: var(--dt-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dt-text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-val.t-warn { color: var(--dt-amber); }
+.stat-val.t-good { color: var(--dt-green); }
+.stat-val.t-bad { color: var(--dt-red); }
+.stat-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dt-text-faint);
+}
+
+/* ---- Horizontal bar rows (hot atoms) ---- */
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.bar-row-label {
+  flex: 0 0 34%;
+  font-family: var(--dt-mono);
+  color: var(--dt-purple);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-row-track {
+  flex: 1;
+  height: 10px;
+  background: var(--dt-bg-inset);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-row-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--dt-accent-soft), var(--dt-accent));
+  border-radius: 3px;
+}
+.bar-row-num {
+  flex: 0 0 auto;
+  font-family: var(--dt-mono);
+  color: var(--dt-text-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Insights ---- */
+.insights { display: flex; flex-direction: column; gap: 5px; }
+.insight {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--dt-border);
+  background: var(--dt-bg-inset);
+  color: var(--dt-text-dim);
+}
+.insight-ic { flex: 0 0 auto; font-weight: 700; }
+.insight.t-warn { border-color: rgba(240,179,94,0.4); }
+.insight.t-warn .insight-ic { color: var(--dt-amber); }
+.insight.t-bad { border-color: rgba(248,113,113,0.4); }
+.insight.t-bad .insight-ic { color: var(--dt-red); }
+.insight.t-good .insight-ic { color: var(--dt-green); }
+
+/* ---- Reactivity heat badge (state tree) ---- */
+.row .grow { flex: 1; min-width: 8px; }
+.heat { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.heat-bar {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--dt-bg-inset);
+  overflow: hidden;
+}
+.heat-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--dt-blue), var(--dt-amber));
+}
+.heat-num {
+  font-family: var(--dt-mono);
+  font-size: 9.5px;
+  color: var(--dt-text-faint);
+  min-width: 18px;
+  text-align: right;
+}
+
+/* ---- Sortable table headers ---- */
+table.dt-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table.dt-table th.sortable:hover { color: var(--dt-text-dim); }
+
+/* ---- Effect visual timeline ---- */
+.tl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 4px;
+}
+.tl-axis {
+  position: relative;
+  flex: 0 0 120px;
+  font-family: var(--dt-mono);
+  font-size: 9px;
+  color: var(--dt-text-faint);
+}
+.tl-axis-end { float: right; }
+.tl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-bottom: 1px solid rgba(43,47,56,0.4);
+}
+.tl-name {
+  flex: 0 0 38%;
+  font-family: var(--dt-mono);
+  font-size: 10.5px;
+  color: var(--dt-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-track {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  background: var(--dt-bg-inset);
+  border-radius: 4px;
+}
+.tl-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  margin-left: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--dt-bg-inset);
+}
+.tl-dot.green { background: var(--dt-green); }
+.tl-dot.blue { background: var(--dt-blue); }
+.tl-dot.purple { background: var(--dt-purple); }
+.tl-dot.grey { background: var(--dt-grey); }
+.tl-dot.red { background: var(--dt-red); }
+
 /* ---- Resize grip ---- */
 .resize {
   position: absolute;

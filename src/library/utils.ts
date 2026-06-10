@@ -2,7 +2,7 @@
  * DOM helpers shared by built-in components.
  */
 
-import { resolveIconClasses, type IconSize } from "../icons/index.js";
+import { resolveIconClasses, getCustomIcon, type IconSize } from "../icons/index.js";
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -379,8 +379,31 @@ export function renderIcon(
   if (!text) return null;
   const color = options.color ? sanitiseCssColor(options.color) : "";
   const style = color ? `color:${color};` : null;
-  const classes = resolveIconClasses(text);
   const wrapperClass = ["rui-icon", options.className].filter(Boolean).join(" ");
+
+  // Registered custom icon (inline SVG) wins over the Font Awesome lookup.
+  const custom = getCustomIcon(text);
+  if (custom) {
+    const span = el("span", {
+      class: `${wrapperClass} rui-icon-custom`,
+      "data-icon-size": options.size ?? null,
+      style,
+      "aria-hidden": "true",
+    });
+    if (/^\s*<svg[\s>]/i.test(custom)) {
+      span.innerHTML = custom;
+    } else {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("fill", "currentColor");
+      svg.innerHTML = custom;
+      span.appendChild(svg as unknown as Node);
+    }
+    return span;
+  }
+
+  const classes = resolveIconClasses(text);
   if (classes.length === 0) {
     return el("span", {
       class: wrapperClass,

@@ -107,14 +107,57 @@ Everything you need at runtime ships in a single bundle:
   `$toast.success/.error/.info/.warning`, `$toast.dismiss(id)`,
   `$toast.clear()`, and a reactive `$toast.items` list to render with
   `Toasts`/`Toast`.
+- **`$form({ values, rules, onSubmit })` — the form engine.** Managed
+  reactive form with per-field `$util.rules` validators (including async
+  ones via `$util.rules.asyncCustom` — think server-side uniqueness checks),
+  touched/dirty tracking, and `form.submit()` (alias `handleSubmit()`) that
+  validates — awaiting async rules — then calls `onSubmit`. Access
+  `form.values.field` (two-way bindable), `form.errors.field`,
+  `form.touched.field`, `form.dirty` (flips on the first edit, even via
+  two-way binding; clears on reset), `form.valid`, `form.submitting`
+  (stays `true` until an async `onSubmit` settles), `form.validating`
+  (async rules in flight), and call `form.setField()`, `form.touch()`,
+  `form.reset()`. `Input`/`TextArea`/`Select`/`NumberInput` accept
+  `onBlur`/`onFocus`, so validate-on-blur is one prop:
+  `Input("email", { value: form.values.email, onBlur: () => form.touch("email") })`.
+- **`$store` persistence + undo/redo.** Add `persist: "key"` to mirror the
+  store to `localStorage` (or `persistIn: "session"` for `sessionStorage`) — hydrates on mount. Add `history: true` (or a depth number) for full undo/redo: `store.undo()` / `store.redo()` / `store.canUndo` / `store.canRedo`.
+- **Universal `sx` / `animate` styling channel.** Every component accepts a
+  token-aware `sx` object — spacing (`p px py pt…`, logical `ps pe ms me`;
+  `px`/`mx` emit `padding-inline`/`margin-inline` so RTL apps mirror
+  automatically), sizing (`w h minW maxW…`), color (`bg color borderColor`,
+  gradient refs like `"gradient.brand"`), surface (`border radius shadow
+  opacity backdrop`), background imagery (`bgImage` + `bgOverlay` wash +
+  `bgSize`), typography (`fontSize weight textDecoration textAlign`),
+  flex/grid (`display direction align justify wrap grow shrink basis
+  columns`), position/layering (`position top right bottom left inset
+  zIndex` — layer tokens resolve through themeable `--rui-z-*` vars), and
+  interaction `states: { hover|focus|active|disabled|… }` compiled to
+  scoped CSS rules — plus `animate: "fade-up"` motion presets. Any value
+  accepts a `{ base, sm, md, lg, xl }` map that resolves to real `@media`
+  breakpoints. No stylesheet required.
+- **60+ new components** since v0.4: marketing bands (`Section`, `Split`,
+  `Bento`), motion (`Reveal`, `Transition`, `FlipList`, `Parallax`),
+  accessibility primitives (`VisuallyHidden`, `SkipLink`, `LiveRegion`,
+  `FocusTrap`), realtime (`TypingIndicator`, `PresenceAvatars`,
+  `ReactionPicker`, `LiveCursor`), e-commerce (`Cart`, `ProductCard`,
+  `OrderSummary`), canvas (`DrawingCanvas`, `SignaturePad`), scheduling
+  (`Calendar`), virtualization (`VirtualGrid`), and many more.
+- **RTL + logical layout.** Set `dir="rtl"` on `<aktion-app>` and the whole
+  tree flips (text direction, flex order, logical spacing). Programs need no
+  code change.
+- **SSR / SSG.** `renderToString(program, { path, initialState })` → `{ html, state }` for server-side rendering. `renderToStaticMarkup` for static pages.
+- **DX tooling.** `tailwindToSx(classString)` maps Tailwind classes to `sx`; `htmlToAktion(html)` imports common HTML/JSX; `componentSchema()` emits a stable JSON schema for editor autocomplete; `buildGallery()` generates a self-contained component explorer; `suggestComponent("Buttn")` returns typo candidates.
+- **Testing utilities.** `within(node)` for scoped queries, `axe(node)` for a11y audits from the `aktion-runtime/test` entry.
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
   across renders. Components that need to hold UI state get a
   `helpers.useInstanceState(...)` slot keyed by their position in the tree.
-- **A rich component library** of **170+ components** spanning layout,
+- **A rich component library** of **271 components** spanning layout,
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
-  editors, advanced UI, and standard helpers. See [Component library](#component-library).
+  editors, advanced UI, motion, marketing, e-commerce, accessibility,
+  realtime, and standard helpers. See [Component library](#component-library).
 - **Declarative side effects.** `$effect(() => { body }, [...deps])` for
   background work — anonymous blocks where the dependency list mixes
   state triggers (`$atom`), lifecycle triggers (`"mount"`, `"unmount"`,
@@ -138,9 +181,12 @@ Everything you need at runtime ships in a single bundle:
   wired up.
 - **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`,
   `brutalist`, `skyline`) plus full custom-token support via CSS custom
-  properties. **50+ design tokens** organised into `colors`, `radius`,
-  and `font` groups. Brand the UI from inside the script with
-  `$theme({...})` statement.
+  properties. **80+ design tokens** organised into `colors`, `radius`,
+  `font`, `spacing`, `shadows`, `gradients` (referenced as
+  `"gradient.brand"` from `sx`/`GradientText`), `zIndex` (layer tokens
+  feeding `sx.zIndex`), and `motion` groups — plus `fonts` (Google-Fonts
+  shorthand import) and `icons` (custom inline-SVG registration). Brand
+  the UI from inside the script with a `$theme({...})` statement.
 - **`$i18n` factory.** `const { t, setCurrentLanguage, getCurrentLanguage } = $i18n({ defaultLanguage, currentLanguage, translations })` builds a translation bundle keyed by language, with `{name}` placeholder interpolation.
 - **Font Awesome 6.7.2** auto-loaded — every `icon` prop accepts a Free
   Font Awesome name (no `fa-` prefix). Use `Icon(name, { variant?, size? })`
@@ -313,6 +359,8 @@ All members live on the `<aktion-app>` element.
 | `strict`        | `true` / unset                                  | Dev/strict mode. Surfaces silent failures as `console.warn`s — unknown identifiers that would resolve to `null`, and trailing `{...}` objects passed to a user component whose keys match no parameter (the silent named→positional flip). Off by default; enable while developing. |
 | `router-mode`   | `hash` (default) / `history`                    | URL strategy. `history` uses the History API for clean `/about` URLs (needs an `index.html` fallback on the server); `hash` works on any static host. |
 | `router-base`   | path string (e.g. `/app`)                       | Sub-directory the SPA is served under, stripped from / prepended to URLs in `history` mode. |
+| `dir`           | `ltr` / `rtl` / `auto`                          | Writing direction. Reflects onto the render root so logical CSS properties, flex order, and text direction flip automatically. Programs need no code change. |
+| `scroll-restoration` | `auto` / `top`                             | Opt-in scroll restoration. `auto` restores per-path scroll on back/forward and jumps to top on fresh navigation; `top` always jumps to top. |
 
 Routing and JavaScript execution inside `effect` / action bodies are
 always available — no host attribute, no allow-list. To omit those
@@ -345,6 +393,30 @@ surfaces from the *generated prompt*, build it via
 | `hydrateState(snapshot)`                                        | Apply a snapshot to the live store and schedule a re-render. Atoms not in the snapshot are untouched.                        |
 | `loadSnapshot({ programText, state })`                          | Atomic program + state load. The next render plans the program with the hydrated state already in place.                     |
 | `applyDelta(ops)`                                               | Apply a structured delta (`patch` / `replace` / `append` / `new` / `delete`). User `$state` is preserved across the diff.    |
+
+### Module exports
+
+Beyond the element, `aktion-runtime` exports a set of standalone utilities importable from subpaths:
+
+```ts
+import { renderToString, renderToStaticMarkup } from "aktion-runtime";
+// → { html, state } for SSR; renderToStaticMarkup for SSG
+
+import { htmlToAktion, tailwindToSx, componentSchema, buildGallery, suggestComponent } from "aktion-runtime";
+// htmlToAktion(html)           → Aktion program string from common HTML/JSX
+// tailwindToSx("p-4 bg-white") → sx object ({ p: "m", bg: "surface", _unmapped: [...] })
+// componentSchema()             → stable JSON schema for editor tooling
+// buildGallery()                → self-contained HTML component explorer
+// suggestComponent("Buttn")     → ["Button", ...] typo suggestions
+
+import { render, within, axe, cleanup } from "aktion-runtime/test";
+// render(program, opts) → Screen with Testing-Library-style queries + interactions
+// within(node)          → scoped query set
+// axe(node)             → a11y audit (returns array of violations)
+
+import { getDiagnostics, getCompletions, formatProgram } from "aktion-runtime/language";
+// DOM-free language service for editor integrations
+```
 
 ### Events
 
@@ -515,23 +587,23 @@ $app(pages)
   `.status`, `.loading`, `.headers`, `.lastUpdated`, `.refetch()`,
   `.cancel()`, and a settable `.onDone` callback that fires each time the
   request settles (handy for `$todos.refetch()` after a write).
-- `$query({ url, key?, ttl? })` — a **cached, deduplicated** read built on
-  `$http`. Identical queries (same `key`, or same method + url + query +
-  body) share one in-flight request and one cached bag, so the same data
-  fetched from several components hits the network once. Optional `ttl` (ms)
-  auto-refetches stale data. Same reactive bag as `$http`.
-- `$mutation({ url, method? })` — a **deferred** write that fires only when
+- `$query({ url, key?, ttl?, refetchInterval?, refetchOnFocus?, refetchOnReconnect? })` — a **cached, deduplicated** read built on
+  `$http`. Identical queries share one bag. Optional `ttl` auto-refetches stale data; `refetchInterval` (ms) polls a live feed; `refetchOnFocus` / `refetchOnReconnect` refresh on tab focus / reconnect. Add `infinite: { param, limit, mode, select }` for a paginated list — `$feed.loadMore()` appends the next page while `$feed.hasMore` is true. Pass `gql` (+ optional `variables`) to POST a GraphQL document and unwrap `.data` automatically.
+- `$mutation({ url, method?, optimistic?, invalidates? })` — a **deferred** write that fires only when
   you call `.mutate(overrides?)` (not on render; `method` defaults to
-  `POST`). The bag exposes `.loading` / `.error` / `.data`, plus `.reset()`
-  and a settable `.onDone`. `.mutate()` resolves with the response body.
-  Assign it to an atom and trigger it from a handler:
-  `$save = $mutation({ url }); Button("Save", { onClick: () => $save.mutate({ body: $form }) })`.
+  `POST`). `optimistic: (overrides) => { … }` runs synchronously before the request and auto-rolls-back if it fails; `invalidates: ["key"]` refetches matching cached queries after success. The bag exposes `.loading` / `.error` / `.data`, plus `.reset()` and a settable `.onDone`. Use `$util.invalidate(keys)` to manually trigger cache invalidation from anywhere.
+- `$socket({ url, protocols?, bufferSize?, reconnect? })` — reactive **WebSocket**. Read `.status` (`"connecting" | "open" | "closed"`), `.connected`, `.last`, `.messages`, `.attempts`; call `.send(data)` (queues while connecting, flushes on open) or `.close()` (stops for good). `reconnect: true` (or a max-attempt number) retries dropped connections with exponential backoff. Auto-tears-down on re-plan.
+- `$sse({ url, event?, withCredentials?, bufferSize? })` — reactive **Server-Sent Events** stream with the same `.status`/`.connected`/`.last`/`.messages`/`.close()` surface (EventSource reconnects natively).
 - `pages = $router({ "/path": Component(), default: NotFound() })` —
   function-call router. The reserved `route` handle exposes the
   reactive surface (`route.path`, `route.params`, `route.query`,
-  `route.pattern`) and a `route.navigate("/path")` method; each arm
-  body additionally receives a scoped `params` loop var with its
-  captures.
+  `route.pattern`) and a `route.navigate("/path")` method. Supports
+  **nested layout routes** (`"/app": { layout: AppShell, routes: {...} }` —
+  the shell stays mounted while only the `outlet` swaps), **navigation guards**
+  (`$util.onNavigate(({ to, from }) => …)` — return `false` to block or a
+  path to redirect), **query-param state** (`$util.url.setQuery("tab","v")`),
+  **lazy routes** (`Lazy(() => import(…))`), and **scroll restoration**
+  (set `scroll-restoration="auto"` on `<aktion-app>`).
 - Two-way binding is implicit: pass a `$variable` (or a member chain
   rooted at one — `value: $form.email`) as an input prop and the
   runtime wires it both ways.
@@ -564,7 +636,23 @@ $app(pages)
   `$util.groupBy`, `$util.format`, `$util.formatDate`, `$util.plural`, `$util.range`,
   `$util.addDays`, `$util.pick`, `$util.omit`, `$util.merge`, `$util.cloneDeep`,
   `$util.chunk`, `$util.partition`, `$util.keyBy`, `$util.zip`, `$util.flatten`,
-  `$util.count`, …). Never carry hidden state — safe to call anywhere.
+  `$util.count`, `$util.slugify`, `$util.truncate`, `$util.initials`, `$util.currency`,
+  `$util.bytes`, `$util.relativeTime`, `$util.uuid`, `$util.copy` (async — resolves
+  `true` only when the clipboard write succeeds), `$util.sleep(ms)`,
+  `$util.debounceFn`, `$util.throttleFn` (leading + trailing edge), …). Never
+  carry hidden state — safe to call anywhere.
+  Also exposes **reactive env getters** (`$util.scroll`, `$util.viewport`,
+  `$util.breakpoint`, `$util.media`, `$util.mouse`, `$util.url` — lazy listeners,
+  re-render on change; `$util.url.setQuery`/`.removeQuery` write query params),
+  **styling/validation sub-namespaces** (`$util.style.cx`,
+  `.gradient`, `.alpha`, `.clamp`, `.token`, `.toStyle`; `$util.rules.required()`,
+  `.email()`, `.min()`, `.pattern()`, `.custom()`, `.asyncCustom()` — awaited by
+  `$form` —, `.validate()`, `.validateAll()`), **computed helper**
+  (`$util.derived(fn)`), **side-effect hooks** (`$util.onError`, `$util.onNavigate`,
+  `$util.onRequest`, `$util.onResponse`, `$util.invalidate`), and **device/platform
+  helpers** (`$util.vibrate`, `.share`, `.readClipboard`, `.geolocate`, `.isOnline`,
+  `.deviceType`, `.worker(pureFn)`, `.registerServiceWorker`, `.webManifest`,
+  `.nativeShell`, `.isNativeApp`).
 - **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
   raw HTML elements and `Styles(css)` for raw CSS injected into the
   shadow root. Use only when the standard component library cannot
@@ -870,6 +958,20 @@ only components that read it), and store fields support two-way binding
 component's local `$state` / `$name = value` for state one component owns.
 See the [Global state guide](https://asfand-dev.github.io/aktion/stores.html).
 
+**Persistence.** Add `persist: "key"` and the store's data round-trips to `localStorage` on every change and hydrates on mount. Use `persistIn: "session"` for `sessionStorage`. `persist` and `persistIn` are config-only — they're never exposed as state fields.
+
+**Undo/redo.** Add `history: true` (or a depth cap) and the store records per-mutation snapshots. `store.undo()` / `store.redo()` / `store.clearHistory()` plus reactive `store.canUndo` / `store.canRedo` for wiring button `disabled` states.
+
+```js
+doc = $store({
+  persist: "my-doc",   // survives reload
+  history: 25,         // undo/redo up to 25 steps
+  title: "Untitled",
+  setTitle: (s, v) => { s.title = v }
+})
+// doc.undo() / doc.redo() / doc.canUndo / doc.canRedo
+```
+
 ### Component-scoped effects
 
 `$effect(() => { … }, [...deps])` blocks can live at the program top level
@@ -926,7 +1028,7 @@ deep authoring guide [`coding-gen-skill.md`](./coding-gen-skill.md).
 
 ## Component library
 
-The bundle ships **170+ components** grouped by domain. Reach for **pattern composites**
+The bundle ships **271 components** grouped by domain. Reach for **pattern composites**
 (`Hero`, `PageHeader`, `Stats`, `Toolbar`, `EmptyState`, `Timeline`,
 `KanbanBoard`, `DescriptionList`, `PricingTable`, …) before hand-rolling
 the equivalent with `Card` + `Stack` — they're tuned to produce dense,
@@ -934,7 +1036,7 @@ production-quality SaaS UI in a single line.
 
 | Group              | Components |
 | ------------------ | ---------- |
-| **Layout**         | `Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky`, `ResizablePanels`, `MasonryGrid` |
+| **Layout**         | `Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`, `Container`, `Box`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky` (with a `data-stuck` pinned hook), `ResizablePanels`, `MasonryGrid`, `Section` (page band with eyebrow/title/subtitle), `Split` (sticky two-pane), `Bento`/`BentoCell` (asymmetric grid), `Overlay`/`OverlayItem` (anchored layering), `Fragment` |
 | **Content**        | `Text`, `Image`, `Icon`, `Badge`, `BadgeList`, `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `Markdown`, `Kbd` |
 | **Forms**          | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons`, `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm` |
 | **Data**           | `Table`, `Col`, `DataGrid`, `List`, `ListItem`, `StatCard`, `Stats`, `Sparkline`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList` |
@@ -947,6 +1049,16 @@ production-quality SaaS UI in a single line.
 | **Patterns**       | `Hero`, `PageHeader`, `SectionHeader`, `Toolbar`, `EmptyState`, `Timeline`, `TimelineItem`, `ActivityLog`, `FeatureGrid`, `FeatureItem`, `MediaCard`, `Testimonial`, `ProfileCard`, `Comment`, `Banner`, `Notification`, `InboxPanel`, `OnboardingChecklist`, `KanbanBoard`, `KanbanColumn`, `KanbanCard`, `DescriptionList`, `DescriptionItem`, `StatusDot`, `PricingTable`, `PricingCard`, `LoadingState`, `ErrorState`, `SuccessState`, `Tour`, `Spotlight` |
 | **App shell**      | `AppShell`, `Sidebar`, `SidebarSection`, `SidebarItem` (supports `to` for router navigation), `SplitView` |
 | **Advanced UI**    | `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`, `VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`, `Truncate`, `InlineEdit`, `NotificationBell` |
+| **Marketing**      | `NavBar` (sticky/blur + mobile burger menu), `Brand`, `Footer`, `FooterColumn`, `LogoCloud`, `LogoChip`, `Display`, `Heading`, `Eyebrow`, `GradientText`, `CountUp`, `Metric`, `MetricStrip`, `CodeWindow`, `BrowserFrame`, `Terminal`, `Backdrop` (grid/blobs/particles), `ThemeToggle`, `Swatch`, `Prose` |
+| **E-commerce**     | `ProductCard`, `PriceTag`, `QuantityStepper`, `VariantSelector`, `OrderSummary`, `Cart` |
+| **Motion & gestures** | `Reveal` (scroll-triggered), `Transition` (enter/exit), `FlipList` (FLIP reorder), `RouteView` (route transitions), `Parallax`, `OnGesture` (swipe/pan/longPress/doubleTap), `Sortable`, `Draggable`, `DropZone`, `Confetti`, `Lottie` |
+| **Overlays**       | `Sheet`, `BottomSheet`, `ConfirmDialog` — all with Escape-to-close, a Tab focus trap, and focus restore |
+| **Content & docs** | `TableOfContents`, `ReadingProgress`, `ScrollSpy`, `AuthorByline`, `ShareButtons`, `RelativeTime`, `CopyButton`, `KbdShortcut`, `QRCode`, `Svg` (sanitised inline SVG) |
+| **Realtime & social** | `TypingIndicator`, `PresenceAvatars`, `ReactionPicker`, `LiveCursor`, `TabBar` (mobile bottom nav) |
+| **Scheduling**     | `Calendar` (month grid with arrow-key navigation, event chips/dots), `CountdownTimer` |
+| **Canvas**         | `DrawingCanvas`, `SignaturePad` |
+| **Accessibility**  | `VisuallyHidden`, `SkipLink`, `LiveRegion`, `FocusTrap` |
+| **Utility**        | `SegmentedControl`, `FloatingActionButton`, `SpeedDial`, `BackToTop`, `VirtualGrid` (windowed 2-D grid) |
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
 | **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `OnMount`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection / lifecycle listeners or raw class / style to ANY component without it needing a dedicated prop. `OnMount(child, { onMount, onUnmount })` is the DOM-ref escape hatch — `onMount(node)` fires once after attach so you can measure, focus, or hand the node to an imperative library. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
@@ -1074,9 +1186,11 @@ Themes are flat maps of CSS-valued strings, grouped by domain:
 | Semantic     | `colorSuccess`, `colorWarning`, `colorDanger`, `colorInfo`                                                                                                                          |
 | Typography   | `fontFamily`, `fontFamilyHeading`, `fontFamilyMono`, `fontSizeBase`, `fontSizeHeading`, `fontSizeTitle`, `fontWeightBody`, `fontWeightHeading`, `letterSpacingHeading`, `headingTextTransform` |
 | Shape        | `radiusXs`, `radiusSm`, `radiusMd`, `radiusLg`, `radiusPill`, `radiusButton`, `radiusInput`, `borderWidth`, `shadowSm`, `shadowMd`, `shadowLg`                                       |
-| Spacing      | `spacingXs`, `spacingS`, `spacingM`, `spacingL`, `spacingXl`                                                                                                                        |
+| Spacing      | `spacingXs`, `spacingS`, `spacingM`, `spacingL`, `spacingXl`, `spacing2xl`, `spacing3xl`                                                                                            |
+| Gradients    | `gradientBrand`, `gradientAccent`, `gradientWarm`, `gradientCool`, `gradientSuccess`, `gradientDanger` — referenced as `"gradient.brand"` from `sx`, `GradientText`, `fill` props    |
 | Buttons      | `buttonFontWeight`, `buttonTextTransform`, `buttonLetterSpacing`, `buttonPaddingY`, `buttonPaddingX`                                                                                |
-| Motion       | `transitionDuration`                                                                                                                                                                |
+| Motion       | `transitionDuration`, `motionFast`, `motionBase`, `motionSlow`, `motionEase` (optional — set via `$theme({ motion: {...} })`)                                                       |
+| Layers       | `zBase`, `zRaised`, `zDropdown`, `zSticky`, `zBanner`, `zOverlay`, `zModal`, `zPopover`, `zToast`, `zTooltip` (optional — set via `$theme({ zIndex: {...} })`; consumed by `sx.zIndex` tokens) |
 | Charts       | `chart1`–`chart6`                                                                                                                                                                   |
 
 ### Custom token map from the host
@@ -1115,11 +1229,35 @@ $theme({
 $app(Column([CardHeader("GitHub-style page"), Buttons([Button("New repository")])]))
 ```
 
-`$theme` expects the **structured** form — top-level groups `colors` /
-`radius` / `font` (plus metadata keys `name` and `direction`). Removing
-the `$theme(...)` line snaps the UI back to
+`$theme` expects the **structured** form — top-level token groups
+(`colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`,
+`zIndex`, `motion`, `fonts`, `icons`) plus metadata keys `name` and
+`direction`. Removing the `$theme(...)` line snaps the UI back to
 the base theme. Unknown keys are ignored silently, so typos in an
 LLM-emitted token map can never break the page.
+
+**Full property list** (all optional; token values are strings — bare
+numbers are coerced):
+
+| Key         | Type                | Notes                                                                                                                                                                                              |
+| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`      | `string`            | Selects a built-in theme as the base palette (`"dark"`, `"neon"`, `"pastel"`, `"glass"`, `"brutalist"`, `"skyline"`); structured overrides layer on top. Unknown names are ignored.                |
+| `direction` | `"ltr"` \| `"rtl"`  | Reading direction. Metadata only — not applied as a token.                                                                                                                                        |
+| `colors`    | `{ [key]: string }` | CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info`. |
+| `radius`    | `{ [key]: string }` | CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.                                                                                                                       |
+| `font`      | `{ [key]: string }` | CSS strings. Keys: `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading`. Also accepts `import` for web fonts (see `fonts`). |
+| `spacing`   | `{ [key]: string }` | CSS length strings. Keys: `xs`, `s`, `m`, `l`, `xl`, `2xl`, `3xl`.                                                                                                                                 |
+| `shadows`   | `{ [key]: string }` | CSS shadow strings. Keys: `sm`, `md`, `lg`.                                                                                                                                                        |
+| `gradients` | `object`            | Named gradients. Keys: `brand`, `accent`, `warm`, `cool`, `success`, `danger`. Values: color-stop arrays (`["#6366f1", "#ec4899"]`), `{ stops, angle? }`, or a safe gradient string.               |
+| `zIndex`    | `object`            | Layer tokens (numbers OK). Keys: `base`, `raised`, `dropdown`, `sticky`, `banner`, `overlay`, `modal`, `popover`, `toast`, `tooltip`.                                                              |
+| `motion`    | `{ [key]: string }` | Motion tokens. Keys: `fast`, `base`, `slow`, `ease`.                                                                                                                                               |
+| `fonts`     | `object`            | Web-font loader: `{ import: ["Inter:400,700"] }` (Google Fonts shorthand).                                                                                                                         |
+| `icons`     | `object`            | Custom inline-SVG icons: `{ logo: "<path …/>" }` — usable anywhere a Font Awesome name works.                                                                                                      |
+
+Tokens outside these groups (line-height, letter-spacing, heading
+text-transform, border width, button styling, chart series, transition
+duration) are base-theme-only — set them from the host via
+`el.setTheme(...)` or CSS variables, not `$theme({...})`.
 
 ### Host-page CSS variable override
 
@@ -1221,6 +1359,24 @@ notFoundPage  = Callout("Not found", { description: `We couldn't find ${route.pa
 - Route patterns support literal segments (`"/about"`), parameter
   segments (`"/users/:id"` → `params.id`), and trailing wildcards
   (`"/docs/*"` → `params._`).
+- **Nested layout routes** — an arm shaped `{ layout, routes }` matches as
+  a path *prefix*: the shell stays mounted while the matched child binds to
+  the `outlet` identifier inside the layout (params merge parent + child;
+  layouts compose).
+- **Navigation guards** — `$util.onNavigate(({ to, from }) => …)`: return
+  `false` to block, a path string to redirect (`"/login"`), anything else
+  to allow. Enforced for in-app navigation, browser back/forward, and
+  manual URL edits.
+- **Query-param state** — `$util.url.setQuery("sort", v)` /
+  `.removeQuery("sort")` write the URL query in place (shareable filters /
+  tabs); read back reactively via `$util.url.query` or `route.query`.
+- **Scroll restoration** — set `scroll-restoration="auto"` on
+  `<aktion-app>` to restore per-path scroll on back/forward (`"top"`
+  always jumps to top). **Route transitions** — wrap the outlet in
+  `RouteView(pages, { routeKey: route.path, animation: "fade" })` to
+  replay an entrance animation on navigation. **Prefetch** —
+  `NavLink(..., { prefetch: () => $query({...}) })` warms a query cache on
+  first hover/focus.
 - `NavLink(label, { to, variant?, exact?, icon? })` is a router-aware
   anchor that intercepts clicks and reflects `data-active="true"` for the
   current path.
@@ -1383,6 +1539,20 @@ import {
   uses them under the hood. `getCompletions` is **scope-aware**: alongside
   the library + reserved words it surfaces the symbols declared in the
   current document — your own reactive atoms, components, and actions.
+
+### Migration & DX tooling
+
+The same entry exports the migration/DX suite:
+
+| Export | What it does |
+| ------ | ------------ |
+| `htmlToAktion(html)` | Convert static HTML to an Aktion program — common tags map to components, `class` attributes run through `tailwindToSx` (mapped utilities become `sx`, leftovers stay under `className`), and `flex`/`flex-col` containers become `Row`/`Column`. |
+| `tailwindToSx(classString)` | Map Tailwind utilities to an `sx` object — spacing/color/typography/flex/grid/radius/shadow/sizing/position/z-index/overflow, with responsive prefixes (`md:p-8`) becoming `sx` breakpoint maps and state prefixes (`hover:bg-primary`) becoming `sx.states` entries. Unrecognised classes come back under `_unmapped`. |
+| `componentSchema(library)` | Stable, machine-readable JSON schema of every component (props/types/enums/flags) for editor autocomplete and release diffing. |
+| `buildGallery(library)` | Self-contained HTML component explorer ("Storybook page") generated from the schema. |
+| `suggestComponent(name, library)` | "Did you mean?" typo candidates by edit distance. |
+| `renderToString(program, opts)` / `renderToStaticMarkup` | SSR/SSG — render a program to `{ html, state }` under any DOM (browser or Node + happy-dom/jsdom); pair with `StateStore.hydrate`. From the main entry. |
+| `within(node)` / `axe(node)` | Testing helpers from `aktion-runtime/test` — scoped queries and a dependency-free a11y audit (`img-alt`, `svg-name`, `button-name`, `link-name`, `label` — with `aria-labelledby` resolution —, `duplicate-id`, `tabindex`). |
 
 ---
 

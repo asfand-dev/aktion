@@ -83,6 +83,16 @@ export interface EndpointResource {
   refetch: () => Promise<void>;
   cancel: () => void;
   /**
+   * Infinite/paginated query extras (VI.1), present only when the resource was
+   * created with `$query({ infinite: {...} })`. `data` holds the flattened
+   * items across every loaded page.
+   */
+  loadMore?: () => Promise<void>;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  page?: number;
+  pages?: unknown[];
+  /**
    * Optional completion callback. Fires once each time a request settles
    * (success *or* error) — the initial load and every `refetch()`. It does
    * NOT fire when a request is superseded or `cancel()`led. Authors assign
@@ -116,10 +126,34 @@ export function isEndpointResource(value: unknown): value is EndpointResource {
 
 export class HttpRuntime {
   private interceptors: HttpInterceptors = {};
+  /**
+   * Program-level interceptors registered in-program via
+   * `$util.onRequest` / `$util.onResponse` (suggestions-global VI.5). Kept in
+   * a separate layer from host interceptors so a replan can wipe them without
+   * disturbing host glue. Request interceptors run host→program; response
+   * interceptors run program→host (inner-to-outer, the usual convention).
+   */
+  private programInterceptors: HttpInterceptors = {};
 
   /** Merge new interceptors on top of any previously-registered ones. */
   registerInterceptors(interceptors: HttpInterceptors): void {
     this.interceptors = { ...this.interceptors, ...interceptors };
+  }
+
+  /** Merge in-program interceptors on top of any already registered. */
+  registerProgramInterceptors(interceptors: HttpInterceptors): void {
+    this.programInterceptors = { ...this.programInterceptors, ...interceptors };
+  }
+
+  /** Drop every in-program interceptor (called on replan so they don't leak). */
+  clearProgramInterceptors(): void {
+    this.programInterceptors = {};
+  }
+
+  /** Notify both interceptor layers of a request error. */
+  private fireError(error: unknown, request: HttpRequest): void {
+    this.interceptors.onError?.(error, request);
+    this.programInterceptors.onError?.(error, request);
   }
 
   /**
@@ -134,15 +168,18 @@ export class HttpRuntime {
 
   /**
    * Issue a single HTTP request. Runs through `onRequest`/`onResponse`
-   * interceptors and surfaces a `retry()` one-shot inside `onResponse`.
+   * interceptors (host + program layers) and surfaces a `retry()` one-shot
+   * inside each `onResponse`.
    */
   async request(input: HttpRequest): Promise<HttpResponse> {
     let req: HttpRequest = { ...input, headers: { ...input.headers } };
-    if (this.interceptors.onRequest) {
+    const requestChain = [this.interceptors.onRequest, this.programInterceptors.onRequest];
+    for (const onRequest of requestChain) {
+      if (!onRequest) continue;
       try {
-        req = await this.interceptors.onRequest(req);
+        req = await onRequest(req);
       } catch (err) {
-        this.interceptors.onError?.(err, req);
+        this.fireError(err, req);
         throw err;
       }
     }
@@ -181,18 +218,20 @@ export class HttpRuntime {
 
     try {
       let response = await exec();
-      if (this.interceptors.onResponse) {
+      const responseChain = [this.programInterceptors.onResponse, this.interceptors.onResponse];
+      for (const onResponse of responseChain) {
+        if (!onResponse) continue;
         let retried = false;
         const retry = async (): Promise<HttpResponse> => {
           if (retried) return response;
           retried = true;
           return exec();
         };
-        response = await this.interceptors.onResponse(response, retry);
+        response = await onResponse(response, retry);
       }
       return response;
     } catch (err) {
-      this.interceptors.onError?.(err, req);
+      this.fireError(err, req);
       throw err;
     }
   }
@@ -226,7 +265,32 @@ const RESERVED_CONFIG_KEYS = new Set([
   "body",
   "query",
   "signal",
+  "gql",
+  "variables",
+  "optimistic",
+  "invalidates",
 ]);
+
+/**
+ * Refetch every cached query whose key contains any of the given substrings
+ * (VI.2). Used by `$mutation({ invalidates: [...] })` and `$util.invalidate`.
+ *
+ * Matching is deliberately SUBSTRING-based: cache keys are derived from the
+ * request (url + params), so `invalidates: ["/api/posts"]` refreshes the
+ * list, every page of it, and any filtered variant in one go. The trade-off
+ * is that a short needle ("post") can over-invalidate ("composting") — use
+ * a path-ish needle ("/posts") when precision matters.
+ */
+export function invalidateQueries(ctx: EvaluationContext, keys: unknown): void {
+  const list = Array.isArray(keys) ? keys : keys != null ? [keys] : [];
+  const needles = list.map((k) => String(k)).filter(Boolean);
+  if (needles.length === 0) return;
+  for (const [cacheKey, resource] of ctx.queryCache) {
+    if (needles.some((n) => cacheKey.includes(n))) {
+      if (!resource.loading) void resource.refetch();
+    }
+  }
+}
 
 /**
  * Build an `HttpRequest` from the user-supplied configuration object
@@ -234,13 +298,20 @@ const RESERVED_CONFIG_KEYS = new Set([
  * `headers`, `body`, and a `query` shorthand whose entries are appended
  * to the URL as a querystring. Every other key is forwarded verbatim as
  * a `fetch` option (`credentials`, `mode`, `cache`, `redirect`, …).
+ *
+ * GraphQL (VI.6): when `gql` (a query/mutation document string) is present
+ * the request becomes a `POST` with a `{ query, variables }` JSON body, so
+ * `$query({ url: "/graphql", gql: "{ viewer { login } }" })` just works.
  */
 function buildRequestFromConfig(config: unknown): HttpRequest {
   const cfg = (config && typeof config === "object" && !Array.isArray(config))
     ? (config as Record<string, unknown>)
     : {};
   const url = typeof cfg.url === "string" ? cfg.url : "";
-  const method = (typeof cfg.method === "string" ? cfg.method.toUpperCase() : "GET") as HttpMethod;
+  const isGraphQL = typeof cfg.gql === "string" && cfg.gql.trim().length > 0;
+  const method = isGraphQL
+    ? "POST" as HttpMethod
+    : (typeof cfg.method === "string" ? cfg.method.toUpperCase() : "GET") as HttpMethod;
   const headers: Record<string, string> = {};
   if (cfg.headers && typeof cfg.headers === "object" && !Array.isArray(cfg.headers)) {
     for (const [k, v] of Object.entries(cfg.headers as Record<string, unknown>)) {
@@ -267,7 +338,9 @@ function buildRequestFromConfig(config: unknown): HttpRequest {
     url: finalUrl,
     method,
     headers,
-    body: cfg.body,
+    body: isGraphQL
+      ? { query: cfg.gql, variables: asRecord(cfg.variables) }
+      : cfg.body,
   };
   if (Object.keys(init).length > 0) req.init = init;
   if (cfg.signal instanceof AbortSignal) req.signal = cfg.signal;
@@ -346,12 +419,21 @@ export function createHttpResource(
       const response = await ctx.http.request(req);
       if (runId !== generation) return; // superseded by a newer run / cancel
       const ok = response.status >= 200 && response.status < 300;
-      if (ok) {
-        resource.data = response.body;
+      // GraphQL (VI.6): unwrap `{ data, errors }` so `.data` is the payload and
+      // a GraphQL-level `errors` array surfaces through `.error` even on a 200.
+      const isGraphQL = typeof (asRecord(config).gql) === "string";
+      const gqlBody = isGraphQL ? asRecord(response.body) : null;
+      const gqlErrors = gqlBody && Array.isArray(gqlBody.errors) && gqlBody.errors.length > 0
+        ? gqlBody.errors
+        : null;
+      if (ok && !gqlErrors) {
+        resource.data = isGraphQL ? gqlBody!.data : response.body;
         resource.state = "data";
         resource.error = undefined;
       } else {
-        resource.error = { status: response.status, body: response.body };
+        resource.error = gqlErrors
+          ? { graphqlErrors: gqlErrors }
+          : { status: response.status, body: response.body };
         resource.state = "error";
       }
       resource.status = response.status;
@@ -397,6 +479,11 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** Coerce a config flag to boolean (accepts `true` / `"true"`). */
+function asBoolean(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
 /** Stable cache key for a query config (used when no explicit `key` given). */
 function deriveQueryKey(cfg: Record<string, unknown>): string {
   const method = typeof cfg.method === "string" ? cfg.method.toUpperCase() : "GET";
@@ -405,7 +492,15 @@ function deriveQueryKey(cfg: Record<string, unknown>): string {
   let b = "null";
   try { q = JSON.stringify(cfg.query ?? null); } catch { /* keep default */ }
   try { b = JSON.stringify(cfg.body ?? null); } catch { /* keep default */ }
-  return `${method} ${url} ${q} ${b}`;
+  // GraphQL documents + variables participate in the key so two different
+  // queries against the same endpoint cache separately.
+  let g = "null";
+  if (typeof cfg.gql === "string") {
+    let v = "null";
+    try { v = JSON.stringify(cfg.variables ?? null); } catch { /* keep default */ }
+    g = `${cfg.gql}|${v}`;
+  }
+  return `${method} ${url} ${q} ${b} ${g}`;
 }
 
 /**
@@ -423,6 +518,15 @@ export function createQueryResource(
   ctx: EvaluationContext,
 ): EndpointResource {
   const cfg = asRecord(config);
+  // Infinite / paginated query (VI.1): a dedicated bag that accumulates pages.
+  if (cfg.infinite && typeof cfg.infinite === "object") {
+    const key = cfg.key != null ? String(cfg.key) : deriveQueryKey(cfg);
+    const cached = ctx.queryCache.get(key);
+    if (cached) return cached;
+    const resource = createInfiniteQueryResource(cfg, ctx);
+    ctx.queryCache.set(key, resource);
+    return resource;
+  }
   const ttl = typeof cfg.ttl === "number" ? cfg.ttl : 0;
   const key = cfg.key != null ? String(cfg.key) : deriveQueryKey(cfg);
   const cache = ctx.queryCache;
@@ -441,11 +545,147 @@ export function createQueryResource(
   // Strip query-layer-only keys so they aren't forwarded to `fetch`.
   const httpConfig: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(cfg)) {
-    if (k === "key" || k === "ttl") continue;
+    if (k === "key" || k === "ttl" || k === "refetchInterval" || k === "refetchOnFocus" || k === "refetchOnReconnect") continue;
     httpConfig[k] = v;
   }
   const resource = createHttpResource(httpConfig, ctx);
   cache.set(key, resource);
+
+  // Background refetch (suggestions-global VI.4). Set up ONCE per resource
+  // (it's cached across renders) and torn down via ctx.disposers on replan.
+  const interval = typeof cfg.refetchInterval === "number" ? cfg.refetchInterval : 0;
+  if (interval > 0) {
+    const id = setInterval(() => { if (!resource.loading) void resource.refetch(); }, Math.max(250, interval));
+    ctx.disposers.push(() => clearInterval(id));
+  }
+  if (asBoolean(cfg.refetchOnFocus) && typeof window !== "undefined") {
+    const onFocus = (): void => { if (!resource.loading) void resource.refetch(); };
+    window.addEventListener("focus", onFocus);
+    ctx.disposers.push(() => window.removeEventListener("focus", onFocus));
+  }
+  if (asBoolean(cfg.refetchOnReconnect) && typeof window !== "undefined") {
+    const onOnline = (): void => { if (!resource.loading) void resource.refetch(); };
+    window.addEventListener("online", onOnline);
+    ctx.disposers.push(() => window.removeEventListener("online", onOnline));
+  }
+  return resource;
+}
+
+/**
+ * `$query({ url, infinite: { param?, start?, limit? } })` — an infinite /
+ * paginated read (VI.1). `data` holds the flattened items across every loaded
+ * page; `loadMore()` fetches and appends the next page; `hasMore` is true while
+ * the last page came back full (`length === limit`). `param` is the page/offset
+ * query key (default `"page"`); `mode` is `"page"` (1,2,3…) or `"offset"`
+ * (0, limit, 2·limit…). An optional `select(body)` maps a page body to its item
+ * array when the items are nested (e.g. `body => body.results`).
+ */
+function createInfiniteQueryResource(
+  cfg: Record<string, unknown>,
+  ctx: EvaluationContext,
+): EndpointResource {
+  const opts = asRecord(cfg.infinite);
+  const param = typeof opts.param === "string" ? opts.param : "page";
+  const limit = typeof opts.limit === "number" && opts.limit > 0 ? opts.limit : 20;
+  const start = typeof opts.start === "number" ? opts.start : (opts.mode === "offset" ? 0 : 1);
+  const mode = opts.mode === "offset" ? "offset" : "page";
+  const select = typeof opts.select === "function" ? (opts.select as (b: unknown) => unknown) : null;
+  const notify = () => ctx.notify?.();
+  const pages: unknown[] = [];
+  let pageIndex = start;
+  let inFlight = false;
+
+  const baseConfig: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (k === "key" || k === "ttl" || k === "infinite") continue;
+    baseConfig[k] = v;
+  }
+
+  const toItems = (body: unknown): unknown[] => {
+    const picked = select ? select(body) : body;
+    return Array.isArray(picked) ? picked : [];
+  };
+  const flatten = (): unknown[] => {
+    const out: unknown[] = [];
+    for (const p of pages) for (const item of toItems(p)) out.push(item);
+    return out;
+  };
+
+  const resource: EndpointResource = {
+    state: "loading",
+    data: [],
+    error: undefined,
+    loading: true,
+    hasMore: true,
+    loadingMore: false,
+    page: start,
+    pages,
+    refetch: async () => {
+      if (inFlight) return; // a reset mid-flight would interleave page writes
+      pages.length = 0;
+      pageIndex = start;
+      resource.hasMore = true;
+      await fetchPage(true);
+    },
+    cancel: () => { /* infinite query has no single in-flight controller to expose */ },
+    loadMore: async () => {
+      if (inFlight || !resource.hasMore) return;
+      await fetchPage(false);
+    },
+  };
+  Object.defineProperty(resource, HTTP_RESOURCE_BRAND, { value: true, enumerable: false, writable: false });
+
+  const fetchPage = async (isReset: boolean): Promise<void> => {
+    if (!ctx.http) {
+      resource.error = { message: "http runtime not available" };
+      resource.state = "error";
+      resource.loading = false;
+      notify();
+      return;
+    }
+    inFlight = true;
+    if (isReset || pages.length === 0) { resource.loading = true; resource.state = pages.length ? "stale" : "loading"; }
+    else { resource.loadingMore = true; }
+    notify();
+    try {
+      // `pageIndex` already advances by `limit` in offset mode and by 1 in
+      // page mode (see below), so it IS the wire value for both.
+      const pageValue = pageIndex;
+      const merged: Record<string, unknown> = {
+        ...baseConfig,
+        query: { ...asRecord(baseConfig.query), [param]: pageValue, limit },
+      };
+      const req = buildRequestFromConfig(merged);
+      req.url = ctx.http.resolveUrl(req.url);
+      const response = await ctx.http.request(req);
+      const ok = response.status >= 200 && response.status < 300;
+      if (!ok) {
+        resource.error = { status: response.status, body: response.body };
+        resource.state = "error";
+        return;
+      }
+      const items = toItems(response.body);
+      pages.push(response.body);
+      resource.hasMore = items.length >= limit;
+      pageIndex = mode === "offset" ? pageIndex + limit : pageIndex + 1;
+      resource.page = mode === "offset" ? pages.length : pageIndex - 1;
+      resource.data = flatten();
+      resource.error = undefined;
+      resource.state = "data";
+      resource.lastUpdated = Date.now();
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+      resource.error = err;
+      resource.state = "error";
+    } finally {
+      inFlight = false;
+      resource.loading = false;
+      resource.loadingMore = false;
+      notify();
+    }
+  };
+
+  void fetchPage(true);
   return resource;
 }
 
@@ -513,11 +753,29 @@ export function createMutationResource(
       const localController = controller;
       resource.loading = true;
       resource.error = undefined;
+
+      // Optimistic update (VI.2): snapshot state, then run the optimistic fn so
+      // the UI reflects the change instantly. Roll back if the request fails.
+      const optimistic = base.optimistic;
+      let rollback: (() => void) | null = null;
+      if (typeof optimistic === "function") {
+        const snapshot = new Map<string, unknown>();
+        for (const [name, value] of ctx.state.entries()) snapshot.set(name, value);
+        rollback = (): void => {
+          for (const [name] of ctx.state.entries()) {
+            if (!snapshot.has(name)) ctx.state.set(name, undefined as never);
+          }
+          for (const [name, value] of snapshot) ctx.state.set(name, value as never);
+          ctx.notify?.();
+        };
+        try { (optimistic as (o: unknown) => void)(asRecord(overrides)); } catch { /* ignore */ }
+      }
       notify();
 
       if (!ctx.http) {
         resource.error = { message: "http runtime not available" };
         resource.loading = false;
+        if (rollback) rollback();
         notify();
         return undefined;
       }
@@ -532,8 +790,11 @@ export function createMutationResource(
         if (ok) {
           resource.data = response.body;
           resource.error = undefined;
+          // Invalidate dependent queries so they refetch fresh server state.
+          if (base.invalidates != null) invalidateQueries(ctx, base.invalidates);
         } else {
           resource.error = { status: response.status, body: response.body };
+          if (rollback) rollback();
         }
         resource.status = response.status;
         return ok ? response.body : undefined;
@@ -541,6 +802,7 @@ export function createMutationResource(
         if (runId !== generation) return undefined;
         if ((err as { name?: string })?.name === "AbortError") return undefined;
         resource.error = err;
+        if (rollback) rollback();
         return undefined;
       } finally {
         if (runId === generation) {

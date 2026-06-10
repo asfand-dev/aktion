@@ -15,6 +15,7 @@ import {
   clearTokenOverrides,
   sanitiseThemeTokens,
   lightTheme,
+  builtInThemes,
   type ThemeTokens,
 } from "../src/theme/index.js";
 import { isThemeNode } from "../src/runtime/index.js";
@@ -66,6 +67,51 @@ aktion = Stack([Text("Hello World")])`);
 
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#6366f1");
     expect(el.style.getPropertyValue("--rui-radius-button")).toBe("8px");
+  });
+
+  it("applies a built-in theme via the `name` property", async () => {
+    const el = create();
+    el.setResponse(`$theme({ name: "neon" })
+aktion = Stack([Text("Hello World")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    // The full neon palette is written as CSS custom properties on the host.
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe(
+      builtInThemes.neon.colorPrimary,
+    );
+    expect(el.style.getPropertyValue("--rui-color-bg")).toBe(
+      builtInThemes.neon.colorBg,
+    );
+    expect(el.style.getPropertyValue("--rui-font-family")).toBe(
+      builtInThemes.neon.fontFamily,
+    );
+  });
+
+  it("lets structured overrides layer on top of a `name` built-in theme", async () => {
+    const el = create();
+    el.setResponse(`$theme({ name: "neon", colors: { primary: "#ff00ff" } })
+aktion = Stack([Text("Hello World")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    // Override wins for the primary colour...
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#ff00ff");
+    // ...while the rest of the neon palette still applies.
+    expect(el.style.getPropertyValue("--rui-color-bg")).toBe(
+      builtInThemes.neon.colorBg,
+    );
+  });
+
+  it("ignores an unknown `name` and applies no built-in palette", async () => {
+    const el = create();
+    el.setResponse(`$theme({ name: "not-a-theme", colors: { primary: "#123456" } })
+aktion = Stack([Text("Hello World")])`);
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    // Only the explicit override is written; no built-in tokens leak in.
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#123456");
+    expect(el.style.getPropertyValue("--rui-color-bg")).not.toBe(
+      builtInThemes.neon.colorBg,
+    );
   });
 
   it("clears stale tokens when a bare $theme({...}) is removed", async () => {

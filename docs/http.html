@@ -267,6 +267,148 @@ $app(Stack([
         host-integration examples.
       </p>
 
+      <h2 id="program-interceptors">In&#8209;program interceptors</h2>
+      <p>
+        Host interceptors live outside the program. To inject auth or retry logic
+        <em>from inside</em> an Aktion program, register
+        <code>$util.onRequest</code> / <code>$util.onResponse</code>. They run on a
+        separate layer from host interceptors and are wiped on every re&#8209;plan, so
+        they never leak between programs.
+      </p>
+<pre><code>// Add an auth header to every request this program makes.
+$util.onRequest(req =&gt; ({ headers: { Authorization: "Bearer " + $token } }))
+
+// Refresh the token once on a 401, then replay the request.
+$util.onResponse(async (res, retry) =&gt;
+  res.status === 401 ? (await refreshToken(), retry()) : res)</code></pre>
+      <p>
+        <code>onRequest</code> returns a partial that is merged over the outgoing
+        request (headers are shallow&#8209;merged). <code>onResponse</code> receives a
+        one&#8209;shot <code>retry()</code> and may return a replacement response or
+        nothing to pass the original through. Request interceptors run
+        host&nbsp;&rarr;&nbsp;program; response interceptors run
+        program&nbsp;&rarr;&nbsp;host.
+      </p>
+
+      <h2 id="query">Cached reads with <code>$query</code></h2>
+      <p>
+        <code>$query</code> takes the same config as <code>$http</code> but
+        <strong>deduplicates and caches</strong>. Calls that share a
+        <code>key</code> (or the same derived method&nbsp;+&nbsp;url&nbsp;+&nbsp;query&nbsp;+&nbsp;body)
+        share one in&#8209;flight request and one reactive bag &mdash; so the same data
+        read from several components hits the network once.
+      </p>
+<pre><code>$users = $query({ url: API + "/users", key: "users", ttl: 30000 })
+// Elsewhere — no second request, same bag:
+$alsoUsers = $query({ url: API + "/users" })</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Option</th><th>Type</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>key</code></td><td><code>string</code></td><td>Explicit cache key. Calls with the same key share a bag. Never sent to <code>fetch</code>.</td></tr>
+          <tr><td><code>ttl</code></td><td><code>number</code></td><td>Milliseconds. Auto&#8209;refetch when cached data is older than this.</td></tr>
+          <tr><td><code>refetchInterval</code></td><td><code>number</code></td><td>Poll: re&#8209;issue every N ms.</td></tr>
+          <tr><td><code>refetchOnFocus</code></td><td><code>boolean</code></td><td>Refetch when the tab regains focus.</td></tr>
+          <tr><td><code>refetchOnReconnect</code></td><td><code>boolean</code></td><td>Refetch when the browser comes back online.</td></tr>
+        </tbody>
+      </table>
+<pre><code>// A live dashboard tile that refreshes itself.
+$stats = $query({
+  url: API + "/stats",
+  key: "stats",
+  refetchInterval: 15000,
+  refetchOnFocus: true
+})</code></pre>
+
+      <h2 id="infinite">Infinite &amp; paginated lists</h2>
+      <p>
+        Pass an <code>infinite</code> config to turn a <code>$query</code> into a
+        paginated list. <code>.data</code> flattens every loaded page; call
+        <code>.loadMore()</code> to append the next one and read <code>.hasMore</code>
+        / <code>.loadingMore</code> to drive the UI.
+      </p>
+<pre><code>$feed = $query({
+  url: API + "/posts",
+  infinite: {
+    param: "page",        // query param name (default "page")
+    limit: 20,            // page size (default 20)
+    mode: "page",         // "page" | "offset"
+    select: b =&gt; b.results // pluck the array out of a wrapped response
+  }
+})
+
+$app(Column([
+  Column($feed.data.map(p =&gt; Card([Text(p.title)]))),
+  $feed.hasMore
+    ? Button($feed.loadingMore ? "Loading…" : "Load more", { onClick: () =&gt; $feed.loadMore() })
+    : Text("That's everything.")
+]))</code></pre>
+
+      <h2 id="mutation">Mutations</h2>
+      <p>
+        <code>$mutation</code> is the deferred&#8209;write variant: it does nothing
+        until you call <code>.mutate(overrides?)</code>. Method defaults to
+        <code>POST</code>. On top of plain writes it supports <strong>optimistic
+        updates</strong> (apply state instantly, auto&#8209;rollback on failure) and
+        <strong>cache invalidation</strong> (refetch dependent <code>$query</code>s).
+      </p>
+<pre><code>$addTodo = $mutation({
+  url: API + "/todos",
+  optimistic: o =&gt; { $todos = [...$todos, o.body] },  // instant; rolls back if the request fails
+  invalidates: ["todos"]                              // refetch any $query whose key contains "todos"
+})
+
+Button("Add", { onClick: () =&gt; $addTodo.mutate({ body: { title: $title } }) })</code></pre>
+      <p>
+        Read <code>.loading</code> / <code>.error</code> / <code>.data</code> on the
+        bag, and assign an <code>.onDone</code> settle hook. Call
+        <code>$util.invalidate(keys)</code> any time to refetch matching queries
+        after a manual write.
+      </p>
+
+      <h2 id="graphql">GraphQL</h2>
+      <p>
+        Add a <code>gql</code> document (and optional <code>variables</code>) to any
+        <code>$http</code> / <code>$query</code> / <code>$mutation</code>. The request
+        becomes a <code>POST</code> of <code>{ query, variables }</code>,
+        <code>.data</code> is unwrapped from the GraphQL <code>data</code> field, and a
+        GraphQL <code>errors</code> array surfaces through <code>.error</code>.
+      </p>
+<pre><code>$viewer = $query({
+  url: "https://api.example.com/graphql",
+  key: "viewer",
+  gql: `query($login: String!) { user(login: $login) { name avatarUrl } }`,
+  variables: { login: $handle }
+})
+// $viewer.data.user.name</code></pre>
+
+      <h2 id="realtime">Realtime — <code>$socket</code> &amp; <code>$sse</code></h2>
+      <p>
+        For push data, open a reactive WebSocket with <code>$socket</code> or a
+        Server&#8209;Sent&#8209;Events stream with <code>$sse</code>. Both return a bag
+        whose <code>.status</code> / <code>.last</code> / <code>.messages</code>
+        fields re&#8209;render as frames arrive (string payloads are JSON&#8209;parsed
+        when possible), and both are torn down automatically on re&#8209;plan or
+        disconnect &mdash; a program never leaks a live connection.
+      </p>
+<pre><code>// Two-way WebSocket with auto-reconnect
+$chat = $socket({ url: "wss://example.com/room/42", reconnect: true })
+Badge($chat.status, { tone: $chat.status == "open" ? "success" : "warning" })
+Button("Send", { onClick: () =&gt; $chat.send({ text: $draft }) })
+// $chat.status · $chat.last · $chat.messages · $chat.attempts
+
+// One-way Server-Sent Events
+$prices = $sse({ url: API + "/prices", event: "tick" })
+Text($prices.last ? $prices.last.value : "—")</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>$socket</th><th>$sse</th></tr></thead>
+        <tbody>
+          <tr><td><code>.status</code> (<code>"connecting" | "open" | "closed"</code>) · <code>.connected</code> · <code>.last</code> · <code>.messages</code> · <code>.error</code></td><td>✓</td><td>✓</td></tr>
+          <tr><td><code>.send(data)</code></td><td>✓ (objects JSON&#8209;stringified; queues while connecting and flushes on open)</td><td>&mdash;</td></tr>
+          <tr><td><code>reconnect: true | n</code> config + <code>.attempts</code></td><td>✓ (exponential backoff, 500&nbsp;ms &rarr; 15&nbsp;s cap; a user <code>close()</code> always stops)</td><td>native (EventSource retries on its own)</td></tr>
+          <tr><td><code>.close()</code></td><td>✓ (disables auto&#8209;reconnect)</td><td>✓</td></tr>
+        </tbody>
+      </table>
+
       <h2 id="rules">Rules of thumb</h2>
       <ul>
         <li>Always pass a <strong>full absolute URL</strong>. There is no base URL.</li>

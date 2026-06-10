@@ -1260,7 +1260,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
     if (tok.type === "Punctuation" && tok.value === ".") {
       ctx.consume();
       const propTok = ctx.consume();
-      if (propTok.type !== "Identifier" && propTok.type !== "Keyword") {
+      if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
         throw {
           message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
           line: propTok.line,
@@ -1305,7 +1305,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
         };
       } else {
         const propTok = ctx.consume();
-        if (propTok.type !== "Identifier" && propTok.type !== "Keyword") {
+        if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
           throw {
             message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
             line: propTok.line,

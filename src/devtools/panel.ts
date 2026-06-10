@@ -57,12 +57,14 @@ interface AppModel {
   state: Record<string, unknown>;
   /** Atom (root) → timestamp of last change, for flash highlighting. */
   changed: Map<string, number>;
+  /** Atom (root) → number of flushes that changed it (reactivity heat). */
+  changeCounts: Map<string, number>;
   /** Timestamp of the first observed event (timeline zero). */
   firstTime: number | null;
 }
 
 function emptyModel(): AppModel {
-  return { commits: [], effects: [], state: {}, changed: new Map(), firstTime: null };
+  return { commits: [], effects: [], state: {}, changed: new Map(), changeCounts: new Map(), firstTime: null };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -146,6 +148,21 @@ function fmtRel(ms: number): string {
   return `${ms.toFixed(0)} ms`;
 }
 
+/** Compact integer with a `k` suffix past 9999 (`12.3k`). */
+function fmtCount(n: number): string {
+  if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
+/** Percentage with no decimals (`73%`). */
+function fmtPct(num: number, den: number): string {
+  if (den <= 0) return "—";
+  return `${Math.round((num / den) * 100)}%`;
+}
+
+/** Sortable columns of the ranked-components table. */
+type RankKey = "name" | "renders" | "memo" | "total" | "avg" | "max";
+
 const PHASE_CHIP: Record<string, string> = {
   mount: "green",
   update: "blue",
@@ -176,13 +193,19 @@ export class AktionDevtoolsElement extends HTMLElement {
   private stateFilter = "";
   private expanded = new Set<string>();
   private editingPath: string | null = null;
+  /** Sort atoms by change frequency (reactivity heat) instead of name. */
+  private stateSortByActivity = false;
 
   // Profiler tab
   private selectedCommitId: number | null = null;
   private flashOnCommit = false;
+  /** Sort key + direction for the ranked-components table. */
+  private rankedSort: { key: RankKey; dir: 1 | -1 } = { key: "total", dir: -1 };
 
   // Effects tab
   private phaseFilter: Set<EffectPhase> = new Set(["mount", "run", "cleanup", "unmount", "error"]);
+  /** Group the effect timeline into per-effect lanes vs. a flat log. */
+  private effectView: "timeline" | "log" = "timeline";
 
   // chrome
   private collapsed = false;
@@ -306,7 +329,9 @@ export class AktionDevtoolsElement extends HTMLElement {
       case "state": {
         model.state = event.snapshot;
         for (const p of event.changedPaths) {
-          model.changed.set(rootOf(p), event.time);
+          const root = rootOf(p);
+          model.changed.set(root, event.time);
+          model.changeCounts.set(root, (model.changeCounts.get(root) ?? 0) + 1);
         }
         break;
       }
@@ -469,6 +494,7 @@ export class AktionDevtoolsElement extends HTMLElement {
   /* ---------------------------------------------------------------------- */
 
   private renderStateTab(app: DevtoolsAppRecord, model: AppModel): void {
+    const totalChanges = [...model.changeCounts.values()].reduce((a, b) => a + b, 0);
     const toolbar = h(
       "div",
       { class: "toolbar" },
@@ -481,7 +507,12 @@ export class AktionDevtoolsElement extends HTMLElement {
           this.renderTreeOnly(app, model);
         },
       }),
-      h("span", { class: "muted" }, `${Object.keys(model.state).length} atoms`),
+      h("button", {
+        class: `filter-chip ${this.stateSortByActivity ? "is-on" : ""}`,
+        title: "Sort atoms by how often they change (reactivity heat)",
+        onclick: () => { this.stateSortByActivity = !this.stateSortByActivity; this.renderTreeOnly(app, model); },
+      }, "Sort by activity"),
+      h("span", { class: "muted" }, `${Object.keys(model.state).length} atoms · ${fmtCount(totalChanges)} changes`),
     );
 
     const tree = h("div", { class: "tree" });
@@ -499,13 +530,21 @@ export class AktionDevtoolsElement extends HTMLElement {
 
   private fillTree(tree: HTMLElement, app: DevtoolsAppRecord, model: AppModel): void {
     const filter = this.stateFilter.trim().toLowerCase();
-    const names = Object.keys(model.state).sort((a, b) => a.localeCompare(b));
+    const maxChanges = Math.max(1, ...model.changeCounts.values());
+    const names = Object.keys(model.state).sort((a, b) => {
+      if (this.stateSortByActivity) {
+        const ca = model.changeCounts.get(a) ?? 0;
+        const cb = model.changeCounts.get(b) ?? 0;
+        if (cb !== ca) return cb - ca;
+      }
+      return a.localeCompare(b);
+    });
     const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
     let shown = 0;
     for (const name of names) {
       if (filter && !name.toLowerCase().includes(filter)) continue;
       shown += 1;
-      this.appendRow(tree, app, model, name, name, model.state[name], 0, now);
+      this.appendRow(tree, app, model, name, name, model.state[name], 0, now, maxChanges);
     }
     if (shown === 0) {
       tree.appendChild(h("div", { class: "empty" }, filter ? "No atoms match the filter." : "No reactive state yet."));
@@ -521,13 +560,16 @@ export class AktionDevtoolsElement extends HTMLElement {
     value: unknown,
     depth: number,
     now: number,
+    maxChanges: number,
   ): void {
     const type = valueType(value);
     const expandable = isExpandable(value);
     const isOpen = this.expanded.has(path);
     const reserved = depth === 0 && RESERVED_ATOMS.has(key);
-    const changedAt = model.changed.get(rootOf(path));
+    const root = rootOf(path);
+    const changedAt = model.changed.get(root);
     const justChanged = changedAt != null && now - changedAt < FLASH_MS;
+    const changeCount = depth === 0 ? (model.changeCounts.get(root) ?? 0) : 0;
 
     const twist = h("span", {
       class: `twist ${expandable ? "" : "is-leaf"}`,
@@ -547,6 +589,19 @@ export class AktionDevtoolsElement extends HTMLElement {
       valueSpan.addEventListener("click", () => this.beginEdit(app, path, value, valueSpan));
     }
 
+    // Reactivity-heat badge: a small bar + count showing how often this atom
+    // changed across the session, so the hottest atoms stand out at a glance.
+    const heat = changeCount > 0
+      ? h("span", {
+          class: "heat",
+          title: `${changeCount} change${changeCount === 1 ? "" : "s"} this session`,
+        },
+        h("span", { class: "heat-bar" },
+          h("span", { class: "heat-fill", style: `width:${Math.max(8, Math.round((changeCount / maxChanges) * 100))}%` })),
+        h("span", { class: "heat-num" }, fmtCount(changeCount)),
+      )
+      : null;
+
     const row = h(
       "div",
       { class: `row ${justChanged ? "is-changed" : ""}`, style: `padding-left:${8 + depth * 14}px` },
@@ -555,12 +610,14 @@ export class AktionDevtoolsElement extends HTMLElement {
       h("span", { class: "sep" }, ": "),
       valueSpan,
       reserved ? h("span", { class: "tag" }, "reserved") : null,
+      h("span", { class: "grow" }),
+      heat,
     );
     container.appendChild(row);
 
     if (expandable && isOpen) {
       for (const [childKey, childValue] of childEntries(value)) {
-        this.appendRow(container, app, model, `${path}.${childKey}`, childKey, childValue, depth + 1, now);
+        this.appendRow(container, app, model, `${path}.${childKey}`, childKey, childValue, depth + 1, now, maxChanges);
       }
     }
   }
@@ -647,11 +704,141 @@ export class AktionDevtoolsElement extends HTMLElement {
     }
 
     const selected = model.commits.find((c) => c.commitId === this.selectedCommitId) ?? last!;
+    const summary = this.renderPerfSummary(model);
+    const insights = this.renderProfilerInsights(model);
+    const hotAtoms = this.renderHotAtoms(model);
     const detail = this.renderCommitDetail(selected);
     const ranked = this.renderRankedComponents(model);
 
-    this.bodyEl.replaceChildren(toolbar, strip, detail, ranked);
+    const sections = [toolbar, summary, strip, insights, detail, hotAtoms, ranked]
+      .filter((n): n is HTMLElement => n != null);
+    this.bodyEl.replaceChildren(...sections);
     void app;
+  }
+
+  /** A compact grid of headline performance numbers for the session. */
+  private renderPerfSummary(model: AppModel): HTMLElement {
+    const commits = model.commits;
+    const totalTime = commits.reduce((a, c) => a + c.duration, 0);
+    const avg = commits.length ? totalTime / commits.length : 0;
+    const slowest = commits.reduce<CommitRecord | null>((m, c) => (!m || c.duration > m.duration ? c : m), null);
+    let rendered = 0, memoized = 0, fullRenders = 0;
+    for (const c of commits) {
+      rendered += c.rendered;
+      memoized += c.memoized;
+      if (c.fullRender) fullRenders += 1;
+    }
+    const first = commits[0];
+    const lastCommit = commits[commits.length - 1];
+    const span = first && lastCommit ? (lastCommit.startTime - first.startTime) : 0;
+    const rate = span > 0 ? (commits.length / (span / 1000)) : 0;
+
+    const stat = (label: string, value: string, opts: { tone?: string; title?: string; onclick?: () => void } = {}) =>
+      h("div", { class: `stat ${opts.onclick ? "is-link" : ""}`, title: opts.title, onclick: opts.onclick },
+        h("span", { class: `stat-val ${opts.tone ? `t-${opts.tone}` : ""}` }, value),
+        h("span", { class: "stat-label" }, label),
+      );
+
+    return h("div", { class: "section" },
+      h("p", { class: "section-title" }, "Performance summary"),
+      h("div", { class: "stat-grid" },
+        stat("commits", fmtCount(commits.length)),
+        stat("total render", fmtMs(totalTime)),
+        stat("avg / commit", fmtMs(avg), { tone: avg >= 8 ? "warn" : undefined }),
+        slowest
+          ? stat("slowest", fmtMs(slowest.duration), {
+              tone: slowest.duration >= 16 ? "warn" : undefined,
+              title: `Commit #${slowest.commitId} — click to inspect`,
+              onclick: () => { this.selectedCommitId = slowest.commitId; this.scheduleRender(); },
+            })
+          : stat("slowest", "—"),
+        stat("memoized", fmtPct(memoized, rendered + memoized), {
+          tone: (rendered + memoized) > 0 && memoized / (rendered + memoized) < 0.2 ? "warn" : "good",
+          title: `${fmtCount(memoized)} skipped / ${fmtCount(rendered + memoized)} component evaluations`,
+        }),
+        stat("full renders", fmtCount(fullRenders), {
+          tone: fullRenders > Math.max(1, commits.length * 0.5) ? "warn" : undefined,
+          title: "Commits that bypassed memoization and re-evaluated the whole tree",
+        }),
+        rate > 0 ? stat("commit rate", `${rate.toFixed(1)}/s`, { tone: rate >= 30 ? "warn" : undefined }) : null,
+      ),
+    );
+  }
+
+  /**
+   * Reactivity insight: which `$state` paths triggered the most commits.
+   * Surfaces the "hot" atoms driving re-renders so an author can see what
+   * their UI actually reacts to.
+   */
+  private renderHotAtoms(model: AppModel): HTMLElement {
+    const counts = new Map<string, number>();
+    for (const c of model.commits) {
+      for (const p of c.changedPaths) counts.set(p, (counts.get(p) ?? 0) + 1);
+    }
+    const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const max = Math.max(1, ...rows.map(([, n]) => n));
+
+    const body = rows.length
+      ? h("div", {}, ...rows.map(([path, n]) =>
+          h("div", { class: "bar-row" },
+            h("span", { class: "bar-row-label" }, path),
+            h("span", { class: "bar-row-track" },
+              h("span", { class: "bar-row-fill", style: `width:${Math.round((n / max) * 100)}%` })),
+            h("span", { class: "bar-row-num" }, `${fmtCount(n)} commit${n === 1 ? "" : "s"}`),
+          )))
+      : h("div", { class: "faint", style: "font-size:11px" }, "No state-driven commits yet (forced / initial only).");
+
+    return h("div", { class: "section" },
+      h("p", { class: "section-title" }, "Reactivity — state paths that triggered commits"),
+      body,
+    );
+  }
+
+  /**
+   * Heuristic insights: surface likely performance problems derived from the
+   * captured commits (frequent re-renders, heavy bodies, low memoization).
+   */
+  private renderProfilerInsights(model: AppModel): HTMLElement | null {
+    interface Agg { name: string; kind: string; renders: number; memo: number; total: number; max: number; }
+    const aggs = new Map<string, Agg>();
+    for (const commit of model.commits) {
+      for (const c of commit.components) {
+        let a = aggs.get(c.name);
+        if (!a) { a = { name: c.name, kind: c.kind, renders: 0, memo: 0, total: 0, max: 0 }; aggs.set(c.name, a); }
+        if (c.phase === "memo") a.memo += 1;
+        else { a.renders += 1; a.total += c.selfTime; a.max = Math.max(a.max, c.selfTime); }
+      }
+    }
+
+    const insights: Array<{ tone: string; icon: string; text: string }> = [];
+    const commitCount = model.commits.length;
+    for (const a of aggs.values()) {
+      if (a.renders === 0) continue;
+      const avg = a.total / a.renders;
+      if (avg >= 8) {
+        insights.push({ tone: "warn", icon: "▲", text: `${a.name} averages ${fmtMs(avg)} per render — consider splitting or memoizing its work.` });
+      }
+      if (a.kind === "user" && a.renders >= 12 && a.memo === 0 && commitCount >= 4) {
+        insights.push({ tone: "warn", icon: "↻", text: `${a.name} re-rendered ${fmtCount(a.renders)}× and was never memoized — check its $state reads.` });
+      }
+    }
+    const fullAfterInitial = model.commits.filter((c) => c.fullRender && !c.initial).length;
+    if (fullAfterInitial >= 3) {
+      insights.push({ tone: "warn", icon: "⛶", text: `${fmtCount(fullAfterInitial)} commits forced a full re-render (memoization disabled) — often async/timer/effect notifies.` });
+    }
+    if (insights.length === 0 && commitCount > 0) {
+      insights.push({ tone: "good", icon: "✓", text: "No render hot-spots detected. Component bodies are cheap and memoization is doing its job." });
+    }
+    if (insights.length === 0) return null;
+
+    return h("div", { class: "section" },
+      h("p", { class: "section-title" }, "Insights"),
+      h("div", { class: "insights" }, ...insights.slice(0, 6).map((i) =>
+        h("div", { class: `insight t-${i.tone}` },
+          h("span", { class: "insight-ic" }, i.icon),
+          h("span", {}, i.text),
+        ))),
+    );
   }
 
   private renderCommitDetail(commit: CommitRecord): HTMLElement {
@@ -714,27 +901,55 @@ export class AktionDevtoolsElement extends HTMLElement {
   }
 
   private renderRankedComponents(model: AppModel): HTMLElement {
-    interface Agg { name: string; kind: string; renders: number; memo: number; total: number; }
+    interface Agg { name: string; kind: string; renders: number; memo: number; total: number; max: number; }
     const aggs = new Map<string, Agg>();
     for (const commit of model.commits) {
       for (const c of commit.components) {
         let a = aggs.get(c.name);
-        if (!a) { a = { name: c.name, kind: c.kind, renders: 0, memo: 0, total: 0 }; aggs.set(c.name, a); }
+        if (!a) { a = { name: c.name, kind: c.kind, renders: 0, memo: 0, total: 0, max: 0 }; aggs.set(c.name, a); }
         if (c.phase === "memo") a.memo += 1;
-        else { a.renders += 1; a.total += c.selfTime; }
+        else { a.renders += 1; a.total += c.selfTime; a.max = Math.max(a.max, c.selfTime); }
       }
     }
-    const rows = [...aggs.values()].sort((a, b) => b.total - a.total);
+    const sortKey = this.rankedSort.key;
+    const dir = this.rankedSort.dir;
+    const valueOf = (r: Agg): number | string => {
+      switch (sortKey) {
+        case "name": return r.name;
+        case "renders": return r.renders;
+        case "memo": return r.memo;
+        case "avg": return r.renders ? r.total / r.renders : 0;
+        case "max": return r.max;
+        default: return r.total;
+      }
+    };
+    const rows = [...aggs.values()].sort((a, b) => {
+      const va = valueOf(a), vb = valueOf(b);
+      if (typeof va === "string" || typeof vb === "string") {
+        return dir * String(va).localeCompare(String(vb));
+      }
+      return dir * (vb - va) * -1; // dir=-1 → descending for numbers
+    });
     const maxTotal = Math.max(...rows.map((r) => r.total), 0.001);
+
+    const sortFor = (key: RankKey) => () => {
+      if (this.rankedSort.key === key) this.rankedSort.dir = (this.rankedSort.dir === 1 ? -1 : 1) as 1 | -1;
+      else this.rankedSort = { key, dir: key === "name" ? 1 : -1 };
+      this.scheduleRender();
+    };
+    const arrow = (key: RankKey) => sortKey === key ? (dir === 1 ? " ▲" : " ▼") : "";
+    const th = (key: RankKey, label: string, right = false) =>
+      h("th", { class: "sortable", style: right ? "text-align:right" : "", onclick: sortFor(key) }, label + arrow(key));
 
     const table = h("table", { class: "dt-table" },
       h("thead", {}, h("tr", {},
-        h("th", {}, "Component"),
+        th("name", "Component"),
         h("th", {}, "Type"),
-        h("th", { style: "text-align:right" }, "Renders"),
-        h("th", { style: "text-align:right" }, "Memo"),
-        h("th", { style: "text-align:right" }, "Total"),
-        h("th", { style: "text-align:right" }, "Avg"),
+        th("renders", "Renders", true),
+        th("memo", "Memo", true),
+        th("total", "Total", true),
+        th("avg", "Avg", true),
+        th("max", "Max", true),
       )),
       h("tbody", {}, ...rows.map((r) =>
         h("tr", {},
@@ -747,12 +962,13 @@ export class AktionDevtoolsElement extends HTMLElement {
             h("span", {}, fmtMs(r.total)),
           ),
           h("td", { class: "num" }, r.renders ? fmtMs(r.total / r.renders) : "—"),
+          h("td", { class: "num" }, r.renders ? fmtMs(r.max) : "—"),
         ),
       )),
     );
 
     return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Components — ranked by total self time"),
+      h("p", { class: "section-title" }, "Components — ranked by self time"),
       rows.length ? table : h("div", { class: "faint", style: "font-size:11px" }, "No component renders captured."),
     );
   }
@@ -778,6 +994,11 @@ export class AktionDevtoolsElement extends HTMLElement {
       )),
       h("div", { class: "grow" }),
       h("button", {
+        class: `filter-chip ${this.effectView === "timeline" ? "is-on" : ""}`,
+        title: "Toggle the visual timeline",
+        onclick: () => { this.effectView = this.effectView === "timeline" ? "log" : "timeline"; this.scheduleRender(); },
+      }, this.effectView === "timeline" ? "Timeline" : "Log"),
+      h("button", {
         class: "icon-btn",
         title: "Clear effect events",
         onclick: () => { model.effects.length = 0; this.scheduleRender(); },
@@ -792,7 +1013,123 @@ export class AktionDevtoolsElement extends HTMLElement {
       return;
     }
 
-    this.bodyEl.replaceChildren(toolbar, this.renderEffectLanes(model), this.renderEffectLog(model));
+    const summary = this.renderEffectSummary(model);
+    const insights = this.renderEffectInsights(model);
+    const viz = this.effectView === "timeline"
+      ? this.renderEffectTimeline(model)
+      : this.renderEffectLog(model);
+    const sections = [toolbar, summary, insights, this.renderEffectLanes(model), viz]
+      .filter((n): n is HTMLElement => n != null);
+    this.bodyEl.replaceChildren(...sections);
+  }
+
+  /** Headline counters for the effect session. */
+  private renderEffectSummary(model: AppModel): HTMLElement {
+    const keys = new Set<string>();
+    let runs = 0, total = 0, cleanups = 0, errors = 0;
+    for (const e of model.effects) {
+      keys.add(e.effectKey);
+      if (e.phase === "run") { runs += 1; total += e.duration ?? 0; }
+      else if (e.phase === "cleanup") cleanups += 1;
+      else if (e.phase === "error") errors += 1;
+    }
+    const stat = (label: string, value: string, tone?: string) =>
+      h("div", { class: "stat" },
+        h("span", { class: `stat-val ${tone ? `t-${tone}` : ""}` }, value),
+        h("span", { class: "stat-label" }, label),
+      );
+    return h("div", { class: "section" },
+      h("p", { class: "section-title" }, "Effect summary"),
+      h("div", { class: "stat-grid" },
+        stat("effects", fmtCount(keys.size)),
+        stat("runs", fmtCount(runs)),
+        stat("total run", fmtMs(total)),
+        stat("avg run", fmtMs(runs ? total / runs : 0)),
+        stat("cleanups", fmtCount(cleanups)),
+        stat("errors", fmtCount(errors), errors > 0 ? "bad" : "good"),
+      ),
+    );
+  }
+
+  /** Re-run thrash + error detection for effects. */
+  private renderEffectInsights(model: AppModel): HTMLElement | null {
+    interface Agg { label: string; runs: number; errors: number; total: number; }
+    const aggs = new Map<string, Agg>();
+    for (const e of model.effects) {
+      let a = aggs.get(e.effectKey);
+      if (!a) { a = { label: e.label, runs: 0, errors: 0, total: 0 }; aggs.set(e.effectKey, a); }
+      if (e.phase === "run") { a.runs += 1; a.total += e.duration ?? 0; }
+      else if (e.phase === "error") a.errors += 1;
+    }
+    const insights: Array<{ tone: string; icon: string; text: string }> = [];
+    for (const a of aggs.values()) {
+      if (a.errors > 0) {
+        insights.push({ tone: "bad", icon: "✖", text: `${a.label} threw ${fmtCount(a.errors)}× — check the effect body.` });
+      }
+      if (a.runs >= 20) {
+        insights.push({ tone: "warn", icon: "↻", text: `${a.label} ran ${fmtCount(a.runs)}× — a hot trigger; confirm its dependency list is intentional.` });
+      } else if (a.runs >= 1 && a.total / Math.max(1, a.runs) >= 6) {
+        insights.push({ tone: "warn", icon: "▲", text: `${a.label} averages ${fmtMs(a.total / a.runs)} per run — heavy work in an effect body.` });
+      }
+    }
+    if (insights.length === 0) return null;
+    return h("div", { class: "section" },
+      h("p", { class: "section-title" }, "Insights"),
+      h("div", { class: "insights" }, ...insights.slice(0, 6).map((i) =>
+        h("div", { class: `insight t-${i.tone}` },
+          h("span", { class: "insight-ic" }, i.icon),
+          h("span", {}, i.text),
+        ))),
+    );
+  }
+
+  /**
+   * A visual, time-positioned timeline: one lane per effect, with a marker
+   * for every event placed along a shared time axis and coloured by phase.
+   * Makes overlapping runs, cleanup→run pairing, and bursts obvious at a
+   * glance in a way the chronological log can't.
+   */
+  private renderEffectTimeline(model: AppModel): HTMLElement {
+    const base = model.firstTime ?? 0;
+    const last = model.effects.reduce((m, e) => Math.max(m, e.time), base);
+    const span = Math.max(1, last - base);
+
+    // Group events by effect, preserving first-seen order for stable lanes.
+    const order: string[] = [];
+    const byKey = new Map<string, { label: string; instance: boolean; events: EffectEvent[] }>();
+    for (const e of model.effects) {
+      let lane = byKey.get(e.effectKey);
+      if (!lane) { lane = { label: e.label, instance: e.instanceKey != null, events: [] }; byKey.set(e.effectKey, lane); order.push(e.effectKey); }
+      lane.events.push(e);
+    }
+
+    const wrap = h("div", { class: "section", style: "padding:0" });
+    wrap.appendChild(h("div", { class: "tl-head" },
+      h("span", { class: "section-title", style: "margin:0" }, `Timeline · ${fmtRel(span)} span`),
+      h("span", { class: "tl-axis" }, "0", h("span", { class: "tl-axis-end" }, fmtRel(span))),
+    ));
+
+    for (const key of order) {
+      const lane = byKey.get(key)!;
+      const track = h("div", { class: "tl-track" });
+      for (const e of lane.events) {
+        if (!this.phaseFilter.has(e.phase)) continue;
+        const leftPct = ((e.time - base) / span) * 100;
+        track.appendChild(h("span", {
+          class: `tl-dot ${PHASE_CHIP[e.phase] ?? "grey"}`,
+          style: `left:${Math.min(99, Math.max(0, leftPct))}%`,
+          title: `${e.phase} · ${e.reason}${e.duration != null ? ` · ${fmtMs(e.duration)}` : ""} · ${fmtRel(e.time - base)}`,
+        }));
+      }
+      wrap.appendChild(h("div", { class: "tl-row" },
+        h("span", { class: "tl-name" },
+          lane.label,
+          lane.instance ? h("span", { class: "chip purple", style: "margin-left:5px" }, "inst") : null,
+        ),
+        track,
+      ));
+    }
+    return wrap;
   }
 
   private renderEffectLanes(model: AppModel): HTMLElement {

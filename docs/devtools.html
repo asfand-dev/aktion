@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DevTools · Aktion</title>
-  <meta name="description" content="Aktion DevTools — a real, in-page debugger for any <aktion-app>. Inspect and edit live reactive $state, profile every render commit (mount/update/memoized) with a flamegraph and ranked components, and watch a timeline of every effect's mount, run, cleanup, and unmount. The React/Vue DevTools experience, built on Aktion's own runtime signals." />
+  <meta name="description" content="Aktion DevTools — a real, in-page debugger for any <aktion-app>. Inspect and edit live reactive $state with per-atom reactivity heat, profile every render commit (mount/update/memoized) with a flamegraph, performance-summary stats, hot-path insights, and a ranked sortable component table, and watch every effect on a visual timeline with run/error insights. The React/Vue DevTools experience, built on Aktion's own runtime signals." />
   <script>
     (function () {
       try {
@@ -165,7 +165,14 @@ $app(Column([
         sibling fields are preserved. Atoms flash as they change, and runtime-owned
         atoms (like <code>route</code>) are shown but marked read-only.
       </p>
-<pre><code>import { mountDevtools } from "aktion/devtools";
+      <p>
+        Each atom also carries a <strong>reactivity-heat badge</strong> &mdash; a
+        small bar and count of how often it has changed this session &mdash; so
+        the busiest state stands out instantly. Hit <strong>Sort by
+        activity</strong> to rank atoms by change frequency and find what your UI
+        actually churns on.
+      </p>
+<pre><code>import { mountDevtools } from "aktion-runtime/devtools";
 mountDevtools();        // attaches to every &lt;aktion-app&gt; on the page</code></pre>
 
       <h2 id="render-profiler">Render profiler</h2>
@@ -183,24 +190,40 @@ mountDevtools();        // attaches to every &lt;aktion-app&gt; on the page</cod
         <li><strong>memoized</strong> &mdash; its body was skipped because neither its args nor the <code>$state</code> paths it reads changed.</li>
       </ul>
       <p>
-        A ranked <strong>&ldquo;most expensive components&rdquo;</strong> table
-        aggregates self-time across captured commits so you can spot the
-        hot paths at a glance. Flip on <strong>Flash on commit</strong> to
-        outline the app element every time it re-renders.
+        A ranked <strong>components</strong> table aggregates render counts,
+        total / average / <strong>max</strong> self-time and memo skips across
+        captured commits &mdash; click any column header to sort &mdash; so you
+        can spot hot paths at a glance. Above it, a <strong>performance
+        summary</strong> shows headline numbers (total render time, average and
+        slowest commit, memoization ratio, full-render count, commit rate), a
+        <strong>reactivity</strong> panel ranks the <code>$state</code> paths
+        that triggered the most commits, and an <strong>insights</strong> list
+        calls out likely problems &mdash; heavy component bodies, components that
+        re-render without ever memoizing, and bursts of forced full renders.
+        Flip on <strong>Flash on commit</strong> to outline the app element every
+        time it re-renders.
       </p>
 
       <h2 id="effect-timeline">Effect timeline</h2>
       <p>
-        A chronological stream of every effect lifecycle transition &mdash;
+        A stream of every effect lifecycle transition &mdash;
         <code>mount</code>, <code>run</code>, <code>cleanup</code>,
         <code>unmount</code>, and <code>error</code> &mdash; each attributed to
         the trigger that fired it: a <code>$state</code> change
         (<code>state:count</code>), an interval tick
-        (<code>every(1000)</code>), or a lifecycle event. Per-effect
-        <strong>lanes</strong> summarise run counts and total run time, and you
-        can filter the log by phase. Component-scoped effects (declared inside a
-        <code>function</code> body) are tagged <em>instance</em> and correctly
-        report their <code>unmount</code> when the component leaves the tree.
+        (<code>every(1000)</code>), or a lifecycle event. A
+        <strong>visual timeline</strong> plots every event for each effect along
+        a shared time axis &mdash; coloured by phase &mdash; so bursts,
+        overlapping runs, and cleanup&rarr;run pairing are obvious at a glance
+        (toggle to a flat <strong>Log</strong> view when you want exact
+        ordering). An <strong>effect summary</strong> totals runs, run time,
+        cleanups, and errors, while <strong>insights</strong> flag effects that
+        re-ran excessively (a hot trigger or over-broad dependency list), did
+        heavy work per run, or threw. Per-effect <strong>lanes</strong> summarise
+        run counts and total time, and you can filter by phase. Component-scoped
+        effects (declared inside a <code>function</code> body) are tagged
+        <em>instance</em> and correctly report their <code>unmount</code> when the
+        component leaves the tree.
       </p>
 
       <h2 id="enable">Enable it</h2>

@@ -4,6 +4,8 @@ export * from "./evaluator.js";
 export * from "./router.js";
 export * from "./http.js";
 export * from "./i18n.js";
+export { renderToString, renderToStaticMarkup } from "./ssr.js";
+export type { RenderToStringOptions, RenderToStringResult } from "./ssr.js";
 export { storage, type CookieOptions, type StorageNamespace, type StorageRoot } from "./storage.js";
 export { consoleNs, type ConsoleNamespace } from "./console.js";
 export {

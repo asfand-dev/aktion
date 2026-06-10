@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aktion Quest — the interactive tutorial. Learn Aktion by building.</title>
+  <meta name="description" content="An interactive, game-style tutorial for Aktion. 11 hands-on levels with a live editor, instant previews, XP, achievements and one dragon. Learn reactive state, components, layout, forms, effects, HTTP, sx styling and theming — by actually building." />
+
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="apple-touch-icon" href="assets/logo.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Aktion Quest — the interactive tutorial" />
+  <meta property="og:description" content="11 hands-on levels. Live editor. XP, achievements, and one dragon. Learn Aktion by actually building." />
+  <meta property="og:image" content="assets/logo.png" />
+
+  <script>
+    // Shared dark/light bootstrap with the docs (same localStorage key).
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+
+  <style>
+    /* ===================================================================
+       Design tokens (shared with index.html)
+       =================================================================== */
+    :root {
+      --ak-indigo: #6366f1;
+      --ak-violet: #8b5cf6;
+      --ak-pink:   #ec4899;
+      --ak-cyan:   #22d3ee;
+      --ak-emerald:#10b981;
+      --ak-amber:  #f59e0b;
+      --ak-blue:   #3b82f6;
+
+      --grad-brand: linear-gradient(120deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
+      --grad-cyan:  linear-gradient(120deg, #22d3ee 0%, #6366f1 100%);
+      --grad-warm:  linear-gradient(120deg, #f59e0b 0%, #ec4899 100%);
+      --grad-emerald: linear-gradient(120deg, #10b981 0%, #22d3ee 100%);
+
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      --maxw: 1240px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    html[data-doc-theme='light'] {
+      --bg:        #fbfaff;
+      --bg-2:      #ffffff;
+      --bg-soft:   #f3f1fc;
+      --surface:   rgba(255,255,255,0.7);
+      --surface-solid: #ffffff;
+      --border:    rgba(20,16,60,0.10);
+      --border-strong: rgba(20,16,60,0.16);
+      --text:      #14102b;
+      --text-soft: #443f63;
+      --text-mute: #6b6789;
+      --code-bg:   #0e0b1c;
+      --code-text: #e6e3ff;
+      --hero-glow: 0.55;
+      --nav-bg:    rgba(255,255,255,0.72);
+      --shadow:    0 24px 60px -24px rgba(60,40,160,0.30);
+      --shadow-sm: 0 8px 24px -10px rgba(60,40,160,0.22);
+      --dot:       rgba(99,102,241,0.14);
+      --ok:        #0d9261;
+      --ok-bg:     rgba(16,185,129,0.12);
+    }
+    html[data-doc-theme='dark'] {
+      --bg:        #07060f;
+      --bg-2:      #0c0a18;
+      --bg-soft:   #120f24;
+      --surface:   rgba(20,17,40,0.55);
+      --surface-solid: #14112a;
+      --border:    rgba(255,255,255,0.09);
+      --border-strong: rgba(255,255,255,0.16);
+      --text:      #f3f1ff;
+      --text-soft: #c4c0e6;
+      --text-mute: #908bba;
+      --code-bg:   #08060f;
+      --code-text: #e6e3ff;
+      --hero-glow: 1;
+      --nav-bg:    rgba(10,8,22,0.66);
+      --shadow:    0 30px 70px -28px rgba(0,0,0,0.8);
+      --shadow-sm: 0 12px 30px -12px rgba(0,0,0,0.65);
+      --dot:       rgba(139,92,246,0.18);
+      --ok:        #34d399;
+      --ok-bg:     rgba(16,185,129,0.14);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; font-family: var(--font-sans); background: var(--bg); color: var(--text);
+      line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    h1,h2,h3,h4 { line-height: 1.12; letter-spacing: -0.02em; margin: 0; font-weight: 800; }
+    p { margin: 0; }
+    ::selection { background: rgba(139,92,246,0.35); color: #fff; }
+    .wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 24px; }
+    .grad-text { background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* ----- background decorations ----- */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: linear-gradient(var(--dot) 1px, transparent 1px), linear-gradient(90deg, var(--dot) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 70%);
+    }
+    .blob { position: fixed; border-radius: 50%; filter: blur(90px); z-index: 0; pointer-events: none; opacity: calc(var(--hero-glow) * 0.6); animation: floatBlob 18s var(--ease) infinite alternate; }
+    .blob.b1 { width: 480px; height: 480px; top: -180px; left: -120px; background: radial-gradient(circle, #6366f1, transparent 70%); }
+    .blob.b2 { width: 420px; height: 420px; top: -60px; right: -150px; background: radial-gradient(circle, #ec4899, transparent 70%); animation-delay: -7s; }
+    @keyframes floatBlob { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(60px, 50px) scale(1.12); } }
+    .page { position: relative; z-index: 1; }
+
+    /* ===================================================================
+       Top bar
+       =================================================================== */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(180%) blur(18px); -webkit-backdrop-filter: saturate(180%) blur(18px);
+      background: var(--nav-bg); border-bottom: 1px solid var(--border);
+    }
+    .nav-inner { display: flex; align-items: center; gap: 18px; height: 64px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; letter-spacing: -0.03em; }
+    .brand img { width: 32px; height: 32px; }
+    .brand .quest { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #fff; background: var(--grad-brand); padding: 3px 9px; border-radius: 99px; }
+    .xp-wrap { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; max-width: 520px; margin-inline: auto; }
+    .xp-label { font-size: 12.5px; font-weight: 700; color: var(--text-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .xp-bar { flex: 1; height: 10px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; min-width: 60px; }
+    .xp-fill {
+      height: 100%; width: 0%; border-radius: 99px; background: var(--grad-brand); background-size: 200% 100%;
+      transition: width .8s var(--ease); animation: shimmer 3s linear infinite; min-width: 0;
+    }
+    @keyframes shimmer { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-soft);
+      cursor: pointer; transition: .2s; font-size: 14.5px;
+    }
+    .icon-btn:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14.5px;
+      padding: 11px 20px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
+      transition: transform .2s var(--ease), box-shadow .2s, filter .2s; white-space: nowrap; font-family: var(--font-sans);
+    }
+    .btn-primary { background: var(--grad-brand); color: #fff; box-shadow: 0 10px 28px -8px rgba(124,58,237,0.6); background-size: 160% 160%; }
+    .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: grayscale(.4); box-shadow: none; }
+    .btn-ghost { background: var(--surface); border-color: var(--border); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+    .docs-link { font-size: 14px; font-weight: 600; color: var(--text-soft); padding: 8px 12px; border-radius: 9px; transition: .2s; }
+    .docs-link:hover { color: var(--text); background: var(--bg-soft); }
+
+    /* ===================================================================
+       Intro screen
+       =================================================================== */
+    .intro { padding: 72px 0 80px; text-align: center; }
+    .badge-pill {
+      display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 700; letter-spacing: .08em;
+      color: var(--text-soft); background: var(--surface); border: 1px solid var(--border);
+      padding: 8px 16px; border-radius: 99px; animation: fadeUp .6s var(--ease) both;
+    }
+    .badge-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ak-emerald); box-shadow: 0 0 10px var(--ak-emerald); animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .intro h1 { font-size: clamp(38px, 6.4vw, 74px); margin: 26px auto 18px; max-width: 18ch; animation: fadeUp .6s var(--ease) .06s both; }
+    .intro .lead { font-size: clamp(16px, 2vw, 19.5px); color: var(--text-soft); max-width: 62ch; margin: 0 auto 34px; animation: fadeUp .6s var(--ease) .12s both; }
+    .intro .lead strong { color: var(--text); }
+    .intro-cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; animation: fadeUp .6s var(--ease) .18s both; }
+    .btn-xl { font-size: 16.5px; padding: 15px 30px; border-radius: 14px; }
+    .press-start { position: relative; overflow: hidden; }
+    .press-start::after {
+      content: ""; position: absolute; inset: -40%; background: linear-gradient(100deg, transparent 42%, rgba(255,255,255,.5) 50%, transparent 58%);
+      transform: translateX(-100%); animation: sheen 3.2s var(--ease) infinite;
+    }
+    @keyframes sheen { 0%, 55% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    .intro-stats { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 34px; animation: fadeUp .6s var(--ease) .24s both; }
+    .stat-chip {
+      display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 99px;
+      background: var(--surface); border: 1px solid var(--border); font-size: 13.5px; font-weight: 600; color: var(--text-soft);
+    }
+    .stat-chip i { background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .skill-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; max-width: 880px; margin: 52px auto 0; animation: fadeUp .6s var(--ease) .3s both; }
+    .skill {
+      padding: 18px 14px; border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--border);
+      font-size: 13.5px; font-weight: 600; color: var(--text-soft); transition: transform .25s var(--ease), box-shadow .25s, border-color .25s;
+    }
+    .skill:hover { transform: translateY(-4px); box-shadow: var(--shadow-sm); border-color: var(--border-strong); }
+    .skill i { display: block; font-size: 21px; margin-bottom: 10px; background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .skill:nth-child(2) i, .skill:nth-child(6) i { background: var(--grad-cyan); -webkit-background-clip: text; background-clip: text; }
+    .skill:nth-child(3) i, .skill:nth-child(7) i { background: var(--grad-warm); -webkit-background-clip: text; background-clip: text; }
+    .skill:nth-child(4) i, .skill:nth-child(8) i { background: var(--grad-emerald); -webkit-background-clip: text; background-clip: text; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ===================================================================
+       Game screen
+       =================================================================== */
+    .game { display: none; padding: 34px 0 80px; }
+    .game.active { display: block; }
+    .game-layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 28px; align-items: start; }
+
+    /* ----- level rail ----- */
+    .rail { position: sticky; top: 86px; display: flex; flex-direction: column; gap: 4px; }
+    .rail-title { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); padding: 0 12px 10px; }
+    .rail-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 13px;
+      cursor: pointer; border: 1px solid transparent; transition: .2s; user-select: none;
+    }
+    .rail-item:hover:not(.locked) { background: var(--bg-soft); }
+    .rail-item.current { background: var(--surface); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+    .rail-item.locked { opacity: .45; cursor: not-allowed; }
+    .rail-ico {
+      width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px;
+      background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft); font-size: 14px; transition: .25s;
+    }
+    .rail-item.done .rail-ico { background: var(--grad-brand); border-color: transparent; color: #fff; }
+    .rail-item.current .rail-ico { border-color: var(--ak-violet); color: var(--ak-violet); animation: glowPulse 2s infinite; }
+    .rail-item.done.current .rail-ico { color: #fff; }
+    @keyframes glowPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,.35); } 50% { box-shadow: 0 0 0 6px rgba(139,92,246,0); } }
+    .rail-txt { min-width: 0; line-height: 1.3; }
+    .rail-txt b { display: block; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rail-txt small { font-size: 11.5px; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .rail-state { margin-left: auto; font-size: 12px; color: var(--text-mute); flex: none; }
+    .rail-item.done .rail-state { color: var(--ok); }
+
+    /* ----- stage ----- */
+    .stage { min-width: 0; animation: fadeUp .45s var(--ease) both; }
+    .level-head { margin-bottom: 18px; }
+    .lvl-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .lvl-badge { font-size: 11.5px; font-weight: 800; letter-spacing: .1em; color: #fff; background: var(--grad-brand); padding: 5px 12px; border-radius: 99px; }
+    .lvl-badge.boss { background: var(--grad-warm); }
+    .lvl-xp { font-size: 12px; font-weight: 700; color: var(--text-mute); border: 1px dashed var(--border-strong); padding: 4px 11px; border-radius: 99px; }
+    .lvl-done-chip { font-size: 12px; font-weight: 700; color: var(--ok); background: var(--ok-bg); padding: 4px 11px; border-radius: 99px; display: none; }
+    .lvl-done-chip.show { display: inline-flex; align-items: center; gap: 6px; }
+    .level-head h2 { font-size: clamp(26px, 3.4vw, 38px); }
+    .lvl-tag { color: var(--text-mute); font-size: 14.5px; margin-top: 6px; font-style: italic; }
+
+    .learn-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 22px 24px; margin-bottom: 16px; font-size: 15px; color: var(--text-soft);
+    }
+    .learn-box p { margin-bottom: 10px; }
+    .learn-box p:last-child { margin-bottom: 0; }
+    .learn-box strong { color: var(--text); }
+    .learn-box code {
+      font-family: var(--font-mono); font-size: .88em; background: var(--bg-soft);
+      border: 1px solid var(--border); padding: 1.5px 6px; border-radius: 6px; color: var(--text); white-space: nowrap;
+    }
+    .mini-code {
+      margin: 14px 0 4px; background: var(--code-bg); color: var(--code-text); border-radius: 12px;
+      padding: 16px 18px; font-family: var(--font-mono); font-size: 12.8px; line-height: 1.7;
+      overflow-x: auto; border: 1px solid var(--border);
+    }
+
+    .mission-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 18px 24px; margin-bottom: 18px; position: relative; overflow: hidden;
+    }
+    .mission-box::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--grad-brand); }
+    .mission-head { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+    .mission-head i { color: var(--ak-pink); }
+    .mission-progress { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--text-mute); text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+    .mission-brief { font-size: 14.5px; color: var(--text-soft); margin-bottom: 12px; }
+    .objectives { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    .objectives li { display: flex; align-items: center; gap: 11px; font-size: 14.5px; color: var(--text-soft); transition: color .3s; }
+    .objectives li i { font-size: 16px; color: var(--text-mute); transition: .3s; width: 18px; text-align: center; }
+    .objectives li.done { color: var(--text); }
+    .objectives li.done i { color: var(--ok); transform: scale(1.15); }
+
+    /* ----- workbench ----- */
+    .workbench { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); background: var(--surface-solid); }
+    .window-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #161325; }
+    html[data-doc-theme='light'] .window-bar { background: #1b1730; }
+    .dots { display: flex; gap: 7px; }
+    .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+    .dots i:nth-child(1){ background:#ff5f57; } .dots i:nth-child(2){ background:#febc2e; } .dots i:nth-child(3){ background:#28c840; }
+    .file { font-family: var(--font-mono); font-size: 12.5px; color: #cbd5e1; }
+    .live-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: #4ade80; letter-spacing: .05em; }
+    .live-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse 1.6s infinite; }
+    .bar-actions { margin-left: auto; display: flex; gap: 8px; }
+    .bar-btn {
+      display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; font-family: var(--font-sans);
+      color: #cbd5e1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: .2s;
+    }
+    .bar-btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+    .split { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); }
+    .code-pane { position: relative; background: var(--code-bg); height: 430px; }
+    .code-pane textarea, .code-pane pre {
+      position: absolute; inset: 0; margin: 0; padding: 18px 20px; border: 0;
+      font-family: var(--font-mono); font-size: 13.2px; line-height: 1.72; tab-size: 2;
+      white-space: pre; overflow: auto; background: transparent;
+    }
+    .code-pane pre { pointer-events: none; color: var(--code-text); overflow: hidden; z-index: 1; }
+    .code-pane textarea {
+      z-index: 2; resize: none; color: transparent; caret-color: #e6e3ff; outline: none; -webkit-text-fill-color: transparent;
+    }
+    .code-pane textarea::selection { background: rgba(139,92,246,0.4); }
+    .tk-kw { color: #c084fc; } .tk-str { color: #fca5a5; } .tk-atom { color: #f472b6; font-weight: 600; }
+    .tk-comp { color: #a5b4fc; } .tk-num { color: #fbbf24; } .tk-com { color: #64748b; font-style: italic; }
+    .tk-interp { color: #22d3ee; }
+    .preview-pane { background: var(--bg-2); height: 430px; overflow: auto; padding: 18px; border-left: 1px solid var(--border); }
+    .preview-pane aktion-app { display: block; }
+
+    /* ----- hint + feedback ----- */
+    .hint-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin-top: 16px; }
+    .hint-box {
+      flex: 1; min-width: 240px; display: none; background: var(--surface); border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm); padding: 12px 16px; font-size: 14px; color: var(--text-soft);
+    }
+    .hint-box.show { display: block; animation: fadeUp .3s var(--ease) both; }
+    .hint-box b { color: var(--ak-amber); }
+    .level-nav { display: flex; gap: 12px; margin-top: 20px; align-items: center; }
+    .complete-btn { margin-left: auto; }
+    .complete-btn.ready { animation: readyPulse 1.6s infinite; }
+    @keyframes readyPulse { 0%,100% { box-shadow: 0 10px 28px -8px rgba(124,58,237,.6); } 50% { box-shadow: 0 10px 40px -4px rgba(236,72,153,.75); } }
+
+    /* ===================================================================
+       Finish screen
+       =================================================================== */
+    .finish { display: none; padding: 60px 0 90px; text-align: center; }
+    .finish.active { display: block; }
+    .certificate {
+      position: relative; max-width: 760px; margin: 0 auto; border-radius: 28px; padding: 3px;
+      background: var(--grad-brand); box-shadow: var(--shadow); animation: fadeUp .5s var(--ease) both;
+    }
+    .cert-inner { background: var(--bg-2); border-radius: 25px; padding: 52px 40px; }
+    .cert-inner .seal { font-size: 44px; margin-bottom: 14px; }
+    .cert-kicker { font-size: 12px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; color: var(--text-mute); }
+    .cert-inner h2 { font-size: clamp(28px, 4vw, 42px); margin: 12px 0 8px; }
+    .cert-name {
+      font-family: var(--font-sans); font-size: 22px; font-weight: 800; text-align: center; color: var(--text);
+      background: transparent; border: none; border-bottom: 2px dashed var(--border-strong); outline: none;
+      padding: 6px 10px; margin: 14px auto 6px; display: block; width: min(360px, 90%);
+    }
+    .cert-name:focus { border-bottom-color: var(--ak-violet); }
+    .cert-sub { color: var(--text-soft); font-size: 15.5px; max-width: 48ch; margin: 10px auto 0; }
+    .cert-quote { margin-top: 18px; font-style: italic; color: var(--text-mute); font-size: 14px; }
+    .finish-stats { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 34px 0 8px; }
+    .fstat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 26px; min-width: 130px; }
+    .fstat b { display: block; font-size: 26px; font-weight: 800; background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .fstat span { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-mute); }
+    .finish-cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 26px; }
+    .side-quests { max-width: 880px; margin: 56px auto 0; text-align: left; }
+    .side-quests h3 { text-align: center; font-size: 22px; margin-bottom: 6px; }
+    .side-quests .sq-sub { text-align: center; color: var(--text-mute); font-size: 14.5px; margin-bottom: 24px; }
+    .sq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .sq-card {
+      display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; border-radius: var(--radius-md);
+      background: var(--surface); border: 1px solid var(--border); transition: transform .25s var(--ease), box-shadow .25s, border-color .25s;
+    }
+    .sq-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); border-color: var(--border-strong); }
+    .sq-card i { font-size: 19px; margin-top: 3px; background: var(--grad-cyan); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sq-card b { display: block; font-size: 15px; }
+    .sq-card span { font-size: 13.5px; color: var(--text-mute); }
+
+    /* ===================================================================
+       Toasts, confetti, xp float
+       =================================================================== */
+    #toasts { position: fixed; top: 80px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+    .ach-toast {
+      display: flex; align-items: center; gap: 13px; background: var(--surface-solid); border: 1px solid var(--border-strong);
+      border-radius: 14px; padding: 13px 18px; box-shadow: var(--shadow); min-width: 270px; max-width: 340px;
+      animation: toastIn .45s var(--ease) both;
+    }
+    .ach-toast.bye { animation: toastOut .35s var(--ease) both; }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(40px) scale(.95); } to { opacity: 1; transform: none; } }
+    @keyframes toastOut { to { opacity: 0; transform: translateX(40px) scale(.95); } }
+    .ach-ico { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; background: var(--grad-brand); color: #fff; font-size: 16px; }
+    .ach-toast b { display: block; font-size: 14px; }
+    .ach-toast span { font-size: 12.5px; color: var(--text-mute); display: block; line-height: 1.4; }
+    #confetti { position: fixed; inset: 0; z-index: 99; pointer-events: none; }
+    .xp-float {
+      position: fixed; z-index: 101; font-weight: 800; font-size: 20px; pointer-events: none;
+      background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: xpFloat 1.2s var(--ease) both;
+    }
+    @keyframes xpFloat { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-70px) scale(1.3); } }
+
+    /* ----- footer ----- */
+    footer { border-top: 1px solid var(--border); padding: 30px 0; color: var(--text-mute); font-size: 13.5px; }
+    .foot-inner { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+    .foot-links { display: flex; gap: 18px; }
+    .foot-links a { color: var(--text-soft); transition: .2s; }
+    .foot-links a:hover { color: var(--text); }
+
+    /* ===================================================================
+       Responsive
+       =================================================================== */
+    @media (max-width: 1020px) {
+      .game-layout { grid-template-columns: 1fr; }
+      .rail { position: static; flex-direction: row; overflow-x: auto; padding-bottom: 8px; gap: 8px; }
+      .rail-title { display: none; }
+      .rail-item { flex: none; padding: 8px 12px 8px 8px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); }
+      .rail-txt small, .rail-state { display: none; }
+      .rail-ico { width: 28px; height: 28px; border-radius: 50%; font-size: 11.5px; }
+      .split { grid-template-columns: 1fr; }
+      .preview-pane { border-left: none; border-top: 1px solid var(--border); height: 340px; }
+      .code-pane { height: 360px; }
+      .skill-grid { grid-template-columns: repeat(2, 1fr); }
+      .sq-grid { grid-template-columns: 1fr; }
+      .xp-wrap { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="blob b1" aria-hidden="true"></div>
+  <div class="blob b2" aria-hidden="true"></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div id="toasts" aria-live="polite"></div>
+
+  <div class="page">
+    <!-- ============================ TOP BAR ============================ -->
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="index.html">
+          <img src="assets/logo.png" alt="Aktion logo" />
+          <span>Aktion</span>
+          <span class="quest">QUEST</span>
+        </a>
+        <div class="xp-wrap" id="xpWrap" title="Experience points. Not redeemable for salary.">
+          <span class="xp-label" id="xpLabel">0 XP</span>
+          <div class="xp-bar"><div class="xp-fill" id="xpFill"></div></div>
+          <span class="xp-label" id="lvlLabel">Lv 0/11</span>
+        </div>
+        <div class="nav-right">
+          <a class="docs-link" href="get-started.html">Docs</a>
+          <a class="docs-link" href="playground.html">Playground</a>
+          <button class="icon-btn" id="themeToggle" aria-label="Toggle dark mode" title="Toggle theme"><i class="fa-solid fa-moon"></i></button>
+          <a class="icon-btn" href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub"><i class="fa-brands fa-github"></i></a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============================ INTRO ============================ -->
+    <section class="intro" id="introScreen">
+      <div class="wrap">
+        <span class="badge-pill"><span class="dot"></span> INTERACTIVE TUTORIAL · 11 LEVELS · 0 BUILD STEPS</span>
+        <h1>Learn <span class="grad-text">Aktion</span> by actually building things.</h1>
+        <p class="lead">
+          Eleven bite-size levels. A live editor with instant previews. XP, achievements, and exactly one dragon.
+          By the end you'll write <strong>reactive UIs in a strict subset of JavaScript you already know</strong> —
+          components, state, forms, effects, HTTP, styling and themes. No JSX. No bundler. No webpack config
+          that gains sentience at 2&nbsp;AM.
+        </p>
+        <div class="intro-cta">
+          <button class="btn btn-primary btn-xl press-start" id="startBtn"><i class="fa-solid fa-play"></i> Press Start</button>
+          <a class="btn btn-ghost btn-xl" href="get-started.html"><i class="fa-solid fa-book"></i> I prefer calm, quiet docs</a>
+        </div>
+        <div class="intro-stats">
+          <span class="stat-chip"><i class="fa-solid fa-layer-group"></i> 11 levels — it goes to 11</span>
+          <span class="stat-chip"><i class="fa-solid fa-mug-hot"></i> ~25 min (one coffee)</span>
+          <span class="stat-chip"><i class="fa-solid fa-star"></i> 1,300 XP to earn</span>
+          <span class="stat-chip"><i class="fa-solid fa-floppy-disk"></i> Progress auto-saved</span>
+        </div>
+        <div class="skill-grid">
+          <div class="skill"><i class="fa-solid fa-cubes"></i> Components &amp; the trailing-object rule</div>
+          <div class="skill"><i class="fa-solid fa-bolt"></i> Reactive state with <code style="font-family:var(--font-mono)">$atoms</code></div>
+          <div class="skill"><i class="fa-solid fa-table-cells-large"></i> Layout: Column, Row &amp; Grid</div>
+          <div class="skill"><i class="fa-solid fa-code-branch"></i> Real JS control flow</div>
+          <div class="skill"><i class="fa-solid fa-bullhorn"></i> Actions &amp; toasts</div>
+          <div class="skill"><i class="fa-solid fa-clipboard-check"></i> Forms &amp; validation</div>
+          <div class="skill"><i class="fa-solid fa-stopwatch"></i> Effects, timers &amp; HTTP</div>
+          <div class="skill"><i class="fa-solid fa-palette"></i> sx styling &amp; theming</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ GAME ============================ -->
+    <section class="game" id="gameScreen">
+      <div class="wrap game-layout">
+        <aside class="rail" id="rail" aria-label="Levels">
+          <div class="rail-title">Quest log</div>
+          <!-- rail items injected -->
+        </aside>
+
+        <div class="stage" id="stage">
+          <div class="level-head">
+            <div class="lvl-meta">
+              <span class="lvl-badge" id="lvlBadge">LEVEL 1</span>
+              <span class="lvl-xp" id="lvlXp">+100 XP</span>
+              <span class="lvl-done-chip" id="lvlDoneChip"><i class="fa-solid fa-circle-check"></i> Completed</span>
+            </div>
+            <h2 id="lvlTitle"></h2>
+            <p class="lvl-tag" id="lvlTag"></p>
+          </div>
+
+          <div class="learn-box" id="lvlLearn"></div>
+
+          <div class="mission-box">
+            <div class="mission-head">
+              <i class="fa-solid fa-crosshairs"></i> Your mission
+              <span class="mission-progress" id="missionProgress">0/0</span>
+            </div>
+            <p class="mission-brief" id="missionBrief"></p>
+            <ul class="objectives" id="objectives"></ul>
+          </div>
+
+          <div class="workbench">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file" id="fileName">level-1.aktion</span>
+              <span class="live-badge"><span class="dot"></span> LIVE</span>
+              <div class="bar-actions">
+                <button class="bar-btn" id="runBtn" title="Cmd/Ctrl + Enter"><i class="fa-solid fa-play"></i> Run</button>
+                <button class="bar-btn" id="resetBtn"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+                <button class="bar-btn" id="solutionBtn"><i class="fa-solid fa-wand-magic-sparkles"></i> Solution</button>
+              </div>
+            </div>
+            <div class="split">
+              <div class="code-pane">
+                <pre id="editorHl" aria-hidden="true"></pre>
+                <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="Aktion code editor"></textarea>
+              </div>
+              <div class="preview-pane" id="preview"></div>
+            </div>
+          </div>
+
+          <div class="hint-row">
+            <button class="btn btn-ghost" id="hintBtn"><i class="fa-solid fa-lightbulb"></i> <span id="hintBtnLabel">Hint</span></button>
+            <div class="hint-box" id="hintBox"></div>
+          </div>
+
+          <div class="level-nav">
+            <button class="btn btn-ghost" id="prevBtn"><i class="fa-solid fa-arrow-left"></i> Previous</button>
+            <button class="btn btn-primary complete-btn" id="completeBtn" disabled>Complete level <i class="fa-solid fa-arrow-right"></i></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ FINISH ============================ -->
+    <section class="finish" id="finishScreen">
+      <div class="wrap">
+        <div class="certificate">
+          <div class="cert-inner">
+            <div class="seal">🏆</div>
+            <div class="cert-kicker">Certificate of Aktion</div>
+            <h2>Certified <span class="grad-text">Aktion Hero</span></h2>
+            <input class="cert-name" id="certName" value="Anonymous Dev" aria-label="Your name" />
+            <p class="cert-sub">
+              has defeated the dragon, shipped to prod on a Friday, and can now build reactive,
+              themeable UIs with one tag and a fraction of the code.
+            </p>
+            <p class="cert-quote">"It works on my machine" — and, for once, on everyone else's too.</p>
+          </div>
+        </div>
+        <div class="finish-stats">
+          <div class="fstat"><b id="statXp">0</b><span>XP earned</span></div>
+          <div class="fstat"><b id="statLevels">11/11</b><span>Levels</span></div>
+          <div class="fstat"><b id="statHints">0</b><span>Hints used</span></div>
+          <div class="fstat"><b id="statTime">—</b><span>Time</span></div>
+        </div>
+        <div class="finish-cta">
+          <button class="btn btn-primary btn-xl" id="bragBtn"><i class="fa-solid fa-copy"></i> Copy brag for the team chat</button>
+          <a class="btn btn-ghost btn-xl" href="playground.html"><i class="fa-solid fa-flask"></i> Keep building in the playground</a>
+          <button class="btn btn-ghost" id="replayBtn"><i class="fa-solid fa-rotate-left"></i> Replay levels</button>
+        </div>
+        <div class="side-quests">
+          <h3>Side quests</h3>
+          <p class="sq-sub">The main quest is done. These optional bosses drop rare loot.</p>
+          <div class="sq-grid">
+            <a class="sq-card" href="routing.html"><i class="fa-solid fa-route"></i><div><b>$router — multi-page apps</b><span>Hash-based routing, params, NavLink. No router library, obviously.</span></div></a>
+            <a class="sq-card" href="stores.html"><i class="fa-solid fa-database"></i><div><b>$store — global state + undo/redo</b><span>Persistence to localStorage and time travel. Ctrl+Z as a feature.</span></div></a>
+            <a class="sq-card" href="llm-integration.html"><i class="fa-solid fa-robot"></i><div><b>LLM integration</b><span>Stream Aktion straight from a model into live UI. The party trick.</span></div></a>
+            <a class="sq-card" href="components.html"><i class="fa-solid fa-cubes"></i><div><b>All 271 components</b><span>You met maybe 20. The other 251 are waiting. No pressure.</span></div></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ FOOTER ============================ -->
+    <footer>
+      <div class="wrap foot-inner">
+        <span>© 2026 Aktion · MIT License · No developers were harmed in this tutorial.</span>
+        <div class="foot-links">
+          <a href="index.html">Home</a>
+          <a href="get-started.html">Docs</a>
+          <a href="playground.html">Playground</a>
+          <a href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- =================================================================
+       Level code: starters & solutions (raw text, no escaping needed)
+       ================================================================== -->
+  <script type="text/plain" data-level="1" data-kind="starter">
+$app(Card([
+  CardHeader("👋 Hello, Aktion"),
+  Text("Plain text. Riveting stuff.")
+]))
+</script>
+  <script type="text/plain" data-level="1" data-kind="solution">
+$app(Card([
+  CardHeader("👋 Hello, Aktion", { subtitle: "My very first component tree" }),
+  Markdown("This is **bold**, this is *italic*, and this is _shipping to prod_."),
+  Text("No JSX. No build step. No existential dread.")
+]))
+</script>
+
+  <script type="text/plain" data-level="2" data-kind="starter">
+$count = 0
+
+$app(Card([
+  CardHeader("The Clicker 3000™"),
+  Text(`Clicks: ${$count}`),
+  Row([
+    Button("+1", { variant: "primary", onClick: () => { $count++ } })
+  ], { gap: "s" })
+]))
+</script>
+  <script type="text/plain" data-level="2" data-kind="solution">
+$count = 0
+
+$app(Card([
+  CardHeader("The Clicker 3000™", { subtitle: "Every framework demo is a counter. It's the law." }),
+  Text(`Clicks: ${$count}`),
+  Row([
+    Button("+1", { variant: "primary", onClick: () => { $count++ } }),
+    Button("-1", { onClick: () => { $count-- } }),
+    Button("Reset", { variant: "secondary", onClick: () => { $count = 0 } })
+  ], { gap: "s" })
+]))
+</script>
+
+  <script type="text/plain" data-level="3" data-kind="starter">
+$app(Column([
+  PageHeader("Mission Control", { subtitle: "Numbers that go up and to the right" })
+], { gap: "l" }))
+</script>
+  <script type="text/plain" data-level="3" data-kind="solution">
+$app(Column([
+  PageHeader("Mission Control", { subtitle: "Numbers that go up and to the right" }),
+  Grid([
+    StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" }),
+    StatCard("Users", { value: "12,540", trend: "up", delta: "+184", icon: "users" }),
+    StatCard("Bugs squashed", { value: "847", trend: "up", delta: "+3 today", icon: "bug-slash" })
+  ], { gap: "m", minChildWidth: "150px" }),
+  Card([
+    CardHeader("Layout cheat sheet"),
+    Text("Column stacks. Row lines up. Grid… grids. Gap tokens: xs, s, m, l, xl.")
+  ])
+], { gap: "l" }))
+</script>
+
+  <script type="text/plain" data-level="4" data-kind="starter">
+$todos = [
+  { title: "Learn Aktion", done: true },
+  { title: "Build something cool", done: false },
+  { title: "Touch grass", done: false }
+]
+
+$app(Card([
+  CardHeader("Todo or not todo"),
+  Column($todos.map(t => Text(t.title)), { gap: "s" })
+]))
+</script>
+  <script type="text/plain" data-level="4" data-kind="solution">
+$todos = [
+  { title: "Learn Aktion", done: true },
+  { title: "Build something cool", done: false },
+  { title: "Touch grass", done: false }
+]
+
+$app(Card([
+  CardHeader("Todo or not todo", {
+    subtitle: `${$todos.filter(t => !t.done).length} left — so close`
+  }),
+  Column($todos.map(t => Row([
+    Text(t.title),
+    t.done
+      ? Badge("Done", { tone: "success" })
+      : Badge("Pending", { tone: "warning" })
+  ], { gap: "s", align: "center", justify: "between" })), { gap: "s" })
+]))
+</script>
+
+  <script type="text/plain" data-level="5" data-kind="starter">
+function deploy() {
+  $toast.info("Deploying… please remain calm.")
+}
+
+$app(Card([
+  CardHeader("Big Red Button Department"),
+  Button("Deploy to prod", { variant: "primary", icon: "rocket", onClick: () => deploy() })
+]))
+</script>
+  <script type="text/plain" data-level="5" data-kind="solution">
+$deploys = 0
+
+function deploy() {
+  $deploys++
+  $toast.success(`Deploy #${$deploys} shipped. You absolute legend.`)
+}
+
+function rollback() {
+  $toast.error("Rolled back. It's fine. Everything is fine. 🔥")
+}
+
+$app(Card([
+  CardHeader("Big Red Button Department", { subtitle: `${$deploys} deploys and counting` }),
+  Row([
+    Button("Deploy to prod", { variant: "primary", icon: "rocket", onClick: () => deploy() }),
+    Button("Rollback", { variant: "secondary", icon: "clock-rotate-left", onClick: () => rollback() })
+  ], { gap: "s" })
+]))
+</script>
+
+  <script type="text/plain" data-level="6" data-kind="starter">
+form = $form({
+  values: { email: "" },
+  rules: {
+    email: [$util.rules.required(), $util.rules.email()]
+  },
+  onSubmit: (v) => { $toast.success(`Welcome aboard, ${v.email}!`) }
+})
+
+$app(Card([
+  CardHeader("Join the waitlist", { subtitle: "We never email you. We're too busy." }),
+  Input("email", { label: "Email", value: form.values.email, error: form.errors.email }),
+  Button("Sign up", { variant: "primary", onClick: () => form.submit() })
+]))
+</script>
+  <script type="text/plain" data-level="6" data-kind="solution">
+form = $form({
+  values: { email: "", password: "" },
+  rules: {
+    email: [$util.rules.required(), $util.rules.email()],
+    password: [$util.rules.required(), $util.rules.minLength(8)]
+  },
+  onSubmit: (v) => { $toast.success(`Welcome aboard, ${v.email}!`) }
+})
+
+$app(Card([
+  CardHeader("Join the waitlist", { subtitle: "We never email you. We're too busy." }),
+  Column([
+    Input("email", { label: "Email", value: form.values.email, error: form.errors.email }),
+    Input("password", { label: "Password", type: "password", value: form.values.password, error: form.errors.password }),
+    Button("Sign up", { variant: "primary", onClick: () => form.submit(), loading: form.submitting })
+  ], { gap: "m" })
+]))
+</script>
+
+  <script type="text/plain" data-level="7" data-kind="starter">
+$seconds = 0
+
+$effect(() => { $seconds++ }, ["every(1000)"])
+
+$app(Card([
+  CardHeader("Time flies when you're reactive"),
+  Text(`You've been on this level for ${$seconds}s`)
+]))
+</script>
+  <script type="text/plain" data-level="7" data-kind="solution">
+$seconds = 0
+
+$effect(() => { $seconds++ }, ["every(1000)"])
+
+$effect(() => {
+  console.log("Level 7 mounted. The clock is ticking. Literally.")
+}, ["mount"])
+
+$effect(() => {
+  if ($seconds === 10) {
+    $toast.success("Achievement: 10 whole seconds of patience.")
+  }
+}, [$seconds])
+
+$app(Card([
+  CardHeader("Time flies when you're reactive"),
+  Text(`You've been on this level for ${$seconds}s`),
+  ProgressBar(Math.min($seconds * 10, 100), { label: "Patience meter" })
+]))
+</script>
+
+  <script type="text/plain" data-level="8" data-kind="starter">
+$repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
+
+$app(Card([
+  CardHeader("Fetch Quest", { subtitle: "One primitive. Zero axios." }),
+  Text("TODO: handle loading, error and data states…")
+]))
+</script>
+  <script type="text/plain" data-level="8" data-kind="solution">
+$repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
+
+$app(Card([
+  CardHeader("Fetch Quest", { subtitle: "One primitive. Zero axios." }),
+  $repo.loading
+    ? Row([Spinner(), Text("Summoning JSON from the cloud…")], { gap: "s", align: "center" })
+    : $repo.error
+      ? Alert("The internet said no. Classic internet.", { tone: "danger" })
+      : Column([
+          StatCard("GitHub stars", { value: `${$repo.data.stargazers_count}`, icon: "star" }),
+          Text(`Open issues: ${$repo.data.open_issues_count} (rookie numbers)`),
+          Button("Refetch", { icon: "rotate", onClick: () => $repo.refetch() })
+        ], { gap: "m" })
+]))
+</script>
+
+  <script type="text/plain" data-level="9" data-kind="starter">
+$app(Column([
+  Text("I am painfully unstyled.", { sx: { p: "m" } }),
+  Text("Help us. Please.", { sx: { p: "m" } })
+], { gap: "m" }))
+</script>
+  <script type="text/plain" data-level="9" data-kind="solution">
+$app(Column([
+  Text("Now THIS is podracing. ✨", {
+    sx: {
+      p: "l",
+      bg: "gradient.brand",
+      color: "#fff",
+      radius: "lg",
+      shadow: "lg",
+      fontSize: "xl",
+      weight: "800",
+      states: { hover: { opacity: "0.9" } }
+    },
+    animate: "fade-up"
+  }),
+  Card([
+    Text("Tokens, not pixels: p, bg, radius, shadow — and hover states. No stylesheet was harmed.")
+  ], { sx: { p: "m", radius: "lg", shadow: "md" }, animate: "fade-up" })
+], { gap: "m" }))
+</script>
+
+  <script type="text/plain" data-level="10" data-kind="starter">
+$theme({
+  colors: { primary: "#6366f1" }
+})
+
+$app(Card([
+  CardHeader("Theme Park", { subtitle: "Tickets are free, rides are tokens" }),
+  Column([
+    Button("Primary button", { variant: "primary" }),
+    Badge("I follow the brand", { tone: "primary" })
+  ], { gap: "m" })
+]))
+</script>
+  <script type="text/plain" data-level="10" data-kind="solution">
+$theme({
+  colors: { primary: "#10b981", accent: "#f59e0b" },
+  radius: { md: "14px", button: "12px" },
+  gradients: { brand: "linear-gradient(120deg, #10b981, #22d3ee)" }
+})
+
+$app(Card([
+  CardHeader("Theme Park", { subtitle: "Tickets are free, rides are tokens" }),
+  Column([
+    Button("Primary button", { variant: "primary" }),
+    Badge("I follow the brand", { tone: "primary" }),
+    Text("Rebranded!", { sx: { bg: "gradient.brand", color: "#fff", p: "m", radius: "md", weight: "700" } })
+  ], { gap: "m" })
+]))
+</script>
+
+  <script type="text/plain" data-level="11" data-kind="starter">
+// FINAL BOSS: build Mission Control.
+// The dragon is watching. The dragon is also your PM.
+
+$uptime = 0
+
+$app(Column([
+  PageHeader("🚀 Mission Control", { subtitle: "Everything is nominal. Probably." })
+], { gap: "l" }))
+</script>
+  <script type="text/plain" data-level="11" data-kind="solution">
+// FINAL BOSS: Mission Control. The dragon never stood a chance.
+
+$uptime = 0
+$alerts = [
+  { msg: "Coffee reserves at 12%", level: "warning" },
+  { msg: "Friday deploy detected", level: "danger" },
+  { msg: "All tests green", level: "success" }
+]
+
+$effect(() => { $uptime++ }, ["every(1000)"])
+
+function ship() {
+  $toast.success("Shipped. The dragon nods approvingly. 🐉")
+}
+
+$app(Column([
+  PageHeader("🚀 Mission Control", { subtitle: `Uptime: ${$uptime}s — everything is nominal. Probably.` }),
+  Grid([
+    StatCard("Deploys", { value: "42", trend: "up", delta: "+3", icon: "rocket" }),
+    StatCard("Errors", { value: "0", trend: "down", delta: "-7", icon: "bug-slash" }),
+    StatCard("Morale", { value: "97%", trend: "up", delta: "+5%", icon: "face-grin-stars" })
+  ], { gap: "m", minChildWidth: "150px" }),
+  Card([
+    CardHeader("Incident feed", { subtitle: "Live-ish" }),
+    Column($alerts.map(a => Row([
+      Badge(a.level, { tone: a.level }),
+      Text(a.msg)
+    ], { gap: "s", align: "center" })), { gap: "s" })
+  ]),
+  Button("SHIP IT", {
+    variant: "primary", icon: "dragon",
+    onClick: () => ship(),
+    sx: { p: "m", weight: "800", states: { hover: { opacity: "0.9" } } }
+  })
+], { gap: "l" }))
+</script>
+
+  <!-- =================================================================
+       Game engine
+       ================================================================== -->
+  <script type="module">
+    import "../dist/aktion.js"; // registers <aktion-app>
+
+    /* ============================ helpers ============================ */
+    const $id = (s) => document.getElementById(s);
+    const docTheme = () => document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    const stripStrings = (c) => c.replace(/`(?:\\[\s\S]|[^`])*`|"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'/g, '""');
+    const count = (c, re) => (c.match(re) || []).length;
+
+    /* ============================ levels ============================ */
+    const LEVELS = [
+      {
+        icon: "fa-hand-spock", title: "Hello, Component",
+        railSub: "Your first render",
+        tag: "Chapter 1, in which you render UI from plain text and nobody mentions a bundler.",
+        xp: 100, achievement: "Hello, World Domination",
+        learn: `
+          <p><strong>Everything in Aktion is a component call.</strong> Components are just functions — <code>Card(…)</code>, <code>Text(…)</code>, <code>Button(…)</code> — and <code>$app(…)</code> mounts the tree. There are 271 of them built in, so you may never write a <code>&lt;div&gt;</code> again.</p>
+          <p>The <strong>trailing-object rule</strong> is the entire components API: at most <em>one</em> positional argument, and every other prop goes in a trailing <code>{ }</code>. Learn this one shape and you know how to call all 271.</p>
+          <pre class="mini-code">Component(positionalArg, { prop: value, anotherProp: value })
+// e.g.
+CardHeader("Title", { subtitle: "Smaller, sadder text" })
+Markdown("Renders **markdown**, because of course it does.")</pre>
+          <p>Children go in arrays: <code>Card([childA, childB])</code>. That's it. That's the syntax.</p>`,
+        brief: "Warm up the renderer: upgrade the starter card in the editor →",
+        objectives: [
+          { label: "Keep the app mounted with $app(…)", test: (c) => /\$app\s*\(/.test(c) },
+          { label: "Give the CardHeader a subtitle prop", test: (c) => /subtitle\s*:/.test(c) },
+          { label: "Add a Markdown(…) child with some **bold** text", test: (c) => /Markdown\s*\([\s\S]*?\*\*[\s\S]*?\*\*/.test(c) },
+        ],
+        hints: [
+          "Props always live in the trailing object: <code>CardHeader(\"Title\", { subtitle: \"…\" })</code>.",
+          "Markdown is just another component: <code>Markdown(\"some **bold** text\")</code>.",
+          "Stuck? The Solution button exists and judges nobody.",
+        ],
+      },
+      {
+        icon: "fa-bolt", title: "A $tate of Mind",
+        railSub: "Reactive atoms",
+        tag: "Every framework tutorial is a counter. We checked — it's legally binding.",
+        xp: 100, achievement: "Reactive Ingredient",
+        learn: `
+          <p><strong>One prefix makes state reactive: <code>$</code>.</strong> Write <code>$count = 0</code> and the runtime tracks every read and write. No hooks, no setters, no signals ceremony — mutate it like a normal variable and the UI updates.</p>
+          <pre class="mini-code">$count = 0                       // reactive atom
+let vibes = "immaculate"         // plain binding — captured once, never tracked
+
+Text(\`Clicks: \${$count}\`)       // re-renders when $count changes
+Button("+1", { onClick: () => { $count++ } })</pre>
+          <p>Tracking is <strong>path-granular</strong>: reading <code>$user.name</code> subscribes to <code>user.name</code> only — writing <code>$user.role</code> won't re-render it. Your DOM does the minimum amount of work, like a senior engineer on a Friday.</p>`,
+        brief: "The Clicker 3000™ only goes up. Unacceptable. Add the missing controls →",
+        objectives: [
+          { label: "Keep a reactive atom ($something = …)", test: (c) => /\$[A-Za-z_]\w*\s*=\s*[^=]/.test(c) },
+          { label: "Add a button that decrements ($count-- or -=)", test: (c) => /\$\w+\s*(--|-=)/.test(c) },
+          { label: "Add a Reset button that sets it back to 0", test: (c) => /=>\s*\{?[^}]*\$\w+\s*=\s*0/.test(c) },
+          { label: "Field at least 3 Buttons total", test: (c) => count(c, /Button\s*\(/g) >= 3 },
+        ],
+        hints: [
+          "Decrement inside a lambda: <code>onClick: () => { $count-- }</code>.",
+          "Reset is assignment: <code>onClick: () => { $count = 0 }</code>.",
+          "Drop the new Buttons inside the existing <code>Row([…])</code> so they line up.",
+        ],
+      },
+      {
+        icon: "fa-table-cells-large", title: "Layout Tetris",
+        railSub: "Column · Row · Grid",
+        tag: "Centering a div has been solved. You may now tell your grandchildren.",
+        xp: 100, achievement: "Grid Iron",
+        learn: `
+          <p>Three components handle 95% of layout: <strong><code>Column</code></strong> stacks, <strong><code>Row</code></strong> lines up, <strong><code>Grid</code></strong>… grids. Spacing uses tokens — <code>gap: "xs" | "s" | "m" | "l" | "xl"</code> — so your spacing is consistent even when your sleep schedule isn't.</p>
+          <pre class="mini-code">Grid([cardA, cardB, cardC], { gap: "m", minChildWidth: "150px" })
+// minChildWidth = responsive for free. No media queries were written.</pre>
+          <p><code>StatCard</code> is the dashboard workhorse: <code>StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" })</code>. Any Font Awesome name works as an <code>icon</code>.</p>`,
+        brief: "Mission Control has a header and zero data. The boss is asking questions. Add a Grid of StatCards →",
+        objectives: [
+          { label: "Lay it out with Grid(…)", test: (c) => /Grid\s*\(/.test(c) },
+          { label: "Add at least 3 StatCards", test: (c) => count(c, /StatCard\s*\(/g) >= 3 },
+          { label: "Space things with a gap token", test: (c) => /gap\s*:\s*["']/.test(c) },
+          { label: "Show a trend or delta on a stat", test: (c) => /(trend|delta)\s*:/.test(c) },
+        ],
+        hints: [
+          "Put the Grid right after the PageHeader, inside the Column's array.",
+          "<code>StatCard(\"Users\", { value: \"12,540\", trend: \"up\", delta: \"+184\", icon: \"users\" })</code>",
+          "<code>minChildWidth: \"150px\"</code> makes the grid wrap responsively. Chef's kiss.",
+        ],
+      },
+      {
+        icon: "fa-code-branch", title: "Go With the Flow",
+        railSub: "if / map / ternary",
+        tag: "No v-if. No *ngIf. No {#if}. Just… if. Revolutionary, we know.",
+        xp: 100, achievement: "Flow State",
+        learn: `
+          <p>Aktion's control flow is <strong>literally JavaScript</strong> — <code>if/else</code>, <code>for…of</code>, <code>switch</code>, ternaries, <code>.map</code>, <code>.filter</code>. There is no template DSL to memorize, because the language you already know is the template DSL.</p>
+          <pre class="mini-code">// lists
+Column($todos.map(t => Text(t.title)), { gap: "s" })
+
+// branching, as a value
+t.done ? Badge("Done", { tone: "success" })
+       : Badge("Pending", { tone: "warning" })
+
+// derived values, inline
+\`\${$todos.filter(t => !t.done).length} left\`</pre>
+          <p>Because <code>$todos</code> is reactive, the <code>.map</code> and <code>.filter</code> recompute automatically when the array changes. You write expressions; the runtime does the bookkeeping.</p>`,
+        brief: "These todos have no status and no accountability. Add badges and a remaining count →",
+        objectives: [
+          { label: "Render the list with .map(…)", test: (c) => /\.map\s*\(/.test(c) },
+          { label: "Branch with a ternary (cond ? A : B)", test: (c) => /\?[\s\S]+?:/.test(stripStrings(c)) },
+          { label: "Count what's left with .filter(…)", test: (c) => /\.filter\s*\(/.test(c) },
+          { label: "Give the Badges a tone", test: (c) => /tone\s*:/.test(c) },
+        ],
+        hints: [
+          "Wrap each row: <code>Row([Text(t.title), t.done ? … : …], { gap: \"s\", align: \"center\", justify: \"between\" })</code>.",
+          "Badge tones: <code>success</code>, <code>warning</code>, <code>danger</code>, <code>info</code>.",
+          "Remaining count: <code>$todos.filter(t => !t.done).length</code> — drop it in the CardHeader subtitle.",
+        ],
+      },
+      {
+        icon: "fa-bullhorn", title: "Action Heroes",
+        railSub: "Actions & $toast",
+        tag: "Deploying on a Friday, but with a toast notification, so it's fine.",
+        xp: 100, achievement: "Toast of the Town",
+        learn: `
+          <p><strong>Actions are camelCase <code>function</code> declarations</strong> — your event handlers. They can mutate atoms, call other actions, and generally cause consequences.</p>
+          <p><strong><code>$toast</code></strong> owns notifications so you never hand-manage a toast array again: <code>$toast.success(msg)</code>, <code>.error(msg)</code>, <code>.info(msg)</code>, <code>.warning(msg)</code>, or the full <code>$toast.show(msg, { tone, title, duration })</code>.</p>
+          <pre class="mini-code">function deploy() {
+  $deploys++
+  $toast.success(\`Deploy #\${$deploys} shipped!\`)
+}
+
+Button("Deploy", { onClick: () => deploy() })</pre>
+          <p>Need to talk to the outside world? <code>$emit("name", { detail })</code> fires a real CustomEvent on the host element. Your React app can listen. Diplomacy!</p>`,
+        brief: "One button, no consequences, no fun. Add a deploy counter, a success toast, and a rollback →",
+        objectives: [
+          { label: "Declare an action with function", test: (c) => /function\s+[a-z]\w*\s*\(/.test(c) },
+          { label: "Mutate state inside an action ($x++ or +=)", test: (c) => /\$\w+\s*(\+\+|\+=)/.test(c) },
+          { label: "Celebrate with $toast.success(…)", test: (c) => /\$toast\.success\s*\(/.test(c) },
+          { label: "Add a rollback with $toast.error(…)", test: (c) => /\$toast\.error\s*\(/.test(c) },
+        ],
+        hints: [
+          "Add <code>$deploys = 0</code> at the top, then <code>$deploys++</code> inside deploy().",
+          "Template literals work in toasts: <code>$toast.success(`Deploy #${'$'}{$deploys} shipped`)</code>.",
+          "Second action, second button: <code>function rollback() { $toast.error(\"It's fine. 🔥\") }</code>.",
+        ],
+      },
+      {
+        icon: "fa-clipboard-check", title: "Forms Without Tears",
+        railSub: "$form & validation",
+        tag: "Values, validation, touched, dirty, submitting — handled. Go live your life.",
+        xp: 100, achievement: "Form-idable",
+        learn: `
+          <p><strong><code>$form({ values, rules, onSubmit })</code></strong> is the whole form engine. Two-way binding is automatic — point an Input's <code>value</code> at <code>form.values.email</code> and they stay in sync. No onChange plumbing. None.</p>
+          <pre class="mini-code">form = $form({
+  values: { email: "" },
+  rules:  { email: [$util.rules.required(), $util.rules.email()] },
+  onSubmit: (v) => { /* only runs when everything validates */ }
+})
+
+Input("email", { label: "Email", value: form.values.email, error: form.errors.email })
+Button("Go", { onClick: () => form.submit() })</pre>
+          <p>Validators ship in <code>$util.rules</code>: <code>required()</code>, <code>email()</code>, <code>minLength(n)</code>, <code>pattern(re)</code>, even async ones. The form also tracks <code>.dirty</code>, <code>.touched</code>, <code>.valid</code> and <code>.submitting</code> — because someone always asks.</p>`,
+        brief: "A waitlist with no password field? Security would like a word. Add one, with rules →",
+        objectives: [
+          { label: "Keep the $form({…}) engine", test: (c) => /\$form\s*\(\s*\{/.test(c) },
+          { label: "Add a password field to values and rules", test: (c) => /password\s*:\s*\[/.test(c) },
+          { label: "Enforce minLength(8) — security theater, but real", test: (c) => /minLength\s*\(\s*\d+\s*\)/.test(c) },
+          { label: "Two-way bind it (value: form.values.password)", test: (c) => /value\s*:\s*form\.values\.password/.test(c) },
+          { label: "Surface the error (error: form.errors.…)", test: (c) => /error\s*:\s*form\.errors\.password/.test(c) },
+        ],
+        hints: [
+          "values: <code>{ email: \"\", password: \"\" }</code> — rules get a matching key.",
+          "<code>password: [$util.rules.required(), $util.rules.minLength(8)]</code>",
+          "Copy the email Input and rename the bindings. Yes, copy-paste is a valid strategy. It's called 'reuse'.",
+        ],
+      },
+      {
+        icon: "fa-stopwatch", title: "Side Effects May Include…",
+        railSub: "$effect & lifecycle",
+        tag: "Timers, watchers and mount hooks. Consult your runtime if symptoms persist.",
+        xp: 100, achievement: "Cause and $effect",
+        learn: `
+          <p><strong><code>$effect(body, deps)</code></strong> runs side work declaratively. The dependency list mixes three kinds of triggers:</p>
+          <pre class="mini-code">$effect(() => { … }, [$count])          // re-run when $count changes
+$effect(() => { … }, ["mount"])         // once, on mount
+$effect(() => { … }, ["every(1000)"])   // every second — auto-cleared on unmount
+$effect(() => { … }, [$q, "debounce(300)"])  // rate-limited watcher</pre>
+          <p>No dependency array means <code>["mount"]</code>. Intervals clean themselves up when the component leaves the tree — no orphaned <code>setInterval</code> haunting your tab at 3 AM.</p>`,
+        brief: "The clock ticks but nothing cares. Add a mount log and a watcher that celebrates at exactly 10 seconds →",
+        objectives: [
+          { label: "Keep the \"every(1000)\" heartbeat", test: (c) => /"every\(\s*\d+\s*\)"/.test(c) },
+          { label: "Run something once on \"mount\"", test: (c) => /["']mount["']/.test(c) },
+          { label: "Watch an atom (deps like [$seconds])", test: (c) => /\[[^\]"']*\$\w+[^\]]*\]/.test(c) },
+          { label: "Guard the celebration with if (…)", test: (c) => /if\s*\(/.test(c) },
+        ],
+        hints: [
+          "Mount effect: <code>$effect(() => { console.log(\"hi\") }, [\"mount\"])</code>.",
+          "Watcher: <code>$effect(() => { if ($seconds === 10) { $toast.success(\"…\") } }, [$seconds])</code>.",
+          "The if-guard matters — without it you'd toast on every single tick. Nobody wants 60 toasts.",
+        ],
+      },
+      {
+        icon: "fa-satellite-dish", title: "Fetch Quest",
+        railSub: "$http resources",
+        tag: "One network primitive. The 47 axios wrappers in your last project send their regards.",
+        xp: 100, achievement: "Fetch Happened",
+        learn: `
+          <p><strong><code>$http({ url, method, … })</code></strong> is the only network call. Assign it to an atom and you get a <em>reactive resource bag</em> — the request fires on mount and the fields update in place:</p>
+          <pre class="mini-code">$repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
+
+$repo.loading   // true while in flight
+$repo.data      // parsed body when it lands
+$repo.error     // the bad news, if any
+$repo.refetch() // run it back</pre>
+          <p>Loading/error/success is just a chained ternary — it's only an expression, after all. GET is the default method, so a read is a one-liner.</p>`,
+        brief: "The request fires but the UI shows a TODO. Render all three states like a professional →",
+        objectives: [
+          { label: "Keep the $http({ url }) resource", test: (c) => /\$http\s*\(\s*\{/.test(c) },
+          { label: "Handle .loading (Spinner deserves work too)", test: (c) => /\.loading/.test(c) },
+          { label: "Handle .error (the internet is a lie)", test: (c) => /\.error/.test(c) },
+          { label: "Render something from .data", test: (c) => /\.data/.test(c) },
+          { label: "Add a refetch() button", test: (c) => /\.refetch\s*\(\s*\)/.test(c) },
+        ],
+        hints: [
+          "Chain it: <code>$repo.loading ? … : $repo.error ? … : Column([…])</code>.",
+          "Loading row: <code>Row([Spinner(), Text(\"Summoning JSON…\")], { gap: \"s\" })</code>.",
+          "Stars live at <code>$repo.data.stargazers_count</code>. Refetch: <code>onClick: () => $repo.refetch()</code>.",
+        ],
+      },
+      {
+        icon: "fa-palette", title: "Dress to Compress",
+        railSub: "The sx channel",
+        tag: "In this dojo we say 'design tokens', not 'I'll just eyeball the padding'.",
+        xp: 100, achievement: "Style Icon",
+        learn: `
+          <p><strong>Every component accepts <code>sx</code></strong> — a token-aware style object. Spacing (<code>p, px, py, m…</code>), color (<code>bg, color</code> — including gradient refs like <code>"gradient.brand"</code>), surface (<code>radius, shadow, border</code>), typography (<code>fontSize, weight</code>), flex/grid — all of it, no stylesheet.</p>
+          <pre class="mini-code">Text("Fancy", {
+  sx: {
+    p: "l", bg: "gradient.brand", color: "#fff",
+    radius: "lg", shadow: "lg", weight: "800",
+    states: { hover: { opacity: "0.9" } }   // interaction states, compiled to CSS
+  },
+  animate: "fade-up"                        // motion presets: fade-up, scale-up, …
+})</pre>
+          <p>Any value also takes a responsive map — <code>p: { base: "m", md: "xl" }</code> — which compiles to real media queries. RTL flips automatically because spacing is logical. You're welcome.</p>`,
+        brief: "Two tragically unstyled Texts. Give them the glow-up of a lifetime →",
+        objectives: [
+          { label: "Paint with a gradient (bg: \"gradient.…\")", test: (c) => /bg\s*:\s*["']gradient\./.test(c) },
+          { label: "Round and elevate (radius + shadow)", test: (c) => /radius\s*:/.test(c) && /shadow\s*:/.test(c) },
+          { label: "React on hover (states: { hover: … })", test: (c) => /states\s*:\s*\{[\s\S]*?hover/.test(c) },
+          { label: "Animate in (animate: \"…\")", test: (c) => /animate\s*:\s*["']/.test(c) },
+        ],
+        hints: [
+          "Gradient refs come from the theme: <code>bg: \"gradient.brand\"</code> — add <code>color: \"#fff\"</code> so the text survives.",
+          "<code>states: { hover: { opacity: \"0.9\" } }</code> goes inside sx.",
+          "<code>animate: \"fade-up\"</code> is a sibling of sx, not inside it. Easy XP.",
+        ],
+      },
+      {
+        icon: "fa-swatchbook", title: "Theme Park",
+        railSub: "$theme & tokens",
+        tag: "Seven built-in themes, 80+ tokens, and your brand color is now the law.",
+        xp: 100, achievement: "Theme Lord",
+        learn: `
+          <p>Aktion ships <strong>7 themes</strong> — light, dark, neon, pastel, glass, brutalist, skyline — switched with one attribute: <code>&lt;aktion-app theme="neon"&gt;</code>. (This preview follows the docs' theme toggle, try it ↑)</p>
+          <p><strong><code>$theme({…})</code></strong> rebrands from inside the script — override any of the 80+ tokens and every component obeys instantly:</p>
+          <pre class="mini-code">$theme({
+  colors: { primary: "#10b981", accent: "#f59e0b" },
+  radius: { md: "14px", button: "12px" },
+  gradients: { brand: "linear-gradient(120deg, #10b981, #22d3ee)" }
+})</pre>
+          <p>Buttons, badges, charts, focus rings — they all read tokens, so one <code>$theme</code> call restyles the entire app. It's CSS variables underneath, but you'll never have to know their names.</p>`,
+        brief: "This park is on factory defaults. Rebrand it — your colors, your rules →",
+        objectives: [
+          { label: "Keep the $theme({…}) call", test: (c) => /\$theme\s*\(\s*\{/.test(c) },
+          { label: "Pick a new primary (any hex but #6366f1)", test: (c) => /primary\s*:\s*["']#(?!6366f1)[0-9a-fA-F]{3,8}["']/.test(c) },
+          { label: "Override the brand gradient (gradients: {…})", test: (c) => /gradients\s*:\s*\{/.test(c) },
+          { label: "Tweak the radius tokens (radius: {…})", test: (c) => /radius\s*:\s*\{/.test(c) },
+        ],
+        hints: [
+          "Try <code>primary: \"#10b981\"</code> (emerald) or <code>\"#f59e0b\"</code> (amber). Or your startup's color. We don't judge.",
+          "<code>gradients: { brand: \"linear-gradient(120deg, #10b981, #22d3ee)\" }</code>",
+          "<code>radius: { md: \"14px\", button: \"12px\" }</code> — small numbers: serious; big numbers: friendly.",
+        ],
+      },
+      {
+        icon: "fa-dragon", title: "Final Boss: Ship It™", boss: true,
+        railSub: "Everything at once",
+        tag: "The dragon is just production on a Friday. You've trained for this.",
+        xp: 300, achievement: "Certified Aktion Hero",
+        learn: `
+          <p><strong>No new concepts. Just you, an empty Column, and everything you've learned.</strong> Build a Mission Control dashboard: live uptime, stats, an incident feed, and a big shippable button.</p>
+          <p>Your arsenal: <code>$atoms</code> · <code>Grid</code> + <code>StatCard</code> · <code>.map</code> · <code>function</code> actions + <code>$toast</code> · <code>$effect</code> with <code>"every(1000)"</code> · <code>sx</code>.</p>
+          <pre class="mini-code">// a battle plan, should you want one:
+// 1. $effect ticks $uptime every second
+// 2. Grid of 2-3 StatCards
+// 3. $alerts array → .map into rows with Badges
+// 4. ship() action → $toast.success → glory</pre>
+          <p>Hints still work. The Solution button still exists. But you won't need either. (You might. That's also fine.)</p>`,
+        brief: "Assemble Mission Control. The dragon — who is also your PM — expects all six objectives by EOD →",
+        objectives: [
+          { label: "Reactive state (an atom you mutate)", test: (c) => /\$(?!app\b|theme\b|toast\b|effect\b|http\b|form\b|util\b|emit\b)\w+\s*=/.test(c) },
+          { label: "A Grid with at least 2 StatCards", test: (c) => /Grid\s*\(/.test(c) && count(c, /StatCard\s*\(/g) >= 2 },
+          { label: "A list rendered with .map(…)", test: (c) => /\.map\s*\(/.test(c) },
+          { label: "An action that fires a $toast", test: (c) => /function\s+[a-z]\w*/.test(c) && /\$toast\./.test(c) },
+          { label: "A heartbeat $effect(…)", test: (c) => /\$effect\s*\(/.test(c) },
+          { label: "At least one sx flourish", test: (c) => /sx\s*:\s*\{/.test(c) },
+        ],
+        hints: [
+          "Start with the heartbeat: <code>$effect(() => { $uptime++ }, [\"every(1000)\"])</code> — instant life.",
+          "Steal your own Grid from Level 3 and the .map pattern from Level 4. Recycling is a virtue.",
+          "Finish with <code>Button(\"SHIP IT\", { variant: \"primary\", icon: \"dragon\", onClick: () => ship() })</code>.",
+        ],
+      },
+    ];
+
+    const TOTAL_XP = LEVELS.reduce((a, l) => a + l.xp, 0);
+
+    /* ============================ state ============================ */
+    const SAVE_KEY = "aktion-quest-v1";
+    let state = { xp: 0, completed: [], current: 0, startedAt: null, code: {}, hints: {}, konami: false, name: "Anonymous Dev" };
+    try { state = { ...state, ...(JSON.parse(localStorage.getItem(SAVE_KEY)) || {}) }; } catch (_) {}
+    const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) {} };
+    const isDone = (i) => state.completed.includes(i);
+    const maxUnlocked = () => Math.min(state.completed.length ? Math.max(...state.completed) + 1 : 0, LEVELS.length - 1);
+
+    /* ============================ code blocks ============================ */
+    const codeFor = (i, kind) => {
+      const el = document.querySelector(`script[type="text/plain"][data-level="${i + 1}"][data-kind="${kind}"]`);
+      return el ? el.textContent.replace(/^\n/, "").replace(/\n\s*$/, "\n") : "";
+    };
+
+    /* ============================ syntax highlighting ============================ */
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const TOK = /(\/\/[^\n]*)|(`(?:\\[\s\S]|[^`])*`?)|("(?:\\.|[^"\n])*"?)|('(?:\\.|[^'\n])*'?)|(\$[A-Za-z_]\w*)|\b(function|return|if|else|for|of|in|const|let|var|while|do|switch|case|break|default|new|true|false|null|undefined|typeof)\b|([A-Z][A-Za-z0-9_]*)(?=\s*\()|(\d+(?:\.\d+)?)/g;
+    function highlight(src) {
+      let out = "", last = 0, m;
+      TOK.lastIndex = 0;
+      while ((m = TOK.exec(src))) {
+        out += esc(src.slice(last, m.index));
+        const [full, com, tpl, dq, sq, atom, kw, comp, num] = m;
+        if (com) out += `<span class="tk-com">${esc(com)}</span>`;
+        else if (tpl) {
+          // template literal: color interpolations + atoms inside them
+          const inner = esc(tpl).replace(/(\$\{[^}]*\})/g, (s) =>
+            `<span class="tk-interp">${s.replace(/(\$[A-Za-z_]\w*)(?!\{)/g, '<span class="tk-atom">$1</span>')}</span>`);
+          out += `<span class="tk-str">${inner}</span>`;
+        }
+        else if (dq || sq) out += `<span class="tk-str">${esc(full)}</span>`;
+        else if (atom) out += `<span class="tk-atom">${esc(atom)}</span>`;
+        else if (kw) out += `<span class="tk-kw">${esc(kw)}</span>`;
+        else if (comp) out += `<span class="tk-comp">${esc(comp)}</span>`;
+        else if (num) out += `<span class="tk-num">${esc(num)}</span>`;
+        else out += esc(full);
+        last = TOK.lastIndex;
+      }
+      return out + esc(src.slice(last)) + "\n";
+    }
+
+    /* ============================ DOM refs ============================ */
+    const introScreen = $id("introScreen"), gameScreen = $id("gameScreen"), finishScreen = $id("finishScreen");
+    const rail = $id("rail"), editor = $id("editor"), editorHl = $id("editorHl"), preview = $id("preview");
+    const objectivesEl = $id("objectives"), completeBtn = $id("completeBtn"), hintBox = $id("hintBox");
+
+    /* ============================ rail ============================ */
+    function renderRail() {
+      rail.querySelectorAll(".rail-item").forEach((n) => n.remove());
+      LEVELS.forEach((lvl, i) => {
+        const li = document.createElement("div");
+        const locked = i > maxUnlocked();
+        li.className = "rail-item" + (isDone(i) ? " done" : "") + (i === state.current ? " current" : "") + (locked ? " locked" : "");
+        li.setAttribute("role", "button");
+        li.title = locked ? "Locked. The dragon guards this level until you finish the previous one." : lvl.title;
+        li.innerHTML = `
+          <span class="rail-ico"><i class="fa-solid ${isDone(i) ? "fa-check" : lvl.icon}"></i></span>
+          <span class="rail-txt"><b>${i + 1}. ${lvl.title}</b><small>${lvl.railSub}</small></span>
+          <span class="rail-state">${isDone(i) ? `<i class="fa-solid fa-circle-check"></i>` : locked ? `<i class="fa-solid fa-lock"></i>` : `${lvl.xp}xp`}</span>`;
+        if (!locked) li.addEventListener("click", () => showLevel(i));
+        rail.appendChild(li);
+      });
+    }
+
+    /* ============================ header xp ============================ */
+    function renderHeader() {
+      $id("xpLabel").textContent = `${state.xp.toLocaleString()} XP`;
+      $id("lvlLabel").textContent = `Lv ${state.completed.length}/${LEVELS.length}`;
+      $id("xpFill").style.width = `${Math.min(100, (state.xp / TOTAL_XP) * 100)}%`;
+    }
+
+    /* ============================ preview ============================ */
+    let previewTimer = null;
+    function renderPreview(code) {
+      preview.innerHTML = "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", docTheme());
+      preview.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(code);
+        else app.setAttribute("response", code);
+      } catch (err) { console.error("[tutorial] render failed", err); }
+    }
+    const schedulePreview = () => {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => renderPreview(editor.value), 450);
+    };
+
+    /* ============================ objectives ============================ */
+    function checkObjectives() {
+      const lvl = LEVELS[state.current];
+      const code = editor.value;
+      let done = 0;
+      lvl.objectives.forEach((o, i) => {
+        const li = objectivesEl.children[i];
+        const ok = o.test(code);
+        if (ok) done++;
+        li.classList.toggle("done", ok);
+        li.querySelector("i").className = ok ? "fa-solid fa-circle-check" : "fa-regular fa-circle";
+      });
+      $id("missionProgress").textContent = `${done}/${lvl.objectives.length}`;
+      const all = done === lvl.objectives.length;
+      completeBtn.disabled = !all;
+      completeBtn.classList.toggle("ready", all && !isDone(state.current));
+      return all;
+    }
+
+    /* ============================ level rendering ============================ */
+    let hintIdx = 0;
+    function showLevel(i) {
+      state.current = i; save();
+      const lvl = LEVELS[i];
+      introScreen.style.display = "none";
+      finishScreen.classList.remove("active");
+      gameScreen.classList.add("active");
+
+      const badge = $id("lvlBadge");
+      badge.textContent = lvl.boss ? "FINAL BOSS" : `LEVEL ${i + 1} / ${LEVELS.length}`;
+      badge.classList.toggle("boss", !!lvl.boss);
+      $id("lvlXp").textContent = `+${lvl.xp} XP`;
+      $id("lvlDoneChip").classList.toggle("show", isDone(i));
+      $id("lvlTitle").textContent = lvl.title;
+      $id("lvlTag").textContent = lvl.tag;
+      $id("lvlLearn").innerHTML = lvl.learn;
+      $id("lvlLearn").querySelectorAll("pre.mini-code").forEach((p) => { p.innerHTML = highlight(p.textContent); });
+      $id("missionBrief").textContent = lvl.brief;
+      $id("fileName").textContent = lvl.boss ? "final-boss.aktion" : `level-${i + 1}.aktion`;
+
+      objectivesEl.innerHTML = "";
+      lvl.objectives.forEach((o) => {
+        const li = document.createElement("li");
+        li.innerHTML = `<i class="fa-regular fa-circle"></i><span>${o.label}</span>`;
+        objectivesEl.appendChild(li);
+      });
+
+      editor.value = state.code[i] ?? codeFor(i, "starter");
+      editorHl.innerHTML = highlight(editor.value);
+      editor.scrollTop = 0; editorHl.scrollTop = 0;
+
+      hintIdx = state.hints[i] || 0;
+      hintBox.classList.remove("show");
+      $id("hintBtnLabel").textContent = hintIdx ? `Hint (${hintIdx}/${lvl.hints.length})` : "Hint";
+
+      $id("prevBtn").style.visibility = i === 0 ? "hidden" : "visible";
+      completeBtn.innerHTML = isDone(i)
+        ? `Next level <i class="fa-solid fa-arrow-right"></i>`
+        : lvl.boss
+          ? `Slay the dragon <i class="fa-solid fa-dragon"></i>`
+          : `Complete level <i class="fa-solid fa-arrow-right"></i>`;
+
+      checkObjectives();
+      renderPreview(editor.value);
+      renderRail();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    /* ============================ completion ============================ */
+    function completeLevel() {
+      const i = state.current, lvl = LEVELS[i];
+      if (!checkObjectives()) return;
+      const firstTime = !isDone(i);
+      if (firstTime) {
+        state.completed.push(i);
+        state.xp += lvl.xp;
+        save(); renderHeader();
+        confetti(lvl.boss ? 260 : 110);
+        toast(`Achievement: ${lvl.achievement}`, lvl.boss ? "+300 XP · The dragon has been refactored." : `+${lvl.xp} XP · Objective complete.`, lvl.boss ? "fa-dragon" : "fa-trophy");
+        floatXp(`+${lvl.xp} XP`);
+      }
+      if (i === LEVELS.length - 1) showFinish();
+      else setTimeout(() => showLevel(i + 1), firstTime ? 850 : 0);
+    }
+
+    function showFinish() {
+      gameScreen.classList.remove("active");
+      introScreen.style.display = "none";
+      finishScreen.classList.add("active");
+      $id("statXp").textContent = state.xp.toLocaleString();
+      $id("statLevels").textContent = `${state.completed.length}/${LEVELS.length}`;
+      $id("statHints").textContent = Object.values(state.hints).reduce((a, b) => a + b, 0);
+      const mins = state.startedAt ? Math.max(1, Math.round((Date.now() - state.startedAt) / 60000)) : null;
+      $id("statTime").textContent = mins ? `${mins}m` : "—";
+      $id("certName").value = state.name || "Anonymous Dev";
+      confetti(320);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    /* ============================ confetti ============================ */
+    const cvs = $id("confetti"), ctx = cvs.getContext("2d");
+    let pieces = [], rafId = null;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function confetti(n) {
+      if (reduceMotion) return;
+      cvs.width = innerWidth; cvs.height = innerHeight;
+      const colors = ["#6366f1", "#8b5cf6", "#ec4899", "#22d3ee", "#10b981", "#f59e0b"];
+      for (let i = 0; i < n; i++) {
+        pieces.push({
+          x: Math.random() * cvs.width, y: -20 - Math.random() * cvs.height * 0.4,
+          w: 6 + Math.random() * 7, h: 8 + Math.random() * 8,
+          vy: 2.2 + Math.random() * 3.4, vx: -1.6 + Math.random() * 3.2,
+          rot: Math.random() * Math.PI, vr: -0.12 + Math.random() * 0.24,
+          c: colors[(Math.random() * colors.length) | 0],
+        });
+      }
+      if (!rafId) tickConfetti();
+    }
+    function tickConfetti() {
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      pieces = pieces.filter((p) => p.y < cvs.height + 30);
+      for (const p of pieces) {
+        p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.vy += 0.025;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      rafId = pieces.length ? requestAnimationFrame(tickConfetti) : (ctx.clearRect(0, 0, cvs.width, cvs.height), null);
+    }
+
+    /* ============================ toasts + xp float ============================ */
+    function toast(title, msg, icon = "fa-trophy") {
+      const el = document.createElement("div");
+      el.className = "ach-toast";
+      el.innerHTML = `<span class="ach-ico"><i class="fa-solid ${icon}"></i></span><div><b>${title}</b><span>${msg}</span></div>`;
+      $id("toasts").appendChild(el);
+      setTimeout(() => { el.classList.add("bye"); setTimeout(() => el.remove(), 380); }, 4200);
+    }
+    function floatXp(text) {
+      const r = completeBtn.getBoundingClientRect();
+      const el = document.createElement("div");
+      el.className = "xp-float"; el.textContent = text;
+      el.style.left = `${r.left + r.width / 2 - 30}px`; el.style.top = `${r.top - 14}px`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1250);
+    }
+
+    /* ============================ editor wiring ============================ */
+    editor.addEventListener("input", () => {
+      editorHl.innerHTML = highlight(editor.value);
+      state.code[state.current] = editor.value; save();
+      checkObjectives(); schedulePreview();
+    });
+    editor.addEventListener("scroll", () => {
+      editorHl.scrollTop = editor.scrollTop; editorHl.scrollLeft = editor.scrollLeft;
+    });
+    editor.addEventListener("keydown", (e) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const s = editor.selectionStart, t = editor.selectionEnd;
+        editor.setRangeText("  ", s, t, "end");
+        editor.dispatchEvent(new Event("input"));
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); renderPreview(editor.value); }
+    });
+
+    /* ============================ buttons ============================ */
+    $id("runBtn").addEventListener("click", () => renderPreview(editor.value));
+    $id("resetBtn").addEventListener("click", () => {
+      editor.value = codeFor(state.current, "starter");
+      editor.dispatchEvent(new Event("input"));
+      toast("Code reset", "We don't talk about draft one.", "fa-rotate-left");
+    });
+    $id("solutionBtn").addEventListener("click", () => {
+      editor.value = codeFor(state.current, "solution");
+      editor.dispatchEvent(new Event("input"));
+      toast("Solution revealed", "Your secret is safe with us. (It's in localStorage.)", "fa-wand-magic-sparkles");
+    });
+    $id("hintBtn").addEventListener("click", () => {
+      const lvl = LEVELS[state.current];
+      hintIdx = Math.min(hintIdx + 1, lvl.hints.length);
+      state.hints[state.current] = Math.max(state.hints[state.current] || 0, hintIdx); save();
+      hintBox.innerHTML = `<b>Hint ${hintIdx}/${lvl.hints.length}:</b> ${lvl.hints[hintIdx - 1]}`;
+      hintBox.classList.add("show");
+      $id("hintBtnLabel").textContent = `Hint (${hintIdx}/${lvl.hints.length})`;
+    });
+    $id("prevBtn").addEventListener("click", () => { if (state.current > 0) showLevel(state.current - 1); });
+    completeBtn.addEventListener("click", completeLevel);
+
+    $id("startBtn").addEventListener("click", () => {
+      if (!state.startedAt) { state.startedAt = Date.now(); save(); }
+      if (state.completed.length === LEVELS.length) showFinish();
+      else showLevel(Math.min(maxUnlocked(), state.current || 0));
+    });
+    $id("replayBtn").addEventListener("click", () => showLevel(0));
+    $id("certName").addEventListener("input", (e) => { state.name = e.target.value; save(); });
+    $id("bragBtn").addEventListener("click", async () => {
+      const brag = `🏆 ${state.name || "Anonymous Dev"} just became a Certified Aktion Hero — ${state.xp} XP, 11/11 levels, one dragon refactored. Learn Aktion the fun way: https://asfand-dev.github.io/aktion/tutorial.html`;
+      try { await navigator.clipboard.writeText(brag); toast("Copied to clipboard", "Go forth and humble-brag responsibly.", "fa-copy"); }
+      catch (_) { toast("Clipboard said no", brag, "fa-copy"); }
+    });
+
+    /* ============================ resume banner ============================ */
+    if (state.completed.length > 0 && state.completed.length < LEVELS.length) {
+      const btn = $id("startBtn");
+      btn.innerHTML = `<i class="fa-solid fa-play"></i> Resume — Level ${maxUnlocked() + 1}`;
+    } else if (state.completed.length === LEVELS.length) {
+      $id("startBtn").innerHTML = `<i class="fa-solid fa-trophy"></i> View your certificate`;
+    }
+
+    /* ============================ theme toggle ============================ */
+    const themeBtn = $id("themeToggle");
+    const setThemeIcon = () => { themeBtn.innerHTML = docTheme() === "dark" ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>'; };
+    setThemeIcon();
+    themeBtn.addEventListener("click", () => {
+      const next = docTheme() === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-doc-theme", next);
+      try { localStorage.setItem("doc-theme", next); } catch (_) {}
+      setThemeIcon();
+      document.querySelectorAll("aktion-app").forEach((a) => a.setAttribute("theme", next));
+    });
+
+    /* ============================ konami ============================ */
+    const KONAMI = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+    let kIdx = 0;
+    window.addEventListener("keydown", (e) => {
+      if (e.target === editor) return;
+      kIdx = e.key === KONAMI[kIdx] ? kIdx + 1 : (e.key === KONAMI[0] ? 1 : 0);
+      if (kIdx === KONAMI.length) {
+        kIdx = 0;
+        if (!state.konami) {
+          state.konami = true; state.xp += 50; save(); renderHeader();
+          confetti(150);
+          toast("Achievement: 30 Lives", "+50 XP · ↑↑↓↓←→←→BA. Respect, old-timer.", "fa-gamepad");
+        } else {
+          toast("Nice try", "The cheat code only pays out once. The dragon remembers.", "fa-gamepad");
+        }
+      }
+    });
+
+    /* ============================ boot ============================ */
+    renderHeader();
+    renderRail();
+    window.addEventListener("resize", () => { if (pieces.length) { cvs.width = innerWidth; cvs.height = innerHeight; } });
+  </script>
+</body>
+</html>

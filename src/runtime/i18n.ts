@@ -52,7 +52,7 @@ export function createI18n(config: I18nConfig = {}): I18nInstance {
       }
     }
     if (template === undefined) return key;
-    return interpolate(template, vars);
+    return interpolate(template, vars, currentLanguage || defaultLanguage || "en");
   }
 
   function setCurrentLanguage(lang: string): void {
@@ -85,11 +85,116 @@ function sanitiseTranslations(
   return out;
 }
 
-function interpolate(template: string, vars?: Record<string, unknown>): string {
-  if (!vars) return template;
-  return template.replace(/\{([^}]+)\}/g, (_, expr: string) => {
-    const value = vars[expr.trim()];
+function interpolate(template: string, vars?: Record<string, unknown>, locale = "en"): string {
+  // First resolve ICU `{name, plural, …}` / `{name, select, …}` blocks, then
+  // the simple `{name}` placeholders. ICU blocks can contain `#` (the number)
+  // and are matched with brace-balancing so nested braces work.
+  const withIcu = resolveIcu(template, vars ?? {}, locale);
+  return withIcu.replace(/\{([^{}]+)\}/g, (_, expr: string) => {
+    const value = (vars ?? {})[expr.trim()];
     if (value === null || value === undefined) return "";
     return String(value);
   });
+}
+
+/**
+ * Resolve ICU MessageFormat `plural` and `select` blocks (X.2). Supports:
+ *   {count, plural, one {# item} other {# items}}
+ *   {count, plural, =0 {none} one {# item} other {# items}}
+ *   {gender, select, male {he} female {she} other {they}}
+ * `#` inside a chosen plural branch is replaced with the (formatted) number.
+ * Branch bodies may contain nested `{name}` placeholders (resolved by the
+ * caller's second pass). Unmatched / malformed blocks are left untouched.
+ */
+function resolveIcu(template: string, vars: Record<string, unknown>, locale: string): string {
+  let out = "";
+  let i = 0;
+  while (i < template.length) {
+    const open = template.indexOf("{", i);
+    if (open === -1) { out += template.slice(i); break; }
+    // Find the matching close brace for this block.
+    const end = matchBrace(template, open);
+    if (end === -1) { out += template.slice(i); break; }
+    const inner = template.slice(open + 1, end);
+    const resolved = tryResolveIcuBlock(inner, vars, locale);
+    if (resolved !== null) {
+      out += template.slice(i, open) + resolved;
+    } else {
+      // Not an ICU block — leave the braces for the simple-placeholder pass.
+      out += template.slice(i, end + 1);
+    }
+    i = end + 1;
+  }
+  return out;
+}
+
+/** Index of the `}` matching the `{` at `start`, honouring nesting. */
+function matchBrace(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i += 1) {
+    if (s[i] === "{") depth += 1;
+    else if (s[i] === "}") { depth -= 1; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+function tryResolveIcuBlock(inner: string, vars: Record<string, unknown>, locale: string): string | null {
+  // Split into `name, type, rest` (only the first two commas matter).
+  const firstComma = inner.indexOf(",");
+  if (firstComma === -1) return null;
+  const name = inner.slice(0, firstComma).trim();
+  const secondComma = inner.indexOf(",", firstComma + 1);
+  if (secondComma === -1) return null;
+  const type = inner.slice(firstComma + 1, secondComma).trim();
+  const body = inner.slice(secondComma + 1);
+  if (type !== "plural" && type !== "select") return null;
+
+  const branches = parseIcuBranches(body);
+  if (!branches) return null;
+  const raw = vars[name];
+
+  if (type === "select") {
+    const chosen = branches[String(raw)] ?? branches.other;
+    return chosen ?? "";
+  }
+  // plural
+  const num = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isFinite(num)) {
+    const exact = branches[`=${num}`];
+    let chosen = exact;
+    if (chosen === undefined) {
+      let category = "other";
+      try { category = new Intl.PluralRules(locale).select(num); } catch { /* default */ }
+      chosen = branches[category] ?? branches.other;
+    }
+    const formatted = formatNumber(num, locale);
+    return (chosen ?? "").replace(/#/g, formatted);
+  }
+  return branches.other ?? "";
+}
+
+/** Parse `one {…} other {…}` branch bodies into a `{ category: text }` map. */
+function parseIcuBranches(body: string): Record<string, string> | null {
+  const branches: Record<string, string> = {};
+  let i = 0;
+  let found = false;
+  while (i < body.length) {
+    // Skip whitespace.
+    while (i < body.length && /\s/.test(body[i]!)) i += 1;
+    if (i >= body.length) break;
+    // Read the category key up to the next `{`.
+    const brace = body.indexOf("{", i);
+    if (brace === -1) break;
+    const key = body.slice(i, brace).trim();
+    const close = matchBrace(body, brace);
+    if (close === -1) break;
+    branches[key] = body.slice(brace + 1, close);
+    found = true;
+    i = close + 1;
+  }
+  return found ? branches : null;
+}
+
+function formatNumber(num: number, locale: string): string {
+  try { return new Intl.NumberFormat(locale).format(num); } catch { return String(num); }
 }

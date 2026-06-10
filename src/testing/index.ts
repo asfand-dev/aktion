@@ -862,3 +862,139 @@ export function cleanup(): void {
 export function json(data: unknown, status = 200): MockResult {
   return { json: data, status };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Scoped queries — `within(element)` (XIV.6)                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface WithinQueries {
+  getByText(matcher: Matcher): HTMLElement;
+  queryByText(matcher: Matcher): HTMLElement | null;
+  getAllByText(matcher: Matcher): HTMLElement[];
+  getByRole(role: string, options?: { name?: Matcher }): HTMLElement;
+  queryByRole(role: string, options?: { name?: Matcher }): HTMLElement | null;
+  getAllByRole(role: string, options?: { name?: Matcher }): HTMLElement[];
+  getByTestId(id: string): HTMLElement;
+  queryByTestId(id: string): HTMLElement | null;
+}
+
+function scopedTextMatches(value: string, matcher: Matcher, el?: Element): boolean {
+  if (typeof matcher === "string") return value.includes(matcher);
+  if (matcher instanceof RegExp) return matcher.test(value);
+  if (typeof matcher === "function") return Boolean(matcher(value, el ?? document.createElement("div")));
+  return false;
+}
+
+/**
+ * Scope Testing-Library-style queries to a subtree (XIV.6). Mirror of RTL's
+ * `within(node)` — useful for asserting inside one card/row of a list without
+ * matching siblings.
+ */
+export function within(root: Element): WithinQueries {
+  const all = (): HTMLElement[] => Array.from(root.querySelectorAll<HTMLElement>("*"));
+  const byText = (matcher: Matcher): HTMLElement[] =>
+    all().filter((el) => {
+      // Leaf-ish match: the element's own text (excluding nested element text noise)
+      const own = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent ?? "")
+        .join("")
+        .trim();
+      const full = (el.textContent ?? "").trim();
+      return scopedTextMatches(own || full, matcher, el);
+    });
+  const byRole = (role: string, name?: Matcher): HTMLElement[] =>
+    all().filter((el) => {
+      const roles = [el.getAttribute("role"), ...implicitRoles(el)].filter(Boolean) as string[];
+      if (!roles.includes(role)) return false;
+      if (name == null) return true;
+      const accName = el.getAttribute("aria-label") ?? (el.textContent ?? "").trim();
+      return scopedTextMatches(accName, name, el);
+    });
+  return {
+    getByText: (m) => { const r = byText(m); if (!r[0]) throw new Error(`within: no element with text ${String(m)}`); return r[0]; },
+    queryByText: (m) => byText(m)[0] ?? null,
+    getAllByText: (m) => byText(m),
+    getByRole: (role, o) => { const r = byRole(role, o?.name); if (!r[0]) throw new Error(`within: no [role=${role}]`); return r[0]; },
+    queryByRole: (role, o) => byRole(role, o?.name)[0] ?? null,
+    getAllByRole: (role, o) => byRole(role, o?.name),
+    getByTestId: (id) => { const el = root.querySelector<HTMLElement>(`[data-testid="${id}"]`); if (!el) throw new Error(`within: no [data-testid=${id}]`); return el; },
+    queryByTestId: (id) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Accessibility audit — `axe(root)` (XIV.6)                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface A11yViolation {
+  rule: string;
+  message: string;
+  element: string;
+}
+
+/**
+ * Lightweight accessibility audit (XIV.6) — a pragmatic subset of axe-style
+ * checks that need no dependency: images without alt, non-decorative SVGs
+ * without a label, buttons/links without an accessible name (resolving
+ * `aria-labelledby`), inputs without a label, duplicate ids, and positive
+ * tabindex. Returns the list of violations (empty = clean).
+ */
+export function axe(root: Element): A11yViolation[] {
+  const violations: A11yViolation[] = [];
+  const desc = (el: Element): string => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${el.className && typeof el.className === "string" ? `.${el.className.split(/\s+/)[0]}` : ""}`;
+  const push = (rule: string, message: string, el: Element): void => { violations.push({ rule, message, element: desc(el) }); };
+  const byId = (id: string): Element | null => root.querySelector(`[id="${id.replace(/"/g, '\\"')}"]`);
+  /** Resolve `aria-labelledby` to the concatenated text of EXISTING targets. */
+  const labelledByText = (el: Element): string => {
+    const refs = (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+    return refs.map((id) => byId(id)?.textContent ?? "").join(" ").trim();
+  };
+
+  for (const img of Array.from(root.querySelectorAll("img"))) {
+    if (!img.hasAttribute("alt")) push("img-alt", "Image is missing an alt attribute", img);
+  }
+  // Standalone SVGs need a label unless explicitly decorative.
+  for (const svg of Array.from(root.querySelectorAll("svg"))) {
+    if (svg.getAttribute("aria-hidden") === "true" || svg.getAttribute("role") === "presentation") continue;
+    if (svg.closest("button, a, [role=button]")) continue; // judged via its control's name
+    const labelled = (svg.getAttribute("aria-label") ?? "").trim()
+      || (svg.querySelector("title")?.textContent ?? "").trim()
+      || labelledByText(svg);
+    if (!labelled) push("svg-name", "SVG has no accessible label (add aria-label, a <title>, or aria-hidden=\"true\")", svg);
+  }
+  for (const btn of Array.from(root.querySelectorAll("button, [role=button]"))) {
+    const name = (btn.getAttribute("aria-label") ?? "").trim()
+      || labelledByText(btn)
+      || (btn.textContent ?? "").trim();
+    // An icon-only button passes only when the icon itself carries a label.
+    const labelledIcon = btn.querySelector("img[alt], svg[aria-label], svg title");
+    if (!name && !labelledIcon) push("button-name", "Button has no accessible name", btn);
+  }
+  for (const a of Array.from(root.querySelectorAll("a[href]"))) {
+    const name = (a.getAttribute("aria-label") ?? "").trim()
+      || labelledByText(a)
+      || (a.textContent ?? "").trim();
+    if (!name && !a.querySelector("img[alt], svg[aria-label], svg title")) push("link-name", "Link has no accessible name", a);
+  }
+  for (const input of Array.from(root.querySelectorAll("input, select, textarea"))) {
+    const type = (input as HTMLInputElement).type;
+    if (type === "hidden") continue;
+    const id = input.getAttribute("id");
+    // `aria-labelledby` only counts when the referenced element exists.
+    const hasLabel = Boolean((input.getAttribute("aria-label") ?? "").trim() || labelledByText(input) ||
+      (id && root.querySelector(`label[for="${id.replace(/"/g, '\\"')}"]`)) || input.closest("label"));
+    if (!hasLabel) push("label", "Form control has no associated label", input);
+  }
+  const seen = new Set<string>();
+  for (const el of Array.from(root.querySelectorAll("[id]"))) {
+    const id = el.getAttribute("id")!;
+    if (seen.has(id)) push("duplicate-id", `Duplicate id "${id}"`, el);
+    seen.add(id);
+  }
+  for (const el of Array.from(root.querySelectorAll("[tabindex]"))) {
+    const ti = Number(el.getAttribute("tabindex"));
+    if (Number.isFinite(ti) && ti > 0) push("tabindex", `Positive tabindex (${ti}) disrupts tab order`, el);
+  }
+  return violations;
+}

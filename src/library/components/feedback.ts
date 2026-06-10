@@ -19,7 +19,19 @@ import { resolveIconClasses } from "../../icons/index.js";
 
 const AVATAR_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 
-const AVATAR_FALLBACKS = ["initials", "dicebear"] as const;
+const AVATAR_FALLBACKS = ["initials", "dicebear", "gradient"] as const;
+
+/**
+ * Deterministic offline avatar (IX.4): hash the seed into a hue and render a
+ * two-stop gradient swatch with the initials. No network — works offline.
+ */
+function gradientAvatarStyle(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  const hue2 = (hue + 40) % 360;
+  return `background:linear-gradient(135deg, hsl(${hue} 65% 55%), hsl(${hue2} 65% 45%));color:#fff;`;
+}
 
 export const Avatar: ComponentSpec = {
   name: "Avatar",
@@ -63,6 +75,12 @@ export const Avatar: ComponentSpec = {
         live.replaceWith(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
       };
       root.append(img);
+    } else if (fallback === "gradient" && name) {
+      // Offline generated gradient avatar (IX.4).
+      root.append(el("span", {
+        class: "rui-avatar-fallback rui-avatar-gradient",
+        style: gradientAvatarStyle(name),
+      }, [initialsFor(name)]));
     } else {
       root.append(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
     }
@@ -974,6 +992,31 @@ export const Toast: ComponentSpec = {
       const placeholder = el("div", { class: "rui-toast-placeholder", hidden: "" });
       return placeholder;
     }
+    return root;
+  },
+};
+
+export const Toasts: ComponentSpec = {
+  name: "Toasts",
+  description:
+    "Stacked container for transient `Toast` notifications, pinned to a " +
+    "viewport corner. Render the reactive `$toast.items` list into it: " +
+    "`Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, " +
+    "onClose: () => $toast.dismiss(t.id) })))`. Use a standalone `Toast` " +
+    "with `position` for a single one-off notice.",
+  props: [
+    { name: "children", type: "Node[]", description: "Toast components to stack" },
+    { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Viewport corner the stack pins to (default \"top-right\")" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", {
+      class: "rui-toasts",
+      "data-position": asString(props.position, "top-right"),
+      // The stack itself is chrome, not content — individual toasts carry
+      // their own `status`/`alert` roles for screen readers.
+      "aria-live": "off",
+    });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
   },
 };

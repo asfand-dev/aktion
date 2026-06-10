@@ -69,3 +69,16 @@ export type {
   SignatureInfo,
   ParameterInfo,
 } from "./signature-help.js";
+export { htmlToAktion } from "./html-import.js";
+export {
+  componentSchema,
+  tailwindToSx,
+  buildGallery,
+  suggestComponent,
+} from "./schema.js";
+export type {
+  LibrarySchema,
+  ComponentSchemaEntry,
+  ComponentPropSchema,
+  GalleryOptions,
+} from "./schema.js";

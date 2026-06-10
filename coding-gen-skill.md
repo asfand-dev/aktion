@@ -33,6 +33,7 @@ description: >-
 - [6. Effects](#6-effects)
 - [7. HTTP — `$http({...})`](#7-http--http)
 - [8. `$util` — runtime helper namespace](#8-util--runtime-helper-namespace)
+- [8.5. Universal styling — `sx` and `animate`](#85-universal-styling--sx-and-animate)
 - [9. Component reference (by group)](#9-component-reference-by-group)
 - [10. JavaScript layer](#10-javascript-layer)
 - [11. Routing](#11-routing)
@@ -878,6 +879,49 @@ only components that read `items`), and two-way binding works against a store
 field (`Input(value: form.draft)`). Use a `$store` for shared state; use a
 component's local `$state` / `$name = …` for state one component owns.
 
+### Store persistence — `persist` / `persistIn`
+
+Add `persist: "key"` to mirror the store's data to `localStorage` on every
+change and hydrate it from there on mount. Use `persistIn: "session"` for
+`sessionStorage` (per-tab). These keys are config-only and never appear as
+state fields.
+
+```javascript
+prefs = $store({
+  persist: "app-prefs",      // key in localStorage
+  persistIn: "local",        // "local" (default) | "session"
+  theme: "system",
+  density: "comfortable",
+  setTheme: (s, v) => { s.theme = v }
+})
+```
+
+New fields added to the schema keep their code defaults when an older snapshot
+loads; unknown/renamed keys from the snapshot are silently dropped — safe to
+evolve the shape over time.
+
+### Store undo/redo — `history`
+
+Add `history: true` (or a depth cap like `history: 50`) and the store records
+a per-mutation snapshot. A fresh edit clears the redo branch.
+
+```javascript
+doc = $store({
+  history: 25,              // cap at 25 steps
+  title: "",
+  body: "",
+  setTitle: (s, v) => { s.title = v },
+  setBody: (s, v) => { s.body = v }
+})
+
+// Undo/redo controls:
+Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })
+Button("Redo", { onClick: () => doc.redo(), disabled: !doc.canRedo })
+// Also: doc.clearHistory()
+```
+
+`persist` and `history` compose: a store can survive reloads AND offer undo.
+
 ### URL-synced state
 
 URL state lives on the router:
@@ -1459,6 +1503,179 @@ Button("Add", { onClick: () => $save.mutate({ body: { title: $title } }) })
 body. The bag exposes `.loading` / `.error` / `.data`, a `.reset()` to clear
 it, and the same `.onDone` settle hook as `$http`.
 
+### Advanced `$query` — infinite pagination, polling, GraphQL
+
+**Infinite / paginated lists** — pass an `infinite` config and `$query`
+manages the page index, item accumulation, and loading state. `.data` is the
+flattened item list across all loaded pages.
+
+```javascript
+$feed = $query({
+  url: "https://api.example.com/posts",
+  key: "posts-feed",
+  infinite: {
+    param: "page",           // query param written per page ("page" by default)
+    limit: 20,               // items per page (20 by default)
+    mode: "page",            // "page" (1-based) | "offset" (bytes/items cumulative)
+    select: b => b.items     // unwrap from a wrapper shape ({ items: [...] })
+  }
+})
+// $feed.data        — flat array across all pages
+// $feed.loadMore()  — fetch the next page
+// $feed.hasMore     — false when the last page returned < limit items
+// $feed.loadingMore — true while the next page is in flight
+```
+
+Pair `.loadMore()` with `OnIntersect` for automatic infinite scroll:
+
+```javascript
+OnIntersect(
+  Button($feed.loadingMore ? "Loading…" : "Load more", { onClick: $feed.loadMore }),
+  { onEnter: $feed.loadMore, once: false }
+)
+```
+
+**Background polling** — add polling/focus/reconnect refresh to any `$query`:
+
+| Option | Type | Purpose |
+|---|---|---|
+| `refetchInterval` | `number` (ms) | Poll on an interval — live dashboards, leaderboards. |
+| `refetchOnFocus` | `boolean` | Refetch when the user returns to the tab. |
+| `refetchOnReconnect` | `boolean` | Refetch when the network comes back online. |
+
+**GraphQL** — add `gql` (+ optional `variables`) to any `$http` / `$query` /
+`$mutation`: the request POSTs `{ query, variables }`, `.data` is the
+unwrapped GraphQL `data` field, and a GraphQL `errors` array surfaces through
+`.error`.
+
+```javascript
+$repos = $query({
+  url: "https://api.example.com/graphql",
+  gql: `query($n: Int!) { repos(first: $n) { nodes { name } } }`,
+  variables: { n: 10 }
+})
+// $repos.data.repos.nodes → [{ name: "…" }, …]
+```
+
+### Advanced `$mutation` — optimistic updates + cache invalidation
+
+**Optimistic update** — `optimistic: (overrides) => { … }` runs
+synchronously before the request, so the UI responds instantly. The runtime
+snapshots state before calling it; if the request fails (the promise rejects
+or the HTTP status is ≥ 400) it restores every atom touched inside the block.
+
+**Cache invalidation** — `invalidates: ["key"]` refetches every cached
+`$query` whose `key` contains any listed substring once the write succeeds.
+
+```javascript
+$add = $mutation({
+  url: "https://api.example.com/todos",
+  // Apply instantly; auto-rolled-back on failure:
+  optimistic: (o) => { $todos = [...$todos, { id: "tmp", title: o.body.title }] },
+  // Refetch any $query with "todos" in its key after success:
+  invalidates: ["todos"]
+})
+Button("Add", { onClick: () => $add.mutate({ body: { title: $title } }) })
+```
+
+Call `$util.invalidate("todos")` from anywhere to trigger the same
+refetch on demand (e.g. after a manual side-channel update).
+
+### Realtime — `$socket` and `$sse`
+
+For data that should **push** from the server without a poll cycle:
+
+**`$socket({ url, protocols?, bufferSize?, onMessage?, reconnect? })`** — a
+reactive WebSocket. JSON payloads are auto-parsed.
+
+```javascript
+$chat = $socket({ url: "wss://example.com/room/42", reconnect: true })
+// $chat.status     — "connecting" | "open" | "closed" (drive a status badge off this)
+// $chat.connected  — boolean shorthand for status == "open"
+// $chat.last       — most recent message (null before first)
+// $chat.messages   — array of last `bufferSize` messages (newest last)
+// $chat.attempts   — reconnect attempts in the current streak (resets on success)
+// $chat.send(data) — send; objects are JSON-stringified. Messages sent while
+//                    "connecting" QUEUE and flush once the socket opens.
+// $chat.close()    — close for good (disables auto-reconnect).
+```
+
+`reconnect: true` retries dropped connections with exponential backoff
+(500 ms → 15 s cap); pass a number to cap the attempts. A user `close()`
+always wins.
+
+```javascript
+Badge($chat.status, { tone: $chat.status == "open" ? "success" : "warning" })
+Button("Send", { onClick: () => $chat.send({ text: $draft }) })
+```
+
+**`$sse({ url, event?, withCredentials?, bufferSize?, onMessage? })`** — a
+reactive Server-Sent Events stream. One-way server→client; the browser's
+EventSource reconnects natively (`status` reads `"connecting"` while it does).
+
+```javascript
+$prices = $sse({ url: "https://api.example.com/prices", event: "tick" })
+// same .status / .connected / .last / .messages / .close() surface as $socket
+```
+
+Both tear down automatically when the program replans or the element disconnects.
+
+### `$form({...})` — the managed form engine
+
+For any form with more than one or two fields, `$form` is cleaner than
+wiring atoms by hand. It manages values, validation errors, touched state, and
+submit orchestration.
+
+```javascript
+form = $form({
+  values: { email: "", password: "" },
+  rules: {
+    email:    [$util.rules.required(), $util.rules.email(),
+               $util.rules.asyncCustom((v) => checkAvailable(v), "Email already registered")],
+    password: [$util.rules.required(), $util.rules.minLength(8)]
+  },
+  onSubmit: (v) => { $save.mutate({ body: v }) }
+})
+```
+
+**Bag members:**
+
+| Member | Purpose |
+|---|---|
+| `form.values.field` | Current value — two-way bind to an input (`value: form.values.email`). |
+| `form.errors.field` | Error message string (or `undefined` when valid). |
+| `form.touched.field` | `true` once `form.touch("field")` has been called. |
+| `form.dirty` | `true` once any value differs from the clean snapshot — flips on the FIRST edit (including two-way binding writes) and clears on `reset()` or when values return to clean. Drive "Unsaved changes" badges and discard-confirmations off this. |
+| `form.valid` | `true` when there are no errors. |
+| `form.submitting` | `true` from submit until an **async** `onSubmit` settles — wire to `Button({ loading, disabled })`. |
+| `form.validating` | `true` while async rules (`asyncCustom`) are in flight — "Checking availability…" hints. |
+| `form.setField(name, value)` | Set one field and clear its error. |
+| `form.setValues({...})` | Merge several values at once. |
+| `form.validate()` | Validate all fields; populate `.errors`. Returns a Promise when async rules exist. |
+| `form.validateField(name)` | Validate and return the error message (or `null`; a Promise for async rules). |
+| `form.touch(name)` | Mark touched, then validate that field. |
+| `form.submit()` | Touch-all → validate (awaiting async rules) → call `onSubmit(values)` when valid. `form.handleSubmit()` is an alias. |
+| `form.reset()` | Restore initial values, clear errors/touched/dirty. |
+
+Wire an input — `Input`, `TextArea`, `Select`, and `NumberInput` all accept
+`onBlur`/`onFocus` (fired with the current value), so validate-on-blur is
+one prop:
+
+```javascript
+Input("email", {
+  label: "Email",
+  value: form.values.email,
+  error: form.errors.email,
+  hint: form.validating ? "Checking availability…" : "",
+  onBlur: () => form.touch("email")
+})
+Button("Create account", {
+  onClick: () => form.submit(),
+  loading: form.submitting,
+  disabled: form.submitting || form.validating
+})
+```
+
 ---
 
 ## 8. `$util` — runtime helper namespace
@@ -1752,6 +1969,168 @@ on mobile, 2 on tablet, 4 on desktop. Breakpoints:
 - `lg` — ≥ 1024px.
 - `xl` — ≥ 1280px.
 
+### New in §8: formatting & misc helpers
+
+| Function | Purpose |
+|---|---|
+| `$util.slugify(text)` | URL-safe slug (lowercased, non-alphanumerics → dashes). |
+| `$util.truncate(text, len?, ellipsis?)` | Clip to `len` chars (default 80) + ellipsis. |
+| `$util.initials(name, max?)` | Uppercase initials from a name (default 2 chars). |
+| `$util.currency(value, code?, locale?)` | Locale currency string — `$util.currency(48230, "EUR")`. |
+| `$util.percent(value, decimals?)` | Format a 0–1 ratio as `"73.6%"`. |
+| `$util.bytes(value)` | Human file size — `$util.bytes(1536)` → `"1.5 KB"`. |
+| `$util.relativeTime(date)` | Localised relative time — `"3 days ago"`. |
+| `$util.copy(text)` | Write text to the clipboard — **async**: resolves `true` only when the write actually succeeds (`ok = await $util.copy(x)`). |
+| `$util.sleep(ms)` | Awaitable pause — `await $util.sleep(300)` (capped at 60 s). |
+| `$util.uuid()` | Random RFC-4122 v4 UUID. |
+| `$util.debounceFn(fn, wait?)` | Returns a debounced wrapper (trailing edge, default 250 ms). |
+| `$util.throttleFn(fn, wait?)` | Returns a throttled wrapper (default 250 ms) — leading edge fires immediately, plus ONE trailing fire with the latest args so the final call is never dropped. |
+
+### `$util.style` — bounded CSS helpers
+
+```javascript
+cls = $util.style.cx("card", { "card--active": $selected })
+bg  = $util.style.gradient(["#6366f1", "#ec4899"], 135)
+c   = $util.style.alpha("primary", 0.12)        // → color-mix(...)
+sz  = $util.style.clamp("16px", "2vw", "24px")
+tok = $util.style.token("spacing.l")             // → var(--rui-spacing-l)
+str = $util.style.toStyle({ padding: "8px" })    // → "padding:8px"
+```
+
+### `$util.rules` — composable validators (for `$form` and standalone use)
+
+Each factory returns a `(value) => string | null` validator. Compose a list per field.
+
+```javascript
+emailRules = [$util.rules.required(), $util.rules.email()]
+pwRules    = [$util.rules.required(), $util.rules.minLength(8), $util.rules.pattern(/[A-Z]/)]
+// Run one field:
+msg = $util.rules.validate($email, emailRules)   // first error or null
+// Run a whole object:
+errs = $util.rules.validateAll({ email: $email, age: $age }, { email: emailRules, age: [$util.rules.min(18)] })
+// errs → { email: "message" | undefined, age: "message" | undefined }
+```
+
+Built-in validators: `required(msg?)` / `email(msg?)` / `url(msg?)` / `min(n, msg?)` /
+`max(n, msg?)` / `minLength(n, msg?)` / `maxLength(n, msg?)` / `pattern(re, msg?)` /
+`oneOf([...], msg?)` / `matches(otherValue, msg?)` / `custom(fn, msg?)` /
+`asyncCustom(fn, msg?)`.
+
+`asyncCustom` accepts a Promise-returning `fn(value)` — resolve `true`/`null`
+for valid, `false` (→ `msg`) or an error string for invalid. Use it for
+server-side checks (username/email uniqueness). `validate`/`validateAll` stay
+synchronous for sync rules and return a Promise only when an async rule is
+hit; `$form.submit()` awaits them and exposes `form.validating` meanwhile.
+
+### `$util.derived(fn)` — reactive computed value
+
+Like a computed property, but without an explicit dependency list. The function
+recomputes whenever the atoms it reads change.
+
+```javascript
+subtotal = $util.derived(() => $util.sum($cart.map(i => i.price * i.qty)))
+```
+
+Prefer this over `$memo(() => …, [deps])` for plain read-through values where
+the dependency list is obvious from the function body.
+
+### Reactive env getters (under `$util`)
+
+Lazy listeners — attach only on first read, re-render on change, torn down on
+replan. Always read as `$util.<namespace>.<field>`.
+
+| Getter | Shape | Notes |
+|---|---|---|
+| `$util.scroll` | `{ x, y, progress, direction }` | `progress` 0–1; `direction` "up"\|"down". |
+| `$util.viewport` | `{ width, height }` | Window inner size in pixels. |
+| `$util.breakpoint` | `{ active, width, sm, md, lg, xl }` | `active` "base"\|"sm"\|"md"\|"lg"\|"xl"; boolean flags. |
+| `$util.media` | `{ prefersDark, prefersReducedMotion, online, pointer, portrait }` | Honor user preferences; `pointer` "coarse"\|"fine". |
+| `$util.mouse` | `{ x, y }` | Pointer client coordinates. |
+| `$util.url` | `{ path, params, query, hash, navigate, setQuery, removeQuery }` | Reactive URL snapshot — `setQuery("tab","billing")` writes the URL. |
+
+### Interceptors and side-effect hooks (under `$util`)
+
+| Call | Purpose |
+|---|---|
+| `$util.onError(fn)` | Register a program-level error sink — `fn({ error, source })` fires when an action throws, before default logging. Pass `null` to clear. |
+| `$util.onNavigate(fn)` | Navigation guard — `fn({ to, from })` returns `false` to block, a path string to redirect, or nothing to allow. Covers in-app `navigate()` and browser back/forward. |
+| `$util.onRequest(fn)` | In-program HTTP request interceptor — `fn(request)` returns a partial merged over the request (headers shallow-merged). Ideal for auth-token injection. |
+| `$util.onResponse(fn)` | In-program HTTP response interceptor — `fn(response, retry)` may replace the response or `await retry()` to re-issue once (e.g. on 401). |
+| `$util.invalidate(keys)` | Refetch every cached `$query` whose key contains any listed substring — call after a manual write. |
+
+### Device, worker, and PWA helpers (under `$util`)
+
+| Call | Returns | Purpose |
+|---|---|---|
+| `$util.vibrate(pattern?)` | `boolean` | Haptics (ms or on/off array). |
+| `$util.share({ title?, text?, url? })` | `Promise<boolean>` | Native share sheet. |
+| `$util.readClipboard()` | `Promise<string>` | Read clipboard text. |
+| `$util.geolocate()` | `Promise<{lat,lng,accuracy}|null>` | Current position. |
+| `$util.isOnline()` | `boolean` | Network status. |
+| `$util.deviceType()` | `"mobile"|"tablet"|"desktop"` | Best-effort device class. |
+| `$util.worker(pureFn, ...args)` | `Promise<any>` | Run a closure-free function off the main thread in a Web Worker. |
+| `$util.registerServiceWorker(url, scope?)` | `Promise<boolean>` | Register a service worker. |
+| `$util.webManifest({ name, icons, … })` | `object` | Build a sanitised Web App Manifest. |
+| `$util.nativeShell()` | `string` | `"capacitor"|"cordova"|"tauri"|"electron"|"react-native"|"web"`. |
+| `$util.isNativeApp()` | `boolean` | `true` inside any native shell. |
+
+---
+
+## 8.5. Universal styling — `sx` and `animate`
+
+EVERY component accepts a universal style channel as named props — no
+stylesheet, no `Styles(...)` escape hatch. All values are **bounded**:
+design tokens, small enums, or sanitised scalars (never raw CSS), so they
+stay theme-safe and XSS-safe. Prefer `sx` over `Css`/`Styles`/`HTMLTag`
+whenever a bespoke look is needed.
+
+```javascript
+Card([Text("Lift on hover")], {
+  sx: { p: "l", radius: "lg", bg: "surface", shadow: "md",
+        states: { hover: { scale: 1.03, shadow: "lg" } } },
+  animate: "fade-up"
+})
+```
+
+### `sx` keys (all optional)
+
+| Group | Keys | Values |
+|---|---|---|
+| Padding | `p px py pt pr pb pl ps pe` | Spacing token `xs\|s\|m\|l\|xl\|2xl\|3xl\|none\|auto`, safe-area insets `safe\|safe-top\|safe-right\|safe-bottom\|safe-left`, or a CSS length. `px` is **logical** (`padding-inline`) and `ps`/`pe` are inline start/end — RTL apps mirror automatically. |
+| Margin | `m mx my mt mr mb ml ms me` | Same scale; `mx` logical (`margin-inline`), `ms`/`me` start/end. |
+| Gap | `gap` | Spacing token or length. |
+| Sizing | `w h minW maxW minH maxH` | `full\|half\|screen\|dvh\|min\|max\|fit\|auto` or a length. |
+| Color | `bg color borderColor` | Color token (`surface bg text text-muted primary accent success warning danger info border transparent current`), a gradient ref (`"gradient.brand\|accent\|warm\|cool\|success\|danger"`), or a raw color. |
+| Surface | `border radius shadow opacity backdrop` | `border: none\|subtle\|strong\|<color>`; `radius: xs\|sm\|md\|lg\|pill\|full\|circle`; `shadow: sm\|md\|lg\|none`; `backdrop: "blur"` for frosted glass. |
+| Background imagery | `bgImage bgOverlay bgSize` | `bgImage` accepts http(s)/relative/`data:image` URLs only; `bgOverlay` lays a color or `gradient.*` wash over it (or stands alone as a tint); `bgSize: cover\|contain`. |
+| Typography | `fontSize weight textDecoration textAlign` | `fontSize: xs\|sm\|base\|lg\|xl\|2xl\|3xl\|4xl` or a length; `weight: 100…900\|bold\|normal`; `textDecoration: underline\|line-through\|overline\|none`. |
+| Flex / grid | `display direction align justify wrap grow shrink basis columns` | `display: flex\|grid\|block\|inline\|inline-flex\|inline-block\|none\|contents`; `align/justify: start\|center\|end\|between\|…`; `columns: n` → equal grid tracks. |
+| Position | `position top right bottom left inset zIndex` | `position: relative\|absolute\|fixed\|sticky`; `zIndex` takes a layer token (`base\|raised\|dropdown\|sticky\|banner\|overlay\|modal\|popover\|toast\|tooltip` — themeable via `$theme({ zIndex: {...} })`) or a number. |
+| Misc | `overflow cursor` | `overflow: hidden\|auto\|scroll\|visible\|clip`; `cursor: pointer\|grab\|…`. |
+| Interaction | `hover focus` | Bounded effect shorthands: `hover: { lift\|grow\|glow\|bright\|border\|underline\|scale }`. |
+| State CSS | `states` | `{ hover\|focus\|focus-visible\|active\|disabled\|checked\|group-hover: { bg, color, borderColor, shadow, radius, opacity, scale, translateX, translateY, rotate, cursor, textDecoration } }` — compiled to real scoped `:state` rules. |
+
+**Responsive:** ANY value may be a breakpoint map `{ base, sm, md, lg, xl }`
+— compiled to real `@media (min-width)` rules.
+
+```javascript
+Box([…], { sx: { p: { base: "m", md: "xl" }, direction: { base: "column", lg: "row" } } })
+```
+
+### `animate` — motion presets
+
+`animate: "fade-up"` or `{ preset, delay?, duration?, repeat? }`. Presets:
+`fade fade-up fade-down fade-left fade-right zoom zoom-in slide-up
+slide-down slide-left slide-right pulse float shimmer bounce spin ping
+wiggle`. All presets auto-respect `prefers-reduced-motion`. Stagger lists
+with `items.map((x, i) => Card(…, { animate: { preset: "fade-up", delay: i * 60 } }))`.
+
+### Other universal props
+
+`id`/`anchor` (element id for smooth-scroll targets), `className`, `style`
+(sanitised inline string), `aria: {…}` / `data: {…}` passthrough,
+`tooltip`, `hidden`.
+
 ---
 
 ## 9. Component reference (by group)
@@ -1933,12 +2312,100 @@ Notes:
 ### Advanced UI
 
 `IconButton`, `CommandPalette`, `FilterChips`, `FieldRepeater`,
-`VirtualList`, `QueryBuilder`, `DiffViewer`, `JsonTree`, `Gantt`,
-`Truncate`, `InlineEdit`, `NotificationBell`.
+`VirtualList`, `VirtualGrid`, `QueryBuilder`, `DiffViewer`, `JsonTree`,
+`Gantt`, `Truncate`, `InlineEdit`, `NotificationBell`.
+
+### Marketing & landing
+
+`Section` (full-bleed page band with `eyebrow`/`title`/`subtitle`/`background`),
+`Split` (two-pane with `ratio`/`divider`/`stackAt`/`sticky`), `Bento`/`BentoCell`
+(asymmetric feature grid), `Overlay`/`OverlayItem` (anchor badges/buttons over
+any node), `NavBar` (marketing nav: `brand`/`links`/`actions`, `sticky`,
+`blur`, built-in mobile burger menu), `Brand`, `Footer`/`FooterColumn`,
+`LogoCloud`/`LogoChip`, `Display`/`Heading`/`Eyebrow` (display typography
+with responsive clamp sizes), `GradientText`, `CountUp`,
+`Metric`/`MetricStrip` (gradient stat tiles, `countUp` on scroll-in),
+`CodeWindow`/`BrowserFrame`/`Terminal` (window chrome), `Backdrop`
+(grid/blobs/particles decoration), `ThemeToggle` (host theme flip — no
+host glue), `Swatch`, `Prose` (typographic reading container).
+
+```javascript
+Section([
+  MetricStrip([Metric("271", { label: "Components", countUp: true }), Metric("7", { label: "Themes" })])
+], { eyebrow: "Why Aktion", title: "Everything built in", background: "soft", align: "center" })
+```
+
+### E-commerce
+
+`ProductCard`, `PriceTag`, `QuantityStepper`, `VariantSelector` (pills or
+color swatches), `OrderSummary`, `Cart` (line items + qty steppers +
+subtotal; `onQty(id, qty)` / `onRemove(id)`).
+
+### Motion & gestures
+
+`Reveal(child, { animation, once })` (scroll-triggered entrance),
+`Transition(child, { show, preset })` (enter/EXIT choreography — keeps the
+child mounted through the exit animation), `FlipList(children)` (FLIP
+reorder animation — pair with `key:` on items), `RouteView(pages,
+{ routeKey: route.path, animation })` (route transitions), `Parallax(child,
+{ speed })`, `OnGesture(child, { swipe, pan, longPress, doubleTap })`,
+`Sortable(items, { onReorder })`, `Draggable`/`DropZone` (payload DnD),
+`Confetti({ fire, count })` (one-shot, self-cleaning), `Lottie({ src })`.
+
+### Overlays (state-bound dialogs)
+
+`Sheet(children, { open, side, title, onClose })`, `BottomSheet(children,
+{ open, title })`, `ConfirmDialog(title, { open, message, tone, onConfirm,
+onCancel })`. Bind `open` to a `$variable`; all three close on **Escape**,
+trap Tab focus inside the panel while open, focus the panel on open
+(ConfirmDialog lands on Cancel — the safe action), and restore focus on
+close. No extra wiring needed.
+
+```javascript
+$confirmOpen = false
+Button("Delete", { tone: "danger", onClick: () => { $confirmOpen = true } })
+ConfirmDialog("Delete item?", { open: $confirmOpen, tone: "danger", onConfirm: () => remove() })
+```
+
+### Content & docs
+
+`TableOfContents`, `ReadingProgress` (top scroll bar), `ScrollSpy`
+(sticky in-page nav), `AuthorByline`, `ShareButtons`, `RelativeTime`
+(auto "3m ago"), `CopyButton(text)` (flips to "Copied!" and reverts),
+`KbdShortcut(["Cmd","K"])`, `QRCode(data)` (offline SVG), `Svg(markup,
+{ viewBox })` (sanitised inline SVG).
+
+### Realtime & social
+
+`TypingIndicator`, `PresenceAvatars(people)` (overlapping avatars + online
+dots), `ReactionPicker(reactions, { onReact })`, `LiveCursor({ x, y,
+label })` (drive from `$socket` presence), `TabBar(items, { active,
+onChange })` (mobile bottom nav with safe-area padding + `aria-current`).
+
+### Scheduling & canvas
+
+`Calendar({ month, year, selected, events, onSelect, onNavigate })` —
+Google-style month grid: Today/prev/next toolbar, event chips/dots,
+**arrow-key/Home/End keyboard navigation**, two-way `selected` binding.
+`CountdownTimer(to)`. `DrawingCanvas` (freehand, PNG out via `onEnd`),
+`SignaturePad`.
+
+### Accessibility
+
+`VisuallyHidden(text)`, `SkipLink(target)`, `LiveRegion(message,
+{ politeness })` (announce async status), `FocusTrap(children,
+{ active })`. Overlay components ship their own focus handling (see
+Overlays above); reach for `FocusTrap` when composing custom dialogs.
+
+### Utility
+
+`SegmentedControl`, `FloatingActionButton`, `SpeedDial(actions)`,
+`BackToTop`.
 
 ### Helpers
 
-`Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary`.
+`Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary`, `Fragment`
+(group siblings without a layout box).
 
 ### Behaviour & styling wrappers
 
@@ -2255,6 +2722,67 @@ pages = $router({
 })
 ```
 
+### Nested layout routes (IV.1)
+
+An arm shaped `{ layout, routes }` matches as a **path prefix** and keeps the
+shell mounted while only the inner page swaps. The matched child is bound to
+`outlet` inside the layout function.
+
+```javascript
+function DashboardShell(outlet) {
+  return Row([Sidebar(), Column([outlet])], { gap: "l" })
+}
+
+pages = $router({
+  "/": Landing(),
+  "/app": {
+    layout: DashboardShell,       // fn(outlet) — renders shell + child
+    routes: {
+      "/":            Dashboard(),
+      "/orders/:id":  OrderDetail({ id: params.id }),
+      "/settings":    Settings()
+    }
+  },
+  default: NotFound()
+})
+// Navigating between /app/orders/42 and /app/settings keeps DashboardShell mounted.
+// Params merge parent + child captures.
+```
+
+### Navigation guards (IV.2)
+
+```javascript
+$util.onNavigate(({ to, from }) => {
+  if (to.startsWith("/admin") && !$user.isAdmin) return "/login"   // redirect
+  if (to === "/checkout" && $cart.items.length === 0) return false  // block
+})
+// Clear with: $util.onNavigate(null)
+```
+
+Guards cover in-app `navigate()` calls and browser back/forward. A redirect
+loop is capped automatically; guards fail open if they throw.
+
+### Query-param ↔ state (IV.6)
+
+Write query params without a full navigation — great for filter / tab / sort state:
+
+```javascript
+$util.url.setQuery("tab", "billing")           // set one
+$util.url.setQuery({ sort: "name", page: 2 })  // set several
+$util.url.setQuery("q", null)                  // null/'' drops the key
+$util.url.removeQuery("page")
+activeTab = $util.url.query.tab ?? "overview"  // read (reactive)
+```
+
+### Scroll restoration (IV.5)
+
+Set on the host element — no code change in the authored program:
+
+```html
+<aktion-app scroll-restoration="auto"></aktion-app>  <!-- restore on back/forward, top on fresh nav -->
+<aktion-app scroll-restoration="top"></aktion-app>   <!-- always jump to top -->
+```
+
 ---
 
 ## 12. Globals — `$storage`, `$console`, `$toast`
@@ -2423,13 +2951,33 @@ $app(AppShell(...))
 
 ### Token groups (structured form is mandatory)
 
+Every token **value is a string** (bare numbers are coerced). All groups
+and keys are optional — pass only what you want to override.
+
 | Group          | Tokens                                                                                   |
 | -------------- | ---------------------------------------------------------------------------------------- |
 | `colors`       | `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info` |
-| `radius`       | `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`, `borderWidth`                          |
-| `font`         | `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading`, `lineHeightBody`, `lineHeightHeading`, `letterSpacingHeading`, `headingTextTransform` |
+| `radius`       | `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`                                         |
+| `font`         | `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading` |
+| `spacing`      | `xs`, `s`, `m`, `l`, `xl`, `2xl`, `3xl` — the scale `sx` spacing tokens resolve to        |
+| `shadows`      | `sm`, `md`, `lg`                                                                          |
+| `gradients`    | Named stops arrays — `gradients: { brand: ["#6366f1", "#ec4899"] }` (or `{ stops, angle }`) → referenced as `"gradient.brand"` from `sx.bg`, `GradientText`, `fill` props |
+| `zIndex`       | Layer tokens — `zIndex: { modal: 2000, toast: 2100, … }` (keys: `base raised dropdown sticky banner overlay modal popover toast tooltip`) → consumed by `sx.zIndex` tokens |
+| `motion`       | `fast`, `base`, `slow`, `ease` → `--rui-motion-*` vars                                    |
+| `fonts`        | `fonts: { import: ["Inter:400,700", "JetBrains Mono"] }` — Google-Fonts shorthand web-font loading |
+| `icons`        | `icons: { logo: "<path …/>" }` — register custom inline-SVG icons usable anywhere a Font Awesome name works |
 
-Plus metadata keys `name` and `direction` (`"ltr"` / `"rtl"`).
+Plus metadata keys `name` and `direction` (`"ltr"` / `"rtl"`). `name`
+selects a built-in theme as the base palette (`"dark"`, `"neon"`, …;
+unknown names are ignored); `direction` is advisory metadata and applies
+no token.
+
+Tokens outside these groups (line-height, letter-spacing, heading
+text-transform, border width, button styling, chart series, transition
+duration) are **base-theme-only** — they can't be set through
+`$theme({...})`, so keys like `font: { lineHeightBody: ... }` flatten to
+an unknown token and are silently dropped. Set them from the host via
+`el.setTheme(...)` or CSS variables instead.
 
 ---
 

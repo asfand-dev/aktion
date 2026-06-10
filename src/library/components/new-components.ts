@@ -490,6 +490,76 @@ export const VirtualList: ComponentSpec = {
   },
 };
 
+export const VirtualGrid: ComponentSpec = {
+  name: "VirtualGrid",
+  description:
+    "Windowed 2-D grid for very large collections (galleries, tiles, " +
+    "thumbnails). Only the visible rows of cells are mounted. Pass " +
+    "pre-rendered nodes (or plain values) as `items`; set `columns`, " +
+    "`itemHeight`, and `gap`. Virtualizes by row so thousands of items scroll " +
+    "smoothly (XI.3).",
+  props: [
+    { name: "items", type: "any[]" },
+    { name: "columns", type: "number", optional: true, description: "Cells per row (default 4)" },
+    { name: "itemHeight", type: "number", optional: true, description: "Row height in px (default 120)" },
+    { name: "gap", type: "number", optional: true, description: "Gap between cells in px (default 8)" },
+    { name: "height", type: "number", optional: true, description: "Viewport height in px (default 480)" },
+  ],
+  render: (_node, props, helpers) => {
+    const columns = Math.max(1, Math.min(12, Math.floor(asNumber(props.columns, 4))));
+    const itemHeight = Math.max(24, asNumber(props.itemHeight, 120));
+    const gap = Math.max(0, asNumber(props.gap, 8));
+    const height = Math.max(120, asNumber(props.height, 480));
+    const items = asArray<unknown>(props.items);
+    const total = items.length;
+    const rowCount = Math.ceil(total / columns);
+    const rowStride = itemHeight + gap;
+
+    const viewport = el("div", { class: "rui-virtual-grid" });
+    const scrollEl = el("div", { class: "rui-virtual-grid-scroller", style: `max-height:${height}px;overflow:auto` });
+    const spacer = el("div", { class: "rui-virtual-grid-spacer", style: `position:relative;height:${rowCount * rowStride}px` });
+    const windowEl = el("div", {
+      class: "rui-virtual-grid-window",
+      style: `position:absolute;left:0;right:0;top:0;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));gap:${gap}px`,
+    });
+
+    const fillWindow = (winNode: HTMLElement, scrollTop: number): void => {
+      winNode.replaceChildren();
+      const firstRow = Math.max(0, Math.floor((Number.isFinite(scrollTop) ? scrollTop : 0) / rowStride) - 1);
+      const visibleRows = Math.ceil(height / rowStride) + 2;
+      const lastRow = Math.min(rowCount, firstRow + visibleRows);
+      winNode.style.transform = `translateY(${firstRow * rowStride}px)`;
+      for (let r = firstRow; r < lastRow; r += 1) {
+        for (let c = 0; c < columns; c += 1) {
+          const idx = r * columns + c;
+          if (idx >= total) break;
+          const entry = items[idx];
+          const cell = el("div", { class: "rui-virtual-grid-cell", style: `height:${itemHeight}px` });
+          if (entry && typeof entry === "object" && (entry as { __kind?: string }).__kind) {
+            cell.append(helpers.renderNode(entry));
+          } else {
+            cell.append(el("span", {}, [asString(entry)]));
+          }
+          winNode.append(cell);
+        }
+      }
+    };
+
+    // Read scrollTop + window from the LIVE event target so virtualization keeps
+    // working after a morph re-render swaps the captured nodes (the handler is
+    // copied onto the on-page scroller, and `currentTarget` is that real node).
+    scrollEl.onscroll = (ev) => {
+      const liveScroller = (ev?.currentTarget ?? ev?.target ?? scrollEl) as HTMLElement;
+      const liveWindow = liveScroller.querySelector<HTMLElement>(".rui-virtual-grid-window");
+      if (liveWindow) fillWindow(liveWindow, liveScroller.scrollTop);
+    };
+    fillWindow(windowEl, 0);
+    scrollEl.append(spacer, windowEl);
+    viewport.append(scrollEl);
+    return viewport;
+  },
+};
+
 export const QueryBuilder: ComponentSpec = {
   name: "QueryBuilder",
   description:
