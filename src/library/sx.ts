@@ -17,6 +17,8 @@ import { responsiveClassFor, isResponsiveMap, stateClassFor, type ResponsiveGrou
 /** Spacing scale → CSS variable. Mirrors Tailwind-ish mental model. */
 const SPACING: Record<string, string> = {
   none: "0",
+  "3xs": "var(--rui-spacing-3xs)",
+  "2xs": "var(--rui-spacing-2xs)",
   xs: "var(--rui-spacing-xs)",
   s: "var(--rui-spacing-s)",
   sm: "var(--rui-spacing-s)",

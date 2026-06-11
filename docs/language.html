@@ -119,7 +119,7 @@ body = Card([
         <tbody>
           <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
           <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
-          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant.</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
         </tbody>
       </table>
       <p>
@@ -295,8 +295,8 @@ cards = $people.map(p =&gt; Card([
 ]))
 $app(Column([
   Text(`${$people.length} people`, { tone: "muted" }),
-  Column(cards, { gap: "s" })
-], { gap: "m" }))</code></pre>
+  Column(cards, { gap: "sm" })
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -373,8 +373,8 @@ total = $util.sum($prices)
 count = $util.count($prices)
 $app(Column([
   Text(`${count} ${$util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
-  Row($util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "s" })
-], { gap: "m" }))</code></pre>
+  Row($util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "sm" })
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -414,21 +414,32 @@ id = crypto.randomUUID()</code></pre>
         for the full bridge surface.
       </p>
 
-      <h2 id="component-calls">Component calls &mdash; one positional + trailing object</h2>
+      <h2 id="component-calls">Component calls &mdash; three argument forms</h2>
       <p>
-        Every component call takes the shape
-        <code>Type(positional, { prop: value })</code>: <strong>at most one
-        positional argument</strong> &mdash; typically the title, primary value,
-        or children array &mdash; and everything else in a single trailing
-        <code>{ }</code> object literal. This keeps every call site
-        self-documenting regardless of how many optional props a component has.
+        Pick <strong>one form per call</strong>. The canonical form is
+        <code>Type(positional, { prop: value })</code> &mdash; the prop tagged
+        <em>(positional)</em> bare, everything else in a trailing
+        <code>{ }</code> object. Calls may also be <strong>all-positional</strong>
+        (arguments bind to the signature&rsquo;s props in listed order) or
+        <strong>all-named</strong> (a single <code>{ }</code> object naming every
+        prop). A lone object for a component whose positional prop is itself
+        object-typed is that prop&rsquo;s payload, and one object is never split
+        between the two roles.
       </p>
-<pre><code>// ✅ One positional + a trailing options object
+<pre><code>// ✅ Canonical: one positional + a trailing options object
 Button("Save", { variant: "primary" })
 Grid([Card1(), Card2(), Card3()], { columns: 3 })
 StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
 
-// ❌ Multiple positional args — order matters, meaning is hidden, schema rejects
+// ✅ All-positional — binds in signature order
+StatCard("Revenue", "$48k", "up")
+
+// ✅ All-named — a single object naming the props
+Button({ label: "Save", variant: "primary" })
+
+// ⚠️ Signature order matters for all-positional calls:
+// Button(label, onClick?, variant?, …) — so this binds "primary" to
+// onClick, NOT variant. Prefer the trailing object for non-adjacent props.
 Button("Save", "primary")</code></pre>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -436,7 +447,7 @@ Button("Save", "primary")</code></pre>
   Card([Text("One")]),
   Card([Text("Two")]),
   Card([Text("Three")])
-], { columns: 3, gap: "m" }))</code></pre>
+], { columns: 3, gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

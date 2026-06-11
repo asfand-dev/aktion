@@ -508,18 +508,23 @@ $app(pages)
   operators (`= += -= *= /= ??= ++ --`) are all allowed.
   `let/const/var` are optional and do not affect reactivity — only the
   `$` prefix makes a value reactive.
-- **Component-call shape** — every call follows the trailing-object
-  rule:
+- **Component-call shapes** — pick ONE per call:
 
   ```js
-  Component(positionalArg, { prop: value, … })
+  Component(positionalArg, { prop: value, … })  // canonical
+  Component(arg1, arg2, arg3)                   // all-positional, signature order
+  Component({ prop: value, … })                 // all-named single object
   ```
 
-  Each component accepts **at most one positional argument** (typically
-  the title, children array, or primary value); every other argument
-  goes in a trailing `{ }` object literal. This is the *only* call
-  shape — `Button("Save", "primary", true)` is a schema error; write
-  `Button("Save", { variant: "primary", loading: true })` instead.
+  The canonical form passes the prop tagged `(positional)` bare and every
+  other prop in a trailing `{ }` object. All-positional calls bind
+  arguments to the signature's props in listed order — mind that order:
+  `Button("Save", "primary")` puts `"primary"` in the second slot
+  (`onClick`), not `variant`, so prefer the trailing object for
+  non-adjacent props. A single `{ }` argument whose keys are prop names
+  is an all-named call; when the component's positional prop is itself
+  object-typed, a lone object is that prop's payload instead. One object
+  is never split between the two roles.
 - `function Name(p = default) { return Expression }` — PascalCase name
   means it's a component. Parameters use standard JS defaults (`=`).
   Inside the body, `$x = expr` is a **declaration**: the initializer
@@ -527,6 +532,11 @@ $app(pages)
   whatever value the user (or an action / effect) has written.
   **Always** end with an explicit `return`. Components do not have a
   `props` object — every parameter is a real JS parameter.
+  A custom component may NOT reuse a built-in component's name (the
+  validator flags it) — unless its body calls that same name, the
+  supported **wrapper pattern**: inside its own body the name resolves to
+  the BUILT-IN, so `function Badge(l) { return Badge(l, { tone:
+  "success" }) }` extends the library Badge instead of recursing.
 - `function name(args) { body }` — camelCase name means it's an action.
   Callable effects with optional `return`. Used as event handlers
   (`onClick: save`) or as expressions (`$result = greet("Ada")`). Wrap
@@ -713,7 +723,7 @@ Highlights:
 - Array shortcuts: `$rows.length`, `$rows.first`, `$rows.last`,
   plus pluck (`$rows.title` → `[title1, title2, …]`).
 - Responsive prop maps on layout components:
-  `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "l" })`.
+  `Grid(items, { columns: { sm: 1, md: 2, lg: 4 }, gap: "lg" })`.
 - Forward references are allowed — call `$app(Column([...]))` first
   and let the children stream in beneath it.
 
@@ -1343,7 +1353,7 @@ nav = Row([
   NavLink("Home",      { to: "/", exact: true }),
   NavLink("Dashboard", { to: "/dashboard" }),
   NavLink("Users",     { to: "/users" })
-], { gap: "s" })
+], { gap: "sm" })
 
 $app(Stack([nav, pages]))
 

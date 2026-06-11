@@ -213,7 +213,7 @@ const componentGroups: ComponentGroup[] = [
       "- `Container([...], { size })` centers a wide page within a comfortable max-width (sm/md/lg/xl/full) — landing pages, articles, marketing sections.",
       "- `Box([...], { padding?, margin?, border?, background?, maxWidth? })` is a plain spacing/surface wrapper for when a `Card` is too heavy.",
       "- `Separator(orientation?, label?)` adds a visual break between sections; pass a `label` for a centered \"OR\"-style divider.",
-      "- `gap`/`padding` spacing tokens are `xs|s|m|l|xl`; `align`/`justify`/`columns`/`direction`/`gap` all accept responsive maps like `{base: …, md: …, lg: …}`.",
+      "- `gap`/`padding` spacing tokens are `none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl` (`none` = 0); `align`/`justify`/`columns`/`direction`/`gap` all accept responsive maps like `{base: …, md: …, lg: …}`.",
       "- Use `Drawer` for side-panel detail views and `Modal` for centered dialogs. `Sticky(children, side?, offset?)` pins a toolbar/banner while content scrolls. `ResizablePanels(primary, secondary)` gives a user-resizable two-pane split. `MasonryGrid([...])` is for Pinterest-style mixed-height walls.",
     ],
   },

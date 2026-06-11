@@ -119,7 +119,7 @@ $app(AppShell(MainSidebar(), pages))</code></pre>
 <pre><code>nav = Row([
   NavLink("Home",  { to: "/", exact: true }),
   NavLink("Users", { to: "/users" })
-], { gap: "s" })</code></pre>
+], { gap: "sm" })</code></pre>
       <p>
         By default the active check is a <strong>prefix</strong> match, so the
         <code>"Users"</code> link stays highlighted on <code>/users/42</code> too.
@@ -206,7 +206,7 @@ $app(AppShell(nav, pages))</code></pre>
       SidebarItem("Billing", { to: "/settings/billing" })
     ])]),
     Column([ outlet ])          // ← matched child renders here
-  ], { gap: "l" })
+  ], { gap: "lg" })
 }
 
 pages = $router({

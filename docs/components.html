@@ -264,7 +264,13 @@
         <p>
           Props marked <em>optional</em> can be omitted or passed as
           <code>null</code>. Enum values are case-sensitive and must be passed
-          as quoted strings.
+          as quoted strings. Calls take one of three forms: the canonical
+          <code>Comp(positional, { props })</code>, all-positional in the
+          listed prop order, or a single all-named <code>{ }</code> object.
+          Spacing props (<code>gap</code>/<code>padding</code>/<code>margin</code>)
+          share the scale
+          <code>none&nbsp;| 3xs&nbsp;| 2xs&nbsp;| xs&nbsp;| sm&nbsp;| md&nbsp;| lg&nbsp;| xl&nbsp;| 2xl&nbsp;| 3xl</code>
+          (<code>none</code> = 0).
         </p>
       </div>
 
@@ -273,6 +279,14 @@
       </div>
 
       <h2>Adding your own components</h2>
+      <p>
+        In-program <code>function MyCard(...) { return ... }</code> declarations
+        may not reuse a built-in component's name — the validator flags the
+        collision — unless the body calls that same name (the wrapper pattern:
+        inside its own body the name refers to the built-in, so
+        <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code>
+        extends the library Badge instead of recursing).
+      </p>
       <p>
         Pass <code>ComponentSpec</code> objects to <code>el.registerComponents([...])</code>.
         Each spec defines the source signature and a renderer that returns a DOM
@@ -329,13 +343,13 @@ el.registerComponents([ProductCard]);</code></pre>
   Card([CardHeader("First section")]),
   Card([CardHeader("Second section")]),
   Card([CardHeader("Third section")])
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Row: `$app(Row([
   Text("Inbox", { variant: "large-heavy" }),
   Spacer(),
   Button("Filter", { variant: "ghost" }),
   Button("Compose", { variant: "primary" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
       Center: `$app(Center([
   EmptyState("No results", { description: "Try a different search term." })
 ], { minHeight: "40vh" }))`,
@@ -343,25 +357,25 @@ el.registerComponents([ProductCard]);</code></pre>
   Badge("First",  { tone: "primary" }),
   Badge("Second", { tone: "info" }),
   Badge("Third",  { tone: "success" })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
       Grid: `$app(Grid([
   Card([CardHeader("Tile A")]),
   Card([CardHeader("Tile B")]),
   Card([CardHeader("Tile C")])
-], { columns: 3, gap: "m" }))`,
+], { columns: 3, gap: "md" }))`,
       StackItem: `$app(Row([
   Badge("Fixed", { tone: "info" }),
   StackItem(Input("search", { placeholder: "This input grows to fill the row" }), { grow: 1 }),
   Button("Action", { variant: "primary" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       GridItem: `$app(Grid([
   GridItem(Card([CardHeader("Sidebar"), Text("1/4 width.")]), { span: "1/4" }),
   GridItem(Card([CardHeader("Main content"), Text("3/4 width.")]), { span: "3/4" })
-], { columns: 12, gap: "m" }))`,
+], { columns: 12, gap: "md" }))`,
       Box: `$app(Stack([
-  Box([Text("Padded box with primary background.")], { padding: "m", background: "primary", border: "subtle" }),
-  Box([Text("Muted surface with large padding.")], { padding: "l", background: "muted", border: "default" })
-], { gap: "m" }))`,
+  Box([Text("Padded box with primary background.")], { padding: "md", background: "primary", border: "subtle" }),
+  Box([Text("Muted surface with large padding.")], { padding: "lg", background: "muted", border: "default" })
+], { gap: "md" }))`,
       Container: `$app(Container([
   Card([CardHeader("Centred content", { subtitle: "Wrapped in Container size=md" })])
 ], { size: "md" }))`,
@@ -369,7 +383,7 @@ el.registerComponents([ProductCard]);</code></pre>
   Text("Left edge"),
   Spacer(),
   Text("Right edge")
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Card: `$app(Card([
   CardHeader("Card title", { subtitle: "With a subtitle" }),
   Text("Card body content."),
@@ -457,11 +471,11 @@ $app(Card([
   Icon("chart-line", { variant: "solid",   size: "lg" }),
   Icon("star",       { variant: "regular", size: "lg" }),
   Icon("github",     { variant: "brands",  size: "lg" })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
       Link: `$app(Stack([
   Link("Internal link", { href: "#section" }),
   Link("External link", { href: "https://example.com", external: true })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
       Badge: `$app(Stack([
   Badge("Default"),
   Badge("Primary", { tone: "primary" }),
@@ -469,13 +483,13 @@ $app(Card([
   Badge("Warning", { tone: "warning" }),
   Badge("Danger",  { tone: "danger" }),
   Badge("Info",    { tone: "info" })
-], { direction: "row", gap: "s", align: "center" }))`,
+], { direction: "row", gap: "sm", align: "center" }))`,
       BadgeList: `$app(BadgeList(["react", "typescript", "ui", "streaming"], { tone: "primary", size: "sm" }))`,
       Callout: `$app(Stack([
   Callout("info",    { title: "Pro tip",      text: "Use $variables for reactive two-way binding." }),
   Callout("success", { title: "All caught up", text: "Your draft was auto-saved at 10:24 AM.", icon: "circle-check" }),
   Callout("warning", { title: "Heads up",     text: "Owner: Mei · ARR $84,000 · renewal in Q3", icon: "lightbulb", ignored1: true })
-], { direction: "column", gap: "s" }))`,
+], { direction: "column", gap: "sm" }))`,
       Quote: `$app(Quote(
   "Aktion took our recap email from 4k lines of glue to 40.",
   { attribution: "Naomi · last QBR", tone: "primary" }
@@ -486,7 +500,7 @@ $app(Card([
       Kbd: `$app(Stack([
   Kbd(["Cmd", "K"]),
   Kbd(["Shift", "?"], { size: "sm" })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
 
       // Forms
       Form: `$email = ""
@@ -560,7 +574,7 @@ $app(ToggleGroup("view", { items: [
   Button("Secondary", { variant: "secondary" }),
   Button("Ghost", { variant: "ghost" }),
   Button("Danger", { variant: "danger" })
-], { direction: "row", gap: "s", align: "center" }))`,
+], { direction: "row", gap: "sm", align: "center" }))`,
       Buttons: `$app(Buttons([
   Button("Save", { variant: "primary" }),
   Button("Cancel", { variant: "ghost" })
@@ -630,7 +644,7 @@ $app(Table([
   Tile("Active deals",     { icon: "briefcase",            value: "47",    description: "$418k ARR pipeline",        tone: "info" }),
   Tile("At-risk accounts", { icon: "triangle-exclamation", value: "12",    description: "Needs follow-up this week", tone: "warning" }),
   Tile("Champions",        { icon: "trophy",               value: "63",    description: "NPS 9–10 in last 30d",      tone: "success" })
-], { columns: 4, gap: "m" }))`,
+], { columns: 4, gap: "md" }))`,
       Progress: `$app(Stack([
   Progress(72,   { max: 100, label: "Upload progress", tone: "primary", indeterminate: false, showValue: true }),
   Progress(40,   { max: 100, label: "Quota used",      tone: "warning", indeterminate: false, showValue: true }),
@@ -640,7 +654,7 @@ $app(Table([
   ProgressRing(72,  { max: 100,           description: "In stock", tone: "success" }),
   ProgressRing(28,  { max: 100,           description: "Backlog",  tone: "warning" }),
   ProgressRing(100, { max: 100, label: "circle-check", description: "Shipped",  tone: "primary" })
-], { direction: "row", gap: "l", align: "center" }))`,
+], { direction: "row", gap: "lg", align: "center" }))`,
       Pagination: `$page = 3
 $app(Pagination($page, { pages: 10, siblings: 1 }))`,
       Tree: `$app(Tree([
@@ -706,7 +720,7 @@ $app(Pagination($page, { pages: 10, siblings: 1 }))`,
     { children: [
       Stack([Box(Avatar("Ada Lovelace", { src: "https://i.pravatar.cc/64?img=47", size: "lg" })),
              Stack([Text("Ada Lovelace", { variant: "body-heavy" }), Text("Mathematician · 1843", { variant: "small", tone: "muted" })])],
-            { direction: "row", gap: "s" }),
+            { direction: "row", gap: "sm" }),
       Text("Wrote the first algorithm intended to be processed by a machine.")
     ],
     placement: "bottom",
@@ -1010,7 +1024,7 @@ $app(Toolbar(
   StatusDot("Database",  { tone: "success" }),
   StatusDot("Webhooks",  { tone: "warning" }),
   StatusDot("Streaming", { tone: "success", pulse: true })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
       PricingTable: `$app(PricingTable([
   PricingCard("Starter", { price: "$0",  period: "/mo", description: "For hobby projects.",
     features: ["1 workspace", "Community support", "1 GB storage"],
@@ -1101,7 +1115,7 @@ nav = Stack([
   NavLink("Home",  { to: "/",      variant: "ghost", exact: true }),
   NavLink("About", { to: "/about", variant: "ghost" }),
   NavLink("404",   { to: "/oops",  variant: "ghost" })
-], { direction: "row", gap: "s" })
+], { direction: "row", gap: "sm" })
 pages = $router({
   "/":      homePage,
   "/about": aboutPage,
@@ -1119,14 +1133,14 @@ $app(pages)`,
   NavLink("Home",    { to: "/",        variant: "ghost",   exact: true,  icon: "house" }),
   NavLink("Docs",    { to: "/docs",    variant: "ghost",   exact: false, icon: "book" }),
   NavLink("Pricing", { to: "/pricing", variant: "primary", exact: false, icon: "tag" })
-], { direction: "row", gap: "s", align: "center" }))`,
+], { direction: "row", gap: "sm", align: "center" }))`,
 
       // New components & refined widgets (May 2026 rollout)
       IconButton: `$app(Stack([
   IconButton("pencil", { label: "Edit", variant: "primary", size: "md" }),
   IconButton("trash", { label: "Delete", variant: "danger", size: "md" }),
   IconButton("ellipsis-vertical", { label: "More", variant: "ghost", size: "md" })
-], { direction: "row", gap: "s", align: "center" }))`,
+], { direction: "row", gap: "sm", align: "center" }))`,
       CommandPalette: `$open = false
 $app(Stack([btn, commandPalette]))
 btn = Button("Open Command Palette", { action: () => { $open = true } });
@@ -1191,7 +1205,7 @@ $app(InlineEdit($value, { label: "Title" }))`,
   Spinner("sm"),
   Spinner("md", { label: "Loading" }),
   Spinner("lg", { label: "Importing rows", tone: "success" })
-], { direction: "row", gap: "m", align: "center" }))`,
+], { direction: "row", gap: "md", align: "center" }))`,
       Sparkline: `$app(Stack([
   Text("Weekly visits", { variant: "small" }),
   Sparkline([10, 14, 9, 22, 18, 28, 31], { tone: "primary" })
@@ -1217,12 +1231,12 @@ $app(DateRangePicker("range", { from: $from, to: $to, label: "Reporting window" 
   CodeBlock("function greet(name) {\\n  return 'Hello, ' + name + '!'\\n}\\n\\ngreet('Ada')", { language: "ts", showLineNumbers: true, highlightLines: "1-3" }),
   Text("header: false — chromeless, sized, and scrollable:", { variant: "small", tone: "muted" }),
   CodeBlock("$total = 0\\nfor (const line of $items) {\\n  $total = $total + line.price * line.qty\\n}\\n$app(Text(\\"Total: \\" + $total))", { language: "aktion", header: false, height: "96px" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Image: `$app(Image("https://images.unsplash.com/photo-1517022812141-23620dba5c23?auto=format&w=600&h=300",
 { alt: "Hero photo", caption: "Self-constrained 16:9 image", ratio: "16:9", fit: "cover" }))`,
       Skeleton: `$app(Stack([
   Skeleton("card"),
-  Stack([Skeleton("avatar"), Skeleton("paragraph", { count: 2 })], { direction: "row", gap: "m", align: "center" })
+  Stack([Skeleton("avatar"), Skeleton("paragraph", { count: 2 })], { direction: "row", gap: "md", align: "center" })
 ]))`,
       Modal: `$app(Modal("Modal title", { open: true, children: [
   Text("Modal body shown when open=true.")
@@ -1684,7 +1698,7 @@ $app(pages)`,
   Link("Internal route",   { to: "/dashboard" }),
   Link("External docs",    { href: "https://example.com", external: true }),
   Link(Badge("Wrapped component", { tone: "primary" }), { to: "/profile" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
 
       // -------------------------------------------------------------------
       // Escape hatches — last-resort raw HTML / CSS primitives
@@ -1717,7 +1731,7 @@ $app(pages)`,
   Heading("Section heading", { size: "section" }),
   Heading("Large heading", { size: "lg" }),
   Heading("Medium heading", { size: "md" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
       Eyebrow: `$app(Stack([
   Eyebrow("New in v0.6"),
   Display("Headline that follows the eyebrow", { size: "lg" })
@@ -1731,8 +1745,8 @@ $app(pages)`,
   Swatch("Pastel",   { background: "#fff5fb", foreground: "#7c3aed", colors: ["#c4b5fd", "#fbcfe8", "#a7f3d0"] }),
   Swatch("Skyline",  { background: "linear-gradient(160deg, #0f172a, #1e3a8a)", foreground: "#bae6fd", colors: ["#38bdf8", "#818cf8", "#0ea5e9"] }),
   Swatch("Brand",    { background: "linear-gradient(120deg, #6366f1, #8b5cf6 45%, #ec4899)", foreground: "#ffffff", colors: ["#ffffff", "#fde68a", "#fbcfe8"] })
-], { minChildWidth: "160px", gap: "m" }))`,
-      ThemeToggle: `$app(Row([Text("Toggle the theme:"), ThemeToggle()], { gap: "m", align: "center" }))`,
+], { minChildWidth: "160px", gap: "md" }))`,
+      ThemeToggle: `$app(Row([Text("Toggle the theme:"), ThemeToggle()], { gap: "md", align: "center" }))`,
 
       // ── Page bands & advanced layout (Part II) ──
       Section: `$app(Section([
@@ -1745,17 +1759,17 @@ $app(pages)`,
       Split: `$app(Split(
   Card([CardHeader("Left pane"), Text("Primary content.")]),
   Card([CardHeader("Right pane"), Text("Secondary content.")]),
-  { ratio: "3/2", gap: "l", divider: true }
+  { ratio: "3/2", gap: "lg", divider: true }
 ))`,
       Bento: `$app(Bento([
-  BentoCell(Card([CardHeader("Hero", { subtitle: "span: hero (2×2)" }), Text("The marquee cell — give it your headline feature.")], { gap: "s" }), { span: "hero" }),
+  BentoCell(Card([CardHeader("Hero", { subtitle: "span: hero (2×2)" }), Text("The marquee cell — give it your headline feature.")], { gap: "sm" }), { span: "hero" }),
   BentoCell(Card([CardHeader("Wide", { subtitle: "span: 2x1" })]), { span: "2x1" }),
   BentoCell(Card([CardHeader("Tile A")])),
   BentoCell(Card([CardHeader("Tile B")])),
-  BentoCell(Card([CardHeader("Tall", { subtitle: "span: tall (1×2)" }), Text("Grows two rows.")], { gap: "s" }), { span: "tall" }),
+  BentoCell(Card([CardHeader("Tall", { subtitle: "span: tall (1×2)" }), Text("Grows two rows.")], { gap: "sm" }), { span: "tall" }),
   BentoCell(Card([CardHeader("Tile C")])),
   BentoCell(Card([CardHeader("Full-width strip", { subtitle: "span: full" })]), { span: "full" })
-], { columns: 4, gap: "m", rowHeight: "minmax(96px, auto)" }))`,
+], { columns: 4, gap: "md", rowHeight: "minmax(96px, auto)" }))`,
       BentoCell: `$app(Bento([
   BentoCell(Card([CardHeader("Featured", { subtitle: "2 columns wide" })]), { span: "2x1" }),
   BentoCell(Card([CardHeader("Side")])),
@@ -1775,7 +1789,7 @@ $app(pages)`,
       Fragment: `$app(Grid([
   Fragment([Card([CardHeader("A")]), Card([CardHeader("B")])]),
   Card([CardHeader("C")])
-], { columns: 3, gap: "m" }))`,
+], { columns: 3, gap: "md" }))`,
 
       // ── App chrome: nav, footer, tab bars (Parts VIII.1, XII.1) ──
       NavBar: `$app(NavBar({
@@ -1819,7 +1833,7 @@ $app(TabBar([
       LogoChip: `$app(Row([
   LogoChip("Acme", { icon: "cube" }),
   LogoChip("Globex", { icon: "globe" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       CountUp: `$app(Row([
   Stack([CountUp(12500, { suffix: "+" }), Text("Customers", { variant: "small", tone: "muted" })], { align: "center" }),
   Stack([CountUp(99, { suffix: "%" }), Text("Uptime", { variant: "small", tone: "muted" })], { align: "center" })
@@ -1827,7 +1841,7 @@ $app(TabBar([
       Metric: `$app(Row([
   Metric("$48k", { label: "MRR", gradient: true }),
   Metric(1280, { label: "Signups", countUp: true })
-], { gap: "l" }))`,
+], { gap: "lg" }))`,
       MetricStrip: `$app(MetricStrip([
   Metric("12k", { label: "Stars" }),
   Metric("98%", { label: "Uptime" }),
@@ -1839,7 +1853,7 @@ $app(TabBar([
   { file: "counter.aktion", preview: true }
 ))`,
       BrowserFrame: `$app(BrowserFrame(
-  Stack([Text("Page content rendered inside a browser chrome.")], { gap: "s" }),
+  Stack([Text("Page content rendered inside a browser chrome.")], { gap: "sm" }),
   { url: "https://acme.com/dashboard" }
 ))`,
       Terminal: `$app(Terminal([
@@ -1855,26 +1869,26 @@ $app(Stack([
     Backdrop({ grid: true, blobs: ["#6366f1", "#ec4899", "#22d3ee"], particles: 60, type: $type, speed: 1 }),
     Center([Display("Animated hero backdrop", { size: "lg", align: "center" })], { minHeight: "32vh" })
   ], { padding: "none", style: "position: relative; overflow: hidden; border-radius: 16px" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       CopyButton: `$app(Stack([
   Row([
     CodeBlock("npm i aktion-runtime", { copy: false }),
     CopyButton("npm i aktion-runtime", { label: "Copy" })
-  ], { gap: "m", align: "center" }),
+  ], { gap: "md", align: "center" }),
   Row([
     Text("Custom confirmation:", { tone: "muted" }),
     CopyButton("https://aktion.dev", { label: "Copy link", copiedLabel: "Link copied ✓" })
-  ], { gap: "m", align: "center" })
-], { gap: "m" }))`,
+  ], { gap: "md", align: "center" })
+], { gap: "md" }))`,
       SegmentedControl: `$view = "grid"
 $app(Stack([
   SegmentedControl(["grid", "list", "board"], { value: $view, onChange: (v) => { $view = v } }),
   Text("Selected view: " + $view, { tone: "muted" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       FloatingActionButton: `$app(Box([
   Text("A floating action button is pinned to the corner."),
   FloatingActionButton("plus", { label: "New item" })
-], { padding: "l" }))`,
+], { padding: "lg" }))`,
       Prose: `$app(Prose([
   Markdown("## Writing with Prose\\n\\nThe **Prose** container applies typographic rhythm to long-form text — headings, paragraphs, lists, quotes, links, and inline \`code\` all get consistent spacing and sizing.\\n\\n### What you get\\n\\n- Comfortable line length and leading\\n- Styled lists, like this one\\n- [Links](https://example.com) with sensible accents\\n\\n> Wrap any Markdown(...) or rich nodes — blog posts, docs bodies, product descriptions.\\n\\nUse the \`size\` prop (sm | md | lg) to scale the whole reading experience.")
 ], { size: "md" }))`,
@@ -1885,11 +1899,11 @@ $app(Stack([
       CountdownTimer: `$app(Stack([
   Text("Launch in:"),
   CountdownTimer("2026-12-31T23:59:59Z", { endLabel: "We are live!" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
       TypingIndicator: `$app(Stack([
   ChatBubble("Hey, are you there?", { from: "them" }),
   TypingIndicator("Ada")
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
 
       // ── E-commerce (Part VIII.2) ──
       PriceTag: `$app(Row([
@@ -1900,7 +1914,7 @@ $app(Stack([
 $app(Stack([
   QuantityStepper($qty, { min: 1, max: 9, onChange: (n) => { $qty = n } }),
   Text("Quantity: " + $qty, { tone: "muted" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       ProductCard: `$app(ProductCard("Wireless Headphones", {
   image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480",
   price: 199,
@@ -1919,7 +1933,7 @@ $app(Stack([
     { label: "Pink",   value: "pink",   color: "#ec4899" },
     { label: "Teal",   value: "teal",   color: "#14b8a6" }
   ], { value: $color, kind: "swatch", label: "Color", onChange: (v) => { $color = v } })
-], { gap: "l" }))`,
+], { gap: "lg" }))`,
       OrderSummary: `$app(OrderSummary([
   { label: "Wireless Headphones", amount: "199.00" },
   { label: "USB-C Cable",         amount: "12.00" }
@@ -1977,27 +1991,27 @@ $app(ReactionPicker($reactions, {
   Text("Collaborator cursors float over the canvas."),
   LiveCursor({ x: 60, y: 30, label: "Ada", color: "#6366f1" }),
   LiveCursor({ x: 160, y: 64, label: "Alan", color: "#ec4899" })
-], { padding: "l", style: "position: relative; min-height: 120px" }))`,
+], { padding: "lg", style: "position: relative; min-height: 120px" }))`,
 
       // ── Motion & gestures (Part III) ──
       Reveal: `$app(Stack([
   Reveal(Card([CardHeader("Fades up on scroll")]), { animation: "fade-up" }),
   Reveal(Card([CardHeader("Zooms in (delayed)")]), { animation: "zoom", delay: 150 })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Transition: `$open = true
 $app(Stack([
   Switch("open", { value: $open, label: "Show panel", onChange: (v) => { $open = v } }),
   Transition(Card([CardHeader("Animated panel"), Text("Toggles in and out with a scale transition.")]), { show: $open, preset: "scale" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       FlipList: `$items = ["Apple", "Banana", "Cherry", "Date"]
 $app(Stack([
   Button("Shuffle", { variant: "primary", size: "small", onClick: () => { $items = [$items[3], $items[0], $items[2], $items[1]] } }),
   FlipList($items.map(x => Card([Text(x)], { key: x })), { duration: 300 })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Parallax: `$app(Stack([
   Text("Scroll — the card drifts at a different rate."),
   Parallax(Card([CardHeader("Parallax layer")]), { speed: 0.3 })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       ReadingProgress: `$app(Stack([
   ReadingProgress({ gradient: true, height: "4px" }),
   Text("A reading-progress bar fills as the page scrolls (pinned to the top).")
@@ -2012,15 +2026,15 @@ $app(Stack([
     Card([
       CardHeader("Gesture surface", { subtitle: "swipe · long-press · double-tap" }),
       Text("Drag across me, hold me down, or tap twice — works with touch and mouse.")
-    ], { gap: "s" }),
+    ], { gap: "sm" }),
     {
       swipe: (dir) => { $last = "swiped " + dir },
       longPress: () => { $last = "long pressed" },
       doubleTap: () => { $last = "double tapped" }
     }
   ),
-  Row([Text("Last gesture:", { tone: "muted" }), Badge($last, { tone: "primary" })], { gap: "s", align: "center" })
-], { gap: "m" }))`,
+  Row([Text("Last gesture:", { tone: "muted" }), Badge($last, { tone: "primary" })], { gap: "sm", align: "center" })
+], { gap: "md" }))`,
       Sortable: `$tasks = ["Design", "Build", "Test", "Ship"]
 function moveTask(from, to) {
   let next = [...$tasks]
@@ -2030,15 +2044,15 @@ function moveTask(from, to) {
 }
 $app(Stack([
   Sortable(
-    $tasks.map(t => Card([Text(t, { variant: "body-heavy" })], { padding: "s", key: t })),
+    $tasks.map(t => Card([Text(t, { variant: "body-heavy" })], { padding: "sm", key: t })),
     { handle: true, onReorder: (from, to) => moveTask(from, to) }
   ),
   Text("Order: " + $tasks.join(" → "), { tone: "muted", variant: "small" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       Draggable: `$app(Row([
   Draggable(Badge("Drag me", { tone: "primary" }), { data: "card-1" }),
   DropZone(EmptyState("Drop here", { description: "Release a draggable item." }), { label: "Drop target", onDrop: (data) => $toast.show("Dropped " + data) })
-], { gap: "l", align: "center" }))`,
+], { gap: "lg", align: "center" }))`,
       DropZone: `$app(DropZone(
   EmptyState("Drop files or items here", { description: "A bounded drop target." }),
   { label: "Upload zone", onDrop: (data) => $toast.success("Dropped") }
@@ -2049,12 +2063,12 @@ $app(Stack([
 $app(Stack([
   Button("Open sheet", { variant: "primary", onClick: () => { $open = true } }),
   Sheet([CardHeader("Slide-in sheet"), Text("Anchored to the right edge."), Button("Close", { size: "small", onClick: () => { $open = false } })], { open: $open, side: "right", title: "Details", onClose: () => { $open = false } })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       BottomSheet: `$open = false
 $app(Stack([
   Button("Open bottom sheet", { variant: "primary", onClick: () => { $open = true } }),
   BottomSheet([Text("A mobile-style bottom sheet."), Button("Done", { size: "small", onClick: () => { $open = false } })], { open: $open, title: "Options", onClose: () => { $open = false } })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       ConfirmDialog: `$open = false
 $app(Stack([
   Button("Delete item", { variant: "danger", onClick: () => { $open = true } }),
@@ -2067,19 +2081,19 @@ $app(Stack([
     onConfirm: () => { $open = false; $toast.success("Deleted") },
     onCancel: () => { $open = false }
   })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       SpeedDial: `$action = "none yet"
 $app(Box([
   Stack([
     Text("Click the + button (bottom-right) to expand the quick actions."),
-    Row([Text("Last action:", { tone: "muted" }), Badge($action, { tone: "primary" })], { gap: "s", align: "center" })
-  ], { gap: "s" }),
+    Row([Text("Last action:", { tone: "muted" }), Badge($action, { tone: "primary" })], { gap: "sm", align: "center" })
+  ], { gap: "sm" }),
   SpeedDial([
     { label: "New doc", icon: "file",      onClick: () => { $action = "New doc" } },
     { label: "Upload",  icon: "upload",    onClick: () => { $action = "Upload" } },
     { label: "Invite",  icon: "user-plus", onClick: () => { $action = "Invite" } }
   ], { icon: "plus" })
-], { padding: "l" }))`,
+], { padding: "lg" }))`,
 
       // ── Utility & feedback (Parts VIII.8, III) ──
       Confetti: `$fire = false
@@ -2087,23 +2101,23 @@ $app(Stack([
   Row([
     Button("Celebrate 🎉", { variant: "primary", onClick: () => { $fire = true } }),
     Button("Reset", { variant: "ghost", onClick: () => { $fire = false } })
-  ], { gap: "s" }),
+  ], { gap: "sm" }),
   Confetti({ fire: $fire, count: 90 })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       KbdShortcut: `$app(Row([
   Text("Open the command palette:"),
   KbdShortcut(["Cmd", "K"]),
   Text("or"),
   KbdShortcut("Ctrl+Shift+P")
-], { gap: "m", align: "center", wrap: true }))`,
+], { gap: "md", align: "center", wrap: true }))`,
       Svg: `$app(Row([
   Svg("<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='2'/><path d='M8 12l3 3 5-6' fill='none' stroke='currentColor' stroke-width='2'/>", { viewBox: "0 0 24 24", width: "48px", height: "48px", fill: "var(--rui-color-success)" }),
   Text("Inline, sanitised SVG.")
-], { gap: "m", align: "center" }))`,
+], { gap: "md", align: "center" }))`,
       QRCode: `$app(Stack([
   QRCode("https://aktion.dev", { size: 140, ecc: "M" }),
   Text("Scannable offline QR — encoded in the browser.", { variant: "small", tone: "muted" })
-], { gap: "s", align: "center" }))`,
+], { gap: "sm", align: "center" }))`,
       Calendar: `$picked = "2026-06-14"
 $app(Stack([
   Calendar({
@@ -2120,18 +2134,18 @@ $app(Stack([
     onNavigate: (y, m) => $toast.show("Viewing " + (m + 1) + "/" + y)
   }),
   Text("Selected: " + $picked, { tone: "muted" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
 
       // ── Interactive canvas / editors (Part VIII.7) ──
       DrawingCanvas: `$strokes = 0
 $app(Stack([
   DrawingCanvas({ width: 320, height: 180, color: "#6366f1", lineWidth: 3, onChange: (n) => { $strokes = n } }),
   Text("Strokes: " + $strokes, { tone: "muted" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
       SignaturePad: `$app(Stack([
   Text("Sign below:", { variant: "small", tone: "muted" }),
   SignaturePad({ width: 360, height: 150, onChange: (png) => $toast.show(png ? "Captured" : "Cleared") })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
 
       // ── Media (Part III.8) ──
       Lottie: `$app(Stack([
@@ -2143,7 +2157,7 @@ $app(Stack([
     loop: true
   }),
   Text("Plays via lottie-web when window.lottie is present; otherwise the poster keeps the layout intact.", { variant: "small", tone: "muted" })
-], { gap: "s" }))`,
+], { gap: "sm" }))`,
 
       // ── Accessibility primitives (Part X.3) ──
       VisuallyHidden: `$app(Button([
@@ -2153,17 +2167,17 @@ $app(Stack([
       SkipLink: `$app(Stack([
   SkipLink("main-content", { label: "Skip to content" }),
   Text("Press Tab to reveal the link, then Enter to jump past this filler…"),
-  Card([Text("…some long navigation a keyboard user would rather skip…", { tone: "muted" })], { padding: "s" }),
+  Card([Text("…some long navigation a keyboard user would rather skip…", { tone: "muted" })], { padding: "sm" }),
   Card([
     CardHeader("Main content"),
     Text("Activating the skip link moves focus here — even inside the shadow DOM.")
-  ], { id: "main-content", gap: "s" })
-], { gap: "s" }))`,
+  ], { id: "main-content", gap: "sm" })
+], { gap: "sm" }))`,
       LiveRegion: `$status = "Saving…"
 $app(Stack([
-  Row([Button("Save", { variant: "primary", size: "small", onClick: () => { $status = "Saved ✓" } }), Text($status)], { gap: "m", align: "center" }),
+  Row([Button("Save", { variant: "primary", size: "small", onClick: () => { $status = "Saved ✓" } }), Text($status)], { gap: "md", align: "center" }),
   LiveRegion($status, { politeness: "polite" })
-], { gap: "m" }))`,
+], { gap: "md" }))`,
       FocusTrap: `$app(FocusTrap([
   Card([
     CardHeader("Focus is trapped here"),

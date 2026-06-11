@@ -11,7 +11,7 @@ import {
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 
 const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
-const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl", "small", "normal", "large"] as const;
+const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 
 function normaliseButtonSize(value: unknown): string {
   const v = asString(value).trim().toLowerCase();

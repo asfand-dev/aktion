@@ -628,7 +628,7 @@ $app(Card([
   Text(`Clicks: ${$count}`),
   Row([
     Button("+1", { variant: "primary", onClick: () => { $count++ } })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
   <script type="text/plain" data-level="2" data-kind="solution">
@@ -641,14 +641,14 @@ $app(Card([
     Button("+1", { variant: "primary", onClick: () => { $count++ } }),
     Button("-1", { onClick: () => { $count-- } }),
     Button("Reset", { variant: "secondary", onClick: () => { $count = 0 } })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
 
   <script type="text/plain" data-level="3" data-kind="starter">
 $app(Column([
   PageHeader("Mission Control", { subtitle: "Numbers that go up and to the right" })
-], { gap: "l" }))
+], { gap: "lg" }))
 </script>
   <script type="text/plain" data-level="3" data-kind="solution">
 $app(Column([
@@ -657,12 +657,12 @@ $app(Column([
     StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" }),
     StatCard("Users", { value: "12,540", trend: "up", delta: "+184", icon: "users" }),
     StatCard("Bugs squashed", { value: "847", trend: "up", delta: "+3 today", icon: "bug-slash" })
-  ], { gap: "m", minChildWidth: "150px" }),
+  ], { gap: "md", minChildWidth: "150px" }),
   Card([
     CardHeader("Layout cheat sheet"),
     Text("Column stacks. Row lines up. Grid… grids. Gap tokens: xs, s, m, l, xl.")
   ])
-], { gap: "l" }))
+], { gap: "lg" }))
 </script>
 
   <script type="text/plain" data-level="4" data-kind="starter">
@@ -674,7 +674,7 @@ $todos = [
 
 $app(Card([
   CardHeader("Todo or not todo"),
-  Column($todos.map(t => Text(t.title)), { gap: "s" })
+  Column($todos.map(t => Text(t.title)), { gap: "sm" })
 ]))
 </script>
   <script type="text/plain" data-level="4" data-kind="solution">
@@ -693,7 +693,7 @@ $app(Card([
     t.done
       ? Badge("Done", { tone: "success" })
       : Badge("Pending", { tone: "warning" })
-  ], { gap: "s", align: "center", justify: "between" })), { gap: "s" })
+  ], { gap: "sm", align: "center", justify: "between" })), { gap: "sm" })
 ]))
 </script>
 
@@ -724,7 +724,7 @@ $app(Card([
   Row([
     Button("Deploy to prod", { variant: "primary", icon: "rocket", onClick: () => deploy() }),
     Button("Rollback", { variant: "secondary", icon: "clock-rotate-left", onClick: () => rollback() })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
 
@@ -759,7 +759,7 @@ $app(Card([
     Input("email", { label: "Email", value: form.values.email, error: form.errors.email }),
     Input("password", { label: "Password", type: "password", value: form.values.password, error: form.errors.password }),
     Button("Sign up", { variant: "primary", onClick: () => form.submit(), loading: form.submitting })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ]))
 </script>
 
@@ -809,14 +809,14 @@ $repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
 $app(Card([
   CardHeader("Fetch Quest", { subtitle: "One primitive. Zero axios." }),
   $repo.loading
-    ? Row([Spinner(), Text("Summoning JSON from the cloud…")], { gap: "s", align: "center" })
+    ? Row([Spinner(), Text("Summoning JSON from the cloud…")], { gap: "sm", align: "center" })
     : $repo.error
       ? Alert("The internet said no. Classic internet.", { tone: "danger" })
       : Column([
           StatCard("GitHub stars", { value: `${$repo.data.stargazers_count}`, icon: "star" }),
           Text(`Open issues: ${$repo.data.open_issues_count} (rookie numbers)`),
           Button("Refetch", { icon: "rotate", onClick: () => $repo.refetch() })
-        ], { gap: "m" })
+        ], { gap: "md" })
 ]))
 </script>
 
@@ -824,7 +824,7 @@ $app(Card([
 $app(Column([
   Text("I am painfully unstyled.", { sx: { p: "m" } }),
   Text("Help us. Please.", { sx: { p: "m" } })
-], { gap: "m" }))
+], { gap: "md" }))
 </script>
   <script type="text/plain" data-level="9" data-kind="solution">
 $app(Column([
@@ -844,7 +844,7 @@ $app(Column([
   Card([
     Text("Tokens, not pixels: p, bg, radius, shadow — and hover states. No stylesheet was harmed.")
   ], { sx: { p: "m", radius: "lg", shadow: "md" }, animate: "fade-up" })
-], { gap: "m" }))
+], { gap: "md" }))
 </script>
 
   <script type="text/plain" data-level="10" data-kind="starter">
@@ -857,7 +857,7 @@ $app(Card([
   Column([
     Button("Primary button", { variant: "primary" }),
     Badge("I follow the brand", { tone: "primary" })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ]))
 </script>
   <script type="text/plain" data-level="10" data-kind="solution">
@@ -873,7 +873,7 @@ $app(Card([
     Button("Primary button", { variant: "primary" }),
     Badge("I follow the brand", { tone: "primary" }),
     Text("Rebranded!", { sx: { bg: "gradient.brand", color: "#fff", p: "m", radius: "md", weight: "700" } })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ]))
 </script>
 
@@ -885,7 +885,7 @@ $uptime = 0
 
 $app(Column([
   PageHeader("🚀 Mission Control", { subtitle: "Everything is nominal. Probably." })
-], { gap: "l" }))
+], { gap: "lg" }))
 </script>
   <script type="text/plain" data-level="11" data-kind="solution">
 // FINAL BOSS: Mission Control. The dragon never stood a chance.
@@ -909,20 +909,20 @@ $app(Column([
     StatCard("Deploys", { value: "42", trend: "up", delta: "+3", icon: "rocket" }),
     StatCard("Errors", { value: "0", trend: "down", delta: "-7", icon: "bug-slash" }),
     StatCard("Morale", { value: "97%", trend: "up", delta: "+5%", icon: "face-grin-stars" })
-  ], { gap: "m", minChildWidth: "150px" }),
+  ], { gap: "md", minChildWidth: "150px" }),
   Card([
     CardHeader("Incident feed", { subtitle: "Live-ish" }),
     Column($alerts.map(a => Row([
       Badge(a.level, { tone: a.level }),
       Text(a.msg)
-    ], { gap: "s", align: "center" })), { gap: "s" })
+    ], { gap: "sm", align: "center" })), { gap: "sm" })
   ]),
   Button("SHIP IT", {
     variant: "primary", icon: "dragon",
     onClick: () => ship(),
     sx: { p: "m", weight: "800", states: { hover: { opacity: "0.9" } } }
   })
-], { gap: "l" }))
+], { gap: "lg" }))
 </script>
 
   <!-- =================================================================
@@ -946,20 +946,41 @@ $app(Column([
         xp: 100, achievement: "Hello, World Domination",
         learn: `
           <p><strong>Everything in Aktion is a component call.</strong> Components are just functions — <code>Card(…)</code>, <code>Text(…)</code>, <code>Button(…)</code> — and <code>$app(…)</code> mounts the tree. There are 271 of them built in, so you may never write a <code>&lt;div&gt;</code> again.</p>
-          <p>The <strong>trailing-object rule</strong> is the entire components API: at most <em>one</em> positional argument, and every other prop goes in a trailing <code>{ }</code>. Learn this one shape and you know how to call all 271.</p>
-          <pre class="mini-code">Component(positionalArg, { prop: value, anotherProp: value })
-// e.g.
+          <p>There are <strong>three ways to pass arguments</strong> to a component. Use only <em>one</em> way in each call. <strong>Use any way which suits your needs.</strong></p>
+          <pre class="mini-code">// Way 1 — STANDARD: the first argument passed as positional,
+// and the rest of the arguments are passed as a trailing object "{...}".
+Button("Save", { onClick: () => console.log("Button Clicked!") })
+StatCard("Revenue", { value: "$48k", trend: "up" })
 CardHeader("Title", { subtitle: "Smaller, sadder text" })
-Markdown("Renders **markdown**, because of course it does.")</pre>
-          <p>Children go in arrays: <code>Card([childA, childB])</code>. That's it. That's the syntax.</p>`,
+
+// Way 2 — ALL POSITIONAL: only values, in the same order as the arguments signature.
+Button("Save", () => console.log("Button Clicked!"))
+StatCard("Revenue", "$48k", "up")
+CardHeader("Title", "Smaller, sadder text")
+
+// Way 3 — ALL NAMED: one { } object, every prop written by name.
+Button({ label: "Save", onClick: () => console.log("Button Clicked!") })
+StatCard({ label: "Revenue", value: "$48k", trend: "up" })
+CardHeader({ title: "Title", subtitle: "Smaller, sadder text" })
+
+// Signatures:
+// Button(label, onClick, ...)
+// StatCard(label, value, trend, ...)
+// CardHeader(title, subtitle)
+
+// Find all components signatures at:
+// https://asfand-dev.github.io/aktion/components.html</pre>
+          <p><strong>Be careful with Way 2 — the order matters.</strong> Button's signature is <code>Button(label, onClick?, variant?, …)</code>. So <code>Button("Save", "primary")</code> puts <code>"primary"</code> into <code>onClick</code> (the 2nd prop) — not into <code>variant</code> (the 3rd). If the props you want are not next to each other in the signature, use Way 1 instead. (Every signature is listed in the <a href="components.html">component reference</a>; the main prop is marked <em>(positional)</em>.)</p>
+          <p>Two small rules. First: one <code>{ }</code> object is <em>either</em> the props object <em>or</em> a normal value — never both in the same call. Second: if a component's main prop is itself an object (for example a config or data object), then <code>Comp({ … })</code> passes that object as the <em>value</em>, not as props.</p>
+          <p>Children go in arrays: <code>Card([childA, childB])</code>. While you type, the editor shows a small tooltip with the signature and highlights the parameter you are on — it works for all three ways. That's it. That's the syntax.</p>`,
         brief: "Warm up the renderer: upgrade the starter card in the editor →",
         objectives: [
           { label: "Keep the app mounted with $app(…)", test: (c) => /\$app\s*\(/.test(c) },
-          { label: "Give the CardHeader a subtitle prop", test: (c) => /subtitle\s*:/.test(c) },
+          { label: "Give the CardHeader a subtitle prop by using Way 1 (Trailing object)", test: (c) => /subtitle\s*:/.test(c) },
           { label: "Add a Markdown(…) child with some **bold** text", test: (c) => /Markdown\s*\([\s\S]*?\*\*[\s\S]*?\*\*/.test(c) },
         ],
         hints: [
-          "Props always live in the trailing object: <code>CardHeader(\"Title\", { subtitle: \"…\" })</code>.",
+          "Canonical form: props go in the trailing object — <code>CardHeader(\"Title\", { subtitle: \"…\" })</code>.",
           "Markdown is just another component: <code>Markdown(\"some **bold** text\")</code>.",
           "Stuck? The Solution button exists and judges nobody.",
         ],
@@ -996,8 +1017,8 @@ Button("+1", { onClick: () => { $count++ } })</pre>
         tag: "Centering a div has been solved. You may now tell your grandchildren.",
         xp: 100, achievement: "Grid Iron",
         learn: `
-          <p>Three components handle 95% of layout: <strong><code>Column</code></strong> stacks, <strong><code>Row</code></strong> lines up, <strong><code>Grid</code></strong>… grids. Spacing uses tokens — <code>gap: "xs" | "s" | "m" | "l" | "xl"</code> — so your spacing is consistent even when your sleep schedule isn't.</p>
-          <pre class="mini-code">Grid([cardA, cardB, cardC], { gap: "m", minChildWidth: "150px" })
+          <p>Three components handle 95% of layout: <strong><code>Column</code></strong> stacks, <strong><code>Row</code></strong> lines up, <strong><code>Grid</code></strong>… grids. Spacing uses tokens — <code>gap: "none" | "3xs" | "2xs" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl"</code> (<code>none</code> = 0) — so your spacing is consistent even when your sleep schedule isn't.</p>
+          <pre class="mini-code">Grid([cardA, cardB, cardC], { gap: "md", minChildWidth: "150px" })
 // minChildWidth = responsive for free. No media queries were written.</pre>
           <p><code>StatCard</code> is the dashboard workhorse: <code>StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" })</code>. Any Font Awesome name works as an <code>icon</code>.</p>`,
         brief: "Mission Control has a header and zero data. The boss is asking questions. Add a Grid of StatCards →",
@@ -1021,7 +1042,7 @@ Button("+1", { onClick: () => { $count++ } })</pre>
         learn: `
           <p>Aktion's control flow is <strong>literally JavaScript</strong> — <code>if/else</code>, <code>for…of</code>, <code>switch</code>, ternaries, <code>.map</code>, <code>.filter</code>. There is no template DSL to memorize, because the language you already know is the template DSL.</p>
           <pre class="mini-code">// lists
-Column($todos.map(t => Text(t.title)), { gap: "s" })
+Column($todos.map(t => Text(t.title)), { gap: "sm" })
 
 // branching, as a value
 t.done ? Badge("Done", { tone: "success" })
@@ -1169,7 +1190,7 @@ $repo.refetch() // run it back</pre>
   },
   animate: "fade-up"                        // motion presets: fade-up, scale-up, …
 })</pre>
-          <p>Any value also takes a responsive map — <code>p: { base: "m", md: "xl" }</code> — which compiles to real media queries. RTL flips automatically because spacing is logical. You're welcome.</p>`,
+          <p>Any value also takes a responsive map — <code>p: { base: "md", md: "xl" }</code> — which compiles to real media queries. RTL flips automatically because spacing is logical. You're welcome.</p>`,
         brief: "Two tragically unstyled Texts. Give them the glow-up of a lifetime →",
         objectives: [
           { label: "Paint with a gradient (bg: \"gradient.…\")", test: (c) => /bg\s*:\s*["']gradient\./.test(c) },

@@ -378,11 +378,13 @@ $app(Hello("Ada"))</script>
       <!-- ===================== PROPS ===================== -->
       <h2 id="props">Props &amp; named arguments</h2>
       <p>
-        Aktion components take one positional argument (when it has an obvious
-        identity like a label or items list) followed by a single
+        Aktion components canonically take one positional argument (when it has
+        an obvious identity like a label or items list) followed by a single
         <code>{ options }</code> object &mdash; the same pattern as
         <code>Array.prototype.sort(compareFn)</code> or
-        <code>fetch(url, options)</code>. There is no JSX, no template DSL, and no
+        <code>fetch(url, options)</code>. All-positional calls (arguments in
+        signature order) and a single all-named <code>{ }</code> object are
+        also accepted. There is no JSX, no template DSL, and no
         attribute&#8209;vs&#8209;prop dichotomy.
       </p>
       <div data-fw-panel="react" class="is-active">
@@ -866,7 +868,7 @@ $app(Text(fullName))</code></pre>
   { id: 2, title: "Ship it" },
   { id: 3, title: "Celebrate" }
 ]
-$app(Column($todos.map(t => Card([Text(t.title)])), { gap: "s" }))</script>
+$app(Column($todos.map(t => Card([Text(t.title)])), { gap: "sm" }))</script>
         </div>
       </div>
 
@@ -1341,7 +1343,7 @@ function Card({ children }) { return &lt;div className="card"&gt;{children}&lt;/
         <div class="mig-pane">
           <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
 <pre><code>function MyCard(children) {
-  return Box(children, { padding: "m", background: "surface", border: "default" })
+  return Box(children, { padding: "md", background: "surface", border: "default" })
 }
 $app(MyCard([
   CardHeader("Hi"),

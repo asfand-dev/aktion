@@ -570,12 +570,12 @@
     StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" }),
     StatCard("Users", { value: "12,540", trend: "up", delta: "+184", icon: "users" }),
     StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%", icon: "arrow-trend-down" })
-  ], { gap: "m", minChildWidth: "150px" }),
+  ], { gap: "md", minChildWidth: "150px" }),
   Card([
     CardHeader("Welcome back"),
     Text("This dashboard streamed in as plain text and rendered as a live UI.")
   ])
-], { gap: "l" }))</pre>
+], { gap: "lg" }))</pre>
               </div>
               <div class="preview-pane"></div>
             </div>
@@ -846,8 +846,8 @@ $app(Card([
     Button("−", { variant: "secondary", onClick: dec }),
     Button("Reset", { variant: "ghost", onClick: reset }),
     Button("+", { variant: "primary", onClick: inc })
-  ], { gap: "s", justify: "center" })
-], { gap: "m" }))</pre>
+  ], { gap: "sm", justify: "center" })
+], { gap: "md" }))</pre>
               </div>
             </div>
           </div>
@@ -946,7 +946,7 @@ $app(Card([
           <div class="demo-card reveal">
             <div class="head"><i class="fa-solid fa-chart-simple"></i> Charts &amp; stats</div>
             <div class="body">
-<pre data-demo style="display:none">$app(Column([kpi, chart], { gap: "m" }))
+<pre data-demo style="display:none">$app(Column([kpi, chart], { gap: "md" }))
 kpi = StatCard("Active users", { value: "8,420", trend: "up", delta: "+12%", icon: "users" })
 chart = BarChart(labels, [Series("Users", values)], { title: "Daily Activity" })
 labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -990,7 +990,7 @@ settingsCard = Card([
       icon: "check", 
       fullWidth: true 
     })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ])
 
 planOptions = [
@@ -1004,7 +1004,7 @@ planOptions = [
           <div class="demo-card reveal">
             <div class="head"><i class="fa-solid fa-table-list"></i> Data &amp; feedback</div>
             <div class="body">
-<pre data-demo style="display:none">$app(Column([callout, userTable, statusBadges], { gap: "m" }))
+<pre data-demo style="display:none">$app(Column([callout, userTable, statusBadges], { gap: "md" }))
 callout = Callout("Heads up", { tone: "info", description: "Your trial ends in 3 days." })
 userTable = Table([
   Col("Name", ["Ada Lovelace", "Alan Turing", "Grace Hopper"]),
@@ -1018,7 +1018,7 @@ userTable = Table([
 statusBadges = Row([
   Badge("Live", { tone: "success" }),
   Badge("Beta", { tone: "warning" })
-], { gap: "s" })</pre>
+], { gap: "sm" })</pre>
             </div>
           </div>
         </div>
@@ -1191,7 +1191,7 @@ statusBadges = Row([
     new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
 
     /* ---- streaming token animation ---- */
-    const STREAM_SRC = `$app(Column([header, card, btn], { gap: "m" }))
+    const STREAM_SRC = `$app(Column([header, card, btn], { gap: "md" }))
 header = PageHeader("Live order", { subtitle: "Streaming in…" })
 card = Card([
   CardHeader("Espresso · x2"),

@@ -1393,9 +1393,9 @@ export class AktionElement extends HTMLElement {
     // later string update re-parses the same program correctly.
     const program = this.pendingCompiled ?? parse(this.currentResponse);
     this.pendingCompiled = null;
-    // Aktion 0.5 — schema validator runs alongside the parser
-    // so multi-positional calls, unknown props, enum mismatches, and
-    // legacy Theme tokens become fatal errors (mirroring the parser-level
+    // Schema validator runs alongside the parser so positional arity
+    // overflows, unknown props, enum mismatches, built-in-name collisions,
+    // and legacy Theme tokens become errors (mirroring the parser-level
     // migration errors for syntactic legacy forms). The banner surfaces
     // them together so authors see one unified list.
     const schemaErrors = validateProgramSchema(program, this.library);

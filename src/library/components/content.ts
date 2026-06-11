@@ -9,7 +9,7 @@
 import type { ComponentSpec } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
-  sanitiseCssLength, sanitiseImageSrc,
+  sanitiseCssLength, sanitiseImageSrc, SPACING_TOKENS, normalizeSpacingToken,
 } from "../utils.js";
 import { ICON_SIZES } from "../../icons/index.js";
 import { highlightLine, isHighlightable } from "../highlight.js";
@@ -108,6 +108,7 @@ const TEXT_PROPS = [
   { name: "value", type: "string" },
   { name: "variant", type: "string", optional: true, enum: TEXT_VARIANTS },
   { name: "tone", type: "string", optional: true, enum: ["default", "muted", "primary", "success", "warning", "danger"], description: "Visual accent" },
+  { name: "align", type: "string", optional: true, enum: ["left", "center", "right"], description: "Horizontal text alignment — the text becomes its own block-level line" },
   {
     name: "style",
     type: "string",
@@ -119,11 +120,13 @@ const TEXT_PROPS = [
 const renderText: ComponentSpec["render"] = (_node, props) => {
   const variant = asString(props.variant, "body");
   const tone = asString(props.tone, "default");
+  const align = asString(props.align);
   const style = sanitiseInlineStyle(props.style);
   return el("span", {
     class: "rui-text",
     "data-variant": variant,
     "data-color": tone,
+    "data-align": align || null,
     style: style || null,
   }, [asString(props.value)]);
 };
@@ -131,9 +134,11 @@ const renderText: ComponentSpec["render"] = (_node, props) => {
 export const Text: ComponentSpec = {
   name: "Text",
   description:
-    "Renders plain text with a typographic variant. Optional `style` prop " +
-    "accepts a CSS declaration string (e.g. \"font-size: 16px; color: #000;\") " +
-    "applied directly to the rendered element.",
+    "Renders plain text with a typographic variant. `align` " +
+    "(left|center|right) sets the horizontal alignment (the text renders as " +
+    "its own block). Optional `style` prop accepts a CSS declaration string " +
+    "(e.g. \"font-size: 16px; color: #000;\") applied directly to the " +
+    "rendered element.",
   props: TEXT_PROPS,
   render: renderText,
 };
@@ -592,13 +597,13 @@ export const Container: ComponentSpec = {
     { name: "children", type: "Node[]" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg", "xl", "full"], description: "sm=640 / md=820 / lg=1040 / xl=1280 / full=100% (default lg)" },
     { name: "maxWidth", type: "string", optional: true, description: "Custom CSS max-width (overrides `size`)" },
-    { name: "padding", type: "string", optional: true, enum: ["none", "s", "m", "l"], description: "Horizontal padding (default m)" },
+    { name: "padding", type: "string", optional: true, enum: SPACING_TOKENS, description: "Horizontal padding (default md)" },
   ],
   render: (_node, props, helpers) => {
     const root = el("div", {
       class: "rui-container",
       "data-size": asString(props.size, "lg"),
-      "data-padding": asString(props.padding, "m"),
+      "data-padding": normalizeSpacingToken(props.padding, "md"),
       style: props.maxWidth ? `max-width:${sanitiseCssLength(props.maxWidth, "auto")};` : null,
     });
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
@@ -614,11 +619,11 @@ export const Spacer: ComponentSpec = {
     "inside `Stack(direction=\"row\")`). Pass `size` to render a fixed " +
     "vertical/horizontal gap instead.",
   props: [
-    { name: "size", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Fixed gap; omit to flex-grow" },
+    { name: "size", type: "string", optional: true, enum: SPACING_TOKENS, description: "Fixed gap; omit to flex-grow" },
     { name: "flex", type: "boolean", optional: true, description: "Flex-grow even when size is set (default true when size omitted)" },
   ],
   render: (_node, props) => {
-    const size = asString(props.size);
+    const size = normalizeSpacingToken(props.size, asString(props.size));
     const flex = props.flex === undefined ? !size : asBoolean(props.flex);
     return el("span", {
       class: "rui-spacer",

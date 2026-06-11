@@ -416,7 +416,7 @@ describe("Row / Column / Center", () => {
     expect(node.getAttribute("data-direction")).toBe("row");
     expect(node.getAttribute("data-align")).toBe("center");
     expect(node.getAttribute("data-uniform")).toBe("false");
-    expect(node.getAttribute("data-gap")).toBe("m");
+    expect(node.getAttribute("data-gap")).toBe("md");
   });
 
   it("Row grow:true makes children share the row equally (data-uniform=true)", () => {
@@ -447,7 +447,7 @@ describe("Row / Column / Center", () => {
       helpers,
     ) as HTMLElement;
     expect(node.getAttribute("data-justify")).toBe("between");
-    expect(node.getAttribute("data-gap")).toBe("s");
+    expect(node.getAttribute("data-gap")).toBe("sm");
     expect(node.getAttribute("data-wrap")).toBe("true");
   });
 
@@ -579,8 +579,8 @@ describe("Box", () => {
       helpers,
     ) as HTMLElement;
     expect(node.className).toBe("rui-box");
-    expect(node.getAttribute("data-padding")).toBe("l");
-    expect(node.getAttribute("data-margin")).toBe("s");
+    expect(node.getAttribute("data-padding")).toBe("lg");
+    expect(node.getAttribute("data-margin")).toBe("sm");
     expect(node.getAttribute("data-border")).toBe("subtle");
     expect(node.getAttribute("data-background")).toBe("muted");
     expect(node.getAttribute("style") ?? "").toContain("max-width:480px");
@@ -964,7 +964,7 @@ describe("Container", () => {
     ) as HTMLElement;
     expect(node.classList.contains("rui-container")).toBe(true);
     expect(node.getAttribute("data-size")).toBe("md");
-    expect(node.getAttribute("data-padding")).toBe("l");
+    expect(node.getAttribute("data-padding")).toBe("lg");
     expect(node.getAttribute("style") ?? "").toContain("max-width:720px");
   });
 });
@@ -979,7 +979,7 @@ describe("Spacer", () => {
   it("renders a fixed gap when size is set", () => {
     const node = Spacer.render(makeNode("Spacer", []), { size: "l" }, helpers) as HTMLElement;
     expect(node.getAttribute("data-flex")).toBe("false");
-    expect(node.getAttribute("data-size")).toBe("l");
+    expect(node.getAttribute("data-size")).toBe("lg");
   });
 });
 
@@ -996,6 +996,19 @@ describe("Text", () => {
     expect(node.getAttribute("data-color")).toBe("primary");
     expect(node.textContent).toBe("Hello");
     expect(node.hasAttribute("style")).toBe(false);
+    // No align prop → no data-align attribute (the span stays inline).
+    expect(node.hasAttribute("data-align")).toBe(false);
+  });
+
+  it("sets data-align when the align prop is given", () => {
+    for (const align of ["left", "center", "right"]) {
+      const node = Text.render(
+        makeNode("Text", ["Hello"]),
+        { value: "Hello", align },
+        helpers,
+      ) as HTMLElement;
+      expect(node.getAttribute("data-align")).toBe(align);
+    }
   });
 
   it("applies a sanitised inline style declaration string", () => {
@@ -2699,6 +2712,17 @@ describe("new components — phase 1-4 rollout", () => {
     expect(sm.getAttribute("data-size")).toBe("sm");
     // Unrecognised tokens (including the removed `small|normal|large`) fall back to `md`.
     expect(unknown.getAttribute("data-size")).toBe("md");
+  });
+
+  it("Button accepts the default/outline/link variants", () => {
+    for (const variant of ["default", "outline", "link"]) {
+      const node = Button.render(
+        makeNode("Button", ["Save", null, variant]),
+        { label: "Save", variant },
+        helpers,
+      ) as HTMLElement;
+      expect(node.getAttribute("data-variant")).toBe(variant);
+    }
   });
 });
 

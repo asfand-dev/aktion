@@ -10,6 +10,7 @@
 
 import type { ComponentNode } from "../runtime/evaluator.js";
 import type { Router } from "../runtime/router.js";
+import { UNIVERSAL_PROP_NAMES } from "./sx.js";
 
 export type PrimitiveType =
   | "string"
@@ -101,6 +102,144 @@ export function assertOnePositionalMax(specs: ReadonlyArray<ComponentSpec>): voi
       );
     }
   }
+}
+
+/* ----------------------------------------------------------------------- *
+ * Flexible call binding (§19) — shared between the runtime evaluator and
+ * the schema validator so both agree on how a call's arguments map onto a
+ * spec's props. Library calls accept:
+ *   - positional arguments in slot order (first one lands in the
+ *     `positional: true` slot, the rest fill the remaining slots in
+ *     declaration order),
+ *   - a named-props object (the trailing `{ prop: value }` form, the legacy
+ *     leading-object form, or a single all-named object argument), and
+ *   - the combination of one-or-more positionals plus the named object.
+ * `chooseNamedBagIndex` decides which argument (if any) plays the
+ * named-props role; everything else is positional.
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Minimal shape of one call argument for binding decisions: `objectKeys`
+ * is the list of non-spread literal keys when the argument is an object
+ * literal, `null` for every other expression kind.
+ */
+export interface CallArgShape {
+  objectKeys: ReadonlyArray<string> | null;
+}
+
+/** True when a prop's declared type can accept a plain-object payload. */
+export function propExpectsObject(prop: PropSpec): boolean {
+  return /\bobject\b|\bRecord\b|\{|\bany\b/i.test(prop.type);
+}
+
+/** Prop names + aliases (the names a named-props object may use), plus `key`. */
+export function knownPropNames(spec: ComponentSpec): Set<string> {
+  const names = new Set<string>();
+  for (const p of spec.props) {
+    names.add(p.name);
+    if (p.aliases) for (const alias of p.aliases) names.add(alias);
+  }
+  names.add("key");
+  return names;
+}
+
+/**
+ * The slot the `n`-th (0-based) positional argument binds to, mirroring the
+ * runtime: positional #0 → the `positional: true` slot (or slot 0), every
+ * later positional → the next unfilled slot in declaration order. `null`
+ * when the call has more positionals than the spec has props.
+ */
+export function slotForNthPositional(spec: ComponentSpec, n: number): PropSpec | null {
+  const positionalIndex = findPositionalIndex(spec);
+  if (positionalIndex < 0) return null;
+  const filled = new Set<number>();
+  let target = -1;
+  for (let i = 0; i <= n; i += 1) {
+    if (i === 0) {
+      target = positionalIndex;
+    } else {
+      let cursor = 0;
+      while (cursor < spec.props.length && filled.has(cursor)) cursor += 1;
+      if (cursor >= spec.props.length) return null;
+      target = cursor;
+    }
+    filled.add(target);
+  }
+  return spec.props[target] ?? null;
+}
+
+/**
+ * Decide which argument of a library-component call is the named-props
+ * object. Returns the argument index, or `-1` when every argument is
+ * positional. The rules, in order:
+ *
+ *   1. Single object argument, one-prop component → the object is the
+ *      prop's payload when that prop accepts an object; otherwise it is
+ *      named props exactly when all keys are known prop names.
+ *   2. Single object argument, multi-prop component → named props when all
+ *      keys are known; a payload for an object-typed positional slot when
+ *      none are; otherwise assume named props so validation can flag the
+ *      unknown keys.
+ *   3. Multiple arguments — the LAST object literal is the candidate:
+ *      in trailing position it is the named-props object (the canonical
+ *      form) unless none of its keys are known and the slot it would fill
+ *      expects an object; in leading/middle position (legacy
+ *      `Grid({cols: 12}, [...])`) it is named props only when at least one
+ *      key is a known prop name.
+ *
+ * A single object is never split between roles — it is wholly named props
+ * or wholly a positional payload.
+ */
+export function chooseNamedBagIndex(
+  args: ReadonlyArray<CallArgShape>,
+  spec: ComponentSpec,
+): number {
+  let lastObj = -1;
+  for (let i = args.length - 1; i >= 0; i -= 1) {
+    if (args[i]!.objectKeys !== null) {
+      lastObj = i;
+      break;
+    }
+  }
+  if (lastObj < 0) return -1;
+  const keys = args[lastObj]!.objectKeys!;
+  const known = knownPropNames(spec);
+  const knownCount = keys.reduce(
+    (count, k) => count + (known.has(k) || UNIVERSAL_PROP_NAMES.has(k) ? 1 : 0),
+    0,
+  );
+  const allKnown = keys.length > 0 && knownCount === keys.length;
+  const anyKnown = knownCount > 0;
+  const positionalProp = findPositionalProp(spec);
+
+  if (args.length === 1) {
+    if (spec.props.length === 1) {
+      return propExpectsObject(spec.props[0]!) ? -1 : (allKnown ? 0 : -1);
+    }
+    if (allKnown) return 0;
+    if (!anyKnown && positionalProp && propExpectsObject(positionalProp)) return -1;
+    return 0;
+  }
+
+  if (lastObj !== args.length - 1) {
+    return anyKnown ? lastObj : -1;
+  }
+
+  if (anyKnown || keys.length === 0) return lastObj;
+  const slot = slotForNthPositional(spec, args.length - 1);
+  if (slot && propExpectsObject(slot)) return -1;
+  return lastObj;
+}
+
+/** Build `CallArgShape`s from AST call arguments (parser `Expression`s). */
+export function callArgShapes(
+  args: ReadonlyArray<{ kind: string; properties?: ReadonlyArray<{ spread?: unknown; key: string }> }>,
+): CallArgShape[] {
+  return args.map((arg) => ({
+    objectKeys: arg.kind === "Object" && arg.properties
+      ? arg.properties.filter((p) => !p.spread).map((p) => p.key)
+      : null,
+  }));
 }
 
 /**

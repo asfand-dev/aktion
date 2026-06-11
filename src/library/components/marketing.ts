@@ -11,6 +11,7 @@ import type { ComponentSpec, RenderHelpers } from "../types.js";
 import { mapPositionalArgs } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseImageSrc, sanitiseHref,
+  normalizeSpacingToken,
 } from "../utils.js";
 import { CodeBlock } from "./content.js";
 
@@ -120,7 +121,7 @@ export const Section: ComponentSpec = {
     { name: "children", type: "Node[]", positional: true, required: true },
     { name: "background", type: "string", optional: true, enum: ["base", "soft", "surface", "muted", "brand"], aliases: ["bg"] },
     { name: "width", type: "string", optional: true, enum: ["sm", "md", "lg", "xl", "full"] },
-    { name: "padding", type: "string", optional: true, enum: ["sm", "md", "lg"] },
+    { name: "padding", type: "string", optional: true, enum: ["none", "xs", "sm", "md", "lg", "xl"], description: "Band padding preset (default md)" },
     { name: "align", type: "string", optional: true, enum: ["left", "center"] },
     { name: "eyebrow", type: "string", optional: true },
     { name: "title", type: "string | Node[]", optional: true },
@@ -132,7 +133,7 @@ export const Section: ComponentSpec = {
     const root = el("section", {
       class: "rui-section",
       "data-bg": bg !== "base" ? bg : null,
-      "data-pad": asString(props.padding) || null,
+      "data-pad": normalizeSpacingToken(props.padding, asString(props.padding)) || null,
       "data-align": asString(props.align) || null,
       id: asString(props.id) || null,
     });
@@ -211,7 +212,7 @@ export const Brand: ComponentSpec = {
   description: "Logo + product name (+ optional version pill), linking home. Use in NavBar/Footer.",
   props: [
     { name: "name", type: "string", positional: true, required: true, aliases: ["label"] },
-    { name: "logo", type: "string", optional: true, description: "Logo image src" },
+    { name: "logo", type: "string", optional: true, description: "Logo image src URL, e.g. https://example.com/logo.png" },
     { name: "version", type: "string", optional: true },
     { name: "href", type: "string", optional: true },
   ],
@@ -891,7 +892,7 @@ export const Backdrop: ComponentSpec = {
       ].filter(Boolean).join(";");
       root.append(el("div", { class: "rui-backdrop-blob", style }));
     });
-    const count = Math.max(0, Math.min(120, Math.round(asNumber(props.particles, 0))));
+    const count = Math.max(0, Math.min(120, Math.round(asNumber(props.particles || 50, 0))));
     if (count > 0) {
       const typeRaw = asString(props.type, "network");
       const palette = asArray<unknown>(props.particleColors)

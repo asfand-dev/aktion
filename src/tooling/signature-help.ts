@@ -2,13 +2,30 @@
  * Signature help for Aktion calls.
  *
  * When the cursor sits inside `Caller(…)`, report the callee's signature and
- * which parameter is active (the comma count at the call's depth). Resolves
- * library components, `$`-builtins, and the author's own components / actions
- * / hooks. Pure + DOM-free like the rest of the language service.
+ * which parameter is active. The active parameter follows the §19 flexible
+ * call-binding rules (shared with the runtime via `chooseNamedBagIndex` /
+ * `slotForNthPositional`):
+ *
+ *   - positional arguments highlight the slot they will bind to — the first
+ *     positional maps to the `(positional)` slot, later ones to the next
+ *     unfilled slots in declaration order, so all-positional calls track
+ *     the signature correctly;
+ *   - inside the named-props object (trailing, leading, or a single
+ *     all-named argument) the highlighted parameter is the prop whose key
+ *     the cursor is on — `Button("Save", { variant: ‸ })` highlights
+ *     `variant`, not "argument #1";
+ *   - an object argument that binds positionally (payload for an
+ *     object-typed slot) highlights that slot.
+ *
+ * Resolves library components, `$`-builtins, and the author's own
+ * components / actions / hooks. Pure + DOM-free like the rest of the
+ * language service.
  */
 
 import { parse } from "../parser/index.js";
-import type { ComponentLibrary } from "../library/types.js";
+import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
+import { chooseNamedBagIndex, slotForNthPositional } from "../library/types.js";
+import { findComponent } from "../library/registry.js";
 import { defaultLibrary } from "../library/index.js";
 import { getComponentCatalog, type ComponentEntry } from "../language/components.js";
 import { findBuiltin } from "../language/builtins.js";
@@ -28,6 +45,12 @@ export interface SignatureInfo {
 export interface SignatureHelp {
   signatures: SignatureInfo[];
   activeSignature: number;
+  /**
+   * Index into `signatures[activeSignature].parameters`. May equal
+   * `parameters.length` (out of range) when no parameter should be
+   * highlighted — e.g. the cursor is on a not-yet-matching object key or
+   * past the last slot of an all-positional call.
+   */
   activeParameter: number;
 }
 
@@ -43,17 +66,68 @@ export function getSignatureHelp(
   const call = findActiveCall(source, position);
   if (!call || !call.callee) return null;
 
-  const signature =
-    libraryComponentSignature(call.callee, library) ??
-    builtinSignature(call.callee) ??
-    userSignature(call.callee, source);
-  if (!signature) return null;
+  const spec = findComponent(library, call.callee);
+  if (spec) {
+    const signature = libraryComponentSignature(call.callee, library);
+    if (!signature) return null;
+    const activeParameter = resolveActiveSlot(call, spec, signature.parameters.length);
+    return { signatures: [signature], activeSignature: 0, activeParameter };
+  }
 
-  const activeParameter =
-    signature.parameters.length > 0
-      ? Math.min(call.argIndex, signature.parameters.length - 1)
-      : 0;
+  const signature = builtinSignature(call.callee) ?? userSignature(call.callee, source);
+  if (!signature) return null;
+  const activeParameter = resolveDeclaredParam(call, signature.parameters.map((p) => p.label));
   return { signatures: [signature], activeSignature: 0, activeParameter };
+}
+
+/**
+ * Map the cursor's argument context onto a library spec's prop index using
+ * the same binding rules the runtime applies.
+ */
+function resolveActiveSlot(call: ActiveCall, spec: ComponentSpec, paramCount: number): number {
+  const noHighlight = paramCount; // out-of-range index → editors highlight nothing
+  const bagIdx = chooseNamedBagIndex(call.args, spec);
+
+  // Cursor inside the named-props object → highlight the prop whose key the
+  // cursor is on (or prefix-matches the key being typed).
+  if (call.objectArg !== null && call.argIndex === bagIdx) {
+    const key = call.objectArg.activeKey;
+    if (!key) return noHighlight;
+    const exact = spec.props.findIndex((p) => p.name === key || (p.aliases?.includes(key) ?? false));
+    if (exact >= 0) return exact;
+    const prefix = spec.props.findIndex((p) => p.name.startsWith(key));
+    return prefix >= 0 ? prefix : noHighlight;
+  }
+
+  // Positional context: the cursor's argument binds as the n-th positional,
+  // where the named-props object (if already present) is excluded.
+  let n = call.argIndex;
+  if (bagIdx >= 0 && bagIdx < call.argIndex) n -= 1;
+  const slot = slotForNthPositional(spec, n);
+  if (!slot) return noHighlight;
+  const index = spec.props.indexOf(slot);
+  return index >= 0 ? index : noHighlight;
+}
+
+/**
+ * Active parameter for user components / actions / hooks (declared params,
+ * no spec). Positional commas map 1:1; inside a trailing object the key is
+ * matched against the declared parameter names.
+ */
+function resolveDeclaredParam(call: ActiveCall, paramLabels: string[]): number {
+  if (paramLabels.length === 0) return 0;
+  const names = paramLabels.map((label) => label.replace(/^\.\.\./, "").replace(/\?$/, ""));
+  if (call.objectArg !== null) {
+    const key = call.objectArg.activeKey;
+    if (key) {
+      const exact = names.indexOf(key);
+      if (exact >= 0) return exact;
+      const prefix = names.findIndex((name) => name.startsWith(key));
+      if (prefix >= 0) return prefix;
+    }
+    return paramLabels.length;
+  }
+  return Math.min(call.argIndex, paramLabels.length - 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,26 +215,82 @@ function paramDoc(type: string, enumValues?: readonly string[], description?: st
 // Cursor → enclosing call
 // ---------------------------------------------------------------------------
 
-interface ActiveCall {
+/** Per-argument shape gathered by the scanner (feeds `chooseNamedBagIndex`). */
+interface ScannedArg {
+  /** Top-level keys when the argument is an object literal; null otherwise. */
+  objectKeys: string[] | null;
+}
+
+interface ActiveObjectContext {
+  /**
+   * The prop key the cursor is on: the key whose value region contains the
+   * cursor, or the partial identifier being typed in key position. Empty
+   * when the cursor sits before any key (e.g. right after `{`).
+   */
+  activeKey: string;
+}
+
+export interface ActiveCall {
   callee: string;
   /** Zero-based index of the argument the cursor is in. */
   argIndex: number;
+  /** Shapes of every argument seen so far (the cursor's one included). */
+  args: ScannedArg[];
+  /** Set when the cursor is inside an object literal that IS the argument. */
+  objectArg: ActiveObjectContext | null;
 }
 
-interface CallFrame {
+/**
+ * Expose the cursor → enclosing-call analysis so other language-service
+ * surfaces (completions) can apply the same §19 binding rules without
+ * re-implementing the scan.
+ */
+export function analyseCallContext(source: string, position: Position): ActiveCall | null {
+  return findActiveCall(source, position);
+}
+
+interface ObjectInfo {
+  keys: string[];
+  /** Last key whose `:` was passed at this object's top level (cursor may be in its value). */
+  valueKey: string | null;
+  /** True between an argument-separating comma (or `{`) and the next `:`. */
+  expectingKey: boolean;
+  /** Identifier accumulated in key position (the key currently being typed). */
+  pendingKey: string;
+}
+
+interface ScanFrame {
   bracket: "(" | "[" | "{";
   callee: string;
   commas: number;
+  /** Call frames: shape info per completed/started argument. */
+  args: ScannedArg[];
+  /** Object frame bookkeeping (only for `{` frames). */
+  object: ObjectInfo | null;
+  /** For `{` frames opened directly as a call argument: the arg's record. */
+  argRecord: ScannedArg | null;
 }
 
 /**
  * Forward-scan to the cursor, maintaining a bracket stack so comma counting
  * respects nested arrays / objects. Strings and comments are skipped. The
- * nearest still-open `(` frame is the active call.
+ * nearest still-open `(` frame is the active call; for object-literal
+ * arguments the scanner also records their top-level keys and which key the
+ * cursor is on, so the caller can apply the §19 binding rules.
  */
 function findActiveCall(source: string, position: Position): ActiveCall | null {
   const offset = lineColumnToOffset(source, position);
-  const stack: CallFrame[] = [];
+  const stack: ScanFrame[] = [];
+
+  const currentArg = (frame: ScanFrame): ScannedArg => {
+    while (frame.args.length <= frame.commas) frame.args.push({ objectKeys: null });
+    return frame.args[frame.commas]!;
+  };
+
+  const flushPendingKey = (obj: ObjectInfo, asShorthand: boolean): void => {
+    if (obj.pendingKey && asShorthand) obj.keys.push(obj.pendingKey);
+    obj.pendingKey = "";
+  };
 
   for (let i = 0; i < offset; i += 1) {
     const ch = source[i]!;
@@ -182,25 +312,90 @@ function findActiveCall(source: string, position: Position): ActiveCall | null {
       continue;
     }
 
+    const top = stack[stack.length - 1];
+
     if (ch === "(" || ch === "[" || ch === "{") {
       const callee = ch === "(" ? identifierBefore(source, i) : "";
-      stack.push({ bracket: ch, callee, commas: 0 });
+      let argRecord: ScannedArg | null = null;
+      let object: ObjectInfo | null = null;
+      if (ch === "{") {
+        object = { keys: [], valueKey: null, expectingKey: true, pendingKey: "" };
+        // An object opening directly inside a call frame is (the start of)
+        // that argument's value — link it so its keys feed the arg shape.
+        if (top && top.bracket === "(") {
+          const arg = currentArg(top);
+          if (arg.objectKeys === null) arg.objectKeys = object.keys;
+          argRecord = arg;
+        }
+      }
+      stack.push({ bracket: ch, callee, commas: 0, args: [], object, argRecord });
       continue;
     }
     if (ch === ")" || ch === "]" || ch === "}") {
-      stack.pop();
+      const closing = stack.pop();
+      if (closing?.bracket === "{" && closing.object) {
+        flushPendingKey(closing.object, closing.object.expectingKey);
+      }
       continue;
     }
-    if (ch === "," && stack.length > 0) {
-      stack[stack.length - 1]!.commas += 1;
+
+    if (!top) continue;
+
+    if (ch === ",") {
+      top.commas += 1;
+      if (top.bracket === "(") currentArg(top);
+      if (top.object) {
+        flushPendingKey(top.object, top.object.expectingKey);
+        top.object.expectingKey = true;
+        top.object.valueKey = null;
+      }
+      continue;
+    }
+
+    if (top.object) {
+      const obj = top.object;
+      if (obj.expectingKey) {
+        if (/[\w$]/.test(ch)) {
+          obj.pendingKey += ch;
+        } else if (ch === ":") {
+          obj.keys.push(obj.pendingKey);
+          obj.valueKey = obj.pendingKey;
+          obj.pendingKey = "";
+          obj.expectingKey = false;
+        } else if (ch === "." && source.slice(i, i + 3) === "...") {
+          // Spread — no key.
+          obj.pendingKey = "";
+          obj.expectingKey = false;
+          i += 2;
+        } else if (!/\s/.test(ch)) {
+          // Computed key or other syntax — give up on this entry's key.
+          obj.pendingKey = "";
+        }
+      }
+      continue;
     }
   }
 
   for (let i = stack.length - 1; i >= 0; i -= 1) {
     const frame = stack[i]!;
-    if (frame.bracket === "(") {
-      return { callee: frame.callee, argIndex: frame.commas };
+    if (frame.bracket !== "(") continue;
+    // Materialise the in-progress argument so shapes include it.
+    while (frame.args.length <= frame.commas) frame.args.push({ objectKeys: null });
+
+    // Is the cursor inside an object literal that is this call's argument?
+    let objectArg: ActiveObjectContext | null = null;
+    const inner = stack[i + 1];
+    if (inner && inner.bracket === "{" && inner.object && inner.argRecord) {
+      const obj = inner.object;
+      objectArg = { activeKey: obj.expectingKey ? obj.pendingKey : (obj.valueKey ?? "") };
     }
+
+    return {
+      callee: frame.callee,
+      argIndex: frame.commas,
+      args: frame.args.map((a) => ({ objectKeys: a.objectKeys })),
+      objectArg,
+    };
   }
   return null;
 }

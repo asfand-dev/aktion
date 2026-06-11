@@ -21,9 +21,10 @@ import type {
 } from "../parser/types.js";
 import { parse } from "../parser/index.js";
 import type { ComponentLibrary } from "./types.js";
-import { findPositionalProp } from "./types.js";
+import { chooseNamedBagIndex, callArgShapes, slotForNthPositional, propExpectsObject } from "./types.js";
 import { findComponent } from "./registry.js";
 import { UNIVERSAL_PROP_NAMES } from "./sx.js";
+import { canonicalSizeToken } from "./utils.js";
 
 /**
  * Combined entry point for hosts: parse the source and merge any
@@ -57,18 +58,52 @@ export function validateProgram(
  *
  *   - produces a parser-level migration error at parse time, or
  *   - produces a schema-validator error here when library knowledge is
- *     required (multi-positional calls, unknown props, enum mismatches,
- *     legacy Theme tokens, …).
+ *     required (positional arity overflows, unknown props, enum
+ *     mismatches, built-in-name collisions, legacy Theme tokens, …).
  */
 export function validateProgramSchema(
   program: Program,
   library: ComponentLibrary,
 ): ParseError[] {
   const errors: ParseError[] = [];
-  for (const stmt of program.statements) {
-    walkStatement(stmt, library, errors);
+  // Calls to user-declared components are bound to the *custom* signature at
+  // runtime (even when the name shadows a built-in), so they must not be
+  // schema-checked against the library spec. Collected once per program;
+  // validation is synchronous, so the module-level set cannot be observed
+  // by a concurrent run.
+  currentDeclaredComponents = collectDeclaredComponentNames(program);
+  try {
+    for (const stmt of program.statements) {
+      walkStatement(stmt, library, errors);
+    }
+  } finally {
+    currentDeclaredComponents = EMPTY_NAME_SET;
   }
   return errors;
+}
+
+const EMPTY_NAME_SET: ReadonlySet<string> = new Set();
+let currentDeclaredComponents: ReadonlySet<string> = EMPTY_NAME_SET;
+
+/** Deep-collect every `ComponentDeclaration` name in the program (incl. component-local ones). */
+function collectDeclaredComponentNames(program: Program): Set<string> {
+  const names = new Set<string>();
+  const scan = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const entry of node) scan(entry);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (rec.kind === "ComponentDeclaration" && typeof rec.name === "string") {
+      names.add(rec.name);
+    }
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") scan(rec[key]);
+    }
+  };
+  scan(program.statements);
+  return names;
 }
 
 function walkStatement(
@@ -84,6 +119,9 @@ function walkStatement(
       walkExpression(stmt.expression, library, out);
       return;
     case "ComponentDeclaration":
+      validateComponentDeclarationName(stmt, library, out);
+      for (const inner of stmt.body.body) walkStatement(inner, library, out);
+      return;
     case "ActionDeclaration":
     case "EffectDeclaration":
     case "HookDeclaration":
@@ -232,11 +270,57 @@ function walkExpression(
   }
 }
 
+/**
+ * A custom component may not reuse a built-in component's name — UNLESS its
+ * body calls that same name, in which case it is the supported wrapper
+ * pattern: inside its own body the name resolves to the BUILT-IN (the
+ * innermost call renders the library component, every outer call the custom
+ * one), so the declaration extends the built-in instead of replacing it.
+ */
+function validateComponentDeclarationName(
+  stmt: Extract<Statement, { kind: "ComponentDeclaration" }>,
+  library: ComponentLibrary,
+  out: ParseError[],
+): void {
+  if (!findComponent(library, stmt.name)) return;
+  if (subtreeCallsName(stmt.body, stmt.name)) return;
+  out.push({
+    message:
+      `function ${stmt.name}(...) — "${stmt.name}" is a built-in component name. ` +
+      `Rename the custom component (e.g. "App${stmt.name}"), or call ${stmt.name}(...) ` +
+      `inside the body to wrap the built-in (inside its own body the name refers ` +
+      `to the built-in component).`,
+    line: stmt.loc?.line ?? 0,
+    column: stmt.loc?.column ?? 0,
+  });
+}
+
+/**
+ * Deep-scan an AST subtree for a `Call` whose callee is `name`. Generic
+ * object walk (AST nodes are acyclic plain objects) so new statement /
+ * expression kinds are covered automatically; `loc` subtrees are skipped.
+ */
+function subtreeCallsName(node: unknown, name: string): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (Array.isArray(node)) return node.some((entry) => subtreeCallsName(entry, name));
+  const rec = node as Record<string, unknown>;
+  if (rec.kind === "Call" && rec.callee === name) return true;
+  for (const key of Object.keys(rec)) {
+    if (key === "loc") continue;
+    if (subtreeCallsName(rec[key], name)) return true;
+  }
+  return false;
+}
+
 function validateCall(
   expr: Extract<Expression, { kind: "Call" }>,
   library: ComponentLibrary,
   out: ParseError[],
 ): void {
+  // Calls that resolve to a user component declaration follow the custom
+  // signature, not the library spec — skip them (the declaration itself is
+  // checked by `validateComponentDeclarationName`).
+  if (currentDeclaredComponents.has(expr.callee)) return;
   const spec = findComponent(library, expr.callee);
   if (!spec) return; // User-declared or unknown — skip silently.
   const propNames = new Set<string>();
@@ -249,18 +333,13 @@ function validateCall(
   // Allow `key:` everywhere (content-addressed identity, §13).
   propNames.add("key");
 
-  // Detect the named-props ObjectExpr (JS-style props: `Button("Save", { variant: "primary" })`).
-  // We accept the *last* ObjectExpr in the argument list so leading
-  // props (`Grid({ cols: 12 }, [children])`) and trailing props
-  // (`Button("Hi", { onClick })`) both validate consistently.
+  // Detect the named-props ObjectExpr with the same §19 flexible-call rules
+  // the runtime uses (`chooseNamedBagIndex`): trailing object
+  // (`Button("Hi", { onClick })`), leading object (`Grid({ cols: 12 },
+  // [children])`), or a single all-named object (`Button({ children: "Hi" })`).
+  // Object arguments destined for object-typed slots stay positional.
   const args = expr.arguments;
-  let trailingObjIdx = -1;
-  for (let i = args.length - 1; i >= 0; i -= 1) {
-    if (args[i]!.kind === "Object") {
-      trailingObjIdx = i;
-      break;
-    }
-  }
+  const trailingObjIdx = chooseNamedBagIndex(callArgShapes(args), spec);
   const trailingObj =
     trailingObjIdx >= 0
       ? (args[trailingObjIdx] as Extract<Expression, { kind: "Object" }>)
@@ -271,27 +350,48 @@ function validateCall(
     if (i === trailingObjIdx) continue;
     positionalArgs.push(args[i]!);
   }
-  if (positionalArgs.length > 1) {
-    const positionalProp = findPositionalProp(spec);
-    const positionalName = positionalProp?.name ?? "(none)";
-    const namedNames = collectNamedPropNames(args, trailingObj);
-    const extras = spec.props
-      .filter((p) => p.name !== positionalName && !namedNames.has(p.name))
-      .slice(0, positionalArgs.length - 1)
-      .map((p) => p.name);
-    const hints = extras.length > 0
-      ? extras.map((n) => `${n}: …`).join(", ")
-      : "use a trailing { prop: value } object";
+
+  // Positional arity: a call may pass at most one positional per prop slot.
+  if (positionalArgs.length > spec.props.length) {
     out.push({
       message:
-        `${expr.callee}(...) — Aktion 0.5 §19.1 allows at most ` +
-        `one positional argument (the "${positionalName}" prop). The extra ` +
-        `${positionalArgs.length - 1} positional argument(s) must be passed ` +
-        `inside a trailing object: ${hints}. Multi-positional calls are removed.`,
+        `${expr.callee}(...) — takes at most ${spec.props.length} positional ` +
+        `argument${spec.props.length === 1 ? "" : "s"} ` +
+        `(${spec.props.map((p) => p.name).join(", ")}); got ${positionalArgs.length}.`,
       line: expr.loc?.line ?? 0,
       column: expr.loc?.column ?? 0,
     });
   }
+
+  // Positional literal checks along the runtime's slot mapping: positional
+  // #0 → the positional slot, the rest → the next unfilled slots in
+  // declaration order. Enum-carrying slots reject unknown literals; slots
+  // that cannot accept an object reject object literals (a named-props
+  // object that matched no prop name lands here — the hint points at the
+  // prop list).
+  positionalArgs.forEach((arg, n) => {
+    const prop = slotForNthPositional(spec, n);
+    if (!prop) return;
+    if (prop.enum && arg.kind === "Literal" && typeof arg.value === "string") {
+      const value = arg.value;
+      if (!prop.enum.includes(value) && !prop.enum.includes(canonicalSizeToken(value))) {
+        out.push({
+          message: `<${expr.callee}> ${prop.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+          line: arg.loc?.line ?? expr.loc?.line ?? 0,
+          column: arg.loc?.column ?? expr.loc?.column ?? 0,
+        });
+      }
+    }
+    if (arg.kind === "Object" && !propExpectsObject(prop)) {
+      out.push({
+        message:
+          `<${expr.callee}> — object passed positionally for "${prop.name}" ` +
+          `(${prop.type}). Use named props from: ${spec.props.map((p) => p.name).join(", ")}.`,
+        line: arg.loc?.line ?? expr.loc?.line ?? 0,
+        column: arg.loc?.column ?? expr.loc?.column ?? 0,
+      });
+    }
+  });
 
   // Collect named entries from trailing Object properties.
   const namedEntries: Array<{ name: string; value: Expression; loc?: { line: number; column: number } }> = [];
@@ -324,7 +424,10 @@ function validateCall(
     );
     if (prop?.enum && entry.value.kind === "Literal" && typeof entry.value.value === "string") {
       const value = entry.value.value;
-      if (!prop.enum.includes(value)) {
+      // Legacy t-shirt spellings (`s`/`m`/`l`, `small`/…) stay accepted as
+      // long as their canonical form is in the enum; only the canonical
+      // names are advertised in the error message.
+      if (!prop.enum.includes(value) && !prop.enum.includes(canonicalSizeToken(value))) {
         out.push({
           message: `<${expr.callee}> ${entry.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
           line: entry.loc?.line ?? expr.loc?.line ?? 0,
@@ -335,18 +438,6 @@ function validateCall(
   }
 }
 
-function collectNamedPropNames(
-  _args: ReadonlyArray<Expression>,
-  trailingObj: Extract<Expression, { kind: "Object" }> | null,
-): Set<string> {
-  const names = new Set<string>();
-  if (trailingObj) {
-    for (const prop of trailingObj.properties) {
-      if (!prop.spread) names.add(prop.key);
-    }
-  }
-  return names;
-}
 
 /**
  * Theme token validation (§16).

@@ -1,18 +1,17 @@
 /**
- * Acceptance tests for Aktion §19.1 — "one positional
- * argument max" enforcement.
+ * Acceptance tests for Aktion §19 flexible call binding.
  *
- * The redesign mandates that every component call accepts at most one
- * positional argument (the canonical primary slot) and every other
- * argument MUST be passed in a trailing object literal. This file
- * pins down:
+ * A call may use ONE of: the canonical form (one positional for the
+ * `(positional)` slot + a trailing named object), the all-positional form
+ * (arguments bind to props in declaration order), or the all-named form
+ * (a single object naming every prop). This file pins down:
  *
  *   - The `PropSpec.positional` flag + `findPositionalIndex` helper
  *     correctly identify the canonical positional prop, even when it
  *     lives at a non-zero slot (e.g. `Callout(variant?, title (positional))`).
  *   - `assertOnePositionalMax` throws on contradictory specs.
- *   - `validateProgramSchema` surfaces an advisory warning when a call
- *     passes more than one positional argument.
+ *   - `validateProgramSchema` accepts all three call forms, checks
+ *     positional arity, and validates literal enum values positionally.
  *   - The evaluator routes the single positional arg to the spec's
  *     positional slot, regardless of the prop's index in `props`.
  *   - Named arg values land in the right spec slot (slot order, not
@@ -130,26 +129,41 @@ describe("§19.1 — schema metadata", () => {
   });
 });
 
-describe("§19.1 — validateProgramSchema warns on multi-positional", () => {
-  it("flags `Button(label, variant, ...)` as a multi-positional violation", () => {
+describe("§19 — validateProgramSchema accepts the flexible call forms", () => {
+  it("accepts an all-positional call (signature order)", () => {
     const program = parse(`btn = Button("Save", "primary", true)`);
     const warnings = validateProgramSchema(program, defaultLibrary);
-    const warn = warnings.find((w) => w.message.startsWith("Button(...)"));
-    expect(warn).toBeDefined();
-    expect(warn!.message).toMatch(/at most one positional argument/);
-    expect(warn!.message).toMatch(/"label" prop/);
-    expect(warn!.message).toMatch(/onClick: …/);
+    expect(warnings).toEqual([]);
   });
 
-  it("flags `StatCard(\"Revenue\", \"$48k\", \"up\", …)` with extras counted", () => {
+  it("accepts a long all-positional call", () => {
     const program = parse(
       `card = StatCard("Revenue", "$48k", "up", "+12%", "chart-pie")`,
     );
     const warnings = validateProgramSchema(program, defaultLibrary);
-    const warn = warnings.find((w) => w.message.startsWith("StatCard(...)"));
+    expect(warnings).toEqual([]);
+  });
+
+  it("accepts an all-named single-object call", () => {
+    const program = parse(`btn = Button({ label: "Save", variant: "primary", loading: true })`);
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    expect(warnings).toEqual([]);
+  });
+
+  it("flags more positionals than the spec has props", () => {
+    const program = parse(`e = Eyebrow("Pricing", "extra")`);
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    const warn = warnings.find((w) => w.message.startsWith("Eyebrow(...)"));
     expect(warn).toBeDefined();
-    expect(warn!.message).toMatch(/at most one positional argument/);
-    expect(warn!.message).toMatch(/value: …, trend: …, delta: …, icon: …/);
+    expect(warn!.message).toMatch(/at most 1 positional argument/);
+  });
+
+  it("validates enum literals positionally along the slot mapping", () => {
+    const program = parse(`s = Spinner("gigantic")`);
+    const warnings = validateProgramSchema(program, defaultLibrary);
+    const warn = warnings.find((w) => w.message.includes("gigantic"));
+    expect(warn).toBeDefined();
+    expect(warn!.message).toMatch(/must be one of/);
   });
 
   it("accepts a single-positional call without warnings", () => {
@@ -191,7 +205,7 @@ describe("§19.1 — evaluator routes positional args to the spec slot", () => {
     expect(node.args[4]).toBe("lg");       // size slot
   });
 
-  it("multi-positional is gracefully accepted (legacy fallback)", () => {
+  it("all-positional binds slots in declaration order", () => {
     const node = evalCall(
       `x = StatCard("Revenue", "$48k", "up", "+12%", "chart-pie")`,
     );
@@ -200,6 +214,13 @@ describe("§19.1 — evaluator routes positional args to the spec slot", () => {
     expect(node.args[2]).toBe("up");       // trend
     expect(node.args[3]).toBe("+12%");     // delta
     expect(node.args[4]).toBe("chart-pie"); // icon
+  });
+
+  it("a single all-named object binds by prop name", () => {
+    const node = evalCall(`x = Button({ label: "Save", variant: "primary" })`);
+    expect(node.name).toBe("Button");
+    expect(node.args[0]).toBe("Save");     // label slot
+    expect(node.args[2]).toBe("primary");  // variant slot
   });
 });
 
@@ -234,10 +255,11 @@ describe("§19.1 — value: $atom lifts target onto argMeta.stateRef", () => {
   });
 });
 
-describe("§19.1 — prompt projection", () => {
-  it("teaches the one-positional rule in the Syntax section", () => {
+describe("§19 — prompt projection", () => {
+  it("teaches the argument forms in the Syntax section", () => {
     const prompt = generatePrompt(defaultLibrary);
-    expect(prompt).toMatch(/One positional argument max/);
+    expect(prompt).toMatch(/Argument forms/);
+    expect(prompt).toMatch(/all-positional, signature order/);
     expect(prompt).toMatch(/StatCard\("Revenue", \{ value: "\$48k"/);
   });
 

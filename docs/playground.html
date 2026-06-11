@@ -332,6 +332,8 @@
       position: fixed;
       z-index: 101;
       max-width: 360px;
+      max-height: min(520px, 60vh);
+      overflow-y: auto;
       pointer-events: none;
       background: var(--doc-surface-elev);
       border: 1px solid var(--doc-border);
@@ -786,6 +788,11 @@
     /* ------- Editor hover / signature tooltip ------- */
     .pg-cm-tooltip {
       max-width: 360px;
+      /* Cap the popup height — long component docs scroll instead of
+         covering the whole editor. */
+      max-height: min(520px, 45vh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
       font-size: 12px;
       line-height: 1.5;
       padding: 10px 12px;
@@ -1252,6 +1259,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.06.04-files2"></script>
+  <script type="module" src="assets/playground.js?v=2026.06.11-esc"></script>
 </body>
 </html>

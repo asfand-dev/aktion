@@ -19,6 +19,11 @@ import {
   resolveSpecifier,
   defineCompiledProgram,
   COMPILED_PROGRAM_VERSION,
+  defaultLibrary,
+  findComponent,
+  chooseNamedBagIndex,
+  slotForNthPositional,
+  validateProgramSchema,
 } from "../../dist/aktion.js";
 
 // Public CDN URL embedded in standalone HTML exports so the downloaded file
@@ -79,7 +84,7 @@ async function loadCodeMirror() {
 const EXAMPLES = {
   chat: {
     label: "Chat reply",
-    code: `// Highlights: one positional + named args everywhere, template literals, FollowUpBlock dispatch.
+    code: `// Highlights: the canonical call form (positional + named args), template literals, FollowUpBlock dispatch.
 $app(Stack([greeting, sample, follow]))
 
 greeting = Card([
@@ -117,7 +122,7 @@ $app(Column([
     Text(\`Count: \${$count}\`),
     PrimaryButton({ label: "Increment", onClick: increment })
   ])
-], { gap: "l", align: "center", padding: "xl" }))`,
+], { gap: "lg", align: "center", padding: "xl" }))`,
       "Button.aktion": `// A reusable button. \`icon\` is private to this module — another file can
 // declare its own \`icon\` without clashing (true module scope).
 icon = "bolt"
@@ -188,7 +193,7 @@ function Row(t) {
   return Card([Stack([
     Text(t.text),
     Button("Delete", { action: () => { $todos = $util.filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
-  ], { direction: "row", gap: "s", align: "center", justify: "between" })])
+  ], { direction: "row", gap: "sm", align: "center", justify: "between" })])
 }
 
 list = $todos.map(t => Row(t))
@@ -252,7 +257,7 @@ nav = Stack([
   NavLink("Home",      { to: "/",            variant: "ghost" }),
   NavLink("Dashboard", { to: "/dashboard",   variant: "ghost" }),
   NavLink("Alice",     { to: "/users/alice", variant: "ghost" })
-], { direction: "row", gap: "s" })
+], { direction: "row", gap: "sm" })
 
 $app(Stack([nav, page]))`,
   },
@@ -273,7 +278,7 @@ $app(Card([
       Button("-",     { action: dec }),
       Button("Reset", { action: reset, variant: "ghost" }),
       Button("+",     { action: inc,   variant: "primary" })
-    ], { direction: "row", gap: "s" })
+    ], { direction: "row", gap: "sm" })
   ])
 ]))`,
   },
@@ -301,7 +306,7 @@ $app(Stack([
       CardHeader("By channel"),
       PieChart(["Organic","Direct","Referral"], { values: [60, 25, 15] })
     ])
-  ], { columns: {sm: 1, md: 2}, gap: "l" })
+  ], { columns: {sm: 1, md: 2}, gap: "lg" })
 ]))`,
   },
   dataGrid: {
@@ -399,8 +404,8 @@ $app(Stack([
           {actor: "Grace", title: "added release window",  time: "1d", icon: "rocket",        tone: "info"}
         ])
       ])
-    ], { direction: "column", gap: "l" })
-  ], { columns: {sm: 1, lg: 2}, gap: "l" })
+    ], { direction: "column", gap: "lg" })
+  ], { columns: {sm: 1, lg: 2}, gap: "lg" })
 ]))`,
   },
   media: {
@@ -454,7 +459,7 @@ $app(Stack([
         }
       )
     ])
-  ], { columns: {sm: 1, md: 2}, gap: "l" }),
+  ], { columns: {sm: 1, md: 2}, gap: "lg" }),
   Card([
     SectionHeader("Itinerary", { subtitle: "Six stops" }),
     Map(65.0, { lng: -16.0, zoom: 5, markers: [
@@ -530,7 +535,7 @@ $app(Stack([
     Card([SectionHeader("SLA uptime"),  Gauge(99.3, { min: 95, max: 100, caption: "Above target", tone: "success", size: "lg" })]),
     Card([SectionHeader("P95 latency"), Gauge(112,  { min: 0,  max: 250, caption: "ms",           tone: "primary", size: "lg" })]),
     Card([SectionHeader("Error rate"),  Gauge(0.42, { min: 0,  max: 5,   caption: "% requests",   tone: "warning", size: "lg" })])
-  ], { columns: {sm: 1, md: 3}, gap: "l" }),
+  ], { columns: {sm: 1, md: 3}, gap: "lg" }),
   Card([
     SectionHeader("Signups · last 7 days", { subtitle: "Stacked by source" }),
     LineChart(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
@@ -553,7 +558,7 @@ $app(Stack([
         Series("Northwind",   { values: [60,85,70,65,80] })
       ] })
     ])
-  ], { columns: {sm: 1, md: 2}, gap: "l" }),
+  ], { columns: {sm: 1, md: 2}, gap: "lg" }),
   Grid([
     Card([
       SectionHeader("Sessions vs conversions"),
@@ -566,7 +571,7 @@ $app(Stack([
       SectionHeader("Response time"),
       Histogram([1,2,2,3,3,3,4,4,5,5,5,5,6,6,7,8,8,9], { bins: 6 })
     ])
-  ], { columns: {sm: 1, md: 2}, gap: "l" })
+  ], { columns: {sm: 1, md: 2}, gap: "lg" })
 ]))`,
   },
   storageConsole: {
@@ -626,7 +631,7 @@ $app(Stack([
     Stack([
       Button("Accept cookies", { action: acceptCookies, variant: "primary" }),
       Button("Reset everything", { action: clearAll, variant: "ghost" })
-    ], { direction: "row", gap: "s" })
+    ], { direction: "row", gap: "sm" })
   ])
 ]))`,
   },
@@ -639,18 +644,18 @@ sidebar = Card([
     NavLink("Overview", { to: "/",         variant: "ghost" }),
     NavLink("Reports",  { to: "/reports",  variant: "ghost" }),
     NavLink("Settings", { to: "/settings", variant: "ghost" })
-  ], { direction: "column", gap: "s" })
+  ], { direction: "column", gap: "sm" })
 ])
 
 content = Card([
   CardHeader("Main workspace", { subtitle: "GridItem span='3/4' fills the rest" }),
-  Text("Use Grid([...], { columns: 12, gap: 'l' }) with GridItem(child, { span: '1/4' }) for sidebar layouts.")
+  Text("Use Grid([...], { columns: 12, gap: 'lg' }) with GridItem(child, { span: '1/4' }) for sidebar layouts.")
 ])
 
 $app(Grid([
   GridItem(sidebar, { span: "1/4" }),
   GridItem(content, { span: "3/4" })
-], { columns: 12, gap: "l" }))`,
+], { columns: 12, gap: "lg" }))`,
   },
 
   // ── NEW: realtime / websocket ─────────────────────────────────────────────
@@ -718,7 +723,7 @@ $app(Stack([
       Button("Place bet", { onClick: placeBet, variant: "primary", loading: $add.loading }),
       $add.error ? Alert("Order failed", { tone: "danger" }) : null
     ])
-  ], { columns: { sm: 1, md: 2 }, gap: "l" }),
+  ], { columns: { sm: 1, md: 2 }, gap: "lg" }),
   Card([
     CardHeader("Leaderboard"),
     Async($leaderboard, {
@@ -782,13 +787,13 @@ $app(Stack([
       NumberInput("age", { label: "Age", value: form.values.age, error: form.errors.age, onBlur: () => form.touch("age") }),
       Input("password", { label: "Password",        value: form.values.password, error: form.errors.password, type: "password", onBlur: () => form.touch("password") }),
       Input("confirm",  { label: "Confirm password", value: form.values.confirm,  error: form.errors.confirm,  type: "password", onBlur: () => form.touch("confirm") })
-    ], { gap: "m" }),
+    ], { gap: "md" }),
     Row([
       // submit() (alias handleSubmit) awaits async rules, then onSubmit;
       // submitting stays true until an async onSubmit settles.
       Button("Submit", { onClick: () => form.submit(), variant: "primary", loading: form.submitting, disabled: form.submitting || form.validating }),
       Button("Reset",  { onClick: () => form.reset(), variant: "ghost", disabled: !form.dirty })
-    ], { gap: "s" }),
+    ], { gap: "sm" }),
     $done ? Alert(\`Welcome, \${$submitted}!\`, { tone: "success", icon: "circle-check" }) : null,
     Badge(\`\${Object.keys(form.errors).length} errors\`, { tone: Object.keys(form.errors).length === 0 ? "success" : "danger" })
   ])
@@ -831,9 +836,9 @@ $app(Stack([
         Row([
           Input("tag-input", { placeholder: "Add tag…", value: $newTag, size: "sm" }),
           Button("Add", { onClick: () => { doc.addTag($newTag); $newTag = "" }, size: "sm", variant: "secondary" })
-        ], { gap: "s" }),
+        ], { gap: "sm" }),
         Row(doc.tags.map(t => Tag(t, { onRemove: () => doc.removeTag(t) })), { gap: "xs", wrap: true })
-      ], { gap: "m" })
+      ], { gap: "md" })
     ]),
     Card([
       SectionHeader("Preview"),
@@ -841,7 +846,7 @@ $app(Stack([
       Markdown(doc.body),
       BadgeList(doc.tags.map(t => Badge(t, { tone: "primary", size: "sm" })))
     ])
-  ], { columns: { sm: 1, md: 2 }, gap: "l" })
+  ], { columns: { sm: 1, md: 2 }, gap: "lg" })
 ]))`,
   },
 
@@ -861,7 +866,7 @@ hero = Section([
   Row([
     Button("Get started", { variant: "primary", icon: "rocket", size: "lg" }),
     Button("View docs",   { variant: "ghost",   icon: "book",   size: "lg" })
-  ], { gap: "m", justify: "center" })
+  ], { gap: "md", justify: "center" })
 ], { background: "brand", eyebrow: "New in v0.6" })
 
 features = Section([
@@ -898,7 +903,7 @@ sxDemo = Section([
     Card([Text("Responsive")], {
       sx: { p: "l", width: { base: "100%", md: "66%" } }
     })
-  ], { columns: { sm: 1, md: 3 }, gap: "m" })
+  ], { columns: { sm: 1, md: 3 }, gap: "md" })
 ], { background: "muted", title: "sx styling" })
 
 $app(Column([hero, features, sxDemo]))`,
@@ -976,12 +981,12 @@ $app(Stack([
               Row([
                 Badge(p.category ?? "general", { size: "sm" }),
                 Text($util.relativeTime(p.createdAt ?? $util.now()), { tone: "muted", variant: "small" })
-              ], { gap: "s" })
+              ], { gap: "sm" })
             ], { gap: "xs" })
-          ], { gap: "m", align: "center" }),
+          ], { gap: "md", align: "center" }),
           Text(p.excerpt ?? "", { tone: "muted" })
         ])
-      ), { gap: "m" }),
+      ), { gap: "md" }),
       $feed.hasMore
         ? OnIntersect(
             Button($feed.loadingMore ? "Loading…" : "Load more", {
@@ -1022,14 +1027,14 @@ $app(Stack([
     Button("Open sheet",        { onClick: () => { $sheetOpen = true },  variant: "primary", icon: "panel-right" }),
     Button("Open bottom sheet", { onClick: () => { $bottomOpen = true }, variant: "secondary" }),
     Button("Delete first file", { onClick: () => { $confirmOpen = true }, tone: "danger", icon: "trash", disabled: $util.count($items) === 0 })
-  ], { gap: "s", wrap: true }),
+  ], { gap: "sm", wrap: true }),
   Card([
     SectionHeader("Files"),
     List($items.map(f => ListItem(f, { icon: "file" }))),
     Row([
       CopyButton(\`\${$util.count($items)} files\`, { label: "Copy summary" }),
       KbdShortcut(["Esc"]), Text("closes any open dialog", { tone: "muted", variant: "small" })
-    ], { gap: "s", align: "center" })
+    ], { gap: "sm", align: "center" })
   ]),
   Card([
     SectionHeader("Pick a review date", { subtitle: "Click a day — or focus the grid and use the arrow keys" }),
@@ -1689,7 +1694,7 @@ const LANGUAGE_SNIPPETS = [
       'nav = Stack([\n' +
       '  NavLink("Home",  { to: "/",      variant: "ghost", exact: true }),\n' +
       '  NavLink("Users", { to: "/users", variant: "ghost" })\n' +
-      '], { direction: "row", gap: "s" })\n\n' +
+      '], { direction: "row", gap: "sm" })\n\n' +
       '$app(Stack([nav, pages]))',
   },
   {
@@ -2527,10 +2532,70 @@ function initPlayground(cm) {
       if (spec) {
         const { argStart, argText } = readCurrentArg(text, call, pos, argBase);
 
+        // §19 binding context — shared by the cases below. `runtimeSpec`
+        // carries the prop metadata (enum, positional flag, aliases) the
+        // flexible-call helpers need; `scan` mirrors the runtime's view of
+        // the arguments typed so far.
+        const runtimeSpec = runtimeSpecFor(call.name);
+        const scan = runtimeSpec ? scanCallArgShapes(text, call, pos) : null;
+        const bagIdx = runtimeSpec ? chooseNamedBagIndex(scan.shapes, runtimeSpec) : -1;
+        // An object argument that binds POSITIONALLY (payload for an
+        // object-typed slot) takes data keys, not prop names — suppress the
+        // named-arg machinery inside it and fall through to the general list.
+        const inPayloadObject = Boolean(
+          runtimeSpec && inObject && scan.activeObject && scan.activeObject.argIndex !== bagIdx,
+        );
+
+        // CASE 0 (§19 all-positional): cursor in a BARE positional slot —
+        // when the slot the argument will bind to carries an enum, offer
+        // its values. Inside an open string the quotes are already typed.
+        if (!inObject && runtimeSpec && !scan.activeObject && bagIdx !== call.argIndex) {
+          let slotIndex = call.argIndex;
+          if (bagIdx >= 0 && bagIdx < call.argIndex) slotIndex -= 1;
+          const slot = slotForNthPositional(runtimeSpec, slotIndex);
+          if (slot && slot.enum && slot.enum.length > 0) {
+            const openString = argText.match(/^\s*(["'])([\w-]*)$/);
+            if (openString) {
+              return {
+                from: pos - openString[2].length,
+                options: slot.enum.map((v) => ({
+                  label: v,
+                  type: "constant",
+                  detail: `${slot.name} (${call.name})`,
+                })),
+              };
+            }
+            if (/^\s*$/.test(argText)) {
+              const named = collectUsedNamedArgs(text, call, argBase);
+              const remainingParams = (spec.params || []).filter((p) => !named.has(p.name));
+              return {
+                from: word.from,
+                options: [
+                  ...slot.enum.map((v) => ({
+                    label: `"${v}"`,
+                    type: "constant",
+                    detail: `${slot.name} (${call.name})`,
+                    boost: 55,
+                  })),
+                  ...remainingParams.map((p) => ({
+                    label: `{ ${p.name}: … }`,
+                    type: "property",
+                    detail: p.type + (p.required ? "" : " (optional)"),
+                    boost: p.required ? 50 : 30,
+                    info: () => makeParamInfo(p),
+                    apply: applyNamedArg(p, false),
+                  })),
+                ],
+                validFor: /[\w"']*/,
+              };
+            }
+          }
+        }
+
         // CASE 1: cursor sits in a named-arg VALUE position
         //         (`Button("Save", variant: <here>)`). Surface the enum
         //         values inline so the user can tab through them.
-        const valueMatch = argText.match(/^\s*([A-Za-z_]\w*)\s*:\s*(.*)$/s);
+        const valueMatch = inPayloadObject ? null : argText.match(/^\s*([A-Za-z_]\w*)\s*:\s*(.*)$/s);
         if (valueMatch) {
           const paramName = valueMatch[1];
           const partialValue = valueMatch[2];
@@ -2567,7 +2632,7 @@ function initPlayground(cm) {
         //         so it stays valid; inside the braces it just inserts the
         //         `name: value` pair. A bare `name: value` directly as a call
         //         argument is a parse error, so we never emit that shape.
-        const couldBeNamedArgName = /^\s*[A-Za-z_]?[\w]*$/.test(argText);
+        const couldBeNamedArgName = !inPayloadObject && /^\s*[A-Za-z_]?[\w]*$/.test(argText);
         if (couldBeNamedArgName && spec.params && spec.params.length > 0) {
           const used = collectUsedNamedArgs(text, call, argBase);
           const remaining = spec.params.filter((p) => !used.has(p.name));
@@ -3062,6 +3127,96 @@ function initPlayground(cm) {
   }
 
   /**
+   * §19 flexible-call scan: walk the active call's arguments up to `pos`
+   * and report each argument's shape (`objectKeys` — the top-level keys
+   * when the argument is an object literal, else `null`) plus the cursor's
+   * object context (whether the cursor sits inside an argument's object
+   * literal and the prop key it is on). Feeds `chooseNamedBagIndex` /
+   * `slotForNthPositional` from the runtime so completions and signature
+   * help highlight the slot an argument will ACTUALLY bind to — for the
+   * canonical form, all-positional calls, and all-named object calls alike.
+   */
+  function scanCallArgShapes(text, call, pos) {
+    const shapes = [{ objectKeys: null }];
+    let str = null;
+    let comment = null;
+    let depth = 0;        // bracket depth relative to the call's arg list
+    let obj = null;       // top-level-object state for the CURRENT argument
+    let i = call.openParen + 1;
+    const top = Math.min(pos, text.length);
+    const flushPending = () => {
+      if (obj && obj.expectingKey && obj.pendingKey) obj.keys.push(obj.pendingKey);
+      if (obj) obj.pendingKey = "";
+    };
+    while (i < top) {
+      const ch = text[i];
+      if (comment === "line") { if (ch === "\n") comment = null; i++; continue; }
+      if (comment === "block") { if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; } i++; continue; }
+      if (str) { if (ch === "\\") { i += 2; continue; } if (ch === str) str = null; i++; continue; }
+      if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
+      if (ch === "#") { comment = "line"; i++; continue; }
+      if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
+      if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
+      if (ch === "(" || ch === "[") { depth++; i++; continue; }
+      if (ch === "{") {
+        if (depth === 0) {
+          const arg = shapes[shapes.length - 1];
+          if (arg.objectKeys === null) {
+            arg.objectKeys = [];
+            obj = { keys: arg.objectKeys, expectingKey: true, pendingKey: "", valueKey: null };
+          }
+        }
+        depth++; i++; continue;
+      }
+      if (ch === ")" || ch === "]" || ch === "}") {
+        depth--;
+        if (ch === "}" && depth === 0 && obj) { flushPending(); obj = null; }
+        i++; continue;
+      }
+      if (ch === ",") {
+        if (depth === 0) {
+          shapes.push({ objectKeys: null });
+          obj = null;
+        } else if (depth === 1 && obj) {
+          flushPending();
+          obj.expectingKey = true;
+          obj.valueKey = null;
+        }
+        i++; continue;
+      }
+      if (depth === 1 && obj && obj.expectingKey) {
+        if (/[\w$]/.test(ch)) obj.pendingKey += ch;
+        else if (ch === ":") {
+          obj.keys.push(obj.pendingKey);
+          obj.valueKey = obj.pendingKey;
+          obj.pendingKey = "";
+          obj.expectingKey = false;
+        } else if (ch === "." && text.slice(i, i + 3) === "...") {
+          obj.pendingKey = "";
+          obj.expectingKey = false;
+          i += 3; continue;
+        } else if (!/\s/.test(ch)) {
+          obj.pendingKey = "";
+        }
+      }
+      i++;
+    }
+    const activeObject = obj
+      ? {
+          argIndex: shapes.length - 1,
+          activeKey: obj.expectingKey ? obj.pendingKey : (obj.valueKey || ""),
+        }
+      : null;
+    return { shapes, activeObject };
+  }
+
+  /** Runtime component spec (props + binding metadata) for a callee, or null. */
+  function runtimeSpecFor(name) {
+    if (!name) return null;
+    try { return findComponent(defaultLibrary, name) || null; } catch { return null; }
+  }
+
+  /**
    * Lightweight scanner: returns the enclosing call (component or @builtin)
    * at `pos`, or `null`. Tracks strings, escapes, and both line and block
    * comments so commas inside literals are ignored.
@@ -3191,7 +3346,10 @@ function initPlayground(cm) {
       typeof activeIndex === "number" &&
       spec.params.length > 0
     ) {
-      activeIdx = Math.min(activeIndex, spec.params.length - 1);
+      // Out-of-range (negative or past the last slot) means "highlight
+      // nothing" — e.g. the named-props object just opened, or an
+      // all-positional call ran past the spec's slots.
+      activeIdx = activeIndex >= 0 && activeIndex < spec.params.length ? activeIndex : null;
     }
 
     const sig = document.createElement("code");
@@ -3367,19 +3525,19 @@ function initPlayground(cm) {
     editorView.focus();
   }
 
-  // ---- Linter: surface ParseError from runtime/parser ----
-  // The §19.1 "one positional argument max" advisory is informational for
-  // every component (the runtime still slots extras into the next prop),
-  // so we hide it from the playground to keep the inline diagnostic list
-  // focused on hard errors.
-  const isPositionalAdvisory = (err) =>
-    typeof err?.message === "string" &&
-    /allows at most one positional argument/i.test(err.message);
-
+  // ---- Linter: surface ParseError from runtime/parser + schema validator ----
+  // Schema diagnostics carry the §19 flexible-call checks (positional
+  // arity, enum values along the slot mapping), the canonical spacing-token
+  // enums, and the built-in-name collision error for custom components —
+  // the same list the <aktion-app> error banner shows.
   const lintSource = lint.linter((view) => {
     const text = view.state.doc.toString();
     const program = parse(text);
-    const filtered = program.errors.filter((e) => !isPositionalAdvisory(e));
+    let schemaErrors = [];
+    try {
+      schemaErrors = validateProgramSchema(program, defaultLibrary);
+    } catch { /* the validator must never break the editor */ }
+    const filtered = [...program.errors, ...schemaErrors];
     parseErrors = filtered;
     refreshStatusErrors();
     return filtered.map((err) => {
@@ -3487,9 +3645,13 @@ function initPlayground(cm) {
 
   // ---- Signature help: while the cursor is inside a `Name(...)` call, show
   //      the active parameter and its allowed enum values (when present). ----
+  // Dispatched (Escape) to dismiss the signature popup; it stays hidden
+  // until the next doc/selection change recomputes it.
+  const hideSignatureEffect = state.StateEffect.define();
   const signatureField = state.StateField.define({
     create: computeSignatureTooltip,
     update(value, tr) {
+      if (tr.effects.some((e) => e.is(hideSignatureEffect))) return null;
       if (!tr.docChanged && !tr.selection) return value;
       return computeSignatureTooltip(tr.state);
     },
@@ -3504,11 +3666,43 @@ function initPlayground(cm) {
     if (!call) return null;
     const resolved = resolveSpec(call.name);
     if (!resolved) return null;
-    // Prefer name-based resolution: when the user has typed `variant: …`,
-    // pin the active param to `variant` (not whatever positional index
-    // happens to fall there). Falls back to `argIndex` for purely
-    // positional args.
-    const namedArgName = detectActiveNamedArg(text, call, sel.head);
+    // §19 flexible calls — highlight the parameter the cursor's argument
+    // will BIND to: inside the named-props object (trailing, leading, or a
+    // single all-named argument) that is the prop whose key the cursor is
+    // on; at a positional slot it is resolved with the same slot-ordering
+    // helpers the runtime uses, so all-positional calls track the
+    // signature correctly (first positional → the `(positional)` slot,
+    // later ones → the next unfilled slots in declaration order).
+    const runtimeSpec = runtimeSpecFor(call.name);
+    const scan = scanCallArgShapes(text, call, sel.head);
+    let namedArgName = null;
+    let activeIndex = null;
+    if (runtimeSpec) {
+      const bagIdx = chooseNamedBagIndex(scan.shapes, runtimeSpec);
+      if (scan.activeObject && scan.activeObject.argIndex === bagIdx) {
+        const key = scan.activeObject.activeKey;
+        if (key) {
+          const exact = runtimeSpec.props.find(
+            (p) => p.name === key || (p.aliases && p.aliases.includes(key)),
+          );
+          const match = exact || runtimeSpec.props.find((p) => p.name.startsWith(key));
+          if (match) namedArgName = match.name;
+        }
+        if (!namedArgName) activeIndex = -1; // object open, no key yet → no highlight
+      } else {
+        let n = call.argIndex;
+        if (bagIdx >= 0 && bagIdx < call.argIndex) n -= 1;
+        const slot = slotForNthPositional(runtimeSpec, n);
+        activeIndex = slot ? runtimeSpec.props.indexOf(slot) : -1;
+      }
+    } else {
+      // Synthetic specs ($http config) — key match inside the object,
+      // otherwise the plain positional index.
+      namedArgName =
+        (scan.activeObject && scan.activeObject.activeKey) ||
+        detectActiveNamedArg(text, call, sel.head);
+      if (!namedArgName) activeIndex = call.argIndex;
+    }
     return {
       pos: sel.head,
       above: true,
@@ -3520,7 +3714,7 @@ function initPlayground(cm) {
         dom.append(buildSpecTooltipDom(
           resolved.spec,
           resolved.kind,
-          call.argIndex,
+          activeIndex,
           namedArgName,
         ));
         return { dom };
@@ -3538,6 +3732,17 @@ function initPlayground(cm) {
     const { argText } = readCurrentArg(text, call, pos);
     const match = argText.match(/^\s*([A-Za-z_]\w*)\s*:/);
     return match ? match[1] : null;
+  }
+
+  /**
+   * Dismiss the editor's hover + signature popups (wired to Escape). The
+   * signature popup stays hidden until the next doc/selection change.
+   */
+  function dismissEditorPopups() {
+    if (!editorView) return;
+    const effects = [hideSignatureEffect.of(null)];
+    if (view.closeHoverTooltips) effects.push(view.closeHoverTooltips);
+    editorView.dispatch({ effects });
   }
 
   // ---- Compartments for live updates ----
@@ -3851,6 +4056,9 @@ function initPlayground(cm) {
     if (e.key === "Escape") {
       closeHelp();
       closeErrorModal();
+      dismissEditorPopups();
+      if (inspectOn) toggleInspect();
+      hideInspectOverlay();
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }
   });

@@ -89,6 +89,9 @@ export interface ThemeTokens {
   shadowMd: string;
   shadowLg: string;
   /* ----- Spacing ---------------------------------------------------- */
+  /** Hairline spacing steps below `xs` (optional; default 1px / 2px). */
+  spacing3xs?: string;
+  spacing2xs?: string;
   spacingXs: string;
   spacingS: string;
   spacingM: string;
@@ -582,6 +585,8 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   shadowSm: "--rui-shadow-sm",
   shadowMd: "--rui-shadow-md",
   shadowLg: "--rui-shadow-lg",
+  spacing3xs: "--rui-spacing-3xs",
+  spacing2xs: "--rui-spacing-2xs",
   spacingXs: "--rui-spacing-xs",
   spacingS: "--rui-spacing-s",
   spacingM: "--rui-spacing-m",

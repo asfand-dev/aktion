@@ -69,6 +69,58 @@ export function asNumber(value: unknown, fallback = 0): number {
 }
 
 /**
+ * Canonical t-shirt spacing scale shared by every `gap`/`padding`/`margin`/
+ * spacing-ish prop. `none` always resolves to `0`. Ordered smallest → largest
+ * so the list reads naturally in docs and error messages.
+ */
+export const SPACING_TOKENS = ["none", "3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const;
+export type SpacingToken = typeof SPACING_TOKENS[number];
+
+/**
+ * Legacy t-shirt spellings still accepted at runtime and in validation but no
+ * longer advertised in prop enums: the early single-letter spacing dialect
+ * (`s`/`m`/`l`) and the verbose Button sizes (`small`/`normal`/`large`).
+ */
+export const LEGACY_SIZE_TOKEN_ALIASES: Record<string, string> = {
+  s: "sm",
+  m: "md",
+  l: "lg",
+  small: "sm",
+  normal: "md",
+  large: "lg",
+};
+
+/** Map a size token to its canonical spelling (`m` → `md`); other values pass through. */
+export function canonicalSizeToken(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return LEGACY_SIZE_TOKEN_ALIASES[raw] ?? raw;
+}
+
+/**
+ * Normalise a spacing prop value to a canonical {@link SPACING_TOKENS} entry.
+ * Legacy aliases canonicalise first; anything outside the scale returns
+ * `fallback` so callers can keep their historical defaults.
+ */
+export function normalizeSpacingToken(value: unknown, fallback = ""): string {
+  const token = canonicalSizeToken(value);
+  return (SPACING_TOKENS as readonly string[]).includes(token) ? token : fallback;
+}
+
+/**
+ * Resolve a spacing token (canonical or legacy) to its CSS value: `none` → `0`,
+ * everything else → the matching `var(--rui-spacing-*)`. The stylesheet keeps
+ * the historical short variable names for `sm`/`md`/`lg` (`--rui-spacing-s/m/l`)
+ * so existing theme overrides keep working. Unknown tokens return "".
+ */
+export function spacingCssValue(value: unknown): string {
+  const token = normalizeSpacingToken(value);
+  if (!token) return "";
+  if (token === "none") return "0";
+  const varKey = token === "sm" ? "s" : token === "md" ? "m" : token === "lg" ? "l" : token;
+  return `var(--rui-spacing-${varKey})`;
+}
+
+/**
  * Breakpoint keys honoured by responsive prop maps (Grid columns, Stack
  * direction, etc.). Ordered from narrow → wide so CSS only needs to chain
  * one `min-width` per breakpoint and naturally cascades.

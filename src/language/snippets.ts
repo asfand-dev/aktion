@@ -43,7 +43,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  Text("${2:Section title}", { variant: "large-heavy" }),\n' +
       '  Spacer(),\n' +
       '  Button("${3:Action}", { variant: "primary" })\n' +
-      '], { gap: "m" })',
+      '], { gap: "md" })',
   },
   {
     name: "Center",
@@ -100,7 +100,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '$app(Grid([\n' +
       '  GridItem(sidebar${1}, { span: "1/4" }),\n' +
       '  GridItem(main${1}, { span: "3/4" })\n' +
-      '], { columns: 12, gap: "l" }))',
+      '], { columns: 12, gap: "lg" }))',
   },
   {
     name: "KanbanBoard",
@@ -158,7 +158,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  NavLink("Home",      { to: "/",          variant: "ghost", exact: true }),\n' +
       '  NavLink("Dashboard", { to: "/dashboard", variant: "ghost" }),\n' +
       '  NavLink("Users",     { to: "/users",     variant: "ghost" })\n' +
-      '], { gap: "s" })',
+      '], { gap: "sm" })',
   },
   {
     name: "Effect",
@@ -321,7 +321,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   {
     name: "ResponsiveGrid",
     description: "Grid with a responsive column map per breakpoint.",
-    template: 'cards${1} = Grid(${2:items}, { columns: {sm: 1, md: 2, lg: 4}, gap: "${3:l}" })',
+    template: 'cards${1} = Grid(${2:items}, { columns: {sm: 1, md: 2, lg: 4}, gap: "${3:lg}" })',
   },
   // ── New feature snippets ──────────────────────────────────────────────────
   {
@@ -410,7 +410,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'Card([Text("${1:Content}")], {\n' +
       '  sx: {\n' +
-      '    p: "${2:l}",\n' +
+      '    p: "${2:lg}",\n' +
       '    radius: "${3:lg}",\n' +
       '    bg: "${4:surface}",\n' +
       '    shadow: "${5:md}",\n' +
@@ -424,9 +424,9 @@ export const snippetCatalog: readonly SnippetEntry[] = [
     template:
       'Box([${1:children}], {\n' +
       '  sx: {\n' +
-      '    p: { base: "${2:m}", md: "${3:xl}" },\n' +
+      '    p: { base: "${2:md}", md: "${3:xl}" },\n' +
       '    direction: { base: "column", lg: "row" },\n' +
-      '    px: "${4:l}",\n' +
+      '    px: "${4:lg}",\n' +
       '    fontSize: "${5:lg}",\n' +
       '    weight: "${6:600}"\n' +
       '  }\n' +
@@ -457,7 +457,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
       '  Row([\n' +
       '    Input("draft", { value: ${3:$draft} }),\n' +
       '    Button("Send", { onClick: () => { ${1:$chat}.send({ text: ${3:$draft} }); ${3:$draft} = "" } })\n' +
-      '  ], { gap: "s" })\n' +
+      '  ], { gap: "sm" })\n' +
       '])',
   },
   {

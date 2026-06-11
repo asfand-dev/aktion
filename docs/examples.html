@@ -208,7 +208,7 @@ extras = Card([
 ])
 status = Callout("info", { title: "Status", text: $log, icon: "circle-info" })
 
-$app(Stack([counter, extras, status], { direction: "column", gap: "l" }))</code></pre>
+$app(Stack([counter, extras, status], { direction: "column", gap: "lg" }))</code></pre>
         </div>
       </div>
 
@@ -309,7 +309,7 @@ nav = Sidebar([
 ], { brand: "Acme HQ", footer: Stack([
   Avatar("Asha Patel", { size: "sm" }),
   Text("Settings", { variant: "body-heavy" })
-], { direction: "row", gap: "s" }) })
+], { direction: "row", gap: "sm" }) })
 
 topbar = [
   StatusDot("Realtime", { tone: "success", pulse: true }),
@@ -342,7 +342,7 @@ projects = Card([
   ])
 ])
 
-content = Stack([header, kpis, projects], { direction: "column", gap: "l" })
+content = Stack([header, kpis, projects], { direction: "column", gap: "lg" })
 $app(AppShell({ sidebar: nav, content: content, topbar: topbar }))</code></pre>
         </div>
       </div>
@@ -388,7 +388,7 @@ activity = Card([
   ])
 ])
 
-$app(Stack([header, info, activity], { direction: "column", gap: "l" }))</code></pre>
+$app(Stack([header, info, activity], { direction: "column", gap: "lg" }))</code></pre>
         </div>
       </div>
 
@@ -428,7 +428,7 @@ plans = Grid([
     description: "Collaboration at scale",
     features: ["Everything in Pro", "SSO", "Audit log", "Dedicated success manager"],
     cta: Button("Contact sales", () => upgrade("Team"), { variant: "secondary" }) })
-], { columns: 3, gap: "l" })
+], { columns: 3, gap: "lg" })
 
 faqs = Card([
   SectionHeader("Frequently asked"),
@@ -510,11 +510,11 @@ ratings = Stack([
   Rating(4.7, { count: 248, label: "Northern lights" }),
   Rating(4.5, { count: 132, label: "Cenote dive" }),
   Rating(4.9, { count: 412, label: "Kyoto temples" })
-], { direction: "column", gap: "s" })
+], { direction: "column", gap: "sm" })
 $app(Stack([
-  Grid(cards, { columns: 3, gap: "l" }),
+  Grid(cards, { columns: 3, gap: "lg" }),
   ratings
-], { direction: "column", gap: "l" }))</code></pre>
+], { direction: "column", gap: "lg" }))</code></pre>
         </div>
       </div>
 
@@ -562,7 +562,7 @@ $app(Stack([
     description: "Wire up a 3rd-party source." }),
   Tile("Schedule a sync", { icon: "calendar-days",
     description: "Book time with your CSM." })
-], { columns: 2, gap: "m" }))</code></pre>
+], { columns: 2, gap: "md" }))</code></pre>
         </div>
       </div>
 
@@ -597,7 +597,7 @@ $app(Stack([
       time: "1h ago",
       icon: "triangle-exclamation",
       tone: "warning" })
-  ], { direction: "column", gap: "s" })
+  ], { direction: "column", gap: "sm" })
 ]))</code></pre>
         </div>
       </div>
@@ -622,7 +622,7 @@ $app(Stack([
   Comment("Linus Torvalds", {
     text: "Looks good — can we ship this on Friday?",
     time: "2h ago" })
-], { direction: "column", gap: "m" }))</code></pre>
+], { direction: "column", gap: "md" }))</code></pre>
         </div>
       </div>
 
@@ -651,8 +651,8 @@ thread = Stack([
     time: "9:01", role: "assistant" }),
   ChatBubble("You", { text: "Send that to Slack #standup.",
     time: "9:02", role: "user" })
-], { direction: "column", gap: "s" })
-$app(Stack([bar, ring, thread], { direction: "column", gap: "l" }))</code></pre>
+], { direction: "column", gap: "sm" })
+$app(Stack([bar, ring, thread], { direction: "column", gap: "lg" }))</code></pre>
         </div>
       </div>
 
@@ -689,7 +689,7 @@ $app(Stack([bar, ring, thread], { direction: "column", gap: "l" }))</code></pre>
     description: "Retrying in 12 s…",
     tone: "warning",
     icon: "triangle-exclamation" })
-], { direction: "column", gap: "s", position: "bottom-right" }))</code></pre>
+], { direction: "column", gap: "sm", position: "bottom-right" }))</code></pre>
         </div>
       </div>
 
@@ -925,7 +925,7 @@ $app(Card([
         })
       ],
       ratio: "4:3"
-    })), { columns: { sm: 1, md: 2, lg: 4 }, gap: "m" })
+    })), { columns: { sm: 1, md: 2, lg: 4 }, gap: "md" })
 
     return Stack([header, filters, cards], { gap: "xl" })
   }
@@ -942,8 +942,8 @@ $app(Card([
             Text($util.format($util.sum($cart.price), "currency", "USD"), { variant: "large-heavy" })
           ], { direction: "row" }),
           Button("Checkout", { onClick: checkout, variant: "primary", fullWidth: true })
-        ], { gap: "s" })
-  ], { padding: "m", maxWidth: "320px" })
+        ], { gap: "sm" })
+  ], { padding: "md", maxWidth: "320px" })
 
   // --- Router & Layout ---
   pages = $router({
@@ -1040,7 +1040,7 @@ summary = Card([
 $app(Stack([
   Card([CardHeader("Your cart"), List(items)]),
   summary
-], { direction: "column", gap: "m" }))</code></pre>
+], { direction: "column", gap: "md" }))</code></pre>
         </div>
       </div>
 
@@ -1078,7 +1078,7 @@ $app(Stack([
     Stack([
       Text(`Ticks: ${$ticks}`, { variant: "large-heavy" }),
       Button("Reset", { action: reset, variant: "secondary", size: "small" })
-    ], { direction: "row", gap: "m", align: "center", justify: "between" })
+    ], { direction: "row", gap: "md", align: "center", justify: "between" })
   ]))</code></pre>
         </div>
       </div>

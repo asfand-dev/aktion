@@ -27,9 +27,10 @@ import { parse } from "../parser/index.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
 import { validateProgramSchema } from "../library/validate.js";
-import { findPositionalProp } from "../library/types.js";
+import { findPositionalProp, chooseNamedBagIndex, slotForNthPositional } from "../library/types.js";
 import { keywordDocs, type KeywordDoc } from "../language/grammar.js";
 import { builtinCatalog, findBuiltin } from "../language/builtins.js";
+import { analyseCallContext } from "./signature-help.js";
 
 export interface Position {
   /** 1-indexed line number. */
@@ -164,12 +165,50 @@ export function getCompletions(
   }
 
   const general = generalCompletions(library, user);
+  const call = analyseCallContext(source, position);
 
-  // Inside a component call's trailing props object `{ … }` — offer the
-  // spec's prop names first, then the general list.
+  // Inside a component call's named-props object `{ … }` — trailing,
+  // leading, or a single all-named argument — offer the spec's prop names
+  // first, then the general list. An object that binds POSITIONALLY under
+  // the §19 rules (a payload for an object-typed slot) gets no prop names:
+  // its keys are data, not props.
   if (ctx.objectCallee) {
     const spec = findComponent(library, ctx.objectCallee);
-    if (spec) return [...propCompletions(spec), ...general];
+    if (spec) {
+      const isNamedBag =
+        !call ||
+        call.objectArg === null ||
+        chooseNamedBagIndex(call.args, spec) === call.argIndex;
+      if (isNamedBag) return [...propCompletions(spec), ...general];
+    }
+    return general;
+  }
+
+  // Bare positional position inside a library call — when the slot the
+  // argument will bind to carries an enum, offer its values first so
+  // all-positional calls complete as well as named ones do.
+  if (call?.callee && call.objectArg === null) {
+    const spec = findComponent(library, call.callee);
+    if (spec) {
+      const bagIdx = chooseNamedBagIndex(call.args, spec);
+      if (bagIdx !== call.argIndex) {
+        let n = call.argIndex;
+        if (bagIdx >= 0 && bagIdx < call.argIndex) n -= 1;
+        const slot = slotForNthPositional(spec, n);
+        if (slot?.enum && slot.enum.length > 0) {
+          // Inside an open string literal the quotes are already typed.
+          const prefix = source.slice(0, lineColumnToOffset(source, position));
+          const inString = /["']([\w-]*)$/.test(prefix);
+          const values = slot.enum.map((value) => ({
+            label: inString ? value : `"${value}"`,
+            kind: "prop" as const,
+            detail: `${slot.name} value (${call.callee})`,
+            documentation: slot.description,
+          }));
+          return [...values, ...general];
+        }
+      }
+    }
   }
 
   return general;

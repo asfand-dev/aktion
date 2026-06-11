@@ -7,7 +7,7 @@
  */
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
-import { el, asArray, asString, asBoolean, asNumber, sanitiseCssLength } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, sanitiseCssLength, SPACING_TOKENS, normalizeSpacingToken, spacingCssValue } from "../utils.js";
 
 function renderChild(helpers: RenderHelpers, child: unknown): Node {
   if (child == null) return document.createTextNode("");
@@ -51,7 +51,7 @@ export const Split: ComponentSpec = {
     { name: "left", type: "Node", positional: true, required: true, aliases: ["primary"] },
     { name: "right", type: "Node", required: true, aliases: ["secondary"] },
     { name: "ratio", type: "string", optional: true, description: "Column ratio: 1/1, 3/2, 2/3, 1/3, 2/1, etc." },
-    { name: "gap", type: "string", optional: true, enum: ["none", "s", "m", "l", "xl"] },
+    { name: "gap", type: "string", optional: true, enum: SPACING_TOKENS },
     { name: "divider", type: "boolean", optional: true },
     { name: "sticky", type: "string", optional: true, enum: ["left", "right"], description: "Pin one pane while the other scrolls" },
     { name: "stackAt", type: "string", optional: true, enum: ["sm", "md", "lg"], description: "Breakpoint below which it stacks (default md)" },
@@ -59,8 +59,7 @@ export const Split: ComponentSpec = {
   ],
   render: (_node, props, helpers) => {
     const ratio = RATIO_MAP[asString(props.ratio, "1/1")] ?? "1fr 1fr";
-    const gapKey = asString(props.gap, "l");
-    const gap = gapKey === "none" ? "0" : `var(--rui-spacing-${gapKey === "s" ? "s" : gapKey === "m" ? "m" : gapKey === "xl" ? "xl" : "l"})`;
+    const gap = spacingCssValue(asString(props.gap, "lg")) || "var(--rui-spacing-l)";
     const root = el("div", {
       class: "rui-split",
       "data-divider": asBoolean(props.divider) ? "true" : null,
@@ -118,12 +117,16 @@ function parseBentoSpan(span: unknown): { col: number; row: number; name: string
 export const BentoCell: ComponentSpec = {
   name: "BentoCell",
   description:
-    "A single cell in a Bento grid. `span` is a named size (tile|wide|tall|" +
-    "hero|full), a \"CxR\" string like \"2x1\", a bare column-span number, " +
-    "or `{ col, row }`. The child stretches to fill the cell.",
+    "A single cell in a Bento grid. `span` names a size — `tile` 1×1, " +
+    "`wide` 2×1 (2 columns), `tall` 1×2 (2 rows), `hero` 2×2, `full` (a " +
+    "whole row) — or use a \"CxR\" string (\"2x1\"), a bare column-span " +
+    "number, or `{ col, row }`; `rowSpan` adds rows to a named/numeric " +
+    "span. The child stretches to fill the cell, so images/cards crop to " +
+    "the cell's shape. Pick spans that tile the parent Bento with no " +
+    "leftover tracks.",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "span", type: "string | number | object", optional: true, description: "tile|wide|tall|hero|full, \"2x1\", 2, or { col, row }" },
+    { name: "span", type: "string | number | object", optional: true, description: "tile (1×1) | wide (2×1) | tall (1×2) | hero (2×2) | full (whole row), \"2x1\", 2, or { col, row }" },
     { name: "rowSpan", type: "number", optional: true, description: "Rows to span (combines with a numeric/named span)" },
   ],
   render: (_node, props, helpers) => {
@@ -147,23 +150,27 @@ export const BentoCell: ComponentSpec = {
 export const Bento: ComponentSpec = {
   name: "Bento",
   description:
-    "Asymmetric 'bento box' grid where cells span varied widths/heights — " +
-    "the marquee feature-section layout. Children should be BentoCell nodes " +
-    "(plain nodes are treated as 1×1). `columns` sets the track count " +
-    "(default 6), `rowHeight` sizes the implicit rows so `tall`/`hero` " +
-    "cells actually grow, and `dense` (default true) backfills gaps. " +
-    "Collapses to 2 columns below 920px and 1 below 640px.",
+    "Asymmetric 'bento box' grid — the marquee feature-section layout. " +
+    "Children must be BentoCell nodes (a plain node becomes a 1×1 tile). " +
+    "Two rules make it look right: (1) spans must tile the grid exactly — " +
+    "each row's column spans sum to `columns` and row-spans pair up with " +
+    "neighbouring cells, never leaving a dangling track (e.g. `columns: 3` " +
+    "with 4 cells: hero 2×2 + tall 1×2 fill rows 1–2, wide 2×1 + tile fill " +
+    "row 3); (2) set a fixed `rowHeight` (e.g. \"180px\") whenever cells " +
+    "hold images or cards — the default auto row stretches to the tallest " +
+    "cell and makes the mosaic ragged. Give 1–2 standout cells a big span " +
+    "(hero/wide/tall) and keep the rest 1×1 tiles. `dense` (default true) " +
+    "backfills gaps. Collapses to 2 columns below 920px and 1 below 640px.",
   props: [
     { name: "items", type: "BentoCell[]", positional: true, required: true, aliases: ["children", "cells"] },
-    { name: "columns", type: "number", optional: true, description: "Track count 1–8 (default 6)" },
-    { name: "gap", type: "string", optional: true, enum: ["s", "m", "l", "xl"] },
-    { name: "rowHeight", type: "string", optional: true, description: "grid-auto-rows track size (CSS length, default minmax(110px, auto))" },
+    { name: "columns", type: "number", optional: true, description: "Track count 1–8 (default 6) — pick it so the cell spans in every row can sum to it" },
+    { name: "gap", type: "string", optional: true, enum: SPACING_TOKENS },
+    { name: "rowHeight", type: "string", optional: true, description: "Fixed row track size, e.g. \"180px\" — set it whenever any cell spans rows or holds images (default minmax(110px, auto) stretches rows to content)" },
     { name: "dense", type: "boolean", optional: true, description: "Backfill holes with later cells (default true)" },
   ],
   render: (_node, props, helpers) => {
     const cols = Math.max(1, Math.min(8, Math.round(asNumber(props.columns, 6))));
-    const gapRaw = asString(props.gap, "m");
-    const gapKey = ["s", "m", "l", "xl"].includes(gapRaw) ? gapRaw : "m";
+    const gapKey = normalizeSpacingToken(props.gap, "md");
     const rowHeight = sanitiseCssLength(props.rowHeight, "");
     const dense = props.dense === undefined ? true : asBoolean(props.dense);
     const root = el("div", {

@@ -118,8 +118,8 @@ $app(Card([Column([
   Row([
     Button("−", { onClick: dec, variant: "ghost" }),
     Button("Increment", { onClick: inc, variant: "primary" })
-  ], { gap: "s" })
-], { gap: "m" })]))</code></pre>
+  ], { gap: "sm" })
+], { gap: "md" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -139,7 +139,7 @@ $app(Column([
   Button("Open", { onClick: () =&gt; $open = true, variant: "primary" }),
   $open ? Callout("info", { title: "Now open", description: "Inline lambda opened me; a named action closes me." }) : Text("Closed."),
   $open ? Button("Close", { onClick: close, variant: "ghost" }) : Spacer()
-], { gap: "m" }))</code></pre>
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -157,7 +157,7 @@ $app(Card([Column($items.map(item =&gt; Row([
   Text(item.name),
   Spacer(),
   Button("Remove", { onClick: () =&gt; remove(item.id), variant: "ghost", size: "sm" })
-], { gap: "s" })), { gap: "s" })]))</code></pre>
+], { gap: "sm" })), { gap: "sm" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -228,7 +228,7 @@ $app(Card([Column($items.map(f =&gt; Row([
   Text(f.name),
   Spacer(),
   Button("Delete", { onClick: () =&gt; del(f.id), variant: "danger", size: "sm" })
-], { gap: "s" })), { gap: "s" })]))</code></pre>
+], { gap: "sm" })), { gap: "sm" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

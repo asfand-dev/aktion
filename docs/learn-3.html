@@ -577,9 +577,10 @@ $app(Card([
 </script>
 
   <script type="text/aktion" id="start-2">
-// Every component call has ONE shape:
+// The canonical call shape (use it by default):
 //   Component(oneThing, { props })
-// One positional argument max — the rest goes in { }.
+// Also valid: all-positional (signature order) and a single
+// all-named { } object — pick one form per call.
 
 $app(Card([
   CardHeader("One shape to rule them all"),
@@ -588,7 +589,7 @@ $app(Card([
     Button("Primary", { variant: "primary" }),
     Button("Secondary", { variant: "secondary" }),
     Button("Ghost", { variant: "ghost" })
-  ], { gap: "s", wrap: true })
+  ], { gap: "sm", wrap: true })
 ]))
 </script>
   <script type="text/aktion" id="sol-2">
@@ -599,13 +600,13 @@ $app(Card([
     Button("Primary", { variant: "primary", icon: "rocket" }),
     Button("Secondary", { variant: "secondary" }),
     Button("Ghost", { variant: "ghost" })
-  ], { gap: "s", wrap: true })
+  ], { gap: "sm", wrap: true })
 ]))
 </script>
 
   <script type="text/aktion" id="start-3">
 // Column stacks things. Row lines them up. Grid does the math.
-// Spacing is tokens: "xs" | "s" | "m" | "l" | "xl". No CSS files.
+// Spacing is tokens: "none" | "3xs" | "2xs" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl". No CSS files.
 
 $app(Column([
   Text("Three boxes. Zero CSS written.", { variant: "large-heavy" }),
@@ -613,8 +614,8 @@ $app(Column([
     Card([CardHeader("One")]),
     Card([CardHeader("Two")]),
     Card([CardHeader("Three")])
-  ], { gap: "m" })
-], { gap: "m" }))
+  ], { gap: "md" })
+], { gap: "md" }))
 </script>
   <script type="text/aktion" id="sol-3">
 $app(Column([
@@ -623,8 +624,8 @@ $app(Column([
     Card([CardHeader("One")]),
     Card([CardHeader("Two")]),
     Card([CardHeader("Three")])
-  ], { columns: 3, gap: "m" })
-], { gap: "m" }))
+  ], { columns: 3, gap: "md" })
+], { gap: "md" }))
 </script>
 
   <script type="text/aktion" id="start-4">
@@ -638,7 +639,7 @@ $app(Card([
   Text(`${$count}`, { variant: "title" }),
   Row([
     Button("+1", { variant: "primary", onClick: () => { $count = $count + 1 } })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
   <script type="text/aktion" id="sol-4">
@@ -650,7 +651,7 @@ $app(Card([
   Row([
     Button("+1", { variant: "primary", onClick: () => { $count = $count + 1 } }),
     Button("Reset", { variant: "ghost", onClick: () => { $count = 0 } })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
 
@@ -666,7 +667,7 @@ $app(Card([
   CardHeader("Events", { subtitle: "Functions + onClick. That's it." }),
   Row([
     Button("Toast me", { variant: "primary", icon: "bread-slice", onClick: cheer })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
   <script type="text/aktion" id="sol-5">
@@ -683,7 +684,7 @@ $app(Card([
   Row([
     Button("Toast me", { variant: "primary", icon: "bread-slice", onClick: cheer }),
     Button("Uh oh", { variant: "danger", onClick: panic })
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ]))
 </script>
 
@@ -720,7 +721,7 @@ $todos = ["Learn Aktion", "Build something", "Ship it"]
 list = Column($todos.map(todo => Row([
   Icon("circle-check"),
   Text(todo)
-], { gap: "s" })), { gap: "s" })
+], { gap: "sm" })), { gap: "sm" })
 
 $app(Card([
   CardHeader("Todo list", { subtitle: `${$todos.length} things to glory` }),
@@ -733,7 +734,7 @@ $todos = []
 list = Column($todos.map(todo => Row([
   Icon("circle-check"),
   Text(todo)
-], { gap: "s" })), { gap: "s" })
+], { gap: "sm" })), { gap: "sm" })
 
 $app(Card([
   CardHeader("Todo list", { subtitle: `${$todos.length} things to glory` }),
@@ -760,7 +761,7 @@ $app(Card([
     }) }),
     FormControl("Volume", { field: Slider("volume", { value: $volume, min: 0, max: 100, showValue: true }) }),
     Text(`Plan: ${$plan} · Volume: ${$volume}`, { tone: "muted" })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ]))
 </script>
   <script type="text/aktion" id="sol-8">
@@ -781,7 +782,7 @@ $app(Card([
     FormControl("Volume", { field: Slider("volume", { value: $volume, min: 0, max: 100, showValue: true }) }),
     FormControl("Notifications", { field: Switch("notify", { label: "Email me", value: $notify }) }),
     Text(`Plan: ${$plan} · Volume: ${$volume} · Notify: ${$notify}`, { tone: "muted" })
-  ], { gap: "m" })
+  ], { gap: "md" })
 ]))
 </script>
 
@@ -803,7 +804,7 @@ $app(Card([
         Text(u.name, { variant: "body-heavy" }),
         Text(u.email, { variant: "small", tone: "muted" })
       ], { gap: "xs" })
-    ], { gap: "s" })), { gap: "m" })
+    ], { gap: "sm" })), { gap: "md" })
   })
 ]))
 </script>
@@ -821,7 +822,7 @@ $app(Card([
         Text(u.name, { variant: "body-heavy" }),
         Text(u.email, { variant: "small", tone: "muted" })
       ], { gap: "xs" })
-    ], { gap: "s" })), { gap: "m" })
+    ], { gap: "sm" })), { gap: "md" })
   }),
   Button("Refetch", { variant: "secondary", icon: "rotate", onClick: () => { $users.refetch() } })
 ]))
@@ -876,7 +877,7 @@ $app(Card([
     Badge("primary", { tone: "primary" }),
     Badge("success", { tone: "success" }),
     Badge("warning", { tone: "warning" })
-  ], { gap: "s" }),
+  ], { gap: "sm" }),
   Button("I inherit the primary color", { variant: "primary", fullWidth: true })
 ]))
 </script>
@@ -892,7 +893,7 @@ $app(Card([
     Badge("primary", { tone: "primary" }),
     Badge("success", { tone: "success" }),
     Badge("warning", { tone: "warning" })
-  ], { gap: "s" }),
+  ], { gap: "sm" }),
   Button("I inherit the primary color", { variant: "primary", fullWidth: true })
 ]))
 </script>
@@ -913,7 +914,7 @@ $app(Column([
   Grid([
     StatCard("Deploys", { value: `${$deploys}`, trend: "up", icon: "rocket" }),
     StatCard("Uptime", { value: "99.98%", trend: "flat", icon: "heart-pulse" })
-  ], { columns: 2, gap: "m" }),
+  ], { columns: 2, gap: "md" }),
   Card([
     CardHeader("Crew"),
     Table([
@@ -926,7 +927,7 @@ $app(Column([
     ])
   ]),
   Button("Ship it", { variant: "primary", icon: "rocket", onClick: shipIt, fullWidth: true })
-], { gap: "m" }))
+], { gap: "md" }))
 </script>
   <script type="text/aktion" id="sol-12">
 $deploys = 3
@@ -947,7 +948,7 @@ $app(Column([
     StatCard("Deploys", { value: `${$deploys}`, trend: "up", icon: "rocket" }),
     StatCard("Uptime", { value: "99.98%", trend: "flat", icon: "heart-pulse" }),
     StatCard("Coffee", { value: "4 cups", trend: "up", icon: "mug-hot" })
-  ], { columns: 3, gap: "m" }),
+  ], { columns: 3, gap: "md" }),
   Card([
     CardHeader("Crew"),
     Table([
@@ -962,8 +963,8 @@ $app(Column([
   Row([
     Button("Ship it", { variant: "primary", icon: "rocket", onClick: shipIt }),
     Button("Rollback", { variant: "danger", icon: "clock-rotate-left", onClick: rollback })
-  ], { gap: "s", grow: true })
-], { gap: "m" }))
+  ], { gap: "sm", grow: true })
+], { gap: "md" }))
 </script>
 
   <!-- =================================================================
@@ -999,7 +1000,7 @@ $app(Column([
         grad: "g2",
         tagline: "One call shape for all 270+ components. Your muscle memory will thank you.",
         brief: [
-          "The rule: <code>Component(oneThing, { props })</code> — at most one positional argument.",
+          "The canonical shape: <code>Component(oneThing, { props })</code>. All-positional and all-named calls work too — pick one form per call.",
           "Everything else goes in the trailing <code>{ }</code>: variants, icons, handlers.",
           "Unknown props get flagged by the validator. It's strict, but it's honest.",
         ],

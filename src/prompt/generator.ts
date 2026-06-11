@@ -164,15 +164,17 @@ $effect(() => $console.log($count), [$count])                     // declarative
 
 ### Two rules, broken constantly — always check
 1. **Invoke components with parentheses.** A component is a function; the bare name is just its value. Render it by calling it, even with no args: \`$app(MyApp())\` not \`$app(MyApp)\`; \`Column([Header(), Body()])\` not \`Column([Header, Body])\`. (Exception: passing a component as a callback, e.g. \`render: UserCard\`.)
-2. **One positional argument max** (the trailing-object rule): each call takes at most one bare positional arg; all other props go in a trailing \`{ }\` object.
+2. **Argument forms** (per call, pick ONE): the canonical form is one bare positional — the prop tagged \`(positional)\` in the signature — plus a trailing \`{ }\` object for every other prop. Also supported: ALL-positional (arguments bind to the signature's props in listed order, so only use it for adjacent leading props), and ALL-named (a single \`{ }\` object naming every prop). Never split one object between roles.
 
 \`\`\`
-Button("Save", { variant: "primary", loading: $isSaving })
+Button("Save", { variant: "primary", loading: $isSaving })   // canonical: positional + trailing object
 StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
-Row([Card1(), Card2()], { gap: "m" })
+StatCard("Revenue", "$48k", "up")                            // all-positional, signature order
+Button({ label: "Save", variant: "primary" })                // all-named single object
+Row([Card1(), Card2()], { gap: "md" })
 \`\`\`
 
-\`Button("Save", "primary")\` is a schema error — use the named-prop form. Any call also accepts \`{ key: ... }\` to pin per-instance state across reorders.
+Mind the signature order with all-positional calls: \`Button("Save", "primary")\` puts \`"primary"\` in the second slot (\`onClick\`), NOT \`variant\` — prefer the trailing object for non-adjacent props. A lone object argument to a component whose positional prop is itself object-typed is that prop's payload, not named props. Any call also accepts \`{ key: ... }\` to pin per-instance state across reorders.
 
 ### Reserved top-level names
 - \`$app(...)\` — registers the UI root (REQUIRED).
@@ -623,7 +625,7 @@ function fullUniversalProps(): string {
 EVERY component accepts a universal style/behaviour channel as named props, in addition to its own props. These are **bounded** (tokens & enums, never raw CSS) so they stay theme-safe — prefer them over the \`Css\`/\`Styles\`/\`HTMLTag\` escape hatches.
 
 - **\`sx: { … }\`** — token-aware inline styling. Keys (all optional):
-  - Spacing (\`xs|s|m|l|xl|2xl|3xl|none|auto\`, the \`safe\`/\`safe-top\`/\`safe-right\`/\`safe-bottom\`/\`safe-left\` notch insets, or a CSS length): \`p px py pt pr pb pl\`, \`m mx my mt mr mb ml\`, \`gap\`. \`px\`/\`mx\` are logical (\`padding-inline\`) and \`ps pe ms me\` set the inline start/end sides, so RTL apps mirror automatically.
+  - Spacing (\`none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl|auto\` (\`none\` = 0), the \`safe\`/\`safe-top\`/\`safe-right\`/\`safe-bottom\`/\`safe-left\` notch insets, or a CSS length): \`p px py pt pr pb pl\`, \`m mx my mt mr mb ml\`, \`gap\`. \`px\`/\`mx\` are logical (\`padding-inline\`) and \`ps pe ms me\` set the inline start/end sides, so RTL apps mirror automatically.
   - Sizing (\`full|half|screen|dvh|min|max|fit|auto\` or length): \`w h minW maxW minH maxH\`.
   - Color (token \`surface|bg|text|text-muted|primary|accent|success|warning|danger|border\`, a gradient ref \`gradient.brand|accent|warm|cool|success|danger\`, or a raw color): \`bg color borderColor\`.
   - Surface: \`border: none|subtle|strong|<color>\`, \`radius: xs|sm|md|lg|pill|full\`, \`shadow: sm|md|lg|none\`, \`opacity\`, \`backdrop: "blur"\`, \`bgImage\` (http(s)/relative/data:image only) + \`bgOverlay\` (color or \`gradient.*\` wash over the image), \`bgSize: cover|contain\`.
@@ -723,7 +725,7 @@ function fullComponentLibrary(library: ComponentLibrary): string {
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [];
   lines.push("## Component library");
-  lines.push("Use only these components. Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot — pass it bare; every other prop goes in a trailing `{ prop: value }` object.");
+  lines.push("Use only these components. Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot. Canonical call: pass it bare and put every other prop in a trailing `{ prop: value }` object. Also valid: all-positional in the listed order (the first positional fills the `(positional)` slot, the rest fill the remaining slots top-to-bottom), or a single `{ prop: value }` object naming every prop.");
   lines.push("");
   for (const group of groups) {
     lines.push(`### ${group.name}`);
@@ -783,7 +785,7 @@ row = task => Card([Row([
   Badge(task.done ? "done" : "open", { tone: task.done ? "success" : "neutral" }),
   StackItem(Text(task.title, { tone: task.done ? "muted" : "default" }), { grow: 1 }),
   Button(task.done ? "Reopen" : "Done", { onClick: () => toggle(task), size: "sm" })
-], { gap: "m" })])
+], { gap: "md" })])
 
 $app(Column([
   PageHeader("Tasks", { subtitle: \`\${$tasks.data.length} items\`, actions: [Button("Refresh", { onClick: $tasks.refetch, variant: "ghost" })] }),
@@ -791,9 +793,9 @@ $app(Column([
     loading: LoadingState("Loading tasks…"),
     error:   ErrorState("Couldn't fetch tasks"),
     empty:   EmptyState("No tasks yet"),
-    data:    Column($tasks.data.map(t => row(t)), { gap: "s" })
+    data:    Column($tasks.data.map(t => row(t)), { gap: "sm" })
   })
-], { gap: "l" }))`,
+], { gap: "lg" }))`,
   ];
 }
 
@@ -852,7 +854,7 @@ A program is a flat list of \`name = expression\` statements in standard JavaScr
 ### Component calls
 - **Case doesn't matter** — \`Card\` and \`card\` are equivalent.
 - **Always invoke with parentheses** — \`Column([Header(), Body()])\`, never \`Column([Header, Body])\`; write \`Hero()\` even with no args.
-- **One positional arg, the rest in a trailing object** — \`Callout("info", { title: "Heads up", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`.
+- **Canonical call: one positional arg, the rest in a trailing object** — \`Callout("info", { title: "Heads up", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`. All-positional (signature order) and all-named (single \`{ }\` object) calls also work.
 
 ### Build UI from data — JS is fully supported
 \`.map\` / \`.filter\` arrays into nodes (\`rows.map(r => ListItem(r.title))\`), ternaries for branching, and the array-pluck shortcut \`rows.title\` → \`[each row.title]\` to feed columns (\`Col("Title", rows.title)\`) and chart series (\`PieChart(rows.label, rows.value)\`). \`if\` / \`for\` are statements — not usable on the right of \`=\`.
@@ -954,7 +956,7 @@ function chatFinalVerification(): string {
 2. Every component is invoked with \`()\` — \`Hero()\`, never bare \`Hero\`.
 3. Only the read-only display components above — no forms, clickable buttons, state writes, actions, effects, HTTP, or routing.
 4. Tables are column-oriented (\`Table([Col("Label", arr)])\`, cells may be components via \`rows.map(r => Badge(r.status))\`); charts take numeric arrays (array-pluck \`rows.value\`).
-5. One positional arg per call, everything else in a trailing \`{ }\` object; no statement split across lines outside an unmatched bracket.`;
+5. Prefer one positional arg per call with everything else in a trailing \`{ }\` object; no statement split across lines outside an unmatched bracket.`;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -95,7 +95,7 @@ describe("MasonryGrid responsive (II.6)", () => {
     const grid = el.shadowRoot?.querySelector(".rui-masonry-grid") as HTMLElement;
     expect(grid).toBeTruthy();
     expect(grid.getAttribute("data-columns")).toBe("4");
-    expect(grid.getAttribute("data-gap")).toBe("l");
+    expect(grid.getAttribute("data-gap")).toBe("lg");
     expect(grid.querySelectorAll(".rui-card").length).toBe(3);
   });
 });

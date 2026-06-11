@@ -169,7 +169,7 @@ function Profile() {
     // Reads only $user.name — a write to $user.role won't re-render this.
     Text(`Name: ${$user.name}`, { variant: "large-heavy" }),
     Button("Rename", { variant: "primary", onClick: () =&gt; { $user.name = "Grace" } }),
-  ], { gap: "m" })
+  ], { gap: "md" })
 }
 $app(Profile())</code></pre>
         <div class="lay-demo-preview"></div>
@@ -259,7 +259,7 @@ $app(Profile())</code></pre>
     Grid($util.range(1, bp.lg ? 4 : (bp.md ? 2 : 1)).map(n =&gt;
       Card([Text(`Cell ${n}`)])
     ), { columns: bp.lg ? 4 : (bp.md ? 2 : 1) }),
-  ], { gap: "m" })
+  ], { gap: "md" })
 }
 $app(Responsive())</code></pre>
         <div class="lay-demo-preview"></div>

@@ -15,7 +15,7 @@
 import type { ComponentSpec } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
-  sanitiseCssLength,
+  sanitiseCssLength, SPACING_TOKENS, normalizeSpacingToken,
 } from "../utils.js";
 import { Notification } from "./patterns.js";
 
@@ -540,11 +540,11 @@ export const MasonryGrid: ComponentSpec = {
   props: [
     { name: "items", type: "Node[]" },
     { name: "columns", type: "number", optional: true, description: "Preferred column count (default 3)" },
-    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"] },
+    { name: "gap", type: "string", optional: true, enum: SPACING_TOKENS },
   ],
   render: (_node, props, helpers) => {
     const columns = Math.max(1, Math.min(6, Math.floor(asNumber(props.columns, 3))));
-    const gap = asString(props.gap, "m");
+    const gap = normalizeSpacingToken(props.gap, "md");
     const root = el("div", {
       class: "rui-masonry-grid",
       "data-columns": String(columns),

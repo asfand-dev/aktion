@@ -86,7 +86,7 @@
           <tr><td><code>$x = 0</code></td><td>One reactive-atom kind. No declaration keyword.</td></tr>
           <tr><td><code>function User(u) { return Card([...]) }</code></td><td>PascalCase function = component; must <code>return</code> its tree.</td></tr>
           <tr><td><code>function save() { ... }</code></td><td>camelCase function = action.</td></tr>
-          <tr><td><code>Button("Save", { variant: "primary" })</code></td><td>One positional arg max; named props go in a trailing object. Multi-positional calls raise a schema error.</td></tr>
+          <tr><td><code>Button("Save", { variant: "primary" })</code></td><td>Canonical call: one positional + named props in a trailing object. All-positional (signature order) and all-named single-object calls are valid too.</td></tr>
           <tr><td><code>items.map(x =&gt; ...)</code> / <code>cond ? a : b</code></td><td>Standard JS iteration and ternaries in expression position.</td></tr>
           <tr><td><code>switch (v) { case "a": return X; default: return Y }</code></td><td>Standard JS <code>switch</code> (no DSL <code>match</code>).</td></tr>
           <tr><td><code>$effect(() =&gt; { ... }, [$x])</code></td><td>Callback + deps array.</td></tr>

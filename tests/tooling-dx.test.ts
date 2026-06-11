@@ -79,6 +79,35 @@ describe("context-aware completions inside brackets", () => {
     // components / atoms.
     expect(labels).toContain("Sidebar");
   });
+
+  it("offers prop names inside an all-named single-object call (§19)", () => {
+    const src = "Button({\n  \n})";
+    const labels = getCompletions(src, { line: 2, column: 3 }, defaultLibrary).map((c) => c.label);
+    expect(labels).toContain("label:");
+    expect(labels).toContain("variant:");
+  });
+
+  it("offers enum values at a bare positional slot (§19 all-positional)", () => {
+    // Spinner(size?, …) — slot 0 carries the size enum.
+    const src = "Spinner(";
+    const labels = getCompletions(src, { line: 1, column: 9 }, defaultLibrary).map((c) => c.label);
+    expect(labels).toContain('"sm"');
+    expect(labels).toContain('"md"');
+  });
+
+  it("offers unquoted enum values when the string is already open", () => {
+    const src = 'Spinner("s';
+    const labels = getCompletions(src, { line: 1, column: 11 }, defaultLibrary).map((c) => c.label);
+    expect(labels).toContain("sm");
+    expect(labels).not.toContain('"sm"');
+  });
+
+  it("maps later positional slots to their enums (slot order)", () => {
+    // Button(label, onClick?, variant?, …) — third positional is `variant`.
+    const src = 'Button("Save", doSave, ';
+    const labels = getCompletions(src, { line: 1, column: 24 }, defaultLibrary).map((c) => c.label);
+    expect(labels).toContain('"primary"');
+  });
 });
 
 describe("Vite plugin source map", () => {

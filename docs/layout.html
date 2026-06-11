@@ -94,9 +94,10 @@
       </table>
       <p>
         <code>gap</code> and <code>padding</code> use the spacing scale
-        <code>xs&nbsp;&middot;&nbsp;s&nbsp;&middot;&nbsp;m&nbsp;&middot;&nbsp;l&nbsp;&middot;&nbsp;xl</code>.
+        <code>none&nbsp;&middot;&nbsp;3xs&nbsp;&middot;&nbsp;2xs&nbsp;&middot;&nbsp;xs&nbsp;&middot;&nbsp;sm&nbsp;&middot;&nbsp;md&nbsp;&middot;&nbsp;lg&nbsp;&middot;&nbsp;xl&nbsp;&middot;&nbsp;2xl&nbsp;&middot;&nbsp;3xl</code>
+        (<code>none</code> = 0).
         Wherever you see a value below, it can also be a
-        <strong>responsive map</strong> like <code>{ base: "s", md: "l" }</code>.
+        <strong>responsive map</strong> like <code>{ base: "sm", md: "lg" }</code>.
       </p>
 
       <h2 id="column">Column &mdash; stack vertically</h2>
@@ -111,7 +112,7 @@
   PageHeader("Project Atlas", { subtitle: "Updated 2 hours ago" }),
   Card([CardHeader("Overview"), Text("A Column stacks its children top to bottom with an even gap.")]),
   Card([CardHeader("Activity"), Text("Each card is a child; the Column owns the spacing between them.")])
-], { gap: "l" }))</code></pre>
+], { gap: "lg" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -130,7 +131,7 @@
   Spacer(),
   Button("Invite", { variant: "ghost", icon: "user-plus" }),
   Button("New", { variant: "primary", icon: "plus" })
-], { gap: "s" })]))</code></pre>
+], { gap: "sm" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <p>
@@ -145,7 +146,7 @@
 <pre><code>$app(Row([
   StackItem(Input("q", { placeholder: "Search the docs…" }), { grow: 1 }),
   Button("Search", { variant: "primary" })
-], { gap: "s" }))</code></pre>
+], { gap: "sm" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -163,7 +164,7 @@
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "between" })]),
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "center" })]),
   Card([Row([Badge("A"), Badge("B"), Badge("C")], { justify: "end" })])
-], { gap: "m" }))</code></pre>
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -186,7 +187,7 @@
   StatCard("Users", { value: "2,184", trend: "up", delta: "+184" }),
   StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%" }),
   StatCard("NPS", { value: "62", trend: "up", delta: "+5" })
-], { gap: "m", minChildWidth: "180px" }))</code></pre>
+], { gap: "md", minChildWidth: "180px" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -197,7 +198,7 @@
   Card([CardHeader("One")]),
   Card([CardHeader("Two")]),
   Card([CardHeader("Three")])
-], { columns: 3, gap: "m" }))</code></pre>
+], { columns: 3, gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -214,7 +215,7 @@
 <pre><code>$app(Grid([
   GridItem(Card([CardHeader("Side"), Text("span 1/4")]), { span: "1/4" }),
   GridItem(Card([CardHeader("Main"), Text("span 3/4")]), { span: "3/4" })
-], { gap: "l" }))</code></pre>
+], { gap: "lg" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -249,7 +250,7 @@
 <pre><code>$app(Grid([
   Card([CardHeader("Tile 1")]), Card([CardHeader("Tile 2")]),
   Card([CardHeader("Tile 3")]), Card([CardHeader("Tile 4")])
-], { columns: { base: 1, sm: 2, lg: 4 }, gap: "m" }))</code></pre>
+], { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
       <div class="lay-demo">
@@ -257,7 +258,7 @@
 <pre><code>$app(Stack([
   Card([CardHeader("Nav"), Text("Column on mobile, beside the content on desktop.")]),
   Card([CardHeader("Content"), Text("Stack is the escape hatch for responsive direction.")])
-], { direction: { base: "column", md: "row" }, gap: "m" }))</code></pre>
+], { direction: { base: "column", md: "row" }, gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -273,9 +274,9 @@
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Column([
-  Box([Text("A subtle inset surface — lighter than a Card.")], { padding: "m", background: "muted", border: "subtle" }),
-  Box([Text("Tinted callout-style box.")], { padding: "m", background: "primary" })
-], { gap: "m" }))</code></pre>
+  Box([Text("A subtle inset surface — lighter than a Card.")], { padding: "md", background: "muted", border: "subtle" }),
+  Box([Text("Tinted callout-style box.")], { padding: "md", background: "primary" })
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -293,7 +294,7 @@
     Button("Get started", { variant: "primary" })
   ], { background: "brand", eyebrow: "New", title: "Ship UIs in one language", subtitle: "A band that spans full width and centers its content." }),
   Section([
-    Grid([Card([Text("Fast")]), Card([Text("Reactive")]), Card([Text("Themeable")])], { columns: 3, gap: "m" })
+    Grid([Card([Text("Fast")]), Card([Text("Reactive")]), Card([Text("Themeable")])], { columns: 3, gap: "md" })
   ], { background: "soft", title: "Features" })
 ]))</code></pre>
         <div class="lay-demo-preview"></div>
@@ -383,7 +384,7 @@
   Card([Text("Hover me")], { sx: { p: "l", states: { hover: { scale: 1.04, shadow: "lg" } } } }),
   Card([Text("Gradient")], { sx: { p: "l", bg: "gradient.cool", color: "#fff" } }),
   Card([Text("Half on md+")], { sx: { p: "l", width: { base: "100%", md: "60%" } } })
-], { columns: 3, gap: "m" }))</code></pre>
+], { columns: 3, gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -411,12 +412,12 @@
     StatCard("MRR", { value: "$48.2k", trend: "up", delta: "+12%" }),
     StatCard("Deals", { value: "318", trend: "up", delta: "+24" }),
     StatCard("Win rate", { value: "31%", trend: "down", delta: "-2%" })
-  ], { gap: "m" }),
+  ], { gap: "md" }),
   Grid([
     GridItem(Card([CardHeader("Pipeline"), Text("Main chart goes here.")]), { span: "2/3" }),
     GridItem(Card([CardHeader("Tasks"), Text("Side panel.")]), { span: "1/3" })
-  ], { gap: "l" })
-], { gap: "l" }))</code></pre>
+  ], { gap: "lg" })
+], { gap: "lg" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -435,9 +436,9 @@
     GridItem(Column([
       Card([CardHeader("Welcome back")]),
       Card([CardHeader("Recent activity")])
-    ], { gap: "m" }), { span: "3/4" })
-  ], { gap: "l" })
-], { gap: "m" }))</code></pre>
+    ], { gap: "md" }), { span: "3/4" })
+  ], { gap: "lg" })
+], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
@@ -450,7 +451,7 @@
     Input("email", { placeholder: "you@example.com" }),
     Input("password", { placeholder: "Password", type: "password" }),
     Button("Continue", { variant: "primary" })
-  ], { gap: "m" })], { padding: "l", background: "surface", border: "default", maxWidth: "360px" })
+  ], { gap: "md" })], { padding: "lg", background: "surface", border: "default", maxWidth: "360px" })
 ], { minHeight: "70vh" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
@@ -459,9 +460,9 @@
       <table class="signature-table demo-cheats">
         <thead><tr><th>Goal</th><th>Snippet</th></tr></thead>
         <tbody>
-          <tr><td>Page body</td><td><code>Column([&hellip;], { gap: "l" })</code></td></tr>
+          <tr><td>Page body</td><td><code>Column([&hellip;], { gap: "lg" })</code></td></tr>
           <tr><td>Toolbar (title left, actions right)</td><td><code>Row([title, Spacer(), &hellip;buttons])</code></td></tr>
-          <tr><td>Even button row</td><td><code>Row([&hellip;], { gap: "s" })</code></td></tr>
+          <tr><td>Even button row</td><td><code>Row([&hellip;], { gap: "sm" })</code></td></tr>
           <tr><td>Equal-width cards in a row</td><td><code>Grid([&hellip;], { columns: 3 })</code></td></tr>
           <tr><td>Reflowing KPI / card wall</td><td><code>Grid([&hellip;], { minChildWidth: "200px" })</code></td></tr>
           <tr><td>Sidebar + main</td><td><code>Grid([GridItem(s, { span: "1/4" }), GridItem(m, { span: "3/4" })])</code></td></tr>
@@ -469,7 +470,7 @@
           <tr><td>Center on both axes</td><td><code>Center([&hellip;], { minHeight: "60vh" })</code></td></tr>
           <tr><td>Centered reading column</td><td><code>Container([&hellip;], { size: "md" })</code></td></tr>
           <tr><td>Stack on mobile, row on desktop</td><td><code>Stack([&hellip;], { direction: { base: "column", md: "row" } })</code></td></tr>
-          <tr><td>Padding / inset surface</td><td><code>Box([&hellip;], { padding: "m", background: "muted" })</code></td></tr>
+          <tr><td>Padding / inset surface</td><td><code>Box([&hellip;], { padding: "md", background: "muted" })</code></td></tr>
           <tr><td>Full-width page band</td><td><code>Section([&hellip;], { background: "soft", title: "&hellip;" })</code></td></tr>
           <tr><td>Two panes (content + aside)</td><td><code>Split(left, right, { ratio: "2/3", divider: true })</code></td></tr>
           <tr><td>Editorial bento grid</td><td><code>Bento([BentoCell(c, { span: 2 }), &hellip;])</code></td></tr>

@@ -43,7 +43,7 @@ import { loadFonts } from "../theme/fonts.js";
 import { builtInThemes } from "../theme/index.js";
 import { matchRoute, matchRoutePrefix, type Router, type NavigationGuard } from "./router.js";
 import { findComponent } from "../library/registry.js";
-import { findPositionalIndex } from "../library/types.js";
+import { findPositionalIndex, chooseNamedBagIndex, callArgShapes } from "../library/types.js";
 import { UNIVERSAL_PROP_NAMES } from "../library/sx.js";
 import type { ComponentLibrary } from "../library/types.js";
 import { storage as storageGlobal } from "./storage.js";
@@ -517,6 +517,18 @@ export function leaveUserComponent(ctx: EvaluationContext): void {
   if (budget.componentDepth > 0) budget.componentDepth -= 1;
 }
 
+/**
+ * True when `name` refers to a user component declaration whose body is
+ * currently being evaluated AND a library component of the same name exists.
+ * In that window the name resolves to the built-in (wrapper semantics) —
+ * see `EvaluationContext.activeComponentDecls`.
+ */
+function isSelfShadowingLibraryName(name: string, ctx: EvaluationContext): boolean {
+  return ctx.activeComponentDecls.length > 0
+    && ctx.activeComponentDecls.includes(name)
+    && Boolean(ctx.library && findComponent(ctx.library, name));
+}
+
 export interface ArgMeta {
   /**
    * Name of the `$variable` (or dotted path inside one) carried by this
@@ -724,6 +736,14 @@ export interface EvaluationContext {
   library?: ComponentLibrary;
   /** Component declarations (`function Foo() { return ... }` — PascalCase). */
   componentDecls: Map<string, ComponentDeclaration>;
+  /**
+   * Names of user component declarations whose bodies are currently being
+   * evaluated (innermost last). Inside its own body, a declaration that
+   * shadows a library component resolves back to the BUILT-IN, so the
+   * wrapper pattern (`function Button(...) { return Button(...) }`) renders
+   * the library Button instead of recursing to the depth limit.
+   */
+  activeComponentDecls: string[];
   /** Effect declarations (`effect(() => { ... }, [deps])`), keyed by auto-generated name. */
   effectDecls: Map<string, EffectDeclaration>;
   /**
@@ -903,6 +923,7 @@ export function createContext(
     router: options.router,
     library: options.library,
     componentDecls: new Map(),
+    activeComponentDecls: [],
     effectDecls: new Map(),
     componentEffectStack: [],
     actionDecls: new Map(),
@@ -1644,7 +1665,12 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // never need to call `notify()` per call (the previous async
       // wrapper *did* notify per call, which produced an infinite render
       // loop when an action was passed as a `.map(...)` callback).
-      const action = ctx.actionDecls.get(expr.name);
+      // Inside the body of a component declaration that shadows a library
+      // component, bare references to that name skip the user declaration
+      // (and its action mirror) and resolve to the built-in below — same
+      // wrapper semantics as the call path.
+      const refShadowsBuiltin = isSelfShadowingLibraryName(expr.name, ctx);
+      const action = refShadowsBuiltin ? undefined : ctx.actionDecls.get(expr.name);
       if (action) return makeSyncActionCallable(action, ctx);
       // PascalCase function declarations (components) referenced by name
       // resolve to a synchronous callable that builds a `UserComponent`
@@ -1653,7 +1679,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // invoke the returned function with the standard `(item, index)`
       // signature, and the callable forwards them as positional args to
       // the component declaration.
-      const userComponent = ctx.componentDecls.get(expr.name);
+      const userComponent = refShadowsBuiltin ? undefined : ctx.componentDecls.get(expr.name);
       if (userComponent) return makeUserComponentCallable(userComponent, ctx);
       // Built-in namespace globals (`storage`, `console`). Returned as
       // ordinary objects so member/method-call expressions resolve
@@ -3480,9 +3506,13 @@ function evaluateComponentCall(
   //
   // Aktion 0.5 component declarations win over the legacy macro form and the
   // built-in library. This lets author code override built-in components
-  // by name (e.g. wrapping `Button` with telemetry).
+  // by name (e.g. wrapping `Button` with telemetry). EXCEPTION: inside the
+  // declaration's own body the name resolves back to the BUILT-IN (when one
+  // exists), so the wrapper pattern terminates instead of recursing — the
+  // outermost call is the custom component, the innermost the library one.
   const componentDecl = ctx.componentDecls.get(callee);
-  if (componentDecl) {
+  const selfShadowsBuiltin = componentDecl !== undefined && isSelfShadowingLibraryName(callee, ctx);
+  if (componentDecl && !selfShadowsBuiltin) {
     return invokeComponentDecl(componentDecl, args, ctx, loc);
   }
   // Aktion 0.5 action declarations.
@@ -3493,7 +3523,7 @@ function evaluateComponentCall(
   //     can write `$result = greet("Ada")` and read `$result` immediately.
   // Synchronous evaluation matches every other JS-subset call shape and
   // makes actions composable with array helpers (`.map(save)`, etc.).
-  const actionDecl = ctx.actionDecls.get(callee);
+  const actionDecl = selfShadowsBuiltin ? undefined : ctx.actionDecls.get(callee);
   if (actionDecl) {
     const evaluated = args.map((a) => evaluate(a, ctx));
     return runActionDeclSync(actionDecl, evaluated, ctx);
@@ -3664,7 +3694,7 @@ function evaluateComponentCall(
 }
 
 /**
- * Aktion 0.5 §19.1 — build the slot-aligned `args` and
+ * §19 flexible calls — build the slot-aligned `args` and
  * `argMeta` arrays for a library-component call. The function handles:
  *
  *   - Plain positional arguments — routed to the spec's single
@@ -3678,10 +3708,10 @@ function evaluateComponentCall(
  *     chain rooted at one (`{ value: $form.email }`), the slot's
  *     `argMeta.stateRef` carries the dotted path so renderers can wire
  *     a deep two-way binding.
- *   - Extra positional args (multi-positional, §19.1 violation) — fall
- *     through to the next unnamed slot in declaration order so the
- *     graceful runtime path keeps rendering while the schema-validator
- *     warning surfaces the migration hint.
+ *   - Extra positional args (§19 all-positional / mixed calls) — fall
+ *     through to the next unfilled slot in declaration order, so
+ *     `Button("Save", "primary")` binds `children` then `variant` and
+ *     mixed calls fill whatever the named object left open.
  *
  * For user-declared components (no library spec) we fall back to the
  * simple "evaluate each argument as-is" path so per-instance state lookup
@@ -3719,20 +3749,15 @@ function resolveLibraryCallArgs(
   }));
   let universal: Record<string, unknown> | undefined;
 
-  // Split the named-props ObjectExpr from positional args. The named-props
-  // block is the *last* ObjectExpr in `propArgs` — so `Foo("hi", {x: 1})`
-  // (trailing) and `Foo({x: 1}, [children])` (leading) both work. This is
-  // the most JS-natural shape and matches how React-style libraries pass
-  // props alongside positional children.
+  // Split the named-props ObjectExpr from positional args. The shared
+  // `chooseNamedBagIndex` (§19 flexible calls) picks the object that plays
+  // the named-props role — trailing (`Foo("hi", {x: 1})`), leading
+  // (`Foo({x: 1}, [children])`), or a single all-named object
+  // (`Foo({label: "hi", x: 1})`) — and leaves payload objects (an object
+  // argument destined for an object-typed slot) positional.
   type PositionalSource = { expr: Expression; value: unknown };
   const positionals: PositionalSource[] = [];
-  let trailingObjIdx = -1;
-  for (let i = propArgs.length - 1; i >= 0; i -= 1) {
-    if (propArgs[i]!.kind === "Object") {
-      trailingObjIdx = i;
-      break;
-    }
-  }
+  const trailingObjIdx = chooseNamedBagIndex(callArgShapes(propArgs), spec);
 
   for (let i = 0; i < propArgs.length; i += 1) {
     if (i === trailingObjIdx) continue;
@@ -3766,14 +3791,13 @@ function resolveLibraryCallArgs(
     }
   }
 
-  // Aktion 0.5 §19.1 — exactly one positional argument max
-  // *at the language layer* (schema validator surfaces an error for any
-  // additional positional). The runtime keeps a graceful render path so
-  // direct-evaluator callers without the validator hooked up still see a
-  // populated node: the first positional lands in the spec's positional
-  // slot; any extras fall through to the next unnamed slots in spec
-  // order. This is the same "best-effort render even on schema error"
-  // contract the rest of the runtime follows.
+  // §19 flexible calls — positional arguments are first-class: the first
+  // positional lands in the spec's positional slot; every further
+  // positional fills the next unfilled slot in declaration order (so
+  // all-positional calls bind props in their documented order). Named
+  // entries above always win their slot; positionals only fill what is
+  // left. The schema validator checks arity and literal enum values along
+  // the same mapping.
   if (positionals.length > 0 && positionalIndex >= 0 && !slots[positionalIndex]!.filled) {
     const { expr, value } = positionals.shift()!;
     slots[positionalIndex]!.value = value;
@@ -4098,10 +4122,14 @@ export function evaluateUserComponent(
   const prevHookScope = ctx.hookScope;
   const hookScope: HookScope = { instanceKey, cursor: 0 };
   ctx.hookScope = hookScope;
+  // While this body evaluates, the declaration's own name resolves to the
+  // library component it shadows (if any) — wrapper semantics.
+  ctx.activeComponentDecls.push(decl.name);
   try {
     const value = evaluateBlock(decl.body, ctx, { stateAsDeclaration: true });
     return { value, effects: effectsFrame, hooks: hookScope.cursor };
   } finally {
+    ctx.activeComponentDecls.pop();
     ctx.hookScope = prevHookScope;
     ctx.componentEffectStack.pop();
     ctx.stateAliases.pop();
@@ -4130,15 +4158,26 @@ function runActionDeclSync(
   args: unknown[],
   ctx: EvaluationContext,
 ): unknown {
-  // Route genuine errors (not control-flow signals) through the program's
-  // `$onError(fn)` hook before they propagate to the default logging.
-  if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx);
+  // A PascalCase component declaration mirrored into the action map keeps
+  // the same wrapper semantics when its body runs as an action: a self-call
+  // inside the body resolves to the shadowed built-in, not back to itself.
+  const shadowsBuiltin = Boolean(
+    decl.name && ctx.componentDecls.has(decl.name) && ctx.library && findComponent(ctx.library, decl.name),
+  );
+  if (shadowsBuiltin) ctx.activeComponentDecls.push(decl.name!);
   try {
-    return runDeclBodySync(decl.params, decl.body, args, ctx);
-  } catch (err) {
-    if (err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal) throw err;
-    try { ctx.errorHook({ error: err, source: decl.name ?? "action" }); } catch { /* hook must never crash the runner */ }
-    throw err;
+    // Route genuine errors (not control-flow signals) through the program's
+    // `$onError(fn)` hook before they propagate to the default logging.
+    if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx);
+    try {
+      return runDeclBodySync(decl.params, decl.body, args, ctx);
+    } catch (err) {
+      if (err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal) throw err;
+      try { ctx.errorHook({ error: err, source: decl.name ?? "action" }); } catch { /* hook must never crash the runner */ }
+      throw err;
+    }
+  } finally {
+    if (shadowsBuiltin) ctx.activeComponentDecls.pop();
   }
 }
 
@@ -4973,11 +5012,11 @@ function buildRouteState(router: NonNullable<EvaluationContext["router"]>): Reco
 }
 
 /**
- * Aktion 0.5 §19.1 — see `resolveLibraryCallArgs`. The
- * legacy "trailing object literal expands to named args" hack was
- * removed in 0.5 — object literals are treated as opaque values like
- * any other argument, so `Stack({ gap: "md" })` no longer aliases
- * `Stack(gap: "md")`.
+ * §19 flexible calls — see `resolveLibraryCallArgs` /
+ * `chooseNamedBagIndex`. A single object argument whose keys match the
+ * spec's prop names IS the named-props object (`Stack({ gap: "md" })` ≡
+ * `Stack([], { gap: "md" })`); an object whose keys match nothing binds
+ * positionally when the target slot accepts an object payload.
  */
 
 function computedMemberAccess(target: unknown, key: unknown): unknown {
@@ -5094,6 +5133,13 @@ const STRUCTURED_THEME_GROUPS = new Set([
 ]);
 const THEME_METADATA_KEYS = new Set(["name", "direction"]);
 
+/** Canonical spacing keys → the flat-token spelling used by ThemeTokens. */
+const SPACING_THEME_KEY_ALIASES: Record<string, string> = {
+  sm: "s",
+  md: "m",
+  lg: "l",
+};
+
 /** Group name → flat-token prefix (e.g. `shadows.md` → `shadowMd`). */
 const THEME_GROUP_PREFIX: Record<string, string> = {
   colors: "color",
@@ -5141,7 +5187,13 @@ function collectThemeTokens(value: unknown): Record<string, string> {
       const isGradient = key === "gradients";
       for (const [innerKey, innerValue] of Object.entries(raw as Record<string, unknown>)) {
         if (innerValue == null) continue;
-        const flatKey = prefix + capitalise(innerKey);
+        // The spacing scale advertises canonical t-shirt names (sm/md/lg) but
+        // stores them in the historical short tokens (spacingS/M/L), so both
+        // spellings override the same CSS variable.
+        const normalisedKey = key === "spacing"
+          ? (SPACING_THEME_KEY_ALIASES[innerKey] ?? innerKey)
+          : innerKey;
+        const flatKey = prefix + capitalise(normalisedKey);
         const str = isGradient ? gradientToCss(innerValue) : stringifyTokenValue(innerValue);
         if (str) out[flatKey] = str;
       }

@@ -229,21 +229,21 @@ todoRow = todo =&gt; Stack([
   Checkbox("done-" + todo.id, { value: todo.isCompleted, onChange: () =&gt; toggleTodo(todo) }),
   Text(todo.title, { tone: todo.isCompleted ? "muted" : "default" }),
   Button("Delete", { onClick: () =&gt; deleteTodo(todo), variant: "ghost", tone: "danger", size: "sm" })
-], { direction: "row", gap: "s", align: "center" })
+], { direction: "row", gap: "sm", align: "center" })
 
 $app(Stack([
   PageHeader("Todos", { actions: [Button("Refresh", { onClick: $todos.refetch, variant: "ghost" })] }),
   Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft }),
     Button("Add", { onClick: addTodo, variant: "primary" })
-  ], { direction: "row", gap: "s" }),
+  ], { direction: "row", gap: "sm" }),
   Async($todos, {
     loading: LoadingState("Loading todos…"),
     error:   ErrorState("Couldn't fetch todos"),
     empty:   EmptyState("No todos yet"),
-    data:    Stack($todos.data.map(todoRow), { direction: "column", gap: "s" })
+    data:    Stack($todos.data.map(todoRow), { direction: "column", gap: "sm" })
   })
-], { direction: "column", gap: "l" }))</code></pre>
+], { direction: "column", gap: "lg" }))</code></pre>
       <p>
         See this exact pattern running live in the
         <a href="live-examples.html">Todos CRUD demo</a>.

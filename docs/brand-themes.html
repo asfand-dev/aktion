@@ -312,7 +312,7 @@ teamCard = Card([
     PersonChip("Linus Wong",   { role: "Senior developer", size: "md", status: "online" }),
     PersonChip("Mira Sanchez", { role: "Product designer", size: "md", status: "away" }),
     PersonChip("Sam Reyes",    { role: "QA engineer",      size: "md", status: "offline" })
-  ], { direction: "column", gap: "s" })
+  ], { direction: "column", gap: "sm" })
 ])
 
 activityCard = Card([
@@ -348,9 +348,9 @@ quickForm = Card([
   ])
 ])
 
-bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], { columns: 2, gap: "l" })
+bottomGrid = Grid([teamCard, activityCard, planCard, quickForm], { columns: 2, gap: "lg" })
 
-$app(Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "l" }))</code></pre>
+$app(Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "lg" }))</code></pre>
     </article>
 
     <article class="example-card">

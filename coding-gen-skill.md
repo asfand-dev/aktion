@@ -84,12 +84,18 @@ Internalize these rules and you will write correct, polished programs:
    `DescriptionList`, `PricingTable`, `StatusDot`, and the **app-shell**
    composites (`AppShell`, `Sidebar`, `SplitView`). They commit a full
    visual section in one line.
-8. **One positional argument max per call.** Every component accepts at
-   most one positional argument — the canonical primary slot — and every
-   other prop goes in an options object:
+8. **Pick ONE argument form per call.** Canonical (preferred): one
+   positional — the prop tagged `(positional)` — plus a trailing options
+   object. Also valid: all-positional (arguments bind to the signature's
+   props in listed order) and all-named (a single `{ }` object naming
+   every prop). Never split one object between roles.
    - ✅ `Button("Save", { variant: "primary", loading: $isSaving })`
    - ✅ `StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })`
-   - ❌ `Button("Save", "primary", true)`
+   - ✅ `StatCard("Revenue", "$48k", "up")` — all-positional, signature order
+   - ✅ `Button({ label: "Save", variant: "primary" })` — all-named
+   - ⚠️ `Button("Save", "primary")` binds `"primary"` to the SECOND slot
+     (`onClick`), not `variant` — use the trailing object for
+     non-adjacent props.
 9. **`items.map(item => Row(item))` is the value-producing iteration form.**
    `for`/`if`/`switch` are JavaScript **statements** — they don't return
    a value, so they cannot appear on the RHS of `name = …`. Use them
@@ -161,7 +167,7 @@ Internalize these rules and you will write correct, polished programs:
     the body holds an independent atom per call site. Lambdas
     `(args) => Card(…)` are an alternative for one-off helpers.
 23. **Use responsive prop maps for full pages.**
-    `Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "l" })` and
+    `Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "lg" })` and
     `Stack(children, { direction: {sm: "column", md: "row"} })` work
     out of the box. Plain numbers / strings still work for simple sections.
 24. **Self-decorating defaults are real — drop the obvious props.** Several
@@ -362,9 +368,11 @@ Before opening a `Stack`/`Card`, scan this checklist:
    a few related `FormControl`s — never a flat list of fields on the page.
 5. **Tabs/Drawers for secondary content.** Hide low-priority sections
    behind `Tabs` or a side `Drawer` rather than scrolling forever.
-6. **Padding, gap, and rhythm.** Use `gap: "l"` for top-level section
-   spacing, `gap: "m"` inside Cards, `gap: "s"` between tightly related
-   controls. Wrap each major chunk in a `Card` for visual grouping.
+6. **Padding, gap, and rhythm.** Use `gap: "lg"` for top-level section
+   spacing, `gap: "md"` inside Cards, `gap: "sm"` between tightly related
+   controls. Wrap each major chunk in a `Card` for visual grouping. The
+   spacing scale everywhere (gap/padding/margin/Spacer) is
+   `none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl` — `none` is exactly 0.
 
 ### Density targets (the most common failure)
 
@@ -1001,14 +1009,20 @@ runtime enforces these:
 
 1. **PascalCase name.** The leading capital letter is what marks the
    function as a component. `function Counter(...)` is a component;
-   `function counter(...)` is an action.
-2. **Single positional argument.** Take at most one positional
-   parameter — typically the title, primary value, or children array.
-   Every other prop goes in a destructured trailing object.
-3. **Trailing options object.** Named props always sit in a single
+   `function counter(...)` is an action. Never reuse a BUILT-IN
+   component's name (the validator flags it) — unless the body calls
+   that same name, the supported wrapper pattern: inside its own body
+   the name refers to the built-in, so
+   `function Badge(l) { return Badge(l, { tone: "success" }) }` extends
+   the library Badge instead of recursing.
+2. **Lead with the primary parameter.** Put the most important value —
+   the title, primary value, or children array — first, so callers can
+   use the canonical one-positional form. Calls may also pass arguments
+   all-positionally (in parameter order) or as a single named object.
+3. **Trailing options object.** Named props conventionally sit in a
    trailing `{ }` object literal — both at the call site
    (`Button("Save", { variant: "primary" })`) and in the parameter
-   list (`function Card(title, { children = [], padding = "m" } = {})`).
+   list (`function Card(title, { children = [], padding = "md" } = {})`).
    Use destructuring with `=` defaults to assign fallbacks.
 4. **Explicit `return`.** The last statement must be
    `return <expression>` — never let a component fall through
@@ -1960,7 +1974,7 @@ async function loadUser(id) {
 
 ### Responsive prop maps
 
-`Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "l" })` — 1 column
+`Grid(items, { columns: {sm: 1, md: 2, lg: 4}, gap: "lg" })` — 1 column
 on mobile, 2 on tablet, 4 on desktop. Breakpoints:
 
 - `base` — less than 640px (mobile).
@@ -1993,7 +2007,7 @@ cls = $util.style.cx("card", { "card--active": $selected })
 bg  = $util.style.gradient(["#6366f1", "#ec4899"], 135)
 c   = $util.style.alpha("primary", 0.12)        // → color-mix(...)
 sz  = $util.style.clamp("16px", "2vw", "24px")
-tok = $util.style.token("spacing.l")             // → var(--rui-spacing-l)
+tok = $util.style.token("spacing.lg")            // → var(--rui-spacing-lg)
 str = $util.style.toStyle({ padding: "8px" })    // → "padding:8px"
 ```
 
@@ -2086,7 +2100,7 @@ whenever a bespoke look is needed.
 
 ```javascript
 Card([Text("Lift on hover")], {
-  sx: { p: "l", radius: "lg", bg: "surface", shadow: "md",
+  sx: { p: "lg", radius: "lg", bg: "surface", shadow: "md",
         states: { hover: { scale: 1.03, shadow: "lg" } } },
   animate: "fade-up"
 })
@@ -2096,7 +2110,7 @@ Card([Text("Lift on hover")], {
 
 | Group | Keys | Values |
 |---|---|---|
-| Padding | `p px py pt pr pb pl ps pe` | Spacing token `xs\|s\|m\|l\|xl\|2xl\|3xl\|none\|auto`, safe-area insets `safe\|safe-top\|safe-right\|safe-bottom\|safe-left`, or a CSS length. `px` is **logical** (`padding-inline`) and `ps`/`pe` are inline start/end — RTL apps mirror automatically. |
+| Padding | `p px py pt pr pb pl ps pe` | Spacing token `none\|3xs\|2xs\|xs\|sm\|md\|lg\|xl\|2xl\|3xl\|auto` (`none` = 0), safe-area insets `safe\|safe-top\|safe-right\|safe-bottom\|safe-left`, or a CSS length. `px` is **logical** (`padding-inline`) and `ps`/`pe` are inline start/end — RTL apps mirror automatically. |
 | Margin | `m mx my mt mr mb ml ms me` | Same scale; `mx` logical (`margin-inline`), `ms`/`me` start/end. |
 | Gap | `gap` | Spacing token or length. |
 | Sizing | `w h minW maxW minH maxH` | `full\|half\|screen\|dvh\|min\|max\|fit\|auto` or a length. |
@@ -2114,7 +2128,7 @@ Card([Text("Lift on hover")], {
 — compiled to real `@media (min-width)` rules.
 
 ```javascript
-Box([…], { sx: { p: { base: "m", md: "xl" }, direction: { base: "column", lg: "row" } } })
+Box([…], { sx: { p: { base: "md", md: "xl" }, direction: { base: "column", lg: "row" } } })
 ```
 
 ### `animate` — motion presets
@@ -2712,7 +2726,7 @@ function SettingsArea() {
     "/settings/notifications": NotificationsPane(),
     default:                   ProfilePane()
   })
-  return Stack([SettingsSidebar(), inner], { direction: "row", gap: "l" })
+  return Stack([SettingsSidebar(), inner], { direction: "row", gap: "lg" })
 }
 
 pages = $router({
@@ -2730,7 +2744,7 @@ shell mounted while only the inner page swaps. The matched child is bound to
 
 ```javascript
 function DashboardShell(outlet) {
-  return Row([Sidebar(), Column([outlet])], { gap: "l" })
+  return Row([Sidebar(), Column([outlet])], { gap: "lg" })
 }
 
 pages = $router({
@@ -2959,7 +2973,7 @@ and keys are optional — pass only what you want to override.
 | `colors`       | `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info` |
 | `radius`       | `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`                                         |
 | `font`         | `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading` |
-| `spacing`      | `xs`, `s`, `m`, `l`, `xl`, `2xl`, `3xl` — the scale `sx` spacing tokens resolve to        |
+| `spacing`      | `3xs`, `2xs`, `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl` (legacy `s`/`m`/`l` accepted) — the scale spacing tokens resolve to |
 | `shadows`      | `sm`, `md`, `lg`                                                                          |
 | `gradients`    | Named stops arrays — `gradients: { brand: ["#6366f1", "#ec4899"] }` (or `{ stops, angle }`) → referenced as `"gradient.brand"` from `sx.bg`, `GradientText`, `fill` props |
 | `zIndex`       | Layer tokens — `zIndex: { modal: 2000, toast: 2100, … }` (keys: `base raised dropdown sticky banner overlay modal popover toast tooltip`) → consumed by `sx.zIndex` tokens |
@@ -3035,7 +3049,7 @@ function remove(id) {
 row = (t) => Card([Stack([
   Checkbox("done-" + t.id, { label: t.text, checked: t.done, onChange: () => toggle(t.id) }),
   Button("Delete", { onClick: () => remove(t.id), variant: "ghost", size: "sm" })
-], { direction: "row", gap: "m", justify: "between", align: "center" })])
+], { direction: "row", gap: "md", justify: "between", align: "center" })])
 
 list = $todos.map(t => row(t))
 
@@ -3044,11 +3058,11 @@ $app(Stack([
   Card([Stack([
     Input("draft", { placeholder: "What needs doing?", value: $draft, onEnter: add }),
     Button("Add", { onClick: add, variant: "primary" })
-  ], { direction: "row", gap: "s" })]),
+  ], { direction: "row", gap: "sm" })]),
   $util.count($todos) == 0
     ? EmptyState("No todos yet", { description: "Add your first task above.", icon: "list-check" })
-    : Stack(list, { gap: "s" })
-], { gap: "l" }))
+    : Stack(list, { gap: "sm" })
+], { gap: "lg" }))
 ```
 
 ### Pattern B — Counter with per-instance state
@@ -3070,7 +3084,7 @@ $app(Grid([
   Counter("A"),
   Counter("B", { initial: 10 }),
   Counter("C", { initial: 100 })
-], { columns: { sm: 1, md: 3 }, gap: "l" }))
+], { columns: { sm: 1, md: 3 }, gap: "lg" }))
 ```
 
 ### Pattern C — Dashboard with KPIs + chart + table
@@ -3147,7 +3161,7 @@ activity = Card([
 
 follow = FollowUpBlock(["Compare to last quarter", "Show only refunds", "Which products underperformed?"])
 
-$app(Stack([header, filterBar, kpis, chart, ordersTable, activity, follow], { gap: "l" }))
+$app(Stack([header, filterBar, kpis, chart, ordersTable, activity, follow], { gap: "lg" }))
 ```
 
 ### Pattern D — Multi-step wizard
@@ -3206,7 +3220,7 @@ $app(Stack([
   Steps(stepLabels, { current: $step }),
   current,
   navBtns
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern E — Settings page (sectioned)
@@ -3258,7 +3272,7 @@ $app(Stack([
   prefs,
   danger,
   Buttons([Button("Save changes", { onClick: save, variant: "primary" })])
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern F — Chat / messaging surface
@@ -3285,20 +3299,20 @@ inbox = InboxPanel([
 ], { title: "Conversations" })
 
 thread = Card([
-  Stack($thread.map(m => ChatBubble(m.from == "me" ? "You" : "Agent", { body: m.body, time: m.time, from: m.from })), { gap: "s" })
+  Stack($thread.map(m => ChatBubble(m.from == "me" ? "You" : "Agent", { body: m.body, time: m.time, from: m.from })), { gap: "sm" })
 ])
 
 composer = Card([
   Stack([
     TextArea("draft", { placeholder: "Write a message…", value: $draft }),
     Buttons([Button("Send", { onClick: send, variant: "primary", icon: "paper-plane" })])
-  ], { gap: "s" })
+  ], { gap: "sm" })
 ])
 
 $app(Stack([
   PageHeader("Support inbox"),
-  SplitView(inbox, Stack([thread, composer], { gap: "m" }), { primaryWidth: "320px" })
-], { gap: "l" }))
+  SplitView(inbox, Stack([thread, composer], { gap: "md" }), { primaryWidth: "320px" })
+], { gap: "lg" }))
 ```
 
 ### Pattern G — Routed multi-page app
@@ -3312,7 +3326,7 @@ function HomePage() {
       StatCard("Pending", { value: "3",  trend: "up", delta: "+1" }),
       StatCard("Done",    { value: "27", trend: "up", delta: "+4" })
     ])
-  ], { gap: "l" })
+  ], { gap: "lg" })
 }
 
 function OrdersPage() {
@@ -3323,7 +3337,7 @@ function OrdersPage() {
       Col("Customer", ["Alex", "Sam", "Wren"]),
       Col("Total", ["$120", "$80", "$210"], { format: "currency", align: "right" })
     ])
-  ], { gap: "l" })
+  ], { gap: "lg" })
 }
 
 function OrderDetail({ id } = {}) {
@@ -3334,7 +3348,7 @@ function OrderDetail({ id } = {}) {
       DescriptionItem("Customer", "Alex Diaz"),
       DescriptionItem("Total",    "$120.00")
     ])
-  ], { gap: "l" })
+  ], { gap: "lg" })
 }
 
 function NotFound() {
@@ -3398,7 +3412,7 @@ list = Stack($services.map(s =>
     StatusDot(s.name, { tone: statusTone(s.status), pulse: s.status != "operational" }),
     Badge(`${s.uptime}% uptime`, { variant: statusTone(s.status), icon: statusIcon(s.status) })
   ], { direction: "row", justify: "between" })])
-), { gap: "s" })
+), { gap: "sm" })
 
 timeline = Card([
   SectionHeader("Recent incidents"),
@@ -3417,7 +3431,7 @@ $app(Stack([
   healthBar,
   list,
   timeline
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern I — Pricing page
@@ -3458,7 +3472,7 @@ faq = Accordion([
 
 closing = Banner("Need a custom plan?", { description: "We'll help you build a quote.", tone: "primary", icon: "envelope" })
 
-$app(Stack([hero, picker, table, faq, closing], { gap: "l" }))
+$app(Stack([hero, picker, table, faq, closing], { gap: "lg" }))
 ```
 
 ### Pattern J — Checkout flow
@@ -3489,7 +3503,7 @@ orderSummary = Card([
       Text(`${it.qty} × ${it.title}`),
       Text($util.format(it.qty * it.price, "currency"))
     ], { direction: "row", justify: "between" })
-  ), { gap: "s" }),
+  ), { gap: "sm" }),
   Separator(),
   Stack([Text("Total", { variant: "large-heavy" }), Text($util.format($total, "currency"), { variant: "large-heavy" })], { direction: "row", justify: "between" })
 ])
@@ -3520,8 +3534,8 @@ content = $step == "details" ? detailsForm : $step == "payment" ? paymentForm : 
 $app(Stack([
   PageHeader("Checkout"),
   steps,
-  Grid([content, orderSummary], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" }))
+  Grid([content, orderSummary], { columns: { sm: 1, md: 2 }, gap: "lg" })
+], { gap: "lg" }))
 ```
 
 ### Pattern K — File manager
@@ -3560,7 +3574,7 @@ rows = $nodes.map(n =>
     Stack([
       Icon(n.type == "folder" ? "folder" : "file", { size: "md" }),
       Text(n.name, { variant: "large-heavy" })
-    ], { direction: "row", gap: "m", align: "center" }),
+    ], { direction: "row", gap: "md", align: "center" }),
     n.type == "file" ? Text(`${n.size} · ${n.modified}`, { tone: "muted" }) : null,
     Button("Open", { onClick: () => open(n), variant: "ghost" })
   ], { direction: "row", justify: "between", align: "center" })])
@@ -3580,8 +3594,8 @@ $app(Stack([
   PageHeader("Files", { subtitle: "Browse and manage your assets" }),
   breadcrumb,
   toolbar,
-  SplitView(Stack(rows, { gap: "s" }), preview, { primaryWidth: "60%" })
-], { gap: "l" }))
+  SplitView(Stack(rows, { gap: "sm" }), preview, { primaryWidth: "60%" })
+], { gap: "lg" }))
 ```
 
 ### Pattern L — Calendar / scheduler
@@ -3606,14 +3620,14 @@ list = Card([
   $util.count(dayEvents) == 0
     ? EmptyState("Nothing scheduled", { description: "Pick a different day or add an event.", icon: "calendar-plus" })
     : Stack(dayEvents.map(e =>
-        Stack([Badge(e.time, { variant: e.tone }), Text(e.title)], { direction: "row", gap: "m", align: "center" })
-      ), { gap: "s" })
+        Stack([Badge(e.time, { variant: e.tone }), Text(e.title)], { direction: "row", gap: "md", align: "center" })
+      ), { gap: "sm" })
 ])
 
 $app(Stack([
   PageHeader("Calendar"),
-  Grid([calendar, list], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" }))
+  Grid([calendar, list], { columns: { sm: 1, md: 2 }, gap: "lg" })
+], { gap: "lg" }))
 ```
 
 ### Pattern M — Docs portal
@@ -3649,12 +3663,12 @@ function getContent() {
 inner = Grid([
   Card([Tree(docTree)]),
   Card([getContent()])
-], { columns: { sm: 1, md: 2 }, gap: "l" })
+], { columns: { sm: 1, md: 2 }, gap: "lg" })
 
 $app(AppShell(sidebar, Stack([
   PageHeader("Docs"),
   inner
-], { gap: "l" })))
+], { gap: "lg" })))
 ```
 
 ### Pattern N — Onboarding checklist
@@ -3671,7 +3685,7 @@ $app(Stack([
   PageHeader("Welcome to Acme", { subtitle: "Let's get you set up — 4 quick steps." }),
   OnboardingChecklist($tasks, { title: "Setup", description: "Complete these to unlock your full workspace." }),
   Banner("Need help?", { description: "Book a 30-minute call with our team.", action: Button("Schedule", { variant: "primary" }), tone: "info" })
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern O — Search-driven directory / CRM
@@ -3706,7 +3720,7 @@ toolbar = Toolbar({
 
 cards = Grid(filtered.map(p =>
   ProfileCard(p.name, { role: p.role, team: p.team, avatarSrc: `https://i.pravatar.cc/120?u=${p.name}`, status: p.status })
-), { columns: { sm: 1, md: 2, lg: 3 }, gap: "l" })
+), { columns: { sm: 1, md: 2, lg: 3 }, gap: "lg" })
 
 $app(Stack([
   PageHeader("Directory", { subtitle: `${$util.count(filtered)} people` }),
@@ -3714,7 +3728,7 @@ $app(Stack([
   $util.count(filtered) == 0
     ? EmptyState("No matches", { description: "Try a different search term.", icon: "magnifying-glass" })
     : cards
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern P — Brand-themed landing page
@@ -3743,7 +3757,7 @@ testimonial = Testimonial("This changed how our team ships.", { author: "Asha Ve
 
 closing = Banner("Start building today", { description: "Free for personal use.", action: Button("Create a repository", { variant: "primary" }), tone: "primary" })
 
-$app(Stack([hero, features, testimonial, closing], { gap: "l" }))
+$app(Stack([hero, features, testimonial, closing], { gap: "lg" }))
 ```
 
 ### Pattern Q — Kanban board
@@ -3772,7 +3786,7 @@ $app(Stack([
       KanbanCard(card.title, { description: card.title, tags: card.tags, assignee: card.assignee, tone: card.tone })
     )})
   ))
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern R — Inbox / split-view
@@ -3792,7 +3806,7 @@ list = InboxPanel($threads.map(t => ({ ...t, onClick: () => open(t.id) })), { ti
 thread = $active
   ? Card([
       SectionHeader($threads.first.title),
-      Stack($util.range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "s" }),
+      Stack($util.range(1, 3).map(n => ChatBubble("Alex", { body: "Message body " + n })), { gap: "sm" }),
       TextArea("reply", { placeholder: "Reply…" }),
       Buttons([Button("Send", { variant: "primary", icon: "paper-plane" })])
     ])
@@ -3801,7 +3815,7 @@ thread = $active
 $app(Stack([
   PageHeader("Inbox"),
   SplitView(list, thread, { primaryWidth: "360px" })
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern S — Content studio
@@ -3831,8 +3845,8 @@ snippet = Card([
 
 $app(Stack([
   PageHeader("Studio", { subtitle: "Compose and publish stories" }),
-  Grid([Stack([editor, snippet], { gap: "l" }), metadata], { columns: { sm: 1, md: 2 }, gap: "l" })
-], { gap: "l" }))
+  Grid([Stack([editor, snippet], { gap: "lg" }), metadata], { columns: { sm: 1, md: 2 }, gap: "lg" })
+], { gap: "lg" }))
 ```
 
 ### Pattern T — Data explorer
@@ -3874,7 +3888,7 @@ $app(Stack([
     empty:   EmptyState("No events", { icon: "rectangle-list" }),
     data:    Card([table])
   })
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern U — Media gallery
@@ -3896,7 +3910,7 @@ $app(Stack([
   PageHeader("Travel diary", { subtitle: "A photo a day, every day." }),
   hero,
   Card([SectionHeader("All photos"), gallery])
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ### Pattern V — Real-time feed
@@ -3913,15 +3927,15 @@ feed = Stack($messages.map(m =>
   Card([Stack([
     Badge($util.formatDate(m.id, "time"), { variant: m.tone }),
     Text(m.body)
-  ], { direction: "row", gap: "m" })])
-), { gap: "s" })
+  ], { direction: "row", gap: "md" })])
+), { gap: "sm" })
 
 $app(Stack([
   PageHeader("Live feed", { subtitle: "Auto-updating every 2s" }),
   $util.count($messages) == 0
     ? EmptyState("Waiting for events…", { icon: "satellite-dish" })
     : feed
-], { gap: "l" }))
+], { gap: "lg" }))
 ```
 
 ---
@@ -3978,7 +3992,7 @@ Before finishing, walk your output and verify:
 14. Density target (§0.5) met for the page type.
 15. No hard-coded colours / gradients. All styling uses `tone:` /
     `variant:` / theme tokens.
-16. One positional argument max per component call.
+16. One argument form per component call (canonical positional + trailing object preferred; all-positional and all-named also valid).
 17. Comments use only `//` or `/* */`.
 18. No DSL JS-wrapper blocks — direct JS lives in function/effect bodies.
 19. `$emit("name", detail)` function call syntax for events.

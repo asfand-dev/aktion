@@ -8,6 +8,7 @@ import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength,
   readResponsiveProp, RESPONSIVE_BREAKPOINTS, type Breakpoint, type ResponsiveProp,
+  SPACING_TOKENS, normalizeSpacingToken, spacingCssValue,
 } from "../utils.js";
 
 const GRID_COLUMNS = 12;
@@ -51,7 +52,10 @@ function emitResponsiveSpacingVars(
 ): void {
   for (const bp of RESPONSIVE_BREAKPOINTS) {
     const v = prop.values[bp];
-    if (v) styleParts.push(`${cssPrefix}-${bp}:var(--rui-spacing-${v}, ${v})`);
+    // Spacing tokens (canonical or legacy) resolve through the shared scale;
+    // anything else keeps the historical var-with-fallback form so raw CSS
+    // lengths in responsive maps still work.
+    if (v) styleParts.push(`${cssPrefix}-${bp}:${spacingCssValue(v) || `var(--rui-spacing-${v}, ${v})`}`);
   }
 }
 
@@ -198,7 +202,7 @@ function renderFlexContainer(
     }
   }
   if (gap.kind === "single") {
-    attrs["data-gap"] = gap.value ? String(gap.value) : "m";
+    attrs["data-gap"] = gap.value ? normalizeSpacingToken(gap.value, String(gap.value)) : "md";
   } else {
     attrs["data-gap"] = "responsive";
     attrs["data-responsive-gap"] = "true";
@@ -221,7 +225,7 @@ function renderFlexContainer(
   const alignContent = asString(props.alignContent);
   if (alignContent) attrs["data-align-content"] = alignContent;
   if (padding.kind === "single") {
-    const pad = padding.value ? String(padding.value) : null;
+    const pad = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
     if (pad) attrs["data-padding"] = pad;
   } else {
     attrs["data-padding"] = "responsive";
@@ -237,11 +241,11 @@ function renderFlexContainer(
 }
 
 /** Shared prop docs for the flex family (Stack/Row/Column). */
-const FLEX_GAP_PROP = { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between children. May be a responsive map." } as const;
+const FLEX_GAP_PROP = { name: "gap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Spacing between children. May be a responsive map." } as const;
 const FLEX_JUSTIFY_PROP = { name: "justify", type: "string | object", optional: true, enum: ["start", "center", "end", "between", "around", "evenly"], description: "Main-axis distribution. May be a responsive map." } as const;
 const FLEX_WRAP_PROP = { name: "wrap", type: "boolean", optional: true, description: "Wrap children onto multiple lines when they overflow" } as const;
 const FLEX_REVERSE_PROP = { name: "reverse", type: "boolean", optional: true, description: "Reverse the visual order of children" } as const;
-const FLEX_PADDING_PROP = { name: "padding", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding token. May be a responsive map." } as const;
+const FLEX_PADDING_PROP = { name: "padding", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Inner padding token. May be a responsive map." } as const;
 const FLEX_INLINE_PROP = { name: "inline", type: "boolean", optional: true, description: "Use inline-flex (shrink-to-fit) instead of a full-width block" } as const;
 const FLEX_ALIGN_CONTENT_PROP = { name: "alignContent", type: "string", optional: true, enum: ["start", "center", "end", "between", "around", "stretch"], description: "Alignment of wrapped lines (only when `wrap` is on)" } as const;
 
@@ -257,7 +261,7 @@ export const Row: ComponentSpec = {
     "chips/tags that should flow onto multiple lines.",
   props: [
     { name: "children", type: "Node[]", description: "Children laid out left → right" },
-    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Horizontal spacing between children (default `m`). May be a responsive map." },
+    { name: "gap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Horizontal spacing between children (default `md`). May be a responsive map." },
     { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Vertical alignment of children (default `center`). May be a responsive map." },
     { ...FLEX_JUSTIFY_PROP },
     { name: "grow", type: "boolean", optional: true, description: "Children share the row width equally (replaces the old `uniform`)" },
@@ -280,7 +284,7 @@ export const Column: ComponentSpec = {
     "the recommended root container for a page or a card body.",
   props: [
     { name: "children", type: "Node[]", description: "Children laid out top → bottom" },
-    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Vertical spacing between children (default `m`). May be a responsive map." },
+    { name: "gap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Vertical spacing between children (default `md`). May be a responsive map." },
     { name: "align", type: "string | object", optional: true, enum: ["start", "center", "end", "stretch"], description: "Horizontal alignment of children (default `stretch`). May be a responsive map." },
     { ...FLEX_JUSTIFY_PROP },
     { ...FLEX_WRAP_PROP },
@@ -338,18 +342,18 @@ export const Center: ComponentSpec = {
     { name: "children", type: "Node[]", description: "Content to center" },
     { name: "axis", type: "string", optional: true, enum: ["both", "horizontal", "vertical"], description: "Which axis to center on (default both)" },
     { name: "minHeight", type: "string", optional: true, description: "CSS min-height — set to center vertically inside a tall region (e.g. `60vh`, `400px`)" },
-    { name: "gap", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Spacing between stacked children (default `m`)" },
-    { name: "padding", type: "string", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding token" },
+    { name: "gap", type: "string", optional: true, enum: SPACING_TOKENS, description: "Spacing between stacked children (default `md`)" },
+    { name: "padding", type: "string", optional: true, enum: SPACING_TOKENS, description: "Inner padding token" },
     { name: "inline", type: "boolean", optional: true, description: "Shrink to fit content instead of filling the available width" },
   ],
   render: (_node, props, helpers) => {
     const attrs: Record<string, string | null> = {
       class: "rui-center",
       "data-axis": asString(props.axis, "both"),
-      "data-gap": asString(props.gap, "m"),
+      "data-gap": normalizeSpacingToken(props.gap, "md"),
       "data-inline": asBoolean(props.inline) ? "true" : null,
     };
-    const padding = asString(props.padding);
+    const padding = normalizeSpacingToken(props.padding, asString(props.padding));
     if (padding) attrs["data-padding"] = padding;
     const styleParts: string[] = [];
     const minHeight = asString(props.minHeight);
@@ -785,8 +789,8 @@ export const Box: ComponentSpec = {
     "but the content needs a subtle surface or inset.",
   props: [
     { name: "children", type: "Node[]" },
-    { name: "padding", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Inner padding. May be a responsive map." },
-    { name: "margin", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Outer margin. May be a responsive map." },
+    { name: "padding", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Inner padding. May be a responsive map." },
+    { name: "margin", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Outer margin. May be a responsive map." },
     { name: "border", type: "string", optional: true, enum: ["none", "subtle", "default"], description: "Border preset (default none)" },
     { name: "background", type: "string", optional: true, enum: ["none", "surface", "muted", "primary", "success", "warning", "danger", "info"], description: "Semantic background token" },
     { name: "maxWidth", type: "string", optional: true, description: "CSS max-width" },
@@ -803,7 +807,7 @@ export const Box: ComponentSpec = {
     const maxWidth = asString(props.maxWidth);
     if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, maxWidth)}`);
     if (padding.kind === "single") {
-      const pad = padding.value ? String(padding.value) : null;
+      const pad = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
       if (pad) attrs["data-padding"] = pad;
     } else {
       attrs["data-padding"] = "responsive";
@@ -811,7 +815,7 @@ export const Box: ComponentSpec = {
       emitResponsiveSpacingVars(styleParts, padding, "--rui-box-padding");
     }
     if (margin.kind === "single") {
-      const mar = margin.value ? String(margin.value) : null;
+      const mar = margin.value ? normalizeSpacingToken(margin.value, String(margin.value)) : null;
       if (mar) attrs["data-margin"] = mar;
     } else {
       attrs["data-margin"] = "responsive";
@@ -858,9 +862,9 @@ export const Grid: ComponentSpec = {
   props: [
     { name: "children", type: "Node[]" },
     { name: "columns", type: "number | object", optional: true, description: "Fixed column count 1–12. Omit for auto-fit; `12` (or `GridItem` children) enables the 12-track span system. May be a responsive map like `{base: 1, md: 3}`." },
-    { name: "gap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Gap on both axes (default `m`). May be a responsive map." },
-    { name: "rowGap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Row gap override. May be a responsive map." },
-    { name: "columnGap", type: "string | object", optional: true, enum: ["xs", "s", "m", "l", "xl"], description: "Column gap override. May be a responsive map." },
+    { name: "gap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Gap on both axes (default `md`). May be a responsive map." },
+    { name: "rowGap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Row gap override. May be a responsive map." },
+    { name: "columnGap", type: "string | object", optional: true, enum: SPACING_TOKENS, description: "Column gap override. May be a responsive map." },
     { name: "minChildWidth", type: "string", optional: true, aliases: ["minItemWidth"], description: "Minimum column width for AUTO-FIT mode, e.g. `\"240px\"` (default 220px). Also caps the floor in FIXED mode." },
     { name: "alignItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Vertical alignment of items within their cells" },
     { name: "justifyItems", type: "string", optional: true, enum: ["start", "center", "end", "stretch"], description: "Horizontal alignment of items within their cells" },
@@ -923,7 +927,7 @@ export const Grid: ComponentSpec = {
     if (twelveColMode) attrs["data-grid-mode"] = "12";
 
     if (gap.kind === "single") {
-      attrs["data-gap"] = gap.value ? String(gap.value) : "m";
+      attrs["data-gap"] = gap.value ? normalizeSpacingToken(gap.value, String(gap.value)) : "md";
     } else {
       attrs["data-gap"] = "responsive";
       attrs["data-responsive-gap"] = "true";
@@ -931,7 +935,7 @@ export const Grid: ComponentSpec = {
     }
 
     if (rowGap.kind === "single" && rowGap.value) {
-      attrs["data-row-gap"] = String(rowGap.value);
+      attrs["data-row-gap"] = normalizeSpacingToken(rowGap.value, String(rowGap.value));
     } else if (rowGap.kind === "responsive") {
       attrs["data-row-gap"] = "responsive";
       attrs["data-responsive-row-gap"] = "true";
@@ -939,7 +943,7 @@ export const Grid: ComponentSpec = {
     }
 
     if (columnGap.kind === "single" && columnGap.value) {
-      attrs["data-column-gap"] = String(columnGap.value);
+      attrs["data-column-gap"] = normalizeSpacingToken(columnGap.value, String(columnGap.value));
     } else if (columnGap.kind === "responsive") {
       attrs["data-column-gap"] = "responsive";
       attrs["data-responsive-column-gap"] = "true";

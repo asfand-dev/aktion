@@ -787,7 +787,7 @@
             description:
               "Every component accepts a universal style/behaviour channel as named props. sx is a BOUNDED style object — tokens, enums, and sanitised scalars, never raw CSS — and any value accepts a { base, sm, md, lg, xl } responsive map compiled to real @media rules. px/mx emit logical padding-inline/margin-inline (RTL mirrors automatically) and ps/pe/ms/me set the inline start/end sides. animate applies a motion preset that auto-respects prefers-reduced-motion. See the layout guide for the full key tables.",
             params: [
-              { name: "sx.p / px / py / pt…pl / ps / pe", type: "token | length | map", desc: "Padding — spacing tokens xs|s|m|l|xl|2xl|3xl, safe-area insets (safe-top…), or lengths. Margin mirrors with m / mx / my / mt…ml / ms / me." },
+              { name: "sx.p / px / py / pt…pl / ps / pe", type: "token | length | map", desc: "Padding — spacing tokens none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl, safe-area insets (safe-top…), or lengths. Margin mirrors with m / mx / my / mt…ml / ms / me." },
               { name: "sx.w / h / minW / maxW / minH / maxH / gap", type: "token | length", desc: "Sizing — full|half|screen|dvh|min|max|fit|auto or a length." },
               { name: "sx.bg / color / borderColor", type: "color token | gradient ref", desc: 'Color tokens (surface, primary, text-muted, …), "gradient.brand|accent|warm|cool|success|danger", or raw colors.' },
               { name: "sx.border / radius / shadow / opacity / backdrop", type: "enum", desc: 'border: none|subtle|strong|<color>; radius: xs|sm|md|lg|pill|full; shadow: sm|md|lg|none; backdrop: "blur".' },
@@ -800,7 +800,7 @@
               { name: "id / anchor / className / style / aria / data / tooltip / hidden", type: "passthrough", desc: "Element id (smooth-scroll targets), extra classes, sanitised inline style, aria-* / data-* maps, title tooltip, hidden flag." },
             ],
             returns: { type: "—", desc: "Applied to the component's rendered root element." },
-            example: 'Card([Text("Hover me")], {\n  sx: {\n    p: { base: "m", md: "xl" },\n    radius: "lg", bg: "surface", shadow: "md",\n    states: { hover: { scale: 1.03, shadow: "lg" } }\n  },\n  animate: "fade-up"\n})',
+            example: 'Card([Text("Hover me")], {\n  sx: {\n    p: { base: "md", md: "xl" },\n    radius: "lg", bg: "surface", shadow: "md",\n    states: { hover: { scale: 1.03, shadow: "lg" } }\n  },\n  animate: "fade-up"\n})',
           },
           {
             anchor: "builtin-emit",

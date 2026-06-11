@@ -125,8 +125,8 @@
     Row([
       Button("Decrement", { onClick: () =&gt; setCount(c =&gt; c - 1) }),
       Button("Increment", { variant: "primary", onClick: () =&gt; setCount(c =&gt; c + 1) }),
-    ], { gap: "s" }),
-  ], { gap: "m" })
+    ], { gap: "sm" }),
+  ], { gap: "md" })
 }
 $app(Counter())</code></pre>
         <div class="lay-demo-preview"></div>
@@ -170,7 +170,7 @@ $app(Counter())</code></pre>
     Text(`Quantity: ${qty}`),
     Button("Add one", { variant: "primary", onClick: () =&gt; setQty(q =&gt; q + 1) }),
     Text(`Total: ${$util.format(total, "currency")}`, { variant: "large-heavy", tone: "primary" }),
-  ], { gap: "m" })
+  ], { gap: "md" })
 }
 $app(Cart())</code></pre>
         <div class="lay-demo-preview"></div>
@@ -203,7 +203,7 @@ function Panel() {
   return Column([
     Button(details.on ? "Hide details" : "Show details", { onClick: details.toggle }),
     details.on ? Card([Text("Hooks compose just like they do in React.")]) : null,
-  ], { gap: "m" })
+  ], { gap: "md" })
 }
 $app(Panel())</code></pre>
         <div class="lay-demo-preview"></div>
@@ -234,8 +234,8 @@ function Demo() {
     Row([
       Button("Increment", { variant: "primary", onClick: counter.increment }),
       Button("Reset", { onClick: counter.reset }),
-    ], { gap: "s" }),
-  ], { gap: "m" })
+    ], { gap: "sm" }),
+  ], { gap: "md" })
 }
 $app(Demo())</code></pre>
         <div class="lay-demo-preview"></div>

@@ -11,7 +11,7 @@ import { installDismissListeners, disposeDismissListeners } from "./_internal.js
 import { extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers } from "./forms-shared.js";
 import { attachOnChange } from "./wrappers.js";
 
-const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
+const BUTTON_VARIANTS = ["primary", "secondary", "outline", "ghost", "link", "danger", "default"] as const;
 const BUTTON_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 const INPUT_TYPES = ["text", "email", "password", "number", "tel", "url", "date"] as const;
 
@@ -48,7 +48,7 @@ export const Button: ComponentSpec = {
   props: [
     { name: "label", type: "string" },
     { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"], description: "Callable invoked when the button is clicked" },
-    { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS },
+    { name: "variant", type: "string", optional: true, aliases: ["tone"], enum: BUTTON_VARIANTS, description: "Visual style — `primary` solid brand button (`default` is its alias), `secondary` surface + border, `outline` transparent with primary border, `ghost` bare, `link` text-only (underlines on hover), `danger` destructive" },
     { name: "type", type: "string", optional: true, enum: ["button", "submit"], description: "HTML button type" },
     { name: "size", type: "string", optional: true, enum: BUTTON_SIZES, description: "Size token `xs|sm|md|lg|xl`" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
