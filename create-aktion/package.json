@@ -1,6 +1,6 @@
 {
   "name": "create-aktion",
-  "version": "0.5.10",
+  "version": "0.5.11",
   "description": "Scaffold a new Aktion app — `npm create aktion@latest` / `npx create-aktion`.",
   "type": "module",
   "bin": {

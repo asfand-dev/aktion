@@ -1,6 +1,6 @@
 {
   "name": "aktion-runtime",
-  "version": "0.5.10",
+  "version": "0.5.11",
   "description": "Aktion is a single web component that turns a compact, streaming-first DSL into a rich, interactive UI inside its shadow DOM. Works in React, Vue, Angular, Svelte, plain HTML — or no framework at all.",
   "type": "module",
   "main": "./dist/index.cjs",
