@@ -1,0 +1,124 @@
+// Food — a restaurant / delivery ordering surface: hero, category tiles, a
+// menu with add-to-cart, a live order summary and reviews. Reusable blocks
+// (DishCard, CategoryTile, ReviewCard) plus a working cart for any food app.
+$app(Column([hero, categoriesCard, body, reviewsCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+img = seed => `https://picsum.photos/seed/${seed}/400/260`
+
+$cart = []
+
+menu = [
+  { id: "m1", name: "Margherita Pizza", desc: "San Marzano, mozzarella, basil", price: 14, rating: 4.8, seed: "fd-pizza", cat: "Mains" },
+  { id: "m2", name: "Truffle Pasta", desc: "Tagliatelle, parmesan, black truffle", price: 18, rating: 4.9, seed: "fd-pasta", cat: "Mains" },
+  { id: "m3", name: "Caesar Salad", desc: "Romaine, croutons, anchovy dressing", price: 11, rating: 4.5, seed: "fd-salad", cat: "Starters" },
+  { id: "m4", name: "Tiramisu", desc: "Espresso-soaked ladyfingers, cocoa", price: 8, rating: 4.7, seed: "fd-tiramisu", cat: "Dessert" },
+  { id: "m5", name: "Bruschetta", desc: "Tomato, garlic, olive oil, basil", price: 9, rating: 4.4, seed: "fd-bruschetta", cat: "Starters" },
+  { id: "m6", name: "Lemonade", desc: "Fresh-squeezed, lightly sweet", price: 5, rating: 4.6, seed: "fd-lemonade", cat: "Drinks" }
+]
+
+categories = [
+  { label: "Starters", icon: "leaf", tone: "success" },
+  { label: "Mains", icon: "utensils", tone: "primary" },
+  { label: "Dessert", icon: "ice-cream", tone: "warning" },
+  { label: "Drinks", icon: "mug-hot", tone: "info" }
+]
+
+reviews = [
+  { name: "Sophie L.", rating: 5, text: "Best truffle pasta in the city. Delivery was 20 minutes early!", seed: "rv-1" },
+  { name: "Marcus D.", rating: 4, text: "Pizza was excellent. Would've loved a bigger portion of salad.", seed: "rv-2" },
+  { name: "Aiko T.", rating: 5, text: "Tiramisu is dangerously good. Ordering again tonight.", seed: "rv-3" }
+]
+
+function addToCart(item) {
+  const existing = $cart.find(c => c.id == item.id)
+  if (existing) $cart = $cart.map(c => c.id == item.id ? { ...c, qty: c.qty + 1 } : c)
+  else $cart = [...$cart, { id: item.id, name: item.name, price: item.price, qty: 1 }]
+  $toast.success(`${item.name} added`)
+}
+
+function setQty(id, qty) {
+  if (qty <= 0) $cart = $cart.filter(c => c.id != id)
+  else $cart = $cart.map(c => c.id == id ? { ...c, qty } : c)
+}
+
+cartCount = $util.sum($cart.map(c => c.qty))
+subtotal = $util.sum($cart.map(c => c.price * c.qty))
+deliveryFee = $cart.length == 0 || subtotal >= 25 ? 0 : 3
+
+// Reusable: a menu dish card with rating, price and add button.
+function DishCard(d) {
+  return Card([
+    Image(img(d.seed), { alt: d.name, sx: { w: "full", h: "140px", radius: "md" } }),
+    Row([
+      StackItem(Text(d.name, { variant: "body-heavy" }), { grow: 1 }),
+      Badge(`★ ${d.rating}`, { tone: "warning", size: "sm" })
+    ], { align: "center" }),
+    Text(d.desc, { variant: "small", tone: "muted" }),
+    Row([
+      PriceTag(d.price, { size: "md" }),
+      Spacer(),
+      Button("Add", { variant: "primary", size: "sm", icon: "plus", onClick: () => addToCart(d) })
+    ], { align: "center" })
+  ], { key: d.id, sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } } })
+}
+
+// Reusable: a customer review card.
+function ReviewCard(r) {
+  return Card([
+    Row([Avatar(r.name, { size: "sm", fallback: "initials" }), StackItem(Text(r.name, { variant: "body-heavy" }), { grow: 1 }), Rating({ value: r.rating, readonly: true })], { gap: "sm", align: "center" }),
+    Text(r.text, { variant: "body", tone: "muted" })
+  ], { key: r.name })
+}
+
+hero = Section([
+  Backdrop({ grid: true, blobs: ["#ef444455", "#f59e0b55"], type: "drift" }),
+  Column([
+    Eyebrow("FREE DELIVERY OVER $25"),
+    Display(["Trattoria Verde — ", GradientText("delivered hot", { gradient: "brand" })], { size: "lg", align: "center", balance: true }),
+    Text("Wood-fired classics from your neighborhood kitchen, in about 30 minutes.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      Badge("Open · closes 11pm", { tone: "success", icon: "clock" }),
+      Badge("★ 4.8 (2.1k)", { tone: "warning", icon: "star" }),
+      Badge("30–40 min", { tone: "info", icon: "motorcycle" })
+    ], { gap: "sm", justify: "center", wrap: true })
+  ], { gap: "md", align: "center", sx: { py: "lg" } })
+], { background: "base", width: "md", align: "center", padding: "lg" })
+
+categoriesCard = Card([
+  SectionHeader("Categories", { eyebrow: "MENU" }),
+  Grid(categories.map(c => Tile(c.label, { icon: c.icon, tone: c.tone, onClick: () => $toast.show(`Jump to ${c.label}`), key: c.label })), { columns: { base: 2, md: 4 }, gap: "md" })
+])
+
+menuCard = Card([
+  SectionHeader("Popular dishes", { eyebrow: "ORDER NOW" }),
+  Grid(menu.map(d => DishCard(d)), { columns: { base: 1, sm: 2 }, gap: "lg" })
+])
+
+cartCard = Card([
+  SectionHeader("Your order", { eyebrow: "CART", subtitle: `${cartCount} item${cartCount == 1 ? "" : "s"}` }),
+  Show($cart.length > 0, {
+    fallback: EmptyState("Your cart is empty", { description: "Add a dish to get started.", icon: "basket-shopping" }),
+    children: Column([
+      Column($cart.map(c => Row([
+        StackItem(Text(`${c.name}`, { variant: "body-heavy" }), { grow: 1 }),
+        QuantityStepper(c.qty, { min: 0, onChange: (q) => setQty(c.id, q) }),
+        StackItem(Text(money(c.price * c.qty), { variant: "body" }), { basis: "70px" })
+      ], { gap: "sm", align: "center", key: c.id })), { gap: "sm" }),
+      Separator("horizontal"),
+      OrderSummary($cart.map(c => ({ label: `${c.name} × ${c.qty}`, value: money(c.price * c.qty) })), {
+        subtotal: money(subtotal),
+        shipping: deliveryFee == 0 ? "Free" : money(deliveryFee),
+        total: money(subtotal + deliveryFee)
+      }),
+      Button("Checkout", { variant: "primary", size: "lg", fullWidth: true, icon: "bag-shopping", onClick: () => $toast.success("Order placed — on its way!") })
+    ], { gap: "md" })
+  })
+])
+
+body = Grid([menuCard, cartCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+reviewsCard = Card([
+  SectionHeader("What diners say", { eyebrow: "REVIEWS", subtitle: "4.8 average from 2,100 orders" }),
+  Grid(reviews.map(r => ReviewCard(r)), { columns: { base: 1, sm: 3 }, gap: "lg" })
+])

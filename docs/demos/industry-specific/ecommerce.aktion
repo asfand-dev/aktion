@@ -1,0 +1,101 @@
+// E-commerce — a seller/admin dashboard: sales KPIs, revenue trend, recent
+// orders, top products and low-stock alerts. Reusable blocks (OrderStatus,
+// ProductRow, StockAlert) for any online-store back office.
+$app(Column([header, kpis, body, productsCard, stockCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+
+sales = {
+  days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  revenue: [1240, 1680, 1420, 2100, 2480, 3120, 2760],
+  orders: [18, 24, 21, 30, 36, 44, 39]
+}
+
+orders = [
+  { id: "#10482", customer: "Mia Chen", items: 3, total: 142.0, status: "Paid", tone: "success" },
+  { id: "#10481", customer: "Leo Park", items: 1, total: 64.0, status: "Shipped", tone: "info" },
+  { id: "#10480", customer: "Ava Smith", items: 5, total: 318.5, status: "Processing", tone: "warning" },
+  { id: "#10479", customer: "Noah Lee", items: 2, total: 89.0, status: "Refunded", tone: "danger" },
+  { id: "#10478", customer: "Zoe Wu", items: 4, total: 210.0, status: "Paid", tone: "success" }
+]
+
+products = [
+  { name: "Trail Runner 2", sold: 184, revenue: 23736, rating: 4.6, seed: "ec-shoe" },
+  { name: "Everyday Hoodie", sold: 152, revenue: 9728, rating: 4.8, seed: "ec-hoodie" },
+  { name: "Packable Shell", sold: 96, revenue: 14304, rating: 4.7, seed: "ec-shell" },
+  { name: "Camp Mug", sold: 240, revenue: 5760, rating: 4.5, seed: "ec-mug" }
+]
+
+stock = [
+  { name: "Wool Crew Socks", left: 6, tone: "danger" },
+  { name: "Commuter Bottle", left: 14, tone: "warning" },
+  { name: "Trail Runner 2", left: 22, tone: "warning" }
+]
+
+img = seed => `https://picsum.photos/seed/${seed}/120/120`
+
+// Reusable: a top-product row with thumbnail, units sold and revenue.
+function ProductRow(p) {
+  return Row([
+    Image(img(p.seed), { alt: p.name, sx: { w: "44px", h: "44px", radius: "md" } }),
+    StackItem(Column([
+      Text(p.name, { variant: "body-heavy" }),
+      Text(`★ ${p.rating} · ${p.sold} sold`, { variant: "small", tone: "muted" })
+    ], { gap: "none" }), { grow: 1 }),
+    Text(money(p.revenue), { variant: "large-heavy", tone: "success" })
+  ], { gap: "md", align: "center", key: p.name })
+}
+
+// Reusable: a low-stock alert row.
+function StockAlert(s) {
+  return Row([
+    Icon("box-open", { size: "sm" }),
+    StackItem(Text(s.name, { variant: "body-heavy" }), { grow: 1 }),
+    Badge(`${s.left} left`, { tone: s.tone, size: "sm", icon: "triangle-exclamation" }),
+    Button("Restock", { variant: "ghost", size: "sm", icon: "plus", onClick: () => $toast.success(`Reorder placed for ${s.name}`) })
+  ], { gap: "md", align: "center", key: s.name })
+}
+
+header = PageHeader("Store overview", {
+  subtitle: "North & Pine · last 7 days",
+  badge: Badge("Store online", { tone: "success", icon: "store" }),
+  actions: [
+    Button("Add product", { variant: "secondary", size: "sm", icon: "plus" }),
+    Button("View storefront", { variant: "primary", size: "sm", icon: "arrow-up-right-from-square" })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Revenue", { value: money($util.sum(sales.revenue)), icon: "sack-dollar", tone: "success", trend: "up", delta: "+18%" }),
+  StatCard("Orders", { value: String($util.sum(sales.orders)), icon: "bag-shopping", tone: "primary", trend: "up", delta: "+12%" }),
+  StatCard("Avg order value", { value: money(Math.round($util.sum(sales.revenue) / $util.sum(sales.orders))), icon: "receipt", tone: "info", trend: "up", delta: "+4%" }),
+  StatCard("Conversion", { value: "3.4%", icon: "bullseye", tone: "warning", trend: "down", delta: "-0.2%" })
+])
+
+salesChart = Card([
+  SectionHeader("Revenue & orders", { eyebrow: "TREND", subtitle: "Last 7 days" }),
+  LineChart(sales.days, { series: [Series("Revenue", { values: sales.revenue }), Series("Orders", { values: sales.orders.map(o => o * 60) })], filled: true })
+])
+
+ordersCard = Card([
+  SectionHeader("Recent orders", { eyebrow: "FULFILLMENT", actions: [Button("All orders", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Table([
+    Col("Order", { values: orders.map(o => Text(o.id, { variant: "body-heavy" })) }),
+    Col("Customer", { values: orders.map(o => Row([Avatar(o.customer, { size: "sm", fallback: "initials" }), Text(o.customer)], { gap: "xs", align: "center" })) }),
+    Col("Items", { align: "center", values: orders.map(o => String(o.items)) }),
+    Col("Total", { align: "right", values: orders.map(o => money(o.total)) }),
+    Col("Status", { values: orders.map(o => Badge(o.status, { tone: o.tone, size: "sm" })) })
+  ], { striped: true })
+])
+
+body = Grid([salesChart, ordersCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+productsCard = Card([
+  SectionHeader("Top products", { eyebrow: "BEST SELLERS" }),
+  Column(products.map(p => ProductRow(p)), { gap: "md" })
+])
+
+stockCard = Card([
+  SectionHeader("Inventory alerts", { eyebrow: "LOW STOCK", subtitle: "Restock before you sell out" }),
+  Column(stock.map(s => StockAlert(s)), { gap: "md" })
+])

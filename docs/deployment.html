@@ -79,10 +79,24 @@
 
       <h2 id="ssr">SSR &amp; hydration</h2>
       <p>
-        The runtime renders client-side into a shadow DOM, so there is no separate
-        server renderer. What you <em>can</em> do is persist and resume state so a
-        reload (or a server-rendered shell) restores the app without re-running the
-        LLM:
+        For server-side rendering and static generation, import
+        <code>renderToString(program, { path, initialState })</code> &mdash; it
+        returns <code>{ html, state }</code> so you can embed crawlable markup in
+        your page shell and serialise <code>state</code> for client hydration.
+        <code>renderToStaticMarkup(program, opts)</code> emits markup only, for
+        fully static pages. The renderer needs a DOM, so in Node register
+        <code>happy-dom</code> / <code>jsdom</code> on <code>globalThis</code> first.
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime";
+
+const { html, state } = renderToString(program, {
+  path: "/dashboard",            // seeds the router for the requested route
+  initialState: { user: me },    // pre-populate reactive atoms
+});
+// Embed `html` in your shell and inline `state` for the client to hydrate.</code></pre>
+      <p>
+        On the client you can also persist and resume reactive state so a reload
+        (or the server-rendered shell) restores the app without re-running the LLM:
       </p>
       <table class="signature-table">
         <thead><tr><th>Method</th><th>Use</th></tr></thead>
@@ -109,8 +123,8 @@ app.hydrateState(await loadSnapshot());</code></pre>
       <div class="callout warn">
         <p>If you cannot relax CSP, you can still run Aktion: avoid emitting complex
           JS expressions from the LLM. Declarative constructs &mdash; component
-          trees, <code>$http()</code>, and the <code>@</code>-functions &mdash;
-          keep working without <code>'unsafe-eval'</code>.</p>
+          trees, <code>$http()</code>, and the <code>$util</code> helper
+          namespace &mdash; keep working without <code>'unsafe-eval'</code>.</p>
       </div>
 <pre><code>Content-Security-Policy:
   default-src 'self';

@@ -1,0 +1,91 @@
+// SaaS — an in-app product dashboard: MRR & usage KPIs, growth trend, plan
+// breakdown, team activity and integrations. Reusable blocks (PlanRow,
+// IntegrationTile, ActivityItem) for any B2B SaaS console.
+$app(Column([header, kpis, body, integrationsCard, activityCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+
+growth = {
+  months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+  mrr: [42, 48, 53, 61, 68, 76],
+  users: [1200, 1380, 1520, 1720, 1980, 2240]
+}
+
+plans = [
+  { name: "Free", users: 1240, share: 55, tone: "default" },
+  { name: "Pro", users: 720, share: 32, tone: "primary" },
+  { name: "Team", users: 220, share: 10, tone: "info" },
+  { name: "Enterprise", users: 60, share: 3, tone: "success" }
+]
+
+integrations = [
+  { name: "Slack", icon: "brands:slack", connected: true },
+  { name: "GitHub", icon: "brands:github", connected: true },
+  { name: "Stripe", icon: "brands:stripe", connected: true },
+  { name: "Figma", icon: "brands:figma", connected: false },
+  { name: "Zapier", icon: "bolt", connected: false },
+  { name: "Webhook", icon: "plug", connected: true }
+]
+
+activity = [
+  { who: "Dana R.", what: "upgraded to the Team plan", time: "12m ago", icon: "arrow-up", tone: "success" },
+  { who: "System", what: "monthly invoices sent to 920 customers", time: "1h ago", icon: "file-invoice", tone: "info" },
+  { who: "Omar K.", what: "invited 4 teammates", time: "3h ago", icon: "user-plus", tone: "primary" },
+  { who: "Lena W.", what: "cancelled — switched to Free", time: "5h ago", icon: "arrow-down", tone: "warning" }
+]
+
+// Reusable: a plan-distribution row with share bar.
+function PlanRow(p) {
+  return Row([
+    StackItem(Text(p.name, { variant: "body-heavy" }), { basis: "120px" }),
+    StackItem(Progress(p.share, { max: 100, tone: p.tone == "default" ? "primary" : p.tone }), { grow: 1 }),
+    Text(`${$util.format(p.users, "compact")} · ${p.share}%`, { variant: "small", tone: "muted" })
+  ], { gap: "md", align: "center", key: p.name })
+}
+
+// Reusable: an integration tile with connect toggle.
+function IntegrationTile(i) {
+  return Card([
+    Row([Icon(i.icon, { size: "lg" }), Spacer(), StatusDot(i.connected ? "Connected" : "Off", { tone: i.connected ? "success" : "default" })], { align: "center" }),
+    Text(i.name, { variant: "body-heavy" }),
+    Button(i.connected ? "Manage" : "Connect", { variant: i.connected ? "ghost" : "secondary", size: "sm", fullWidth: true, onClick: () => $toast.show(`${i.connected ? "Managing" : "Connecting"} ${i.name}`) })
+  ], { key: i.name, sx: { states: { hover: { translateY: "-2px", shadow: "lg" } } } })
+}
+
+header = PageHeader("Workspace overview", {
+  subtitle: "Acme Inc · billing period to date",
+  badge: Badge("All systems operational", { tone: "success", icon: "circle-check" }),
+  actions: [
+    Button("Invite team", { variant: "secondary", size: "sm", icon: "user-plus" }),
+    Button("Upgrade plan", { variant: "primary", size: "sm", icon: "bolt" })
+  ]
+})
+
+kpis = Stats([
+  StatCard("MRR", { value: `${money(growth.mrr[5])}k`, icon: "sack-dollar", tone: "success", trend: "up", delta: "+11.8%" }),
+  StatCard("Active users", { value: $util.format(growth.users[5], "compact"), icon: "users", tone: "primary", trend: "up", delta: "+13%" }),
+  StatCard("Trial conversion", { value: "24%", icon: "bullseye", tone: "info", trend: "up", delta: "+2.4%" }),
+  StatCard("Churn", { value: "2.1%", icon: "user-minus", tone: "warning", trend: "down", delta: "-0.4%" })
+])
+
+growthChart = Card([
+  SectionHeader("Growth", { eyebrow: "6 MONTHS", subtitle: "MRR (k) and active users" }),
+  LineChart(growth.months, { series: [Series("MRR (k)", { values: growth.mrr }), Series("Users (h)", { values: growth.users.map(u => Math.round(u / 100)) })], filled: true })
+])
+
+plansCard = Card([
+  SectionHeader("Plan distribution", { eyebrow: "SUBSCRIPTIONS" }),
+  Column(plans.map(p => PlanRow(p)), { gap: "md" })
+])
+
+body = Grid([growthChart, plansCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+integrationsCard = Card([
+  SectionHeader("Integrations", { eyebrow: "CONNECTED APPS", actions: [Button("Browse all", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Grid(integrations.map(i => IntegrationTile(i)), { columns: { base: 2, md: 3, lg: 6 }, gap: "md" })
+])
+
+activityCard = Card([
+  SectionHeader("Team activity", { eyebrow: "RECENT" }),
+  Timeline(activity.map(a => TimelineItem(`${a.who} ${a.what}`, { time: a.time, icon: a.icon, tone: a.tone })))
+])

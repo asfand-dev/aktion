@@ -657,6 +657,31 @@
             example: '$ticks = $sse({ url: API + "/prices", event: "tick" })\n// $ticks.last · $ticks.connected\nText($ticks.last ? $ticks.last.price : "—")',
           },
           {
+            anchor: "builtin-script",
+            name: "$script",
+            kind: "Data",
+            signature: "$script({ src, global?, type?, attributes? }) → resource",
+            description:
+              "Load an external script or stylesheet exactly once and track it reactively — gate a third-party widget (chart, map, payment element, captcha) on its SDK being ready. Calls sharing the same src are de-duplicated across the whole app, so a library loads a single time no matter how many components depend on it. Pair it with Mount / WebComponent to hydrate the widget the moment .ready flips true.",
+            params: [
+              { name: "src", type: "string", desc: "Required. URL of the script or stylesheet to load." },
+              { name: "global", type: "string", optional: true, desc: 'Name of the global the script exposes on window (e.g. "Stripe"). When set, .value resolves to window[global] once loaded.' },
+              { name: "type", type: "string", optional: true, desc: 'Script type — e.g. "module" for an ESM entry. Stylesheets are detected from a .css src.' },
+              { name: "attributes", type: "object", optional: true, desc: "Extra attributes to set on the injected <script> / <link> tag (crossorigin, integrity, …)." },
+            ],
+            returns: {
+              type: "resource",
+              desc: "A reactive bag:",
+              members: [
+                { name: ".ready", type: "boolean", desc: "Flips to true once the resource has loaded — gate dependent rendering on this." },
+                { name: ".loading", type: "boolean", desc: "true while the script/stylesheet is being fetched." },
+                { name: ".error", type: "any", desc: "Set if the load fails; null otherwise." },
+                { name: ".value", type: "any", desc: "The resolved value — window[global] when global is set (e.g. window.Stripe), otherwise true. null until ready." },
+              ],
+            },
+            example: '$stripe = $script({ src: "https://js.stripe.com/v3/", global: "Stripe" })\nShow($stripe.ready, {\n  fallback: Spinner("sm", "Loading payment SDK…"),\n  children: WebComponent("stripe-pricing-table", { attributes: { "pricing-table-id": $tableId } })\n})',
+          },
+          {
             anchor: "builtin-form",
             name: "$form",
             kind: "Data",
@@ -832,6 +857,30 @@
             returns: { type: "void", desc: "Nothing; it fires a DOM event." },
             example: 'Button("Save", { onClick: () => $emit("saved", { id: $id }) })',
           },
+          {
+            anchor: "builtin-head",
+            name: "$head",
+            kind: "App",
+            signature: "$head({ title, titleTemplate?, meta, og, twitter, link, jsonLd, htmlAttrs })",
+            description:
+              "A reactive document-head manager: it sets document.title, meta tags, canonical / alternate links, Open Graph + Twitter cards, JSON-LD, and <html> attributes — and updates them whenever the atoms it reads change. Per-route $head(...) calls compose, so a route's title naturally replaces the previous one. renderToString emits the resolved <head> so server-rendered pages are crawlable and share correctly.",
+            params: [
+              { name: "title", type: "string", optional: true, desc: "Document title. Combine with titleTemplate for a per-route suffix." },
+              { name: "titleTemplate", type: "string", optional: true, desc: 'Template with a %s placeholder, e.g. "%s · Aktion" — %s is replaced by title.' },
+              { name: "meta", type: "object", optional: true, desc: 'Plain <meta name=…> tags, e.g. { description: "…", "theme-color": "#000" }.' },
+              { name: "og", type: "object", optional: true, desc: 'Open Graph tags (og:* ), e.g. { title, description, image, type }.' },
+              { name: "twitter", type: "object", optional: true, desc: 'Twitter card tags (twitter:* ), e.g. { card: "summary_large_image", title }.' },
+              { name: "link", type: "object[]", optional: true, desc: 'Array of <link> descriptors, e.g. [{ rel: "canonical", href: "https://…" }].' },
+              { name: "jsonLd", type: "object | object[]", optional: true, desc: "Structured-data object(s) emitted as <script type=\"application/ld+json\">." },
+              { name: "htmlAttrs", type: "object", optional: true, desc: 'Attributes set on the <html> element, e.g. { lang: "en" }.' },
+            ],
+            returns: { type: "void", desc: "Nothing; it applies the head directives reactively." },
+            example: '$head({\n  title: $page.title,\n  titleTemplate: "%s · Acme",\n  meta: { description: $page.summary },\n  og: { title: $page.title, image: $page.cover },\n  link: [{ rel: "canonical", href: "https://acme.app" + route.path }]\n})',
+            notes: [
+              "Call it at the top level for site-wide defaults, and again inside a route's component to override per page — later calls compose over earlier ones.",
+              "See the <a href=\"head.html\">Document head guide</a> for SEO, social-card, and SSR walkthroughs.",
+            ],
+          },
         ],
       },
 
@@ -916,6 +965,25 @@
             ],
             membersTitle: "Members",
             example: '$toast.success("Saved!")\n$toast.error("Could not save", { duration: 0 })\ntoaster = Toasts($toast.items.map(t =>\n  Toast({ message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))',
+          },
+          {
+            anchor: "builtin-dom",
+            name: "$dom",
+            kind: "Namespace",
+            signature: "$dom.onResize(node, cb) · onIntersect(node, cb, opts?) · onMutation(node, cb, opts?) · measure(node)",
+            description:
+              "A managed DOM-observer namespace for layout-aware widgets. Hand it a real element (captured via a Mount or OnMount node ref) and it wires the matching observer, returning a disposer; every observer it creates is auto-disposed on the next re-plan, so a program never leaks listeners. Pair it with Mount / WebComponent when a third-party widget needs to react to size or visibility changes.",
+            members: [
+              { name: "onResize(node, cb)", type: "(node, (entry) => void) => dispose", desc: "Observe element size changes (ResizeObserver). Returns a disposer." },
+              { name: "onIntersect(node, cb, opts?)", type: "(node, (entry) => void, opts?) => dispose", desc: "Observe viewport intersection (IntersectionObserver); opts forwards threshold / rootMargin." },
+              { name: "onMutation(node, cb, opts?)", type: "(node, (records) => void, opts?) => dispose", desc: "Observe DOM mutations (MutationObserver); opts forwards childList / attributes / subtree." },
+              { name: "measure(node)", type: "(node) => { rect, scroll, viewport } | null", desc: "Synchronously measure an element: its bounding rect, scroll offsets, and the current viewport size." },
+            ],
+            membersTitle: "Members",
+            example: 'OnMount(Box([], { sx: { h: "320px" } }), {\n  onMount: (node) => {\n    $dom.onResize(node, (e) => { $w = e.contentRect.width })\n  }\n})',
+            notes: [
+              "See the <a href=\"interop.html\">Interop guide</a> for hosting imperative chart / map / editor libraries with Mount, WebComponent, $script, and $dom.",
+            ],
           },
         ],
       },

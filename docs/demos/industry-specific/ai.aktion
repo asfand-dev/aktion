@@ -1,0 +1,94 @@
+// AI — an LLM platform console: token usage & latency KPIs, request trend,
+// deployed models, an interactive prompt playground and recent runs. Reusable
+// blocks (ModelRow, RunRow) for any AI / ML product surface.
+$app(Column([header, kpis, body, playgroundCard, runsCard], { gap: "lg", padding: "md" }))
+
+$prompt = "Summarize this quarter's revenue report in three bullets."
+$temp = 7
+
+usage = {
+  hours: ["00", "04", "08", "12", "16", "20"],
+  requests: [820, 640, 1820, 2640, 2980, 2210],
+  latency: [240, 220, 310, 380, 360, 290]
+}
+
+models = [
+  { name: "atlas-large", task: "General reasoning", load: 74, status: "Healthy", tone: "success" },
+  { name: "atlas-fast", task: "Low-latency chat", load: 58, status: "Healthy", tone: "success" },
+  { name: "vision-pro", task: "Image understanding", load: 91, status: "High load", tone: "warning" },
+  { name: "embed-3", task: "Embeddings", load: 33, status: "Healthy", tone: "success" }
+]
+
+runs = [
+  { id: "run_8f21", model: "atlas-large", tokens: 1840, ms: 920, status: "Success", tone: "success" },
+  { id: "run_8f20", model: "atlas-fast", tokens: 420, ms: 180, status: "Success", tone: "success" },
+  { id: "run_8f1f", model: "vision-pro", tokens: 3120, ms: 2400, status: "Timeout", tone: "danger" },
+  { id: "run_8f1e", model: "embed-3", tokens: 96, ms: 60, status: "Success", tone: "success" },
+  { id: "run_8f1d", model: "atlas-large", tokens: 2210, ms: 1080, status: "Filtered", tone: "warning" }
+]
+
+// Reusable: a deployed-model row with utilisation bar.
+function ModelRow(m) {
+  return Row([
+    Icon("microchip", { size: "sm" }),
+    StackItem(Column([
+      Text(m.name, { variant: "body-heavy" }),
+      Text(m.task, { variant: "small", tone: "muted" })
+    ], { gap: "none" }), { grow: 1 }),
+    StackItem(Progress(m.load, { max: 100, tone: m.load > 85 ? "danger" : m.load > 70 ? "warning" : "success" }), { basis: "140px" }),
+    Badge(m.status, { tone: m.tone, size: "sm" })
+  ], { gap: "md", align: "center", key: m.name })
+}
+
+header = PageHeader("AI platform", {
+  subtitle: "Inference overview · last 24 hours",
+  badge: Badge("4 models live", { tone: "primary", icon: "robot" }),
+  actions: [
+    Button("API keys", { variant: "secondary", size: "sm", icon: "key" }),
+    Button("Deploy model", { variant: "primary", size: "sm", icon: "rocket", onClick: () => $toast.success("Deployment queued") })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Requests today", { value: $util.format($util.sum(usage.requests), "compact"), icon: "wave-square", tone: "primary", trend: "up", delta: "+19%" }),
+  StatCard("Tokens", { value: "48.2M", icon: "coins", tone: "info", trend: "up", delta: "+12%" }),
+  StatCard("Avg latency", { value: `${Math.round($util.sum(usage.latency) / usage.latency.length)}ms`, icon: "gauge-high", tone: "success", trend: "down", delta: "-22ms" }),
+  StatCard("Error rate", { value: "0.8%", icon: "triangle-exclamation", tone: "warning", trend: "down", delta: "-0.3%" })
+])
+
+usageChart = Card([
+  SectionHeader("Inference volume", { eyebrow: "24 HOURS", subtitle: "Requests and latency" }),
+  LineChart(usage.hours, { series: [Series("Requests", { values: usage.requests }), Series("Latency (ms)", { values: usage.latency })], filled: true })
+])
+
+modelsCard = Card([
+  SectionHeader("Deployed models", { eyebrow: "FLEET" }),
+  Column(models.map(m => ModelRow(m)), { gap: "md" })
+])
+
+body = Grid([usageChart, modelsCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+playgroundCard = Card([
+  SectionHeader("Prompt playground", { eyebrow: "TRY IT", subtitle: "Send a prompt to atlas-large" }),
+  TextArea("prompt", { label: "Prompt", rows: 3, value: $prompt }),
+  Row([
+    StackItem(Slider("temp", { label: `Temperature ${($temp / 10).toFixed(1)}`, min: 0, max: 10, value: $temp }), { grow: 1 }),
+    Button("Run", { variant: "primary", icon: "paper-plane", onClick: () => $toast.success("Prompt sent to atlas-large") })
+  ], { gap: "md", align: "end" }),
+  ChatBubble("atlas-large", {
+    body: "• Revenue grew 18% QoQ to $4.2M\n• Enterprise tier drove 62% of new MRR\n• Churn fell to 2.1%, a 4-quarter low",
+    from: "agent",
+    time: "just now"
+  })
+])
+
+runsCard = Card([
+  SectionHeader("Recent runs", { eyebrow: "LOGS", actions: [Button("View all", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Table([
+    Col("Run ID", { values: runs.map(r => Text(r.id, { variant: "body-heavy" })) }),
+    Col("Model", { values: runs.map(r => Badge(r.model, { tone: "info", size: "sm" })) }),
+    Col("Tokens", { align: "right", values: runs.map(r => $util.format(r.tokens, "compact")) }),
+    Col("Latency", { align: "right", values: runs.map(r => `${r.ms}ms`) }),
+    Col("Status", { values: runs.map(r => Badge(r.status, { tone: r.tone, size: "sm" })) })
+  ], { striped: true })
+])

@@ -60,7 +60,7 @@
         <span class="hero-eyebrow">Quality</span>
         <h1>DevTools.</h1>
         <p class="lead">
-          <strong>Aktion DevTools</strong> (<code>aktion/devtools</code>) is a
+          <strong>Aktion DevTools</strong> (<code>aktion-runtime/devtools</code>) is a
           real, in-page debugger for any <code>&lt;aktion-app&gt;</code> on the
           page &mdash; the Aktion equivalent of the React / Vue DevTools, built
           on Aktion&rsquo;s own runtime signals. Inspect and edit live reactive
@@ -140,7 +140,7 @@ $app(Column([
         </li>
         <li>
           <strong>The panel is a separate, opt-in entry</strong>
-          (<code>aktion/devtools</code>). It installs the hook, adopts every
+          (<code>aktion-runtime/devtools</code>). It installs the hook, adopts every
           <code>&lt;aktion-app&gt;</code> on the page, and renders inside its own
           shadow root &mdash; fully isolated from the app it inspects, so it can
           debug even a broken program without sharing its fate.
@@ -240,7 +240,7 @@ mountDevtools();</code></pre>
 &lt;/script&gt;</code></pre>
       <p>
         <code>mountDevtools()</code> returns a controller
-        (<code>{ element, open, close, toggle, selectApp, destroy }</code>) so
+        (<code>{ element, hook, open, close, toggle, selectApp, destroy }</code>) so
         you can bind it to a keyboard shortcut or a &ldquo;debug&rdquo; button
         and ship it behind a flag. Because the hook is shared, multiple panels
         cooperate on one event stream.
@@ -248,7 +248,7 @@ mountDevtools();</code></pre>
       <div class="callout">
         <p>
           <strong>Zero-cost when closed.</strong> If you never import
-          <code>aktion/devtools</code>, the runtime&rsquo;s instrumentation is
+          <code>aktion-runtime/devtools</code>, the runtime&rsquo;s instrumentation is
           dormant &mdash; no profiling bookkeeping, no event allocation. Open the
           panel and it lights up on the next render.
         </p>
@@ -281,7 +281,7 @@ mountDevtools();</code></pre>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
   <script type="module">
     // Drive the live demo from the program shown above (single source of truth),
-    // and wire the Launch button to the real `aktion/devtools` bundle.
+    // and wire the Launch button to the real `aktion-runtime/devtools` bundle.
     const libUrl = new URL("../dist/aktion.js", import.meta.url).href;
     const dtUrl = new URL("../dist/devtools.js", import.meta.url).href;
 

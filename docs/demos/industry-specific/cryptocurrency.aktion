@@ -1,0 +1,105 @@
+// Cryptocurrency — a portfolio + swap dashboard: total balance, allocation,
+// holdings, an interactive token swap and the market. Reusable blocks
+// (HoldingRow, MarketRow) for any wallet / exchange / DeFi app.
+$app(Column([header, kpis, body, swapCard, marketCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+sign = n => n >= 0 ? "+" : ""
+changeTone = n => n >= 0 ? "success" : "danger"
+
+holdings = [
+  { sym: "BTC", name: "Bitcoin", amount: 0.42, price: 64200, change: 2.1, tone: "warning" },
+  { sym: "ETH", name: "Ethereum", amount: 5.8, price: 3380, change: 3.4, tone: "info" },
+  { sym: "SOL", name: "Solana", amount: 120, price: 148, change: -1.8, tone: "primary" },
+  { sym: "USDC", name: "USD Coin", amount: 4200, price: 1, change: 0.0, tone: "success" }
+]
+
+market = [
+  { sym: "BTC", price: 64200, change: 2.1 },
+  { sym: "ETH", price: 3380, change: 3.4 },
+  { sym: "SOL", price: 148, change: -1.8 },
+  { sym: "ADA", price: 0.46, change: 1.2 },
+  { sym: "DOT", price: 6.2, change: -0.7 },
+  { sym: "LINK", price: 14.8, change: 4.6 }
+]
+
+allocSyms = holdings.map(h => h.sym)
+allocVals = holdings.map(h => Math.round(h.amount * h.price))
+
+$fromAmount = "0.5"
+$fromToken = "ETH"
+$toToken = "SOL"
+
+priceOf = sym => (holdings.find(h => h.sym == sym) ?? market.find(m => m.sym == sym) ?? { price: 0 }).price
+estimated = (Number($fromAmount) * priceOf($fromToken) / (priceOf($toToken) || 1)).toFixed(3)
+
+// Reusable: a holding row with coin badge, balance and 24h change.
+function HoldingRow(h) {
+  return Row([
+    Badge(h.sym, { tone: h.tone, size: "sm" }),
+    StackItem(Column([
+      Text(h.name, { variant: "body-heavy" }),
+      Text(`${h.amount} ${h.sym}`, { variant: "small", tone: "muted" })
+    ], { gap: "none" }), { grow: 1 }),
+    StackItem(Text(money(h.amount * h.price), { variant: "body-heavy" }), { basis: "110px" }),
+    Badge(`${sign(h.change)}${h.change}%`, { tone: changeTone(h.change), size: "sm" })
+  ], { gap: "md", align: "center", key: h.sym })
+}
+
+// Reusable: a market quote row.
+function MarketRow(m) {
+  return Row([
+    StackItem(Text(m.sym, { variant: "body-heavy" }), { grow: 1 }),
+    Text(money(m.price), { variant: "body" }),
+    Badge(`${sign(m.change)}${m.change}%`, { tone: changeTone(m.change), size: "sm", icon: m.change >= 0 ? "arrow-trend-up" : "arrow-trend-down" })
+  ], { gap: "md", align: "center", key: m.sym })
+}
+
+totalValue = $util.sum(holdings.map(h => h.amount * h.price))
+
+header = PageHeader("Wallet", {
+  subtitle: "Self-custody · 4 assets",
+  badge: Badge("+2.6% (24h)", { tone: "success", icon: "arrow-trend-up" }),
+  actions: [
+    Button("Receive", { variant: "secondary", size: "sm", icon: "qrcode" }),
+    Button("Send", { variant: "primary", size: "sm", icon: "paper-plane", onClick: () => $toast.show("Open send flow") })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Total balance", { value: money(totalValue), icon: "wallet", tone: "primary", trend: "up", delta: "+2.6%" }),
+  StatCard("24h P/L", { value: `${money(totalValue * 0.026)}`, icon: "arrow-trend-up", tone: "success", trend: "up", delta: "+2.6%" }),
+  StatCard("Best performer", { value: "LINK +4.6%", icon: "trophy", tone: "success" }),
+  StatCard("Assets", { value: "4", icon: "coins", tone: "info" })
+])
+
+allocCard = Card([
+  SectionHeader("Allocation", { eyebrow: "PORTFOLIO" }),
+  PieChart(allocSyms, { values: allocVals, valueFormat: "percent" })
+])
+
+holdingsCard = Card([
+  SectionHeader("Your assets", { eyebrow: "HOLDINGS" }),
+  Column(holdings.map(h => HoldingRow(h)), { gap: "md" })
+])
+
+body = Grid([allocCard, holdingsCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+swapCard = Card([
+  SectionHeader("Swap", { eyebrow: "TRADE", subtitle: "Estimated, before network fees" }),
+  Row([
+    StackItem(Input("fromAmount", { label: "You pay", value: $fromAmount }), { grow: 1 }),
+    StackItem(Select("fromToken", { label: "Token", value: $fromToken, items: ["BTC", "ETH", "SOL", "USDC"].map(t => SelectItem(t, { label: t })) }), { basis: "140px" })
+  ], { gap: "md", align: "end" }),
+  Center([Icon("arrow-down", { size: "lg" })], { minHeight: "32px" }),
+  Row([
+    StackItem(Input("toAmount", { label: "You receive (est.)", value: estimated }), { grow: 1 }),
+    StackItem(Select("toToken", { label: "Token", value: $toToken, items: ["BTC", "ETH", "SOL", "USDC"].map(t => SelectItem(t, { label: t })) }), { basis: "140px" })
+  ], { gap: "md", align: "end" }),
+  Button("Review swap", { variant: "primary", size: "lg", fullWidth: true, icon: "right-left", onClick: () => $toast.success(`Swapping ${$fromAmount} ${$fromToken} → ~${estimated} ${$toToken}`) })
+])
+
+marketCard = Card([
+  SectionHeader("Market", { eyebrow: "TOP COINS", actions: [Button("See all", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Grid(market.map(m => MarketRow(m)), { columns: { base: 1, sm: 2, lg: 3 }, gap: "md" })
+])

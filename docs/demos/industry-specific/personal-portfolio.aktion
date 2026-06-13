@@ -1,0 +1,88 @@
+// Personal Portfolio — a developer/designer portfolio landing: hero intro,
+// quick stats, selected projects, skills grid, experience timeline and a
+// contact CTA. Reusable blocks (ProjectCard, SkillItem) for any personal site.
+$app(Column([hero, statsBand, projectsCard, skillsCard, experienceCard, contactCard], { gap: "lg", padding: "md" }))
+
+img = seed => `https://picsum.photos/seed/${seed}/600/360`
+
+projects = [
+  { title: "Aurora Analytics", blurb: "Realtime product analytics dashboard handling 2B events/day.", tags: ["React", "TypeScript", "D3"], seed: "proj-aurora" },
+  { title: "Hopper Mobile", blurb: "Cross-platform travel app with offline-first sync.", tags: ["React Native", "GraphQL"], seed: "proj-hopper" },
+  { title: "Forge UI Kit", blurb: "Open-source component library, 8k+ GitHub stars.", tags: ["Design Systems", "a11y"], seed: "proj-forge" },
+  { title: "Pulse CMS", blurb: "Headless CMS with a block-based visual editor.", tags: ["Node", "Postgres"], seed: "proj-pulse" }
+]
+
+skills = [
+  { title: "Frontend", description: "React, Vue, TypeScript, Tailwind", icon: "code", tone: "primary" },
+  { title: "Backend", description: "Node, Go, Postgres, Redis", icon: "server", tone: "info" },
+  { title: "Design", description: "Figma, design systems, motion", icon: "pen-ruler", tone: "success" },
+  { title: "DevOps", description: "Docker, K8s, CI/CD, AWS", icon: "cloud", tone: "warning" }
+]
+
+experience = [
+  { title: "Senior Engineer · Vercel", time: "2023 — Present", description: "Leading the framework DX team.", icon: "briefcase", tone: "primary" },
+  { title: "Product Engineer · Linear", time: "2020 — 2023", description: "Built the realtime sync engine.", icon: "bolt", tone: "info" },
+  { title: "Frontend Dev · Shopify", time: "2018 — 2020", description: "Storefront performance & checkout.", icon: "cart-shopping", tone: "success" },
+  { title: "B.Sc. Computer Science", time: "2014 — 2018", description: "University of Toronto.", icon: "graduation-cap", tone: "default" }
+]
+
+// Reusable: a project showcase card with tags + links.
+function ProjectCard(p) {
+  return MediaCard(p.title, {
+    imageSrc: img(p.seed),
+    description: p.blurb,
+    tags: p.tags,
+    actions: [
+      Button("Live demo", { variant: "primary", size: "sm", icon: "arrow-up-right-from-square" }),
+      Button("Code", { variant: "ghost", size: "sm", icon: "brands:github" })
+    ],
+    key: p.title,
+    sx: { states: { hover: { translateY: "-4px", shadow: "lg" } } }
+  })
+}
+
+hero = Section([
+  Column([
+    Avatar("Jordan Avery", { size: "xl" }),
+    Eyebrow("AVAILABLE FOR FREELANCE"),
+    Display(["Hi, I'm Jordan — I build ", GradientText("delightful web apps", { gradient: "brand" })], { size: "lg", align: "center", balance: true }),
+    Text("Full-stack engineer & designer focused on fast, accessible products with great motion.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      Button("View work", { variant: "primary", size: "lg", icon: "folder-open" }),
+      Button("Download CV", { variant: "secondary", size: "lg", icon: "download" })
+    ], { gap: "md", justify: "center", wrap: true })
+  ], { gap: "md", align: "center", sx: { py: "xl" } })
+], { background: "soft", width: "md", align: "center", padding: "lg" })
+
+statsBand = MetricStrip([
+  Metric("7", { label: "Years experience" }),
+  Metric("40", { label: "Projects shipped", countUp: true }),
+  Metric("8200", { label: "GitHub stars", countUp: true }),
+  Metric("12", { label: "Open-source repos" })
+], { columns: 4 })
+
+projectsCard = Card([
+  SectionHeader("Selected work", { eyebrow: "PROJECTS", subtitle: "A few things I'm proud of" }),
+  Grid(projects.map(p => ProjectCard(p)), { columns: { base: 1, sm: 2 }, gap: "lg" })
+])
+
+skillsCard = Card([
+  SectionHeader("What I do", { eyebrow: "SKILLS" }),
+  FeatureGrid(skills.map(s => FeatureItem(s.title, { description: s.description, icon: s.icon, tone: s.tone })), { columns: 4 })
+])
+
+experienceCard = Card([
+  SectionHeader("Experience", { eyebrow: "CAREER" }),
+  Timeline(experience.map(e => TimelineItem(e.title, { time: e.time, description: e.description, icon: e.icon, tone: e.tone })))
+])
+
+contactCard = Card([
+  Center([Column([
+    Heading("Let's build something together", { size: "section", align: "center" }),
+    Text("Drop me a line — I usually reply within a day.", { variant: "body", tone: "muted", align: "center" }),
+    Row([
+      Button("hello@jordan.dev", { variant: "primary", size: "lg", icon: "envelope", onClick: () => $toast.success("Opening your mail client") }),
+      Button("LinkedIn", { variant: "ghost", size: "lg", icon: "brands:linkedin" })
+    ], { gap: "sm", justify: "center", wrap: true })
+  ], { gap: "md", align: "center" })], { minHeight: "120px" })
+])

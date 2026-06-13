@@ -1,0 +1,92 @@
+// Cloud Computing — an infrastructure console for a cloud platform: compute
+// usage over time, regional health, running services and deploy history.
+// Reusable building blocks (RegionRow, ServiceTile, DeployEvent) for any
+// IaaS / PaaS admin surface.
+$app(Column([header, kpis, body, servicesCard, deploys], { gap: "lg", padding: "md" }))
+
+$range = "24h"
+
+ranges = {
+  "24h": { label: "24 hours", points: ["00", "04", "08", "12", "16", "20"], cpu: [38, 42, 55, 61, 48, 44], net: [12, 18, 30, 41, 28, 22] },
+  "7d":  { label: "7 days", points: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], cpu: [44, 51, 47, 63, 70, 58, 52], net: [20, 26, 22, 35, 44, 38, 30] }
+}
+usage = ranges[$range]
+
+regions = [
+  { name: "us-east-1", load: 62, status: "Operational", tone: "success" },
+  { name: "eu-west-2", load: 81, status: "High load", tone: "warning" },
+  { name: "ap-south-1", load: 47, status: "Operational", tone: "success" },
+  { name: "sa-east-1", load: 94, status: "Degraded", tone: "danger" }
+]
+
+services = [
+  { name: "Compute", icon: "server", up: true, uptime: "99.99% uptime" },
+  { name: "Object Store", icon: "database", up: true, uptime: "99.98% uptime" },
+  { name: "Edge CDN", icon: "globe", up: true, uptime: "100% uptime" },
+  { name: "Functions", icon: "bolt", up: false, uptime: "98.40% uptime" },
+  { name: "Queue", icon: "list-check", up: true, uptime: "99.95% uptime" },
+  { name: "Secrets", icon: "key", up: true, uptime: "100% uptime" }
+]
+
+deployList = [
+  { title: "api-gateway v2.14.0", time: "8m ago", description: "Rolling update across 12 nodes", icon: "rocket", tone: "success" },
+  { title: "billing-worker v1.9.2", time: "42m ago", description: "Hotfix for retry backoff", icon: "wrench", tone: "info" },
+  { title: "web-frontend v3.1.0", time: "2h ago", description: "Canary promoted to 100%", icon: "circle-check", tone: "success" },
+  { title: "auth-service v4.0.1", time: "5h ago", description: "Rolled back — elevated 5xx", icon: "rotate-left", tone: "danger" }
+]
+
+// Reusable: a compact regional health row with a load bar.
+function RegionRow(r) {
+  return Row([
+    StackItem(StatusDot(r.name, { tone: r.tone, pulse: r.tone == "success" }), { grow: 1 }),
+    StackItem(Progress(r.load, { max: 100, tone: r.load > 85 ? "danger" : r.load > 70 ? "warning" : "success" }), { basis: "180px" }),
+    Badge(`${r.load}%`, { tone: r.tone, size: "sm" })
+  ], { gap: "md", align: "center", key: r.name })
+}
+
+// Reusable: a service tile with live health + uptime.
+function ServiceTile(svc) {
+  return Card([
+    Row([Icon(svc.icon, { size: "lg" }), Spacer(), Badge(svc.up ? "Healthy" : "Degraded", { tone: svc.up ? "success" : "warning", size: "sm", icon: svc.up ? "circle-check" : "triangle-exclamation" })], { align: "center" }),
+    Text(svc.name, { variant: "body-heavy" }),
+    Text(svc.uptime, { variant: "small", tone: "muted" })
+  ], { key: svc.name, sx: { states: { hover: { translateY: "-2px", shadow: "lg" } } } })
+}
+
+header = PageHeader("Infrastructure", {
+  subtitle: `Fleet overview · ${usage.label}`,
+  badge: Badge("3 of 4 regions healthy", { tone: "warning", icon: "server" }),
+  actions: [
+    ToggleGroup("range", { items: [{ value: "24h", label: "24H" }, { value: "7d", label: "7D" }], value: $range, size: "sm" }),
+    Button("Deploy", { variant: "primary", icon: "rocket", size: "sm", onClick: () => $toast.success("Deploy pipeline triggered") })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Active nodes", { value: "248", icon: "server", tone: "primary", trend: "up", delta: "+12" }),
+  StatCard("Avg CPU", { value: `${Math.round($util.sum(usage.cpu) / usage.cpu.length)}%`, icon: "microchip", tone: "info", trend: "up", delta: "+4%" }),
+  StatCard("Monthly spend", { value: "$18.4k", icon: "sack-dollar", tone: "warning", trend: "up", delta: "+6.2%" }),
+  StatCard("Open incidents", { value: "1", icon: "triangle-exclamation", tone: "danger", trend: "down", delta: "-2" })
+])
+
+usageChart = Card([
+  SectionHeader("Resource usage", { eyebrow: "TELEMETRY", subtitle: usage.label }),
+  LineChart(usage.points, { series: [Series("CPU %", { values: usage.cpu }), Series("Network Gb/s", { values: usage.net })], filled: true })
+])
+
+regionCard = Card([
+  SectionHeader("Region health", { eyebrow: "GLOBAL" }),
+  Column(regions.map(r => RegionRow(r)), { gap: "md" })
+])
+
+body = Grid([usageChart, regionCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+servicesCard = Card([
+  SectionHeader("Managed services", { eyebrow: "STATUS", actions: [Button("Status page", { variant: "ghost", size: "sm", icon: "arrow-up-right-from-square" })] }),
+  Grid(services.map(s => ServiceTile(s)), { columns: { base: 2, md: 3, lg: 6 }, gap: "md" })
+])
+
+deploys = Card([
+  SectionHeader("Recent deployments", { eyebrow: "PIPELINE" }),
+  Timeline(deployList.map(d => TimelineItem(d.title, { time: d.time, description: d.description, icon: d.icon, tone: d.tone })))
+])

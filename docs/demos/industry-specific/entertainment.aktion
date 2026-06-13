@@ -1,0 +1,98 @@
+// Entertainment — a streaming home screen: hero spotlight, continue-watching
+// rail, trending grid, browse-by-genre tiles and top picks. Reusable blocks
+// (PosterCard, GenreTile) for any streaming / media / OTT product.
+$app(Column([hero, continueCard, trendingCard, genresCard, picksCard], { gap: "lg", padding: "md" }))
+
+img = seed => `https://picsum.photos/seed/${seed}/600/360`
+
+continueList = [
+  { title: "Neon Horizon", meta: "S2 · E4 · 22 min left", progress: 64, seed: "neon1" },
+  { title: "The Quiet Coast", meta: "1h 12m left", progress: 28, seed: "coast2" },
+  { title: "Galactic Drift", meta: "S1 · E9 · 8 min left", progress: 88, seed: "drift3" },
+  { title: "Midnight Diner", meta: "S3 · E1 · 40 min left", progress: 12, seed: "diner4" }
+]
+
+trending = [
+  { title: "Echoes of Tomorrow", genre: "Sci-Fi", rating: 4.7, seed: "echo5", badge: "New" },
+  { title: "Crown & Country", genre: "Drama", rating: 4.5, seed: "crown6", badge: "Top 10" },
+  { title: "Last Laugh", genre: "Comedy", rating: 4.2, seed: "laugh7", badge: null },
+  { title: "Deep Blue", genre: "Documentary", rating: 4.8, seed: "blue8", badge: "Award" },
+  { title: "Shadow Run", genre: "Thriller", rating: 4.4, seed: "shadow9", badge: null },
+  { title: "Sunrise Avenue", genre: "Romance", rating: 4.1, seed: "sun10", badge: null }
+]
+
+genres = [
+  { label: "Action", icon: "explosion", tone: "danger" },
+  { label: "Comedy", icon: "face-laugh", tone: "warning" },
+  { label: "Sci-Fi", icon: "rocket", tone: "primary" },
+  { label: "Drama", icon: "masks-theater", tone: "info" },
+  { label: "Documentary", icon: "film", tone: "success" },
+  { label: "Kids", icon: "child", tone: "default" }
+]
+
+picks = [
+  { title: "The Long Road", genre: "Adventure · 2h 4m", rating: 4.6, seed: "road11" },
+  { title: "Paper Moons", genre: "Animation · 1h 38m", rating: 4.9, seed: "moon12" },
+  { title: "City of Glass", genre: "Mystery · 2h 12m", rating: 4.3, seed: "glass13" }
+]
+
+// Reusable: a poster card with rating + play overlay action.
+function PosterCard(m) {
+  return MediaCard(m.title, {
+    imageSrc: img(m.seed),
+    description: m.genre,
+    badge: m.badge ? Badge(m.badge, { tone: "primary", size: "sm" }) : null,
+    meta: `★ ${m.rating}`,
+    actions: [Button("Play", { variant: "primary", size: "sm", icon: "play", onClick: () => $toast.success(`Playing ${m.title}`) })],
+    key: m.title,
+    sx: { states: { hover: { translateY: "-4px", shadow: "lg" } } }
+  })
+}
+
+// Reusable: a continue-watching tile with resume progress bar.
+function ResumeCard(m) {
+  return Card([
+    Image(img(m.seed), { alt: m.title, sx: { w: "full", h: "120px", radius: "md" } }),
+    Text(m.title, { variant: "body-heavy" }),
+    Text(m.meta, { variant: "small", tone: "muted" }),
+    Progress(m.progress, { max: 100, tone: "danger" })
+  ], { key: m.title, sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } } })
+}
+
+// Reusable: a clickable genre tile.
+function GenreTile(g) {
+  return Tile(g.label, { icon: g.icon, tone: g.tone, onClick: () => $toast.show(`Browse ${g.label}`), key: g.label })
+}
+
+hero = Section([
+  Backdrop({ grid: true, blobs: ["#7c3aed55", "#ec489955"], particles: 24, type: "drift" }),
+  Column([
+    Eyebrow("FEATURED TONIGHT"),
+    Display(["Stream the ", GradientText("future of cinema", { gradient: "brand" })], { size: "lg", align: "center", balance: true }),
+    Text("Award-winning originals, live events and thousands of titles — all ad-free.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      Button("Play featured", { variant: "primary", size: "lg", icon: "play" }),
+      Button("Add to list", { variant: "secondary", size: "lg", icon: "plus" })
+    ], { gap: "md", justify: "center", wrap: true })
+  ], { gap: "md", align: "center", sx: { py: "xl" } })
+], { background: "base", width: "lg", align: "center", padding: "lg" })
+
+continueCard = Card([
+  SectionHeader("Continue watching", { eyebrow: "JUMP BACK IN" }),
+  Grid(continueList.map(m => ResumeCard(m)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })
+])
+
+trendingCard = Card([
+  SectionHeader("Trending now", { eyebrow: "POPULAR", actions: [Button("See all", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Grid(trending.map(m => PosterCard(m)), { columns: { base: 1, sm: 2, lg: 3 }, gap: "lg" })
+])
+
+genresCard = Card([
+  SectionHeader("Browse by genre", { eyebrow: "CATEGORIES" }),
+  Grid(genres.map(g => GenreTile(g)), { columns: { base: 2, md: 3, lg: 6 }, gap: "md" })
+])
+
+picksCard = Card([
+  SectionHeader("Top picks for you", { eyebrow: "RECOMMENDED" }),
+  Grid(picks.map(m => PosterCard(m)), { columns: { base: 1, sm: 3 }, gap: "lg" })
+])

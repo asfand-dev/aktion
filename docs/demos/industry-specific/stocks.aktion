@@ -1,0 +1,102 @@
+// Stocks — a portfolio dashboard: total value & day change, performance trend,
+// holdings table, a watchlist and market movers. Reusable blocks (HoldingRow,
+// MoverRow) for any brokerage / investing app.
+$app(Column([header, kpis, body, watchlistCard, moversCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+sign = n => n >= 0 ? "+" : ""
+changeTone = n => n >= 0 ? "success" : "danger"
+
+perf = {
+  months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+  value: [82, 86, 84, 91, 96, 104]
+}
+
+holdings = [
+  { ticker: "AAPL", name: "Apple Inc.", shares: 40, price: 214.3, change: 1.8 },
+  { ticker: "NVDA", name: "NVIDIA Corp.", shares: 18, price: 126.4, change: 3.4 },
+  { ticker: "MSFT", name: "Microsoft", shares: 22, price: 448.1, change: -0.6 },
+  { ticker: "TSLA", name: "Tesla", shares: 30, price: 182.7, change: -2.1 },
+  { ticker: "AMZN", name: "Amazon", shares: 25, price: 198.5, change: 0.9 }
+]
+
+watchlist = [
+  { ticker: "GOOGL", price: 178.2, change: 1.2 },
+  { ticker: "META", price: 502.6, change: 2.4 },
+  { ticker: "AMD", price: 162.9, change: -1.5 },
+  { ticker: "NFLX", price: 678.4, change: 0.4 }
+]
+
+movers = [
+  { ticker: "SMCI", change: 12.4, up: true },
+  { ticker: "PLTR", change: 8.1, up: true },
+  { ticker: "INTC", change: -6.3, up: false },
+  { ticker: "BA", change: -4.8, up: false }
+]
+
+// Reusable: a watchlist row with live-style quote + change.
+function QuoteRow(q) {
+  return Row([
+    StackItem(Text(q.ticker, { variant: "body-heavy" }), { grow: 1 }),
+    Text(money(q.price), { variant: "body" }),
+    Badge(`${sign(q.change)}${q.change}%`, { tone: changeTone(q.change), size: "sm", icon: q.change >= 0 ? "arrow-trend-up" : "arrow-trend-down" })
+  ], { gap: "md", align: "center", key: q.ticker })
+}
+
+// Reusable: a market-mover row.
+function MoverRow(m) {
+  return Row([
+    Icon(m.up ? "arrow-trend-up" : "arrow-trend-down", { size: "sm" }),
+    StackItem(Text(m.ticker, { variant: "body-heavy" }), { grow: 1 }),
+    Badge(`${sign(m.change)}${m.change}%`, { tone: changeTone(m.change), size: "sm" })
+  ], { gap: "md", align: "center", key: m.ticker })
+}
+
+portfolioValue = $util.sum(holdings.map(h => h.shares * h.price))
+
+header = PageHeader("Portfolio", {
+  subtitle: "Markets open · delayed 15 min",
+  badge: Badge("+1.4% today", { tone: "success", icon: "arrow-trend-up" }),
+  actions: [
+    Button("Deposit", { variant: "secondary", size: "sm", icon: "plus" }),
+    Button("Trade", { variant: "primary", size: "sm", icon: "right-left", onClick: () => $toast.show("Open order ticket") })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Total value", { value: money(portfolioValue), icon: "wallet", tone: "primary", trend: "up", delta: "+8.3%" }),
+  StatCard("Day change", { value: `${money(portfolioValue * 0.014)}`, icon: "arrow-trend-up", tone: "success", trend: "up", delta: "+1.4%" }),
+  StatCard("Buying power", { value: money(12480), icon: "sack-dollar", tone: "info" }),
+  StatCard("Total return", { value: "+26.7%", icon: "chart-line", tone: "success", trend: "up", delta: "+2.1%" })
+])
+
+perfChart = Card([
+  SectionHeader("Portfolio value", { eyebrow: "6 MONTHS", subtitle: "Thousands of USD" }),
+  LineChart(perf.months, { series: [Series("Value (k)", { values: perf.value })], filled: true })
+])
+
+holdingsCard = Card([
+  SectionHeader("Holdings", { eyebrow: "POSITIONS" }),
+  Table([
+    Col("Ticker", { values: holdings.map(h => Text(h.ticker, { variant: "body-heavy" })) }),
+    Col("Name", { values: holdings.map(h => Text(h.name, { variant: "small", tone: "muted" })) }),
+    Col("Shares", { align: "right", values: holdings.map(h => String(h.shares)) }),
+    Col("Value", { align: "right", values: holdings.map(h => money(h.shares * h.price)) }),
+    Col("Change", { align: "right", values: holdings.map(h => Badge(`${sign(h.change)}${h.change}%`, { tone: changeTone(h.change), size: "sm" })) })
+  ], { striped: true })
+])
+
+body = Grid([perfChart, holdingsCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+watchlistCard = Card([
+  SectionHeader("Watchlist", { eyebrow: "TRACKING", actions: [Button("Add symbol", { variant: "ghost", size: "sm", icon: "plus" })] }),
+  Column(watchlist.map(q => QuoteRow(q)), { gap: "sm" })
+])
+
+moversCard = Card([
+  SectionHeader("Market movers", { eyebrow: "TODAY", subtitle: "Biggest swings in the S&P 500" }),
+  Grid([
+    Column(movers.filter(m => m.up).map(m => MoverRow(m)), { gap: "sm" }),
+    Column(movers.filter(m => !m.up).map(m => MoverRow(m)), { gap: "sm" })
+  ], { columns: { base: 1, sm: 2 }, gap: "lg" })
+])

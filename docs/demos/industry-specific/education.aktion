@@ -1,0 +1,99 @@
+// Education — a learning dashboard (LMS): course progress, study trend,
+// enrolled courses, upcoming deadlines and a class leaderboard. Reusable
+// blocks (CourseCard, DeadlineRow, LeaderRow) for any e-learning product.
+$app(Column([header, kpis, coursesCard, body, leaderCard], { gap: "lg", padding: "md" }))
+
+study = {
+  days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  minutes: [45, 60, 30, 80, 55, 90, 40]
+}
+
+courses = [
+  { title: "Intro to Machine Learning", teacher: "Dr. Lin", progress: 72, lessons: "18 / 25 lessons", icon: "robot", tone: "primary" },
+  { title: "Web Development Bootcamp", teacher: "A. Rivers", progress: 45, lessons: "27 / 60 lessons", icon: "code", tone: "info" },
+  { title: "Spanish for Beginners", teacher: "M. Soto", progress: 90, lessons: "36 / 40 lessons", icon: "language", tone: "success" },
+  { title: "Data Structures", teacher: "Prof. Chen", progress: 30, lessons: "9 / 30 lessons", icon: "diagram-project", tone: "warning" }
+]
+
+deadlines = [
+  { title: "ML — Assignment 4", course: "Machine Learning", due: "Tomorrow", tone: "danger", icon: "file-arrow-up" },
+  { title: "Quiz: CSS Flexbox", course: "Web Dev", due: "In 3 days", tone: "warning", icon: "question" },
+  { title: "Oral practice", course: "Spanish", due: "In 5 days", tone: "info", icon: "microphone" },
+  { title: "Project proposal", course: "Data Structures", due: "Next week", tone: "success", icon: "lightbulb" }
+]
+
+leaders = [
+  { name: "Priya N.", points: 4820, rank: 1 },
+  { name: "You", points: 4310, rank: 2 },
+  { name: "Diego M.", points: 3990, rank: 3 },
+  { name: "Sara K.", points: 3650, rank: 4 },
+  { name: "Liam O.", points: 3210, rank: 5 }
+]
+
+// Reusable: an enrolled-course card with a completion bar.
+function CourseCard(c) {
+  return Card([
+    Row([Icon(c.icon, { size: "lg" }), Spacer(), Badge(`${c.progress}%`, { tone: c.tone, size: "sm" })], { align: "center" }),
+    Text(c.title, { variant: "body-heavy" }),
+    Text(`with ${c.teacher} · ${c.lessons}`, { variant: "small", tone: "muted" }),
+    Progress(c.progress, { max: 100, tone: c.tone }),
+    Button("Resume", { variant: "secondary", size: "sm", fullWidth: true, icon: "play", onClick: () => $toast.show(`Resuming ${c.title}`) })
+  ], { key: c.title, sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } } })
+}
+
+// Reusable: an upcoming deadline row.
+function DeadlineRow(d) {
+  return Row([
+    Icon(d.icon, { size: "sm" }),
+    StackItem(Column([
+      Text(d.title, { variant: "body-heavy" }),
+      Text(d.course, { variant: "small", tone: "muted" })
+    ], { gap: "none" }), { grow: 1 }),
+    Badge(d.due, { tone: d.tone, size: "sm", icon: "clock" })
+  ], { gap: "md", align: "center", key: d.title })
+}
+
+// Reusable: a leaderboard row that highlights the current user.
+function LeaderRow(l) {
+  return Row([
+    Badge(`#${l.rank}`, { tone: l.rank <= 3 ? "warning" : "default", size: "sm" }),
+    Avatar(l.name, { size: "sm", fallback: "initials" }),
+    StackItem(Text(l.name, { variant: l.name == "You" ? "body-heavy" : "body" }), { grow: 1 }),
+    Text(`${$util.format(l.points, "compact")} XP`, { variant: "body-heavy", tone: "primary" })
+  ], { gap: "md", align: "center", key: l.name })
+}
+
+header = PageHeader("My learning", {
+  subtitle: "Keep your streak alive — 6 days and counting",
+  badge: Badge("Level 7 · Scholar", { tone: "primary", icon: "graduation-cap" }),
+  actions: [Button("Browse courses", { variant: "primary", size: "sm", icon: "magnifying-glass" })]
+})
+
+kpis = Stats([
+  StatCard("Courses", { value: "4", icon: "book-open", tone: "primary" }),
+  StatCard("Hours this week", { value: `${$util.round($util.sum(study.minutes) / 60, 1)}`, icon: "clock", tone: "info", trend: "up", delta: "+1.2h" }),
+  StatCard("Avg score", { value: "88%", icon: "award", tone: "success", trend: "up", delta: "+3%" }),
+  StatCard("Day streak", { value: "6", icon: "fire", tone: "warning", trend: "up", delta: "+1" })
+])
+
+coursesCard = Card([
+  SectionHeader("Enrolled courses", { eyebrow: "IN PROGRESS" }),
+  Grid(courses.map(c => CourseCard(c)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })
+])
+
+studyChart = Card([
+  SectionHeader("Study time", { eyebrow: "THIS WEEK", subtitle: "Minutes per day" }),
+  BarChart(study.days, { series: [Series("Minutes", { values: study.minutes })] })
+])
+
+deadlinesCard = Card([
+  SectionHeader("Upcoming deadlines", { eyebrow: "DUE SOON" }),
+  Column(deadlines.map(d => DeadlineRow(d)), { gap: "md" })
+])
+
+body = Grid([studyChart, deadlinesCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+leaderCard = Card([
+  SectionHeader("Class leaderboard", { eyebrow: "THIS MONTH", subtitle: "Top learners by XP" }),
+  Column(leaders.map(l => LeaderRow(l)), { gap: "sm" })
+])

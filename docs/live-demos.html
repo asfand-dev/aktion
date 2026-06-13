@@ -17,21 +17,57 @@
   </script>
   <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
   <style>
-    .demo-section { margin-top: 34px; }
-    .demo-section h2 {
-      margin: 0 0 4px;
-      font-size: 19px;
+    .demo-section {
+      margin-top: 16px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .demo-section-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 16px 18px;
+      margin: 0;
+      border: 0;
+      background: transparent;
+      color: var(--doc-text);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--doc-transition);
+    }
+    .demo-section-toggle:hover { background: var(--doc-bg-soft); }
+    .demo-section-toggle:focus-visible { outline: 2px solid var(--doc-primary); outline-offset: -2px; }
+    .demo-section-chevron {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      color: var(--doc-text-muted);
+      transition: transform var(--doc-transition);
+    }
+    .demo-section[data-open="true"] .demo-section-chevron { transform: rotate(90deg); }
+    .demo-section-title {
+      font-size: 18px;
+      font-weight: 600;
       letter-spacing: -0.01em;
     }
     .demo-section-count {
       font-size: 13px;
       color: var(--doc-text-muted);
-      margin: 0 0 14px;
+      margin-left: auto;
+    }
+    .demo-section-body {
+      padding: 0 18px 18px;
+      border-top: 1px solid var(--doc-border-subtle);
     }
     .demo-card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 18px;
+      padding-top: 18px;
     }
     .demo-preview-card {
       display: flex;
@@ -125,57 +161,187 @@
       return r.json();
     });
 
-    // Load each preview iframe only once it scrolls near the viewport — the
-    // catalog holds 70+ live programs and must not boot them all upfront.
-    const lazyFrames = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const frame = entry.target;
-        frame.src = frame.dataset.src;
-        frame.addEventListener("load", () => {
-          frame.parentElement.querySelector(".demo-preview-loading")?.remove();
-        }, { once: true });
-        lazyFrames.unobserve(frame);
+    // Slow auto-scroll of a hovered preview. The embedded runner scrolls its
+    // own `.runner-stage`; we ping-pong through it so the whole program is
+    // revealed, and reset to the top when the pointer leaves.
+    const HOVER_SCROLL_SPEED = 55; // content px per second
+    let scrollRaf = 0;
+    let scrollTarget = null;
+
+    function stopHoverScroll(resetTo = 0) {
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      if (scrollTarget) {
+        try { scrollTarget.scrollTop = resetTo; } catch (_) {}
       }
-    }, { rootMargin: "400px" });
+      scrollTarget = null;
+    }
+
+    function getScroller(iframe) {
+      try {
+        const doc = iframe.contentDocument;
+        return doc ? doc.querySelector(".runner-stage") : null;
+      } catch (_) {
+        return null; // not loaded yet (or cross-origin, which shouldn't happen)
+      }
+    }
+
+    function startHoverScroll(iframe) {
+      const scroller = getScroller(iframe);
+      if (!scroller) return;
+      stopHoverScroll();
+      scrollTarget = scroller;
+      let last = performance.now();
+      let dir = 1;
+      const step = (now) => {
+        const dt = (now - last) / 1000;
+        last = now;
+        const max = scroller.scrollHeight - scroller.clientHeight;
+        if (max > 1) {
+          let next = scroller.scrollTop + dir * HOVER_SCROLL_SPEED * dt;
+          if (next >= max) { next = max; dir = -1; }
+          else if (next <= 0) { next = 0; dir = 1; }
+          scroller.scrollTop = next;
+        }
+        scrollRaf = requestAnimationFrame(step);
+      };
+      scrollRaf = requestAnimationFrame(step);
+    }
+
+    // Mounts a live preview iframe inside a card and tears it down again, so
+    // only the cards near the viewport ever boot the Aktion runtime.
+    function mountFrame(card) {
+      if (card._frame) return;
+      const slot = card.querySelector(".demo-preview-frame");
+      const frame = document.createElement("iframe");
+      frame.src = card.dataset.src;
+      frame.title = `${card.dataset.name} preview`;
+      frame.setAttribute("tabindex", "-1");
+      frame.setAttribute("aria-hidden", "true");
+      frame.addEventListener("load", () => {
+        slot.querySelector(".demo-preview-loading")?.remove();
+        if (card._hovering) startHoverScroll(frame);
+      }, { once: true });
+      slot.appendChild(frame);
+      card._frame = frame;
+    }
+
+    function unmountFrame(card) {
+      if (!card._frame) return;
+      if (scrollTarget && card._hovering) stopHoverScroll();
+      card._frame.remove();
+      card._frame = null;
+      const slot = card.querySelector(".demo-preview-frame");
+      if (!slot.querySelector(".demo-preview-loading")) {
+        const loading = document.createElement("span");
+        loading.className = "demo-preview-loading";
+        loading.textContent = "Loading preview…";
+        slot.appendChild(loading);
+      }
+    }
+
+    function buildCard(folder, file) {
+      const app = `${folder}/${file}`;
+      const card = document.createElement("a");
+      card.className = "demo-preview-card";
+      card.href = `demos/index.html?app=${encodeURIComponent(app)}`;
+      card.target = "_blank";
+      card.rel = "noopener";
+      card.dataset.src = `demos/index.html?app=${encodeURIComponent(app)}&embed=1`;
+      card.dataset.name = programName(file);
+      card.innerHTML = `
+        <span class="demo-preview-frame">
+          <span class="demo-preview-loading">Loading preview…</span>
+        </span>
+        <span class="demo-preview-meta">
+          <span class="demo-preview-name">${programName(file)}</span>
+          <span class="demo-preview-open">Open demo &rarr;</span>
+        </span>
+      `;
+      card.addEventListener("mouseenter", () => {
+        card._hovering = true;
+        if (card._frame) startHoverScroll(card._frame);
+      });
+      card.addEventListener("mouseleave", () => {
+        card._hovering = false;
+        stopHoverScroll();
+      });
+      return card;
+    }
+
+    const CHEVRON =
+      '<svg class="demo-section-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    const sections = [];
 
     for (const [folder, files] of Object.entries(manifest)) {
       const section = document.createElement("section");
       section.className = "demo-section";
+      section.dataset.open = "false";
+      const count = `${files.length} program${files.length === 1 ? "" : "s"}`;
       section.innerHTML = `
-        <h2>${titleCase(folder)}</h2>
-        <p class="demo-section-count">${files.length} program${files.length === 1 ? "" : "s"}</p>
-        <div class="demo-card-grid"></div>
+        <button type="button" class="demo-section-toggle" aria-expanded="false">
+          ${CHEVRON}
+          <span class="demo-section-title">${titleCase(folder)}</span>
+          <span class="demo-section-count">${count}</span>
+        </button>
       `;
-      const grid = section.querySelector(".demo-card-grid");
+      const toggle = section.querySelector(".demo-section-toggle");
+      const ctx = { folder, files, section, toggle, body: null, observer: null };
 
-      for (const file of files) {
-        const app = `${folder}/${file}`;
-        const card = document.createElement("a");
-        card.className = "demo-preview-card";
-        card.href = `demos/index.html?app=${encodeURIComponent(app)}`;
-        card.target = "_blank";
-        card.rel = "noopener";
-        card.innerHTML = `
-          <span class="demo-preview-frame">
-            <span class="demo-preview-loading">Loading preview…</span>
-          </span>
-          <span class="demo-preview-meta">
-            <span class="demo-preview-name">${programName(file)}</span>
-            <span class="demo-preview-open">Open demo &rarr;</span>
-          </span>
-        `;
-        const frame = document.createElement("iframe");
-        frame.dataset.src = `demos/index.html?app=${encodeURIComponent(app)}&embed=1`;
-        frame.title = `${programName(file)} preview`;
-        frame.setAttribute("tabindex", "-1");
-        frame.setAttribute("aria-hidden", "true");
-        card.querySelector(".demo-preview-frame").appendChild(frame);
-        lazyFrames.observe(frame);
-        grid.appendChild(card);
+      // Mount/unmount iframes as cards enter or leave the viewport so the
+      // browser only ever runs the visible programs of the open section.
+      function makeObserver() {
+        return new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) mountFrame(entry.target);
+            else unmountFrame(entry.target);
+          }
+        }, { rootMargin: "150px 0px" });
       }
+
+      function expand() {
+        if (ctx.section.dataset.open === "true") return;
+        for (const other of sections) if (other !== ctx) other.collapse();
+        ctx.section.dataset.open = "true";
+        toggle.setAttribute("aria-expanded", "true");
+        const body = document.createElement("div");
+        body.className = "demo-section-body";
+        const grid = document.createElement("div");
+        grid.className = "demo-card-grid";
+        ctx.observer = makeObserver();
+        for (const file of files) {
+          const card = buildCard(folder, file);
+          grid.appendChild(card);
+          ctx.observer.observe(card);
+        }
+        body.appendChild(grid);
+        ctx.section.appendChild(body);
+        ctx.body = body;
+      }
+
+      function collapse() {
+        if (ctx.section.dataset.open !== "true") return;
+        ctx.section.dataset.open = "false";
+        toggle.setAttribute("aria-expanded", "false");
+        if (ctx.observer) { ctx.observer.disconnect(); ctx.observer = null; }
+        stopHoverScroll();
+        if (ctx.body) { ctx.body.remove(); ctx.body = null; }
+      }
+
+      ctx.expand = expand;
+      ctx.collapse = collapse;
+      toggle.addEventListener("click", () => {
+        if (ctx.section.dataset.open === "true") collapse();
+        else expand();
+      });
+
+      sections.push(ctx);
       root.appendChild(section);
     }
+
+    // Open the first group by default.
+    sections[0]?.expand();
   </script>
 </body>
 </html>

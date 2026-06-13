@@ -78,6 +78,7 @@ const NAV_GROUPS = [
     label: "Theming",
     items: [
       { href: "themes.html", label: "Themes & customization" },
+      { href: "theme-generator.html", label: "Theme generator" },
     ],
   },
   {
@@ -94,7 +95,7 @@ const NAV_GROUPS = [
 const PRIMARY_TABS = [
   { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
-  { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
+  { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-generator.html"] },
   { href: "live-demos.html", label: "Demos",       matches: ["live-demos.html"] },
   { href: "playground.html",  label: "Playground", matches: ["playground.html"] },
   { href: "chat-bot.html",    label: "Chat bot",   matches: ["chat-bot.html"] },
@@ -128,6 +129,7 @@ const PAGE_KEYWORDS = {
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit",
   "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
   "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",
+  "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
   "playground.html": "editor preview live",
   "visual-editor.html": "drag drop visual editor canvas inspector palette no-code wysiwyg",

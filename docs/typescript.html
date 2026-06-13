@@ -180,6 +180,29 @@ app.registerComponents([Sparkline]); // next getSystemPrompt() includes it</code
 
       <h2 id="interceptors">Typing interceptors &amp; the language surface</h2>
       <p>
+        Register host&#8209;wide HTTP interceptors with
+        <code>registerHttpInterceptors(interceptors)</code>. The
+        <code>HttpInterceptors</code> bag is fully typed &mdash; each hook receives a
+        typed <code>HttpRequest</code> / response and may return a (possibly async)
+        replacement, ideal for injecting auth tokens or centralising logging.
+        Multiple calls merge incrementally, so passing only <code>onRequest</code>
+        never clears an existing <code>onResponse</code>:
+      </p>
+<pre><code>import type { AktionElement, HttpInterceptors } from "aktion-runtime";
+
+const app = document.querySelector("aktion-app") as AktionElement;
+
+const interceptors: HttpInterceptors = {
+  onRequest: (req) =&gt; ({
+    ...req,
+    headers: { ...req.headers, Authorization: `Bearer ${getToken()}` },
+  }),
+  onResponse: (res) =&gt; res,                 // inspect/transform; return it
+  onError: (err, req) =&gt; console.error("[http]", req.url, err),
+};
+
+app.registerHttpInterceptors(interceptors); // calls merge incrementally</code></pre>
+      <p>
         The DOM-free <code>aktion-runtime/language</code> entry exports
         <code>getDiagnostics</code>, <code>getCompletions</code>,
         <code>getHoverInfo</code>, and <code>formatProgram</code> (with its

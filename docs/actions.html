@@ -271,7 +271,7 @@ el.addEventListener("form-submitted", (event) =&gt; {
         <tbody>
           <tr><td><strong>Action</strong> &mdash; <code>function save() { &hellip; }</code></td><td>A user event (click, change, submit)</td><td>Mutations the user initiates: writes, server calls, navigation.</td></tr>
           <tr><td><strong>Effect</strong> &mdash; <code>$effect(() =&gt; { &hellip; }, [$dep])</code></td><td>A dependency changing (or mount / interval)</td><td>Reactive side effects: debounced search, timers, subscriptions &mdash; see <a href="side-effects.html">Side effects</a>.</td></tr>
-          <tr><td><strong>Binding</strong> &mdash; <code>$total = sum($items)</code></td><td>Any read it depends on changing</td><td>Pure, derived reactive values. No side effects.</td></tr>
+          <tr><td><strong>Binding</strong> &mdash; <code>$total = $util.sum($items)</code></td><td>Any read it depends on changing</td><td>Pure, derived reactive values. No side effects.</td></tr>
         </tbody>
       </table>
 

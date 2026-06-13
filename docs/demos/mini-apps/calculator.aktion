@@ -1,0 +1,79 @@
+// Calculator — a working four-function calculator with a keypad, live
+// expression display, percent / sign / decimal keys and a tape of recent
+// results. Starting point for: any numeric input pad or POS-style entry screen.
+// Uses: $store({ persist, history }) for undo, Grid keypad, sx hover/press states.
+$app(Center([Container([Column([header, display, keypad, tape], { gap: "md" })], { size: "sm" })], { minHeight: "85vh" }))
+
+calc = $store({
+  persist: "calc.state",
+  history: 30,
+  current: "0",      // the number being typed
+  previous: null,    // the stored operand
+  op: null,          // pending operator
+  fresh: true,       // next digit starts a new number
+  tape: [],          // recent "expr = result" strings
+  press: (s, key) => {
+    if (key == "C") { s.current = "0"; s.previous = null; s.op = null; s.fresh = true; return }
+    if (key == "CE") { s.current = "0"; s.fresh = true; return }
+    if (key == "back") { s.current = s.current.length > 1 ? s.current.slice(0, -1) : "0"; return }
+    if (key == ".") { if (!s.current.includes(".")) s.current = s.current + "."; s.fresh = false; return }
+    if (key == "+/-") { s.current = String(-Number(s.current)); return }
+    if (key == "%") { s.current = String(Number(s.current) / 100); return }
+    if (key == "+" || key == "-" || key == "×" || key == "÷") {
+      if (s.op && !s.fresh) s.press("=")
+      s.previous = s.current; s.op = key; s.fresh = true; return
+    }
+    if (key == "=") {
+      if (s.op == null || s.previous == null) return
+      const a = Number(s.previous), b = Number(s.current)
+      let r = a
+      if (s.op == "+") r = a + b
+      if (s.op == "-") r = a - b
+      if (s.op == "×") r = a * b
+      if (s.op == "÷") r = b == 0 ? NaN : a / b
+      const out = Number.isFinite(r) ? String(Math.round(r * 1e10) / 1e10) : "Error"
+      s.tape = [`${a} ${s.op} ${b} = ${out}`, ...s.tape].slice(0, 8)
+      s.current = out; s.previous = null; s.op = null; s.fresh = true; return
+    }
+    // a digit
+    s.current = (s.fresh || s.current == "0") ? key : s.current + key
+    s.fresh = false
+  },
+  clearTape: (s) => { s.tape = [] }
+})
+
+header = PageHeader("Calculator", {
+  subtitle: "Tap or use the keypad",
+  badge: calc.op ? Badge(`pending ${calc.op}`, { tone: "info" }) : Badge("ready", { tone: "success" }),
+  actions: [
+    Button("Undo", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => calc.undo(), disabled: !calc.canUndo }),
+    Button("Redo", { variant: "ghost", icon: "rotate-right", size: "sm", onClick: () => calc.redo(), disabled: !calc.canRedo })
+  ]
+})
+
+display = Card([Column([
+  Text(calc.previous != null ? `${calc.previous} ${calc.op ?? ""}` : " ", { variant: "small", tone: "muted", align: "right" }),
+  Text(calc.current, { variant: "title", align: "right" })
+], { gap: "none" })])
+
+pressSx = { states: { hover: { translateY: "-1px", shadow: "sm" }, active: { translateY: "0", shadow: "none" } } }
+
+function key(label, { tone = "secondary", icon = null, span = null } = {}) {
+  return GridItem(Button(label, { variant: tone, icon, fullWidth: true, size: "lg", onClick: () => calc.press(label), sx: pressSx }), span ? { span } : {})
+}
+
+keypad = Grid([
+  key("C", { tone: "danger" }), key("CE", { tone: "ghost" }), key("%", { tone: "ghost" }), key("÷", { tone: "primary" }),
+  key("7"), key("8"), key("9"), key("×", { tone: "primary" }),
+  key("4"), key("5"), key("6"), key("-", { tone: "primary" }),
+  key("1"), key("2"), key("3"), key("+", { tone: "primary" }),
+  key("+/-"), key("0"), key("."), key("=", { tone: "primary" })
+], { columns: 4, gap: "sm" })
+
+tape = Card([
+  Row([SectionHeader("Tape", { eyebrow: "HISTORY" }), Spacer(), Button("Clear", { variant: "ghost", size: "xs", icon: "trash", onClick: () => calc.clearTape(), disabled: calc.tape.length == 0 })], { align: "center" }),
+  Show(calc.tape.length > 0, {
+    fallback: EmptyState("No calculations yet", { icon: "clock-rotate-left", description: "Your recent results will appear here." }),
+    children: Column(calc.tape.map((line, i) => Text(line, { variant: "small", tone: i == 0 ? "default" : "muted", align: "right", key: String(i) })), { gap: "2xs" })
+  })
+])

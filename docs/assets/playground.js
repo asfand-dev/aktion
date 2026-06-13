@@ -24,6 +24,15 @@ import {
   chooseNamedBagIndex,
   slotForNthPositional,
   validateProgramSchema,
+  // Shared, canonical language catalogs (the same single source of truth the
+  // VS Code extension + language service consume). The playground reconciles
+  // its editor-shaped catalogs against these at startup so a builtin /
+  // namespace / member / config-key added to the runtime automatically shows
+  // up in autocomplete + hover — no hand-maintained drift.
+  namespaceCatalog,
+  factoryResourceCatalog,
+  routeMembers as runtimeRouteMembers,
+  findBuiltinConfig,
 } from "../../dist/aktion.js";
 
 // Public CDN URL embedded in standalone HTML exports so the downloaded file
@@ -2342,6 +2351,128 @@ const CALLABLE_GLOBALS = [
   { label: "BigInt",  detail: "global", info: "Arbitrary-precision integer — `BigInt(123)`.", apply: "BigInt(${1})", snippet: true },
 ];
 
+/* -------------------------------------------------------------------------
+ * Reconcile the editor catalogs above with the runtime's CANONICAL catalogs.
+ *
+ * The lists above are hand-tuned for ergonomics (nice snippet `apply`
+ * templates). This pass MERGES IN everything the runtime exposes that the
+ * curated lists are missing — new `$`-namespaces (e.g. `$dom`), new namespace
+ * members (`$util.merge`, `$util.chunk`, …), factory resource bags
+ * (e.g. `$script`), config-object keys (e.g. `$head`, `$script`), and `route`
+ * handle members — deriving a reasonable snippet from each entry's signature.
+ * Additive only: curated entries win, so this never regresses the ergonomic
+ * templates while guaranteeing full coverage with zero hand-maintained drift.
+ * Sources: `namespaceCatalog` / `factoryResourceCatalog` / `routeMembers` /
+ * `findBuiltinConfig` in `src/language/namespaces.ts`, `builtinCatalog` in
+ * `src/language/builtins.ts`.
+ * ---------------------------------------------------------------------- */
+
+/** Turn a signature skeleton ("format(value, mode?)" / "scroll") into a CodeMirror snippet apply. */
+function signatureToApply(signature, fallbackName) {
+  if (typeof signature !== "string") return fallbackName;
+  const open = signature.indexOf("(");
+  if (open < 0) return signature || fallbackName; // property — bare name
+  const close = signature.lastIndexOf(")");
+  const head = signature.slice(0, open);
+  const inner = close > open ? signature.slice(open + 1, close) : "";
+  const params = inner.split(",").map((p) => p.trim()).filter(Boolean);
+  if (params.length === 0) return `${head}()`;
+  const stops = params.map((p, i) => {
+    const clean = p.replace(/^\.\.\./, "").replace(/[?:].*$/, "").trim() || `arg${i + 1}`;
+    return `\${${i + 1}:${clean}}`;
+  });
+  return `${head}(${stops.join(", ")})`;
+}
+
+/** Compact "$ns.<a|b|c|…>(...)" header line for a namespace hover popup. */
+function namespaceSignature(ns) {
+  const names = ns.members
+    .filter((m) => m.kind !== "namespace")
+    .slice(0, 6)
+    .map((m) => m.name.split(".").pop());
+  return `${ns.sigil}.<${names.join("|")}|…>(...)`;
+}
+
+/** Map a runtime ConfigKey.type string onto the playground's { type, enumValues } shape. */
+function normalizeConfigType(rawType) {
+  if (typeof rawType !== "string") return { type: "object" };
+  if (rawType.startsWith("enum:")) {
+    const enumValues = (rawType.match(/"([^"]+)"/g) || []).map((s) => s.slice(1, -1));
+    return { type: "enum", enumValues };
+  }
+  if (rawType.includes("=>")) return { type: "function" };
+  if (rawType.includes("[]")) return { type: "array" };
+  if (rawType === "number") return { type: "number" };
+  if (rawType === "boolean" || rawType.startsWith("boolean")) return { type: "boolean" };
+  if (rawType === "string") return { type: "string" };
+  return { type: "object" };
+}
+
+// 1. `$`-namespaces ($util / $storage / $console / $toast / $dom): add the
+//    whole namespace if missing, then merge any members the curated list lacks.
+for (const ns of namespaceCatalog) {
+  let pgNs = GLOBAL_NAMESPACES.find((n) => n.name === ns.sigil);
+  if (!pgNs) {
+    pgNs = { name: ns.sigil, signature: namespaceSignature(ns), description: ns.summary, members: [] };
+    GLOBAL_NAMESPACES.push(pgNs);
+  }
+  const have = new Set(pgNs.members.map((m) => m.name));
+  for (const m of ns.members) {
+    if (m.kind === "namespace" || have.has(m.name)) continue;
+    pgNs.members.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
+  }
+}
+
+// 2. Factory resource bags ($http / $query / $mutation / $socket / $sse /
+//    $form / $store / $script): add missing bags + members.
+for (const f of factoryResourceCatalog) {
+  let bag = FACTORY_RESOURCE_MEMBERS[f.factory];
+  if (!bag) { bag = []; FACTORY_RESOURCE_MEMBERS[f.factory] = bag; }
+  const have = new Set(bag.map((m) => m.name));
+  for (const m of f.members) {
+    if (have.has(m.name)) continue;
+    bag.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
+  }
+}
+
+// 3. The reserved reactive `route` handle: merge any missing members.
+{
+  const have = new Set(ROUTE_MEMBERS.map((m) => m.name));
+  for (const m of runtimeRouteMembers) {
+    if (have.has(m.name)) continue;
+    ROUTE_MEMBERS.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
+  }
+}
+
+// 4. Config-taking builtins ($http / $query / … / $script / $head / $theme /
+//    $i18n): add whole specs (e.g. $script, $head) + any missing config keys.
+for (const b of langSpec.builtins) {
+  const keys = findBuiltinConfig(b.name);
+  if (!keys) continue;
+  let spec = BUILTIN_CONFIG_SPECS[b.sigil];
+  if (!spec) {
+    spec = { name: b.sigil, signature: b.signature, description: b.summary, params: [] };
+    BUILTIN_CONFIG_SPECS[b.sigil] = spec;
+  }
+  const have = new Set(spec.params.map((p) => p.name));
+  for (const k of keys) {
+    if (have.has(k.name)) continue;
+    const norm = normalizeConfigType(k.type);
+    const param = { name: k.name, type: norm.type, required: false, description: k.summary };
+    if (norm.enumValues) param.enumValues = norm.enumValues;
+    spec.params.push(param);
+  }
+}
+
+// Labels already surfaced by the curated lists — used so the builtin sweep in
+// `completions()` only ADDS the `$`-builtins those lists don't already cover
+// ($state, $memo, $ref, $reducer, $id, $optimistic, $head, $script).
+const CURATED_BUILTIN_LABELS = new Set([
+  ...SPECIAL_IDENTIFIERS.map((s) => s.label),
+  ...CALLABLE_GLOBALS.map((g) => g.label),
+  ...GLOBAL_NAMESPACES.map((n) => n.name),
+]);
+
 // Build the inverse mapping (rui-* class → component name) for inspect mode.
 function kebab(name) {
   return name.replace(/[A-Z]/g, (m, i) => (i === 0 ? m.toLowerCase() : "-" + m.toLowerCase()));
@@ -2917,6 +3048,20 @@ function initPlayground(cm) {
       });
     }
 
+    // Every remaining runtime `$`-builtin the curated lists above don't already
+    // cover — hooks ($state, $memo, $ref, $reducer, $id), $optimistic, and the
+    // app/data builtins $head / $script — so typing `$` discovers them all.
+    for (const b of langSpec.builtins) {
+      if (CURATED_BUILTIN_LABELS.has(b.sigil) || !sigilOk(b.sigil)) continue;
+      options.push({
+        label: b.sigil,
+        type: b.namespace ? "namespace" : "function",
+        detail: b.category,
+        info: b.summary,
+        apply: b.namespace ? `${b.sigil}.` : `${b.sigil}(`,
+      });
+    }
+
     // Multi-line snippets — language-level templates first, then the
     // library's component-shaped snippets. Snippet names are bare.
     for (const s of LANGUAGE_SNIPPETS) {
@@ -3089,7 +3234,14 @@ function initPlayground(cm) {
    */
   function scanFactoryResources(source) {
     const out = new Map();
-    const re = /(\$?[A-Za-z_][\w]*)\s*=\s*(?:await\s+)?\$(http|query|mutation|socket|sse|form|store)\s*\(/g;
+    // Alternation derived from the (reconciled) factory map so every factory —
+    // including ones merged from the runtime, e.g. `$script` — is recognised.
+    const factoryAlt = Object.keys(FACTORY_RESOURCE_MEMBERS).join("|");
+    if (!factoryAlt) return out;
+    const re = new RegExp(
+      `(\\$?[A-Za-z_][\\w]*)\\s*=\\s*(?:await\\s+)?\\$(${factoryAlt})\\s*\\(`,
+      "g",
+    );
     let m;
     while ((m = re.exec(source))) out.set(m[1], FACTORY_RESOURCE_MEMBERS[m[2]]);
     return out;
@@ -3184,6 +3336,18 @@ function initPlayground(cm) {
         name: ident.label,
         description: ident.info,
         kind: ident.label.startsWith("$") ? "global" : "reserved",
+      };
+    }
+    // Fallback to the canonical builtin catalog so hovering any `$`-builtin not
+    // surfaced by the curated lists ($state, $memo, $head, $script, …) still
+    // shows its signature + summary.
+    const builtin = langSpec.builtins.find((b) => b.sigil === rawName);
+    if (builtin) {
+      return {
+        name: builtin.sigil,
+        signature: builtin.signature,
+        description: builtin.summary,
+        kind: builtin.namespace ? "namespace" : "global",
       };
     }
     return null;

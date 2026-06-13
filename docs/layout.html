@@ -376,6 +376,7 @@
           <tr><td><code>sx: { bg: "gradient.brand" }</code></td><td>A named theme gradient as the background.</td></tr>
           <tr><td><code>sx: { bgImage: "/hero.jpg", bgOverlay: "rgba(0,0,0,.4)" }</code></td><td>Background image (http(s)/relative/<code>data:image</code> URLs only) with an optional color or <code>gradient.*</code> overlay wash &mdash; hero banners with readable text.</td></tr>
           <tr><td><code>sx: { position: "sticky", top: 0, zIndex: "modal" }</code></td><td>Positioning + layer tokens &mdash; <code>zIndex</code> names resolve through themeable <code>--rui-z-*</code> vars (<code>$theme({ zIndex: {&hellip;} })</code>).</td></tr>
+          <tr><td><code>animate: "fade-up"</code> &middot; <code>animate: { preset: "zoom", delay: 150 }</code></td><td>Sibling motion prop on every component &mdash; presets like <code>fade</code>/<code>fade-up</code>/<code>zoom</code>/<code>slide-*</code>/<code>pulse</code>/<code>float</code>. The object form tunes <code>delay</code>/<code>duration</code>/<code>repeat</code>. Auto&#8209;respects <code>prefers-reduced-motion</code>.</td></tr>
         </tbody>
       </table>
       <div class="lay-demo">

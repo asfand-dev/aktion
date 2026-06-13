@@ -1,0 +1,63 @@
+// News Reader — a Hacker News front page powered by the public Algolia HN API
+// (no key). Switch between the front page and a live search, and open any story
+// or its comments in a new tab. Starting point for: any feed reader, news
+// aggregator or search-backed list.
+// Uses: $query keyed by mode+query, SearchBar onSubmit, Async states, RelativeTime, Link.
+$app(Column([header, controls, view], { gap: "lg", padding: "md" }))
+
+$mode = "front"   // "front" | "search"
+$q = "language"
+$term = "language"
+
+apiUrl = $mode == "front"
+  ? "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=30"
+  : `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent($term)}&tags=story&hitsPerPage=30`
+
+$stories = $query({ url: apiUrl, key: `hn-${$mode}-${$term}`, ttl: 300000 })
+
+function runSearch() { if ($q.trim()) { $mode = "search"; $term = $q.trim() } }
+
+domainOf = url => { try { return new URL(url).hostname.replace(/^www\./, "") } catch (e) { return "news.ycombinator.com" } }
+
+header = PageHeader("Hacker News", {
+  subtitle: $mode == "front" ? "Front page" : `Search · "${$term}"`,
+  badge: Badge("Live API", { tone: "success", icon: "newspaper" })
+})
+
+controls = Row([
+  SegmentedControl(["front", "search"], { value: $mode, onChange: (v) => { $mode = v } }),
+  StackItem(SearchBar("q", { placeholder: "Search stories… e.g. rust, ai, startups", value: $q, onSubmit: runSearch }), { grow: 1 }),
+  Button("Search", { variant: "primary", icon: "magnifying-glass", onClick: runSearch })
+], { gap: "sm", align: "end" })
+
+function storyRow(s, rank) {
+  const url = s.url || `https://news.ycombinator.com/item?id=${s.objectID}`
+  return Card([Row([
+    Center([Text(String(rank), { variant: "title", tone: "muted" })], { minHeight: "44px" }),
+    StackItem(Column([
+      Link(s.title || "(untitled)", { href: url, external: true }),
+      Row([
+        Badge(`▲ ${s.points ?? 0}`, { tone: "warning", size: "xs" }),
+        Badge(domainOf(url), { tone: "neutral", size: "xs", icon: "link" }),
+        Text(`by ${s.author}`, { variant: "small", tone: "muted" }),
+        Spacer(),
+        RelativeTime(s.created_at)
+      ], { gap: "xs", align: "center", wrap: true })
+    ], { gap: "2xs" }), { grow: 1 }),
+    Link(Button(`${s.num_comments ?? 0}`, { variant: "ghost", size: "sm", icon: "regular:comment" }), { href: `https://news.ycombinator.com/item?id=${s.objectID}`, external: true })
+  ], { gap: "md", align: "center" })], {
+    key: s.objectID,
+    sx: { states: { hover: { translateY: "-1px", shadow: "sm" } } }
+  })
+}
+
+hits = $stories.data ? ($stories.data.hits || []).filter(h => h.title) : []
+
+view = Async($stories, {
+  loading: LoadingState("Loading stories…", { description: "Fetching from Hacker News" }),
+  error: ErrorState("Couldn't load stories", { description: "The HN API may be busy — try again.", actions: [Button("Retry", { variant: "primary", icon: "rotate-right", onClick: () => $stories.refetch() })] }),
+  data: Show(hits.length > 0, {
+    fallback: EmptyState("No stories found", { icon: "newspaper", description: `Nothing matched "${$term}".` }),
+    children: Column(hits.map((s, i) => storyRow(s, i + 1)), { gap: "md" })
+  })
+})

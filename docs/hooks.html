@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hooks · Aktion</title>
-  <meta name="description" content="Hooks in Aktion — the built-in $state (useState) and $memo (useMemo), plus how to write and compose your own custom $-prefixed hooks. Per-instance local state with React-style ergonomics." />
+  <meta name="description" content="Hooks in Aktion — the five built-in hooks ($state, $memo, $ref, $reducer, $id), plus how to write and compose your own custom $-prefixed hooks. Per-instance local state with React-style ergonomics." />
   <script>
     (function () {
       try {
@@ -65,9 +65,11 @@
         <p class="lead">
           A function whose name starts with <code>$</code> is a <strong>hook</strong>
           &mdash; the <code>use*</code> convention you know from React. Hooks are
-          how a component holds <em>local, per-instance</em> state. Two are built
-          in &mdash; <code>$state</code> (like <code>useState</code>) and
-          <code>$memo</code> (like <code>useMemo</code>) &mdash; and you compose
+          how a component holds <em>local, per-instance</em> state. Five are built
+          in &mdash; <code>$state</code> (<code>useState</code>),
+          <code>$memo</code> (<code>useMemo</code>), <code>$ref</code>
+          (<code>useRef</code>), <code>$reducer</code> (<code>useReducer</code>),
+          and <code>$id</code> (<code>useId</code>) &mdash; and you compose
           your own by declaring <code>function $name(&hellip;)</code>.
         </p>
       </header>
@@ -92,7 +94,8 @@
           the component leaves the screen.</li>
       </ul>
       <p>
-        <code>$state</code> and <code>$memo</code> are reserved names &mdash; you
+        <code>$state</code>, <code>$memo</code>, <code>$ref</code>,
+        <code>$reducer</code>, and <code>$id</code> are reserved names &mdash; you
         can&rsquo;t shadow them with a custom hook.
       </p>
 
@@ -173,6 +176,111 @@ $app(Counter())</code></pre>
   ], { gap: "md" })
 }
 $app(Cart())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="ref"><code>$ref</code> &mdash; a value that survives renders without triggering one</h2>
+      <p>
+        <code>$ref(initial)</code> returns a stable <code>{ current }</code> box,
+        just like React&rsquo;s <code>useRef</code>. The same object is handed back
+        on every render, and <strong>writing <code>ref.current</code> never
+        schedules a re-render</strong>. Reach for it to remember a value across
+        renders that isn&rsquo;t part of the UI &mdash; a previous value, a timer
+        id, a scroll position, or an imperative handle from
+        <a href="interop.html"><code>Mount</code> / <code>OnMount</code></a>.
+      </p>
+<pre><code>const box = $ref(initialValue)
+box.current        // read the stored value
+box.current = next // store a new value — no re-render</code></pre>
+      <p>
+        Here a <code>$ref</code> remembers the <em>previous</em> count while
+        <code>$state</code> drives the visible one &mdash; the classic
+        &ldquo;previous value&rdquo; pattern:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>function Tracker() {
+  const [count, setCount] = $state(0)
+  const prev = $ref(0)
+  const previous = prev.current   // value from the last render
+  prev.current = count            // remember the current one for next time
+  return Column([
+    Text(`Now: ${count} · Previously: ${previous}`, { variant: "large-heavy" }),
+    Button("Increment", { variant: "primary", icon: "plus", onClick: () =&gt; setCount(c =&gt; c + 1) }),
+  ], { gap: "md" })
+}
+$app(Tracker())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <div class="callout">
+        <p>
+          Because a <code>$ref</code> write is invisible to the renderer, never
+          read <code>ref.current</code> to drive what the UI shows &mdash; the
+          screen won&rsquo;t update. Use <code>$state</code> for anything the user
+          should see, and <code>$ref</code> for the bookkeeping beside it.
+        </p>
+      </div>
+
+      <h2 id="reducer"><code>$reducer</code> &mdash; state transitions in one place</h2>
+      <p>
+        <code>$reducer((state, action) =&gt; next, initial)</code> returns a
+        <code>[state, dispatch]</code> pair &mdash; React&rsquo;s
+        <code>useReducer</code>. Instead of scattering setters, you describe every
+        transition in a single pure reducer and trigger them with
+        <code>dispatch(action)</code>. It shines when the next state depends on the
+        current one or when several actions update the same shape.
+      </p>
+<pre><code>const [state, dispatch] = $reducer((state, action) =&gt; {
+  // return the next state for each action
+}, initialState)</code></pre>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>function Counter() {
+  const [state, dispatch] = $reducer((s, action) =&gt; {
+    if (action === "inc")   return { count: s.count + 1 }
+    if (action === "dec")   return { count: s.count - 1 }
+    if (action === "reset") return { count: 0 }
+    return s
+  }, { count: 0 })
+  return Column([
+    Text(`Count: ${state.count}`, { variant: "large-heavy" }),
+    Row([
+      Button("Decrement", { icon: "minus", onClick: () =&gt; dispatch("dec") }),
+      Button("Reset", { onClick: () =&gt; dispatch("reset") }),
+      Button("Increment", { variant: "primary", icon: "plus", onClick: () =&gt; dispatch("inc") }),
+    ], { gap: "sm" }),
+  ], { gap: "md" })
+}
+$app(Counter())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The action can be any value &mdash; a string like <code>"inc"</code>, or an
+        object such as <code>{ type: "add", text }</code> when a transition needs a
+        payload. <code>dispatch</code> is reference-stable across renders, so it is
+        safe to hand straight to an <code>onClick</code> without re-creating it.
+      </p>
+
+      <h2 id="id"><code>$id</code> &mdash; stable unique identifiers</h2>
+      <p>
+        <code>$id(prefix?)</code> returns a string id that is generated once per
+        component instance and stays the same across renders &mdash; React&rsquo;s
+        <code>useId</code>. Use it to link a label to a control, wire
+        <code>aria-describedby</code>, or key a fragment, without risking
+        collisions when the component renders more than once.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>function Field() {
+  const id = $id("email")
+  return Column([
+    Text("Email address", { variant: "small-heavy" }),
+    Input(id, { placeholder: "you@example.com" }),
+    Text(`This instance owns the stable id "${id}".`, { variant: "small", tone: "muted" }),
+  ], { gap: "xs" })
+}
+// Two instances → two distinct, stable ids.
+$app(Column([Field(), Field()], { gap: "lg" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

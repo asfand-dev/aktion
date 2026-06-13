@@ -1721,6 +1721,7 @@ consumes from the CDN.
 | `deployment.html`                   | Production & deployment — SSR/hydration via `serializeState`, CSP and `unsafe-eval`, integrity hashes, CDN caching, edge-function LLM streaming. |
 | `llm-integration.html`              | LLM integration — wiring OpenAI/Anthropic/OpenRouter/Bedrock streams into `appendChunk`, prompt selection, interceptors, the `assistant-message` round-trip. |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
+| `theme-generator.html`              | Visual theme generator — tune colors, radius, typography, spacing, shadows, and a brand gradient with a live preview, then copy a ready-to-paste `$theme({…})` statement. |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
 | `visual-editor.html`                | Drag-and-drop visual editor for the full 170+ component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
@@ -1739,6 +1740,7 @@ grouped by folder:
 | `demos/mini-apps/`    | Complete interactive apps — trackers, dashboards, storefronts, live-API browsers, marketing pages. |
 | `demos/blocks/`       | Single-file, drop-in functional sections (login card, pricing plans, checkout form, …). |
 | `demos/components/`   | Reusable `function` component showcases grouped by type (buttons, inputs, charts, …). |
+| `demos/industry-specific/` | Full per-industry surfaces with reusable building blocks (finance, healthcare, SaaS, e-commerce, AI, real estate, …). |
 
 All programs are served by one runner shell,
 `docs/demos/index.html?app=<folder>/<file>.aktion` (defaults to
@@ -1783,7 +1785,7 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── element.ts             #   The custom element
 │   └── index.ts               #   Public entry point
 ├── docs/                      # Static documentation site (HTML + CSS + JS)
-│   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components)
+│   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components / industry-specific)
 ├── _docs/                     # Internal design notes and inspirations (not shipped)
 ├── scripts/
 │   ├── emit-prompt.mjs        #   Writes dist/system_prompt*.txt from the bundle

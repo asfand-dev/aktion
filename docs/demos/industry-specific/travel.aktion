@@ -1,0 +1,101 @@
+// Travel — a booking & discovery surface: search hero, trip stats, featured
+// deals, a flights/hotels search panel and a sample itinerary. Reusable blocks
+// (DealCard, ItineraryStep) for any OTA / booking app.
+$app(Column([hero, kpis, dealsCard, searchCard, itineraryCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+img = seed => `https://picsum.photos/seed/${seed}/600/360`
+
+$destination = ""
+$travelTab = "flights"
+
+deals = [
+  { title: "Kyoto in autumn", place: "Japan", price: 980, nights: "7 nights · flight + hotel", rating: 4.8, seed: "tr-kyoto", tag: "-25%" },
+  { title: "Santorini escape", place: "Greece", price: 1240, nights: "5 nights · sea-view suite", rating: 4.9, seed: "tr-santorini", tag: "Popular" },
+  { title: "Patagonia trek", place: "Chile", price: 1620, nights: "9 nights · guided tour", rating: 4.7, seed: "tr-patagonia", tag: null },
+  { title: "Lisbon city break", place: "Portugal", price: 560, nights: "4 nights · central hotel", rating: 4.6, seed: "tr-lisbon", tag: "-15%" }
+]
+
+itinerary = [
+  { title: "Fly SFO → HND", time: "Day 1 · 11:20", description: "ANA 007 · nonstop · 11h 5m", icon: "plane-departure", tone: "primary" },
+  { title: "Check in — Shinjuku", time: "Day 1 · 16:00", description: "Park Hyatt Tokyo · 3 nights", icon: "hotel", tone: "info" },
+  { title: "Day trip to Hakone", time: "Day 2 · 08:30", description: "Open-air museum + onsen", icon: "train", tone: "success" },
+  { title: "Fly HND → SFO", time: "Day 4 · 17:55", description: "ANA 008 · nonstop", icon: "plane-arrival", tone: "primary" }
+]
+
+// Reusable: a travel deal card with price, rating and tag.
+function DealCard(d) {
+  return MediaCard(d.title, {
+    imageSrc: img(d.seed),
+    description: d.nights,
+    badge: d.tag ? Badge(d.tag, { tone: "danger", size: "sm" }) : null,
+    meta: `${d.place} · ★ ${d.rating}`,
+    actions: [
+      Text(`from ${money(d.price)}`, { variant: "large-heavy", tone: "primary" }),
+      Spacer(),
+      Button("View", { variant: "secondary", size: "sm", icon: "arrow-right", onClick: () => $toast.success(`Opening ${d.title}`) })
+    ],
+    key: d.title,
+    sx: { states: { hover: { translateY: "-4px", shadow: "lg" } } }
+  })
+}
+
+hero = Section([
+  Backdrop({ grid: true, blobs: ["#0ea5e955", "#f59e0b55"], particles: 20, type: "drift" }),
+  Column([
+    Eyebrow("PLAN YOUR NEXT TRIP"),
+    Display(["Go somewhere ", GradientText("unforgettable", { gradient: "brand" })], { size: "lg", align: "center", balance: true }),
+    Text("Flights, hotels and curated experiences — bundled to save you more.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      StackItem(SearchBar("destination", { placeholder: "Where to? (city or country)", value: $destination }), { grow: 1 }),
+      Button("Explore", { variant: "primary", size: "lg", icon: "compass", onClick: () => $toast.show(`Exploring ${$destination || "anywhere"}`) })
+    ], { gap: "sm", align: "center" })
+  ], { gap: "md", align: "center", sx: { py: "xl" } })
+], { background: "base", width: "md", align: "center", padding: "lg" })
+
+kpis = Stats([
+  StatCard("Destinations", { value: "1,200+", icon: "earth-americas", tone: "primary" }),
+  StatCard("Avg savings", { value: "22%", icon: "tag", tone: "success", trend: "up", delta: "+3%" }),
+  StatCard("Traveler rating", { value: "4.8 / 5", icon: "star", tone: "warning" }),
+  StatCard("Support", { value: "24 / 7", icon: "headset", tone: "info" })
+])
+
+dealsCard = Card([
+  SectionHeader("Featured deals", { eyebrow: "BUNDLES", actions: [Button("All deals", { variant: "ghost", size: "sm", icon: "arrow-right" })] }),
+  Grid(deals.map(d => DealCard(d)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "lg" })
+])
+
+flightsPane = Column([
+  Row([
+    StackItem(Input("from", { label: "From", placeholder: "SFO" }), { grow: 1 }),
+    StackItem(Input("to", { label: "To", placeholder: "HND" }), { grow: 1 })
+  ], { gap: "md" }),
+  Row([
+    StackItem(DatePicker("depart", { label: "Depart" }), { grow: 1 }),
+    StackItem(DatePicker("return", { label: "Return" }), { grow: 1 })
+  ], { gap: "md" }),
+  Button("Search flights", { variant: "primary", icon: "magnifying-glass", fullWidth: true, onClick: () => $toast.success("Searching flights") })
+], { gap: "md" })
+
+hotelsPane = Column([
+  Input("city", { label: "City or hotel", placeholder: "Tokyo" }),
+  Row([
+    StackItem(DatePicker("checkin", { label: "Check-in" }), { grow: 1 }),
+    StackItem(DatePicker("checkout", { label: "Check-out" }), { grow: 1 }),
+    StackItem(NumberInput("guests", { label: "Guests", value: 2, min: 1, max: 8 }), { basis: "120px" })
+  ], { gap: "md" }),
+  Button("Search hotels", { variant: "primary", icon: "magnifying-glass", fullWidth: true, onClick: () => $toast.success("Searching hotels") })
+], { gap: "md" })
+
+searchCard = Card([
+  SectionHeader("Book your trip", { eyebrow: "SEARCH" }),
+  Tabs([
+    TabItem("flights", { label: "Flights", icon: "plane", children: [flightsPane] }),
+    TabItem("hotels", { label: "Hotels", icon: "hotel", children: [hotelsPane] })
+  ], { defaultValue: $travelTab })
+])
+
+itineraryCard = Card([
+  SectionHeader("Sample itinerary", { eyebrow: "TOKYO · 4 DAYS", subtitle: "What your trip could look like" }),
+  Timeline(itinerary.map(s => TimelineItem(s.title, { time: s.time, description: s.description, icon: s.icon, tone: s.tone })))
+])

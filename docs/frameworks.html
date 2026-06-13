@@ -176,8 +176,9 @@
       <p>
         Other useful methods on the element: <code>setTheme(name | tokens)</code>,
         <code>registerComponents([&hellip;])</code> to extend the library,
-        <code>registerHttpInterceptors([&hellip;])</code> for host&#8209;wide
-        auth/logging, and <code>getSystemPrompt()</code> to build the LLM system
+        <code>registerHttpInterceptors({ onRequest, onResponse, onError })</code>
+        for host&#8209;wide auth/logging (calls merge incrementally), and
+        <code>getSystemPrompt()</code> to build the LLM system
         prompt for the active component set. The observed attributes are
         <code>response</code>, <code>theme</code>, <code>streaming</code>,
         <code>showerrors</code>, <code>dir</code>

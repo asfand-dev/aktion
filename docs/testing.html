@@ -27,7 +27,7 @@
         <span class="hero-eyebrow">Quality</span>
         <h1>Testing.</h1>
         <p class="lead">
-          The <strong>Aktion Testing Library</strong> (<code>aktion/test</code>)
+          The <strong>Aktion Testing Library</strong> (<code>aktion-runtime/test</code>)
           brings React-Testing-Library ergonomics to Aktion programs. You
           <code>render(...)</code> a program into a real
           <code>&lt;aktion-app&gt;</code>, query the rendered shadow DOM the way
@@ -93,7 +93,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: { environment: "happy-dom" },   // or "jsdom"
 });</code></pre>
-      <p>Then import the helpers from <code>aktion/test</code>:</p>
+      <p>Then import the helpers from <code>aktion-runtime/test</code>:</p>
 <pre><code>import { render, renderComponent, cleanup, flush, json } from "aktion-runtime/test";</code></pre>
       <p>
         <code>render</code> returns a <strong>Screen</strong> scoped to that

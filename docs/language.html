@@ -190,9 +190,12 @@ $app(Column([
       <p>
         A function whose name starts with <code>$</code> is a <strong>hook</strong>
         &mdash; the same <code>use*</code> convention you know from React. Hooks are
-        the composable way to manage per-instance state. Two are built in:
-        <code>$state</code> mirrors <code>useState</code> and <code>$memo</code>
-        mirrors <code>useMemo</code>.
+        the composable way to manage per-instance state. Five are built in:
+        <code>$state</code> (<code>useState</code>), <code>$memo</code>
+        (<code>useMemo</code>), <code>$ref</code> (<code>useRef</code>),
+        <code>$reducer</code> (<code>useReducer</code>), and <code>$id</code>
+        (<code>useId</code>). See the <a href="hooks.html">Hooks guide</a> for the
+        full reference and live examples.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -219,6 +222,20 @@ $app(Counter())</code></pre>
           and recomputes it only when a dependency changes (shallow
           <code>Object.is</code>). Omit the deps array to recompute every render.
         </li>
+        <li>
+          <strong><code>$ref(initial)</code></strong> returns a stable
+          <code>{ current }</code> box; writing <code>.current</code> never
+          re-renders (<code>useRef</code>).
+        </li>
+        <li>
+          <strong><code>$reducer((state, action) =&gt; next, initial)</code></strong>
+          returns a <code>[state, dispatch]</code> pair for centralised state
+          transitions (<code>useReducer</code>).
+        </li>
+        <li>
+          <strong><code>$id(prefix?)</code></strong> returns a stable, unique id per
+          instance &mdash; ideal for label/control wiring (<code>useId</code>).
+        </li>
       </ul>
       <p>
         Declare your own hooks with <code>function $name(...)</code>. The body
@@ -244,7 +261,8 @@ function Panel() {
         component / hook body (slots are matched by call order across renders), and
         note that hook state <strong>resets when the instance leaves the tree</strong>
         &mdash; a remounted component starts again from its initial value.
-        <code>$state</code> and <code>$memo</code> are reserved names. Reach for the
+        <code>$state</code>, <code>$memo</code>, <code>$ref</code>,
+        <code>$reducer</code>, and <code>$id</code> are reserved names. Reach for the
         hook form when a component owns local state with explicit setters; the bare
         <code>$name = value</code> per-instance form above is the lighter option when
         an atom is written directly by the component&rsquo;s actions.

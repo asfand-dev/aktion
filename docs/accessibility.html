@@ -175,27 +175,55 @@
         <tbody>
           <tr><td><code>VisuallyHidden(child)</code></td><td>Hides content visually but keeps it in the accessibility tree &mdash; for extra context a sighted user doesn&rsquo;t need.</td></tr>
           <tr><td><code>SkipLink({ to, label })</code></td><td>A &ldquo;skip to main content&rdquo; link that appears on focus &mdash; the first thing a keyboard user tabs to.</td></tr>
-          <tr><td><code>LiveRegion(child, { mode })</code></td><td>An <code>aria-live</code> region. <code>mode: "polite"</code> (default) or <code>"assertive"</code> announces dynamic changes.</td></tr>
-          <tr><td><code>FocusTrap(child, { active })</code></td><td>Cycles <kbd>Tab</kbd> within its subtree and autofocuses the first control &mdash; the mechanism behind accessible dialogs.</td></tr>
+          <tr><td><code>LiveRegion(text, { politeness, visible })</code></td><td>An <code>aria-live</code> region. <code>politeness: "polite"</code> (default) or <code>"assertive"</code> announces dynamic changes; set <code>visible: true</code> to also show it on screen.</td></tr>
+          <tr><td><code>FocusTrap(child, { active })</code></td><td>Cycles <kbd>Tab</kbd> within its subtree and autofocuses the first control &mdash; the mechanism behind accessible dialogs. <code>active</code> defaults to <code>true</code>.</td></tr>
         </tbody>
       </table>
 <pre><code>$app(Column([
-  SkipLink({ to: "#main", label: "Skip to content" }),
+  SkipLink("#main", { label: "Skip to content" }),
   Button("Save", { onClick: () =&gt; { save(); $status = "Saved" } }),
-  LiveRegion(Text($status), { mode: "polite" }),     // announced to screen readers
+  LiveRegion(`Status: ${$status}`, { politeness: "polite" }),  // announced to screen readers
   VisuallyHidden(Text("Press Escape to close")),
 ]))</code></pre>
       <div class="lay-demo">
         <span class="lay-demo-label">Live &mdash; the status text is announced politely to screen readers</span>
 <pre><code>$status = "Nothing saved yet"
 $app(Column([
-  SkipLink({ to: "#main", label: "Skip to content" }),
+  SkipLink("#main", { label: "Skip to content" }),
   Button("Save", { variant: "primary", onClick: () =&gt; { $status = "Saved just now" } }),
-  LiveRegion(Text(`Status: ${$status}`), { mode: "polite" }),
+  LiveRegion(`Status: ${$status}`, { politeness: "polite" }),
   VisuallyHidden(Text("This sentence is read by screen readers but hidden visually.")),
 ], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+
+      <h3 id="focustrap"><code>FocusTrap</code> &mdash; confine keyboard focus</h3>
+      <p>
+        Wrap any subtree in <code>FocusTrap</code> while it is open and
+        <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> cycle <em>within</em> it
+        instead of escaping to the page behind. It autofocuses the first control on
+        mount, so it&rsquo;s the right primitive for hand&#8209;rolled dialogs,
+        drawers, and command palettes. (<code>Modal</code> already traps focus, so
+        reach for <code>FocusTrap</code> only when you build the overlay yourself.)
+        Bind <code>active</code> to the open state so the trap engages only while the
+        surface is visible:
+      </p>
+<pre><code>$open = false
+$app(Column([
+  Button("Open panel", { variant: "primary", onClick: () =&gt; { $open = true } }),
+  $open ? FocusTrap(
+    Card([
+      CardHeader("Edit profile"),
+      Input("name", { placeholder: "Name" }),
+      Input("email", { placeholder: "Email" }),
+      Row([
+        Button("Cancel", { onClick: () =&gt; { $open = false } }),
+        Button("Save", { variant: "primary", onClick: () =&gt; { $open = false } }),
+      ], { gap: "sm" }),
+    ]),
+    { active: $open }
+  ) : null,
+], { gap: "md" }))</code></pre>
 
       <h2 id="rtl">RTL &amp; logical layout</h2>
       <p>

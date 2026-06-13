@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Theme generator · Aktion</title>
+  <meta name="description" content="A state-of-the-art visual theme generator for Aktion. Tune colors, radius, type, spacing, shadows and gradients with live preview, then copy a ready-to-use $theme({…}) statement." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* =========================================================================
+       Theme generator — page-scoped styles.
+       All rules are scoped to body[data-page="theme-generator"] so they never
+       leak into other docs pages. Everything reads the docs `--doc-*` design
+       tokens so the tool tracks the docs light/dark chrome.
+       ========================================================================= */
+
+    body[data-page="theme-generator"] .layout > main { max-width: none; }
+
+    /* Constrain ordinary prose to a comfortable reading width while letting
+       the tool itself span the full content column. */
+    .tg-prose { max-width: var(--doc-content-max); }
+
+    /* ---- Tool shell -------------------------------------------------------- */
+    .tg { margin: 8px 0 40px; }
+    .tg-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1080px) {
+      .tg-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ---- Controls column --------------------------------------------------- */
+    .tg-controls {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .tg-controls-head {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+    }
+    .tg-field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+    .tg-field > label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--doc-text-muted);
+    }
+
+    .tg-select {
+      appearance: none;
+      width: 100%;
+      font: inherit;
+      font-size: 13px;
+      color: var(--doc-text);
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      padding: 8px 30px 8px 10px;
+      cursor: pointer;
+      background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 16px) 16px, calc(100% - 11px) 16px;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+    .tg-select:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); border-color: var(--doc-primary); }
+
+    .tg-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--doc-text);
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      padding: 8px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background var(--doc-transition), border-color var(--doc-transition), color var(--doc-transition);
+    }
+    .tg-btn:hover { background: var(--doc-bg-soft); border-color: var(--doc-border-strong); }
+    .tg-btn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+
+    /* ---- Presets ----------------------------------------------------------- */
+    .tg-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--doc-border);
+    }
+    .tg-preset {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font: inherit;
+      font-size: 12px;
+      color: var(--doc-text);
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-pill);
+      padding: 5px 12px 5px 6px;
+      cursor: pointer;
+      transition: border-color var(--doc-transition), transform 80ms ease;
+    }
+    .tg-preset:hover { border-color: var(--doc-primary); transform: translateY(-1px); }
+    .tg-preset:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+    .tg-preset-dots { display: inline-flex; }
+    .tg-preset-dots i {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid var(--doc-surface);
+      margin-left: -6px;
+    }
+    .tg-preset-dots i:first-child { margin-left: 0; }
+
+    /* ---- Accordion sections ------------------------------------------------ */
+    .tg-section { border-bottom: 1px solid var(--doc-border); }
+    .tg-section:last-child { border-bottom: 0; }
+    .tg-section-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 16px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--doc-text);
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      text-align: left;
+    }
+    .tg-section-head:hover { background: var(--doc-bg-soft); }
+    .tg-section-head i.tg-section-icon { width: 16px; text-align: center; color: var(--doc-primary); }
+    .tg-section-head .tg-chevron { margin-left: auto; color: var(--doc-text-subtle); transition: transform var(--doc-transition); }
+    .tg-section[data-open="false"] .tg-chevron { transform: rotate(-90deg); }
+    .tg-section[data-open="false"] .tg-section-body { display: none; }
+    .tg-section-body { padding: 4px 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* ---- Color rows -------------------------------------------------------- */
+    .tg-color-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+    .tg-color-row label { font-size: 13px; color: var(--doc-text); }
+    .tg-color-input {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-sm);
+      overflow: hidden;
+      background: var(--doc-surface);
+    }
+    .tg-color-input:focus-within { border-color: var(--doc-primary); box-shadow: var(--doc-focus-ring); }
+    .tg-swatch {
+      width: 30px; height: 30px; padding: 0; border: 0;
+      background: transparent; cursor: pointer; flex: none;
+    }
+    /* Normalise the native color input so its swatch fills the chip. */
+    .tg-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+    .tg-swatch::-webkit-color-swatch { border: 0; }
+    .tg-swatch::-moz-color-swatch { border: 0; }
+    .tg-hex {
+      width: 92px;
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      color: var(--doc-text);
+      background: var(--doc-surface);
+      border: 0;
+      border-left: 1px solid var(--doc-border);
+      padding: 6px 8px;
+    }
+    .tg-hex:focus-visible { outline: 0; }
+
+    /* ---- Sliders & control rows ------------------------------------------- */
+    .tg-control { display: flex; flex-direction: column; gap: 8px; }
+    .tg-control-label {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 13px; color: var(--doc-text);
+    }
+    .tg-control-label .tg-value {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-xs);
+      padding: 2px 7px;
+    }
+    .tg-range { width: 100%; accent-color: var(--doc-primary); cursor: pointer; }
+    .tg-range:focus-visible { outline: 0; }
+
+    .tg-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .tg-switch-row span { font-size: 13px; color: var(--doc-text); }
+    .tg-switch {
+      position: relative; width: 40px; height: 22px; flex: none;
+      border-radius: 999px; border: 0; cursor: pointer;
+      background: var(--doc-border-strong); transition: background var(--doc-transition);
+    }
+    .tg-switch::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%; background: #fff;
+      box-shadow: var(--doc-shadow-sm); transition: transform var(--doc-transition);
+    }
+    .tg-switch[aria-checked="true"] { background: var(--doc-primary); }
+    .tg-switch[aria-checked="true"]::after { transform: translateX(18px); }
+    .tg-switch:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+
+    /* ---- Preview column ---------------------------------------------------- */
+    .tg-preview-col {
+      position: sticky;
+      top: calc(var(--doc-topbar-h) + 16px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    @media (max-width: 1080px) {
+      .tg-preview-col { position: static; }
+    }
+
+    .tg-card {
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .tg-card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--doc-text-muted);
+    }
+    .tg-card-head .tg-spacer { flex: 1; }
+
+    .tg-seg { display: inline-flex; border: 1px solid var(--doc-border); border-radius: var(--doc-radius-sm); overflow: hidden; }
+    .tg-seg button {
+      font: inherit; font-size: 12px; color: var(--doc-text-muted);
+      background: var(--doc-surface); border: 0; padding: 4px 10px; cursor: pointer;
+    }
+    .tg-seg button + button { border-left: 1px solid var(--doc-border); }
+    .tg-seg button[aria-pressed="true"] { background: var(--doc-primary-soft); color: var(--doc-primary); }
+
+    .tg-stage {
+      padding: 18px;
+      background:
+        linear-gradient(var(--doc-border-subtle) 1px, transparent 1px) 0 0 / 100% 18px,
+        var(--doc-bg-soft);
+      min-height: 360px;
+      display: flex;
+      justify-content: center;
+    }
+    .tg-stage-inner {
+      width: 100%;
+      max-width: 100%;
+      transition: max-width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .tg-stage[data-viewport="phone"] .tg-stage-inner { max-width: 390px; }
+    .tg-stage aktion-app {
+      display: block;
+      border-radius: var(--doc-radius-md);
+      overflow: hidden;
+      box-shadow: var(--doc-shadow-lg);
+    }
+
+    .tg-code-card pre { margin: 0; border: 0; border-radius: 0; max-height: 420px; }
+
+    /* ---- Misc -------------------------------------------------------------- */
+    .tg-token-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin: 18px 0 26px;
+    }
+    .tg-token {
+      display: flex; align-items: center; gap: 10px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      padding: 10px;
+      background: var(--doc-surface);
+    }
+    .tg-token-chip { width: 30px; height: 30px; border-radius: var(--doc-radius-sm); border: 1px solid var(--doc-border-subtle); flex: none; }
+    .tg-token-meta { min-width: 0; }
+    .tg-token-meta strong { display: block; font-size: 13px; }
+    .tg-token-meta code { font-size: 11px; color: var(--doc-text-muted); }
+  </style>
+</head>
+<body data-page="theme-generator">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Theming</span>
+        <h1>Theme generator.</h1>
+        <p class="lead">
+          Design your brand visually &mdash; tune <strong>colors</strong>,
+          <strong>corner radius</strong>, <strong>typography</strong>,
+          <strong>spacing</strong>, <strong>shadows</strong> and
+          <strong>gradients</strong> and watch a real Aktion UI update live.
+          When it looks right, copy the ready&#8209;to&#8209;paste
+          <strong><code>$theme({&hellip;})</code></strong> statement and drop it into
+          any program.
+        </p>
+      </header>
+
+      <section class="tg" aria-label="Theme generator">
+        <div class="tg-grid">
+          <!-- Controls -->
+          <div class="tg-controls">
+            <div class="tg-controls-head">
+              <div class="tg-field">
+                <label for="tg-base">Start from</label>
+                <select id="tg-base" class="tg-select" aria-label="Base theme">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="neon">Neon</option>
+                  <option value="pastel">Pastel</option>
+                  <option value="glass">Glass</option>
+                  <option value="brutalist">Brutalist</option>
+                  <option value="skyline">Skyline</option>
+                </select>
+              </div>
+              <button class="tg-btn" id="tg-reset" type="button" title="Reset overrides">
+                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reset
+              </button>
+            </div>
+
+            <div class="tg-presets" id="tg-presets" role="group" aria-label="Color presets"></div>
+
+            <div id="tg-sections"></div>
+          </div>
+
+          <!-- Preview + code -->
+          <div class="tg-preview-col">
+            <div class="tg-card">
+              <div class="tg-card-head">
+                <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true" style="color:var(--doc-primary)"></i>
+                <span>Live preview</span>
+                <span class="tg-spacer"></span>
+                <div class="tg-seg" id="tg-viewport" role="group" aria-label="Preview width" style="display: none;">
+                  <button type="button" data-vp="full" aria-pressed="true" title="Full width"><i class="fa-solid fa-desktop" aria-hidden="true"></i></button>
+                  <button type="button" data-vp="phone" aria-pressed="false" title="Phone width"><i class="fa-solid fa-mobile-screen" aria-hidden="true"></i></button>
+                </div>
+              </div>
+              <div class="tg-stage" id="tg-stage" data-viewport="full">
+                <div class="tg-stage-inner">
+                  <aktion-app id="tg-app" data-theme-managed="true"></aktion-app>
+                </div>
+              </div>
+            </div>
+
+            <div class="tg-card tg-code-card">
+              <div class="tg-card-head">
+                <i class="fa-solid fa-code" aria-hidden="true" style="color:var(--doc-primary)"></i>
+                <span><code>$theme(&hellip;)</code> output</span>
+              </div>
+              <pre><code id="tg-output">$theme({})</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="tg-prose">
+        <h2 id="how-to-use">How to use it</h2>
+        <p>
+          The generator starts from one of the seven built&#8209;in themes
+          (<strong>Start from</strong>). Every control you touch becomes an
+          <em>override</em> layered on top of that base &mdash; so the output stays
+          minimal and only contains what you actually changed. Pick a colour preset
+          for an instant palette, fine&#8209;tune individual tokens, then copy the
+          generated <code>$theme({&hellip;})</code>.
+        </p>
+        <ol>
+          <li><strong>Choose a base.</strong> It seeds the surfaces, type, and
+            defaults you build on top of.</li>
+          <li><strong>Tune tokens.</strong> Colours, roundness, density,
+            typography, elevation and a brand gradient &mdash; the preview re&#8209;skins
+            instantly.</li>
+          <li><strong>Copy the statement.</strong> Hover the code block and hit
+            <em>Copy</em>, then paste the <code>$theme({&hellip;})</code> at the top of
+            any Aktion program.</li>
+        </ol>
+
+        <h2 id="using-output">Using the generated theme</h2>
+        <p>
+          A bare <code>$theme({&hellip;})</code> statement lives at the top level of a
+          program, alongside your <code>$app(&hellip;)</code> root. The runtime writes the
+          tokens to the host element as CSS variables and re&#8209;skins every component
+          &mdash; no stylesheet, no rebuild:
+        </p>
+<pre><code>$theme({
+  name: "light",
+  colors: { primary: "#7c3aed", primaryHover: "#6d28d9", accent: "#06b6d4" },
+  radius: { md: "14px", button: "999px" }
+})
+
+$app(Column([
+  Card([
+    CardHeader("Branded card"),
+    Row([
+      Button("Primary", { variant: "primary" }),
+      Button("Ghost", { variant: "ghost" })
+    ], { gap: "sm" })
+  ])
+], { gap: "md" }))</code></pre>
+        <div class="callout" data-variant="info">
+          <h4>Grouped tokens, not flat keys</h4>
+          <p>
+            Inside <code>$theme({&hellip;})</code> tokens live in <strong>groups</strong>
+            (<code>colors.primary</code>, <code>radius.md</code>,
+            <code>font.familyHeading</code>) &mdash; that is exactly what this generator
+            emits. The optional <code>name</code> key selects a built&#8209;in theme as the
+            base palette before your overrides layer on top. Flat keys like
+            <code>colorPrimary</code> are <em>not</em> accepted here &mdash; those belong on
+            the host <code>theme</code> attribute / <code>setTheme()</code>.
+          </p>
+        </div>
+
+        <h2 id="on-the-host">Setting it on the host instead</h2>
+        <p>
+          The same palette can be applied imperatively on the
+          <code>&lt;aktion-app&gt;</code> element &mdash; handy for a user&#8209;facing theme
+          switcher. The host path takes a built&#8209;in name or a <strong>flat</strong>
+          token map:
+        </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.setTheme("dark");                          // a built-in name
+app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
+              radiusMd: "14px" });</code></pre>
+        <p>
+          Use <code>$theme({&hellip;})</code> (grouped) inside a program for a
+          per&#8209;response brand; use <code>setTheme()</code> (flat) on the host for an
+          app&#8209;wide base. See <a href="themes.html">Themes &amp; customization</a> for the
+          full token reference.
+        </p>
+
+        <h2 id="what-you-can-set">What the generator controls</h2>
+        <table class="signature-table">
+          <thead><tr><th>Group</th><th>Tokens</th></tr></thead>
+          <tbody>
+            <tr><td><code>colors</code></td><td>Brand (<code>primary</code>, <code>accent</code>, focus ring), surfaces (<code>bg</code>, <code>surface</code>, <code>border</code>), text, and status (<code>success</code> / <code>warning</code> / <code>danger</code> / <code>info</code>).</td></tr>
+            <tr><td><code>radius</code></td><td>One roundness slider drives <code>xs</code>&hellip;<code>lg</code> plus <code>button</code>/<code>input</code>; a pill toggle rounds buttons fully.</td></tr>
+            <tr><td><code>spacing</code></td><td>A density control scales the <code>xs</code>&hellip;<code>xl</code> spacing ramp behind every <code>gap</code>/<code>padding</code>.</td></tr>
+            <tr><td><code>font</code></td><td>Body &amp; heading families (with on&#8209;demand web&#8209;font loading), base size, and heading weight.</td></tr>
+            <tr><td><code>shadows</code></td><td>An elevation preset sets the <code>sm</code>/<code>md</code>/<code>lg</code> shadow ramp.</td></tr>
+            <tr><td><code>gradients</code></td><td>A two&#8209;stop brand gradient powering <code>GradientText</code> and <code>sx.bg: "gradient.brand"</code>.</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Tokens that are not expressible in the grouped <code>$theme({&hellip;})</code>
+          form (motion, z&#8209;index layers, RTL direction) are documented on the
+          <a href="themes.html#layers">Themes</a> page.
+        </p>
+
+        <h2 id="next">Next</h2>
+        <div class="demo-grid">
+          <a class="demo-card" href="themes.html">
+            <span class="demo-tag">Reference</span>
+            <h3>Themes &amp; customization</h3>
+            <p>Every token group, the built-in themes, and the flat vs grouped token shapes.</p>
+            <span class="demo-arrow">Read the reference &rarr;</span>
+          </a>
+          <a class="demo-card" href="components.html">
+            <span class="demo-tag">Reference</span>
+            <h3>Component catalog</h3>
+            <p>Every component and prop, with live previews that follow the active theme.</p>
+            <span class="demo-arrow">Browse components &rarr;</span>
+          </a>
+          <a class="demo-card" href="playground.html">
+            <span class="demo-tag">Try it</span>
+            <h3>Playground</h3>
+            <p>Paste your <code>$theme({…})</code> and a full program into the live editor.</p>
+            <span class="demo-arrow">Open playground &rarr;</span>
+          </a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/aktion.js"; // registers <aktion-app>
+
+    /* =======================================================================
+       Theme generator logic.
+
+       Model: the generator produces a set of *overrides* layered on top of a
+       built-in base theme. The live preview renders `$theme({...}) + demo`, so
+       what you see is exactly what the generated statement produces. The code
+       output only contains tokens that differ from the base — keeping it
+       minimal and idiomatic.
+       ======================================================================= */
+
+    const app = document.getElementById("tg-app");
+    const output = document.getElementById("tg-output");
+    const sectionsRoot = document.getElementById("tg-sections");
+    const presetsRoot = document.getElementById("tg-presets");
+    const baseSelect = document.getElementById("tg-base");
+    const stage = document.getElementById("tg-stage");
+
+    // A detached probe element lets us read a built-in theme's resolved token
+    // values straight from the runtime (setTheme writes them to inline style),
+    // so base defaults never drift from the library.
+    const probe = document.createElement("aktion-app");
+
+    // flat token -> CSS custom property (camelCase -> --rui-kebab).
+    const cssVar = (token) => "--rui-" + token.replace(/([A-Z])/g, "-$1").toLowerCase();
+
+    // flat token -> [group, key] for the grouped $theme({...}) output.
+    const SPACING_KEY = { spacingXs: "xs", spacingS: "sm", spacingM: "md", spacingL: "lg", spacingXl: "xl" };
+    const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+    function flatToGroup(token) {
+      if (token in SPACING_KEY) return ["spacing", SPACING_KEY[token]];
+      if (token.startsWith("color")) return ["colors", lowerFirst(token.slice(5))];
+      if (token.startsWith("radius")) return ["radius", lowerFirst(token.slice(6))];
+      if (token.startsWith("shadow")) return ["shadows", lowerFirst(token.slice(6))];
+      if (token.startsWith("gradient")) return ["gradients", lowerFirst(token.slice(8))];
+      if (token.startsWith("font")) return ["font", lowerFirst(token.slice(4))];
+      return [null, null];
+    }
+
+    /* ---- State ----------------------------------------------------------- */
+    let base = "light";
+    const overrides = Object.create(null);   // flat token -> value (user-set only)
+    const fonts = { body: "default", heading: "default" };
+
+    function baseValue(token) {
+      return probe.style.getPropertyValue(cssVar(token)).trim();
+    }
+    // Effective value = override if set, else base default.
+    function effective(token) {
+      return token in overrides ? overrides[token] : baseValue(token);
+    }
+    function setOverride(token, value) {
+      const def = baseValue(token);
+      if (value == null || value === "" || value === def) delete overrides[token];
+      else overrides[token] = value;
+    }
+
+    /* ---- Catalogs -------------------------------------------------------- */
+    const COLOR_SECTIONS = [
+      { label: "Brand", icon: "fa-palette", fields: [
+        ["colorPrimary", "Primary"],
+        ["colorPrimaryHover", "Primary hover"],
+        ["colorPrimaryText", "On primary"],
+        ["colorAccent", "Accent"],
+        ["colorAccentHover", "Accent hover"],
+        ["colorAccentText", "On accent"],
+        ["colorFocusRing", "Focus ring"],
+      ]},
+      { label: "Surfaces", icon: "fa-layer-group", fields: [
+        ["colorBg", "Background"],
+        ["colorBgSubtle", "Background subtle"],
+        ["colorSurface", "Surface"],
+        ["colorSurfaceMuted", "Surface muted"],
+        ["colorBorder", "Border"],
+      ]},
+      { label: "Text", icon: "fa-font", fields: [
+        ["colorText", "Text"],
+        ["colorTextMuted", "Muted text"],
+      ]},
+      { label: "Status", icon: "fa-circle-info", fields: [
+        ["colorSuccess", "Success"],
+        ["colorWarning", "Warning"],
+        ["colorDanger", "Danger"],
+        ["colorInfo", "Info"],
+      ]},
+    ];
+
+    const PRESETS = [
+      { name: "Indigo", colors: ["#6366f1", "#4f46e5", "#06b6d4", "#0891b2"] },
+      { name: "Emerald", colors: ["#10b981", "#059669", "#14b8a6", "#0d9488"] },
+      { name: "Sunset", colors: ["#f97316", "#ea580c", "#f43f5e", "#e11d48"] },
+      { name: "Royal", colors: ["#7c3aed", "#6d28d9", "#db2777", "#be185d"] },
+      { name: "Ocean", colors: ["#0ea5e9", "#0284c7", "#06b6d4", "#0891b2"] },
+      { name: "Graphite", colors: ["#334155", "#1e293b", "#64748b", "#475569"] },
+    ];
+
+    const FONTS = [
+      { id: "default", label: "Theme default" },
+      { id: "inter", label: "Inter", family: "Inter, system-ui, sans-serif", import: "Inter:400,600,700" },
+      { id: "roboto", label: "Roboto", family: "Roboto, system-ui, sans-serif", import: "Roboto:400,500,700" },
+      { id: "poppins", label: "Poppins", family: "Poppins, system-ui, sans-serif", import: "Poppins:400,600,700" },
+      { id: "nunito", label: "Nunito", family: "Nunito, system-ui, sans-serif", import: "Nunito:400,600,800" },
+      { id: "spaceGrotesk", label: "Space Grotesk", family: "'Space Grotesk', system-ui, sans-serif", import: "Space Grotesk:400,600,700" },
+      { id: "sourceSerif", label: "Source Serif (serif)", family: "'Source Serif 4', Georgia, serif", import: "Source Serif 4:400,600,700" },
+      { id: "georgia", label: "Georgia (serif)", family: "Georgia, 'Times New Roman', serif" },
+      { id: "jetbrains", label: "JetBrains Mono", family: "'JetBrains Mono', ui-monospace, monospace", import: "JetBrains Mono:400,600,700" },
+    ];
+    const fontById = (id) => FONTS.find((f) => f.id === id) || FONTS[0];
+
+    const DENSITY = {
+      default: null,
+      compact: { spacingXs: "3px", spacingS: "6px", spacingM: "8px", spacingL: "14px", spacingXl: "24px" },
+      cozy: { spacingXs: "4px", spacingS: "8px", spacingM: "12px", spacingL: "20px", spacingXl: "32px" },
+      comfortable: { spacingXs: "6px", spacingS: "12px", spacingM: "18px", spacingL: "28px", spacingXl: "44px" },
+    };
+
+    const ELEVATION = {
+      default: null,
+      none: { shadowSm: "none", shadowMd: "none", shadowLg: "none" },
+      soft: {
+        shadowSm: "0 1px 2px rgba(15, 23, 42, 0.06)",
+        shadowMd: "0 6px 24px rgba(15, 23, 42, 0.08)",
+        shadowLg: "0 18px 60px rgba(15, 23, 42, 0.12)",
+      },
+      medium: {
+        shadowSm: "0 1px 3px rgba(15, 23, 42, 0.10)",
+        shadowMd: "0 10px 30px rgba(15, 23, 42, 0.14)",
+        shadowLg: "0 24px 70px rgba(15, 23, 42, 0.20)",
+      },
+      strong: {
+        shadowSm: "0 2px 6px rgba(15, 23, 42, 0.16)",
+        shadowMd: "0 16px 40px rgba(15, 23, 42, 0.22)",
+        shadowLg: "0 32px 90px rgba(15, 23, 42, 0.30)",
+      },
+    };
+
+    /* ---- Control state that isn't a single token ------------------------- */
+    let density = "default";
+    let elevation = "default";
+    let pillButtons = false;
+    let gradientOn = false;
+    let gradientStops = ["#6366f1", "#ec4899"];
+
+    /* ---- Demo program ---------------------------------------------------- */
+    const DEMO = `
+$app(Column([
+  Row([
+    Column([
+      Text("Acme Analytics", { variant: "title" }),
+      Text("Theme preview workspace", { tone: "muted", variant: "small" })
+    ], { gap: "xs" }),
+    Spacer(),
+    Row([
+      Button("Docs", { variant: "ghost" }),
+      Button("New report", { variant: "primary", icon: "plus" })
+    ], { gap: "sm" })
+  ], { align: "center" }),
+
+  GradientText("Brand gradient heading", { gradient: "brand", variant: "display" }),
+
+  Grid([
+    StatCard("Revenue", "$48.2k", "up", "12%", "dollar-sign"),
+    StatCard("Active users", "8,931", "up", "4%", "users"),
+    StatCard("Churn rate", "1.2%", "down", "0.3%", "arrow-trend-down")
+  ], { columns: 3, gap: "md" }),
+
+  Row([
+    Card([
+      CardHeader("Create project", { subtitle: "Spin up a new workspace" }),
+      Column([
+        Input({ label: "Project name", placeholder: "Acme website" }),
+        Select({ label: "Plan", value: "pro", items: [
+          SelectItem("free", "Free"),
+          SelectItem("pro", "Pro"),
+          SelectItem("ent", "Enterprise")
+        ] }),
+        Switch({ label: "Make project public", value: true }),
+        Row([
+          Button("Cancel", { variant: "secondary" }),
+          Button("Create", { variant: "primary" })
+        ], { gap: "sm", justify: "end" })
+      ], { gap: "md" })
+    ]),
+    Column([
+      Callout("Deployment live", { tone: "success", description: "Build #1283 shipped to production." }),
+      Callout("Quota at 80%", { tone: "warning", description: "Consider upgrading before the reset." }),
+      Card([
+        CardHeader("Onboarding"),
+        Column([
+          Progress(72, 100, "Setup progress", "primary"),
+          Row([
+            Badge("New", { tone: "primary" }),
+            Badge("Beta", { tone: "warning" }),
+            Badge("Stable", { tone: "success" }),
+            Badge("Info", { tone: "info" })
+          ], { gap: "xs" })
+        ], { gap: "md" })
+      ])
+    ], { gap: "md" })
+  ], { gap: "md", align: "start" })
+], { gap: "lg", sx: { p: "lg" } }))`.trim();
+
+    /* ---- Build the grouped override object + source ---------------------- */
+    function collectOverrideTokens() {
+      // Start from explicit per-token overrides, then fold in the derived
+      // controls (density / elevation), diffing each against the base default.
+      const tokens = Object.create(null);
+      const add = (token, value) => {
+        if (value != null && value !== "" && value !== baseValue(token)) tokens[token] = value;
+      };
+      for (const [token, value] of Object.entries(overrides)) add(token, value);
+      if (DENSITY[density]) for (const [t, v] of Object.entries(DENSITY[density])) add(t, v);
+      if (ELEVATION[elevation]) for (const [t, v] of Object.entries(ELEVATION[elevation])) add(t, v);
+      return tokens;
+    }
+
+    function buildThemeObject() {
+      const groups = {};
+      const tokens = collectOverrideTokens();
+      for (const [token, value] of Object.entries(tokens)) {
+        const [group, key] = flatToGroup(token);
+        if (!group) continue;
+        (groups[group] ||= {})[key] = value;
+      }
+      // Gradient is its own array-of-stops shape.
+      if (gradientOn) {
+        (groups.gradients ||= {}).brand = gradientStops.slice();
+      }
+      // Web-font imports (side effect, loads the families used by font.*).
+      const imports = [];
+      for (const sel of [fonts.body, fonts.heading]) {
+        const f = fontById(sel);
+        if (f.import && !imports.includes(f.import)) imports.push(f.import);
+      }
+      const theme = {};
+      if (base !== "light") theme.name = base;
+      if (imports.length) theme.fonts = { import: imports };
+      for (const g of ["colors", "font", "radius", "spacing", "shadows", "gradients"]) {
+        if (groups[g]) theme[g] = groups[g];
+      }
+      return theme;
+    }
+
+    /* ---- Serialise to a pretty $theme({...}) statement ------------------- */
+    const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    function serialise(value, indent) {
+      const pad = "  ".repeat(indent);
+      const padIn = "  ".repeat(indent + 1);
+      if (Array.isArray(value)) {
+        if (value.length === 0) return "[]";
+        return "[" + value.map((v) => JSON.stringify(v)).join(", ") + "]";
+      }
+      if (value && typeof value === "object") {
+        const keys = Object.keys(value);
+        if (keys.length === 0) return "{}";
+        const body = keys
+          .map((k) => `${padIn}${IDENT.test(k) ? k : JSON.stringify(k)}: ${serialise(value[k], indent + 1)}`)
+          .join(",\n");
+        return `{\n${body}\n${pad}}`;
+      }
+      if (typeof value === "number") return String(value);
+      return JSON.stringify(value);
+    }
+    function themeStatement() {
+      const theme = buildThemeObject();
+      return `$theme(${serialise(theme, 0)})`;
+    }
+
+    /* ---- Render ---------------------------------------------------------- */
+    let rafId = 0;
+    function scheduleRender() {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        render();
+      });
+    }
+    function render() {
+      const statement = themeStatement();
+      output.textContent = statement;
+      app.setAttribute("theme", base);
+      try {
+        app.setResponse(`${statement}\n\n${DEMO}`);
+      } catch (err) {
+        console.error("[theme-generator] render failed", err);
+      }
+      stage.style.background = "";
+      stage.style.setProperty("background-color", effective("colorBg"));
+    }
+
+    /* ---- DOM builders ---------------------------------------------------- */
+    function elc(tag, attrs = {}, ...kids) {
+      const node = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (v == null || v === false) continue;
+        if (k === "class") node.className = v;
+        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+        else node.setAttribute(k, v === true ? "" : String(v));
+      }
+      for (const kid of kids) {
+        if (kid == null) continue;
+        node.append(typeof kid === "string" ? document.createTextNode(kid) : kid);
+      }
+      return node;
+    }
+
+    const isHex = (v) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v.trim());
+
+    // Color row: native swatch + hex text input, both two-way bound.
+    function colorRow([token, label]) {
+      const swatch = elc("input", { type: "color", class: "tg-swatch", "aria-label": `${label} colour` });
+      const hex = elc("input", { type: "text", class: "tg-hex", spellcheck: "false", "aria-label": `${label} value` });
+      const sync = () => {
+        const v = effective(token);
+        hex.value = v;
+        if (isHex(v)) swatch.value = v.length === 4
+          ? "#" + v.slice(1).split("").map((c) => c + c).join("")
+          : v;
+      };
+      swatch.addEventListener("input", () => { setOverride(token, swatch.value); hex.value = swatch.value; scheduleRender(); });
+      hex.addEventListener("input", () => {
+        const v = hex.value.trim();
+        setOverride(token, v);
+        if (isHex(v)) swatch.value = v.length === 4 ? "#" + v.slice(1).split("").map((c) => c + c).join("") : v;
+        scheduleRender();
+      });
+      sync();
+      const row = elc("div", { class: "tg-color-row" },
+        elc("label", {}, label),
+        elc("div", { class: "tg-color-input" }, swatch, hex),
+      );
+      row._sync = sync;
+      return row;
+    }
+
+    function rangeControl({ label, min, max, step, get, set, fmt }) {
+      const valueEl = elc("span", { class: "tg-value" }, fmt(get()));
+      const input = elc("input", { type: "range", class: "tg-range", min, max, step, value: get() });
+      input.addEventListener("input", () => {
+        set(Number(input.value));
+        valueEl.textContent = fmt(Number(input.value));
+        scheduleRender();
+      });
+      const ctl = elc("div", { class: "tg-control" },
+        elc("div", { class: "tg-control-label" }, elc("span", {}, label), valueEl),
+        input,
+      );
+      ctl._sync = () => { input.value = get(); valueEl.textContent = fmt(get()); };
+      return ctl;
+    }
+
+    function selectControl({ label, options, get, set }) {
+      const select = elc("select", { class: "tg-select" });
+      for (const [value, text] of options) {
+        const opt = elc("option", { value }, text);
+        select.append(opt);
+      }
+      select.value = get();
+      select.addEventListener("change", () => { set(select.value); scheduleRender(); });
+      const ctl = elc("div", { class: "tg-field" }, elc("label", {}, label), select);
+      ctl._sync = () => { select.value = get(); };
+      return ctl;
+    }
+
+    function switchRow({ label, get, set }) {
+      const btn = elc("button", { type: "button", class: "tg-switch", role: "switch", "aria-checked": String(get()) });
+      btn.addEventListener("click", () => { set(!get()); btn.setAttribute("aria-checked", String(get())); scheduleRender(); });
+      const row = elc("div", { class: "tg-switch-row" }, elc("span", {}, label), btn);
+      row._sync = () => btn.setAttribute("aria-checked", String(get()));
+      return row;
+    }
+
+    function section({ label, icon, open }, ...children) {
+      const body = elc("div", { class: "tg-section-body" }, ...children);
+      const chevron = elc("i", { class: "fa-solid fa-chevron-down tg-chevron", "aria-hidden": "true" });
+      const head = elc("button", { type: "button", class: "tg-section-head" },
+        elc("i", { class: `fa-solid ${icon} tg-section-icon`, "aria-hidden": "true" }),
+        elc("span", {}, label),
+        chevron,
+      );
+      const wrap = elc("div", { class: "tg-section", "data-open": String(open) }, head, body);
+      head.addEventListener("click", () => {
+        wrap.setAttribute("data-open", wrap.getAttribute("data-open") === "true" ? "false" : "true");
+      });
+      return wrap;
+    }
+
+    /* ---- Radius derivation ---------------------------------------------- */
+    function applyRadius(md) {
+      const r = (mult) => Math.round(md * mult) + "px";
+      setOverride("radiusXs", r(0.4));
+      setOverride("radiusSm", r(0.6));
+      setOverride("radiusMd", md + "px");
+      setOverride("radiusLg", r(1.6));
+      setOverride("radiusInput", r(0.6));
+      setOverride("radiusButton", pillButtons ? "999px" : r(0.6));
+    }
+    const currentRadius = () => parseInt(effective("radiusMd"), 10) || 10;
+
+    function applyFont(which) {
+      const sel = fonts[which];
+      const f = fontById(sel);
+      const token = which === "body" ? "fontFamily" : "fontFamilyHeading";
+      if (f.id === "default") delete overrides[token];
+      else setOverride(token, f.family);
+    }
+
+    /* ---- Build the whole control panel ----------------------------------- */
+    const colorRows = [];
+    function buildControls() {
+      sectionsRoot.replaceChildren();
+      colorRows.length = 0;
+
+      // Colour sections.
+      for (const sec of COLOR_SECTIONS) {
+        const rows = sec.fields.map((f) => { const r = colorRow(f); colorRows.push(r); return r; });
+        sectionsRoot.append(section({ label: sec.label, icon: sec.icon, open: sec.label === "Brand" }, ...rows));
+      }
+
+      // Shape.
+      const radius = rangeControl({
+        label: "Corner radius", min: 0, max: 24, step: 1,
+        get: currentRadius, set: (v) => applyRadius(v), fmt: (v) => v + "px",
+      });
+      const pill = switchRow({ label: "Pill-shaped buttons", get: () => pillButtons, set: (v) => { pillButtons = v; applyRadius(currentRadius()); } });
+      const densityCtl = selectControl({
+        label: "Density", get: () => density, set: (v) => { density = v; },
+        options: [["default", "Theme default"], ["compact", "Compact"], ["cozy", "Cozy"], ["comfortable", "Comfortable"]],
+      });
+      sectionsRoot.append(section({ label: "Shape & spacing", icon: "fa-vector-square", open: false }, radius, pill, densityCtl));
+
+      // Typography.
+      const bodyFont = selectControl({
+        label: "Body font", get: () => fonts.body, set: (v) => { fonts.body = v; applyFont("body"); },
+        options: FONTS.map((f) => [f.id, f.label]),
+      });
+      const headingFont = selectControl({
+        label: "Heading font", get: () => fonts.heading, set: (v) => { fonts.heading = v; applyFont("heading"); },
+        options: FONTS.map((f) => [f.id, f.label]),
+      });
+      const sizeCtl = rangeControl({
+        label: "Base font size", min: 12, max: 18, step: 1,
+        get: () => parseInt(effective("fontSizeBase"), 10) || 14,
+        set: (v) => {
+          setOverride("fontSizeBase", v + "px");
+          setOverride("fontSizeSm", (v - 2) + "px");
+          setOverride("fontSizeLg", (v + 2) + "px");
+        },
+        fmt: (v) => v + "px",
+      });
+      const weightCtl = selectControl({
+        label: "Heading weight",
+        get: () => (effective("fontWeightHeading") || "700"),
+        set: (v) => setOverride("fontWeightHeading", v),
+        options: [["400", "Regular"], ["500", "Medium"], ["600", "Semibold"], ["700", "Bold"], ["800", "Extrabold"], ["900", "Black"]],
+      });
+      sectionsRoot.append(section({ label: "Typography", icon: "fa-font", open: false }, bodyFont, headingFont, sizeCtl, weightCtl));
+
+      // Elevation.
+      const elevationCtl = selectControl({
+        label: "Shadow elevation", get: () => elevation, set: (v) => { elevation = v; },
+        options: [["default", "Theme default"], ["none", "None (flat)"], ["soft", "Soft"], ["medium", "Medium"], ["strong", "Strong"]],
+      });
+      sectionsRoot.append(section({ label: "Elevation", icon: "fa-clone", open: false }, elevationCtl));
+
+      // Gradient.
+      const gOn = switchRow({ label: "Custom brand gradient", get: () => gradientOn, set: (v) => { gradientOn = v; } });
+      const gStops = ["from", "to"].map((side, i) => {
+        const swatch = elc("input", { type: "color", class: "tg-swatch", value: gradientStops[i], "aria-label": `Gradient ${side}` });
+        const hex = elc("input", { type: "text", class: "tg-hex", spellcheck: "false", value: gradientStops[i], "aria-label": `Gradient ${side} value` });
+        swatch.addEventListener("input", () => { gradientStops[i] = swatch.value; hex.value = swatch.value; scheduleRender(); });
+        hex.addEventListener("input", () => { const v = hex.value.trim(); gradientStops[i] = v; if (isHex(v)) swatch.value = v; scheduleRender(); });
+        return elc("div", { class: "tg-color-row" },
+          elc("label", {}, side === "from" ? "Gradient start" : "Gradient end"),
+          elc("div", { class: "tg-color-input" }, swatch, hex),
+        );
+      });
+      sectionsRoot.append(section({ label: "Brand gradient", icon: "fa-fill-drip", open: false }, gOn, ...gStops));
+
+      // Keep a reference to controls that need re-syncing after base change.
+      buildControls._syncables = sectionsRoot.querySelectorAll(".tg-control, .tg-field, .tg-switch-row, .tg-color-row");
+      buildControls._derived = [radius, pill, densityCtl, sizeCtl, weightCtl, elevationCtl, bodyFont, headingFont];
+    }
+
+    function syncControls() {
+      for (const row of colorRows) row._sync && row._sync();
+      for (const c of buildControls._derived || []) c._sync && c._sync();
+    }
+
+    /* ---- Presets --------------------------------------------------------- */
+    function buildPresets() {
+      for (const p of PRESETS) {
+        const dots = elc("span", { class: "tg-preset-dots" },
+          ...p.colors.slice(0, 3).map((c) => elc("i", { style: `background:${c}`, "aria-hidden": "true" })),
+        );
+        const btn = elc("button", { type: "button", class: "tg-preset", title: `Apply ${p.name} palette` }, dots, elc("span", {}, p.name));
+        btn.addEventListener("click", () => applyPreset(p));
+        presetsRoot.append(btn);
+      }
+    }
+    function applyPreset(p) {
+      const [primary, primaryHover, accent, accentHover] = p.colors;
+      setOverride("colorPrimary", primary);
+      setOverride("colorPrimaryHover", primaryHover);
+      setOverride("colorPrimaryText", "#ffffff");
+      setOverride("colorAccent", accent);
+      setOverride("colorAccentHover", accentHover);
+      setOverride("colorAccentText", "#ffffff");
+      setOverride("colorFocusRing", primary);
+      gradientStops = [primary, accent];
+      syncControls();
+      scheduleRender();
+    }
+
+    /* ---- Base theme switching ------------------------------------------- */
+    function changeBase(next) {
+      base = next;
+      probe.setTheme(base);                 // refresh probe so baseValue() reads `next`
+      // Clearing overrides means the output starts as just `$theme({ name })`.
+      for (const k of Object.keys(overrides)) delete overrides[k];
+      density = "default";
+      elevation = "default";
+      pillButtons = parseInt(baseValue("radiusButton"), 10) >= 100;
+      fonts.body = "default";
+      fonts.heading = "default";
+      gradientOn = false;
+      gradientStops = [baseValue("colorPrimary") || "#6366f1", baseValue("colorAccent") || "#ec4899"];
+      syncControls();
+      scheduleRender();
+    }
+
+    /* ---- Wire-up --------------------------------------------------------- */
+    probe.setTheme(base);
+    buildPresets();
+    buildControls();
+
+    baseSelect.addEventListener("change", () => changeBase(baseSelect.value));
+    document.getElementById("tg-reset").addEventListener("click", () => changeBase(base));
+
+    document.getElementById("tg-viewport").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-vp]");
+      if (!btn) return;
+      stage.setAttribute("data-viewport", btn.dataset.vp);
+      stage.parentElement.querySelectorAll("#tg-viewport button").forEach((b) =>
+        b.setAttribute("aria-pressed", String(b === btn)));
+    });
+
+    // Initialise gradient seed from the base palette and paint once.
+    gradientStops = [baseValue("colorPrimary") || "#6366f1", baseValue("colorAccent") || "#ec4899"];
+    render();
+  </script>
+</body>
+</html>

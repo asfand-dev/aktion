@@ -1,0 +1,90 @@
+// Real Estate — a property marketplace: search hero, market KPIs, featured
+// listings, browse-by-type tiles and an agent CTA. Reusable blocks
+// (ListingCard, NeighborhoodTile) for any property / rentals app.
+$app(Column([hero, kpis, listingsCard, typesCard, agentCard], { gap: "lg", padding: "md" }))
+
+money = n => $util.currency(n, "USD")
+img = seed => `https://picsum.photos/seed/${seed}/600/360`
+
+$query = ""
+$dealType = "buy"
+
+listings = [
+  { title: "Sunlit Loft in SoMa", price: 1240000, beds: 2, baths: 2, sqft: 1180, city: "San Francisco, CA", tag: "New", seed: "re-loft" },
+  { title: "Craftsman Family Home", price: 875000, beds: 4, baths: 3, sqft: 2400, city: "Portland, OR", tag: "Open house", seed: "re-craft" },
+  { title: "Modern Hillside Villa", price: 2150000, beds: 5, baths: 4, sqft: 3600, city: "Austin, TX", tag: "Featured", seed: "re-villa" },
+  { title: "Cozy Garden Cottage", price: 540000, beds: 2, baths: 1, sqft: 900, city: "Asheville, NC", tag: null, seed: "re-cottage" },
+  { title: "Downtown Glass Condo", price: 690000, beds: 1, baths: 1, sqft: 760, city: "Seattle, WA", tag: "Price drop", seed: "re-condo" },
+  { title: "Lakefront Retreat", price: 1480000, beds: 3, baths: 3, sqft: 2100, city: "Lake Tahoe, CA", tag: "Featured", seed: "re-lake" }
+]
+
+types = [
+  { label: "Houses", icon: "house", tone: "primary" },
+  { label: "Apartments", icon: "building", tone: "info" },
+  { label: "Condos", icon: "city", tone: "success" },
+  { label: "Land", icon: "mountain-sun", tone: "warning" },
+  { label: "Commercial", icon: "shop", tone: "default" },
+  { label: "Rentals", icon: "key", tone: "danger" }
+]
+
+// Reusable: a property listing card with price, specs and tag.
+function ListingCard(l) {
+  return MediaCard(l.title, {
+    imageSrc: img(l.seed),
+    description: `${l.beds} bd · ${l.baths} ba · ${l.sqft} sqft`,
+    badge: l.tag ? Badge(l.tag, { tone: "primary", size: "sm" }) : null,
+    meta: l.city,
+    actions: [
+      Text(money(l.price), { variant: "large-heavy", tone: "primary" }),
+      Spacer(),
+      Button("Tour", { variant: "secondary", size: "sm", icon: "calendar", onClick: () => $toast.success(`Tour requested: ${l.title}`) })
+    ],
+    key: l.title,
+    sx: { states: { hover: { translateY: "-4px", shadow: "lg" } } }
+  })
+}
+
+hero = Section([
+  Backdrop({ grid: true, blobs: ["#0ea5e955", "#22c55e55"], type: "drift" }),
+  Column([
+    Eyebrow("FIND YOUR PLACE"),
+    Display(["The home you've been ", GradientText("looking for", { gradient: "brand" })], { size: "lg", align: "center", balance: true }),
+    Text("Browse 12,000+ listings across the country, updated in real time.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      ToggleGroup("dealType", { items: [{ value: "buy", label: "Buy" }, { value: "rent", label: "Rent" }], value: $dealType, size: "sm" })
+    ], { justify: "center" }),
+    Row([
+      StackItem(SearchBar("query", { placeholder: "City, neighborhood, or ZIP", value: $query }), { grow: 1 }),
+      Button("Search", { variant: "primary", size: "lg", icon: "magnifying-glass", onClick: () => $toast.show(`Searching ${$dealType}: ${$query || "everywhere"}`) })
+    ], { gap: "sm", align: "center" })
+  ], { gap: "md", align: "center", sx: { py: "xl" } })
+], { background: "base", width: "md", align: "center", padding: "lg" })
+
+kpis = Stats([
+  StatCard("Active listings", { value: "12,480", icon: "house", tone: "primary", trend: "up", delta: "+320" }),
+  StatCard("Median price", { value: "$642k", icon: "tag", tone: "info", trend: "up", delta: "+2.1%" }),
+  StatCard("Avg days on market", { value: "28", icon: "clock", tone: "success", trend: "down", delta: "-3" }),
+  StatCard("Mortgage rate", { value: "6.4%", icon: "percent", tone: "warning", trend: "down", delta: "-0.1%" })
+])
+
+listingsCard = Card([
+  SectionHeader("Featured listings", { eyebrow: "FOR SALE", actions: [Button("View map", { variant: "ghost", size: "sm", icon: "map-location-dot" })] }),
+  Grid(listings.map(l => ListingCard(l)), { columns: { base: 1, sm: 2, lg: 3 }, gap: "lg" })
+])
+
+typesCard = Card([
+  SectionHeader("Browse by type", { eyebrow: "CATEGORIES" }),
+  Grid(types.map(t => Tile(t.label, { icon: t.icon, tone: t.tone, onClick: () => $toast.show(`Browse ${t.label}`), key: t.label })), { columns: { base: 2, md: 3, lg: 6 }, gap: "md" })
+])
+
+agentCard = Card([
+  Center([Column([
+    Avatar("Renee Carter", { size: "lg" }),
+    Heading("Talk to a local agent", { size: "section", align: "center" }),
+    Text("Renee has closed 240+ homes in your area. Get a free consultation.", { variant: "body", tone: "muted", align: "center" }),
+    Row([
+      Button("Book a call", { variant: "primary", size: "lg", icon: "phone" }),
+      Button("Message", { variant: "ghost", size: "lg", icon: "envelope" })
+    ], { gap: "sm", justify: "center", wrap: true })
+  ], { gap: "md", align: "center" })], { minHeight: "120px" })
+])
