@@ -141,9 +141,14 @@ const SPACING_SCALE: Record<string, string> = {
 };
 const COLOR_WORDS: Record<string, string> = {
   primary: "primary", accent: "accent", success: "success", green: "success",
-  danger: "danger", red: "danger", warning: "warning", amber: "warning",
-  info: "info", blue: "info", muted: "text-muted", gray: "text-muted",
-  slate: "text-muted", white: "surface", black: "text", transparent: "transparent",
+  emerald: "success", teal: "success", lime: "success",
+  danger: "danger", red: "danger", rose: "danger", pink: "danger",
+  warning: "warning", amber: "warning", yellow: "warning", orange: "warning",
+  info: "info", blue: "info", sky: "info", cyan: "info", indigo: "info",
+  violet: "accent", purple: "accent", fuchsia: "accent",
+  muted: "text-muted", gray: "text-muted", grey: "text-muted",
+  slate: "text-muted", zinc: "text-muted", neutral: "text-muted", stone: "text-muted",
+  white: "surface", black: "text", transparent: "transparent", current: "current",
 };
 const RADIUS_MAP: Record<string, string> = {
   none: "none", sm: "sm", "": "md", md: "md", lg: "lg", xl: "lg", "2xl": "lg", "3xl": "lg", full: "full",
@@ -185,10 +190,72 @@ const STATE_PREFIXES = new Set(["hover", "focus", "focus-visible", "active", "di
 /** sx keys that `sx.states` supports (mirror of `resolveStateDecls`). */
 const STATEABLE_KEYS = new Set(["bg", "color", "borderColor", "shadow", "radius", "opacity", "cursor", "textDecoration", "scale"]);
 
+/**
+ * Unwrap a Tailwind arbitrary value (`w-[327px]`, `bg-[#abc]`,
+ * `grid-cols-[200px_1fr]`). Returns `{ prefix, value }` with the brackets
+ * removed and Tailwind's `_`-as-space convention restored, or `null` when the
+ * utility is not an arbitrary-value one.
+ */
+function unwrapArbitrary(base: string): { prefix: string; value: string } | null {
+  const m = base.match(/^(.+?)-\[(.+)\]$/);
+  if (!m) return null;
+  const value = m[2]!.replace(/_/g, " ").trim();
+  return { prefix: m[1]!, value };
+}
+
+/**
+ * Map a Tailwind arbitrary value (`w-[327px]`, `p-[12px]`, `text-[#abc]`, …)
+ * onto the matching `sx` key. The bounded `sx` engine accepts raw lengths /
+ * colors, so arbitrary values survive a migration instead of being dropped.
+ */
+function mapArbitrary(prefix: string, value: string): Record<string, unknown> | null {
+  switch (prefix) {
+    case "w": return { w: value };
+    case "h": return { h: value };
+    case "min-w": return { minW: value };
+    case "max-w": return { maxW: value };
+    case "min-h": return { minH: value };
+    case "max-h": return { maxH: value };
+    case "p": return { p: value };
+    case "px": return { px: value };
+    case "py": return { py: value };
+    case "pt": return { pt: value };
+    case "pr": return { pr: value };
+    case "pb": return { pb: value };
+    case "pl": return { pl: value };
+    case "m": return { m: value };
+    case "mx": return { mx: value };
+    case "my": return { my: value };
+    case "mt": return { mt: value };
+    case "mr": return { mr: value };
+    case "mb": return { mb: value };
+    case "ml": return { ml: value };
+    case "gap": return { gap: value };
+    case "top": return { top: value };
+    case "right": return { right: value };
+    case "bottom": return { bottom: value };
+    case "left": return { left: value };
+    case "inset": return { inset: value };
+    case "text": return /^#|^rgb|^hsl|^var\(/i.test(value) ? { color: value } : { fontSize: value };
+    case "bg": return { bg: value };
+    case "border": return { borderColor: value };
+    case "rounded": return { radius: value };
+    case "z": return { zIndex: value };
+    case "opacity": return { opacity: Number(value) };
+    case "leading": return null; // line-height — not in the bounded sx surface
+    default: return null;
+  }
+}
+
 /** Map ONE bare Tailwind utility to a partial `sx` object (null = unknown). */
 function mapUtility(base: string): Record<string, unknown> | null {
   let m: RegExpMatchArray | null;
   const space = (raw: string): string | null => SPACING_SCALE[raw] ?? null;
+
+  // Arbitrary values (`w-[327px]`, `bg-[#abc]`, `text-[14px]`) — handle first
+  // so the bracket syntax never leaks into a token lookup below.
+  const arb = unwrapArbitrary(base);
+  if (arb) return mapArbitrary(arb.prefix, arb.value);
 
   if ((m = base.match(/^p([xytrblse]?)-(.+)$/))) { const v = space(m[2]!) ?? m[2]!; return { [m[1] === "" ? "p" : `p${m[1]}`]: v }; }
   if ((m = base.match(/^m([xytrblse]?)-(.+)$/))) { const v = space(m[2]!) ?? m[2]!; return { [m[1] === "" ? "m" : `m${m[1]}`]: v }; }
@@ -252,6 +319,14 @@ function mapUtility(base: string): Record<string, unknown> | null {
   if (base === "cursor-pointer") return { cursor: "pointer" };
   if (base === "cursor-default") return { cursor: "default" };
   if (base === "cursor-not-allowed") return { cursor: "not-allowed" };
+  if (base === "cursor-grab") return { cursor: "grab" };
+  if (base === "cursor-grabbing") return { cursor: "grabbing" };
+  if (base === "cursor-text") return { cursor: "text" };
+  if (base === "cursor-move") return { cursor: "move" };
+  if (base === "cursor-wait") return { cursor: "wait" };
+  if (base.startsWith("backdrop-blur")) return { backdrop: "blur" };
+  if (base === "bg-cover") return { bgSize: "cover" };
+  if (base === "bg-contain") return { bgSize: "contain" };
   if (base === "underline") return { textDecoration: "underline" };
   if (base === "line-through") return { textDecoration: "line-through" };
   if (base === "no-underline") return { textDecoration: "none" };
@@ -335,6 +410,195 @@ export function tailwindToSx(classString: unknown): Record<string, unknown> {
     if (!assignedAny) unmapped.push(cls);
   }
   if (unmapped.length > 0) sx._unmapped = unmapped;
+  return sx;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CSS string → sx + styled-components / emotion extraction                  */
+/* -------------------------------------------------------------------------- */
+
+/** CSS `align-items` / `justify-content` value → bounded sx token. */
+const ALIGN_FROM_CSS: Record<string, string> = {
+  "flex-start": "start", start: "start", center: "center",
+  "flex-end": "end", end: "end", stretch: "stretch", baseline: "baseline",
+};
+const JUSTIFY_FROM_CSS: Record<string, string> = {
+  "flex-start": "start", start: "start", center: "center",
+  "flex-end": "end", end: "end", "space-between": "between",
+  "space-around": "around", "space-evenly": "evenly", stretch: "stretch",
+};
+
+const DISPLAY_VALUES = new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]);
+const DIRECTION_VALUES = new Set(["row", "column", "row-reverse", "column-reverse"]);
+const POSITION_VALUES = new Set(["relative", "absolute", "fixed", "sticky", "static"]);
+const OVERFLOW_VALUES = new Set(["hidden", "auto", "scroll", "visible", "clip"]);
+const CURSOR_VALUES = new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]);
+const TEXT_ALIGN_VALUES = new Set(["left", "center", "right", "justify", "start", "end"]);
+const TEXT_DECORATION_VALUES = new Set(["underline", "none", "line-through", "overline"]);
+
+/**
+ * Map ONE CSS declaration (`prop`, `value`) onto a partial `sx` object, or
+ * `null` when the bounded `sx` surface can't represent it (so the caller can
+ * surface it under `_unmapped`).
+ */
+function mapCssDeclaration(prop: string, value: string): Record<string, unknown> | null {
+  const v = value.trim();
+  if (!v) return null;
+  const enumKey = (set: Set<string>, key: string): Record<string, unknown> | null =>
+    set.has(v) ? { [key]: v } : null;
+
+  switch (prop) {
+    // Box model
+    case "padding": return { p: v };
+    case "padding-top": return { pt: v };
+    case "padding-right": return { pr: v };
+    case "padding-bottom": return { pb: v };
+    case "padding-left": return { pl: v };
+    case "padding-inline": return { px: v };
+    case "padding-block": return { py: v };
+    case "margin": return { m: v };
+    case "margin-top": return { mt: v };
+    case "margin-right": return { mr: v };
+    case "margin-bottom": return { mb: v };
+    case "margin-left": return { ml: v };
+    case "margin-inline": return { mx: v };
+    case "margin-block": return { my: v };
+    case "gap": case "grid-gap": return { gap: v };
+    // Sizing
+    case "width": return { w: v };
+    case "height": return { h: v };
+    case "min-width": return { minW: v };
+    case "max-width": return { maxW: v };
+    case "min-height": return { minH: v };
+    case "max-height": return { maxH: v };
+    // Color / surface
+    case "color": return { color: v };
+    case "background": case "background-color": return { bg: v };
+    case "border-color": return { borderColor: v };
+    case "border-radius": return { radius: v };
+    case "opacity": { const n = Number(v); return Number.isFinite(n) ? { opacity: n } : null; }
+    // Flex / grid
+    case "display": return enumKey(DISPLAY_VALUES, "display");
+    case "flex-direction": return enumKey(DIRECTION_VALUES, "direction");
+    case "align-items": return v in ALIGN_FROM_CSS ? { align: ALIGN_FROM_CSS[v] } : null;
+    case "justify-content": return v in JUSTIFY_FROM_CSS ? { justify: JUSTIFY_FROM_CSS[v] } : null;
+    case "flex-grow": return { grow: Number(v) };
+    case "flex-shrink": return { shrink: Number(v) };
+    case "flex-basis": return { basis: v };
+    case "flex-wrap": return v === "wrap" ? { wrap: true } : v === "nowrap" ? { wrap: false } : null;
+    // Position / layering
+    case "position": return enumKey(POSITION_VALUES, "position");
+    case "top": return { top: v };
+    case "right": return { right: v };
+    case "bottom": return { bottom: v };
+    case "left": return { left: v };
+    case "inset": return { inset: v };
+    case "z-index": { const n = Number(v); return Number.isFinite(n) ? { zIndex: n } : null; }
+    // Typography
+    case "font-size": return { fontSize: v };
+    case "font-weight": return { weight: v };
+    case "text-align": return enumKey(TEXT_ALIGN_VALUES, "textAlign");
+    case "text-decoration": case "text-decoration-line": return enumKey(TEXT_DECORATION_VALUES, "textDecoration");
+    // Effects
+    case "overflow": return enumKey(OVERFLOW_VALUES, "overflow");
+    case "cursor": return enumKey(CURSOR_VALUES, "cursor");
+    case "background-image": return { bgImage: v };
+    default: return null;
+  }
+}
+
+/** Split a declaration block into `[prop, value]` pairs (top-level `;`). */
+function splitDeclarations(block: string): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  let depth = 0;
+  let buf = "";
+  const flush = (): void => {
+    const decl = buf.trim();
+    buf = "";
+    if (!decl) return;
+    const idx = decl.indexOf(":");
+    if (idx <= 0) return;
+    out.push([decl.slice(0, idx).trim().toLowerCase(), decl.slice(idx + 1).trim()]);
+  };
+  for (const ch of block) {
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === ";" && depth === 0) { flush(); continue; }
+    buf += ch;
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Map a raw CSS declaration string to the closest Aktion `sx` object. The
+ * complement of `tailwindToSx` for migrations from inline `style="..."`,
+ * CSS Modules, or any hand-written rule body:
+ *
+ *   cssToSx("display:flex; gap:12px; padding:0 16px; color:#1a1a1a")
+ *   // → { display: "flex", gap: "12px", px: "16px", py: "0", color: "#1a1a1a" }
+ *
+ * Pass a full rule (`.btn { … }`) and the first rule body is used. Anything
+ * the bounded `sx` surface can't express (transforms, transitions, raw
+ * gradients, `box-shadow`, …) is returned verbatim under `_unmapped` so the
+ * caller can drop it into a `Css(...)` / `Styles(...)` escape hatch instead of
+ * losing it silently.
+ */
+export function cssToSx(cssText: unknown): Record<string, unknown> {
+  const sx: Record<string, unknown> = {};
+  const unmapped: string[] = [];
+  let text = String(cssText ?? "").trim();
+  if (!text) return sx;
+
+  // If a full rule is passed, operate on the first `{ … }` body.
+  const brace = text.indexOf("{");
+  if (brace >= 0) {
+    const close = text.lastIndexOf("}");
+    text = text.slice(brace + 1, close > brace ? close : undefined);
+  }
+
+  for (const [prop, value] of splitDeclarations(text)) {
+    // Skip CSS custom properties — they belong in a theme / Styles block.
+    if (prop.startsWith("--")) { unmapped.push(`${prop}: ${value}`); continue; }
+    const mapped = mapCssDeclaration(prop, value);
+    if (mapped) Object.assign(sx, mapped);
+    else unmapped.push(`${prop}: ${value}`);
+  }
+  if (unmapped.length > 0) sx._unmapped = unmapped;
+  return sx;
+}
+
+/**
+ * Extract the static declarations from a styled-components / emotion template
+ * into an `sx` object. Accepts the template string (or the raw strings array
+ * of a tagged template) — `${…}` interpolations are stripped, and nested
+ * blocks (`&:hover { … }`, `@media { … }`, child selectors) are dropped into
+ * `_unmapped` since the bounded `sx` base layer can't host them (use
+ * `sx.hover` / `Styles(...)` for those):
+ *
+ *   styledToSx(`
+ *     display: flex;
+ *     padding: 12px 16px;
+ *     color: ${p => p.color};
+ *     &:hover { opacity: 0.8; }
+ *   `)
+ *   // → { display: "flex", px: "16px", py: "12px", _unmapped: ["&:hover { … }"] }
+ */
+export function styledToSx(template: unknown): Record<string, unknown> {
+  const raw = Array.isArray(template) ? template.join(" ") : String(template ?? "");
+  // Drop `${…}` interpolations (single-level) so the static CSS parses cleanly.
+  let css = raw.replace(/\$\{[^}]*\}/g, "").trim();
+
+  // Peel off nested blocks (`selector { … }`) — record them as unmapped and
+  // keep only the top-level declarations for the sx mapping.
+  const nested: string[] = [];
+  css = css.replace(/[^{};]+\{[^{}]*\}/g, (block) => { nested.push(block.trim()); return ""; });
+
+  const sx = cssToSx(css);
+  if (nested.length > 0) {
+    const existing = Array.isArray(sx._unmapped) ? (sx._unmapped as string[]) : [];
+    sx._unmapped = [...existing, ...nested];
+  }
   return sx;
 }
 

@@ -142,6 +142,19 @@ function replaceNode(oldNode: Node, newNode: Node): Node {
 }
 
 function patchElement(oldEl: Element, newEl: Element): void {
+  // Preserved subtrees (`data-rui-preserve`) are owned by imperative code —
+  // a third-party widget mounted via `Mount(...)`, a hydrated web component,
+  // a chart / map / editor instance. The reconciler must keep the live node
+  // and NEVER touch its children (which the widget created and manages) or
+  // its form state. We still push Aktion-owned attribute changes additively
+  // (so a reactive `sx` / `class` / attribute update reaches the host) and
+  // keep event handlers current, but we never remove attributes the widget
+  // may have reflected onto itself.
+  if (oldEl.hasAttribute("data-rui-preserve") || newEl.hasAttribute("data-rui-preserve")) {
+    syncAttributesAdditive(oldEl, newEl);
+    syncEventHandlers(oldEl, newEl);
+    return;
+  }
   syncAttributes(oldEl, newEl);
   syncEventHandlers(oldEl, newEl);
   // Reconcile children FIRST so that <select>.value can resolve against
@@ -149,6 +162,24 @@ function patchElement(oldEl: Element, newEl: Element): void {
   // before we apply any parent-level form-state updates.
   reconcileChildren(oldEl, Array.from(newEl.childNodes));
   syncFormState(oldEl, newEl);
+}
+
+/**
+ * Additive attribute sync for preserved nodes: apply new / changed
+ * attributes from the freshly-rendered node, but never remove attributes
+ * that the live node carries and the fresh one omits. This lets Aktion
+ * update the host element (class / inline `sx` styles / data-*) while
+ * leaving any attributes the imperative widget reflected onto itself
+ * untouched.
+ */
+function syncAttributesAdditive(oldEl: Element, newEl: Element): void {
+  const newAttrs = newEl.attributes;
+  for (let i = 0; i < newAttrs.length; i += 1) {
+    const attr = newAttrs[i]!;
+    if (oldEl.getAttribute(attr.name) !== attr.value) {
+      oldEl.setAttribute(attr.name, attr.value);
+    }
+  }
 }
 
 function syncAttributes(oldEl: Element, newEl: Element): void {

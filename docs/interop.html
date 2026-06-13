@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Third-party widgets &amp; interop · Aktion</title>
+  <meta name="description" content="Embed any imperative or third-party library that owns its own DOM — charts, maps, editors, payment elements, captchas — with Mount(), WebComponent(), the $script() loader, and the $dom observer namespace. A clean setup → update → cleanup lifecycle, reactive attributes, and auto-disposed observers." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    .req {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #b45309;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .muted { color: var(--doc-text-muted); font-weight: 400; }
+  </style>
+</head>
+<body data-page="interop">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>Third-party widgets &amp; interop.</h1>
+        <p class="lead">
+          Almost every real app embeds at least one imperative library that owns
+          its own DOM &mdash; Stripe Elements, Mapbox, a chart, Monaco, a video
+          SDK, a captcha. Aktion gives you four first-class primitives to drop
+          them in cleanly: <code>Mount(&hellip;)</code> for a managed lifecycle,
+          <code>WebComponent(&hellip;)</code> for native custom elements,
+          <code>$script(&hellip;)</code> to load an external SDK once, and
+          <code>$dom</code> for managed resize / intersection / mutation
+          observers.
+        </p>
+      </header>
+
+      <h2 id="why">Why these exist</h2>
+      <p>
+        Aktion components render <em>declaratively</em>: you describe the tree,
+        the runtime reconciles the DOM, and it reuses + patches nodes on every
+        re-render to preserve focus, scroll, and form state. That is exactly
+        wrong for a widget that builds its <strong>own</strong> DOM &mdash; a
+        chart canvas, a map&rsquo;s tile layers, an editor&rsquo;s document. If
+        the reconciler touched those nodes it would corrupt or destroy the
+        widget mid-session.
+      </p>
+      <p>
+        The interop primitives solve this in one move: the host element they
+        create is marked <code>data-rui-preserve</code>, which tells the
+        reconciler &ldquo;this subtree is owned by imperative code &mdash; never
+        reconcile its children or reset its form state.&rdquo; Aktion keeps
+        flowing its own attributes (a reactive <code>sx</code> / <code>class</code>)
+        but otherwise leaves the live node alone. You get reactive data binding
+        <em>around</em> a widget that fully owns the DOM <em>inside</em>.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Reach for interop only for real imperative libraries.</strong>
+          If a chart, map, editor, or payment element can&rsquo;t be expressed
+          with built-in components, these are the escape hatch. For everything
+          else, prefer the built-in component library &mdash; it reconciles,
+          themes, and stays accessible for free.
+        </p>
+      </div>
+
+      <h2 id="mount">Mount &mdash; managed imperative widgets</h2>
+      <p>
+        <code>Mount({ setup, update?, cleanup?, props?, tag?, sx? })</code> is the
+        managed host for any imperative widget. Aktion creates the host element;
+        you fill it and react to prop changes through a clean three-phase
+        lifecycle.
+      </p>
+<pre><code>chart = Mount({
+  tag: "div",                          // host element (default "div")
+  sx: { h: "320px" },                  // layout the host like any component
+  setup: (node, props) =&gt; {            // runs ONCE after the host attaches
+    return new Chart(node, props.config)  //   → return the instance handle
+  },
+  update: (instance, props) =&gt; {       // runs when `props` change (shallow-compared)
+    instance.data = props.data
+    instance.update()
+  },
+  cleanup: (instance) =&gt; instance.destroy(),  // runs on unmount
+  props: { config: $cfg, data: $series }      // reactive bag handed to setup/update
+})</code></pre>
+
+      <h3 id="mount-lifecycle">The lifecycle contract</h3>
+      <table class="signature-table">
+        <thead><tr><th>Hook</th><th>Signature</th><th>When it runs</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>setup</code> <span class="req">required</span></td>
+            <td><code>(node, props) =&gt; instance</code></td>
+            <td>Once, on a microtask right after the host element is attached to
+              the document. Build your widget here and <strong>return the
+              instance handle</strong> &mdash; it is passed back to
+              <code>update</code> and <code>cleanup</code>.</td>
+          </tr>
+          <tr>
+            <td><code>update</code></td>
+            <td><code>(instance, props) =&gt; void</code></td>
+            <td>On every re-render where the <code>props</code> bag changed by a
+              <strong>shallow compare</strong> (<code>Object.is</code> per key).
+              Push the new data into the live widget. Deferred to a microtask, so
+              it runs after the reconcile pass.</td>
+          </tr>
+          <tr>
+            <td><code>cleanup</code></td>
+            <td><code>(instance) =&gt; void</code></td>
+            <td>Once, when the component leaves the render tree. Destroy the
+              widget / remove listeners so it can&rsquo;t leak.</td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong><code>props</code> is the reactive boundary.</strong> Bind
+          <code>$state</code> into <code>props</code> and <code>update</code>
+          fires whenever any value changes &mdash; that is how the outside world
+          drives the widget. Reading state <em>inside</em> <code>setup</code> /
+          <code>update</code> is fine too.</li>
+        <li><strong>The host is never rebuilt.</strong> Because the host is
+          preserved, re-renders never re-run <code>setup</code> or recreate the
+          element &mdash; the widget instance lives for the whole session.</li>
+        <li><strong>Shallow compare.</strong> <code>{ data: $series }</code>
+          counts as changed only when <code>$series</code> is a new reference.
+          Replace arrays/objects immutably (e.g. <code>$series = [...]</code>) to
+          trigger an update.</li>
+        <li><code>tag</code> picks the host element (<code>"div"</code>,
+          <code>"canvas"</code>, <code>"section"</code>, &hellip;). Defaults to
+          <code>"div"</code>.</li>
+      </ul>
+
+      <h3 id="mount-live">Live: a self-contained canvas</h3>
+      <p>
+        No external library needed &mdash; <code>setup</code> grabs the canvas
+        2D context and draws. This is the whole pattern in miniature: Aktion owns
+        the <code>&lt;canvas&gt;</code>, your code owns the pixels.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$app(Column([
+  Text("Drawn by an imperative Mount:", { sx: { weight: "600" } }),
+  Mount({
+    tag: "canvas",
+    sx: { w: "100%", h: "140px", radius: "md" },
+    setup: (node) =&gt; {
+      node.width = 600; node.height = 280
+      ctx = node.getContext("2d")
+      ctx.fillStyle = "#6366f1"
+      ctx.fillRect(20, 20, 200, 90)
+      ctx.fillStyle = "#22c55e"
+      ctx.beginPath()
+      ctx.arc(360, 120, 70, 0, Math.PI * 2)
+      ctx.fill()
+      return ctx
+    }
+  })
+]))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3 id="mount-chart">Full example: Chart.js with reactive data</h3>
+      <p>
+        Load the library with <a href="#script"><code>$script</code></a>, gate
+        the <code>Mount</code> on it being ready, then push reactive series in
+        through <code>props</code>:
+      </p>
+<pre><code>$chartjs = $script({ src: "https://cdn.jsdelivr.net/npm/chart.js", global: "Chart" })
+$series  = [12, 19, 7, 15]
+
+function SalesChart() {
+  if (!$chartjs.ready) {
+    return Skeleton({ sx: { h: "320px" } })   // graceful loading state
+  }
+  return Mount({
+    sx: { h: "320px" },
+    setup: (node, props) =&gt; new $chartjs.value(node, {
+      type: "bar",
+      data: { labels: ["Q1","Q2","Q3","Q4"], datasets: [{ data: props.series }] }
+    }),
+    update: (chart, props) =&gt; {
+      chart.data.datasets[0].data = props.series
+      chart.update()
+    },
+    cleanup: (chart) =&gt; chart.destroy(),
+    props: { series: $series }
+  })
+}
+
+$app(Column([
+  SalesChart(),
+  Button("Shuffle", { onClick: () =&gt; $series = $series.map(() =&gt; Math.round(Math.random() * 20)) })
+]))</code></pre>
+
+      <h2 id="webcomponent">WebComponent &mdash; native custom elements</h2>
+      <p>
+        Many third-party widgets already ship as <strong>custom elements</strong>
+        (<code>&lt;stripe-pricing-table&gt;</code>, <code>&lt;model-viewer&gt;</code>,
+        a design-system element). <code>WebComponent(tag, { attributes?,
+        properties?, on?, children? })</code> renders and hydrates one with
+        reactive attributes, rich JS properties, and event hooks.
+      </p>
+<pre><code>widget = WebComponent("stripe-pricing-table", {
+  attributes: {                         // reactive — re-applied on $state change
+    "pricing-table-id": $id,
+    "publishable-key":  $pk
+  },
+  on: {                                 // listeners stay current across renders
+    "checkout": e =&gt; route.navigate("/thanks")
+  }
+})</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>tag</code> <span class="req">required</span></td><td>The custom-element tag (<strong>must contain a hyphen</strong>). A hyphen-less name falls back to a <code>div</code> so a typo can&rsquo;t crash the page.</td></tr>
+          <tr><td><code>attributes</code> <span class="muted">(alias <code>attrs</code>)</span></td><td>Reactive attribute map. <code>$state</code> values update the element on change. <code>false</code> / <code>null</code> removes the attribute; <code>true</code> sets it empty. <code>on*</code> keys are ignored (use <code>on</code>).</td></tr>
+          <tr><td><code>properties</code> <span class="muted">(alias <code>props</code>)</span></td><td>JS properties assigned directly on the element &mdash; for components that take rich, non-string values (objects, arrays, functions).</td></tr>
+          <tr><td><code>on</code> <span class="muted">(alias <code>events</code>)</span></td><td>Event map <code>{ eventName: handler }</code>. Bound once to the live element; handlers always read the latest closure, so they see current state.</td></tr>
+          <tr><td><code>children</code></td><td>Light-DOM child nodes / text slotted inside the element.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Use <code>attributes</code> for simple string-ish values and
+        <code>properties</code> when the element exposes a rich property API:
+      </p>
+<pre><code>viewer = WebComponent("model-viewer", {
+  attributes: { src: $modelUrl, "camera-controls": true, ar: true },
+  properties: { cameraOrbit: $orbit },   // a rich, non-string property
+  on: { "load": () =&gt; $loaded = true }
+})</code></pre>
+
+      <h2 id="script">$script &mdash; load an external SDK once</h2>
+      <p>
+        <code>$script({ src, global? })</code> loads an external UMD/ESM script
+        (or stylesheet) <strong>exactly once</strong> per <code>src</code> across
+        the whole app, and returns a reactive bag you gate your UI on.
+      </p>
+<pre><code>$stripe = $script({ src: "https://js.stripe.com/v3/", global: "Stripe" })
+// → { ready, loading, error, value }   (value = window.Stripe once loaded)</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Field / option</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>.ready</code></td><td><code>true</code> once the resource has loaded successfully &mdash; gate widgets on this.</td></tr>
+          <tr><td><code>.loading</code></td><td><code>true</code> while it is still downloading.</td></tr>
+          <tr><td><code>.error</code></td><td>The load error, or <code>null</code> on success.</td></tr>
+          <tr><td><code>.value</code></td><td>The resolved value: <code>window[global]</code> for a script with a <code>global</code> (e.g. <code>window.Stripe</code>), otherwise <code>true</code>. <code>null</code> until ready.</td></tr>
+          <tr><td><code>src</code> <span class="req">required</span></td><td>URL of the script or stylesheet. De-duplicated per src.</td></tr>
+          <tr><td><code>global</code></td><td>Name of the window global the script defines &mdash; read into <code>.value</code> once ready.</td></tr>
+          <tr><td><code>type</code> / <code>as</code></td><td><code>type: "module"</code> for ESM; <code>as: "style"</code> forces a stylesheet (inferred for <code>.css</code> URLs).</td></tr>
+          <tr><td><code>attributes</code></td><td>Extra attributes for the injected <code>&lt;script&gt;</code> / <code>&lt;link&gt;</code> (e.g. <code>crossorigin</code>, <code>integrity</code>).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The canonical pattern is &ldquo;don&rsquo;t render the widget until its
+        SDK exists&rdquo;:
+      </p>
+<pre><code>$maps = $script({ src: "https://maps.example.com/sdk.js", global: "MapSDK" })
+
+function MapView() {
+  if ($maps.error)  return Alert("Map failed to load", { variant: "danger" })
+  if (!$maps.ready) return Spinner()
+  return Mount({
+    sx: { h: "400px" },
+    setup: (node) =&gt; new $maps.value.Map(node, { center: [0, 0], zoom: 2 }),
+    cleanup: (map) =&gt; map.remove()
+  })
+}</code></pre>
+      <p>
+        On the server (<code>renderToString</code>) there is no DOM to inject
+        into, so the bag stays <code>{ ready: false }</code> and your UI falls
+        back to the loading branch &mdash; exactly what you want for an SSR
+        placeholder that hydrates on the client.
+      </p>
+
+      <h2 id="dom">$dom &mdash; managed observers</h2>
+      <p>
+        Migrating resize / intersection / mutation logic usually means
+        hand-rolling an observer plus its teardown in an <a href="side-effects.html"><code>$effect</code></a>.
+        The <code>$dom</code> namespace does the bookkeeping: every observer it
+        creates is <strong>auto-disposed</strong> on re-plan / unmount, and each
+        method returns a disposer so you can stop early.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>$dom.onResize(node, cb)</code></td><td>ResizeObserver &mdash; <code>cb({ width, height, entry })</code> on size change. Returns a disposer.</td></tr>
+          <tr><td><code>$dom.onIntersect(node, cb, options?)</code></td><td>IntersectionObserver &mdash; <code>cb(entry)</code> on visibility change. Options: <code>{ root?, rootMargin?, threshold? }</code>.</td></tr>
+          <tr><td><code>$dom.onMutation(node, cb, options?)</code></td><td>MutationObserver &mdash; <code>cb(mutations)</code>. Options: <code>{ childList?, attributes?, subtree?, characterData? }</code>.</td></tr>
+          <tr><td><code>$dom.measure(node)</code></td><td>One-shot read → <code>{ rect, scroll, viewport }</code> (bounding rect + scroll offsets + window size).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Pair these with a node reference from
+        <a href="components.html#OnMount"><code>OnMount</code></a> or a
+        <code>Mount</code> host:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; resize the window</span>
+<pre><code>$w = 0
+$app(OnMount(
+  Box([ Text(`Container width: ${$w}px`, { sx: { weight: "600" } }) ], { sx: { p: "20px" } }),
+  { onMount: (node) =&gt; $dom.onResize(node, ({ width }) =&gt; $w = Math.round(width)) }
+))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+<pre><code>// Lazy-load an image / fire analytics when a section scrolls into view:
+$app(OnMount(Box([ Text("Reveal me") ]), {
+  onMount: (node) =&gt; $dom.onIntersect(node, (entry) =&gt; {
+    if (entry.isIntersecting) $seen = true
+  }, { threshold: 0.25 })
+}))
+
+// One-shot measurement (no observer):
+size = $dom.measure(node)   // → { rect: {width,height,top,left,…}, scroll, viewport }</code></pre>
+
+      <h2 id="preservation">How preservation works (and SSR)</h2>
+      <p>
+        Every interop host carries <code>data-rui-preserve</code>. During
+        reconciliation Aktion treats such a node as a black box: it
+        <strong>never</strong> reconciles its children or resets form state, but
+        it <strong>does</strong> push its own attribute changes additively (so a
+        reactive <code>sx</code>, <code>class</code>, or <code>data-*</code> still
+        flows) and keeps event handlers current. That is what lets a chart keep
+        its canvas while you restyle its wrapper.
+      </p>
+      <p>
+        Because the widget&rsquo;s DOM is built imperatively on the client,
+        interop hosts render as an empty placeholder during
+        <code>renderToString</code> and come alive on hydration. Combine that
+        with a <code>!ready</code> loading branch and your SSR output is a clean
+        skeleton that fills in client-side &mdash; see
+        <a href="deployment.html">Production &amp; deployment</a>.
+      </p>
+
+      <h2 id="recipes">Recipes</h2>
+
+      <h3>Monaco editor with two-way binding</h3>
+<pre><code>$monaco = $script({ src: "https://cdn.example.com/monaco/loader.js", global: "monaco" })
+$code   = "function hi() {}"
+
+function Editor() {
+  if (!$monaco.ready) return Skeleton({ sx: { h: "300px" } })
+  return Mount({
+    sx: { h: "300px", border: true, radius: "md" },
+    setup: (node, props) =&gt; {
+      ed = $monaco.value.editor.create(node, { value: props.value, language: "javascript" })
+      ed.onDidChangeModelContent(() =&gt; $code = ed.getValue())
+      return ed
+    },
+    update: (ed, props) =&gt; { if (props.value !== ed.getValue()) ed.setValue(props.value) },
+    cleanup: (ed) =&gt; ed.dispose(),
+    props: { value: $code }
+  })
+}</code></pre>
+
+      <h3>Stripe payment element</h3>
+<pre><code>$stripe = $script({ src: "https://js.stripe.com/v3/", global: "Stripe" })
+
+function Checkout() {
+  if (!$stripe.ready) return Spinner()
+  return Mount({
+    sx: { minH: "60px" },
+    setup: (node, props) =&gt; {
+      stripe = $stripe.value(props.pk)
+      elements = stripe.elements({ clientSecret: props.secret })
+      card = elements.create("payment")
+      card.mount(node)
+      return { stripe, elements, card }
+    },
+    cleanup: (inst) =&gt; inst.card.destroy(),
+    props: { pk: $publishableKey, secret: $clientSecret }
+  })
+}</code></pre>
+
+      <h2 id="choosing">Mount vs. WebComponent vs. OnMount</h2>
+      <table class="signature-table">
+        <thead><tr><th>Use</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>Mount</code></td><td>The library has an imperative JS API you call (<code>new Chart(node, …)</code>, <code>map.remove()</code>) and you want a managed setup/update/cleanup lifecycle.</td></tr>
+          <tr><td><code>WebComponent</code></td><td>The widget is already a custom element &mdash; you just need to place the tag and bind reactive attributes / properties / events.</td></tr>
+          <tr><td><a href="components.html#OnMount"><code>OnMount</code></a></td><td>You only need a one-shot node reference for a small imperative tweak (focus, scroll, a measurement) &mdash; no lifecycle, no teardown bookkeeping.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-cards">
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Side effects</h3>
+          <p>The <code>$effect()</code> primitive &mdash; the dependency-driven counterpart for non-widget side effects and listeners.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="head.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Document head</h3>
+          <p><code>$head(&hellip;)</code> &mdash; reactive title, meta, Open Graph, and JSON-LD that also feeds SSR.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component library</h3>
+          <p>The full catalog of built-in components &mdash; reach for these before an interop escape hatch.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[interop demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

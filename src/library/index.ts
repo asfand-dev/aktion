@@ -81,6 +81,7 @@ import {
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
 } from "./components/helpers.js";
 import { HTMLTag, Styles } from "./components/escape-hatch.js";
+import { Mount, WebComponent } from "./components/interop.js";
 import {
   OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
 } from "./components/wrappers.js";
@@ -189,6 +190,8 @@ const components: ComponentSpec[] = [
   DrawingCanvas, SignaturePad,
   // Escape hatches for raw HTML / CSS — last-resort primitives
   HTMLTag, Styles,
+  // Imperative / third-party widget interop
+  Mount, WebComponent,
 ];
 
 const componentGroups: ComponentGroup[] = [
@@ -469,6 +472,16 @@ const componentGroups: ComponentGroup[] = [
       "- `OnMount(child, { onMount?, onUnmount? })` is the DOM-ref / lifecycle wrapper. `onMount(node)` fires once after the wrapped element attaches; `onUnmount(node)` fires when it leaves the tree. Use it to measure or focus an element, or to hand a node to an imperative library (chart / map / editor). Stash the node in a `$ref(...)`.",
       "- `Css(child, { style?, class? })` merges raw class tokens and inline styles onto the wrapped child. Reach for it ONLY when the standard component props can't express the styling — prefer `Box`/`Stack`/`Grid` for layout and `$theme(...)` for tokens.",
       "- `Link(label_or_child, { to?, href?, external?, variant? })` is the anchor primitive — accepts either a plain string label or a wrapped component. Use `to` for client-side router navigation and `href` (with `external: true`) for outbound links.",
+    ],
+  },
+  {
+    name: "Interop",
+    components: ["Mount", "WebComponent"],
+    notes: [
+      "- Interop primitives are the bridge to imperative / third-party libraries that own their own DOM. Reach for them ONLY when a real widget (chart, map, editor, payment element, captcha) cannot be expressed with built-in components.",
+      "- `Mount({ setup, update?, cleanup?, props?, tag?, sx? })` is the managed imperative-component host. `setup(node, props)` runs once after the host attaches and returns an instance handle; `update(instance, props)` runs when the (shallow-compared) `props` bag changes; `cleanup(instance)` runs on unmount. Aktion owns + preserves the host element so the widget is never rebuilt mid-session. Example: `Mount({ sx: { h: \"320px\" }, setup: (node, p) => new Chart(node, p.config), update: (c, p) => { c.data = p.data; c.update() }, cleanup: c => c.destroy(), props: { config: $cfg, data: $series } })`.",
+      "- `WebComponent(tag, { attributes?, properties?, on?, children? })` renders + hydrates a native custom element. `attributes` is reactive (re-applies on `$state` change); `properties` assigns rich JS props; `on` binds event listeners that stay current across renders. Example: `WebComponent(\"stripe-pricing-table\", { attributes: { \"pricing-table-id\": $id, \"publishable-key\": $pk }, on: { checkout: e => route.navigate(\"/thanks\") } })`.",
+      "- Pair these with the `$script({ src, global? })` loader (gate a widget on its SDK being ready) and the `$dom` observer namespace (`$dom.onResize`/`onIntersect`/`measure`) for layout-aware widgets.",
     ],
   },
   {

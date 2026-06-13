@@ -21,9 +21,9 @@ const labelsOf = (src: string, line: number, column: number): string[] =>
   getCompletions(src, { line, column }, defaultLibrary).map((c) => c.label);
 
 describe("namespace catalog data", () => {
-  it("exposes the four `.`-member namespaces", () => {
+  it("exposes the `.`-member namespaces", () => {
     expect(namespaceCatalog.map((n) => n.name).sort()).toEqual(
-      ["console", "storage", "toast", "util"],
+      ["console", "dom", "storage", "toast", "util"],
     );
   });
 
@@ -41,8 +41,39 @@ describe("namespace catalog data", () => {
 
   it("models every factory resource bag", () => {
     expect(factoryResourceCatalog.map((f) => f.factory).sort()).toEqual(
-      ["form", "http", "mutation", "query", "socket", "sse", "store"],
+      ["form", "http", "mutation", "query", "script", "socket", "sse", "store"],
     );
+  });
+});
+
+describe("interop namespaces + builtins", () => {
+  it("completes $dom observer members after a dot", () => {
+    const labels = labelsOf("x = $dom.", 1, 10);
+    expect(labels).toContain("onResize");
+    expect(labels).toContain("onIntersect");
+    expect(labels).toContain("measure");
+  });
+
+  it("completes the $script load bag from its assignment", () => {
+    const src = "$sdk = $script({ src: u })\nx = $sdk.";
+    const labels = labelsOf(src, 2, 10);
+    expect(labels).toContain("ready");
+    expect(labels).toContain("value");
+    expect(labels).toContain("error");
+  });
+
+  it("completes $script({ … }) config keys", () => {
+    const labels = labelsOf("$x = $script({ ", 1, 15);
+    expect(labels).toContain("src");
+    expect(labels).toContain("global");
+  });
+
+  it("completes $head({ … }) config keys", () => {
+    const labels = labelsOf("$head({ ", 1, 8);
+    expect(labels).toContain("title");
+    expect(labels).toContain("meta");
+    expect(labels).toContain("og");
+    expect(labels).toContain("jsonLd");
   });
 });
 

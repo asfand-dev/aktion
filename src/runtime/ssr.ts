@@ -16,7 +16,7 @@
 
 import { parse } from "../parser/index.js";
 import { StateStore } from "./state.js";
-import { createContext, planProgram } from "./evaluator.js";
+import { createContext, planProgram, getHeadManager } from "./evaluator.js";
 import { HttpRuntime } from "./http.js";
 import { Router } from "./router.js";
 import { Renderer } from "../renderer/renderer.js";
@@ -39,6 +39,18 @@ export interface RenderToStringResult {
   html: string;
   /** State snapshot to ship to the client for hydration. */
   state: Record<string, unknown>;
+  /**
+   * Resolved `<head>` markup emitted by every `$head({...})` the program ran
+   * during this render (title, meta, Open Graph / Twitter cards, links,
+   * JSON-LD). Inject it into the page shell's `<head>` so the SSR page is
+   * crawlable + shows social previews. Empty string when no `$head` ran.
+   */
+  head: string;
+  /**
+   * `<html>` attributes (e.g. `{ lang, dir }`) contributed via
+   * `$head({ htmlAttrs })` — spread onto the `<html>` element of the shell.
+   */
+  headAttrs: Record<string, string>;
 }
 
 function hasDom(): boolean {
@@ -73,7 +85,12 @@ export function renderToString(program: string, options: RenderToStringOptions =
     // A malformed program SSRs to an empty container rather than throwing.
     // eslint-disable-next-line no-console
     console.error("[aktion] renderToString parse error", err);
-    return { html: options.container === false ? "" : "<div class=\"rui-root\"></div>", state: state.snapshot() };
+    return {
+      html: options.container === false ? "" : "<div class=\"rui-root\"></div>",
+      state: state.snapshot(),
+      head: "",
+      headAttrs: {},
+    };
   }
   planProgram(parsed, ctx);
 
@@ -106,7 +123,12 @@ export function renderToString(program: string, options: RenderToStringOptions =
   host.append(node);
   const inner = host.innerHTML;
   const html = options.container === false ? inner : host.outerHTML;
-  return { html, state: state.snapshot() };
+  // Resolve any `$head({...})` the program emitted during this render so the
+  // page shell can inject a crawlable `<head>`.
+  const headManager = getHeadManager(ctx);
+  const head = headManager.serialize();
+  const headAttrs = headManager.htmlAttrs();
+  return { html, state: state.snapshot(), head, headAttrs };
 }
 
 /**

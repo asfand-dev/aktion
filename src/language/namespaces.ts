@@ -256,12 +256,24 @@ const toastMembers: readonly NamespaceMember[] = [
   prop("items", "Reactive list of live toasts (newest last). Treat as read-only."),
 ];
 
+// ---------------------------------------------------------------------------
+// $dom — managed observer namespace
+// ---------------------------------------------------------------------------
+
+const domMembers: readonly NamespaceMember[] = [
+  method("onResize", "onResize(node, callback)", "Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan."),
+  method("onIntersect", "onIntersect(node, callback, options?)", "Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }."),
+  method("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }."),
+  method("measure", "measure(node)", "One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size)."),
+];
+
 /** Every `$`-namespace whose members are reached via `.`. */
 export const namespaceCatalog: readonly NamespaceEntry[] = [
   { name: "util", sigil: "$util", summary: "Runtime helper + reactive-environment namespace.", members: utilMembers },
   { name: "storage", sigil: "$storage", summary: "Browser storage namespace (local / session / cookies).", members: storageMembers },
   { name: "console", sigil: "$console", summary: "Console namespace forwarding to the browser console.", members: consoleMembers },
   { name: "toast", sigil: "$toast", summary: "Imperative toast namespace.", members: toastMembers },
+  { name: "dom", sigil: "$dom", summary: "Managed DOM-observer namespace (resize / intersection / mutation / measure).", members: domMembers },
 ];
 
 const namespacesByName: Readonly<Record<string, NamespaceEntry>> = Object.freeze(
@@ -340,6 +352,13 @@ const formResourceMembers: readonly NamespaceMember[] = [
   method("reset", "reset()", "Restore initial values; clears errors/touched/dirty."),
 ];
 
+const scriptResourceMembers: readonly NamespaceMember[] = [
+  prop("ready", "`true` once the external script / stylesheet has loaded successfully."),
+  prop("loading", "`true` while the resource is still downloading."),
+  prop("error", "The load error, or `null` on success."),
+  prop("value", "The resolved value — `window[global]` for a script with a `global` (e.g. window.Stripe), else `true`. `null` until ready."),
+];
+
 const storeResourceMembers: readonly NamespaceMember[] = [
   method("undo", "undo()", "Undo the last change (`history: true|depth` stores)."),
   method("redo", "redo()", "Redo the last undone change."),
@@ -366,6 +385,7 @@ export const factoryResourceCatalog: readonly FactoryResourceEntry[] = [
   { factory: "mutation", summary: "Deferred mutation bag (fires on .mutate()).", members: mutationResourceMembers },
   { factory: "socket", summary: "Reactive WebSocket bag.", members: socketResourceMembers },
   { factory: "sse", summary: "Reactive Server-Sent Events bag.", members: sseResourceMembers },
+  { factory: "script", summary: "External script / stylesheet load bag.", members: scriptResourceMembers },
   { factory: "form", summary: "Managed form engine bag.", members: formResourceMembers },
   { factory: "store", summary: "Global store handle (built-in history methods).", members: storeResourceMembers },
 ];
@@ -517,6 +537,26 @@ const sseConfigKeys: readonly ConfigKey[] = [
   cfg("bufferSize", "number", "Max buffered events kept in `.messages`."),
 ];
 
+const scriptConfigKeys: readonly ConfigKey[] = [
+  cfg("src", "string", "URL of the script (or stylesheet) to load. De-duplicated per src."),
+  cfg("global", "string", "Name of the window global the script defines — read into `.value` once ready (e.g. \"Stripe\")."),
+  cfg("type", "string", 'Script type attribute (e.g. "module" for ESM).'),
+  cfg("as", 'enum: "script" | "style"', "Force the resource kind. Inferred from a `.css` src otherwise."),
+  cfg("attributes", "object", "Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity)."),
+];
+
+const headConfigKeys: readonly ConfigKey[] = [
+  cfg("title", "string", "Document title (sets document.title + <title>)."),
+  cfg("titleTemplate", "string", 'Wrap `title` with a template, e.g. "%s — Acme".'),
+  cfg("meta", "object", "Named meta tags: { description, \"theme-color\", keywords, … } → <meta name content>."),
+  cfg("og", "object", "Open Graph tags: { title, image, type, … } → <meta property=\"og:KEY\">."),
+  cfg("twitter", "object", "Twitter card tags: { card, site, … } → <meta name=\"twitter:KEY\">."),
+  cfg("link", "object[]", "Array of <link> descriptors, e.g. [{ rel: \"canonical\", href }]."),
+  cfg("jsonLd", "object | object[]", "JSON-LD structured data → <script type=\"application/ld+json\">. @context defaults to schema.org."),
+  cfg("base", "string | object", "<base href> for the document."),
+  cfg("htmlAttrs", "object", "Attributes for the <html> element, e.g. { lang: \"en\", dir: \"ltr\" }."),
+];
+
 const formConfigKeys: readonly ConfigKey[] = [
   cfg("values", "object", "Initial field values — the clean snapshot."),
   cfg("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }."),
@@ -556,6 +596,8 @@ const builtinConfigByName: Readonly<Record<string, readonly ConfigKey[]>> = Obje
   mutation: mutationConfigKeys,
   socket: socketConfigKeys,
   sse: sseConfigKeys,
+  script: scriptConfigKeys,
+  head: headConfigKeys,
   form: formConfigKeys,
   store: storeConfigKeys,
   theme: themeConfigKeys,

@@ -154,7 +154,7 @@ Everything you need at runtime ships in a single bundle:
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
   across renders. Components that need to hold UI state get a
   `helpers.useInstanceState(...)` slot keyed by their position in the tree.
-- **A rich component library** of **271 components** spanning layout,
+- **A rich component library** of **275 components** spanning layout,
   forms, charts, data, feedback, navigation, patterns, app-shell composites,
   editors, advanced UI, motion, marketing, e-commerce, accessibility,
   realtime, and standard helpers. See [Component library](#component-library).
@@ -195,6 +195,15 @@ Everything you need at runtime ships in a single bundle:
 - **Markup escape hatches.** `HTMLTag(tag, { attributes?, children? })`
   and `Styles(css)` are the last-resort raw-HTML / raw-CSS injectors
   when no standard component captures the design.
+- **Third-party widget interop.** `Mount({ setup, update?, cleanup?, props? })`
+  hosts an imperative library (chart, map, editor, payment element) with a
+  managed lifecycle; `WebComponent(tag, { attributes?, properties?, on? })`
+  bridges native custom elements; `$script({ src, global? })` loads an external
+  SDK once; and the `$dom` namespace gives auto-disposed resize / intersection /
+  mutation observers + `$dom.measure(node)`.
+- **Document head & SEO.** `$head({ title, meta, og, twitter, link, jsonLd })`
+  is a reactive head manager — per-route titles / meta / Open Graph / JSON-LD
+  that also feed `renderToString` (`head` + `headAttrs`) for crawlable SSR.
 - **A system prompt generator.** Emits a clean, ordered prompt teaching
   the LLM exactly which components, builtins, and tools are available.
   Two flavours ship: `system_prompt.txt` (full — every feature) and
@@ -1038,7 +1047,7 @@ deep authoring guide [`coding-gen-skill.md`](./coding-gen-skill.md).
 
 ## Component library
 
-The bundle ships **271 components** grouped by domain. Reach for **pattern composites**
+The bundle ships **275 components** grouped by domain. Reach for **pattern composites**
 (`Hero`, `PageHeader`, `Stats`, `Toolbar`, `EmptyState`, `Timeline`,
 `KanbanBoard`, `DescriptionList`, `PricingTable`, …) before hand-rolling
 the equivalent with `Card` + `Stack` — they're tuned to produce dense,
@@ -1071,6 +1080,7 @@ production-quality SaaS UI in a single line.
 | **Utility**        | `SegmentedControl`, `FloatingActionButton`, `SpeedDial`, `BackToTop`, `VirtualGrid` (windowed 2-D grid) |
 | **Helpers**        | `Async`, `Show`, `Portal`, `Redirect`, `Lazy`, `ErrorBoundary` |
 | **Behaviour wrappers** | `OnClick`, `OnMouse`, `OnKeyboard`, `OnFocus`, `OnIntersect`, `OnMount`, `Css`, `Link` — attach click / mouse / keyboard / focus / intersection / lifecycle listeners or raw class / style to ANY component without it needing a dedicated prop. `OnMount(child, { onMount, onUnmount })` is the DOM-ref escape hatch — `onMount(node)` fires once after attach so you can measure, focus, or hand the node to an imperative library. `Link(label_or_child, { to?, href?, external? })` wraps either a string or a component as a router-aware anchor. |
+| **Interop**        | `Mount`, `WebComponent` — host an imperative / third-party widget (chart, map, editor, payment element) that owns its own DOM. `Mount({ setup, update?, cleanup?, props?, tag?, sx? })` gives a managed `setup → update → cleanup` lifecycle; `WebComponent(tag, { attributes?, properties?, on? })` renders + hydrates any native custom element with reactive attributes / events. Pair with the `$script({ src, global? })` loader and the `$dom` observer namespace — see [interop.html](https://asfand-dev.github.io/aktion/interop.html). |
 | **Escape hatches** | `HTMLTag`, `Styles` (last-resort raw HTML / CSS — see [language.html](https://asfand-dev.github.io/aktion/language.html#escape-hatches)) |
 | **Theming**        | `$theme` |
 | **Routing**        | `$router({ … })`, `NavLink` |
@@ -1698,6 +1708,8 @@ consumes from the CDN.
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
 | `side-effects.html`                 | `$effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |
+| `interop.html`                      | Third-party / imperative widget interop — `Mount` (managed setup/update/cleanup lifecycle), `WebComponent` (native custom-element bridge), the `$script` external-SDK loader, and the `$dom` observer namespace. How `data-rui-preserve` keeps a widget's DOM intact. |
+| `head.html`                         | Document head & SEO — `$head({...})` for reactive title, meta, canonical/alternate links, Open Graph / Twitter cards, JSON-LD, and `<html>` attrs; per-route composition; and the SSR `head` / `headAttrs` output from `renderToString`. |
 | `javascript-interactions.html`      | Effect + action bodies — the JavaScript execution surface.                               |
 | `routing.html`                      | Hash-based routing guide — always available at runtime.                                 |
 | `reactivity.html`                   | Reactivity & rendering deep-dive — path tracking, the two render gates, exactly what forces a full re-render, and how to stay fine-grained. |

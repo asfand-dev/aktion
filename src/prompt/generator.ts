@@ -86,6 +86,7 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(fullGlobals());
   sections.push(fullEmitAndWrappers());
   sections.push(fullEscapeHatches());
+  sections.push(fullInteropAndHead());
   sections.push(fullUniversalProps());
   sections.push(fullThemingI18nIcons());
   sections.push(fullUtil());
@@ -569,6 +570,47 @@ $app(Column([
   Styles(\`.hero { background: linear-gradient(135deg, #6366f1, #10b981); padding: 24px; border-radius: 12px; }\`),
   HTMLTag("div", { attributes: { class: "hero" }, children: [Text("Custom block")] })
 ]))
+\`\`\``;
+}
+
+function fullInteropAndHead(): string {
+  return `## Third-party widgets & document head
+
+### Imperative / third-party widget interop
+For a library that owns its own DOM (chart, map, editor, payment element, captcha) — NOT for normal markup (use components). The host carries \`data-rui-preserve\`, so the reconciler never touches the widget's DOM.
+- \`Mount({ setup, update?, cleanup?, props?, tag?, sx? })\` — managed imperative host. \`setup(node, props)\` runs once after attach and **returns the instance handle**; \`update(instance, props)\` runs when the (shallow-compared) \`props\` bag changes; \`cleanup(instance)\` runs on unmount. \`props\` is the reactive boundary; \`tag\` sets the host (default \`"div"\`).
+- \`WebComponent(tag, { attributes?, properties?, on?, children? })\` — render + hydrate a native custom element (tag must contain a hyphen). \`attributes\` is reactive, \`properties\` assigns rich JS props, \`on\` binds listeners that stay current.
+- \`$script({ src, global?, type?, as?, attributes? })\` — load an external script/stylesheet once (de-duplicated per \`src\`) → reactive \`{ ready, loading, error, value }\`. Gate a widget on \`.ready\`; \`value\` = \`window[global]\`. Stays un-ready under SSR.
+- \`$dom\` — managed observers, auto-disposed on replan: \`$dom.onResize(node, cb)\`, \`$dom.onIntersect(node, cb, opts?)\`, \`$dom.onMutation(node, cb, opts?)\`, and one-shot \`$dom.measure(node)\` → \`{ rect, scroll, viewport }\`. Pair with an \`OnMount\` / \`Mount\` node ref.
+
+\`\`\`
+$chartjs = $script({ src: "https://cdn.jsdelivr.net/npm/chart.js", global: "Chart" })
+function SalesChart() {
+  if (!$chartjs.ready) return Skeleton({ sx: { h: "320px" } })
+  return Mount({
+    sx: { h: "320px" },
+    setup: (node, p) => new $chartjs.value(node, { type: "bar", data: { datasets: [{ data: p.series }] } }),
+    update: (chart, p) => { chart.data.datasets[0].data = p.series; chart.update() },
+    cleanup: (chart) => chart.destroy(),
+    props: { series: $series }
+  })
+}
+\`\`\`
+
+### Document head — \`$head({...})\`
+Reactive head manager: call it from a page component body. Sets the title, meta, canonical/alternate links, Open Graph + Twitter cards, JSON-LD, and \`<html>\` attrs. Reads \`$state\`, so it re-applies on change; per-route calls compose (later wins). \`renderToString\` returns the resolved \`head\` + \`headAttrs\` for crawlable SSR.
+
+\`\`\`
+function ProductPage() {
+  $head({
+    title: \`\${$product.name} — Acme\`,
+    meta:  { description: $product.summary },
+    og:    { title: $product.name, image: $product.image, type: "product" },
+    link:  [{ rel: "canonical", href: $canonicalUrl }],
+    jsonLd: { "@type": "Product", name: $product.name }
+  })
+  return Column([ /* … */ ])
+}
 \`\`\``;
 }
 

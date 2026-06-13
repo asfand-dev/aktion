@@ -152,6 +152,20 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     signature: "$sse({ url, event })",
     summary: "Reactive Server-Sent Events stream — { status, connected, last, messages, close }. EventSource reconnects natively (status reads \"connecting\" while it does).",
   },
+  {
+    name: "script",
+    sigil: "$script",
+    category: "data",
+    signature: "$script({ src, global? })",
+    summary: "Load an external UMD/ESM script or stylesheet once → reactive { ready, loading, error, value }. `global` reads window[global] into `value` (e.g. window.Stripe). De-duplicated per src across the app; gate a third-party widget on `.ready`.",
+  },
+  {
+    name: "head",
+    sigil: "$head",
+    category: "app",
+    signature: "$head({ title, meta, og, twitter, link, jsonLd })",
+    summary: "Reactive document head: title, meta description, canonical/alternate links, Open Graph + Twitter cards, JSON-LD, <html> attrs. Per-route calls compose; renderToString emits the resolved <head> so SSR pages are crawlable.",
+  },
 
   // App / routing / theming / events.
   {
@@ -214,6 +228,14 @@ export const builtinCatalog: readonly BuiltinEntry[] = [
     category: "namespace",
     signature: "$toast",
     summary: "Imperative toasts: $toast.show/.success/.error/.dismiss; reactive .items.",
+    namespace: true,
+  },
+  {
+    name: "dom",
+    sigil: "$dom",
+    category: "namespace",
+    signature: "$dom",
+    summary: "Managed DOM-observer namespace: $dom.onResize(node, cb) / .onIntersect(node, cb, opts?) / .onMutation(node, cb, opts?) (auto-disposed on replan) and .measure(node) → { rect, scroll, viewport }. Pair with Mount/OnMount node refs.",
     namespace: true,
   },
   {

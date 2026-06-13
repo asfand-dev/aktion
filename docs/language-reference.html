@@ -1532,6 +1532,80 @@
         })),
       });
 
+      // Style migration helpers — tooling exports (aktion-runtime), used when
+      // porting an existing UI's classes / CSS into the bounded `sx` layer.
+      sections.push({
+        id: "style-migration",
+        title: "Style migration helpers",
+        lead:
+          "Tooling functions exported from <code>aktion-runtime</code> for porting an existing codebase into Aktion's bounded <code>sx</code> style layer. Each is <strong>honest about what it can't map</strong>: anything the <code>sx</code> surface can't express is returned verbatim under <code>_unmapped</code> so a migration never silently drops a style. Import them at build / codemod time — they are JS helpers, not in-language <code>$</code>-builtins.",
+        entries: [
+          {
+            anchor: "tooling-tailwindToSx",
+            name: "tailwindToSx",
+            kind: "Tooling",
+            signature: "tailwindToSx(classString) → sx",
+            description:
+              "Convert a Tailwind utility class string into an sx object. Coverage now includes arbitrary values (w-[327px], text-[#abc], rounded-[12px], z-[60]), an extended color-shade palette (emerald / teal / rose / indigo / zinc / …), backdrop blur, background sizing, and more cursors — on top of the spacing, sizing, color, flex, position, and typography utilities.",
+            params: [
+              { name: "classString", type: "string", desc: "A space-separated Tailwind class list, e.g. \"p-4 bg-white rounded-lg shadow\"." },
+            ],
+            returns: {
+              type: "object (sx)",
+              desc: "A bounded sx object. Utilities with no sx equivalent (transforms, transitions, gradients, …) are collected as a string array under _unmapped.",
+            },
+            example:
+              'import { tailwindToSx } from "aktion-runtime";\n\ntailwindToSx("w-[327px] bg-emerald-500 rounded-[12px] text-zinc-600")\n// → { w: "327px", bg: "success", radius: "12px", color: "text-muted" }\n\ntailwindToSx("flex gap-2 p-4 rotate-45")\n// → { display: "flex", gap: "sm", p: "md", _unmapped: ["rotate-45"] }',
+            notes: [
+              "Arbitrary values in <code>[ ]</code> map straight to raw CSS lengths/colors: <code>w-[327px]</code> → <code>{ w: \"327px\" }</code>, <code>bg-[#ff0000]</code> → <code>{ bg: \"#ff0000\" }</code>.",
+              "<code>text-[13px]</code> is treated as a font size while <code>text-[#abc]</code> is treated as a color — the bracket content decides.",
+              "Always inspect <code>_unmapped</code> after a conversion; route those into an <a href=\"components.html#Styles\"><code>Styles(...)</code></a> escape hatch if you need them.",
+            ],
+          },
+          {
+            anchor: "tooling-cssToSx",
+            name: "cssToSx",
+            kind: "Tooling",
+            signature: "cssToSx(cssText) → sx",
+            description:
+              "The complement of tailwindToSx for migrations from inline style=\"…\", CSS Modules, or any hand-written rule body. Maps a raw CSS declaration string onto the closest sx keys, reverse-mapping flex values (flex-start → start, space-between → between) along the way.",
+            params: [
+              { name: "cssText", type: "string", desc: "A CSS declaration block (\"display:flex; gap:12px\") or a full rule (\".btn { … }\") — the first rule body is used." },
+            ],
+            returns: {
+              type: "object (sx)",
+              desc: "A bounded sx object. Declarations the sx surface can't express (transform, transition, box-shadow, custom properties) are returned verbatim under _unmapped.",
+            },
+            example:
+              'import { cssToSx } from "aktion-runtime";\n\ncssToSx("display:flex; gap:12px; padding:0 16px; color:#1a1a1a")\n// → { display: "flex", gap: "12px", px: "16px", py: "0", color: "#1a1a1a" }\n\ncssToSx("align-items: flex-start; transform: rotate(3deg)")\n// → { align: "start", _unmapped: ["transform: rotate(3deg)"] }',
+            notes: [
+              "Pass a whole rule (<code>.card { … }</code>) and only the first declaration body is read.",
+              "CSS custom properties (<code>--x</code>) belong in a theme / <code>Styles</code> block and are surfaced under <code>_unmapped</code>.",
+            ],
+          },
+          {
+            anchor: "tooling-styledToSx",
+            name: "styledToSx",
+            kind: "Tooling",
+            signature: "styledToSx(template) → sx",
+            description:
+              "Extract the static declarations from a styled-components / emotion template into an sx object. ${…} interpolations are stripped and nested blocks (&:hover { … }, @media { … }, child selectors) are dropped into _unmapped, since the bounded sx base layer can't host them — use sx.hover / Styles(...) for those.",
+            params: [
+              { name: "template", type: "string | string[]", desc: "The template string (or the raw strings array of a tagged template)." },
+            ],
+            returns: {
+              type: "object (sx)",
+              desc: "A bounded sx object built from the top-level declarations; interpolations and nested blocks are recorded under _unmapped.",
+            },
+            example:
+              'import { styledToSx } from "aktion-runtime";\n\nstyledToSx(`\n  display: flex;\n  padding: 12px 16px;\n  color: ${p => p.color};\n  gap: 8px;\n  &:hover { opacity: 0.8; }\n`)\n// → { display: "flex", p: "12px 16px", gap: "8px",\n//     _unmapped: ["&:hover { opacity: 0.8; }"] }',
+            notes: [
+              "Dynamic <code>${…}</code> values can't be resolved statically — they're dropped, so re-bind them as reactive <code>sx</code> in the converted component.",
+            ],
+          },
+        ],
+      });
+
       content.replaceChildren();
       for (const section of sections) content.appendChild(sectionEl(section));
       buildToc(sections);

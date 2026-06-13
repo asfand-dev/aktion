@@ -73,6 +73,8 @@ export { htmlToAktion } from "./html-import.js";
 export {
   componentSchema,
   tailwindToSx,
+  cssToSx,
+  styledToSx,
   buildGallery,
   suggestComponent,
 } from "./schema.js";

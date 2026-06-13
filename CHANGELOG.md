@@ -13,6 +13,43 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Third-party / imperative widget interop** — first-class primitives for
+  embedding libraries that own their own DOM (charts, maps, editors, payment
+  elements, captchas):
+  - **`Mount({ setup, update?, cleanup?, props?, tag?, sx? })`** — a managed
+    imperative-component host with a clean lifecycle: `setup(node, props)` runs
+    once after attach and returns an instance handle, `update(instance, props)`
+    runs when the (shallow-compared) `props` bag changes, and
+    `cleanup(instance)` runs on unmount. Aktion owns + preserves the host so the
+    widget is never rebuilt mid-session.
+  - **`WebComponent(tag, { attributes?, properties?, on?, children? })`** —
+    render + hydrate any native custom element with reactive attributes, JS
+    properties, and event hooks (handlers stay current across renders).
+  - **`$script({ src, global?, type?, as?, attributes? })`** — load an external
+    UMD/ESM script or stylesheet once (de-duplicated per `src`), exposing a
+    reactive `{ ready, loading, error, value }` bag. `value` reads
+    `window[global]` once ready.
+  - **`$dom`** — a managed observer namespace: `$dom.onResize(node, cb)`,
+    `$dom.onIntersect(node, cb, opts?)`, `$dom.onMutation(node, cb, opts?)`
+    (auto-disposed on replan), and `$dom.measure(node)` →
+    `{ rect, scroll, viewport }`.
+  - Interop hosts carry `data-rui-preserve`; the morph reconciler keeps the live
+    element and never touches the DOM the widget owns (attribute changes still
+    flow additively).
+- **`$head({ title, titleTemplate?, meta?, og?, twitter?, link?, jsonLd?, base?, htmlAttrs? })`**
+  — a reactive document-head manager. Sets `document.title`, meta tags,
+  canonical/alternate links, Open Graph + Twitter cards, JSON-LD, and `<html>`
+  attributes. Per-route calls compose (later wins on conflicts), and
+  `renderToString` now returns the resolved `head` + `headAttrs` so SSR pages are
+  crawlable.
+- **Deeper style-migration helpers** — `tailwindToSx` now maps arbitrary values
+  (`w-[327px]`, `text-[#abc]`, `rounded-[12px]`, `z-[60]`), an extended
+  color-shade palette, backdrop blur, background sizing, and more cursors. New
+  **`cssToSx(cssText)`** (raw CSS declaration string / rule → `sx`) and
+  **`styledToSx(template)`** (styled-components / emotion template → `sx`)
+  extractors complement it; all three surface anything they can't map under
+  `_unmapped`.
+
 - **Member-level editor intelligence** — the DOM-free `aktion-runtime/language`
   surface now models every namespace member and reactive resource bag, so the
   VS Code extension and the docs playground complete, hover, highlight, and

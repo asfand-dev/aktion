@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Document head &amp; SEO · Aktion</title>
+  <meta name="description" content="$head() — a reactive document-head manager. Set the title, meta description, canonical link, Open Graph / Twitter cards, JSON-LD, and <html> attributes per route. Per-route heads compose with the router, and renderToString emits the resolved head so SSR pages are crawlable." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .req {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #b45309;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .muted { color: var(--doc-text-muted); font-weight: 400; }
+  </style>
+</head>
+<body data-page="head">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>Document head &amp; SEO.</h1>
+        <p class="lead">
+          <code>$head({ &hellip; })</code> is a reactive document-head manager.
+          It sets <code>document.title</code>, meta tags, the canonical link,
+          Open Graph / Twitter cards, JSON-LD, and <code>&lt;html&gt;</code>
+          attributes &mdash; and the <strong>same resolved head feeds
+          <code>renderToString</code></strong>, so server-rendered pages are
+          crawlable and show rich social previews. Anything that has to rank in
+          search or render a link preview &mdash; a marketing page, a blog post,
+          a docs site, an e-commerce PDP &mdash; needs this.
+        </p>
+      </header>
+
+      <h2 id="quick">Quick start</h2>
+      <p>
+        Call <code>$head({ &hellip; })</code> from anywhere that runs during a
+        render &mdash; usually the top of a page component. Values can be
+        reactive: read <code>$state</code> and the head re-applies when it
+        changes.
+      </p>
+<pre><code>function ProductPage() {
+  $head({
+    title: `${$product.name} — Acme`,
+    meta:  { description: $product.summary, "theme-color": "#111" },
+    og:    { title: $product.name, image: $product.image, type: "product" },
+    twitter: { card: "summary_large_image" },
+    link:  [{ rel: "canonical", href: $canonicalUrl }],
+    jsonLd: { "@type": "Product", name: $product.name, offers: { price: $product.price } }
+  })
+  return Column([ /* … the page … */ ])
+}</code></pre>
+      <div class="callout">
+        <p>
+          <strong>Call <code>$head</code> where it renders.</strong> Put it
+          inside a component body (or the page tree) so it runs on every render
+          pass. A bare top-level <code>$head(&hellip;)</code> that nothing
+          evaluates won&rsquo;t fire &mdash; like any expression, it has to be
+          reached during rendering.
+        </p>
+      </div>
+
+      <h2 id="config">Configuration</h2>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Renders</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code></td><td><code>string</code></td><td>Sets <code>document.title</code> and <code>&lt;title&gt;</code>.</td></tr>
+          <tr><td><code>titleTemplate</code></td><td><code>string</code></td><td>Wraps <code>title</code>, e.g. <code>"%s — Acme"</code>. <code>%s</code> is replaced by the title.</td></tr>
+          <tr><td><code>meta</code></td><td><code>object</code></td><td>Named meta tags: <code>{ description, "theme-color", keywords }</code> → <code>&lt;meta name content&gt;</code>. A <code>charset</code> key emits <code>&lt;meta charset&gt;</code>.</td></tr>
+          <tr><td><code>og</code></td><td><code>object</code></td><td>Open Graph: <code>{ title, image, type, url }</code> → <code>&lt;meta property="og:KEY"&gt;</code>.</td></tr>
+          <tr><td><code>twitter</code></td><td><code>object</code></td><td>Twitter cards: <code>{ card, site, creator }</code> → <code>&lt;meta name="twitter:KEY"&gt;</code>.</td></tr>
+          <tr><td><code>link</code></td><td><code>object[]</code></td><td>Array of <code>&lt;link&gt;</code> descriptors, e.g. <code>[{ rel: "canonical", href }, { rel: "alternate", hreflang: "fr", href }]</code>.</td></tr>
+          <tr><td><code>jsonLd</code></td><td><code>object | object[]</code></td><td>JSON-LD structured data → <code>&lt;script type="application/ld+json"&gt;</code>. <code>@context</code> defaults to <code>https://schema.org</code>.</td></tr>
+          <tr><td><code>base</code></td><td><code>string | object</code></td><td><code>&lt;base href&gt;</code> for the document.</td></tr>
+          <tr><td><code>htmlAttrs</code></td><td><code>object</code></td><td>Attributes for <code>&lt;html&gt;</code>, e.g. <code>{ lang: "en", dir: "ltr" }</code>. In SSR these are returned for the page shell.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="reactive">Reactive heads</h2>
+      <p>
+        Because <code>$head</code> runs during render and reads your state, the
+        head is just another reactive output. Change the state and the title /
+        meta update live &mdash; no manual DOM writes.
+      </p>
+<pre><code>$unread = 3
+
+function Inbox() {
+  $head({ title: $unread &gt; 0 ? `(${$unread}) Inbox` : "Inbox" })
+  return Column([ /* … */ ])
+}</code></pre>
+
+      <h2 id="composition">Per-route composition</h2>
+      <p>
+        Multiple <code>$head(&hellip;)</code> calls in one render pass
+        <strong>merge in call order</strong> &mdash; later calls win on
+        conflicts. This is the layout-plus-page pattern: a shared layout sets
+        defaults, and the routed page overrides just the title and description.
+      </p>
+<pre><code>function Layout(page) {
+  $head({                                  // site-wide defaults
+    titleTemplate: "%s — Acme",
+    meta: { "theme-color": "#111", description: "Acme builds tools for teams." },
+    og:   { type: "website", image: "/og-default.png" }
+  })
+  return Column([ Navbar(), page, Footer() ])
+}
+
+function AboutPage() {
+  $head({ title: "About", meta: { description: "Who we are and why." } })
+  return Column([ /* … */ ])
+}
+
+$app(Layout(AboutPage()))
+// → <title>About — Acme</title>, description "Who we are and why.",
+//   and the layout's theme-color + default OG image survive the merge.</code></pre>
+      <p>
+        When the route changes, the new page&rsquo;s render contributes a fresh
+        head and the previous route&rsquo;s tags are replaced &mdash; titles
+        don&rsquo;t pile up. See <a href="routing.html">Routing</a> for the
+        router surface.
+      </p>
+
+      <h2 id="ssr">Server-side rendering</h2>
+      <p>
+        <code>renderToString</code> evaluates your program and returns the
+        resolved head alongside the HTML, so you can inject a crawlable
+        <code>&lt;head&gt;</code> into your page shell:
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime";
+
+const { html, state, head, headAttrs } = renderToString(source);
+
+const page = `&lt;!doctype html&gt;
+&lt;html ${Object.entries(headAttrs).map(([k, v]) =&gt; `${k}="${v}"`).join(" ")}&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    ${head}                          &lt;!-- resolved &lt;title&gt;, meta, OG, JSON-LD --&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    ${html}
+    &lt;script&gt;window.__AKTION_STATE__ = ${JSON.stringify(state)}&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;`;</code></pre>
+      <table class="signature-table">
+        <thead><tr><th><code>renderToString</code> result</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>html</code></td><td>The rendered application markup.</td></tr>
+          <tr><td><code>state</code></td><td>State snapshot to ship for hydration.</td></tr>
+          <tr><td><code>head</code></td><td>The resolved <code>&lt;head&gt;</code> markup (title, meta, OG, Twitter, links, JSON-LD) emitted by every <code>$head(&hellip;)</code> that ran. Empty string when none ran.</td></tr>
+          <tr><td><code>headAttrs</code></td><td><code>&lt;html&gt;</code> attributes (<code>lang</code>, <code>dir</code>, &hellip;) contributed via <code>$head({ htmlAttrs })</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The client re-applies the same head on hydration, so the title /
+        meta you served and the title / meta the app manages stay in sync. See
+        <a href="deployment.html">Production &amp; deployment</a> for the full
+        SSR + hydration flow.
+      </p>
+
+      <h2 id="recipes">Recipes</h2>
+
+      <h3>Canonical + alternates for i18n</h3>
+<pre><code>$head({
+  link: [
+    { rel: "canonical", href: $url },
+    { rel: "alternate", hreflang: "en", href: $urlEn },
+    { rel: "alternate", hreflang: "fr", href: $urlFr }
+  ]
+})</code></pre>
+
+      <h3>Article JSON-LD for rich results</h3>
+<pre><code>$head({
+  title: $post.title,
+  meta:  { description: $post.excerpt },
+  og:    { title: $post.title, type: "article", image: $post.cover },
+  jsonLd: {
+    "@type": "Article",
+    headline: $post.title,
+    author:   { "@type": "Person", name: $post.author },
+    datePublished: $post.date
+  }
+})</code></pre>
+
+      <h3>Blocking indexing on a staging build</h3>
+<pre><code>$head({ meta: { robots: $isProd ? "index,follow" : "noindex,nofollow" } })</code></pre>
+
+      <h2 id="notes">Notes &amp; gotchas</h2>
+      <ul>
+        <li><strong>Managed tags are owned by Aktion.</strong> Every tag
+          <code>$head</code> injects carries <code>data-rui-head</code>. The
+          manager replaces its previous set on each commit and clears them when
+          the program is torn down &mdash; so a re-plan never leaves a stale
+          title behind. Don&rsquo;t hand-write tags Aktion also manages.</li>
+        <li><strong>Commits are batched.</strong> Contributions in a render pass
+          accumulate and commit on a microtask, so several <code>$head</code>
+          calls resolve to one merged head with no flicker. In SSR the merge
+          happens synchronously when the head is serialized.</li>
+        <li><strong>Escape HTML in values? No need.</strong> Titles, meta
+          content, and link attributes are escaped for you. JSON-LD is
+          serialized safely.</li>
+        <li><strong><code>link</code> de-dupes</strong> by <code>rel</code> +
+          <code>href</code> + <code>hreflang</code>, so a layout and a page
+          declaring the same canonical won&rsquo;t emit it twice.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-cards">
+        <a class="demo-card" href="routing.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Routing</h3>
+          <p>Per-route pages and navigation &mdash; where per-route <code>$head</code> composition lives.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="deployment.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Production &amp; deployment</h3>
+          <p>SSR with <code>renderToString</code>, hydration, and shipping a crawlable shell.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="interop.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Third-party widgets</h3>
+          <p><code>Mount</code>, <code>WebComponent</code>, <code>$script</code>, and <code>$dom</code> for imperative libraries.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+</body>
+</html>

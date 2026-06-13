@@ -2563,6 +2563,91 @@ $app(Stack([
   rather than throwing, so a malformed escape hatch can never break
   the page.
 
+### Interop — embedding imperative / third-party widgets
+
+When you must embed a library that owns its own DOM (a chart, map,
+rich-text editor, payment element, captcha, video SDK), reach for the
+interop primitives — NOT `HTMLTag`. Aktion creates + preserves the host
+element (it carries `data-rui-preserve`, so the reconciler never touches
+the DOM the widget builds), and gives you a managed lifecycle.
+
+- **`Mount({ setup, update?, cleanup?, props?, tag?, sx? })`** — the
+  managed imperative-component host.
+  - `setup(node, props)` runs ONCE on a microtask after the host
+    attaches; build the widget and **return its instance handle**.
+  - `update(instance, props)` runs when the `props` bag changes by a
+    **shallow compare** (replace arrays/objects immutably to trigger it).
+  - `cleanup(instance)` runs on unmount — destroy / tear down the widget.
+  - `props` is the reactive boundary: bind `$state` into it to drive the
+    widget. `tag` sets the host element (default `"div"`); `sx` lays it out.
+- **`WebComponent(tag, { attributes?, properties?, on?, children? })`** —
+  render + hydrate any native custom element. `tag` must contain a hyphen
+  (a hyphen-less name falls back to a `div`). `attributes` is reactive;
+  `properties` assigns rich JS props; `on` binds listeners that stay
+  current across renders.
+- **`$script({ src, global?, type?, as?, attributes? })`** — load an
+  external script / stylesheet once (de-duplicated per `src`) → reactive
+  `{ ready, loading, error, value }`. Gate a widget on `.ready`; `value`
+  is `window[global]` once loaded. Stays `{ ready: false }` under SSR.
+- **`$dom`** — managed observers, all auto-disposed on replan:
+  `$dom.onResize(node, cb)`, `$dom.onIntersect(node, cb, opts?)`,
+  `$dom.onMutation(node, cb, opts?)`, and the one-shot
+  `$dom.measure(node)` → `{ rect, scroll, viewport }`. Pair with an
+  `OnMount` / `Mount` node ref.
+
+```javascript
+$chartjs = $script({ src: "https://cdn.jsdelivr.net/npm/chart.js", global: "Chart" })
+$series  = [12, 19, 7, 15]
+
+function SalesChart() {
+  if (!$chartjs.ready) return Skeleton({ sx: { h: "320px" } })   // graceful loading
+  return Mount({
+    sx: { h: "320px" },
+    setup: (node, p) => new $chartjs.value(node, { type: "bar", data: { datasets: [{ data: p.series }] } }),
+    update: (chart, p) => { chart.data.datasets[0].data = p.series; chart.update() },
+    cleanup: (chart) => chart.destroy(),
+    props: { series: $series }
+  })
+}
+```
+
+**Rules of thumb:**
+
+- Reach for interop ONLY for real imperative libraries. Everything else
+  uses the built-in components (they reconcile + theme for free).
+- `Mount` for a JS API you call (`new Chart(...)`); `WebComponent` for an
+  existing custom element; `OnMount` for a one-shot node tweak.
+- Always return teardown: `cleanup` for `Mount`, `.close()` etc. The
+  `$script` / `$dom` resources dispose themselves.
+
+### Document head — `$head(...)`
+
+`$head({ title, titleTemplate?, meta?, og?, twitter?, link?, jsonLd?, base?, htmlAttrs? })`
+is a reactive head manager — call it from a page component body to set the
+title, meta description, canonical link, Open Graph / Twitter cards, and
+JSON-LD. Values can read `$state`, so the head re-applies on change.
+Per-route calls **compose** (later wins on conflicts: a layout sets
+defaults, the page overrides title/description), and `renderToString`
+returns the resolved `head` + `headAttrs` so SSR pages are crawlable.
+
+```javascript
+function ProductPage() {
+  $head({
+    title: `${$product.name} — Acme`,
+    meta:  { description: $product.summary, "theme-color": "#111" },
+    og:    { title: $product.name, image: $product.image, type: "product" },
+    twitter: { card: "summary_large_image" },
+    link:  [{ rel: "canonical", href: $canonicalUrl }],
+    jsonLd: { "@type": "Product", name: $product.name }
+  })
+  return Column([ /* … */ ])
+}
+```
+
+Call `$head` where it renders (inside a component body / the page tree),
+not as a dangling top-level statement — like any expression it must be
+reached during rendering to fire.
+
 ---
 
 ## 10. JavaScript layer

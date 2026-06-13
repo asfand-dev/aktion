@@ -34,6 +34,8 @@ import {
 } from "./http.js";
 import type { EndpointResource } from "./http.js";
 import { createSocketResource, createSseResource } from "./realtime.js";
+import { createScriptResource, createDomManager, type DomManager } from "./interop.js";
+import { createHeadManager, type HeadManager } from "./head.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
@@ -127,12 +129,24 @@ const RESERVED_STATE_NAMESPACES: Record<string, unknown> = {
  * resolver and `memberChainRootsAtState` treat them like the static reserved
  * namespaces (constant root, not fine-grained tracked state).
  */
-const RESERVED_CONTEXT_NAMESPACES = new Set(["toast"]);
+const RESERVED_CONTEXT_NAMESPACES = new Set(["toast", "dom"]);
 
 /** Lazily build (and cache on the context) the `$toast` manager singleton. */
 function getToastManager(ctx: EvaluationContext): ToastManager {
   if (!ctx.toastManager) ctx.toastManager = createToastManager(ctx);
   return ctx.toastManager;
+}
+
+/** Lazily build (and cache on the context) the `$dom` observer manager. */
+function getDomManager(ctx: EvaluationContext): DomManager {
+  if (!ctx.domManager) ctx.domManager = createDomManager(ctx);
+  return ctx.domManager;
+}
+
+/** Lazily build (and cache on the context) the `$head` document-head manager. */
+export function getHeadManager(ctx: EvaluationContext): HeadManager {
+  if (!ctx.headManager) ctx.headManager = createHeadManager(ctx);
+  return ctx.headManager;
 }
 
 /** Lazily build (and cache on the context) the reactive env-globals manager. */
@@ -808,6 +822,17 @@ export interface EvaluationContext {
    * `getToastManager`; its auto-dismiss timers are cleared on dispose.
    */
   toastManager?: ToastManager;
+  /**
+   * Lazily-created singleton backing the reserved `$dom` observer namespace
+   * (`$dom.onResize`, `$dom.onIntersect`, `$dom.measure`, …). Every observer
+   * it creates registers on `disposers`, so all are torn down on replan.
+   */
+  domManager?: DomManager;
+  /**
+   * Lazily-created singleton backing the `$head({...})` document-head manager.
+   * Accumulates per-render contributions and feeds SSR's resolved `<head>`.
+   */
+  headManager?: HeadManager;
   /**
    * Lazily-created singleton backing the reactive environment namespaces
    * (`$viewport`, `$breakpoint`, `$scroll`, `$media`, `$mouse`). Listeners
@@ -1739,6 +1764,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // singleton rather than a static constant.
       if (RESERVED_CONTEXT_NAMESPACES.has(expr.name)) {
         if (expr.name === "toast") return getToastManager(ctx);
+        if (expr.name === "dom") return getDomManager(ctx);
       }
       // `$emit` read resolves to a real bound dispatcher so it survives
       // aliasing (`const e = $emit; e("name", detail)`) instead of being
@@ -3008,6 +3034,18 @@ function evaluateInvoke(
       case "sse": {
         const optsArg = expr.arguments[0];
         return createSseResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "script": {
+        const optsArg = expr.arguments[0];
+        return createScriptResource(optsArg ? evaluate(optsArg, ctx) : {}, ctx);
+      }
+      case "head": {
+        // Apply the head contribution for this render pass. Evaluating the
+        // config here subscribes the render to any `$state` it reads, so a
+        // reactive title / meta re-applies on change.
+        const optsArg = expr.arguments[0];
+        getHeadManager(ctx).apply(optsArg ? evaluate(optsArg, ctx) : {});
+        return null;
       }
       case "theme": {
         const tokensArg = expr.arguments[0];

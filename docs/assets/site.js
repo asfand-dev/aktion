@@ -54,6 +54,8 @@ const NAV_GROUPS = [
       { href: "http.html", label: "HTTP" },
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "side-effects.html", label: "Side effects" },
+      { href: "interop.html", label: "Third-party widgets" },
+      { href: "head.html", label: "Document head" },
       { href: "routing.html", label: "Routing" },
       { href: "testing.html", label: "Testing" },
       { href: "devtools.html", label: "DevTools" },
@@ -90,7 +92,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html"] },
   { href: "live-demos.html", label: "Demos",       matches: ["live-demos.html"] },
@@ -111,7 +113,7 @@ const PAGE_KEYWORDS = {
   "frameworks.html": "react vue angular svelte nextjs html",
   "migration-guide.html": "migrate react vue angular svelte solid preact nextjs jsx tsx hooks composition api signals stores props state",
   "language.html": "syntax expressions state queries mutations builtins",
-  "language-reference.html": "language reference keywords builtins hooks globals operators $util namespace $state $effect $http $memo $store $router $theme $emit util storage console toast i18n reserved handles route aktion literals atoms ternary spread optional chaining nullish template literals fetch math json date intl crypto navigator settimeout setinterval cheatsheet api",
+  "language-reference.html": "language reference keywords builtins hooks globals operators $util namespace $state $effect $http $memo $store $router $theme $emit util storage console toast i18n reserved handles route aktion literals atoms ternary spread optional chaining nullish template literals fetch math json date intl crypto navigator settimeout setinterval cheatsheet api tailwindtosx csstosx styledtosx tailwind css styled-components emotion sx migration arbitrary values unmapped style convert",
   "modules.html": "modules import export multi-file multifile code-splitting code splitting link linker file project component reuse private scope shared state url remote dependency app.aktion entry playground zip",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
   "components.html": "props library catalog signatures",
@@ -120,6 +122,8 @@ const PAGE_KEYWORDS = {
   "actions.html": "action assignment http emit assistant-message navigate route js button click",
   "http.html": "http fetch request response query headers body refetch cancel async resource crud rest api network",
   "javascript-interactions.html": "script @js useeffect hooks",
+  "interop.html": "mount webcomponent web component custom element $script $dom interop third-party imperative widget chart map editor monaco stripe mapbox leaflet chartjs echarts d3 tiptap prosemirror video captcha resizeobserver intersectionobserver mutationobserver measure onresize onintersect onmutation data-rui-preserve external script loader sdk lifecycle setup update cleanup",
+  "head.html": "head document head $head title meta description canonical open graph og twitter card jsonld json-ld structured data schema.org seo social preview link rel htmlattrs lang dir robots noindex titletemplate ssr crawlable rendertostring sitemap marketing pdp",
   "routing.html": "routes navlink navigate hash router",
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit",
   "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
