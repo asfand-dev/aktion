@@ -1,7 +1,7 @@
 /**
- * The Aktion-built homepage (docs/index.aktion) must always parse and render
- * error-free with the current library — it dogfoods NavBar, Backdrop,
- * CodeWindow live previews, Bento, Calendar, Swatch, Table, and Footer.
+ * The Aktion-built homepage (docs/demos/mini-apps/aktion-website.aktion) must always
+ * parse and render error-free with the current library — it dogfoods NavBar,
+ * Backdrop, CodeWindow live previews, Bento, Calendar, Swatch, Table, and Footer.
  */
 import { it, expect, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -12,8 +12,8 @@ const flush = (): Promise<void> => new Promise<void>((r) => queueMicrotask(() =>
 const settle = async (n = 10): Promise<void> => { for (let i = 0; i < n; i += 1) await flush(); };
 afterEach(() => { document.body.innerHTML = ""; });
 
-it("docs/index.aktion parses and renders without errors", async () => {
-  const src = readFileSync("docs/index.aktion", "utf-8");
+it("docs/demos/mini-apps/aktion-website.aktion parses and renders without errors", async () => {
+  const src = readFileSync("docs/demos/mini-apps/aktion-website.aktion", "utf-8");
   expect(() => parse(src)).not.toThrow();
   const el = document.createElement("aktion-app") as HTMLElement & { setResponse(t: string): void };
   document.body.appendChild(el);

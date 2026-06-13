@@ -30,23 +30,13 @@ const docsDir = resolve(root, "docs");
 const distDir = resolve(root, "dist");
 const outDir = resolve(root, "site");
 
-/**
- * Directories under `docs/` that are author-facing source material for the
- * live-example bundle, not files we want shipped to the static site.
- */
-const NON_DEPLOYABLE_DOCS_DIRS = new Set(["_examples"]);
-
 async function main() {
+  await writeDemosManifest();
+
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  await cp(docsDir, outDir, {
-    recursive: true,
-    filter: (src) => {
-      const rel = src.slice(docsDir.length + 1).split("/")[0];
-      return !NON_DEPLOYABLE_DOCS_DIRS.has(rel);
-    },
-  });
+  await cp(docsDir, outDir, { recursive: true });
   await cp(distDir, resolve(outDir, "dist"), { recursive: true });
 
   await rewriteDeployPaths(outDir);
@@ -54,6 +44,28 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(`Site assembled in ${outDir}`);
+}
+
+/**
+ * Scan `docs/demos/<folder>/*.aktion` and regenerate `docs/demos/manifest.json`.
+ * Static hosts cannot list directories, so `demos/index.html` and
+ * `live-demos.html` read this manifest instead. `mini-apps` is always listed
+ * first; remaining folders follow alphabetically.
+ */
+async function writeDemosManifest() {
+  const demosDir = resolve(docsDir, "demos");
+  const entries = await readdir(demosDir, { withFileTypes: true });
+  const folders = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort((a, b) => (a === "mini-apps" ? -1 : b === "mini-apps" ? 1 : a.localeCompare(b)));
+
+  const manifest = {};
+  for (const folder of folders) {
+    const files = await readdir(resolve(demosDir, folder));
+    manifest[folder] = files.filter((f) => f.endsWith(".aktion")).sort();
+  }
+  await writeFile(resolve(demosDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
 /**

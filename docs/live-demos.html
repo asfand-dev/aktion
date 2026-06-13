@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live demos · Aktion</title>
+  <meta name="description" content="Standalone, full-page Aktion demos rendered live. Click a card to open the demo in a new tab." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <style>
+    .demo-section { margin-top: 34px; }
+    .demo-section h2 {
+      margin: 0 0 4px;
+      font-size: 19px;
+      letter-spacing: -0.01em;
+    }
+    .demo-section-count {
+      font-size: 13px;
+      color: var(--doc-text-muted);
+      margin: 0 0 14px;
+    }
+    .demo-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .demo-preview-card {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      overflow: hidden;
+      text-decoration: none;
+      transition: border-color var(--doc-transition), box-shadow var(--doc-transition), transform var(--doc-transition);
+    }
+    .demo-preview-card:hover {
+      border-color: var(--doc-primary);
+      box-shadow: var(--doc-shadow);
+      transform: translateY(-2px);
+    }
+    .demo-preview-frame {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      background: var(--doc-bg-soft);
+      overflow: hidden;
+      border-bottom: 1px solid var(--doc-border-subtle);
+    }
+    /* Zoomed-out live preview: render the full page at 4x size, scale to 25%. */
+    .demo-preview-frame iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 400%;
+      height: 400%;
+      border: 0;
+      transform: scale(0.25);
+      transform-origin: top left;
+      pointer-events: none;
+      background: #fff;
+    }
+    .demo-preview-frame .demo-preview-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12.5px;
+      color: var(--doc-text-subtle);
+    }
+    .demo-preview-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 15px;
+    }
+    .demo-preview-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .demo-preview-open {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--doc-primary);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body data-page="live-demos">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Live demos</span>
+        <h1>Live demos</h1>
+        <p class="lead">Every Aktion program bundled with the docs, rendered live. Click a card to open the demo full-page in a new tab.</p>
+      </header>
+
+      <div id="demo-sections"></div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    const root = document.getElementById("demo-sections");
+
+    const titleCase = (slug) =>
+      slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    const programName = (file) => titleCase(file.replace(/\.aktion$/, ""));
+
+    const manifest = await fetch("demos/manifest.json").then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status} fetching demos/manifest.json`);
+      return r.json();
+    });
+
+    // Load each preview iframe only once it scrolls near the viewport — the
+    // catalog holds 70+ live programs and must not boot them all upfront.
+    const lazyFrames = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const frame = entry.target;
+        frame.src = frame.dataset.src;
+        frame.addEventListener("load", () => {
+          frame.parentElement.querySelector(".demo-preview-loading")?.remove();
+        }, { once: true });
+        lazyFrames.unobserve(frame);
+      }
+    }, { rootMargin: "400px" });
+
+    for (const [folder, files] of Object.entries(manifest)) {
+      const section = document.createElement("section");
+      section.className = "demo-section";
+      section.innerHTML = `
+        <h2>${titleCase(folder)}</h2>
+        <p class="demo-section-count">${files.length} program${files.length === 1 ? "" : "s"}</p>
+        <div class="demo-card-grid"></div>
+      `;
+      const grid = section.querySelector(".demo-card-grid");
+
+      for (const file of files) {
+        const app = `${folder}/${file}`;
+        const card = document.createElement("a");
+        card.className = "demo-preview-card";
+        card.href = `demos/index.html?app=${encodeURIComponent(app)}`;
+        card.target = "_blank";
+        card.rel = "noopener";
+        card.innerHTML = `
+          <span class="demo-preview-frame">
+            <span class="demo-preview-loading">Loading preview…</span>
+          </span>
+          <span class="demo-preview-meta">
+            <span class="demo-preview-name">${programName(file)}</span>
+            <span class="demo-preview-open">Open demo &rarr;</span>
+          </span>
+        `;
+        const frame = document.createElement("iframe");
+        frame.dataset.src = `demos/index.html?app=${encodeURIComponent(app)}&embed=1`;
+        frame.title = `${programName(file)} preview`;
+        frame.setAttribute("tabindex", "-1");
+        frame.setAttribute("aria-hidden", "true");
+        card.querySelector(".demo-preview-frame").appendChild(frame);
+        lazyFrames.observe(frame);
+        grid.appendChild(card);
+      }
+      root.appendChild(section);
+    }
+  </script>
+</body>
+</html>

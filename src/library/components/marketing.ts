@@ -892,7 +892,7 @@ export const Backdrop: ComponentSpec = {
       ].filter(Boolean).join(";");
       root.append(el("div", { class: "rui-backdrop-blob", style }));
     });
-    const count = Math.max(0, Math.min(120, Math.round(asNumber(props.particles || 50, 0))));
+    const count = Math.max(0, Math.min(120, Math.round(asNumber(props.particles, 0))));
     if (count > 0) {
       const typeRaw = asString(props.type, "network");
       const palette = asArray<unknown>(props.particleColors)

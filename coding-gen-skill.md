@@ -4034,7 +4034,7 @@ Before finishing, walk your output and verify:
 - **`docs/playground.html`** — CodeMirror 6 editor with syntax
   highlighting, autocomplete, share links, and an inspector.
 - **`docs/visual-editor.html`** — drag-and-drop visual editor.
-- **`docs/live-examples.html`** — catalog of bundled live demos.
+- **`docs/live-demos.html`** — catalog of bundled live demos.
 - **`docs/chat-bot.html`** — OpenRouter-powered streaming chat.
 - **System prompts at the CDN** —
   [`system_prompt.txt`](https://asfand-dev.github.io/aktion/dist/system_prompt.txt)

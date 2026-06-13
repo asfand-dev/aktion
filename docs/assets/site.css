@@ -298,7 +298,7 @@ img, svg { max-width: 100%; height: auto; display: block; }
   grid-template-columns: var(--doc-sidebar-w) minmax(0, 1fr) var(--doc-toc-w);
 }
 
-/* When a page wants a wide layout (playground, live-examples, etc.) it can
+/* When a page wants a wide layout (playground, live-demos, etc.) it can
    set data-wide on .layout to remove the toc column and stretch content. */
 .layout[data-wide="true"] {
   grid-template-columns: var(--doc-sidebar-w) minmax(0, 1fr);

@@ -24,7 +24,7 @@ That is the whole integration. Works in React, Vue, Angular, Svelte, plain
 HTML, or no framework at all.
 
 - **Docs site:** <https://asfand-dev.github.io/aktion/>
-- **Live examples:** <https://asfand-dev.github.io/aktion/live-examples.html>
+- **Live demos:** <https://asfand-dev.github.io/aktion/live-demos.html>
 - **CDN bundle (ESM):** <https://asfand-dev.github.io/aktion/dist/aktion.js>
 - **System prompt (full):** <https://asfand-dev.github.io/aktion/dist/system_prompt.txt>
 - **System prompt (chat):** <https://asfand-dev.github.io/aktion/dist/system_prompt_chat.txt>
@@ -48,7 +48,7 @@ HTML, or no framework at all.
 - [Tooling](#tooling)
 - [Build-time compiler & multi-file modules](#build-time-compiler--multi-file-modules)
 - [Documentation site](#documentation-site)
-- [Live examples](#live-examples)
+- [Live demos](#live-demos)
 - [Project layout](#project-layout)
 - [Run it locally](#run-it-locally)
 - [Security](#security)
@@ -1696,40 +1696,39 @@ consumes from the CDN.
 | `troubleshooting.html`              | Troubleshooting / FAQ — focus loss, effects not firing, memoized-away components, the `Map` component vs JS `Map`, dropped styles, missing i18n keys. |
 | `errors.html`                       | Error handling & debugging — reading parse/runtime errors, the render-loop and budget guards, the `error` event, and strict mode. |
 | `typescript.html`                   | TypeScript guide — public types, subpath entry points, typing custom components/helpers/interceptors, host event payloads, a typed host-wrapper recipe. |
-| `recipes.html`                      | Recipes, patterns & anti-patterns — the A–V application patterns by task, the JS-aligned do/don't table, and the pre-ship self-check. |
 | `accessibility.html`                | Accessibility guide — conformance target, keyboard map, screen-reader/streaming behaviour, built-in ARIA, and theme contrast. |
 | `deployment.html`                   | Production & deployment — SSR/hydration via `serializeState`, CSP and `unsafe-eval`, integrity hashes, CDN caching, edge-function LLM streaming. |
 | `llm-integration.html`              | LLM integration — wiring OpenAI/Anthropic/OpenRouter/Bedrock streams into `appendChunk`, prompt selection, interceptors, the `assistant-message` round-trip. |
 | `themes.html`                       | Built-in themes gallery, live picker, side-by-side compare, and the token customization studio. |
-| `examples.html`                     | Curated showcase of real-world block UIs (auth, products, FAQ, cart, todos, …).         |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
 | `visual-editor.html`                | Drag-and-drop visual editor for the full 170+ component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
-| `live-examples.html`                | Catalog page that links every demo into the shared `live-example.html?example=<slug>` shell. |
-| `live-example.html`                 | Shared shell for the bundled live examples — picks the demo from the `?example=<slug>` query parameter. |
+| `live-demos.html`                   | Catalog of every bundled demo program as zoomed-out live preview cards, sectioned by `docs/demos/` folder. |
+| `demos/index.html`                  | Shared runner shell for the bundled demos — picks the program from the `?app=<folder>/<file>.aktion` query parameter. |
 
 ---
 
-## Live examples
+## Live demos
 
-Every standalone demo is served by a single shell page
-(`docs/live-example.html`) and a single JS bundle
-(`docs/assets/live-example.js`) that ships every demo's Aktion source
-and setup code together. Open any example with
-`live-example.html?example=<slug>` — the shell renders the original
-hero / source / output layout, so each demo doubles as an integration
-recipe for `setResponse`, `appendChunk`, and `setTheme`.
+Every bundled demo is a pure `.aktion` program under `docs/demos/`,
+grouped by folder:
 
-| Demo slug                       | Highlights                                                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `settings-app`                  | Tabs, `Switch`, `ToggleGroup`, `Progress`, `Kbd`, danger-zone confirmation `Drawer`.                        |
-| `data-explorer`                 | Analytics surface: sortable `DataGrid` + bulk toolbar, `Gauge` SLA dials, `LineChart`, `Heatmap`, `RadarChart`, `ScatterChart`, `Histogram`, `InfiniteList`, `ActivityLog`. |
-| `media-gallery`                 | Travel magazine: `Carousel` hero, `Gallery` + click-to-zoom `Lightbox`, `VideoPlayer`, `AudioPlayer`, Leaflet-backed `Map`. |
-| `content-studio`                | CMS-style authoring surface: `RichTextEditor`, `CodeEditor`, `MultiStepForm`, `ColorPicker`, `TagInput`, `MentionInput`, `PinInput`, `ValidationSummary`, `TopBar`. |
-| `brand-themes.html`             | Same UI reskinned with `$theme({...})` for **GitHub**, **Apple**, **Stripe**, **IONOS**, **Notion**, **Vercel** (bespoke UI on its own page). |
+| Folder                | What's inside                                                                  |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `demos/mini-apps/`    | Complete interactive apps — trackers, dashboards, storefronts, live-API browsers, marketing pages. |
+| `demos/blocks/`       | Single-file, drop-in functional sections (login card, pricing plans, checkout form, …). |
+| `demos/components/`   | Reusable `function` component showcases grouped by type (buttons, inputs, charts, …). |
 
-The full catalog with tag filters lives at
-[`docs/live-examples.html`](https://asfand-dev.github.io/aktion/live-examples.html).
+All programs are served by one runner shell,
+`docs/demos/index.html?app=<folder>/<file>.aktion` (defaults to
+`mini-apps/aktion-website.aktion`), which also offers an app picker, a
+renderer-theme switcher, and a **View .aktion source** button that opens
+the program in the playground editor for live editing. The folder
+contents are scanned into `docs/demos/manifest.json` by
+`scripts/build-docs.mjs`.
+
+The full catalog with zoomed-out live preview cards lives at
+[`docs/live-demos.html`](https://asfand-dev.github.io/aktion/live-demos.html).
 
 ---
 
@@ -1763,8 +1762,7 @@ The full catalog with tag filters lives at
 │   ├── element.ts             #   The custom element
 │   └── index.ts               #   Public entry point
 ├── docs/                      # Static documentation site (HTML + CSS + JS)
-│   ├── _examples/             #   Author-facing source for every bundled live example
-│   └── assets/live-example.js #   GENERATED single-bundle for live-example.html
+│   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components)
 ├── _docs/                     # Internal design notes and inspirations (not shipped)
 ├── scripts/
 │   ├── emit-prompt.mjs        #   Writes dist/system_prompt*.txt from the bundle

@@ -50,4 +50,4 @@ project after this change? If yes, update the README.
   authoring full apps).
 - Don't invent CDN URLs, theme names, or component names in the README —
   cross-check against `src/library/index.ts`, `src/theme/index.ts`, and
-  `docs/live-examples.html` first.
+  `docs/live-demos.html` first.

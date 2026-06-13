@@ -1,0 +1,457 @@
+// =============================================================================
+// Aktion homepage — written in Aktion itself.
+//
+// This page dogfoods the component library end to end: NavBar, Section,
+// Backdrop (canvas particles), CodeWindow (with LIVE previews), Bento,
+// MetricStrip, LogoCloud, Table, Calendar, Swatch, Steps, Terminal, Footer…
+// No custom CSS — everything below is plain components + theme tokens.
+// =============================================================================
+
+$theme({
+  colors: {
+    primary: "#6366f1",
+    primaryHover: "#4f46e5",
+    accent: "#8b5cf6"
+  },
+  font: {
+    family: "Inter, system-ui, -apple-system, Segoe UI, sans-serif",
+    familyHeading: "Inter, system-ui, -apple-system, Segoe UI, sans-serif",
+    weightHeading: "800"
+  },
+  radius: { md: "14px", lg: "20px", button: "11px" }
+})
+
+// ---- Live demo state --------------------------------------------------------
+$plan = "pro"
+$notify = true
+$volume = 60
+$picked = "2026-06-14"
+
+// ---- Code shown (and RUN) by the CodeWindows --------------------------------
+// Multi-line template literals; none of the samples contain a ${...}
+// interpolation, so the source ships verbatim into each window.
+heroCode = `$app(Column([
+  PageHeader("Project Atlas", {
+    subtitle: "12 active · 4 at risk",
+    badge: Badge("On track", { tone: "success" })
+  }),
+  Grid([
+    StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" }),
+    StatCard("Users", { value: "12,540", trend: "up", delta: "+184", icon: "users" }),
+    StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%", icon: "arrow-trend-down" })
+  ], { gap: "md", minChildWidth: "150px" }),
+  Card([
+    CardHeader("Welcome back"),
+    Text("This dashboard is plain text, rendered as a live UI.")
+  ])
+], { gap: "lg" }))`
+
+reactCode = `import { useState } from "react"
+import "./Counter.css"
+
+export function Counter() {
+  const [count, setCount] = useState(0)
+  return (
+    <div className="card">
+      <h3>Counter</h3>
+      <p className="value">{count}</p>
+      <button className="btn"
+        onClick={() => setCount(c => c + 1)}>
+        Increment
+      </button>
+    </div>
+  )
+}
+/* + Counter.css + bundler + JSX build */`
+
+aktionCode = `// no imports · no CSS · no build
+$count = 0
+
+$app(Card([
+  CardHeader("Counter"),
+  Text("Count: " + $count, { variant: "title" }),
+  Button("Increment", {
+    variant: "primary",
+    onClick: () => { $count = $count + 1 }
+  })
+], { sx: { gap: "md" } }))`
+
+counterCode = `$count = 0
+$step = 1
+function inc() { $count = $count + $step }
+function dec() { $count = $count - $step }
+$app(Card([
+  CardHeader("Reactive counter", { subtitle: "State is the one piece of magic" }),
+  Center([Text("" + $count, { variant: "title" })]),
+  Row([
+    Button("−", { variant: "secondary", onClick: dec }),
+    Button("Reset", { variant: "ghost", onClick: () => { $count = 0 } }),
+    Button("+", { variant: "primary", onClick: inc })
+  ], { gap: "sm", justify: "center" })
+], { sx: { gap: "md" } }))`
+
+// ---- Small builders ----------------------------------------------------------
+function feature(icon, title, body, chips) {
+  return Card([
+    Icon(icon, { size: "lg", color: "var(--rui-color-primary)" }),
+    CardHeader(title),
+    Text(body, { tone: "muted" }),
+    chips ? BadgeList(chips, { size: "sm" }) : null
+  ], { sx: { gap: "sm" } })
+}
+
+function flowStep(icon, title, body) {
+  return Card([
+    Center([Icon(icon, { size: "xl", color: "var(--rui-color-primary)" })]),
+    Heading(title, { size: "md", align: "center" }),
+    Text(body, { tone: "muted", sx: { textAlign: "center" } })
+  ], { sx: { gap: "sm" } })
+}
+
+function point(title, body) {
+  return Row([
+    Icon("circle-check", { color: "var(--rui-color-success)" }),
+    Column([
+      Text(title, { variant: "body-heavy" }),
+      Text(body, { variant: "small", tone: "muted" })
+    ], { gap: "xs" })
+  ], { gap: "md", align: "start" })
+}
+
+function yes(label) { return Row([Icon("check", { color: "var(--rui-color-success)" }), Text(label, { variant: "small" })], { gap: "sm", align: "center" }) }
+function no(label)  { return Row([Icon("xmark", { color: "var(--rui-color-danger)" }), Text(label, { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }) }
+function meh(label) { return Row([Icon("minus", { color: "var(--rui-color-warning)" }), Text(label, { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }) }
+
+// =============================================================================
+// Navigation
+// =============================================================================
+nav = NavBar({
+  brand: Brand("Aktion", { logo: "http://localhost:5174/docs/assets/logo.png", version: "v0.5.9", href: "index.html" }),
+  links: [
+    Link("Docs", { href: "get-started.html" }),
+    Link("Components", { href: "components.html" }),
+    Link("Themes", { href: "themes.html" }),
+    Link("Demos", { href: "live-demos.html" }),
+    Link("Playground", { href: "playground.html" })
+  ],
+  actions: [
+    ThemeToggle(),
+    Link(Button("Get started", { variant: "primary", icon: "bolt" }), { href: "get-started.html" })
+  ],
+  sticky: true,
+  blur: true
+})
+
+// =============================================================================
+// Hero — Backdrop + headline + live CodeWindow (code on the left runs on the right)
+// =============================================================================
+hero = Section([
+  Backdrop({ grid: true, blobs: ["#6366f1", "#ec4899", "#22d3ee"], particles: 70, type: "network", fixed: true }),
+  Column([
+    Row([Badge("v0.5.9", { tone: "primary" }), Text("A new language for building user interfaces", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }),
+    Display(["Build complex UIs in ", GradientText("a fraction of the code"), "."], { size: "hero", balance: true }),
+    Text("Aktion is a reactive UI language — a strict subset of JavaScript you already know. It replaces your framework, component kit, router and i18n with one tag: 270+ built-in components, fine-grained reactivity, 7 themes, and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.", { variant: "large", tone: "muted" }),
+    Row([
+      Link(Button("Start building", { variant: "primary", icon: "rocket", size: "lg" }), { href: "get-started.html" }),
+      Link(Button("Open the playground", { variant: "secondary", icon: "play", size: "lg" }), { href: "playground.html" })
+    ], { gap: "md", wrap: true }),
+    Row([
+      Icon("circle-check", { color: "var(--rui-color-success)" }),
+      Text("Learn it in an afternoon · Runs in any framework · LLM-friendly by design — this very page is an Aktion program.", { variant: "small", tone: "muted" })
+    ], { gap: "sm", align: "center" }),
+    Reveal(CodeWindow(heroCode, { file: "reply.aktion", preview: true }), { animation: "fade-up" })
+  ], { gap: "lg" })
+], { width: "xl" })
+
+// =============================================================================
+// Works everywhere
+// =============================================================================
+everywhere = Section([
+  LogoCloud([
+    LogoChip("React", { icon: "brands:react" }),
+    LogoChip("Vue", { icon: "brands:vuejs" }),
+    LogoChip("Angular", { icon: "brands:angular" }),
+    LogoChip("Svelte", { icon: "brands:js" }),
+    LogoChip("Plain HTML", { icon: "brands:html5" }),
+    LogoChip("No framework", { icon: "brands:node-js" })
+  ], { label: "One custom element · drop it anywhere" })
+], { padding: "sm" })
+
+// =============================================================================
+// Stats
+// =============================================================================
+stats = Section([
+  Reveal(MetricStrip([
+    Metric("272", { label: "Built-in components", countUp: true }),
+    Metric("7", { label: "Production themes" }),
+    Metric("83", { label: "Design tokens", countUp: true }),
+    Metric("1", { label: "Script tag to ship" })
+  ], { columns: 4 }), { animation: "fade-up" })
+], { padding: "sm", width: "xl" })
+
+// =============================================================================
+// Less code — React vs Aktion, and the Aktion side actually RUNS
+// =============================================================================
+lessCode = Section([
+  Split(
+    CodeWindow(reactCode, { file: "Counter.jsx", language: "jsx", status: Badge("React · 3 files", { tone: "danger" }) }),
+    CodeWindow(aktionCode, { file: "counter.aktion", preview: true }),
+    { ratio: "1/1", gap: "lg", stackAt: "md", align: "start" }
+  ),
+  Spacer("xl"),
+  Center([Row([
+    Metric("~60%", { label: "less code" }),
+    Metric("0", { label: "build config" }),
+    Metric("1", { label: "file, not three" }),
+    Metric("∞", { label: "styled & themeable" })
+  ], { gap: "md", wrap: true, justify: "center" })])
+], {
+  eyebrow: "Less code, more shipping",
+  title: ["The same UI, ", GradientText("a fraction of the code"), "."],
+  subtitle: "No imports, no CSS files, no build config. Describe the interface as plain data and Aktion owns the DOM, the styling, and the updates — the right window below is rendering its own source.",
+  align: "center",
+  width: "xl"
+})
+
+// =============================================================================
+// Feature bento — the Bento/BentoCell components doing their own marketing
+// =============================================================================
+features = Section([
+  Bento([
+    BentoCell(feature("feather", "Looks like JavaScript — because it is", "Aktion is a strict subset of JS you already know: function, for…of, template literals, arrow functions, destructuring, optional chaining. Nothing new to memorize, no JSX.", ["subset of JS", "no JSX", "no build"]), { span: "3x1" }),
+    BentoCell(feature("bolt", "One reactive sigil — $state", "Declare state with $name = value, read it in your tree, write it in a function. The runtime tracks dependencies automatically at path granularity — no hooks rules, no useMemo dance.", ["$count = 0", "auto-tracked", "fine-grained"]), { span: "3x1" }),
+    BentoCell(feature("cubes", "270+ components", "Layout, forms, charts, tables, calendars, gestures, drawing canvases, marketing sections — included, not installed.", null), { span: "2x1" }),
+    BentoCell(feature("palette", "7 themes + design tokens", "Switch palettes with one attribute, or brand the whole UI in-script with $theme({…}) over 80+ tokens.", null), { span: "2x1" }),
+    BentoCell(feature("language", "Built-in i18n", "$i18n({ translations }) gives you t(), language switching and {name} interpolation — no extra library.", null), { span: "2x1" }),
+    BentoCell(feature("route", "Router + global stores", "$router, NavLink and params ship in the box, alongside $store for shared global state.", null), { span: "2x1" }),
+    BentoCell(feature("puzzle-piece", "Use any JS library", "The full JavaScript surface is in scope — fetch, Intl, crypto, JSON, Date, Math — plus a $util helper namespace.", null), { span: "2x1" }),
+    BentoCell(feature("network-wired", "One HTTP primitive", "$http({ url }) returns a reactive resource with .data, .loading, .error & .refetch().", null), { span: "2x1" }),
+    BentoCell(feature("feather-pointed", "Less code, easier to maintain", "A whole dashboard is a handful of plain-data calls. No flexbox bookkeeping, no global-CSS collisions — everything lives in an isolated Shadow DOM.", ["shadow-DOM scoped", "declarative", "maintainable"]), { span: "3x1" }),
+    BentoCell(feature("wand-magic-sparkles", "LLM-friendly by design", "The same simplicity that makes Aktion fast for you makes it trivial for an AI to write. A built-in system-prompt generator and streaming renderer turn any model into a UI engine.", ["getSystemPrompt()", "streaming", "optional"]), { span: "3x1" })
+  ], { columns: 6, gap: "md", rowHeight: "minmax(170px, auto)" })
+], {
+  eyebrow: "Why developers switch",
+  title: ["One language. ", GradientText("Everything a frontend needs.")],
+  subtitle: "Components, state, routing, theming, i18n and data — built in, batteries included. No glueing together five libraries, no build pipeline, no boilerplate.",
+  align: "center",
+  width: "xl",
+  id: "features"
+})
+
+// =============================================================================
+// AI-native flow
+// =============================================================================
+aiNative = Section([
+  Grid([
+    flowStep("robot", "1 · LLM streams", "The model emits Aktion text token by token."),
+    flowStep("code", "2 · Parser commits", "Each line is parsed and applied as it lands."),
+    flowStep("display", "3 · UI renders", "A React-like reconciler diffs & paints live.")
+  ], { columns: 3, gap: "lg", minChildWidth: "220px" })
+], {
+  eyebrow: "AI-native, not AI-only",
+  title: ["And yes — ", GradientText("an LLM can write it too"), "."],
+  subtitle: "The same plain-data simplicity that speeds you up makes Aktion trivial for a model to generate. It streams token-by-token straight into the DOM — a free superpower, never a requirement.",
+  align: "center",
+  background: "soft",
+  width: "xl"
+})
+
+// =============================================================================
+// Fine-grained reactivity — the counter on the right is LIVE
+// =============================================================================
+reactivity = Section([
+  Split(
+    Column([
+      Eyebrow("Fine-grained reactivity"),
+      Heading(["Path-level tracking. ", GradientText("No wasted renders.")], { size: "lg" }),
+      Text("Reading $user.name subscribes to that path alone — a write to $user.role never re-renders, recomputes, or re-fires an effect that only read name.", { tone: "muted" }),
+      point("Automatic dependency tracking", "The $ sigil is the only thing that makes a binding reactive."),
+      point("Two-way binding for free", "Bind a value with value: $form.email and it just works."),
+      point("Declarative side effects", "$effect(fn, [$dep, \"mount\", \"debounce(300)\"]) with lifecycle & rate-limit triggers."),
+      point("State survives re-renders", "Input focus, selection, scroll, and IME state are preserved by the reconciler.")
+    ], { gap: "md" }),
+    CodeWindow(counterCode, { file: "counter.aktion", preview: true }),
+    { ratio: "1/1", gap: "xl", stackAt: "md", align: "center" }
+  )
+], { width: "xl" })
+
+// =============================================================================
+// Comparison
+// =============================================================================
+comparison = Section([
+  Reveal(Card([
+    Table([
+      Col("Capability", ["No build step / no JSX", "Code to ship the same UI", "Built-in i18n & router", "Components included", "Framework-agnostic", "Style isolation by default", "Built-in themes & tokens"]),
+      Col("Aktion", [yes("One script tag"), yes("~60% less"), yes("Included"), yes("270+ built-in"), yes("Any / none"), yes("Shadow DOM"), yes("7 + custom")]),
+      Col("React", [no("Bundler"), no("Boilerplate"), no("Libraries"), no("Bring your own"), no("React only"), meh("CSS-in-JS"), no("Library")]),
+      Col("Vue", [no("Bundler"), meh("Moderate"), no("Libraries"), no("Bring your own"), no("Vue only"), yes("Scoped"), no("Library")]),
+      Col("Angular", [no("CLI + build"), no("Verbose"), yes("Built-in"), meh("Material only"), no("Angular only"), yes("ViewEncaps."), meh("Material")])
+    ])
+  ], { sx: { p: "sm" } }), { animation: "fade-up" })
+], {
+  eyebrow: "How it compares",
+  title: ["A real alternative to ", GradientText("React, Vue & Angular"), "."],
+  subtitle: "Everything you normally bolt together — a framework, a component kit, a router, an i18n library, a styling system — built into one tag, with far less ceremony.",
+  align: "center",
+  background: "soft",
+  width: "xl"
+})
+
+// =============================================================================
+// Component showcase — no screenshots; these ARE the components
+// =============================================================================
+function save() { $toast.success("Settings saved") }
+
+showcase = Section([
+  Grid([
+    Card([
+      CardHeader("Charts & stats"),
+      StatCard("Active users", { value: "8,420", trend: "up", delta: "+12%", icon: "users" }),
+      BarChart(["Mon", "Tue", "Wed", "Thu", "Fri"], [Series("Users", [32, 51, 44, 68, 59])], { title: "Daily activity" })
+    ], { sx: { gap: "md" } }),
+    Card([
+      CardHeader("Forms & inputs"),
+      FormControl("Plan", Select("plan-select", { items: [SelectItem("free", "Free"), SelectItem("pro", "Pro"), SelectItem("team", "Team")], value: $plan })),
+      FormControl("Notifications", Switch("notify-switch", { label: "Email notifications", value: $notify })),
+      FormControl("Volume", Slider("volume-slider", { value: $volume, min: 0, max: 100, showValue: true })),
+      Button("Save changes", { onClick: save, variant: "primary", icon: "check", fullWidth: true })
+    ], { sx: { gap: "md" } }),
+    Card([
+      CardHeader("Scheduling"),
+      Calendar({ month: 5, year: 2026, selected: $picked, events: [
+        { date: "2026-06-09", label: "Design review", color: "primary" },
+        { date: "2026-06-09", label: "Retro", color: "warning" },
+        { date: "2026-06-14", label: "Sprint demo", color: "danger" },
+        "2026-06-22"
+      ], onSelect: (iso) => { $picked = iso } }),
+      Text("Selected: " + $picked, { variant: "small", tone: "muted" })
+    ], { sx: { gap: "md" } })
+  ], { columns: 3, gap: "lg", minChildWidth: "300px" }),
+  Center([Link(Button("Browse all components", { variant: "primary", icon: "grip" }), { href: "components.html" })])
+], {
+  eyebrow: "Component library",
+  title: ["270+ components. ", GradientText("All live.")],
+  subtitle: "Nothing on this page is a screenshot — every widget here is the real component, rendered by the same program you are reading.",
+  align: "center",
+  width: "xl"
+})
+
+// =============================================================================
+// Themes
+// =============================================================================
+themesStrip = Section([
+  Grid([
+    Swatch("Light", { background: "#ffffff", foreground: "#14102b", colors: ["#6366f1", "#10b981", "#f59e0b"] }),
+    Swatch("Dark", { background: "#0e0b1c", foreground: "#f3f1ff", colors: ["#8b5cf6", "#22d3ee", "#ec4899"] }),
+    Swatch("Neon", { background: "#0a0118", foreground: "#39ff14", colors: ["#39ff14", "#ff00ff", "#00ffff"] }),
+    Swatch("Pastel", { background: "#fff5fb", foreground: "#7c3aed", colors: ["#c4b5fd", "#fbcfe8", "#a7f3d0"] }),
+    Swatch("Glass", { background: "linear-gradient(135deg, #a5b4fc, #c7d2fe)", foreground: "#1e1b4b", colors: ["#ffffff", "#818cf8", "#c7d2fe"] }),
+    Swatch("Brutalist", { background: "#ffff00", foreground: "#000000", colors: ["#000000", "#ff0000", "#0000ff"] }),
+    Swatch("Skyline", { background: "linear-gradient(160deg, #0f172a, #1e3a8a)", foreground: "#bae6fd", colors: ["#38bdf8", "#818cf8", "#0ea5e9"] }),
+    Swatch("Your brand →", { background: "linear-gradient(120deg, #6366f1, #8b5cf6 45%, #ec4899)", foreground: "#ffffff", colors: ["#ffffff", "#fde68a", "#fbcfe8"] })
+  ], { columns: 4, gap: "md", minChildWidth: "180px" })
+], {
+  eyebrow: "Theming",
+  title: ["Seven themes. ", GradientText("Infinite brands.")],
+  subtitle: "Switch palettes with the theme attribute, or override 80+ design tokens in-script with $theme({…}) — exactly what this page does for its Inter headings.",
+  align: "center",
+  width: "xl"
+})
+
+// =============================================================================
+// Three steps for developers
+// =============================================================================
+devSteps = Section([
+  Split(
+    Column([
+      Steps([
+        { title: "Load", details: "One ESM script tag from the CDN — or npm i aktion-runtime." },
+        { title: "Mount", details: "Add <aktion-app theme=\"dark\"> wherever HTML runs." },
+        { title: "Build", details: "Write state, functions and components, then call $app(…). That's the whole app." }
+      ]),
+      Row([
+        Link(Button("Read the docs", { variant: "primary", icon: "book" }), { href: "get-started.html" }),
+        Link(Button("Framework guides", { variant: "secondary", icon: "layer-group" }), { href: "frameworks.html" })
+      ], { gap: "md", wrap: true })
+    ], { gap: "lg" }),
+    Terminal([
+      "// 1 · one tag, any framework",
+      "<script type=\"module\" src=\".../aktion.js\">",
+      "<aktion-app theme=\"dark\">",
+      "",
+      "  // 2 · write Aktion — a JS subset",
+      "  $greeting = \"Hello\"",
+      "  $app(Card([",
+      "    CardHeader($greeting),",
+      "    Button(\"Wave\", { onClick: () => { $greeting = \"Hi!\" } })",
+      "  ]))",
+      "",
+      "</aktion-app>",
+      "✓ no build · no JSX · runs anywhere"
+    ], { file: "index.html — the whole app" }),
+    { ratio: "1/1", gap: "xl", stackAt: "md", align: "center" }
+  )
+], {
+  eyebrow: "For developers",
+  title: ["Three steps to ", GradientText("your first UI"), "."],
+  subtitle: "Load the bundle, mount the tag, and write Aktion. No CLI, no config, no JSX — it runs the same inside React, Vue, Angular or a plain HTML file.",
+  width: "xl"
+})
+
+// =============================================================================
+// Final CTA + footer
+// =============================================================================
+cta = Section([
+  Column([
+    Display("A faster way to build UIs.", { size: "lg", align: "center" }),
+    Text("Learn it in an afternoon. Ship complex, themeable, reactive interfaces in any framework — with a fraction of the code. Open source under MIT.", { variant: "large", sx: { textAlign: "center" } }),
+    Row([
+      Link(Button("Get started free", { variant: "secondary", icon: "rocket", size: "lg" }), { href: "get-started.html" }),
+      Link(Button("Star on GitHub", { variant: "ghost", icon: "brands:github", size: "lg" }), { href: "https://github.com/asfand-dev/aktion" })
+    ], { gap: "md", justify: "center", wrap: true }),
+    Center([CopyButton("npm i aktion-runtime", { label: "npm i aktion-runtime", copiedLabel: "Copied — happy shipping!" })])
+  ], { gap: "lg", align: "center" })
+], { background: "brand", align: "center", width: "lg" })
+
+footer = Footer({
+  brand: Brand("Aktion", { logo: "http://localhost:5174/docs/assets/logo.png", href: "index.html" }),
+  tagline: "A reactive UI language and component runtime — a strict subset of JavaScript — for building rich interfaces in any framework, with far less code.",
+  columns: [
+    FooterColumn("Product", [
+      Link("Get started", { href: "get-started.html" }),
+      Link("Components", { href: "components.html" }),
+      Link("Themes", { href: "themes.html" }),
+      Link("Playground", { href: "playground.html" })
+    ]),
+    FooterColumn("Learn", [
+      Link("Language", { href: "language.html" }),
+      Link("Reactivity", { href: "reactivity.html" }),
+      Link("LLM integration", { href: "llm-integration.html" })
+    ]),
+    FooterColumn("Resources", [
+      Link("Live demos", { href: "live-demos.html" }),
+      Link("Frameworks", { href: "frameworks.html" }),
+      Link("Deployment", { href: "deployment.html" }),
+      Link("GitHub", { href: "https://github.com/asfand-dev/aktion" })
+    ])
+  ],
+  legal: "© 2026 Aktion · Released under the MIT License. This page is rendered from index.aktion — view source to read it."
+})
+
+// ---- Root: a plain array so sections stack without flex gaps ----------------
+$app([
+  nav,
+  hero,
+  everywhere,
+  stats,
+  lessCode,
+  features,
+  aiNative,
+  reactivity,
+  comparison,
+  showcase,
+  themesStrip,
+  devSteps,
+  cta,
+  footer
+])
