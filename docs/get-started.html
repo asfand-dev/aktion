@@ -193,8 +193,8 @@ $app(Card([
         <code>&lt;aktion-app theme="dark"&gt;</code>. Built-in themes include
         <code>light</code>, <code>dark</code>, <code>neon</code>, <code>pastel</code>,
         <code>glass</code>, <code>brutalist</code>, and <code>skyline</code>; you can
-        also pass a token map to <code>setTheme()</code>. See
-        <a href="themes.html">Themes</a> for the full list and custom tokens.
+        also customize the theme with setting the theme variables in <code>$theme({...})</code>. See
+        <a href="themes.html">Themes</a> for the full list and custom theme variables.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live — this demo follows the page theme</span>
@@ -202,7 +202,9 @@ $app(Card([
   CardHeader("Themed surface", { subtitle: "One attribute restyles everything" }),
   Text("Try toggling the doc theme in the top bar."),
   Button("Action", { variant: "primary" })
-]))</code></pre>
+]))
+
+$theme({ colors: { primary: "orange" } })</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 

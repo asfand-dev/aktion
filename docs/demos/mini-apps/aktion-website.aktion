@@ -126,7 +126,7 @@ function meh(label) { return Row([Icon("minus", { color: "var(--rui-color-warnin
 // Navigation
 // =============================================================================
 nav = NavBar({
-  brand: Brand("Aktion", { logo: "http://localhost:5174/docs/assets/logo.png", version: "v0.5.9", href: "index.html" }),
+  brand: Brand("Aktion", { logo: "https://asfand-dev.github.io/aktion/assets/logo.png", version: "v0.5.9", href: "index.html" }),
   links: [
     Link("Docs", { href: "get-started.html" }),
     Link("Components", { href: "components.html" }),
@@ -414,7 +414,7 @@ cta = Section([
 ], { background: "brand", align: "center", width: "lg" })
 
 footer = Footer({
-  brand: Brand("Aktion", { logo: "http://localhost:5174/docs/assets/logo.png", href: "index.html" }),
+  brand: Brand("Aktion", { logo: "https://asfand-dev.github.io/aktion/assets/logo.png", href: "index.html" }),
   tagline: "A reactive UI language and component runtime — a strict subset of JavaScript — for building rich interfaces in any framework, with far less code.",
   columns: [
     FooterColumn("Product", [
