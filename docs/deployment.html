@@ -20,7 +20,13 @@
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
     .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
+    .checklist { list-style: none; padding: 0; margin: 18px 0; }
+    .checklist li { position: relative; padding: 6px 0 6px 28px; border-bottom: 1px solid var(--doc-border); }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before { content: "\2713"; position: absolute; left: 4px; top: 6px; color: #10b981; font-weight: 700; }
   </style>
 </head>
 <body data-page="deployment">
@@ -39,6 +45,16 @@
         </p>
       </header>
 
+      <div class="callout">
+        <h4>The whole picture</h4>
+        <p>A production Aktion app has three moving parts: a <strong>static
+          bundle</strong> (the runtime) served from your host or a CDN, the
+          <strong><code>&lt;aktion-app&gt;</code> element</strong> mounted in your
+          page, and &mdash; for AI surfaces &mdash; an <strong>edge function</strong>
+          that proxies the LLM and streams tokens back. Everything below is about
+          wiring those three together safely.</p>
+      </div>
+
       <h2 id="bundle">Serving the bundle</h2>
       <p>
         Run <code>npm run build</code> and serve <code>dist/</code> from any static
@@ -52,6 +68,13 @@
       <p>
         Pin a version (<code>@0.5.5</code>) for reproducible builds and set a long
         <code>Cache-Control</code> max-age on the immutable bundle.
+      </p>
+      <p>
+        Because the runtime is a plain static ES module, <strong>any static
+        host works</strong> &mdash; Netlify, Vercel, Cloudflare Pages, GitHub
+        Pages, S3 + CloudFront, or your own nginx. There is no server runtime to
+        provision for the UI itself; the only server-side piece you may need is the
+        edge function that proxies your model (see <a href="#edge">below</a>).
       </p>
 
       <h2 id="ssr">SSR &amp; hydration</h2>
@@ -137,6 +160,17 @@ for (;;) {
           to add auth headers, retry on 401, and log network timing centrally.</li>
         <li>Keep the <code>strict</code> attribute on in staging so silent
           fallbacks surface as console warnings before release.</li>
+      </ul>
+
+      <h2 id="checklist">Pre-launch checklist</h2>
+      <ul class="checklist">
+        <li>Runtime bundle is served with a <strong>pinned version</strong> and a long-lived <code>Cache-Control</code> (and an <code>integrity</code> hash if loaded cross-origin).</li>
+        <li><code>script-src</code> allows <code>'unsafe-eval'</code> &mdash; or the LLM is constrained to declarative output (see <a href="#csp">CSP</a>).</li>
+        <li><code>connect-src</code> lists every API the generated programs call.</li>
+        <li>The LLM API key lives <strong>server-side</strong> in an edge function; the browser never sees it.</li>
+        <li>The host <code>error</code> event is wired to your error tracker.</li>
+        <li><code>strict</code> stays <strong>on in staging</strong> and <strong>off in production</strong> (where partial output is expected).</li>
+        <li>Session resumption is tested: <code>serializeState()</code> &rarr; persist &rarr; <code>hydrateState()</code> restores state on reload.</li>
       </ul>
 
       <h2 id="next">Next</h2>

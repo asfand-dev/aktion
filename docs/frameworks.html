@@ -54,6 +54,52 @@
     }
     /* Visual filler so structural demos read clearly without real content. */
     .demo-cheats code { white-space: nowrap; }
+
+    /* Framework tab bar — mirrors the migration guide so the two getting-started
+       pages feel like one flow. Pick a framework, see only its integration. */
+    .fw-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px;
+      margin: 18px 0 0;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      background: var(--doc-surface-elev);
+      position: sticky;
+      top: 64px;
+      z-index: 5;
+      backdrop-filter: blur(8px);
+    }
+    .fw-tab {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--doc-text-muted);
+      font: inherit;
+      font-weight: 500;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background var(--doc-transition), color var(--doc-transition), border-color var(--doc-transition);
+    }
+    .fw-tab:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
+    .fw-tab[aria-selected="true"] {
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      border-color: var(--doc-border);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    }
+    .fw-tab i { font-size: 14px; opacity: 0.9; }
+
+    /* Hidden tab panels */
+    [data-fw-panel] { display: none; }
+    [data-fw-panel].is-active { display: block; }
+    [data-fw-panel] > h2:first-child { margin-top: 26px; }
   </style>
 </head>
 <body data-page="frameworks">
@@ -165,6 +211,23 @@ import "aktion-runtime";
 
       <hr />
 
+      <h2 id="integrations">Framework integrations</h2>
+      <p>
+        Pick your framework below for a copy&#8209;paste integration. Every
+        snippet does the same three things from the contract above: register the
+        bundle once, hand <code>&lt;aktion-app&gt;</code> a program, and listen
+        for its events.
+      </p>
+
+      <div class="fw-tabs" role="tablist" aria-label="Target framework">
+        <button class="fw-tab" role="tab" data-fw="react"   aria-selected="true"><i class="fa-brands fa-react"></i>React</button>
+        <button class="fw-tab" role="tab" data-fw="vue"     aria-selected="false"><i class="fa-brands fa-vuejs"></i>Vue 3</button>
+        <button class="fw-tab" role="tab" data-fw="svelte"  aria-selected="false"><i class="fa-solid fa-bolt"></i>Svelte</button>
+        <button class="fw-tab" role="tab" data-fw="angular" aria-selected="false"><i class="fa-brands fa-angular"></i>Angular</button>
+        <button class="fw-tab" role="tab" data-fw="html"    aria-selected="false"><i class="fa-brands fa-html5"></i>Vanilla JS</button>
+      </div>
+
+      <div data-fw-panel="react" class="is-active">
       <h2 id="react">React</h2>
       <p>
         In JSX you write the custom element tag directly:
@@ -215,9 +278,9 @@ declare global {
     }
   }
 }</code></pre>
+      </div>
 
-      <hr />
-
+      <div data-fw-panel="vue">
       <h2 id="vue">Vue 3</h2>
       <p>
         Tell the Vue compiler that <code>aktion-app</code> is a custom element
@@ -259,9 +322,9 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
 &lt;template&gt;
   &lt;aktion-app ref="el" theme="light" /&gt;
 &lt;/template&gt;</code></pre>
+      </div>
 
-      <hr />
-
+      <div data-fw-panel="svelte">
       <h2 id="svelte">Svelte</h2>
       <p>
         Svelte supports custom elements natively, so there is no configuration
@@ -292,9 +355,9 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
         only runs in the browser, e.g.
         <code>if (browser) await import("aktion-runtime");</code>.
       </p>
+      </div>
 
-      <hr />
-
+      <div data-fw-panel="angular">
       <h2 id="angular">Angular</h2>
       <p>
         Add <code>CUSTOM_ELEMENTS_SCHEMA</code> to the component (or module) so
@@ -312,7 +375,7 @@ bootstrapApplication(AppComponent);
 // app.component.ts
 import { Component, CUSTOM_ELEMENTS_SCHEMA } from "@angular/core";
 
-$util.component({
+@Component({
   standalone: true,
   selector: "app-root",
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -331,9 +394,9 @@ export class AppComponent {
     console.log("follow-up:", (event as CustomEvent).detail.message);
   }
 }</code></pre>
+      </div>
 
-      <hr />
-
+      <div data-fw-panel="html">
       <h2 id="html">Vanilla HTML</h2>
       <p>
         No build step required. A single module&#8209;type script tag imports
@@ -372,8 +435,7 @@ export class AppComponent {
         linker, so an entry that <code>import</code>s other modules fetches its whole
         graph on connect.
       </p>
-
-      <hr />
+      </div>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">
@@ -399,6 +461,30 @@ export class AppComponent {
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    /* Framework tab switcher — shows only the selected framework's panel.
+       Honours the URL hash (#vue, #angular, …) and remembers the last choice. */
+    const tabs = Array.from(document.querySelectorAll(".fw-tab"));
+    const panels = Array.from(document.querySelectorAll("[data-fw-panel]"));
+    function selectFramework(fw) {
+      if (!tabs.some((t) => t.dataset.fw === fw)) return;
+      for (const t of tabs) t.setAttribute("aria-selected", t.dataset.fw === fw ? "true" : "false");
+      for (const p of panels) p.classList.toggle("is-active", p.dataset.fwPanel === fw);
+      try { localStorage.setItem("fw", fw); } catch (_) {}
+    }
+    for (const t of tabs) t.addEventListener("click", () => selectFramework(t.dataset.fw));
+    // Deep-link: #react / #vue / #svelte / #angular / #html selects that tab.
+    const HASH_TO_FW = { react: "react", vue: "vue", svelte: "svelte", angular: "angular", html: "html" };
+    const hashFw = HASH_TO_FW[(location.hash || "").replace("#", "")];
+    let savedFw = null;
+    try { savedFw = localStorage.getItem("fw"); } catch (_) {}
+    if (hashFw) selectFramework(hashFw);
+    else if (savedFw) selectFramework(savedFw);
+    window.addEventListener("hashchange", () => {
+      const fw = HASH_TO_FW[(location.hash || "").replace("#", "")];
+      if (fw) selectFramework(fw);
+    });
+  </script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

@@ -21,6 +21,15 @@
     .faq { border: 1px solid var(--doc-border); border-radius: 10px; padding: 16px 18px; margin: 14px 0; background: var(--doc-surface-elev); }
     .faq h3 { margin-top: 0; }
     .faq .fix { color: var(--doc-text-muted); }
+    .faq pre { margin: 12px 0 4px; }
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* Symptom index */
+    .sym-index { columns: 2; column-gap: 28px; margin: 0; padding-left: 18px; }
+    @media (max-width: 680px) { .sym-index { columns: 1; } }
+    .sym-index li { margin: 4px 0; break-inside: avoid; }
+    .faq-cat { margin-top: 34px; padding-bottom: 4px; border-bottom: 1px solid var(--doc-border); }
   </style>
 </head>
 <body data-page="troubleshooting">
@@ -39,6 +48,26 @@
         </p>
       </header>
 
+      <div class="callout">
+        <h4>Find your symptom</h4>
+        <ul class="sym-index">
+          <li><a href="#focus">Input loses focus while typing</a></li>
+          <li><a href="#binding">Two-way binding isn&rsquo;t updating</a></li>
+          <li><a href="#effect">An effect isn&rsquo;t re-running</a></li>
+          <li><a href="#memoized">A component didn&rsquo;t update</a></li>
+          <li><a href="#list">A list reorders or loses state</a></li>
+          <li><a href="#http">My <code>$http</code> data never appears</a></li>
+          <li><a href="#map"><code>Map(&hellip;)</code> rendered the wrong thing</a></li>
+          <li><a href="#style">An inline style was dropped</a></li>
+          <li><a href="#theme">My theme isn&rsquo;t applying</a></li>
+          <li><a href="#i18n">A translation shows the key</a></li>
+          <li><a href="#silent">Nothing rendered, no error</a></li>
+          <li><a href="#declare">&ldquo;Reactive write during render&rdquo; warning</a></li>
+        </ul>
+      </div>
+
+      <h2 class="faq-cat" id="cat-rendering">Rendering &amp; reactivity</h2>
+
       <div class="faq">
         <h3 id="focus">My <code>Input</code> loses focus on every keystroke / state change</h3>
         <p><strong>Cause.</strong> The morph reconciler preserves focus, selection,
@@ -54,6 +83,27 @@
       </div>
 
       <div class="faq">
+        <h3 id="binding">Typing in an <code>Input</code> doesn&rsquo;t update my state (two-way binding)</h3>
+        <p><strong>Cause.</strong> A control only writes back when you pass the
+          <code>$variable</code> itself as its bound argument. Passing
+          <code>$name</code>&rsquo;s <em>value</em> (e.g. interpolated into a
+          string) gives the control a one-way snapshot &mdash; it renders, but has
+          nothing to write to.</p>
+<pre><code>// ❌ no binding — the field shows the value but typing goes nowhere
+Input({ placeholder: "Name", value: `${$name}` })
+
+// ✅ pass the $variable last so the control reads AND writes it
+$name = ""
+Input("Name", { value: $name }, $name)</code></pre>
+        <p class="fix"><strong>Fix.</strong> Pass the bare <code>$variable</code> as
+          the last argument to <code>Input</code>, <code>Select</code>,
+          <code>Checkbox</code>, <code>Switch</code>, <code>Slider</code>,
+          <code>MultiSelect</code>, and the other bindable controls. See
+          <a href="components.html">Components</a> for each control&rsquo;s binding
+          argument.</p>
+      </div>
+
+      <div class="faq">
         <h3 id="effect">My effect isn&rsquo;t re-running</h3>
         <p><strong>Cause.</strong> <code>$effect(fn, [deps])</code> only re-runs when
           one of its <em>tracked</em> dependencies changes: reactive atoms /
@@ -61,6 +111,11 @@
           component lifecycle and timer ticks. A value that isn&rsquo;t a reactive
           read (a plain local, a prop captured by value) won&rsquo;t re-trigger the
           effect when it changes.</p>
+<pre><code>// ❌ depends on a plain local — never re-fires when $userId changes
+$effect(() =&gt; load(id), [])
+
+// ✅ list the reactive atom; the effect re-runs when $userId changes
+$effect(() =&gt; load($userId), [$userId])</code></pre>
         <p class="fix"><strong>Fix.</strong> Put the actual reactive atom(s) the
           effect depends on into the dependency array. If you need to react to a
           derived value, derive it from atoms (or a <code>$memo</code>) so the
@@ -81,6 +136,49 @@
           &ldquo;why did this render&rdquo; to confirm whether an instance was
           skipped.</p>
       </div>
+
+      <h2 class="faq-cat" id="cat-data">Data, lists &amp; async</h2>
+
+      <div class="faq">
+        <h3 id="list">My list reorders, animates wrong, or loses per-row input state</h3>
+        <p><strong>Cause.</strong> Without a stable <code>key</code>, the morph
+          reconciler matches list children <em>by position</em>. When the array
+          reorders, inserts, or filters, DOM nodes (and their focus / input
+          values) get reused for the wrong row.</p>
+<pre><code>// ❌ positional matching — inserting at the top shifts every row's DOM
+$items.map(item =&gt; Card([Text(item.title)]))
+
+// ✅ key by a stable id so identity follows the data
+$items.map(item =&gt; Card([Text(item.title)], { key: item.id }))</code></pre>
+        <p class="fix"><strong>Fix.</strong> Give every item in a mapped list a
+          <code>key</code> tied to stable data identity (an id, not the array
+          index). This also lets the memoizer skip unchanged rows &mdash; see
+          <a href="performance.html#memo">Performance</a>.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="http">My <code>$http</code> data never appears (blank where the data should be)</h3>
+        <p><strong>Cause.</strong> An <code>$http({...})</code> call returns a
+          <em>resource</em> with a lifecycle (<code>loading</code> &rarr;
+          <code>data</code> / <code>error</code>), not the data directly. Rendering
+          the resource object itself shows nothing useful while it&rsquo;s still
+          loading.</p>
+<pre><code>$users = $http({ url: "/api/users" })
+
+// ✅ switch on the resource state with Async
+Async($users, {
+  loading: Spinner(),
+  error:   Callout("Couldn't load users", { tone: "danger" }),
+  empty:   EmptyState("No users yet"),
+  data:    List($users.data.map(u =&gt; ListItem(u.name))),
+})</code></pre>
+        <p class="fix"><strong>Fix.</strong> Render the resource through
+          <code>Async(resource, { loading, error, empty, data })</code> (or read
+          <code>resource.data</code> / <code>resource.state</code> yourself). See
+          <a href="http.html">HTTP</a>.</p>
+      </div>
+
+      <h2 class="faq-cat" id="cat-gotchas">Common gotchas</h2>
 
       <div class="faq">
         <h3 id="map"><code>Map(...)</code> rendered something unexpected (not a JS <code>Map</code>)</h3>
@@ -107,6 +205,24 @@
       </div>
 
       <div class="faq">
+        <h3 id="theme">My <code>$theme({...})</code> override isn&rsquo;t applying</h3>
+        <p><strong>Cause.</strong> Two things commonly bite: (1) the in-program
+          <code>$theme({...})</code> form takes <em>grouped</em> keys
+          (<code>colors.primary</code>), while the host <code>theme</code> attribute
+          and <code>setTheme()</code> take <em>flat</em> keys
+          (<code>colorPrimary</code>); and (2) unknown token names are silently
+          ignored as a typo guard, so a misspelled token does nothing.</p>
+<pre><code>// ✅ in-program: grouped keys
+$theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
+
+// ✅ host attribute: flat keys (JSON)
+// &lt;aktion-app theme='{"colorPrimary":"#e11d48"}'&gt;&lt;/aktion-app&gt;</code></pre>
+        <p class="fix"><strong>Fix.</strong> Match the key shape to where you set
+          the theme, and check the token name against the
+          <a href="themes.html">Themes</a> token reference.</p>
+      </div>
+
+      <div class="faq">
         <h3 id="i18n">A missing translation shows the key instead of text</h3>
         <p><strong>Cause.</strong> When an <code>$i18n</code> key has no entry for the
           active locale, the runtime returns the key itself rather than throwing &mdash;
@@ -115,6 +231,8 @@
           In <a href="errors.html">strict mode</a>, missing keys are surfaced as
           console warnings so you can find them during development.</p>
       </div>
+
+      <h2 class="faq-cat" id="cat-silent">Silent failures &amp; warnings</h2>
 
       <div class="faq">
         <h3 id="silent">Nothing rendered and there was no error</h3>
@@ -139,6 +257,15 @@
           set-once per-instance declaration) or the <code>$state</code> hook, and
           only write state from event handlers / effects. See
           <a href="reactivity.html">Reactivity &amp; rendering</a>.</p>
+      </div>
+
+      <div class="callout">
+        <h4>Still stuck?</h4>
+        <p>Two switches surface almost everything: add the <code>strict</code>
+          attribute to <code>&lt;aktion-app&gt;</code> to turn silent fallbacks into
+          console warnings (see <a href="errors.html">Error handling</a>), and open
+          the <a href="devtools.html">DevTools</a> panel to inspect live state and
+          read each commit&rsquo;s &ldquo;why did this render&rdquo; reason.</p>
       </div>
 
       <h2 id="next">Next</h2>

@@ -19,8 +19,25 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
     kbd { font: inherit; padding: 1px 6px; border: 1px solid var(--doc-border); border-bottom-width: 2px; border-radius: 5px; background: var(--doc-surface); }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+    @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+    .pair-card { border: 1px solid var(--doc-border); border-radius: 10px; overflow: hidden; background: var(--doc-surface-elev); }
+    .pair-card > .pair-head { font-size: 12px; font-weight: 600; padding: 8px 12px; }
+    .pair-card.bad .pair-head { color: #b91c1c; background: rgba(239, 68, 68, .08); }
+    .pair-card.good .pair-head { color: #047857; background: rgba(16, 185, 129, .1); }
+    .pair-card pre { border: none; border-radius: 0; margin: 0; }
+    .lay-demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; margin: 18px 0 28px; border: 1px solid var(--doc-border); border-radius: 12px; overflow: hidden; background: var(--doc-surface-elev); }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview { padding: 18px; display: block; min-width: 0; border-left: 1px solid var(--doc-border); background: linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px, var(--doc-surface); }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--doc-text-muted); padding: 8px 12px 0; grid-column: 1 / -1; }
   </style>
 </head>
 <body data-page="accessibility">
@@ -51,6 +68,17 @@
         <p>Conformance is a property of the <em>final page</em>, not just the
           library. Custom themes, custom components, and the surrounding host page
           all affect it &mdash; use the checklist at the end to verify your build.</p>
+      </div>
+
+      <div class="callout ok">
+        <h4>What you get for free vs. what you own</h4>
+        <p><strong>The library handles:</strong> roles, accessible names, focus
+          order, focus trapping in <code>Modal</code>, live-region announcements,
+          reduced-motion, forced-colors, and RTL. <strong>You still own:</strong>
+          custom component semantics, custom-theme contrast, and meaningful
+          <code>alt</code> text / labels on the content you generate. The
+          <a href="#audit"><code>axe()</code></a> audit and the
+          <a href="#checklist">pre-ship checklist</a> catch the rest.</p>
       </div>
 
       <h2 id="built-in">ARIA built into components</h2>
@@ -107,6 +135,23 @@
       </ul>
 
       <h2 id="custom">Keeping custom components accessible</h2>
+      <div class="pair">
+        <div class="pair-card bad">
+          <div class="pair-head">Avoid &mdash; a styled div has no role or keyboard support</div>
+<pre><code>OnClick(
+  Box([Text("Delete")], { padding: "sm" }),
+  { onClick: () =&gt; remove() }
+)</code></pre>
+        </div>
+        <div class="pair-card good">
+          <div class="pair-head">Prefer &mdash; a real button is focusable &amp; named</div>
+<pre><code>Button("Delete", {
+  variant: "danger",
+  icon: "trash",
+  onClick: () =&gt; remove()
+})</code></pre>
+        </div>
+      </div>
       <ul>
         <li>Build from real interactive elements (<code>button</code>,
           <code>a</code>, <code>input</code>) rather than click-handler
@@ -140,6 +185,17 @@
   LiveRegion(Text($status), { mode: "polite" }),     // announced to screen readers
   VisuallyHidden(Text("Press Escape to close")),
 ]))</code></pre>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; the status text is announced politely to screen readers</span>
+<pre><code>$status = "Nothing saved yet"
+$app(Column([
+  SkipLink({ to: "#main", label: "Skip to content" }),
+  Button("Save", { variant: "primary", onClick: () =&gt; { $status = "Saved just now" } }),
+  LiveRegion(Text(`Status: ${$status}`), { mode: "polite" }),
+  VisuallyHidden(Text("This sentence is read by screen readers but hidden visually.")),
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
       <h2 id="rtl">RTL &amp; logical layout</h2>
       <p>
@@ -220,5 +276,29 @@ expect(issues).toHaveLength(0)</code></pre>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[accessibility demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

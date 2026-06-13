@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
   </style>
 </head>
@@ -44,6 +46,26 @@
           The program text the runtime renders is a JS-subset DSL and is not
           type-checked &mdash; see <a href="language.html">Language</a>.</p>
       </div>
+
+      <div class="callout">
+        <h4>On this page</h4>
+        <p>
+          <a href="#entries">Package entry points</a> &middot;
+          <a href="#element">Typing the host element</a> &middot;
+          <a href="#events">Host event payloads</a> &middot;
+          <a href="#components">Custom components</a> &middot;
+          <a href="#interceptors">Language &amp; tooling</a> &middot;
+          <a href="#ssr-tooling">SSR &amp; DX exports</a> &middot;
+          <a href="#wrapper">A typed host wrapper</a>
+        </p>
+      </div>
+
+      <p>
+        Install the package and you get the type declarations for free &mdash;
+        there is no separate <code>@types</code> package to add:
+      </p>
+<pre><code>npm install aktion-runtime
+# types ship in the package; no @types/* needed</code></pre>
 
       <h2 id="entries">Package entry points</h2>
       <p>
@@ -98,6 +120,30 @@ app.addEventListener("error", (e) =&gt; {
   const detail = e.detail as { errors: { line: number; column: number; message: string }[] };
   detail.errors.forEach((err) =&gt; reportError(err));
 });</code></pre>
+      <p>
+        To stop casting <code>e.detail</code> at every call site, define a small
+        typed map of the events and a generic <code>on(&hellip;)</code> helper. You
+        get autocompletion on the event name <em>and</em> a correctly-typed
+        <code>detail</code>:
+      </p>
+<pre><code>interface AktionEventMap {
+  "assistant-message": { message: string };
+  "route-change": { path: string };
+  "error": { errors: { line: number; column: number; message: string }[] };
+}
+
+function onAktion&lt;K extends keyof AktionEventMap&gt;(
+  el: EventTarget,
+  type: K,
+  handler: (detail: AktionEventMap[K]) =&gt; void,
+): () =&gt; void {
+  const listener = (e: Event) =&gt; handler((e as CustomEvent&lt;AktionEventMap[K]&gt;).detail);
+  el.addEventListener(type, listener);
+  return () =&gt; el.removeEventListener(type, listener); // call to unsubscribe
+}
+
+// detail is typed as { message: string } — no cast, no `any`.
+const off = onAktion(app, "assistant-message", (detail) =&gt; sendToModel(detail.message));</code></pre>
 
       <h2 id="components">Typing custom components</h2>
       <p>

@@ -59,7 +59,18 @@
       background: var(--doc-surface-elev);
     }
     .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
+    /* Side-by-side "do / don't" cards. */
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+    @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+    .pair pre { margin: 0; }
+    .pair-card { border: 1px solid var(--doc-border); border-radius: 10px; overflow: hidden; background: var(--doc-surface-elev); }
+    .pair-card > .pair-head { font-size: 12px; font-weight: 600; padding: 8px 12px; }
+    .pair-card.bad .pair-head { color: #b91c1c; background: rgba(239, 68, 68, .08); }
+    .pair-card.good .pair-head { color: #047857; background: rgba(16, 185, 129, .1); }
+    .pair-card pre { border: none; border-radius: 0; }
   </style>
 </head>
 <body data-page="reactivity">
@@ -90,6 +101,20 @@
           fine-grained perf profile.</p>
       </div>
 
+      <div class="callout">
+        <h4>On this page</h4>
+        <p>
+          <a href="#model">The reactive model</a> &middot;
+          <a href="#gates">The two render gates</a> &middot;
+          <a href="#full">What forces a full re-render</a> &middot;
+          <a href="#keep-fine">Keeping renders fine-grained</a> &middot;
+          <a href="#declare-vs-assign">Declare vs. assign</a> &middot;
+          <a href="#derived">Derived values</a> &middot;
+          <a href="#env">Reactive environment globals</a> &middot;
+          <a href="#choose">Which state primitive?</a>
+        </p>
+      </div>
+
       <h2 id="model">The reactive model</h2>
       <p>
         A reactive value in Aktion is an <em>atom</em>: a named cell in a single
@@ -104,6 +129,21 @@
         This is the auto-tracking of MobX with the path-granularity of Solid, and
         it needs no selectors or dependency arrays. The catch: it only applies to
         the atom/store style of state.
+      </p>
+      <p>Three lines capture the whole loop &mdash; declare, read, write:</p>
+<pre><code>$count = 0                                  // 1. declare an atom (top level)
+
+function Counter() {
+  return Button(`Clicked ${$count} times`, {  // 2. reading subscribes this Button to "count"
+    onClick: () =&gt; { $count = $count + 1 }     // 3. writing invalidates only "count" readers
+  })
+}
+$app(Counter())</code></pre>
+      <p>
+        No <code>useState</code>, no setter, no dependency array. The
+        <code>$count</code> read inside <code>Counter</code> is what wires the
+        subscription; the <code>$count = &hellip;</code> write in the handler is
+        what fires it. Everything else on the page is left alone.
       </p>
 
       <h2 id="gates">The two render gates</h2>
@@ -173,6 +213,27 @@ function Profile() {
 }
 $app(Profile())</code></pre>
         <div class="lay-demo-preview"></div>
+      </div>
+
+      <p>
+        The single most common performance mistake is reassigning a whole object
+        when you meant to change one field. Write the <em>narrowest</em> path:
+      </p>
+      <div class="pair">
+        <div class="pair-card bad">
+          <div class="pair-head">Avoid &mdash; invalidates every reader of $user</div>
+<pre><code>// Re-creates the object, so any
+// component that read ANY part of
+// $user must re-render.
+$user = { ...$user, name: "Grace" }</code></pre>
+        </div>
+        <div class="pair-card good">
+          <div class="pair-head">Prefer &mdash; invalidates only "user.name"</div>
+<pre><code>// Touches one path. Only the
+// components that read $user.name
+// re-render.
+$user.name = "Grace"</code></pre>
+        </div>
       </div>
 
       <h2 id="declare-vs-assign"><code>$x = expr</code>: declare vs. assign</h2>
@@ -270,7 +331,47 @@ $app(Responsive())</code></pre>
         across devices.
       </p>
 
+      <h2 id="choose">Which state primitive should I reach for?</h2>
+      <p>
+        Aktion gives you four ways to hold state. They all work, but they sit on
+        different render gates. Use this table to pick the one that keeps your app
+        on the fine-grained path:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Use&hellip;</th><th>When the state is&hellip;</th><th>Render gate</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Top-level atom</strong> <code>$count = 0</code></td>
+            <td>Read by more than one component, or read deep in the tree.</td>
+            <td>Fine-grained &mdash; the default, fastest choice.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$store</code></strong></td>
+            <td>Shared, structured app state (cart, user, settings) with many fields.</td>
+            <td>Fine-grained, per-field. See <a href="stores.html">Global state</a>.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$state</code> hook</strong></td>
+            <td>Genuinely component-local <em>and</em> the subtree under it is small.</td>
+            <td>Full re-render of that component. See <a href="hooks.html#state">Hooks</a>.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$memo</code></strong></td>
+            <td>An expensive pure computation you want cached against explicit deps.</td>
+            <td>Recompute forces a full re-render. See <a href="hooks.html#memo">Hooks</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout ok">
+        <p><strong>Rule of thumb.</strong> Reach for a top-level atom or
+          <code>$store</code> first. Drop to <code>$state</code> only when the
+          state truly belongs to one small component and never needs to be read
+          elsewhere &mdash; then the full re-render is cheap because the subtree
+          is tiny.</p>
+      </div>
+
       <h2 id="next">Next</h2>
+      <div class="demo-grid">
         <a class="demo-card" href="hooks.html">
           <span class="demo-tag">Core</span>
           <h3>Hooks</h3>
@@ -282,6 +383,12 @@ $app(Responsive())</code></pre>
           <h3>Global state</h3>
           <p><code>$store</code> for shared, path-tracked application state.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="performance.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Performance</h3>
+          <p>Turn the fine-grained model into real-world speed.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
       </div>
     </main>

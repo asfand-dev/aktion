@@ -27,7 +27,47 @@
       background: var(--doc-surface-elev);
     }
     .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; margin: 18px 0; }
+    .checklist li { position: relative; padding: 6px 0 6px 28px; border-bottom: 1px solid var(--doc-border); }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before { content: "\2713"; position: absolute; left: 4px; top: 6px; color: #10b981; font-weight: 700; }
+    /* Live demo */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
   </style>
 </head>
 <body data-page="performance">
@@ -45,6 +85,26 @@
           memoizer, and feeding the parser efficiently while streaming.
         </p>
       </header>
+
+      <div class="callout">
+        <h4>The short version</h4>
+        <ul class="checklist">
+          <li>Keep state on the <strong>fine-grained path</strong> &mdash; top-level atoms and <code>$store</code> fields, written by narrow paths.</li>
+          <li>Pass <strong>stable props</strong> and give list rows a <strong><code>key</code></strong> so the memoizer can skip unchanged components.</li>
+          <li>Window long lists with <strong><code>VirtualList</code></strong> / <strong><code>VirtualGrid</code></strong>; paginate big datasets.</li>
+          <li>Cache expensive work with <strong><code>$memo</code></strong>; push heavy compute off-thread with <strong><code>$util.worker</code></strong>.</li>
+          <li>Stream with <strong><code>appendChunk</code></strong>, never <code>setResponse</code> per token.</li>
+          <li>Measure with <a href="devtools.html">DevTools</a> before optimising &mdash; don't guess.</li>
+        </ul>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Measure first.</strong> Aktion is fast by default. Before you
+          restructure anything, open <a href="devtools.html">DevTools</a>, record
+          a commit, and read the &ldquo;why did this render&rdquo; reason. Almost
+          every real slowdown traces back to one of two causes: a full re-render
+          you didn&rsquo;t need, or an unstable prop defeating memoization.</p>
+      </div>
 
       <h2 id="renders">1. Minimise full re-renders</h2>
       <p>
@@ -81,6 +141,20 @@
           sorting, and formatting so the work is skipped when inputs are
           unchanged.</li>
       </ul>
+      <p>
+        The classic memo-defeating bug is rebuilding a derived array on every
+        render. Cache it so the prop identity is stable:
+      </p>
+<pre><code>// ❌ filter runs every render; Table sees a "new" array each time
+function Orders() {
+  return Table([Col("Customer", $orders.filter(o =&gt; o.open).map(o =&gt; o.name))])
+}
+
+// ✅ $memo caches the filtered rows until $orders changes
+function Orders() {
+  open = $memo(() =&gt; $orders.filter(o =&gt; o.open), [$orders])
+  return Table([Col("Customer", open.map(o =&gt; o.name))])
+}</code></pre>
       <div class="callout">
         <p>Full re-renders run with memoization <em>disabled</em> by design (the
           tree is re-executed top to bottom). So memoization pays off in
@@ -122,12 +196,32 @@
         <li>Keep per-row work cheap: precompute derived fields with <code>$memo</code>
           or <code>$util</code> rather than inside the row component.</li>
       </ul>
-<pre><code>// Only the visible rows of a 10,000-cell grid are ever in the DOM.
-VirtualGrid($cells, {
+<p>
+        Both components render an array of <strong>pre-built nodes</strong> as
+        <code>items</code> &mdash; map your data to component nodes first, then
+        hand the array over:
+      </p>
+<pre><code>// Only the visible rows of a large grid are ever in the DOM.
+VirtualGrid($cells.map(cell =&gt; Card([Text(cell.label)])), {
   columns: 4,
-  rowHeight: 120,
-  render: (cell) =&gt; Card([Text(cell.label)])
+  itemHeight: 120,
 })</code></pre>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; 2,000 rows, only the visible window is mounted</span>
+<pre><code>$rows = $util.range(1, 2000).map(n =&gt; Row([
+  Badge(`#${n}`, "primary"),
+  Text(`Row ${n}`),
+], { gap: "sm" }))
+
+function Big() {
+  return Card([
+    CardHeader("Virtualized list", { subtitle: "Scroll — the DOM holds only a handful of rows" }),
+    VirtualList($rows, { itemHeight: 44 })
+  ])
+}
+$app(Big())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
       <h2 id="worker">4b. Offload heavy work to a Web Worker</h2>
       <p>
@@ -252,5 +346,29 @@ const { html, state } = renderToString(programSource, { path: "/" })
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[performance demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>

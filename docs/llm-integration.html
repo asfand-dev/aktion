@@ -19,7 +19,14 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
+    .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+    @media (max-width: 760px) { .flow { grid-template-columns: 1fr 1fr; } }
+    .flow-step { border: 1px solid var(--doc-border); border-radius: 10px; padding: 12px 14px; background: var(--doc-surface-elev); }
+    .flow-step b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--doc-text-muted); margin-bottom: 4px; }
   </style>
 </head>
 <body data-page="llm-integration">
@@ -40,6 +47,12 @@
       </header>
 
       <h2 id="loop">The integration loop</h2>
+      <div class="flow">
+        <div class="flow-step"><b>1 · Prompt</b>Build the system prompt with <code>getSystemPrompt()</code>.</div>
+        <div class="flow-step"><b>2 · Generate</b>Send prompt + request to your model via an edge function.</div>
+        <div class="flow-step"><b>3 · Stream</b>Pipe tokens into <code>app.appendChunk(token)</code>.</div>
+        <div class="flow-step"><b>4 · Round-trip</b>Forward <code>assistant-message</code> events as the next turn.</div>
+      </div>
       <ol>
         <li>Build a system prompt that matches the live component library with
           <code>getSystemPrompt()</code>.</li>
@@ -50,6 +63,12 @@
           model, the app fires an <code>assistant-message</code> event &mdash;
           forward it as the next turn.</li>
       </ol>
+      <div class="callout warn">
+        <p><strong>Never call the model from the browser.</strong> Your API key
+          must stay server-side. The browser talks to <em>your</em> endpoint; that
+          endpoint talks to the model and streams raw text back. The complete
+          example below shows both halves.</p>
+      </div>
 
       <h2 id="prompt">Choosing the system prompt</h2>
       <p>
@@ -106,6 +125,102 @@
         <p>Don&rsquo;t call <code>setResponse</code> on every token &mdash; it
           re-parses the entire buffer each time. Stream with
           <code>appendChunk</code>; see <a href="performance.html#streaming">Performance</a>.</p>
+      </div>
+
+      <h2 id="end-to-end">A complete end-to-end example</h2>
+      <p>
+        Here are both halves of a minimal integration. The <strong>edge
+        function</strong> holds the API key, parses the provider&rsquo;s SSE
+        stream, and re-emits plain Aktion text; the <strong>browser</strong> feeds
+        that text to <code>appendChunk</code>.
+      </p>
+<pre><code>// edge: /api/generate  (Vercel / Cloudflare / Netlify edge function)
+import { readFileSync } from "node:fs";
+
+const SYSTEM_PROMPT = readFileSync("system_prompt.txt", "utf8"); // or getSystemPrompt() server-side
+
+export async function POST(req) {
+  const { prompt } = await req.json();
+
+  const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, // stays server-side
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      stream: true,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  // Transform the provider SSE into a plain text stream of Aktion source.
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+          if (delta) controller.enqueue(new TextEncoder().encode(delta));
+        }
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}</code></pre>
+<pre><code>// browser: stream the edge response into the element
+import "aktion-runtime";
+
+const app = document.querySelector("aktion-app");
+
+async function generate(prompt) {
+  app.clear();                 // reset previous program + state
+  app.setAttribute("streaming", "");
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      app.appendChunk(decoder.decode(value, { stream: true }));
+    }
+  } catch (err) {
+    // Network / provider failure — show your own fallback UI.
+    app.setResponse(`$app(Callout("Generation failed — try again.", { tone: "danger" }))`);
+    console.error(err);
+  } finally {
+    app.removeAttribute("streaming"); // tells the parser the document is complete
+  }
+}</code></pre>
+      <div class="callout ok">
+        <p><strong>Why this is robust.</strong> While the
+          <code>streaming</code> attribute is set, the runtime tolerates an
+          incomplete tail (a half-written component renders a
+          <code>Skeleton</code> rather than an error). Dropping the attribute at
+          the end tells the parser the document is final, so any genuinely broken
+          syntax now surfaces through the <code>error</code> event. See
+          <a href="errors.html">Error handling</a>.</p>
       </div>
 
       <h2 id="providers">Provider-specific stream parsing</h2>

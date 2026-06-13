@@ -65,36 +65,77 @@
         <span class="hero-eyebrow">Theming</span>
         <h1>Themes.</h1>
         <p class="lead">
-          Aktion ships with polished <strong>built&#8209;in themes</strong> &mdash;
-          switch between them with one attribute on <code>&lt;aktion-app&gt;</code>.
-          Need a brand of your own? Override any design token in&#8209;program with
-          <strong><code>$theme({&hellip;})</code></strong>: colors, radius, and
-          typography. No raw CSS, no stylesheet plumbing &mdash; just a token map.
+          Every Aktion component is already wired to a set of <strong>design
+          tokens</strong> &mdash; colors, radii, spacing, type, shadows,
+          gradients. Pick one of <strong>seven built&#8209;in themes</strong> with a
+          single attribute, or brand your own by overriding tokens in&#8209;program
+          with <strong><code>$theme({&hellip;})</code></strong>. No CSS files, no
+          stylesheet plumbing &mdash; just a token map.
         </p>
       </header>
+
+      <h2 id="how">How theming works</h2>
+      <p>
+        A theme is nothing more than a bundle of <strong>CSS custom properties</strong>
+        (<code>--rui-color-primary</code>, <code>--rui-radius-md</code>, &hellip;) written
+        onto the <code>&lt;aktion-app&gt;</code> host element. Every component reads
+        those variables, so changing a token reskins the whole tree instantly &mdash;
+        without re&#8209;rendering. There are two layers, and they compose:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Layer</th><th>Where it lives</th><th>Token shape</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Host base</strong></td>
+            <td><code>theme</code> attribute / <code>setTheme()</code> on the element</td>
+            <td>A built&#8209;in name (<code>"dark"</code>) or a <em>flat</em> token map (<code>{ colorPrimary: "&hellip;" }</code>)</td>
+          </tr>
+          <tr>
+            <td><strong>Per&#8209;response overlay</strong></td>
+            <td>A bare <code>$theme({&hellip;})</code> inside the program</td>
+            <td><em>Grouped</em> tokens (<code>{ colors: { primary } }</code>) layered on top of the base</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout" data-variant="info">
+        <h4>Two token shapes, one system</h4>
+        <p>
+          The host paths (<code>theme</code> attribute, <code>setTheme()</code>) take
+          <strong>flat</strong> keys like <code>colorPrimary</code> / <code>radiusMd</code>.
+          The in&#8209;program <code>$theme({&hellip;})</code> takes <strong>grouped</strong>
+          keys like <code>colors.primary</code> / <code>radius.md</code>. Both end up as the
+          same <code>--rui-*</code> CSS variables &mdash; pick the shape that matches where
+          you're setting the theme.
+        </p>
+      </div>
 
       <h2 id="built-in">Built-in themes</h2>
       <p>
         Seven themes come in the box. Select one with the <code>theme</code>
-        attribute on the host element: <code>light</code> (default),
-        <code>dark</code>, <code>neon</code>, <code>pastel</code>,
-        <code>glass</code>, <code>brutalist</code>, and <code>skyline</code>.
-        Switching is instant &mdash; a theme is just a set of CSS custom properties
-        written to the host, so it never re&#8209;renders your tree.
+        attribute on the host element &mdash; <code>light</code> is the default if
+        you omit it. Switching is instant: only the host's CSS variables change.
       </p>
       <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
       <table class="signature-table">
         <thead><tr><th>Theme</th><th>Feel</th></tr></thead>
         <tbody>
-          <tr><td><code>light</code></td><td>Default. Crisp white surfaces, indigo accent.</td></tr>
-          <tr><td><code>dark</code></td><td>Standard high&#8209;contrast dark surface.</td></tr>
-          <tr><td><code>neon</code></td><td>Cyberpunk glow &mdash; magenta/cyan, monospace headings, sharp corners.</td></tr>
-          <tr><td><code>pastel</code></td><td>Soft &amp; rounded &mdash; lavender + mint, large radii.</td></tr>
-          <tr><td><code>glass</code></td><td>Frosted glass &mdash; translucent surfaces over a vivid gradient.</td></tr>
-          <tr><td><code>brutalist</code></td><td>Neo&#8209;brutalism &mdash; hard 2px borders, chunky offset shadows, all&#8209;caps headings.</td></tr>
+          <tr><td><code>light</code></td><td>Default. Crisp white surfaces, indigo accent, 1px borders.</td></tr>
+          <tr><td><code>dark</code></td><td>High&#8209;contrast dark surfaces, soft indigo accent.</td></tr>
+          <tr><td><code>neon</code></td><td>Cyberpunk glow &mdash; magenta/cyan, monospace type, sharp 2px corners.</td></tr>
+          <tr><td><code>pastel</code></td><td>Soft &amp; rounded &mdash; lavender + mint, large radii, gentle shadows.</td></tr>
+          <tr><td><code>glass</code></td><td>Frosted glass &mdash; translucent surfaces with backdrop blur over a vivid gradient.</td></tr>
+          <tr><td><code>brutalist</code></td><td>Neo&#8209;brutalism &mdash; hard 2px borders, chunky offset shadows, all&#8209;caps headings, zero radius.</td></tr>
           <tr><td><code>skyline</code></td><td>Cloud&#8209;console &mdash; deep navy + cyan, dense layout, small radii.</td></tr>
         </tbody>
       </table>
+      <p>
+        Set the theme imperatively too &mdash; handy for a user&#8209;facing theme
+        switcher in the host page:
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.setTheme("dark");                       // a built-in name
+app.setTheme({ colorPrimary: "#7c3aed" });  // flat token overrides
+</code></pre>
       <p>
         This docs site has its own light/dark toggle in the top bar &mdash; the live
         demos below follow it, so you can see how the same tokens read on either
@@ -102,12 +143,12 @@
       </p>
 
       <span id="customization"></span>
-      <h2 id="custom-tokens">Custom tokens with <code>$theme({&hellip;})</code></h2>
+      <h2 id="custom-tokens">Branding in&#8209;program with <code>$theme({&hellip;})</code></h2>
       <p>
-        Assign <code>$theme({&hellip;})</code> to a top&#8209;level binding named
-        <code>theme</code> (alongside your <code>$app(&hellip;)</code> root). The runtime
-        detects it, writes those tokens to the host as CSS custom properties, and
-        reskins the rest of the UI instantly. Tokens live in groups: override just
+        Inside a program, write a bare <code>$theme({&hellip;})</code> statement
+        (anywhere at the top level, alongside your <code>$app(&hellip;)</code> root).
+        The runtime writes those tokens to the host and reskins the UI instantly.
+        Tokens live in <strong>groups</strong>: override just
         <code>colors.primary</code> and every button, badge, link, and focus ring
         follows.
       </p>
@@ -172,37 +213,92 @@ $app(Column([
         <div class="lay-demo-preview"></div>
       </div>
 
-      <h2 id="token-groups">Token groups</h2>
+      <h2 id="token-groups">Token group reference</h2>
       <p>
         Inside <code>$theme({&hellip;})</code> the top&#8209;level keys are
         <strong>structured groups</strong>. Each group's camel&#8209;case keys flatten
-        predictably: <code>colors.primary</code> &rarr; <code>colorPrimary</code>,
-        <code>radius.md</code> &rarr; <code>radiusMd</code>,
-        <code>font.familyHeading</code> &rarr; <code>fontFamilyHeading</code>.
+        to a predictable CSS variable: <code>colors.primary</code> &rarr;
+        <code>--rui-color-primary</code>, <code>radius.md</code> &rarr;
+        <code>--rui-radius-md</code>, <code>font.familyHeading</code> &rarr;
+        <code>--rui-font-family-heading</code>. Here is every group:
       </p>
       <table class="signature-table">
-        <thead><tr><th>Group</th><th>Example keys</th><th>Controls</th></tr></thead>
+        <thead><tr><th>Group</th><th>CSS variable</th><th>Keys</th></tr></thead>
         <tbody>
-          <tr><td><code>colors</code></td><td><code>primary</code> · <code>primaryHover</code> · <code>accent</code> · <code>bg</code> · <code>surface</code> · <code>text</code> · <code>border</code> · <code>success</code> · <code>warning</code> · <code>danger</code> · <code>focusRing</code></td><td>Surface, brand, semantic, and focus&#8209;ring colors.</td></tr>
-          <tr><td><code>radius</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>pill</code> · <code>button</code> · <code>input</code></td><td>Corner rounding per element class.</td></tr>
-          <tr><td><code>font</code></td><td><code>family</code> · <code>familyHeading</code> · <code>familyMono</code> · <code>sizeBase</code> · <code>weightBody</code> · <code>weightHeading</code></td><td>Type families, sizes, weights, and heading treatment.</td></tr>
-          <tr><td><code>spacing</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code> · <code>2xl</code> · <code>3xl</code></td><td>The spacing scale used by <code>gap</code> / <code>padding</code> props and <code>sx</code>.</td></tr>
-          <tr><td><code>shadows</code></td><td><code>sm</code> · <code>md</code> · <code>lg</code></td><td>Elevation shadow tokens.</td></tr>
-          <tr><td><code>gradients</code></td><td><code>brand</code> · <code>accent</code> · <code>warm</code> · <code>cool</code> · <code>success</code> · <code>danger</code></td><td>Named gradients &rarr; <code>--rui-gradient-*</code>. Power <code>GradientText</code> and <code>sx.bg: "gradient.brand"</code>.</td></tr>
-          <tr><td><code>zIndex</code></td><td><code>base</code> · <code>raised</code> · <code>dropdown</code> · <code>sticky</code> · <code>banner</code> · <code>overlay</code> · <code>modal</code> · <code>popover</code> · <code>toast</code> · <code>tooltip</code></td><td>Layer tokens &rarr; <code>--rui-z-*</code>. Consumed by <code>sx.zIndex</code> tokens — one override (<code>zIndex: { modal: 2000 }</code>) restyles the whole layering stack.</td></tr>
-          <tr><td><code>motion</code></td><td><code>fast</code> · <code>base</code> · <code>slow</code> · <code>ease</code></td><td>Motion tokens &rarr; <code>--rui-motion-*</code> — brandable durations and easing.</td></tr>
-          <tr><td><code>fonts</code></td><td><code>import: ["Inter:400,700", &hellip;]</code></td><td>Load web fonts &mdash; injects a sanitised Google Fonts link.</td></tr>
-          <tr><td><code>icons</code></td><td><code>{ name: "&lt;svg&hellip;&gt;" }</code></td><td>Register custom inline SVG icons usable anywhere a Font Awesome name works.</td></tr>
+          <tr><td><code>colors</code></td><td><code>--rui-color-*</code></td><td>See the colour table below (19 tokens).</td></tr>
+          <tr><td><code>radius</code></td><td><code>--rui-radius-*</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>pill</code> · <code>button</code> · <code>input</code></td></tr>
+          <tr><td><code>spacing</code></td><td><code>--rui-spacing-*</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code> · <code>2xl</code> · <code>3xl</code></td></tr>
+          <tr><td><code>font</code></td><td><code>--rui-font-*</code></td><td><code>family</code> · <code>familyHeading</code> · <code>familyMono</code> · <code>sizeBase</code> · <code>sizeSm</code> · <code>sizeLg</code> · <code>sizeHeading</code> · <code>sizeTitle</code> · <code>weightBody</code> · <code>weightHeading</code></td></tr>
+          <tr><td><code>shadows</code></td><td><code>--rui-shadow-*</code></td><td><code>sm</code> · <code>md</code> · <code>lg</code></td></tr>
+          <tr><td><code>gradients</code></td><td><code>--rui-gradient-*</code></td><td><code>brand</code> · <code>accent</code> · <code>warm</code> · <code>cool</code> · <code>success</code> · <code>danger</code></td></tr>
+          <tr><td><code>zIndex</code></td><td><code>--rui-z-*</code></td><td><code>base</code> · <code>raised</code> · <code>dropdown</code> · <code>sticky</code> · <code>banner</code> · <code>overlay</code> · <code>modal</code> · <code>popover</code> · <code>toast</code> · <code>tooltip</code></td></tr>
+          <tr><td><code>motion</code></td><td><code>--rui-motion-*</code></td><td><code>fast</code> · <code>base</code> · <code>slow</code> · <code>ease</code></td></tr>
+          <tr><td><code>fonts</code></td><td>&mdash;</td><td><code>import: ["Inter:400,700"]</code> &mdash; web&#8209;font loader (side effect, not a variable).</td></tr>
+          <tr><td><code>icons</code></td><td>&mdash;</td><td><code>{ name: "&lt;svg&hellip;&gt;" }</code> &mdash; register inline SVG icons (side effect).</td></tr>
         </tbody>
       </table>
       <p>
-        Two metadata keys are also accepted at the top level: <code>name</code> and
-        <code>direction</code>. <code>name</code> selects one of the seven built&#8209;in
-        themes as the base palette, then your structured overrides layer on top. They
-        are never emitted as CSS variables. Flat&#8209;shape tokens
-        (<code>colorPrimary</code>) and free&#8209;form CSS variables raise a schema
-        warning inside <code>$theme({&hellip;})</code> and are dropped &mdash; always use
-        the structured groups here.
+        Two metadata keys are accepted at the top level: <code>name</code> selects one
+        of the seven built&#8209;in themes as the base palette before your overrides
+        layer on top, and <code>direction</code> (<code>"ltr"</code>/<code>"rtl"</code>)
+        is advisory metadata. Neither is emitted as a CSS variable. Flat keys
+        (<code>colorPrimary</code>) and free&#8209;form CSS variables are flagged by the
+        schema validator and dropped &mdash; inside <code>$theme({&hellip;})</code> always
+        use the grouped shape.
+      </p>
+
+      <h3 id="colors">Colour tokens</h3>
+      <p>
+        The <code>colors</code> group is the one you'll reach for most. Defaults shown
+        are from the <code>light</code> theme:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>CSS variable</th><th>Default (light)</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>bg</code></td><td><code>--rui-color-bg</code></td><td><code>#ffffff</code></td><td>Page background.</td></tr>
+          <tr><td><code>bgSubtle</code></td><td><code>--rui-color-bg-subtle</code></td><td><code>#f8fafc</code></td><td>Subtle page wash.</td></tr>
+          <tr><td><code>surface</code></td><td><code>--rui-color-surface</code></td><td><code>#ffffff</code></td><td>Cards, sheets, panels.</td></tr>
+          <tr><td><code>surfaceMuted</code></td><td><code>--rui-color-surface-muted</code></td><td><code>#f1f5f9</code></td><td>Inset / secondary surfaces.</td></tr>
+          <tr><td><code>border</code></td><td><code>--rui-color-border</code></td><td><code>#e2e8f0</code></td><td>Default 1px borders.</td></tr>
+          <tr><td><code>borderSubtle</code></td><td><code>--rui-color-border-subtle</code></td><td><code>rgba(15,23,42,.08)</code></td><td>Hairline dividers.</td></tr>
+          <tr><td><code>text</code></td><td><code>--rui-color-text</code></td><td><code>#0f172a</code></td><td>Primary body text.</td></tr>
+          <tr><td><code>textMuted</code></td><td><code>--rui-color-text-muted</code></td><td><code>#475569</code></td><td>Secondary / caption text.</td></tr>
+          <tr><td><code>primary</code></td><td><code>--rui-color-primary</code></td><td><code>#6366f1</code></td><td>Brand colour — primary buttons, active states.</td></tr>
+          <tr><td><code>primaryHover</code></td><td><code>--rui-color-primary-hover</code></td><td><code>#4f46e5</code></td><td>Hover/pressed brand colour.</td></tr>
+          <tr><td><code>primaryText</code></td><td><code>--rui-color-primary-text</code></td><td><code>#ffffff</code></td><td>Text/icon on a primary fill.</td></tr>
+          <tr><td><code>accent</code></td><td><code>--rui-color-accent</code></td><td><code>#6366f1</code></td><td>Secondary accent — links, chips, callouts.</td></tr>
+          <tr><td><code>accentHover</code></td><td><code>--rui-color-accent-hover</code></td><td><code>#4f46e5</code></td><td>Hover accent.</td></tr>
+          <tr><td><code>accentText</code></td><td><code>--rui-color-accent-text</code></td><td><code>#ffffff</code></td><td>Text on an accent fill.</td></tr>
+          <tr><td><code>focusRing</code></td><td><code>--rui-color-focus-ring</code></td><td><code>#6366f1</code></td><td>Keyboard focus outline.</td></tr>
+          <tr><td><code>success</code></td><td><code>--rui-color-success</code></td><td><code>#10b981</code></td><td>Positive status.</td></tr>
+          <tr><td><code>warning</code></td><td><code>--rui-color-warning</code></td><td><code>#f59e0b</code></td><td>Caution status.</td></tr>
+          <tr><td><code>danger</code></td><td><code>--rui-color-danger</code></td><td><code>#ef4444</code></td><td>Error / destructive status.</td></tr>
+          <tr><td><code>info</code></td><td><code>--rui-color-info</code></td><td><code>#06b6d4</code></td><td>Informational status.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="shape-type">Radius, spacing, type &amp; shadows</h3>
+      <p>
+        These shape and rhythm tokens drive corner rounding, the spacing scale behind
+        <code>gap</code>/<code>padding</code> props and <code>sx</code>, the type ramp, and
+        elevation. Defaults are from the <code>light</code> theme.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Key &rarr; default</th></tr></thead>
+        <tbody>
+          <tr><td><code>radius</code></td><td><code>xs</code> 4px · <code>sm</code> 6px · <code>md</code> 10px · <code>lg</code> 16px · <code>pill</code> 999px · <code>button</code> 6px · <code>input</code> 6px</td></tr>
+          <tr><td><code>spacing</code></td><td><code>xs</code> 4px · <code>sm</code> 8px · <code>md</code> 12px · <code>lg</code> 20px · <code>xl</code> 32px · <code>2xl</code> 48px · <code>3xl</code> 80px</td></tr>
+          <tr><td><code>font</code> sizes</td><td><code>sizeBase</code> 14px · <code>sizeSm</code> 12px · <code>sizeLg</code> 16px · <code>sizeHeading</code> 16px · <code>sizeTitle</code> 22px</td></tr>
+          <tr><td><code>font</code> weights</td><td><code>weightBody</code> 400 · <code>weightHeading</code> 700</td></tr>
+          <tr><td><code>font</code> families</td><td><code>family</code> / <code>familyHeading</code> system&#8209;ui stack · <code>familyMono</code> ui&#8209;monospace stack</td></tr>
+          <tr><td><code>shadows</code></td><td><code>sm</code> subtle · <code>md</code> medium · <code>lg</code> large (each a full <code>box-shadow</code> string)</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The spacing scale advertises t&#8209;shirt names (<code>sm</code>/<code>md</code>/<code>lg</code>)
+        but stores them as the short <code>s</code>/<code>m</code>/<code>l</code> CSS variables, so both
+        <code>spacing: { md: "16px" }</code> and the legacy <code>{ m: "16px" }</code> set the same
+        <code>--rui-spacing-m</code>.
       </p>
 
       <h2 id="gradients-fonts-icons">Gradients, fonts &amp; custom icons</h2>
@@ -232,24 +328,76 @@ $app(Column([
         <div class="lay-demo-preview"></div>
       </div>
       <p>
-        To pull in a web font, add a <code>fonts</code> group &mdash;
-        <code>$theme({ fonts: { import: ["Inter:400,600,700"] } })</code> injects a
-        single sanitised stylesheet link, after which <code>font.family: "Inter,
-        sans-serif"</code> just works.
+        <strong>Web fonts</strong> load on demand: add a <code>fonts</code> group with an
+        <code>import</code> list of <code>"Family:weights"</code> shorthands. Aktion injects
+        one sanitised Google Fonts <code>&lt;link&gt;</code>, after which the family is
+        available to <code>font.family</code>:
       </p>
+<pre><code>$theme({
+  fonts: { import: ["Inter:400,600,700"] },
+  font:  { family: "Inter, system-ui, sans-serif" }
+})</code></pre>
+      <p>
+        <strong>Custom icons</strong> register inline SVG under a name. Once registered,
+        that name works anywhere an icon name is accepted &mdash; the <code>icon</code> prop
+        on <code>Button</code>, <code>Icon("spark")</code>, list bullets, and so on:
+      </p>
+<pre><code>$theme({ icons: { spark: "&lt;svg viewBox='0 0 24 24'&gt;&lt;path d='M12 2l2 7 7 2-7 2-2 7-2-7-7-2 7-2z'/&gt;&lt;/svg&gt;" } })</code></pre>
+
+      <h2 id="using-tokens">Using theme tokens in your UI</h2>
+      <p>
+        You rarely touch raw colors &mdash; components already speak the active theme. When
+        you do need to style something directly, reference tokens through the universal
+        <code>sx</code> prop so it tracks the theme instead of hard&#8209;coding values.
+        Color tokens (<code>primary</code>, <code>surface</code>, <code>text-muted</code>,
+        &hellip;), gradient refs (<code>gradient.brand</code>), spacing tokens
+        (<code>md</code>, <code>lg</code>), and radii all resolve to the same
+        <code>--rui-*</code> variables your theme defines:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({ colors: { primary: "#0d9488" } })
+$app(Row([
+  Card([Text("Token-styled", { sx: { color: "primary", weight: "700" } })],
+    { sx: { bg: "surface", p: "lg", radius: "lg", shadow: "md" } }),
+  Card([Text("Gradient bg")],
+    { sx: { bg: "gradient.brand", p: "lg", radius: "lg", color: "#fff" } })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Because these are tokens, one <code>$theme({&hellip;})</code> override reskins every
+        usage at once. See the <a href="layout.html">Layout guide</a> and the
+        <a href="language-reference.html#universal-sx">universal props reference</a> for the
+        full <code>sx</code> surface.
+      </p>
+
+      <h2 id="layers">Layers, z-index &amp; motion</h2>
+      <p>
+        Two specialised groups make app&#8209;wide behaviour brandable. <code>zIndex</code>
+        tokens (<code>base</code> &rarr; <code>0</code>, <code>dropdown</code> &rarr;
+        <code>1000</code>, <code>modal</code> &rarr; <code>1300</code>, <code>toast</code>
+        &rarr; <code>1400</code>, <code>tooltip</code> &rarr; <code>1500</code>, &hellip;) feed
+        the <code>sx.zIndex</code> prop, so a single override re&#8209;orders your entire
+        layering stack. <code>motion</code> tokens (<code>fast</code>, <code>base</code>,
+        <code>slow</code>, <code>ease</code>) brand durations and easing curves:
+      </p>
+<pre><code>$theme({
+  zIndex: { modal: 2000, toast: 2100 },
+  motion: { fast: "100ms", ease: "cubic-bezier(.2,.8,.2,1)" }
+})</code></pre>
 
       <h2 id="precedence">Per-response vs host theme</h2>
       <p>
-        There are two layers. The <strong>host</strong> picks a base with the
-        <code>theme="&hellip;"</code> attribute (one of the seven built&#8209;ins). A
-        program can then layer a <strong>per&#8209;response</strong> override on top by
-        writing a bare <code>$theme({&hellip;})</code> statement &mdash; it applies <em>only</em>
-        the tokens you pass, so everything else still inherits the host theme. The
-        in&#8209;program <code>$theme({&hellip;})</code> wins for the tokens it sets;
-        remove the line and the UI snaps back to the host theme. Because the override
-        is scoped to that single <code>&lt;aktion-app&gt;</code> embed, themes never
-        leak across responses &mdash; the previous tokens are cleared before the next
-        render applies its own.
+        The two layers compose cleanly. The <strong>host</strong> sets a base with the
+        <code>theme="&hellip;"</code> attribute (one of the seven built&#8209;ins, or a flat
+        JSON token map). A program then layers a <strong>per&#8209;response</strong> overlay
+        by writing a bare <code>$theme({&hellip;})</code> statement &mdash; it applies <em>only</em>
+        the tokens you pass, so everything else still inherits the host theme. The overlay
+        wins for the tokens it sets; delete the line and the UI snaps back to the base.
+        Because the overlay is scoped to a single <code>&lt;aktion-app&gt;</code> embed,
+        themes never leak across responses &mdash; the previous render's tokens are cleared
+        before the next render applies its own.
       </p>
 
       <h2 id="dark-mode">Dark mode</h2>
@@ -260,10 +408,22 @@ $app(Column([
       </p>
       <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
-        You can still layer a per&#8209;response <code>$theme({&hellip;})</code> on top of
-        <code>dark</code> to brand it &mdash; e.g. override <code>colors.primary</code>
-        while keeping the dark surfaces underneath.
+        Layer a per&#8209;response <code>$theme({&hellip;})</code> on top of <code>dark</code>
+        to brand it &mdash; e.g. override <code>colors.primary</code> while keeping the dark
+        surfaces underneath. To follow the OS preference, read it in the host page and call
+        <code>app.setTheme(prefersDark ? "dark" : "light")</code>.
       </p>
+
+      <h2 id="rtl">Right-to-left &amp; direction</h2>
+      <p>
+        Theming and layout are direction&#8209;aware. Set <code>dir="rtl"</code> (or
+        <code>"auto"</code>) on <code>&lt;aktion-app&gt;</code> to flip the whole tree;
+        logical <code>sx</code> props like <code>px</code>/<code>mx</code> and
+        <code>ps</code>/<code>pe</code> mirror automatically. The <code>direction</code> key
+        inside <code>$theme({&hellip;})</code> is advisory metadata only &mdash; use the
+        <code>dir</code> attribute to actually flip the layout.
+      </p>
+<pre><code>&lt;aktion-app theme="light" dir="rtl"&gt;&lt;/aktion-app&gt;</code></pre>
 
       <h2 id="next">Next</h2>
       <div class="demo-grid">

@@ -19,7 +19,35 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--doc-text-muted); padding: 8px 12px 0; grid-column: 1 / -1; }
   </style>
 </head>
 <body data-page="errors">
@@ -37,6 +65,16 @@
           them, and how to read each kind of error.
         </p>
       </header>
+
+      <div class="callout">
+        <h4>The mental model in one line</h4>
+        <p>By default Aktion <strong>swallows</strong> problems so a half-streamed
+          program still renders. Flip on <code>strict</code> while developing to
+          turn that silence into <code>console.warn</code>s, listen for the host
+          <code>error</code> event to route failures into telemetry, and wrap
+          risky subtrees in <code>ErrorBoundary</code> so a throw shows a card
+          instead of a blank page.</p>
+      </div>
 
       <h2 id="philosophy">Two audiences, two modes</h2>
       <p>
@@ -56,6 +94,23 @@
           <tr><td>Trailing object that matches no parameter</td><td>Treated as a positional arg</td><td>Warns about the likely named&rarr;positional flip</td></tr>
         </tbody>
       </table>
+
+      <p>
+        The demo below shows the default safe behaviour in action: a reference to
+        a component that doesn&rsquo;t exist renders a <code>Skeleton</code>
+        placeholder instead of crashing &mdash; exactly what you want while an LLM
+        is still streaming the <code>function</code> that defines it.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; an unknown component falls back to a Skeleton</span>
+<pre><code>$app(Column([
+  Text("Known components render normally:", { variant: "large-heavy" }),
+  Badge("I exist", "success"),
+  Text("An unknown component becomes a Skeleton (no crash):"),
+  ChartThatDoesNotExist(),
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
 
       <h2 id="strict">Enabling strict mode</h2>
       <p>
@@ -141,13 +196,15 @@ app.addEventListener("error", (e) =&gt; {
 
       <h2 id="boundary">ErrorBoundary &amp; <code>$util.onError</code></h2>
       <p>
-        <code>ErrorBoundary(child, { fallback?, showDetails? })</code> catches a render
-        error in its subtree and shows a friendly card instead of breaking the page.
-        Pass <code>showDetails: true</code> in development to include the message.
+        <code>ErrorBoundary(child, { fallback?, onError?, showDetails? })</code>
+        catches a render error in its subtree and shows a fallback instead of
+        breaking the page. Omit <code>fallback</code> for a built-in friendly card
+        (with a Retry button); pass <code>showDetails: true</code> in development to
+        include the message.
       </p>
 <pre><code>ErrorBoundary(
   RiskyWidget(),
-  { fallback: Alert("This widget is unavailable.", { tone: "danger" }), showDetails: true }
+  { fallback: Callout("This widget is unavailable.", { tone: "danger" }), showDetails: true }
 )</code></pre>
       <p>
         For <em>action</em> failures (a throw inside an <code>onClick</code> or effect),
@@ -195,5 +252,29 @@ suggestComponent("Buttn");   // → ["Button", ...]</code></pre>
     </main>
   </div>
   <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module">
+    import "../dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[errors demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
 </body>
 </html>
