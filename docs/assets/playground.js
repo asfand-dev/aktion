@@ -1946,6 +1946,21 @@ const GLOBAL_NAMESPACES = [
     ],
   },
   {
+    name: "$toast",
+    signature: "$toast.<show|success|error|info|warning|dismiss|clear>(...) · $toast.items",
+    description: "Imperative toast namespace. Owns the toast lifecycle (auto-dismiss + reactive list); render `$toast.items` with the Toasts/Toast components.",
+    members: [
+      { name: "show",    apply: "show(${1:message}, { title: \"${2}\", tone: \"${3:info}\" })", info: "Show a toast; returns its id. Options: { title?, tone?, duration? } (duration 0 keeps it sticky)." },
+      { name: "success", apply: "success(${1:message})", info: "Show a toast with tone \"success\"." },
+      { name: "error",   apply: "error(${1:message})",   info: "Show a toast with tone \"danger\"." },
+      { name: "info",    apply: "info(${1:message})",    info: "Show a toast with tone \"info\"." },
+      { name: "warning", apply: "warning(${1:message})", info: "Show a toast with tone \"warning\"." },
+      { name: "dismiss", apply: "dismiss(${1:id})",      info: "Remove a single toast by id." },
+      { name: "clear",   apply: "clear()",               info: "Remove every toast." },
+      { name: "items",   apply: "items",                 info: "Reactive list of live toasts (newest last). Treat as read-only." },
+    ],
+  },
+  {
     name: "Math",
     signature: "Math.<max|min|round|floor|ceil|abs|random|pow|sqrt|…>(...)",
     description: "Standard JS Math namespace. Exposed verbatim — every method and constant works.",
@@ -2016,7 +2031,144 @@ const HTTP_CONFIG_SPEC = {
     { name: "credentials", type: "enum",   required: false, enumValues: ["omit", "same-origin", "include"], description: "Fetch credentials mode." },
     { name: "mode",        type: "enum",   required: false, enumValues: ["cors", "no-cors", "same-origin"], description: "Fetch request mode." },
     { name: "cache",       type: "enum",   required: false, enumValues: ["default", "no-store", "reload", "no-cache", "force-cache"], description: "Fetch cache mode." },
+    { name: "gql",         type: "string", required: false, description: "GraphQL query — POSTs { query, variables }; `.data` is the unwrapped GraphQL data." },
+    { name: "variables",   type: "object", required: false, description: "GraphQL variables paired with `gql`." },
   ],
+};
+
+/**
+ * Synthetic config specs for the remaining config-taking builtins so the
+ * editor surfaces every accepted config-object key (completion + value enums),
+ * hover, and signature help inside `$query({…})`, `$mutation({…})`,
+ * `$socket({…})`, `$sse({…})`, `$form({…})`, `$store({…})`, `$theme({…})`,
+ * and `$i18n({…})`. `$router({…})` is intentionally omitted — its keys are
+ * arbitrary route patterns, not a fixed config object. Mirror the canonical
+ * `findBuiltinConfig` catalog in `src/language/namespaces.ts`.
+ */
+const QUERY_CONFIG_SPEC = {
+  name: "$query",
+  signature: "$query({ url, key?, ttl?, refetchInterval?, infinite?, ... })",
+  description: "Cached, deduplicated HTTP read. Returns a resource bag with polling + pagination extras.",
+  params: [
+    ...HTTP_CONFIG_SPEC.params,
+    { name: "key",                type: "string",  required: false, description: "Cache key — identical keys share one in-flight request + cached bag." },
+    { name: "ttl",                type: "number",  required: false, description: "Milliseconds before cached data is stale and auto-refetched." },
+    { name: "refetchInterval",    type: "number",  required: false, description: "Poll interval in ms (live dashboards)." },
+    { name: "refetchOnFocus",     type: "boolean", required: false, description: "Refetch when the tab regains focus." },
+    { name: "refetchOnReconnect", type: "boolean", required: false, description: "Refetch when the network reconnects." },
+    { name: "infinite",           type: "object",  required: false, description: "Pagination config: { param?, start?, limit?, mode?, select? } → .loadMore()/.hasMore." },
+  ],
+};
+
+const MUTATION_CONFIG_SPEC = {
+  name: "$mutation",
+  signature: "$mutation({ url, method?, body?, optimistic?, invalidates?, ... })",
+  description: "Deferred write fired on `.mutate(overrides?)`. Supports optimistic updates + cache invalidation.",
+  params: [
+    { name: "url",         type: "string", required: true,  description: "Absolute request URL." },
+    { name: "method",      type: "enum",   required: false, enumValues: ["POST", "PUT", "PATCH", "DELETE"], description: "HTTP method. Defaults to POST." },
+    { name: "body",        type: "object", required: false, description: "Default body; shallow-merged with `.mutate(overrides)`." },
+    { name: "headers",     type: "object", required: false, description: "Request headers as a plain object." },
+    { name: "query",       type: "object", required: false, description: "Object serialised into the URL querystring." },
+    { name: "optimistic",  type: "function", required: false, description: "Runs synchronously before the request; auto-rolled-back on failure." },
+    { name: "invalidates", type: "array",  required: false, description: "Refetch every cached $query whose key contains a listed substring on success." },
+    { name: "gql",         type: "string", required: false, description: "GraphQL mutation document." },
+    { name: "variables",   type: "object", required: false, description: "GraphQL variables paired with `gql`." },
+  ],
+};
+
+const SOCKET_CONFIG_SPEC = {
+  name: "$socket",
+  signature: "$socket({ url, protocols?, bufferSize?, onMessage?, reconnect? })",
+  description: "Reactive WebSocket bag (`.status`, `.messages`, `.send()`, `.close()`).",
+  params: [
+    { name: "url",        type: "string",  required: true,  description: "WebSocket URL (ws:// or wss://)." },
+    { name: "protocols",  type: "string",  required: false, description: "Optional sub-protocol(s)." },
+    { name: "bufferSize", type: "number",  required: false, description: "Max buffered messages kept in `.messages`." },
+    { name: "onMessage",  type: "function", required: false, description: "Callback fired for each received message." },
+    { name: "reconnect",  type: "boolean", required: false, description: "Retry dropped connections (true, or a max-attempt count) with backoff." },
+  ],
+};
+
+const SSE_CONFIG_SPEC = {
+  name: "$sse",
+  signature: "$sse({ url, event?, withCredentials?, bufferSize? })",
+  description: "Reactive Server-Sent-Events bag (`.messages`, `.data`, `.close()`).",
+  params: [
+    { name: "url",             type: "string",  required: true,  description: "EventSource URL." },
+    { name: "event",           type: "string",  required: false, description: "Named event to listen for (defaults to message)." },
+    { name: "withCredentials", type: "boolean", required: false, description: "Send credentials with the EventSource request." },
+    { name: "bufferSize",      type: "number",  required: false, description: "Max buffered events kept in `.messages`." },
+  ],
+};
+
+const FORM_CONFIG_SPEC = {
+  name: "$form",
+  signature: "$form({ values, rules?, onSubmit? })",
+  description: "Managed-form engine. Returns a bag with field state, validation, and submit handling.",
+  params: [
+    { name: "values",   type: "object",   required: true,  description: "Initial field values — the clean snapshot." },
+    { name: "rules",    type: "object",   required: false, description: "Per-field validator arrays: { field: [$util.rules.required(), …] }." },
+    { name: "onSubmit", type: "function", required: false, description: "Called with the values once validation passes." },
+  ],
+};
+
+const STORE_CONFIG_SPEC = {
+  name: "$store",
+  signature: "$store({ ...state, ...methods, persist?, history? })",
+  description: "Global store. Your own state + methods, plus optional persistence and undo/redo.",
+  params: [
+    { name: "persist",   type: "string", required: false, description: "Mirror the store's data to localStorage under this key (hydrates on first render)." },
+    { name: "persistIn", type: "enum",   required: false, enumValues: ["local", "session"], description: "Storage backend for `persist` (defaults to local)." },
+    { name: "history",   type: "boolean", required: false, description: "Enable undo()/redo()/clearHistory() + reactive canUndo/canRedo (number = depth)." },
+  ],
+};
+
+const THEME_CONFIG_SPEC = {
+  name: "$theme",
+  signature: "$theme({ name?, colors?, radius?, font?, motion?, ... })",
+  description: "Define / extend the active theme. Token groups flow into the CSS variable surface.",
+  params: [
+    { name: "name",      type: "string", required: false, description: 'Selects a built-in base theme ("dark", "neon", …).' },
+    { name: "direction", type: "enum",   required: false, enumValues: ["ltr", "rtl"], description: "Reading direction (metadata)." },
+    { name: "colors",    type: "object", required: false, description: "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …." },
+    { name: "radius",    type: "object", required: false, description: "Border-radius tokens: xs, sm, md, lg, pill, button, input." },
+    { name: "font",      type: "object", required: false, description: "Font tokens: family, familyHeading, familyMono, sizeBase, weightBody, …." },
+    { name: "spacing",   type: "object", required: false, description: "Spacing scale tokens." },
+    { name: "shadows",   type: "object", required: false, description: "Box-shadow tokens." },
+    { name: "gradients", type: "object", required: false, description: "Gradient color-stop arrays — referenced as gradient.<name>." },
+    { name: "zIndex",    type: "object", required: false, description: "Layer tokens (modal, toast, …) → sx.zIndex / --rui-z-*." },
+    { name: "motion",    type: "object", required: false, description: "Motion tokens: { fast, base, slow, ease } → --rui-motion-*." },
+    { name: "fonts",     type: "object", required: false, description: 'Web-font import: { import: ["Inter:400,700"] }.' },
+    { name: "icons",     type: "object", required: false, description: "Custom inline-SVG icons by name, usable anywhere an icon name is." },
+  ],
+};
+
+const I18N_CONFIG_SPEC = {
+  name: "$i18n",
+  signature: "$i18n({ defaultLanguage, currentLanguage?, translations })",
+  description: "Translation engine. Returns `.t(key, vars?)` plus reactive language state.",
+  params: [
+    { name: "defaultLanguage", type: "string", required: true,  description: "Fallback language when a key is missing for the current language." },
+    { name: "currentLanguage", type: "string", required: false, description: "Active language — drive from a reactive atom for live switching." },
+    { name: "translations",    type: "object", required: true,  description: '{ key: { lang: "text {name}" } }. Supports ICU plural/select.' },
+  ],
+};
+
+/**
+ * Config-taking builtin name → its synthetic config spec. Drives config-object
+ * key completion, hover, and signature help inside `$builtin({ … })`.
+ */
+const BUILTIN_CONFIG_SPECS = {
+  $http: HTTP_CONFIG_SPEC,
+  $query: QUERY_CONFIG_SPEC,
+  $mutation: MUTATION_CONFIG_SPEC,
+  $socket: SOCKET_CONFIG_SPEC,
+  $sse: SSE_CONFIG_SPEC,
+  $form: FORM_CONFIG_SPEC,
+  $store: STORE_CONFIG_SPEC,
+  $theme: THEME_CONFIG_SPEC,
+  $i18n: I18N_CONFIG_SPEC,
 };
 
 /**
@@ -2523,10 +2675,11 @@ function initPlayground(cm) {
       const objOpen = enclosingObjectOpen(text, call, pos);
       const argBase = objOpen != null ? objOpen : call.openParen;
       const inObject = objOpen != null;
-      // `$http({ … })` exposes the synthetic config spec (`url`, `method`,
-      // …); every other call resolves to a library component by name.
-      const spec = (call.name === "$http" && inObject)
-        ? HTTP_CONFIG_SPEC
+      // A config-taking builtin (`$http`, `$query`, `$theme`, …) exposes its
+      // synthetic config spec when the cursor is inside the `{ … }`; every
+      // other call resolves to a library component by name.
+      const spec = (inObject && BUILTIN_CONFIG_SPECS[call.name])
+        ? BUILTIN_CONFIG_SPECS[call.name]
         : langSpec.componentsByName[call.name];
 
       if (spec) {
@@ -2991,10 +3144,11 @@ function initPlayground(cm) {
   // ---- Spec lookup (hover & signature tooltips share this) ----
   function resolveSpec(rawName) {
     if (!rawName) return null;
-    // `$http(...)` carries a synthetic param spec (`url`, `method`, …) so
-    // signature help + hover light up inside the config object. Kind
-    // "component" keeps the `$http` name un-prefixed in the tooltip.
-    if (rawName === "$http") return { kind: "component", spec: HTTP_CONFIG_SPEC };
+    // Config-taking builtins (`$http`, `$query`, `$theme`, …) carry a synthetic
+    // param spec (`url`, `method`, …) so signature help + hover light up inside
+    // the config object. Kind "component" keeps the name un-prefixed.
+    const configSpec = BUILTIN_CONFIG_SPECS[rawName];
+    if (configSpec) return { kind: "component", spec: configSpec };
     const component = langSpec.componentsByName[rawName];
     if (component) return { kind: "component", spec: component };
     return null;

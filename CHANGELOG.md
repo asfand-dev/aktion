@@ -13,6 +13,23 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Member-level editor intelligence** — the DOM-free `aktion-runtime/language`
+  surface now models every namespace member and reactive resource bag, so the
+  VS Code extension and the docs playground complete, hover, highlight, and
+  show signature help for member access after a `.`: `$util.*` (incl. nested
+  `$util.style` / `$util.rules` / `$util.url`), `$storage.*`
+  (`.local`/`.session`/`.cookies`), `$console.*`, `$toast.*`, the reactive
+  `route` handle, and the bag a factory builtin returns (`$http`, `$query`,
+  `$mutation`, `$socket`, `$sse`, `$form`, `$store`). The member catalog ships
+  as data (`namespaceCatalog`, `factoryResourceCatalog`). Object-style component
+  arguments (`{ variant: "primary" }`) now get their keys semantically tagged as
+  properties too.
+- **Config-object key intelligence** — the config-taking builtins (`$http`,
+  `$query`, `$mutation`, `$socket`, `$sse`, `$form`, `$store`, `$theme`,
+  `$i18n`) now complete and hover their accepted config keys inside
+  `$builtin({ … })` (e.g. `url` / `method` / `refetchInterval` / `colors`),
+  shipped as data via `findBuiltinConfig` and mirrored in the docs playground.
+
 - **`$query({ url, key?, ttl? })`** — a cached, deduplicated read built on the
   `$http` runtime. Queries sharing a `key` (or the same derived
   method + url + query + body) reuse one in-flight request and one reactive

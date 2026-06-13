@@ -1548,7 +1548,16 @@ import {
   [playground](https://asfand-dev.github.io/aktion/playground.html)
   uses them under the hood. `getCompletions` is **scope-aware**: alongside
   the library + reserved words it surfaces the symbols declared in the
-  current document — your own reactive atoms, components, and actions.
+  current document — your own reactive atoms, components, and actions. It is
+  also **member-aware**: after a `.` it completes (and hovers / typechecks the
+  signature of) every namespace member — `$util.*` (incl. nested `$util.style`
+  / `$util.rules` / `$util.url`), `$storage.*`, `$console.*`, `$toast.*`, the
+  `route` handle, and the resource bag a factory builtin returns (`$http`,
+  `$query`, `$mutation`, `$socket`, `$sse`, `$form`, `$store`). Inside a
+  config-taking builtin's object (`$http({ … })`, `$theme({ … })`, …) it
+  completes and hovers the accepted config keys. The member + config catalog
+  ships as data (`namespaceCatalog`, `factoryResourceCatalog`,
+  `findBuiltinConfig`) so any host can reuse it.
 
 ### Migration & DX tooling
 

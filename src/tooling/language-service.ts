@@ -30,6 +30,17 @@ import { validateProgramSchema } from "../library/validate.js";
 import { findPositionalProp, chooseNamedBagIndex, slotForNthPositional } from "../library/types.js";
 import { keywordDocs, type KeywordDoc } from "../language/grammar.js";
 import { builtinCatalog, findBuiltin } from "../language/builtins.js";
+import {
+  isNamespaceName,
+  namespaceMembersAt,
+  findNamespaceMember,
+  findFactoryResource,
+  factoryResourceNames,
+  routeMembers,
+  findBuiltinConfig,
+  type NamespaceMember,
+  type ConfigKey,
+} from "../language/namespaces.js";
 import { analyseCallContext } from "./signature-help.js";
 
 export interface Position {
@@ -164,6 +175,17 @@ export function getCompletions(
     ];
   }
 
+  // Member access: `$util.`, `$util.style.`, `$storage.local.`, `route.`,
+  // or `binding.` where `binding` was assigned from a factory builtin
+  // (`$todos = $http(...)` → `.data` / `.refetch()`). Resolved against the
+  // shared namespace + resource-bag catalogs so the editor surfaces every
+  // member with no hand-maintained list.
+  const member = analyseMemberAccess(source, position);
+  if (member) {
+    const items = memberCompletionsFor(member.objectExpr, source);
+    if (items) return items;
+  }
+
   const general = generalCompletions(library, user);
   const call = analyseCallContext(source, position);
 
@@ -180,6 +202,12 @@ export function getCompletions(
         call.objectArg === null ||
         chooseNamedBagIndex(call.args, spec) === call.argIndex;
       if (isNamedBag) return [...propCompletions(spec), ...general];
+    }
+    // Config-taking builtins (`$http({ … })`, `$theme({ … })`, …) — offer the
+    // accepted config-object keys first, then the general list.
+    if (ctx.objectCallee.startsWith("$")) {
+      const config = findBuiltinConfig(ctx.objectCallee.slice(1));
+      if (config) return [...configKeyCompletions(config, ctx.objectCallee), ...general];
     }
     return general;
   }
@@ -300,6 +328,181 @@ function collectUserSymbols(source: string): UserSymbols {
   return { atoms: [...atoms], components: [...components], actions: [...actions] };
 }
 
+// ---------------------------------------------------------------------------
+// Member access (`obj.member`) — namespaces, factory bags, the `route` handle
+// ---------------------------------------------------------------------------
+
+interface MemberAccess {
+  /** The object expression before the trailing `.partial` (e.g. `$util.style`). */
+  objectExpr: string;
+  /** Partial member identifier being typed after the last dot. */
+  typing: string;
+}
+
+/**
+ * Matches a member-access chain ending at the cursor: the object expression
+ * (an optionally `$`-sigilled identifier plus any `.segment`s) followed by a
+ * dot and an optional partial member. Whitespace-free by design — a member
+ * access spanning a newline is not a completion site we care about.
+ */
+const MEMBER_ACCESS_RE = /(\$?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)?$/;
+
+function analyseMemberAccess(source: string, position: Position): MemberAccess | null {
+  const prefix = source.slice(0, lineColumnToOffset(source, position));
+  const match = MEMBER_ACCESS_RE.exec(prefix);
+  if (!match) return null;
+  return { objectExpr: match[1]!, typing: match[2] ?? "" };
+}
+
+/** Map a member's kind onto a completion icon kind. */
+function memberKind(m: NamespaceMember): CompletionItem["kind"] {
+  return m.kind === "method" ? "builtin" : "prop";
+}
+
+function toMemberCompletion(m: NamespaceMember, detail: string): CompletionItem {
+  return {
+    label: m.name,
+    kind: memberKind(m),
+    detail: `${detail} · ${m.signature}`,
+    documentation: m.summary,
+  };
+}
+
+/** Completions for the config-object keys accepted by a config-taking builtin. */
+function configKeyCompletions(keys: readonly ConfigKey[], callee: string): CompletionItem[] {
+  return keys.map((k) => ({
+    label: k.name,
+    kind: "prop" as const,
+    detail: `${callee} config · ${k.name}: ${k.type}`,
+    documentation: k.summary,
+  }));
+}
+
+/**
+ * Resolve member completions for an `objectExpr.` position, or `null` when the
+ * receiver is not a known object (so general completions take over).
+ */
+function memberCompletionsFor(objectExpr: string, source: string): CompletionItem[] | null {
+  const segments = objectExpr.split(".");
+  const root = segments[0]!;
+
+  // `$`-namespace (`$util`, `$storage`, `$console`, `$toast`) + nested
+  // sub-namespaces (`$util.style.`, `$storage.local.`).
+  if (root.startsWith("$")) {
+    const bare = root.slice(1);
+    if (isNamespaceName(bare)) {
+      const members = namespaceMembersAt(bare, segments.slice(1));
+      if (members.length > 0) {
+        return members.map((m) => toMemberCompletion(m, root));
+      }
+      return [];
+    }
+  }
+
+  // Single-segment receivers: the reserved `route` handle, or a binding
+  // assigned from a factory builtin.
+  if (segments.length === 1) {
+    if (root === "route") return routeMembers.map((m) => toMemberCompletion(m, "route"));
+    const factory = factoryBindingFor(source, root);
+    if (factory) {
+      const entry = findFactoryResource(factory);
+      if (entry) return entry.members.map((m) => toMemberCompletion(m, root));
+    }
+  }
+  return null;
+}
+
+/** Build the alternation of factory builtin names, escaped for a RegExp. */
+const FACTORY_ALTERNATION = [...factoryResourceNames].join("|");
+
+/**
+ * The factory builtin a binding was assigned from, if any:
+ * `$todos = $http(...)` → `"http"`. `receiver` is matched exactly as typed
+ * (with or without the `$` sigil). Returns `undefined` when not found.
+ */
+function factoryBindingFor(source: string, receiver: string): string | undefined {
+  if (!FACTORY_ALTERNATION) return undefined;
+  // Escape `$` for the receiver literal; identifiers are otherwise regex-safe.
+  const lhs = receiver.replace(/\$/g, "\\$");
+  const re = new RegExp(`(?:^|[^\\w$.])${lhs}\\s*=\\s*(?:await\\s+)?\\$(${FACTORY_ALTERNATION})\\s*\\(`);
+  const match = re.exec(source);
+  return match ? match[1] : undefined;
+}
+
+/**
+ * Hover for the namespace / factory-bag / `route` member under the cursor.
+ * `word` is the already-extracted identifier at `position`.
+ */
+function memberHoverAt(source: string, position: Position, word: string): HoverInfo | null {
+  // Re-read the prefix up to the END of the hovered word so the member-access
+  // regex sees the full `obj.member` even when the cursor is mid-word.
+  const offset = lineColumnToOffset(source, position);
+  let end = offset;
+  while (end < source.length && /[\w$]/.test(source[end]!)) end += 1;
+  const prefix = source.slice(0, end);
+  const match = MEMBER_ACCESS_RE.exec(prefix);
+  if (!match || (match[2] ?? "") !== word) return null;
+
+  const objectExpr = match[1]!;
+  const segments = objectExpr.split(".");
+  const root = segments[0]!;
+
+  if (root.startsWith("$")) {
+    const bare = root.slice(1);
+    if (isNamespaceName(bare)) {
+      const path = [...segments.slice(1), word].join(".");
+      const m = findNamespaceMember(bare, path);
+      if (m) return memberHover(`${root}.${path}`, m);
+      return null;
+    }
+    const factory = factoryBindingFor(source, root);
+    if (factory && segments.length === 1) {
+      const entry = findFactoryResource(factory);
+      const m = entry?.members.find((x) => x.name === word);
+      if (m) return memberHover(`${root}.${word}`, m);
+    }
+    return null;
+  }
+
+  if (segments.length === 1) {
+    if (root === "route") {
+      const m = routeMembers.find((x) => x.name === word);
+      if (m) return memberHover(`route.${word}`, m);
+    }
+    const factory = factoryBindingFor(source, root);
+    if (factory) {
+      const entry = findFactoryResource(factory);
+      const m = entry?.members.find((x) => x.name === word);
+      if (m) return memberHover(`${root}.${word}`, m);
+    }
+  }
+  return null;
+}
+
+function memberHover(qualified: string, m: NamespaceMember): HoverInfo {
+  return {
+    kind: m.kind === "method" ? "builtin" : "prop",
+    contents: `**${qualified}** — ${m.summary}\n\nSignature: \`${m.signature}\``,
+  };
+}
+
+/**
+ * Hover for a config-object key under the cursor, when it sits inside the
+ * config object of a config-taking builtin (`$http({ url: … })`). Returns
+ * `null` otherwise.
+ */
+function configKeyHoverAt(source: string, position: Position, word: string): HoverInfo | null {
+  const ctx = analyseCursor(source, position);
+  if (!ctx.objectCallee || !ctx.objectCallee.startsWith("$")) return null;
+  const keys = findBuiltinConfig(ctx.objectCallee.slice(1));
+  const key = keys?.find((k) => k.name === word);
+  if (!key) return null;
+  return {
+    kind: "prop",
+    contents: `**${ctx.objectCallee} config · ${key.name}** — ${key.summary}\n\nType: \`${key.type}\``,
+  };
+}
+
 /**
  * Hover info for the symbol under the cursor. Returns `null` when the
  * cursor is not over a recognised symbol.
@@ -311,6 +514,12 @@ export function getHoverInfo(
 ): HoverInfo | null {
   const word = wordAt(source, position);
   if (!word) return null;
+
+  // Member of a `$`-namespace / factory bag / `route` handle under the cursor
+  // (`$util.format`, `$storage.local.set`, `route.path`, `$todos.refetch`).
+  const memberHover = memberHoverAt(source, position, word);
+  if (memberHover) return memberHover;
+
   const spec = findComponent(library, word);
   if (spec) {
     return {
@@ -320,6 +529,10 @@ export function getHoverInfo(
         `Signature: \`${signaturePreview(spec)}\``,
     };
   }
+
+  // Config-object key inside a config-taking builtin (`url` in `$http({ … })`).
+  const configHover = configKeyHoverAt(source, position, word);
+  if (configHover) return configHover;
   if (word.startsWith("$")) {
     // Runtime builtin (hook / factory / namespace) — rich signature + summary
     // sourced from the shared catalog (`src/language/builtins.ts`).

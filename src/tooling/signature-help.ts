@@ -29,6 +29,14 @@ import { findComponent } from "../library/registry.js";
 import { defaultLibrary } from "../library/index.js";
 import { getComponentCatalog, type ComponentEntry } from "../language/components.js";
 import { findBuiltin } from "../language/builtins.js";
+import {
+  isNamespaceName,
+  findNamespaceMember,
+  findFactoryResource,
+  factoryResourceNames,
+  routeMembers,
+  type NamespaceMember,
+} from "../language/namespaces.js";
 import type { Position } from "./language-service.js";
 
 export interface ParameterInfo {
@@ -74,7 +82,10 @@ export function getSignatureHelp(
     return { signatures: [signature], activeSignature: 0, activeParameter };
   }
 
-  const signature = builtinSignature(call.callee) ?? userSignature(call.callee, source);
+  const signature =
+    builtinSignature(call.callee) ??
+    memberCallSignature(call.callee, source) ??
+    userSignature(call.callee, source);
   if (!signature) return null;
   const activeParameter = resolveDeclaredParam(call, signature.parameters.map((p) => p.label));
   return { signatures: [signature], activeSignature: 0, activeParameter };
@@ -165,6 +176,59 @@ function builtinSignature(callee: string): SignatureInfo | null {
   const builtin = findBuiltin(callee.slice(1));
   if (!builtin) return null;
   return { label: builtin.signature, documentation: builtin.summary, parameters: [] };
+}
+
+/**
+ * Signature for a member call on a `$`-namespace (`$util.format(...)`,
+ * `$util.style.cx(...)`), the reserved `route` handle (`route.navigate(...)`),
+ * or a factory-bag binding (`$todos.refetch()`, `form.submit()`). Resolved
+ * against the shared namespace + resource-bag catalogs.
+ */
+function memberCallSignature(callee: string, source: string): SignatureInfo | null {
+  const dot = callee.indexOf(".");
+  if (dot < 0) return null;
+  const root = callee.slice(0, dot);
+  const memberPath = callee.slice(dot + 1);
+
+  let member: NamespaceMember | undefined;
+  if (root.startsWith("$") && isNamespaceName(root.slice(1))) {
+    member = findNamespaceMember(root.slice(1), memberPath);
+  } else if (root === "route" && !memberPath.includes(".")) {
+    member = routeMembers.find((m) => m.name === memberPath);
+  } else if (!memberPath.includes(".")) {
+    const factory = factoryBindingFor(source, root);
+    if (factory) member = findFactoryResource(factory)?.members.find((m) => m.name === memberPath);
+  }
+  if (!member) return null;
+  return memberToSignature(callee, member);
+}
+
+/** Build a SignatureInfo from a catalog member's `signature` skeleton. */
+function memberToSignature(callee: string, member: NamespaceMember): SignatureInfo {
+  const open = member.signature.indexOf("(");
+  const close = member.signature.lastIndexOf(")");
+  const params =
+    open >= 0 && close > open
+      ? member.signature
+          .slice(open + 1, close)
+          .split(",")
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0)
+          .map((p) => ({ label: p }))
+      : [];
+  return { label: `${callee}${member.signature.slice(open >= 0 ? open : member.signature.length)}`, documentation: member.summary, parameters: params };
+}
+
+/** Build the factory-name alternation for the binding scan (escaped `$`). */
+const FACTORY_ALTERNATION = [...factoryResourceNames].join("|");
+
+/** The factory builtin a binding was assigned from (`form = $form(` → "form"). */
+function factoryBindingFor(source: string, receiver: string): string | undefined {
+  if (!FACTORY_ALTERNATION) return undefined;
+  const lhs = receiver.replace(/\$/g, "\\$");
+  const re = new RegExp(`(?:^|[^\\w$.])${lhs}\\s*=\\s*(?:await\\s+)?\\$(${FACTORY_ALTERNATION})\\s*\\(`);
+  const match = re.exec(source);
+  return match ? match[1] : undefined;
 }
 
 function userSignature(callee: string, source: string): SignatureInfo | null {
@@ -419,7 +483,9 @@ function identifierBefore(source: string, parenIndex: number): string {
   let end = parenIndex;
   while (end > 0 && /\s/.test(source[end - 1]!)) end -= 1;
   let start = end;
-  while (start > 0 && /[\w$]/.test(source[start - 1]!)) start -= 1;
+  // Include `.` so a member call (`$util.format`, `form.submit`) is captured
+  // as its full dotted callee, not just the trailing segment.
+  while (start > 0 && /[\w$.]/.test(source[start - 1]!)) start -= 1;
   return source.slice(start, end);
 }
 

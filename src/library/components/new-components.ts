@@ -458,32 +458,37 @@ export const VirtualList: ComponentSpec = {
     scrollEl.style.maxHeight = `${Math.min(Math.max(total, 1), 12) * itemHeight}px`;
     scrollEl.style.overflow = "auto";
 
-    const renderSlice = (startIndex: number): void => {
-      windowEl.replaceChildren();
-      const viewHeight = scrollEl.clientHeight || itemHeight * 12;
+    const renderSlice = (winNode: HTMLElement, scroller: HTMLElement): void => {
+      winNode.replaceChildren();
+      const viewHeight = scroller.clientHeight || itemHeight * 12;
       const visible = Math.ceil(viewHeight / itemHeight) + 2;
-      const start = Math.max(0, startIndex);
+      const scrollTop = Number.isFinite(scroller.scrollTop) ? scroller.scrollTop : 0;
+      const start = Math.max(0, Math.floor(scrollTop / itemHeight));
       const end = Math.min(total, start + visible);
-      windowEl.style.transform = `translateY(${start * itemHeight}px)`;
+      winNode.style.transform = `translateY(${start * itemHeight}px)`;
       for (let i = start; i < end; i++) {
         const entry = rawItems[i];
         if (props.renderItem) {
-          windowEl.append(helpers.renderNode(entry ?? props.renderItem));
+          winNode.append(helpers.renderNode(entry ?? props.renderItem));
         } else if (entry && typeof entry === "object" && (entry as { __kind?: string }).__kind) {
-          windowEl.append(helpers.renderNode(entry));
+          winNode.append(helpers.renderNode(entry));
         } else {
           const row = el("div", { class: "rui-virtual-list-item", style: `height:${itemHeight}px` });
           row.append(el("span", {}, [asString(entry)]));
-          windowEl.append(row);
+          winNode.append(row);
         }
       }
     };
 
-    scrollEl.onscroll = () => {
-      const start = Math.floor(scrollEl.scrollTop / itemHeight);
-      renderSlice(start);
+    // Read scrollTop + window from the LIVE event target so virtualization keeps
+    // working after a morph re-render swaps the captured nodes (the handler is
+    // copied onto the on-page scroller, and `currentTarget` is that real node).
+    scrollEl.onscroll = (ev) => {
+      const liveScroller = (ev?.currentTarget ?? ev?.target ?? scrollEl) as HTMLElement;
+      const liveWindow = liveScroller.querySelector<HTMLElement>(".rui-virtual-list-window");
+      if (liveWindow) renderSlice(liveWindow, liveScroller);
     };
-    renderSlice(0);
+    renderSlice(windowEl, scrollEl);
     scrollEl.append(spacer, windowEl);
     viewport.append(scrollEl);
     return viewport;

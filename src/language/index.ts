@@ -42,6 +42,24 @@ import {
   type BuiltinEntry,
   type BuiltinCategory,
 } from "./builtins.js";
+import {
+  namespaceCatalog,
+  factoryResourceCatalog,
+  factoryResourceNames,
+  routeMembers,
+  i18nResultMembers,
+  findNamespace,
+  isNamespaceName,
+  findFactoryResource,
+  namespaceMembersAt,
+  findNamespaceMember,
+  findBuiltinConfig,
+  type NamespaceEntry,
+  type NamespaceMember,
+  type NamespaceMemberKind,
+  type FactoryResourceEntry,
+  type ConfigKey,
+} from "./namespaces.js";
 
 export type {
   GrammarSpec,
@@ -53,6 +71,11 @@ export type {
   SnippetEntry,
   BuiltinEntry,
   BuiltinCategory,
+  NamespaceEntry,
+  NamespaceMember,
+  NamespaceMemberKind,
+  FactoryResourceEntry,
+  ConfigKey,
 };
 
 export {
@@ -68,6 +91,17 @@ export {
   builtinsByName,
   findBuiltin,
   isBuiltinName,
+  namespaceCatalog,
+  factoryResourceCatalog,
+  factoryResourceNames,
+  routeMembers,
+  i18nResultMembers,
+  findNamespace,
+  isNamespaceName,
+  findFactoryResource,
+  namespaceMembersAt,
+  findNamespaceMember,
+  findBuiltinConfig,
 };
 
 /**

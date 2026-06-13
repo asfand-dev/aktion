@@ -17,11 +17,23 @@ completions, go-to-definition, rename, and more.
 - **Completions** — start typing and you get component names, your own
   file-scoped atoms / components / actions, keywords, and the full `$`-builtin
   catalog. Inside a component's trailing `{ … }` props object you get that
-  component's prop names.
+  component's prop names. Type a `.` after a namespace and every member is
+  offered: `$util.` (and nested `$util.style.` / `$util.rules.` / `$util.url.`),
+  `$storage.` (`.local` / `.session` / `.cookies`), `$console.`, `$toast.`, the
+  reactive `route.` handle, and — for a binding assigned from a factory builtin
+  (`$todos = $http(…)`, `form = $form(…)`) — that resource bag's members
+  (`.data` / `.refetch()`, `.values` / `.submit()`, …). Inside a config-taking
+  builtin's object (`$http({ … })`, `$query`, `$mutation`, `$socket`, `$sse`,
+  `$form`, `$store`, `$theme`, `$i18n`) you get its config keys (`url`,
+  `method`, `refetchInterval`, `colors`, …).
 - **Hover** — component signatures and descriptions, `$`-builtin docs, keyword
-  docs, and `$state` info.
-- **Signature help** — parameter hints for library components, `$`-builtins, and
-  your own components / actions / hooks, with the active argument tracked.
+  docs, `$state` info, per-member docs for every namespace / resource-bag
+  member (`$util.format`, `$storage.local.set`, `$todos.refetch`, `route.path`),
+  and config-object keys inside a builtin's `{ … }` (`$http`'s `url`, `$theme`'s
+  `colors`, …).
+- **Signature help** — parameter hints for library components, `$`-builtins,
+  namespace + resource-bag member calls (`$util.format(…)`, `form.field(…)`),
+  and your own components / actions / hooks, with the active argument tracked.
 - **Go to Definition** — `Cmd/Ctrl+Click` (or `F12`) a symbol to jump to its
   declaration. Works **across files**: clicking an imported binding (e.g.
   `$count` from `import { $count } from "./counter.aktion"`) opens the source

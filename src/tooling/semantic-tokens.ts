@@ -16,6 +16,14 @@ import { tokenize, type Token } from "../parser/lexer.js";
 import type { ComponentLibrary } from "../library/types.js";
 import { defaultLibrary } from "../library/index.js";
 import { findBuiltin } from "../language/builtins.js";
+import {
+  isNamespaceName,
+  findNamespace,
+  findFactoryResource,
+  factoryResourceNames,
+  routeMembers,
+  type NamespaceMember,
+} from "../language/namespaces.js";
 
 /** Token type legend (the host registers these in the same order). */
 export const semanticTokenTypes = [
@@ -66,29 +74,221 @@ export function getSemanticTokens(
   const hooks = new Set<string>();
   collectUserDeclarations(tokens, userComponents, userActions, hooks);
 
+  const factories = collectFactoryBindings(tokens);
+
   const out: SemanticToken[] = [];
   let prev: Token | undefined;
+  // Tracks the receiver chain so a member after a `.` can be resolved against
+  // the namespace / factory-bag / route catalogs (`$util.style.cx`,
+  // `$todos.refetch`, `route.path`).
+  let chain: MemberChain = null;
+  let dotPending = false;
+  // Bracket stack so object-literal keys (`{ variant: "primary" }`) — the props
+  // of an object-style component argument — are tagged as properties, not left
+  // to the generic TextMate layer.
+  const brackets: BracketFrame[] = [];
 
-  for (const t of tokens) {
-    const classified = classify(t, prev, {
-      components,
-      userComponents,
-      userActions,
-      hooks,
+  const emit = (t: Token, c: Classified): void => {
+    out.push({
+      line: t.line,
+      column: t.column,
+      length: tokenLength(t),
+      tokenType: c.type,
+      tokenModifiers: c.modifiers,
     });
-    if (classified) {
-      out.push({
-        line: t.line,
-        column: t.column,
-        length: tokenLength(t),
-        tokenType: classified.type,
-        tokenModifiers: classified.modifiers,
-      });
+  };
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i]!;
+    if (t.type === "Newline") continue;
+
+    // Maintain the bracket stack BEFORE classification so the `{` frame knows
+    // whether it is an object literal (a value position) or a code block.
+    if (t.type === "Punctuation" && (t.value === "(" || t.value === "[" || t.value === "{")) {
+      brackets.push({ bracket: t.value, isObject: t.value === "{" && isValuePosition(prev) });
+    } else if (t.type === "Punctuation" && (t.value === ")" || t.value === "]" || t.value === "}")) {
+      brackets.pop();
     }
-    if (t.type !== "Newline") prev = t;
+
+    // A `.` / `?.` keeps the chain alive and arms the next identifier as a
+    // member lookup.
+    if (isMemberAccess(t)) {
+      dotPending = chain !== null;
+      prev = t;
+      continue;
+    }
+
+    // Member position: classify against the receiver's catalog.
+    if (dotPending && chain && t.type === "Identifier") {
+      const resolved = resolveMember(chain, t.value);
+      emit(t, resolved.token);
+      chain = resolved.next;
+      dotPending = false;
+      prev = t;
+      continue;
+    }
+
+    dotPending = false;
+
+    // Object-literal key: an identifier at the start of an entry inside an
+    // object literal whose next token is `:` (`{ variant: … }`).
+    if (
+      t.type === "Identifier" &&
+      brackets[brackets.length - 1]?.isObject &&
+      isEntryStart(prev) &&
+      nextMeaningful(tokens, i + 1)?.value === ":"
+    ) {
+      emit(t, { type: "property", modifiers: [] });
+      chain = null;
+      prev = t;
+      continue;
+    }
+
+    // Default classification (keywords, numbers, components, state, …).
+    const classified = classify(t, prev, { components, userComponents, userActions, hooks });
+    if (classified) emit(t, classified);
+
+    // Does this token START a resolvable member chain?
+    chain = chainRootFor(t, factories);
+    prev = t;
   }
 
   return out;
+}
+
+interface BracketFrame {
+  bracket: "(" | "[" | "{";
+  /** True for a `{` opened in a value position (object literal vs. code block). */
+  isObject: boolean;
+}
+
+/**
+ * A `{` immediately following an expression-position token starts an object
+ * literal; one following `)` / an identifier / `}` starts a code block
+ * (function / if / for body).
+ */
+function isValuePosition(prev: Token | undefined): boolean {
+  if (!prev) return false;
+  if (prev.type === "Operator") return true; // =, =>, ||, &&, …
+  if (prev.type === "Keyword") return prev.value === "return";
+  if (prev.type === "Punctuation") {
+    // `(` / `[` / `,` (argument or element), `:` (object value), `?` (ternary).
+    return prev.value === "(" || prev.value === "[" || prev.value === "," ||
+      prev.value === ":" || prev.value === "?";
+  }
+  return false;
+}
+
+/** True when `prev` marks the start of a fresh object entry (`{` or `,`). */
+function isEntryStart(prev: Token | undefined): boolean {
+  return Boolean(prev && prev.type === "Punctuation" && (prev.value === "{" || prev.value === ","));
+}
+
+/** Receiver chain state used while resolving `obj.member` highlighting. */
+type MemberChain =
+  | { kind: "namespace"; ns: string; path: string[] }
+  | { kind: "factory"; members: readonly NamespaceMember[] }
+  | { kind: "route" }
+  | null;
+
+interface FactoryBindings {
+  /** `$x = $http(...)` — keyed by the bare state name (`"x"`). */
+  state: Map<string, string>;
+  /** `x = $http(...)` — keyed by the identifier name. */
+  ident: Map<string, string>;
+}
+
+/** The chain a token opens when it is a namespace builtin / factory bag / route. */
+function chainRootFor(t: Token, factories: FactoryBindings): MemberChain {
+  if (t.type === "StateIdentifier") {
+    if (isNamespaceName(t.value)) return { kind: "namespace", ns: t.value, path: [] };
+    const factory = factories.state.get(t.value);
+    if (factory) {
+      const entry = findFactoryResource(factory);
+      if (entry) return { kind: "factory", members: entry.members };
+    }
+    return null;
+  }
+  if (t.type === "Identifier") {
+    if (t.value === "route") return { kind: "route" };
+    const factory = factories.ident.get(t.value);
+    if (factory) {
+      const entry = findFactoryResource(factory);
+      if (entry) return { kind: "factory", members: entry.members };
+    }
+  }
+  return null;
+}
+
+/** Classify a member name against a receiver chain and compute the next chain. */
+function resolveMember(chain: MemberChain, name: string): { token: Classified; next: MemberChain } {
+  const asProperty: Classified = { type: "property", modifiers: [] };
+  if (!chain) return { token: asProperty, next: null };
+
+  if (chain.kind === "namespace") {
+    const ns = findNamespace(chain.ns);
+    const path = [...chain.path, name].join(".");
+    const member = ns?.members.find((m) => m.name === path);
+    if (member) {
+      if (member.kind === "namespace") {
+        return {
+          token: { type: "namespace", modifiers: ["defaultLibrary"] },
+          next: { kind: "namespace", ns: chain.ns, path: [...chain.path, name] },
+        };
+      }
+      return {
+        token: {
+          type: member.kind === "method" ? "function" : "property",
+          modifiers: ["defaultLibrary"],
+        },
+        next: null,
+      };
+    }
+    return { token: asProperty, next: null };
+  }
+
+  const members = chain.kind === "factory" ? chain.members : routeMembers;
+  const member = members.find((m) => m.name === name);
+  if (member) {
+    return {
+      token: { type: member.kind === "method" ? "function" : "property", modifiers: [] },
+      next: null,
+    };
+  }
+  return { token: asProperty, next: null };
+}
+
+/**
+ * Scan the token stream for `receiver = [await] $factory(` assignments so a
+ * binding's member access can resolve to the right resource bag.
+ */
+function collectFactoryBindings(tokens: Token[]): FactoryBindings {
+  const state = new Map<string, string>();
+  const ident = new Map<string, string>();
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i]!;
+    if (!(t.type === "Operator" && t.value === "=")) continue;
+    const receiver = prevMeaningful(tokens, i - 1);
+    if (!receiver) continue;
+    let j = i + 1;
+    let rhs = nextMeaningful(tokens, j);
+    // Skip a leading `await`.
+    if (rhs && rhs.type === "Keyword" && rhs.value === "await") {
+      j = tokens.indexOf(rhs) + 1;
+      rhs = nextMeaningful(tokens, j);
+    }
+    if (!rhs || rhs.type !== "StateIdentifier" || !factoryResourceNames.has(rhs.value)) continue;
+    if (receiver.type === "StateIdentifier") state.set(receiver.value, rhs.value);
+    else if (receiver.type === "Identifier") ident.set(receiver.value, rhs.value);
+  }
+  return { state, ident };
+}
+
+function prevMeaningful(tokens: Token[], from: number): Token | undefined {
+  for (let i = from; i >= 0; i -= 1) {
+    if (tokens[i]!.type !== "Newline") return tokens[i];
+  }
+  return undefined;
 }
 
 interface Scope {

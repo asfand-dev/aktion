@@ -32,7 +32,7 @@ const NAV_GROUPS = [
       { href: "index.html", label: "Introduction" },
       { href: "get-started.html", label: "Installation" },
       { href: "frameworks.html", label: "Frameworks" },
-      { href: "migration-guide.html", label: "Migration guide" },
+      { href: "migration-guide.html", label: "Migration to Aktion" },
     ],
   },
   {

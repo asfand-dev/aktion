@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const selector: vscode.DocumentSelector = { language: LANGUAGE };
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(selector, hoverProvider),
-    vscode.languages.registerCompletionItemProvider(selector, completionProvider, "$"),
+    vscode.languages.registerCompletionItemProvider(selector, completionProvider, "$", "."),
     vscode.languages.registerDocumentFormattingEditProvider(selector, formattingProvider),
     vscode.languages.registerDefinitionProvider(selector, definitionProvider),
     vscode.languages.registerReferenceProvider(selector, referenceProvider),

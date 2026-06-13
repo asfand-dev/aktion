@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 import { parse } from "../src/parser/index.js";
 import { Util } from "../src/runtime/util.js";
 import { morphChildren } from "../src/renderer/morph.js";
+import { VirtualList } from "../src/library/components/new-components.js";
+import type { RenderHelpers } from "../src/library/types.js";
 
 /* -------------------------------------------------------------------------- */
 /*  #1 — lexer must not hard-crash on legacy `@builtin(...)` / `$$x`           */
@@ -306,5 +308,87 @@ describe("#7 morph syncs programmatic value changes into focused fields", () => 
     } finally {
       container.remove();
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  #8 — VirtualList virtualization keeps working after a morph re-render.     */
+/*       The onscroll handler must resolve the LIVE event target, not the      */
+/*       captured (and possibly detached) window/scroller from render time —   */
+/*       otherwise scrolling silently mutates an off-page node and the list    */
+/*       stays frozen on its initial ~window of rows.                          */
+/* -------------------------------------------------------------------------- */
+
+describe("#8 VirtualList re-windows on scroll via the live event target", () => {
+  const noop = () => {/* no-op */};
+  const helpers = {
+    renderNode: () => document.createTextNode(""),
+    invoke: noop,
+    setState: noop,
+    resetState: noop,
+    sendToAssistant: noop,
+    openUrl: noop,
+    bindState: noop,
+    useInstanceState: <T,>(_key: string, initial: T) => {
+      let value = initial;
+      return { get: () => value, set: (next: T) => { value = next; } };
+    },
+    registerDisposer: noop,
+  } as unknown as RenderHelpers;
+
+  const itemHeight = 44;
+  const items = Array.from({ length: 2000 }, (_v, i) => `Row ${i}`);
+
+  const renderList = (): HTMLElement =>
+    VirtualList.render(
+      { __kind: "Component", name: "VirtualList", args: [items, { itemHeight }], argMeta: [{}, {}] },
+      { items, itemHeight },
+      helpers,
+    ) as HTMLElement;
+
+  const firstRowText = (win: Element | null): string =>
+    (win?.firstElementChild?.textContent ?? "").trim();
+
+  it("mounts only a small window of the 2000 rows initially", () => {
+    const root = renderList();
+    const win = root.querySelector(".rui-virtual-list-window");
+    expect(win).not.toBeNull();
+    expect(win!.children.length).toBeGreaterThan(0);
+    expect(win!.children.length).toBeLessThan(items.length);
+    expect(firstRowText(win)).toBe("Row 0");
+  });
+
+  it("re-windows when scrolled, reading scrollTop from the dispatched target", () => {
+    const root = renderList();
+    const scroller = root.querySelector<HTMLElement>(".rui-virtual-list-scroller")!;
+    const win = scroller.querySelector(".rui-virtual-list-window");
+
+    // jsdom does not lay out, so pin scrollTop deterministically.
+    Object.defineProperty(scroller, "scrollTop", { value: itemHeight * 500, configurable: true });
+    scroller.dispatchEvent(new Event("scroll"));
+
+    expect(firstRowText(win)).toBe("Row 500");
+    expect((win as HTMLElement).style.transform).toBe(`translateY(${500 * itemHeight}px)`);
+  });
+
+  it("updates the LIVE on-page window after a morph swaps in a fresh node", () => {
+    const root = renderList();
+    const captured = root.querySelector<HTMLElement>(".rui-virtual-list-scroller")!;
+
+    // Emulate a morph: a fresh on-page scroller (its own window child) keeps the
+    // freshly-rendered onscroll closure copied onto it. The closure still refers
+    // to the discarded `captured` node, so the fix must follow the event target.
+    const live = captured.cloneNode(true) as HTMLElement;
+    live.onscroll = captured.onscroll;
+    Object.defineProperty(live, "scrollTop", { value: itemHeight * 100, configurable: true });
+    const liveWindow = live.querySelector(".rui-virtual-list-window");
+    const capturedWindow = captured.querySelector(".rui-virtual-list-window");
+
+    live.dispatchEvent(new Event("scroll"));
+
+    // The live (on-page) window re-windows…
+    expect(firstRowText(liveWindow)).toBe("Row 100");
+    // …and the detached captured window is left untouched.
+    expect(firstRowText(capturedWindow)).toBe("Row 0");
   });
 });
