@@ -174,7 +174,7 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-m);
-  padding: 20px;
+  padding: var(--rui-app-margin, 20px);
 }
 
 .rui-error-banner {
@@ -2501,6 +2501,20 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   border-radius: var(--rui-radius-md);
   align-self: stretch;
 }
+/* Full-height rail (default): inside an AppShell, pin the sidebar to the
+   viewport so the main content scrolls beneath it. top + height track the app
+   margin so the rail stays inside the same inset as the rest of the shell
+   (margin:0 -> full bleed). Sticky (not fixed) keeps it in normal flow +
+   RTL-safe, and the stretched AppShell sidebar column gives it room to stick.
+   Scoped to AppShell because "full height / fixed beneath scrolling content"
+   is only meaningful there — a standalone Sidebar keeps its natural height. */
+.rui-app-shell .rui-sidebar[data-full-height="true"] {
+  position: sticky;
+  top: var(--rui-app-margin, 20px);
+  height: calc(100vh - var(--rui-app-margin, 20px) * 2);
+  max-height: calc(100vh - var(--rui-app-margin, 20px) * 2);
+  overflow-y: auto;
+}
 .rui-sidebar-header { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--rui-spacing-s); border-bottom: 1px solid var(--rui-color-border-subtle); }
 .rui-sidebar-brand { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--rui-color-text); }
 .rui-sidebar-tagline { font-size: 12px; color: var(--rui-color-text-muted); }
@@ -2579,14 +2593,22 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: var(--rui-spacing-l);
 }
 .rui-app-shell-topbar {
+  display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--rui-spacing-m);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   background: var(--rui-color-surface);
   border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
 }
+/* Topbar content (a Row / TopBar / actions block) grows to fill the bar so
+   the mobile hamburger can sit beside it without pushing it onto its own
+   line. min-width:0 lets long content shrink instead of overflowing. */
+.rui-app-shell-topbar > *:not(.rui-app-shell-toggle) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rui-app-shell-toggle { flex: 0 0 auto; }
 .rui-app-shell-content {
   display: flex;
   flex-direction: column;
@@ -7714,6 +7736,15 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   .rui-app-shell[data-collapsible="true"] .rui-app-shell-toggle {
     display: inline-flex;
   }
+  /* Inside the off-canvas drawer the host is already a full-height fixed
+     panel, so let a full-height rail fill it normally instead of sticking. */
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-full-height="true"] {
+    position: static;
+    top: auto;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
 }
 
 /* Collapsed Sidebar (icon rail) ------------------------------ */
@@ -7723,6 +7754,14 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-sidebar[data-collapsed="true"] .rui-sidebar-item-label,
 .rui-sidebar[data-collapsed="true"] .rui-sidebar-item-badge { display: none; }
 .rui-sidebar[data-collapsed="true"] .rui-sidebar-item { justify-content: center; }
+/* Collapsed rail shows only the brand's initial — centre it in the column. */
+.rui-sidebar[data-collapsed="true"] .rui-sidebar-header { align-items: center; }
+.rui-sidebar[data-collapsed="true"] .rui-sidebar-brand {
+  text-align: center;
+  font-size: 18px;
+  line-height: 1;
+  width: 100%;
+}
 
 /* New components (Tier 1–3) ----------------------------------- */
 .rui-icon-button {

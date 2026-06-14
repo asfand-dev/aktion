@@ -801,17 +801,25 @@ export const Sidebar: ComponentSpec = {
     { name: "brand", type: "string", optional: true, description: "Product name / workspace label at the top" },
     { name: "tagline", type: "string", optional: true },
     { name: "footer", type: "Node[]", optional: true, description: "Footer block (Avatar + name, upgrade CTA, …)" },
-    { name: "collapsed", type: "boolean", optional: true, description: "Render as an icon-only rail (hides labels/badges)" },
+    { name: "collapsed", type: "boolean", optional: true, description: "Render as an icon-only rail (hides labels/badges; brand shrinks to its initial)" },
+    { name: "fullHeight", type: "boolean", optional: true, description: "Pin the rail to the full viewport height so the main content scrolls beneath it (default true). Set false for an auto-height sidebar that scrolls with the page." },
   ],
   render: (_node, props, helpers) => {
     const collapsed = asBoolean(props.collapsed);
+    const fullHeight = props.fullHeight === undefined ? true : asBoolean(props.fullHeight);
     const root = el("aside", { class: "rui-sidebar" });
     if (collapsed) root.dataset.collapsed = "true";
+    if (fullHeight) root.dataset.fullHeight = "true";
     const brand = asString(props.brand);
     const tagline = asString(props.tagline);
     if (brand || tagline) {
       const header = el("div", { class: "rui-sidebar-header" });
-      if (brand) header.append(el("div", { class: "rui-sidebar-brand" }, [brand]));
+      if (brand) {
+        // Collapsed rail: condense the brand to its first character so it fits
+        // the icon-only column (centred via CSS); full label otherwise.
+        const brandText = collapsed ? (brand.trim().charAt(0).toUpperCase() || brand) : brand;
+        header.append(el("div", { class: "rui-sidebar-brand" }, [brandText]));
+      }
       if (tagline) header.append(el("div", { class: "rui-sidebar-tagline" }, [tagline]));
       root.append(header);
     }
@@ -841,11 +849,11 @@ export const AppShell: ComponentSpec = {
     { name: "sidebar", type: "Sidebar", description: "Pass a Sidebar(...) node" },
     { name: "content", type: "Node[]", description: "Main content (typically starts with a PageHeader)" },
     { name: "topbar", type: "Node[]", optional: true, description: "Optional thin top bar above the content" },
-    { name: "collapsible", type: "boolean", optional: true, description: "Show a hamburger that toggles the sidebar drawer on mobile" },
+    { name: "collapsible", type: "boolean", optional: true, description: "Show a hamburger that toggles the sidebar drawer on mobile (default true)" },
     { name: "sidebarOpen", type: "boolean", optional: true, description: "$variable controlling whether the mobile drawer is open" },
   ],
   render: (_node, props, helpers) => {
-    const collapsible = asBoolean(props.collapsible);
+    const collapsible = props.collapsible === undefined ? true : asBoolean(props.collapsible);
     const sidebarOpen = asBoolean(props.sidebarOpen);
     const root = el("div", { class: "rui-app-shell" });
     if (collapsible) root.dataset.collapsible = "true";

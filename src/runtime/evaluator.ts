@@ -137,6 +137,91 @@ function getToastManager(ctx: EvaluationContext): ToastManager {
   return ctx.toastManager;
 }
 
+/**
+ * Build a synthetic `ComponentNode` the author never wrote — used to inject
+ * runtime-managed UI (currently the auto-rendered `$toast` layer). `props` is
+ * an already-evaluated bag keyed by prop name; each value is dropped into its
+ * declared slot, mirroring the positional contract `resolveLibraryCallArgs`
+ * produces (so it survives prop reordering). Undefined values and trailing
+ * empty slots are omitted. `key` becomes the stable per-instance identity.
+ */
+function makeRuntimeNode(
+  ctx: EvaluationContext,
+  name: string,
+  props: Record<string, unknown>,
+  key?: unknown,
+): ComponentNode {
+  const spec = ctx.library ? findComponent(ctx.library, name) : undefined;
+  if (!spec) {
+    return { __kind: "Component", name, args: [props], argMeta: [{}], explicitKey: key };
+  }
+  const slotByName = new Map<string, number>();
+  spec.props.forEach((p, i) => {
+    slotByName.set(p.name, i);
+    if (p.aliases) for (const alias of p.aliases) if (!slotByName.has(alias)) slotByName.set(alias, i);
+  });
+  const args: unknown[] = spec.props.map(() => undefined);
+  for (const [propName, value] of Object.entries(props)) {
+    if (value === undefined) continue;
+    const slot = slotByName.get(propName);
+    if (slot !== undefined) args[slot] = value;
+  }
+  while (args.length > 0 && args[args.length - 1] === undefined) args.pop();
+  return { __kind: "Component", name, args, argMeta: args.map(() => ({})), explicitKey: key };
+}
+
+/**
+ * Build the auto-rendered toast layer from the live `$toast` items — the same
+ * shape an author would hand-write as `Toasts($toast.items.map(t => Toast(…)))`.
+ * Returns null when there is nothing to show. A message-only toast renders the
+ * message as the prominent title (no empty title row); a titled toast keeps the
+ * message as the secondary line. Each toast is keyed by id so per-instance
+ * state survives re-renders regardless of stack position.
+ */
+function buildToastLayer(ctx: EvaluationContext): ComponentNode | null {
+  const mgr = ctx.toastManager;
+  if (!mgr) return null;
+  const items = mgr.items;
+  if (items.length === 0) return null;
+  const children = items.map((item) =>
+    makeRuntimeNode(
+      ctx,
+      "Toast",
+      {
+        title: item.title != null ? item.title : item.message,
+        message: item.title != null ? item.message : undefined,
+        tone: item.tone,
+        onClose: () => mgr.dismiss(item.id),
+      },
+      item.id,
+    ),
+  );
+  return makeRuntimeNode(ctx, "Toasts", { children }, "$toast");
+}
+
+/**
+ * Install the reserved `aktion` (UI root) binding, wrapping the author's root
+ * thunk so live `$toast` notifications auto-render. Used for both the `$app(…)`
+ * builtin and the legacy `aktion = …` assignment, so toasts appear without the
+ * author wiring a `Toasts(...)` anywhere. If the program reads `$toast.items`
+ * itself (the long-hand pattern), it owns rendering and we don't inject — so
+ * existing programs never double-render.
+ */
+function installAppRootBinding(ctx: EvaluationContext, rootThunk: () => unknown): void {
+  ctx.bindings.set("aktion", () => {
+    ctx.toastItemsRead = false;
+    const root = rootThunk();
+    if (ctx.toastManager && !ctx.toastItemsRead) {
+      const layer = buildToastLayer(ctx);
+      if (layer) {
+        if (Array.isArray(root)) return [...root, layer];
+        return root == null ? layer : [root, layer];
+      }
+    }
+    return root;
+  });
+}
+
 /** Lazily build (and cache on the context) the `$dom` observer manager. */
 function getDomManager(ctx: EvaluationContext): DomManager {
   if (!ctx.domManager) ctx.domManager = createDomManager(ctx);
@@ -823,6 +908,14 @@ export interface EvaluationContext {
    */
   toastManager?: ToastManager;
   /**
+   * Per-render flag: set true when the program reads `$toast.items` while the
+   * `$app(...)` tree is being evaluated (i.e. the author renders toasts by
+   * hand). Reset at the start of each `$app` evaluation; when it stays false
+   * and toasts exist, the runtime auto-renders a `Toasts` layer so authors
+   * don't have to wire one up. See the `$app` case in `evaluateCall`.
+   */
+  toastItemsRead?: boolean;
+  /**
    * Lazily-created singleton backing the reserved `$dom` observer namespace
    * (`$dom.onResize`, `$dom.onIntersect`, `$dom.measure`, …). Every observer
    * it creates registers on `disposers`, so all are torn down on replan.
@@ -1361,7 +1454,7 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
       // in source wins.
       const inner = stmt.expression;
       if (isAppCall(inner)) {
-        ctx.bindings.set("aktion", () => evaluate(inner, ctx));
+        installAppRootBinding(ctx, () => evaluate(inner, ctx));
       } else if (isThemeCall(inner)) {
         ctx.bindings.set("theme", () => evaluate(inner, ctx));
       }
@@ -1371,7 +1464,13 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
       if (stmt.isState) return;
       ctx.expressions.set(stmt.identifier, stmt.expression);
       const expr = stmt.expression;
-      ctx.bindings.set(stmt.identifier, () => evaluate(expr, ctx));
+      // The legacy `aktion = …` UI-root form gets the same auto-toast wrapper
+      // as `$app(…)`; everything else is a plain value binding.
+      if (stmt.identifier === "aktion") {
+        installAppRootBinding(ctx, () => evaluate(expr, ctx));
+      } else {
+        ctx.bindings.set(stmt.identifier, () => evaluate(expr, ctx));
+      }
       return;
     }
   }

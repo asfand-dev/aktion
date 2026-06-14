@@ -317,14 +317,23 @@
     .preview-pane { background: var(--bg-2); height: 430px; overflow: auto; padding: 18px; border-left: 1px solid var(--border); }
     .preview-pane aktion-app { display: block; }
 
-    /* ----- hint + feedback ----- */
-    .hint-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin-top: 16px; }
+    /* ----- mission actions (hint + solution) + feedback ----- */
+    .mission-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .mission-actions .btn { flex: 0 1 auto; }
     .hint-box {
-      flex: 1; min-width: 240px; display: none; background: var(--surface); border: 1px dashed var(--border-strong);
+      display: none; margin-top: 12px; background: var(--surface); border: 1px dashed var(--border-strong);
       border-radius: var(--radius-sm); padding: 12px 16px; font-size: 14px; color: var(--text-soft);
     }
     .hint-box.show { display: block; animation: fadeUp .3s var(--ease) both; }
     .hint-box b { color: var(--ak-amber); }
+
+    /* ----- informational step (no editor: Getting Started) ----- */
+    .stage.info-step .workbench,
+    .stage.info-step .objectives,
+    .stage.info-step .mission-progress,
+    .stage.info-step .mission-actions,
+    .stage.info-step .hint-box { display: none; }
+    .stage.info-step .mission-brief { margin-bottom: 0; }
     .level-nav { display: flex; gap: 12px; margin-top: 20px; align-items: center; }
     .complete-btn { margin-left: auto; }
     .complete-btn.ready { animation: readyPulse 1.6s infinite; }
@@ -460,7 +469,7 @@
     <!-- ============================ INTRO ============================ -->
     <section class="intro" id="introScreen">
       <div class="wrap">
-        <span class="badge-pill"><span class="dot"></span> INTERACTIVE TUTORIAL · 11 LEVELS · 0 BUILD STEPS</span>
+        <span class="badge-pill"><span class="dot"></span> INTERACTIVE TUTORIAL · 13 LEVELS · 0 BUILD STEPS</span>
         <h1>Learn <span class="grad-text">Aktion</span> by actually building things.</h1>
         <p class="lead">
           Eleven bite-size levels. A live editor with instant previews. XP, achievements, and exactly one dragon.
@@ -473,7 +482,7 @@
           <a class="btn btn-ghost btn-xl" href="get-started.html"><i class="fa-solid fa-book"></i> I prefer calm, quiet docs</a>
         </div>
         <div class="intro-stats">
-          <span class="stat-chip"><i class="fa-solid fa-layer-group"></i> 11 levels — it goes to 11</span>
+          <span class="stat-chip"><i class="fa-solid fa-layer-group"></i> 13 levels — two louder than 11</span>
           <span class="stat-chip"><i class="fa-solid fa-mug-hot"></i> ~25 min (one coffee)</span>
           <span class="stat-chip"><i class="fa-solid fa-star"></i> 1,300 XP to earn</span>
           <span class="stat-chip"><i class="fa-solid fa-floppy-disk"></i> Progress auto-saved</span>
@@ -519,6 +528,11 @@
             </div>
             <p class="mission-brief" id="missionBrief"></p>
             <ul class="objectives" id="objectives"></ul>
+            <div class="mission-actions">
+              <button class="btn btn-ghost" id="hintBtn"><i class="fa-solid fa-lightbulb"></i> <span id="hintBtnLabel">Hint</span></button>
+              <button class="btn btn-ghost" id="solutionBtn"><i class="fa-solid fa-wand-magic-sparkles"></i> Solution</button>
+            </div>
+            <div class="hint-box" id="hintBox"></div>
           </div>
 
           <div class="workbench">
@@ -529,7 +543,6 @@
               <div class="bar-actions">
                 <button class="bar-btn" id="runBtn" title="Cmd/Ctrl + Enter"><i class="fa-solid fa-play"></i> Run</button>
                 <button class="bar-btn" id="resetBtn"><i class="fa-solid fa-rotate-left"></i> Reset</button>
-                <button class="bar-btn" id="solutionBtn"><i class="fa-solid fa-wand-magic-sparkles"></i> Solution</button>
               </div>
             </div>
             <div class="split">
@@ -539,11 +552,6 @@
               </div>
               <div class="preview-pane" id="preview"></div>
             </div>
-          </div>
-
-          <div class="hint-row">
-            <button class="btn btn-ghost" id="hintBtn"><i class="fa-solid fa-lightbulb"></i> <span id="hintBtnLabel">Hint</span></button>
-            <div class="hint-box" id="hintBox"></div>
           </div>
 
           <div class="level-nav">
@@ -572,7 +580,7 @@
         </div>
         <div class="finish-stats">
           <div class="fstat"><b id="statXp">0</b><span>XP earned</span></div>
-          <div class="fstat"><b id="statLevels">11/11</b><span>Levels</span></div>
+          <div class="fstat"><b id="statLevels">13/13</b><span>Levels</span></div>
           <div class="fstat"><b id="statHints">0</b><span>Hints used</span></div>
           <div class="fstat"><b id="statTime">—</b><span>Time</span></div>
         </div>
@@ -611,13 +619,31 @@
   <!-- =================================================================
        Level code: starters & solutions (raw text, no escaping needed)
        ================================================================== -->
-  <script type="text/plain" data-level="1" data-kind="starter">
+  <script type="text/plain" data-level="2" data-kind="starter">
+// Everything starts with $app(...) — it mounts your UI.
+// Edit anything. The preview updates as you type.
+
+$app(Card([
+  CardHeader("Hello, Aktion", { subtitle: "Your first program" }),
+  Text("This UI is rendered from the code on the left."),
+  Markdown("Edit it. Break it. **Nobody is watching.**")
+]))
+</script>
+  <script type="text/plain" data-level="2" data-kind="solution">
+$app(Card([
+  CardHeader("Hello, Aktion", { subtitle: "Your first program" }),
+  Text("This UI is rendered from the code on the left."),
+  Markdown("Edit it. Break it. **Nobody is watching.**"),
+  Text("Hi back, Aktion!")
+]))
+</script>
+  <script type="text/plain" data-level="3" data-kind="starter">
 $app(Card([
   CardHeader("👋 Hello, Aktion"),
   Text("Plain text. Riveting stuff.")
 ]))
 </script>
-  <script type="text/plain" data-level="1" data-kind="solution">
+  <script type="text/plain" data-level="3" data-kind="solution">
 $app(Card([
   CardHeader("👋 Hello, Aktion", { subtitle: "My very first component tree" }),
   Markdown("This is **bold**, this is *italic*, and this is _shipping to prod_."),
@@ -625,7 +651,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="2" data-kind="starter">
+  <script type="text/plain" data-level="4" data-kind="starter">
 $count = 0
 
 $app(Card([
@@ -636,7 +662,7 @@ $app(Card([
   ], { gap: "sm" })
 ]))
 </script>
-  <script type="text/plain" data-level="2" data-kind="solution">
+  <script type="text/plain" data-level="4" data-kind="solution">
 $count = 0
 
 $app(Card([
@@ -650,12 +676,12 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="3" data-kind="starter">
+  <script type="text/plain" data-level="5" data-kind="starter">
 $app(Column([
   PageHeader("Mission Control", { subtitle: "Numbers that go up and to the right" })
 ], { gap: "lg" }))
 </script>
-  <script type="text/plain" data-level="3" data-kind="solution">
+  <script type="text/plain" data-level="5" data-kind="solution">
 $app(Column([
   PageHeader("Mission Control", { subtitle: "Numbers that go up and to the right" }),
   Grid([
@@ -670,7 +696,7 @@ $app(Column([
 ], { gap: "lg" }))
 </script>
 
-  <script type="text/plain" data-level="4" data-kind="starter">
+  <script type="text/plain" data-level="6" data-kind="starter">
 $todos = [
   { title: "Learn Aktion", done: true },
   { title: "Build something cool", done: false },
@@ -682,7 +708,7 @@ $app(Card([
   Column($todos.map(t => Text(t.title)), { gap: "sm" })
 ]))
 </script>
-  <script type="text/plain" data-level="4" data-kind="solution">
+  <script type="text/plain" data-level="6" data-kind="solution">
 $todos = [
   { title: "Learn Aktion", done: true },
   { title: "Build something cool", done: false },
@@ -702,7 +728,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="5" data-kind="starter">
+  <script type="text/plain" data-level="7" data-kind="starter">
 function deploy() {
   $toast.info("Deploying… please remain calm.")
 }
@@ -712,7 +738,7 @@ $app(Card([
   Button("Deploy to prod", { variant: "primary", icon: "rocket", onClick: () => deploy() })
 ]))
 </script>
-  <script type="text/plain" data-level="5" data-kind="solution">
+  <script type="text/plain" data-level="7" data-kind="solution">
 $deploys = 0
 
 function deploy() {
@@ -733,7 +759,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="6" data-kind="starter">
+  <script type="text/plain" data-level="8" data-kind="starter">
 form = $form({
   values: { email: "" },
   rules: {
@@ -748,7 +774,7 @@ $app(Card([
   Button("Sign up", { variant: "primary", onClick: () => form.submit() })
 ]))
 </script>
-  <script type="text/plain" data-level="6" data-kind="solution">
+  <script type="text/plain" data-level="8" data-kind="solution">
 form = $form({
   values: { email: "", password: "" },
   rules: {
@@ -768,7 +794,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="7" data-kind="starter">
+  <script type="text/plain" data-level="9" data-kind="starter">
 $seconds = 0
 
 $effect(() => { $seconds++ }, ["every(1000)"])
@@ -778,7 +804,7 @@ $app(Card([
   Text(`You've been on this level for ${$seconds}s`)
 ]))
 </script>
-  <script type="text/plain" data-level="7" data-kind="solution">
+  <script type="text/plain" data-level="9" data-kind="solution">
 $seconds = 0
 
 $effect(() => { $seconds++ }, ["every(1000)"])
@@ -800,7 +826,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="8" data-kind="starter">
+  <script type="text/plain" data-level="10" data-kind="starter">
 $repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
 
 $app(Card([
@@ -808,7 +834,7 @@ $app(Card([
   Text("TODO: handle loading, error and data states…")
 ]))
 </script>
-  <script type="text/plain" data-level="8" data-kind="solution">
+  <script type="text/plain" data-level="10" data-kind="solution">
 $repo = $http({ url: "https://api.github.com/repos/asfand-dev/aktion" })
 
 $app(Card([
@@ -825,13 +851,13 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="9" data-kind="starter">
+  <script type="text/plain" data-level="11" data-kind="starter">
 $app(Column([
   Text("I am painfully unstyled.", { sx: { p: "m" } }),
   Text("Help us. Please.", { sx: { p: "m" } })
 ], { gap: "md" }))
 </script>
-  <script type="text/plain" data-level="9" data-kind="solution">
+  <script type="text/plain" data-level="11" data-kind="solution">
 $app(Column([
   Text("Now THIS is podracing. ✨", {
     sx: {
@@ -852,7 +878,7 @@ $app(Column([
 ], { gap: "md" }))
 </script>
 
-  <script type="text/plain" data-level="10" data-kind="starter">
+  <script type="text/plain" data-level="12" data-kind="starter">
 $theme({
   colors: { primary: "#6366f1" }
 })
@@ -865,7 +891,7 @@ $app(Card([
   ], { gap: "md" })
 ]))
 </script>
-  <script type="text/plain" data-level="10" data-kind="solution">
+  <script type="text/plain" data-level="12" data-kind="solution">
 $theme({
   colors: { primary: "#10b981", accent: "#f59e0b" },
   radius: { md: "14px", button: "12px" },
@@ -882,7 +908,7 @@ $app(Card([
 ]))
 </script>
 
-  <script type="text/plain" data-level="11" data-kind="starter">
+  <script type="text/plain" data-level="13" data-kind="starter">
 // FINAL BOSS: build Mission Control.
 // The dragon is watching. The dragon is also your PM.
 
@@ -892,7 +918,7 @@ $app(Column([
   PageHeader("🚀 Mission Control", { subtitle: "Everything is nominal. Probably." })
 ], { gap: "lg" }))
 </script>
-  <script type="text/plain" data-level="11" data-kind="solution">
+  <script type="text/plain" data-level="13" data-kind="solution">
 // FINAL BOSS: Mission Control. The dragon never stood a chance.
 
 $uptime = 0
@@ -944,6 +970,49 @@ $app(Column([
 
     /* ============================ levels ============================ */
     const LEVELS = [
+      {
+        info: true,
+        icon: "fa-rocket", title: "Getting Started",
+        railSub: "Install in seconds",
+        tag: "Chapter 0, in which you get Aktion running. Pick one of three ways — no PhD required.",
+        xp: 50, achievement: "Liftoff",
+        learn: `
+          <p><strong>Aktion runs anywhere a web component does.</strong> Pick whichever start fits — each is one or two lines, no config.</p>
+          <p><strong>1 · Scaffold a project</strong> (recommended) — a hot-reloading Vite&nbsp;+&nbsp;TypeScript app:</p>
+          <pre class="mini-code">npm create aktion@latest my-app
+cd my-app
+npm install
+npm run dev</pre>
+          <p><strong>2 · Drop in a CDN tag</strong> — zero build, paste into any HTML page:</p>
+          <pre class="mini-code">&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
+&lt;aktion-app response="$app(Text('It works'))"&gt;&lt;/aktion-app&gt;</pre>
+          <p><strong>3 · Install from npm</strong> — adding Aktion to an existing app? Import it once; it registers the <code>&lt;aktion-app&gt;</code> element:</p>
+          <pre class="mini-code">npm i aktion-runtime</pre>
+          <p>That's the whole setup — no JSX, no Babel, no bundler required. Hit <strong>Continue</strong> and write your first program.</p>`,
+        brief: "Nothing to type here — skim the three ways to install Aktion, then continue.",
+        objectives: [],
+        hints: [],
+      },
+      {
+        icon: "fa-hand", title: "Hello, Aktion",
+        railSub: "Your first program",
+        tag: "“It's just JavaScript” — and this time it legally is. Aktion is a strict subset of JS.",
+        xp: 100, achievement: "Hello, Aktion",
+        learn: `
+          <p><strong><code>$app(...)</code> mounts your UI.</strong> One call — that's the whole entry point. No imports, no build step, no JSX.</p>
+          <p>Everything on screen is a <strong>component call</strong>: <code>Card</code>, <code>Text</code>, <code>Markdown</code>… and children go in an array — <code>Card([childA, childB])</code>.</p>
+          <p>The preview on the right re-renders as you type. Take a breath — you're safe here.</p>`,
+        brief: "Add one more <code>Text(...)</code> line inside the card. Say hi back.",
+        objectives: [
+          { label: "Keep the app mounted with $app(…)", test: (c) => /\$app\s*\(/.test(c) },
+          { label: "Render at least two Text(…) lines", test: (c) => count(c, /Text\s*\(/g) >= 2 },
+        ],
+        hints: [
+          "Components live inside the <code>[ ]</code> array — add <code>Text(\"Hi back, Aktion!\")</code> after the Markdown line.",
+          "Mind the comma between items in the array.",
+          "Stuck? The Solution button is right there and judges nobody.",
+        ],
+      },
       {
         icon: "fa-hand-spock", title: "Hello, Component",
         railSub: "Your first render",
@@ -1270,7 +1339,7 @@ $repo.refetch() // run it back</pre>
     const TOTAL_XP = LEVELS.reduce((a, l) => a + l.xp, 0);
 
     /* ============================ state ============================ */
-    const SAVE_KEY = "aktion-quest-v1";
+    const SAVE_KEY = "aktion-quest-v2";
     let state = { xp: 0, completed: [], current: 0, startedAt: null, code: {}, hints: {}, konami: false, name: "Anonymous Dev" };
     try { state = { ...state, ...(JSON.parse(localStorage.getItem(SAVE_KEY)) || {}) }; } catch (_) {}
     const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) {} };
@@ -1384,6 +1453,9 @@ $repo.refetch() // run it back</pre>
       introScreen.style.display = "none";
       finishScreen.classList.remove("active");
       gameScreen.classList.add("active");
+      // Informational steps (e.g. "Getting Started") drop the editor/objectives
+      // and just teach — the workbench, objectives and mission actions hide via CSS.
+      $id("stage").classList.toggle("info-step", !!lvl.info);
 
       const badge = $id("lvlBadge");
       badge.textContent = lvl.boss ? "FINAL BOSS" : `LEVEL ${i + 1} / ${LEVELS.length}`;
@@ -1394,7 +1466,7 @@ $repo.refetch() // run it back</pre>
       $id("lvlTag").textContent = lvl.tag;
       $id("lvlLearn").innerHTML = lvl.learn;
       $id("lvlLearn").querySelectorAll("pre.mini-code").forEach((p) => { p.innerHTML = highlight(p.textContent); });
-      $id("missionBrief").textContent = lvl.brief;
+      $id("missionBrief").innerHTML = lvl.brief;
       $id("fileName").textContent = lvl.boss ? "final-boss.aktion" : `level-${i + 1}.aktion`;
 
       objectivesEl.innerHTML = "";
@@ -1417,7 +1489,9 @@ $repo.refetch() // run it back</pre>
         ? `Next level <i class="fa-solid fa-arrow-right"></i>`
         : lvl.boss
           ? `Slay the dragon <i class="fa-solid fa-dragon"></i>`
-          : `Complete level <i class="fa-solid fa-arrow-right"></i>`;
+          : lvl.info
+            ? `Continue <i class="fa-solid fa-arrow-right"></i>`
+            : `Complete level <i class="fa-solid fa-arrow-right"></i>`;
 
       checkObjectives();
       renderPreview(editor.value);
@@ -1554,7 +1628,7 @@ $repo.refetch() // run it back</pre>
     $id("replayBtn").addEventListener("click", () => showLevel(0));
     $id("certName").addEventListener("input", (e) => { state.name = e.target.value; save(); });
     $id("bragBtn").addEventListener("click", async () => {
-      const brag = `🏆 ${state.name || "Anonymous Dev"} just became a Certified Aktion Hero — ${state.xp} XP, 11/11 levels, one dragon refactored. Learn Aktion the fun way: https://asfand-dev.github.io/aktion/tutorial.html`;
+      const brag = `🏆 ${state.name || "Anonymous Dev"} just became a Certified Aktion Hero — ${state.xp} XP, ${LEVELS.length}/${LEVELS.length} levels, one dragon refactored. Learn Aktion the fun way: https://asfand-dev.github.io/aktion/tutorial.html`;
       try { await navigator.clipboard.writeText(brag); toast("Copied to clipboard", "Go forth and humble-brag responsibly.", "fa-copy"); }
       catch (_) { toast("Clipboard said no", brag, "fa-copy"); }
     });

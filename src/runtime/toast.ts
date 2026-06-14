@@ -10,8 +10,12 @@
  * timers are cleared on replan / disconnect via the context's disposer list,
  * and `notify()` re-renders the host whenever the list changes.
  *
- * Render the live list with the existing `Toasts` / `Toast` components, e.g.:
- *   Toasts(map($toast.items, t =>
+ * The live list renders itself: the evaluator auto-appends a `Toasts(...)`
+ * layer to the UI root (see `installAppRootBinding`), so a plain
+ * `$toast.success("Saved")` is enough — authors don't wire up a `Toasts(...)`.
+ * Reading `$toast.items` (the `items` getter flips `ctx.toastItemsRead`) opts
+ * out of the auto-layer so authors can still place the stack themselves:
+ *   Toasts($toast.items.map(t =>
  *     Toast({ title: t.title, message: t.message, tone: t.tone,
  *             onClose: () => $toast.dismiss(t.id) })))
  */
@@ -93,7 +97,6 @@ export function createToastManager(ctx: EvaluationContext): ToastManager {
     if (next.length === items.length) return;
     // Replace the array (new identity) so fine-grained readers re-render.
     items = next;
-    manager.items = items;
     notify();
   };
 
@@ -101,7 +104,6 @@ export function createToastManager(ctx: EvaluationContext): ToastManager {
     if (items.length === 0) return;
     for (const id of [...timers.keys()]) clearTimer(id);
     items = [];
-    manager.items = items;
     notify();
   };
 
@@ -118,7 +120,6 @@ export function createToastManager(ctx: EvaluationContext): ToastManager {
       createdAt: Date.now(),
     };
     items = [...items, item];
-    manager.items = items;
     if (duration > 0) {
       timers.set(
         id,
@@ -138,7 +139,15 @@ export function createToastManager(ctx: EvaluationContext): ToastManager {
       show(message, { ...options, tone });
 
   const manager: ToastManager = {
-    items,
+    // Reading `$toast.items` means the author is rendering the toasts by hand
+    // (the classic `Toasts($toast.items.map(...))` pattern). Flag that on the
+    // context so the runtime's auto-rendered toast layer steps aside and we
+    // never double-render — see the `$app` injection in the evaluator.
+    // Internal code reads the `items` closure directly and never trips this.
+    get items() {
+      ctx.toastItemsRead = true;
+      return items;
+    },
     show,
     success: withTone("success"),
     error: withTone("danger"),
@@ -152,7 +161,6 @@ export function createToastManager(ctx: EvaluationContext): ToastManager {
     for (const handle of timers.values()) clearTimeout(handle);
     timers.clear();
     items = [];
-    manager.items = items;
   });
 
   return manager;

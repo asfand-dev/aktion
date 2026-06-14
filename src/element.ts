@@ -112,6 +112,14 @@ const ATTRIBUTE_SCROLL_RESTORATION = "scroll-restoration";
  * properties cascade to every component.
  */
 const ATTRIBUTE_DIR = "dir";
+/**
+ * Outer spacing around the rendered app shell. A bare number is treated as
+ * pixels (`margin="12"` → `12px`); a full CSS length is passed through
+ * (`margin="1rem"`). Reflected onto `.rui-root` as the `--rui-app-margin`
+ * custom property, which the stylesheet consumes (default `20px`). Set
+ * `margin="0"` to let the app shell touch the edges of its container.
+ */
+const ATTRIBUTE_MARGIN = "margin";
 
 // Re-exported from `runtime/http.ts` so consumers can import them from
 // `./element.js` (the legacy public surface) without reaching into the
@@ -250,6 +258,7 @@ export class AktionElement extends HTMLElement {
       ATTRIBUTE_SHOW_ERRORS,
       ATTRIBUTE_SRC,
       ATTRIBUTE_DIR,
+      ATTRIBUTE_MARGIN,
     ];
   }
 
@@ -460,6 +469,7 @@ export class AktionElement extends HTMLElement {
     this.registerWithDevtools();
     this.applyThemeFromAttribute();
     this.applyDir();
+    this.applyMargin();
     this.startRouter();
     const responseAttr = this.getAttribute(ATTRIBUTE_RESPONSE);
     if (responseAttr !== null && responseAttr !== "" && responseAttr !== this.currentResponse) {
@@ -502,6 +512,7 @@ export class AktionElement extends HTMLElement {
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
     if (name === ATTRIBUTE_THEME) this.applyThemeFromAttribute();
     if (name === ATTRIBUTE_DIR) this.applyDir();
+    if (name === ATTRIBUTE_MARGIN) this.applyMargin();
     if (name === ATTRIBUTE_STREAMING) {
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
@@ -1090,6 +1101,33 @@ export class AktionElement extends HTMLElement {
       this.rootEl.setAttribute("dir", value);
     } else {
       this.rootEl.removeAttribute("dir");
+    }
+  }
+
+  /**
+   * Reflect the host `margin` attribute onto the render root as the
+   * `--rui-app-margin` custom property. A bare number is treated as pixels
+   * (`margin="12"` → `12px`); a full CSS length passes through. An absent or
+   * malformed value clears the override so the stylesheet default (`20px`)
+   * applies; `margin="0"` lets the app shell touch its container's edges.
+   */
+  private applyMargin(): void {
+    const raw = this.getAttribute(ATTRIBUTE_MARGIN);
+    if (raw === null) {
+      this.rootEl.style.removeProperty("--rui-app-margin");
+      return;
+    }
+    const trimmed = raw.trim();
+    let value: string | null = null;
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      value = `${trimmed}px`;
+    } else if (/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|vmin|vmax|%)$/.test(trimmed)) {
+      value = trimmed;
+    }
+    if (value === null) {
+      this.rootEl.style.removeProperty("--rui-app-margin");
+    } else {
+      this.rootEl.style.setProperty("--rui-app-margin", value);
     }
   }
 

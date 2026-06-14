@@ -1000,7 +1000,10 @@ export const Toasts: ComponentSpec = {
   name: "Toasts",
   description:
     "Stacked container for transient `Toast` notifications, pinned to a " +
-    "viewport corner. Render the reactive `$toast.items` list into it: " +
+    "viewport corner. Usually unnecessary: `$toast.success(...)` (and " +
+    "`.show/.error/.info/.warning`) auto-render their own stack. Reach for " +
+    "`Toasts` only for custom placement — render the reactive `$toast.items` " +
+    "list into it and the auto-layer steps aside: " +
     "`Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, " +
     "onClose: () => $toast.dismiss(t.id) })))`. Use a standalone `Toast` " +
     "with `position` for a single one-off notice.",

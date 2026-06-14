@@ -957,16 +957,16 @@
             kind: "Namespace",
             signature: "$toast.show(message, options?) → id",
             description:
-              "An imperative notification manager that owns the toast lifecycle (timers included). Render the reactive .items list with the Toasts / Toast components.",
+              "An imperative notification manager that owns the toast lifecycle (timers included). Toasts render automatically (stacked top-right) — just call $toast.* ; you do not add a Toasts(...) to $app. Rendering the .items list yourself is optional and only for custom placement.",
             members: [
               { name: "show(msg, opts?)", type: "(string, object?) => id", desc: "Show a toast; options include tone and duration (0 = sticky). Auto-dismisses after 4000ms by default." },
               { name: "success / error / info / warning", type: "(string) => id", desc: "Tone shortcuts for show()." },
               { name: "dismiss(id)", type: "(id) => void", desc: "Remove one toast." },
               { name: "clear()", type: "() => void", desc: "Remove all toasts." },
-              { name: ".items", type: "array", desc: "Reactive list of { id, message, title?, tone, duration, createdAt }." },
+              { name: ".items", type: "array", desc: "Reactive list of { id, message, title?, tone, duration, createdAt }. Rendering it opts out of the auto-rendered toast layer." },
             ],
             membersTitle: "Members",
-            example: '$toast.success("Saved!")\n$toast.error("Could not save", { duration: 0 })\ntoaster = Toasts($toast.items.map(t =>\n  Toast({ message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))',
+            example: '// Toasts render on their own — no Toasts(...) needed:\n$toast.success("Saved!")\n$toast.error("Could not save", { duration: 0 })\n\n// Optional: place the stack yourself (opts out of auto-render):\nToasts($toast.items.map(t =>\n  Toast({ message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))',
           },
           {
             anchor: "builtin-dom",

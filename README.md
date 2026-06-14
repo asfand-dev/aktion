@@ -104,9 +104,11 @@ Everything you need at runtime ships in a single bundle:
   toast lifecycle so you never hand-manage a `$toasts = [...]` array.
   `$toast.show(message, { tone?, title?, duration? })` (auto-dismisses after
   `duration` ms, default `4000`; `0` keeps it), plus shortcuts
-  `$toast.success/.error/.info/.warning`, `$toast.dismiss(id)`,
-  `$toast.clear()`, and a reactive `$toast.items` list to render with
-  `Toasts`/`Toast`.
+  `$toast.success/.error/.info/.warning`, `$toast.dismiss(id)`, and
+  `$toast.clear()`. Toasts **render themselves** (stacked top-right) — no
+  `Toasts(...)` to wire into `$app`. For custom placement, render the reactive
+  `$toast.items` list yourself with `Toasts`/`Toast` (which opts out of the
+  auto-rendered layer).
 - **`$form({ values, rules, onSubmit })` — the form engine.** Managed
   reactive form with per-field `$util.rules` validators (including async
   ones via `$util.rules.asyncCustom` — think server-side uniqueness checks),

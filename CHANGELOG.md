@@ -13,6 +13,12 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`$toast` notifications now auto-render.** `$toast.show` / `.success` /
+  `.error` / `.info` / `.warning` display the toast on their own — you no
+  longer wire a `Toasts($toast.items.map(...))` into `$app`. The runtime
+  appends a managed toast layer (stacked top-right) to the UI root. Rendering
+  `$toast.items` yourself still works for custom placement and transparently
+  opts out of the auto-layer, so existing programs never double-render.
 - **Third-party / imperative widget interop** — first-class primitives for
   embedding libraries that own their own DOM (charts, maps, editors, payment
   elements, captchas):

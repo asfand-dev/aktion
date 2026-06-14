@@ -2948,8 +2948,8 @@ $toast.dismiss(id)   // remove one
 $toast.clear()       // remove all
 ```
 
-Render the reactive `$toast.items` list with the `Toasts` / `Toast`
-components — the manager owns the timer, so each `Toast` is just a view:
+Toasts render themselves — a `$toast.*` call shows a notification with **no
+`Toasts(...)` wiring**. The manager owns the timer, so you fire and forget:
 
 ```javascript
 function save() {
@@ -2957,7 +2957,14 @@ function save() {
   $save.onDone = () => { if ($save.error) $toast.error("Save failed"); else $toast.success("Saved") }
 }
 
-toaster = Toasts(map($toast.items, t =>
+$app(Button("Save", { onClick: save }))   // the toast appears on its own
+```
+
+Only if you want custom placement, render the reactive `$toast.items` list
+yourself — doing so opts out of the auto-rendered layer:
+
+```javascript
+Toasts($toast.items.map(t =>
   Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))
 ```
 

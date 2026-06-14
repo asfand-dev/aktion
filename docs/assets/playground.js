@@ -1409,6 +1409,55 @@ async function decodeShare(b64) {
 
 const $ = (id) => document.getElementById(id);
 
+// ---------------------------------------------------------------------------
+// Live preview iframe
+//
+// The preview renders inside a same-origin <iframe> so the renderer's
+// responsive @media breakpoints resolve against the PREVIEW PANE width — not
+// the whole browser window. (An inline <aktion-app> reads the full window, so
+// a narrow split pane would still render at desktop breakpoints — the bug this
+// fixes.) The iframe loads its own copy of the runtime; the parent drives the
+// inner <aktion-app> (mountCompiled / theme), reaches its shadow root for
+// Inspect, and bridges the DevTools global hook to the parent window so the
+// parent-mounted panel still sees the app.
+const RUNTIME_URL = new URL("../../dist/aktion.js", import.meta.url).href;
+let previewFrame = null;
+let previewApp = null; // the <aktion-app> inside the iframe (formerly #pg-target)
+let _frameReadyResolve;
+const frameReady = new Promise((resolve) => { _frameReadyResolve = resolve; });
+
+// The live preview element the rest of the playground talks to. Null until the
+// iframe runtime upgrades <aktion-app>; callers await `frameReady` or use `?.`.
+const getTarget = () => previewApp;
+
+function initPreviewFrame() {
+  previewFrame = $("pg-frame");
+  if (!previewFrame) return;
+  // `srcdoc` (not document.write) — the latter races the iframe's initial
+  // about:blank and gets clobbered. srcdoc resolves relative URLs against the
+  // parent base, so the absolute RUNTIME_URL loads the same dist build.
+  previewFrame.srcdoc = [
+    "<!doctype html><html><head><meta charset='utf-8'>",
+    "<meta name='viewport' content='width=device-width, initial-scale=1'>",
+    "<style>html,body{margin:0;padding:0;background:transparent}aktion-app{display:block;min-height:100vh}body.pg-inspecting,body.pg-inspecting *{cursor:crosshair!important}</style>",
+    // Mirror the DevTools global hook to the parent so the parent-mounted panel
+    // sees this app. A live accessor keeps them in sync regardless of when
+    // DevTools opens. Runs before the runtime module so early reads work too.
+    "<script>(function(){try{var k='__AKTION_DEVTOOLS_HOOK__';Object.defineProperty(window,k,{configurable:true,get:function(){return window.parent[k];},set:function(v){window.parent[k]=v;}});}catch(e){}})();</script>",
+    "<script type='module' src='" + RUNTIME_URL + "'></script>",
+    "</head><body><aktion-app id='pg-target' theme='light' margin='0'></aktion-app></body></html>",
+  ].join("");
+  const onReady = () => {
+    const win = previewFrame.contentWindow;
+    if (!win) return;
+    win.customElements.whenDefined("aktion-app").then(() => {
+      previewApp = previewFrame.contentDocument.getElementById("pg-target");
+      _frameReadyResolve(previewApp);
+    });
+  };
+  previewFrame.addEventListener("load", onReady, { once: true });
+}
+
 function showToast(message, opts = {}) {
   const el = $("pg-toast");
   el.textContent = "";
@@ -4276,10 +4325,13 @@ function initPlayground(cm) {
 
   let currentExample = initialCode.example;
 
-  // Make sure the custom element is upgraded before we start dispatching
-  // property updates — otherwise the initial `response` assignment would
-  // hit a plain HTMLElement and be lost.
-  customElements.whenDefined("aktion-app").then(() => {
+  // Boot the preview iframe, then render once its runtime has upgraded the
+  // inner <aktion-app> — otherwise the initial program assignment would hit a
+  // plain element and be lost. The renderer theme is (re)applied here too,
+  // since `setRendererTheme` during init runs before the inner app exists.
+  initPreviewFrame();
+  frameReady.then(() => {
+    getTarget().setAttribute("theme", $("pg-theme").value || "light");
     scheduleViewerUpdate(true);
   });
 
@@ -5085,7 +5137,7 @@ function initPlayground(cm) {
   async function exportProjectZip() {
     try {
       const linked = await linkCurrentProject();
-      const theme = $("pg-target").getAttribute("theme") || "light";
+      const theme = getTarget()?.getAttribute("theme") || "light";
       const title = `${EXAMPLES[currentExample]?.label ?? "Aktion app"} · Aktion`;
       const indexHtml = await buildIndexHtml(linked.source || files[ENTRY_FILE] || "", theme, title);
       // Files in their folder structure + empty-folder entries + a runnable index.html.
@@ -5151,8 +5203,9 @@ function initPlayground(cm) {
   }
 
   function setRendererTheme(name) {
-    const target = $("pg-target");
-    target.setAttribute("theme", name);
+    // No-op on the inner app until the iframe is ready; the bootstrap
+    // re-applies the persisted theme via `frameReady` once it exists.
+    getTarget()?.setAttribute("theme", name);
     $("pg-theme").value = name;
     $("pg-pill-theme").textContent = name;
     lsWrite(LS.theme, name);
@@ -5194,6 +5247,10 @@ function initPlayground(cm) {
         devtoolsController = mod.mountDevtools();
         btn.disabled = false;
         devtoolsLoading = false;
+        // mountDevtools just installed the global hook in this (parent) window;
+        // the iframe app mirrors it via a live accessor but only registers on a
+        // render, so re-run the preview to make the panel pick it up.
+        scheduleViewerUpdate(true, true);
         showToast("DevTools opened", { icon: "bug" });
       } else {
         devtoolsController.toggle();
@@ -5234,6 +5291,12 @@ function initPlayground(cm) {
   function applyInspectUI(on) {
     $("pg-inspect").setAttribute("aria-pressed", on ? "true" : "false");
     $("pg-viewer-pane").setAttribute("data-inspect", on ? "true" : "false");
+    // The crosshair cursor lives inside the iframe document (a parent CSS rule
+    // can't reach it), so toggle a body class the injected stylesheet targets.
+    frameReady.then(() => {
+      const body = previewFrame?.contentDocument?.body;
+      if (body) body.classList.toggle("pg-inspecting", on);
+    });
     if (!on) hideInspectOverlay();
   }
 
@@ -5276,7 +5339,7 @@ function initPlayground(cm) {
       // Bundle the linked program into the standalone HTML so it runs anywhere.
       const linked = await linkCurrentProject();
       const code = linked.source || files[entryFile] || files[ENTRY_FILE] || "";
-      const theme = $("pg-target").getAttribute("theme") || "light";
+      const theme = getTarget()?.getAttribute("theme") || "light";
       const exampleLabel = EXAMPLES[currentExample]?.label ?? "Aktion app";
       const title = `${exampleLabel} · Aktion`;
       downloadStandaloneHtml(code, theme, title);
@@ -5329,7 +5392,9 @@ function initPlayground(cm) {
   scheduleViewerUpdate = debounce(async (immediate, force) => {
     if (!editorView) return;
     if (!(force || currentRunMode === "live" || immediate)) return;
-    const target = $("pg-target");
+    await frameReady; // the preview <aktion-app> lives inside the iframe
+    const target = getTarget();
+    if (!target) return;
     let linked;
     try {
       linked = await linkCurrentProject();
@@ -5633,66 +5698,68 @@ function initPlayground(cm) {
   let inspectOrderedAst = [];
 
   function initInspect() {
-    const target = $("pg-target");
-    const overlay = $("pg-inspect-overlay");
-    const tooltip = $("pg-inspect-tooltip");
+    // The preview lives inside the iframe, so pointer events fire on its
+    // document (they don't cross the frame boundary). Listen there and build
+    // the index from the inner app's shadow root once the frame is ready.
+    frameReady.then(() => {
+      const target = getTarget();
+      if (!target || !previewFrame) return;
+      const idoc = previewFrame.contentDocument;
 
-    // Make sure overlay sits outside any shadow tree (it already does — it's
-    // appended at document body level). It's pointer-events: none so it
-    // never absorbs clicks.
+      const onPointerMove = (e) => {
+        if (!inspectOn) return;
+        const path = e.composedPath();
+        const el = path.find((node) =>
+          node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
+          node !== target &&
+          node !== target.shadowRoot &&
+          node.tagName !== "AKTION-APP" &&
+          node.classList && node.classList.length > 0,
+        );
+        if (!el) return hideInspectOverlay();
+        const matched = matchComponentForElement(el);
+        if (!matched) return hideInspectOverlay();
+        showInspect(matched.element, matched.componentName, matched.astEntry);
+      };
 
-    const onPointerMove = (e) => {
-      if (!inspectOn) return;
-      const path = e.composedPath();
-      const el = path.find((node) =>
-        node instanceof Element &&
-        node !== target &&
-        node !== target.shadowRoot &&
-        node.tagName !== "AKTION-APP" &&
-        node.classList && node.classList.length > 0,
-      );
-      if (!el) return hideInspectOverlay();
-      const matched = matchComponentForElement(el);
-      if (!matched) return hideInspectOverlay();
-      showInspect(matched.element, matched.componentName, matched.astEntry);
-    };
+      const onClick = (e) => {
+        if (!inspectOn) return;
+        const path = e.composedPath();
+        const el = path.find((node) =>
+          node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
+          node.classList && node.classList.length > 0 &&
+          node.tagName !== "AKTION-APP",
+        );
+        if (!el) return;
+        const matched = matchComponentForElement(el);
+        if (!matched || !matched.astEntry) return;
+        e.preventDefault();
+        e.stopPropagation();
+        jumpToLine(matched.astEntry.line);
+      };
 
-    const onClick = (e) => {
-      if (!inspectOn) return;
-      const path = e.composedPath();
-      const el = path.find((node) =>
-        node instanceof Element &&
-        node.classList && node.classList.length > 0 &&
-        node.tagName !== "AKTION-APP",
-      );
-      if (!el) return;
-      const matched = matchComponentForElement(el);
-      if (!matched || !matched.astEntry) return;
-      e.preventDefault();
-      e.stopPropagation();
-      jumpToLine(matched.astEntry.line);
-    };
+      idoc.addEventListener("pointermove", onPointerMove);
+      idoc.addEventListener("click", onClick, true);
+      // The pointer leaving the iframe altogether can't fire inside it — catch
+      // that from the parent side on the iframe element.
+      previewFrame.addEventListener("pointerleave", () => hideInspectOverlay());
 
-    target.addEventListener("pointermove", onPointerMove);
-    target.addEventListener("pointerleave", () => hideInspectOverlay());
-    target.addEventListener("click", onClick, true);
-
-    // Re-index on attribute changes via a mutation observer on the shadow root
-    const observe = () => {
-      if (!target.shadowRoot) return;
-      const mo = new MutationObserver(() => {
-        // Rebuild the index lazily on next animation frame to coalesce bursts.
-        cancelAnimationFrame(observe._raf);
-        observe._raf = requestAnimationFrame(() => refreshInspectIndex());
-      });
-      mo.observe(target.shadowRoot, { childList: true, subtree: true });
-    };
-    queueMicrotask(observe);
+      // Re-index on shadow-DOM changes (a re-render swaps the tree).
+      if (target.shadowRoot) {
+        let raf = 0;
+        const mo = new MutationObserver(() => {
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(() => refreshInspectIndex());
+        });
+        mo.observe(target.shadowRoot, { childList: true, subtree: true });
+      }
+    });
   }
 
   function matchComponentForElement(el) {
     let cursor = el;
-    while (cursor && cursor !== document.body) {
+    // Stop at any <body> (the iframe's own body when walking the preview tree).
+    while (cursor && cursor.tagName !== "BODY") {
       const componentName = componentNameFromClasses(cursor);
       if (componentName) {
         const astEntry = inspectIndex.get(cursor);
@@ -5716,7 +5783,12 @@ function initPlayground(cm) {
   function showInspect(element, componentName, astEntry) {
     const overlay = $("pg-inspect-overlay");
     const tooltip = $("pg-inspect-tooltip");
-    const rect = element.getBoundingClientRect();
+    // `element` lives inside the iframe, so its rect is relative to the iframe
+    // viewport. The overlay/tooltip are position:fixed in the parent, so shift
+    // by the iframe's own position to land over the right spot.
+    const frameRect = previewFrame ? previewFrame.getBoundingClientRect() : { left: 0, top: 0 };
+    const r = element.getBoundingClientRect();
+    const rect = { left: frameRect.left + r.left, top: frameRect.top + r.top, width: r.width, height: r.height };
     overlay.hidden = false;
     overlay.style.left = `${rect.left}px`;
     overlay.style.top = `${rect.top}px`;
@@ -5780,8 +5852,8 @@ function initPlayground(cm) {
   }
 
   function refreshInspectIndex() {
-    const target = $("pg-target");
-    if (!target.shadowRoot) return;
+    const target = getTarget();
+    if (!target || !target.shadowRoot) return;
     inspectIndex = new WeakMap();
     const source = editorView.state.doc.toString();
     const program = parse(source);
@@ -5840,7 +5912,7 @@ function initPlayground(cm) {
       queueByName.get(entry.name).push(entry);
     }
     const walk = (node) => {
-      if (!(node instanceof Element)) return;
+      if (!node || node.nodeType !== 1) return; // Element (cross-realm safe)
       const name = componentNameFromClasses(node);
       if (name) {
         const q = queueByName.get(name);
@@ -5888,10 +5960,13 @@ function initPlayground(cm) {
   // Subscribe to runtime error events as a redundant source for the linter
   // (covers cases where the linter hasn't run yet). The §19.1 positional
   // advisory is filtered out so the playground stays focused on real errors.
-  $("pg-target").addEventListener("error", (e) => {
-    if (Array.isArray(e.detail?.errors)) {
-      parseErrors = e.detail.errors.filter((err) => !isPositionalAdvisory(err));
-      refreshStatusErrors();
-    }
+  // The preview app lives in the iframe, so bind once it exists.
+  frameReady.then(() => {
+    getTarget().addEventListener("error", (e) => {
+      if (Array.isArray(e.detail?.errors)) {
+        parseErrors = e.detail.errors.filter((err) => !isPositionalAdvisory(err));
+        refreshStatusErrors();
+      }
+    });
   });
 }

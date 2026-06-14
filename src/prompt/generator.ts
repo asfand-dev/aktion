@@ -531,12 +531,14 @@ id = crypto.randomUUID()
 \`\`\`
 
 ### \`$toast\` — imperative notifications
-Instead of hand-managing a \`$toasts = [...]\` array, use the reserved \`$toast\` namespace. \`$toast.show(message, { tone?, title?, duration? })\` appends a toast (auto-dismisses after \`duration\` ms, default 4000; pass \`0\` to keep it). Shortcuts: \`$toast.success/.error/.info/.warning\`. Remove with \`$toast.dismiss(id)\` / \`$toast.clear()\`. Render the reactive \`$toast.items\` list:
+Instead of hand-managing a \`$toasts = [...]\` array, use the reserved \`$toast\` namespace. \`$toast.show(message, { tone?, title?, duration? })\` shows a toast (auto-dismisses after \`duration\` ms, default 4000; pass \`0\` to keep it). Shortcuts: \`$toast.success/.error/.info/.warning\`. Remove with \`$toast.dismiss(id)\` / \`$toast.clear()\`. **Toasts render themselves** (stacked top-right) — just call \`$toast.*\`; you do NOT add a \`Toasts(...)\` to \`$app\`:
 
 \`\`\`
 function save() { $save = $http({ url, method: "POST", body }); $save.onDone = () => $toast.success("Saved") }
-toaster = Toasts(map($toast.items, t => Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))
-\`\`\``;
+$app(Button("Save", { onClick: save }))   // the "Saved" toast appears on its own
+\`\`\`
+
+Only if you want custom placement, render the reactive \`$toast.items\` list yourself — the auto-layer steps aside when you do: \`Toasts($toast.items.map(t => Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))\`.`;
 }
 
 

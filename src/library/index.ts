@@ -332,7 +332,7 @@ const componentGroups: ComponentGroup[] = [
       "- `Popover(trigger, content, title?, side?, align?, width?)` is the click-triggered counterpart of `HoverCard` — use for filter panels, color pickers, share menus, and small settings flyouts. Always renders an × close button in the header; clicking the trigger again, clicking outside, or pressing Escape also closes it.",
       "- `Rating(value, max?, label?, count?, size?, interactive?, halfStep?, icon?)` renders stars for product reviews, testimonials, and ranked lists. Pass a `$variable` as `value` with `interactive=true` to let users rate; add `halfStep=true` so clicking the left half of a star sets a half-value. Set `icon=\"heart\"|\"thumb\"|\"fire\"|\"bolt\"` (or any FA name) to swap glyphs.",
       "- `Toast(title, message?, tone?, icon?, duration?, action?, onClose?, position?)` pins a transient notice; pass `duration` (ms) for auto-dismiss. Use `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
-      "- `Toasts(children, position?)` stacks toasts in a viewport corner. Pair it with the `$toast` namespace: `Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))`.",
+      "- `Toasts(children, position?)` stacks toasts in a viewport corner. Usually unnecessary — the `$toast` namespace (`$toast.success(...)` etc.) auto-renders its own stack. Use `Toasts` only to place the stack yourself: `Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))` (rendering `$toast.items` opts out of the auto-layer).",
       "- `NotificationBell(count?, items?, onOpen?)` — compact inbox trigger; `CommandPalette` for Cmd-K action search.",
     ],
   },

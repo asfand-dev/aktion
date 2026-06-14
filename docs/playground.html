@@ -284,16 +284,16 @@
     .pg-viewer-frame {
       flex: 1;
       min-height: 0;
-      overflow: auto;
+      position: relative;
       background: var(--doc-bg);
     }
-    .pg-viewer-frame aktion-app {
-      display: block;
+    .pg-viewer-frame iframe {
+      position: absolute;
+      inset: 0;
       width: 100%;
-      min-height: 100%;
-    }
-    .pg-pane--viewer[data-inspect="true"] .pg-viewer-frame aktion-app {
-      cursor: crosshair;
+      height: 100%;
+      border: 0;
+      display: block;
     }
 
     /* ------- Splitter ------- */
@@ -1127,7 +1127,11 @@
               </button>
             </div>
             <div class="pg-viewer-frame" id="pg-viewer-frame">
-              <aktion-app id="pg-target" theme="light" data-theme-managed="true"></aktion-app>
+              <!-- The preview renders inside a same-origin iframe so the
+                   renderer's responsive @media breakpoints resolve against the
+                   pane width, not the whole browser window. playground.js
+                   writes an <aktion-app id="pg-target"> into it on boot. -->
+              <iframe id="pg-frame" title="Live preview"></iframe>
             </div>
           </section>
         </div>
@@ -1259,6 +1263,6 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.06.13-catalogs"></script>
+  <script type="module" src="assets/playground.js?v=2026.06.14-iframe-preview2"></script>
 </body>
 </html>
