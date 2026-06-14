@@ -472,7 +472,7 @@
         <span class="badge-pill"><span class="dot"></span> INTERACTIVE TUTORIAL · 13 LEVELS · 0 BUILD STEPS</span>
         <h1>Learn <span class="grad-text">Aktion</span> by actually building things.</h1>
         <p class="lead">
-          Eleven bite-size levels. A live editor with instant previews. XP, achievements, and exactly one dragon.
+          Thirteen bite-size levels. A live editor with instant previews. XP, achievements, and exactly one dragon.
           By the end you'll write <strong>reactive UIs in a strict subset of JavaScript you already know</strong> —
           components, state, forms, effects, HTTP, styling and themes. No JSX. No bundler. No webpack config
           that gains sentience at 2&nbsp;AM.
@@ -624,14 +624,14 @@
 // Edit anything. The preview updates as you type.
 
 $app(Card([
-  CardHeader("Hello, Aktion", { subtitle: "Your first program" }),
+  CardHeader("Hello, Aktion", "Your first program"),
   Text("This UI is rendered from the code on the left."),
   Markdown("Edit it. Break it. **Nobody is watching.**")
 ]))
 </script>
   <script type="text/plain" data-level="2" data-kind="solution">
 $app(Card([
-  CardHeader("Hello, Aktion", { subtitle: "Your first program" }),
+  CardHeader("Hello, Aktion", "Your first program"),
   Text("This UI is rendered from the code on the left."),
   Markdown("Edit it. Break it. **Nobody is watching.**"),
   Text("Hi back, Aktion!")
@@ -658,7 +658,7 @@ $app(Card([
   CardHeader("The Clicker 3000™"),
   Text(`Clicks: ${$count}`),
   Row([
-    Button("+1", { variant: "primary", onClick: () => { $count++ } })
+    Button("+1", { onClick: () => { $count++ } })
   ], { gap: "sm" })
 ]))
 </script>
@@ -669,7 +669,7 @@ $app(Card([
   CardHeader("The Clicker 3000™", { subtitle: "Every framework demo is a counter. It's the law." }),
   Text(`Clicks: ${$count}`),
   Row([
-    Button("+1", { variant: "primary", onClick: () => { $count++ } }),
+    Button("+1", { onClick: () => { $count++ } }),
     Button("-1", { onClick: () => { $count-- } }),
     Button("Reset", { variant: "secondary", onClick: () => { $count = 0 } })
   ], { gap: "sm" })
@@ -984,8 +984,15 @@ cd my-app
 npm install
 npm run dev</pre>
           <p><strong>2 · Drop in a CDN tag</strong> — zero build, paste into any HTML page:</p>
-          <pre class="mini-code">&lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
-&lt;aktion-app response="$app(Text('It works'))"&gt;&lt;/aktion-app&gt;</pre>
+          <pre class="mini-code">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;aktion-app&gt;$app(Text('It works'))&lt;/aktion-app&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</pre>
           <p><strong>3 · Install from npm</strong> — adding Aktion to an existing app? Import it once; it registers the <code>&lt;aktion-app&gt;</code> element:</p>
           <pre class="mini-code">npm i aktion-runtime</pre>
           <p>That's the whole setup — no JSX, no Babel, no bundler required. Hit <strong>Continue</strong> and write your first program.</p>`,
