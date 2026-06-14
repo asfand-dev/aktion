@@ -3120,7 +3120,7 @@ describe("DataGrid cell rendering", () => {
     expect(stubs.length).toBe(3);
   });
 
-  it("Col onClick fires with (value, rowIndex) and stops row-click propagation", () => {
+  it("Col onClick fires with (value, rowIndex, row) and stops row-click propagation", () => {
     const cellCalls: Array<unknown[]> = [];
     const localHelpers = {
       ...helpers,
@@ -3139,7 +3139,9 @@ describe("DataGrid cell rendering", () => {
     const tr = clickable[0]!.closest("tr")!;
     tr.addEventListener("click", () => { rowBubbled = true; });
     clickable[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(cellCalls).toEqual([["Ada", 0]]);
+    // 3rd arg is the header-keyed row object (issue #11) so handlers can read
+    // sibling columns regardless of sort order.
+    expect(cellCalls).toEqual([["Ada", 0, { Name: "Ada" }]]);
     expect(rowBubbled).toBe(false); // stopPropagation prevented the row handler
   });
 });

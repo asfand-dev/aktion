@@ -16,11 +16,23 @@
 
 import { parse } from "../parser/index.js";
 import { StateStore } from "./state.js";
-import { createContext, planProgram, getHeadManager } from "./evaluator.js";
+import {
+  createContext,
+  planProgram,
+  getHeadManager,
+  evaluateUserComponent,
+  enterUserComponent,
+  leaveUserComponent,
+  isComponentNode,
+  isUserComponentNode,
+  RuntimeBudgetError,
+  type EvaluationContext,
+} from "./evaluator.js";
 import { HttpRuntime } from "./http.js";
 import { Router } from "./router.js";
 import { Renderer } from "../renderer/renderer.js";
-import { defaultLibrary } from "../library/index.js";
+import { defaultLibrary, validateProgramSchema } from "../library/index.js";
+import { findComponent } from "../library/registry.js";
 import type { ComponentLibrary } from "../library/types.js";
 
 export interface RenderToStringOptions {
@@ -137,4 +149,158 @@ export function renderToString(program: string, options: RenderToStringOptions =
  */
 export function renderToStaticMarkup(program: string, options: RenderToStringOptions = {}): string {
   return renderToString(program, options).html;
+}
+
+export interface RenderToTextTreeOptions {
+  /** Component library to render against (defaults to the built-in one). */
+  library?: ComponentLibrary;
+  /** Initial path for the in-memory router (default "/"). */
+  path?: string;
+  /** Seed state — values hydrate over the program's declarations. */
+  initialState?: Record<string, unknown>;
+}
+
+export interface RenderToTextTreeResult {
+  /** Indented text outline of the rendered component tree. */
+  text: string;
+  /**
+   * Parse, schema, and render diagnostics. Empty when the program parsed,
+   * validated, and produced a renderable tree without throwing.
+   */
+  errors: string[];
+  /** `true` when `errors` is empty and the root is a renderable node tree. */
+  ok: boolean;
+}
+
+/**
+ * Render an Aktion program to a plain-text component tree **without a DOM**
+ * (issue #9). Unlike `renderToString`, this needs no `happy-dom` / `jsdom`,
+ * so `node` can confirm a program actually *renders* — not just parses —
+ * out of the box. It parses, schema-validates, evaluates the UI root, and
+ * recursively expands user components, surfacing every diagnostic it hits:
+ * parse errors, schema violations, a non-renderable root (#7), an entry-point
+ * throw, and unknown components.
+ *
+ *   import { renderToTextTree } from "aktion-runtime";
+ *   const { ok, text, errors } = renderToTextTree(programSource);
+ *   if (!ok) console.error(errors.join("\n"));
+ *
+ * The text outline is for human/CI inspection (it shows component names and
+ * nesting, not pixel-perfect HTML); `errors` / `ok` are the machine signal.
+ */
+export function renderToTextTree(program: string, options: RenderToTextTreeOptions = {}): RenderToTextTreeResult {
+  const library = options.library ?? defaultLibrary;
+  const errors: string[] = [];
+
+  const parsed = parse(program);
+  for (const e of parsed.errors) errors.push(`parse ${e.line}:${e.column}: ${e.message}`);
+  for (const e of validateProgramSchema(parsed, library)) errors.push(`schema ${e.line}:${e.column}: ${e.message}`);
+
+  const state = new StateStore();
+  if (options.initialState && typeof options.initialState === "object") {
+    state.hydrate(options.initialState);
+  }
+  const router = new Router({ defaultPath: options.path ?? "/" });
+  const http = new HttpRuntime();
+  const ctx = createContext(state, { library, router, http, notify: () => {} });
+
+  try {
+    planProgram(parsed, ctx);
+  } catch (err) {
+    errors.push(`plan: ${describeErr(err)}`);
+    return { text: "", errors, ok: false };
+  }
+
+  const appBinding = ctx.bindings.get("aktion");
+  let rootValue: unknown = null;
+  if (!appBinding) {
+    errors.push("render: program has no UI root — add `$app(...)` (or `aktion = ...`).");
+  } else {
+    try {
+      rootValue = appBinding();
+    } catch (err) {
+      errors.push(`render: entry point threw — ${describeErr(err)}`);
+    }
+  }
+
+  if (appBinding && (rootValue === null || rootValue === undefined)) {
+    errors.push("render: the UI root is empty (renders nothing).");
+  } else if (isBareValue(rootValue)) {
+    errors.push(`render: the UI root is a bare ${typeof rootValue}, not a component tree (root-not-renderable).`);
+  }
+
+  const lines: string[] = [];
+  try {
+    walkTextTree(rootValue, ctx, library, 0, "root", lines, errors);
+  } catch (err) {
+    errors.push(`render: ${describeErr(err)}`);
+  }
+
+  return { text: lines.join("\n"), errors, ok: errors.length === 0 };
+}
+
+function isBareValue(value: unknown): boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+function describeErr(err: unknown): string {
+  if (err instanceof RuntimeBudgetError) return `render budget exceeded (${err.message})`;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/** Walk an evaluated node tree into an indented text outline (DOM-free). */
+function walkTextTree(
+  value: unknown,
+  ctx: EvaluationContext,
+  library: ComponentLibrary,
+  depth: number,
+  path: string,
+  lines: string[],
+  errors: string[],
+): void {
+  if (value === null || value === undefined) return;
+  const indent = "  ".repeat(depth);
+
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => walkTextTree(item, ctx, library, depth, `${path}/${i}`, lines, errors));
+    return;
+  }
+
+  if (isUserComponentNode(value)) {
+    const name = value.decl.name;
+    lines.push(`${indent}<${name}>`);
+    enterUserComponent(ctx, name);
+    try {
+      const evaluated = evaluateUserComponent(value, ctx, path);
+      walkTextTree(evaluated.value, ctx, library, depth + 1, `${path}#${name}`, lines, errors);
+    } catch (err) {
+      errors.push(`render: <${name}> threw — ${describeErr(err)}`);
+    } finally {
+      leaveUserComponent(ctx);
+    }
+    return;
+  }
+
+  if (isComponentNode(value)) {
+    const name = value.name;
+    if (!findComponent(library, name) && !ctx.componentDecls.has(name)) {
+      errors.push(`render: unknown component <${name}>.`);
+    }
+    lines.push(`${indent}<${name}>`);
+    for (const arg of value.args) {
+      // Skip plain props-bag objects — only nodes / arrays / text are children.
+      if (arg !== null && typeof arg === "object" && !Array.isArray(arg) && !isComponentNode(arg) && !isUserComponentNode(arg)) {
+        continue;
+      }
+      walkTextTree(arg, ctx, library, depth + 1, path, lines, errors);
+    }
+    return;
+  }
+
+  if (isBareValue(value)) {
+    const text = String(value);
+    if (text.length > 0) lines.push(`${indent}"${text}"`);
+    return;
+  }
 }

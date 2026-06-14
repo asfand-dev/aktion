@@ -17,6 +17,11 @@
  *
  * Placeholders use `{name}` syntax. Lookup falls back to
  * `defaultLanguage`, then to the bare key.
+ *
+ * The one true path for interpolation is `t(key, { vars })` — pass every
+ * placeholder a value. A placeholder you do NOT supply is left **intact**
+ * (e.g. `t("constraint")` → `"Uppercase: min {n}"`), so the legacy
+ * `t(key).replace("{n}", "1")` idiom no longer silently drops the value.
  */
 
 export interface I18nConfig {
@@ -90,8 +95,16 @@ function interpolate(template: string, vars?: Record<string, unknown>, locale = 
   // the simple `{name}` placeholders. ICU blocks can contain `#` (the number)
   // and are matched with brace-balancing so nested braces work.
   const withIcu = resolveIcu(template, vars ?? {}, locale);
-  return withIcu.replace(/\{([^{}]+)\}/g, (_, expr: string) => {
-    const value = (vars ?? {})[expr.trim()];
+  const bag = vars ?? {};
+  return withIcu.replace(/\{([^{}]+)\}/g, (match, expr: string) => {
+    const key = expr.trim();
+    // Leave a placeholder the caller did NOT supply a value for *intact*, so
+    // the common `t(key).replace("{n}", "1")` idiom keeps working instead of
+    // silently dropping the value (issue #2). Only a placeholder whose key was
+    // explicitly provided is substituted (a provided null/undefined still
+    // resolves to "" — the author asked for interpolation).
+    if (!Object.prototype.hasOwnProperty.call(bag, key)) return match;
+    const value = bag[key];
     if (value === null || value === undefined) return "";
     return String(value);
   });

@@ -123,7 +123,114 @@ export function getDiagnostics(
       message: e.message,
       severity: "error" as const,
     })),
+    // Render-time lint warnings (issue #8). These don't block rendering but
+    // flag silent footguns the schema validator can't see. Editors theme them
+    // by `severity`. Kept narrow + precise to avoid false positives — the
+    // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
+    // compares, #5 unicode escapes) are now fixed in the runtime, so linting
+    // them would flag correct code.
+    ...lintProgram(program),
   ];
+}
+
+/**
+ * Static lint warnings for patterns that still mislead even after the runtime
+ * fixes (issue #8). On by default inside `getDiagnostics`; also exported
+ * standalone for hosts that want only the soft warnings. Currently:
+ *
+ *   - `shadowed-i18n` — a `function` / lambda parameter or `for…of` / `for…in`
+ *     loop variable named the same as a binding destructured from `$i18n(...)`
+ *     (typically `t`). Inside that scope the name resolves to the local, so a
+ *     `t("key")` call quietly invokes the loop item instead of the translator.
+ *     Only fires when `$i18n` is actually destructured in the program, so a
+ *     plain `arr.map(t => …)` elsewhere is never flagged.
+ */
+export function getLintWarnings(source: string): Diagnostic[] {
+  return lintProgram(parse(source));
+}
+
+function lintProgram(program: ReturnType<typeof parse>): Diagnostic[] {
+  const protectedNames = collectI18nBindingNames(program);
+  if (protectedNames.size === 0) return [];
+
+  const warnings: Diagnostic[] = [];
+  const seen = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n);
+      return;
+    }
+    const rec = node as Record<string, unknown> & { kind?: string; loc?: Position };
+    const loc = rec.loc;
+    const flag = (name: unknown, what: string): void => {
+      if (typeof name !== "string" || !protectedNames.has(name)) return;
+      const line = loc?.line ?? 0;
+      const column = loc?.column ?? 0;
+      const key = `${name}:${line}:${column}:${what}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      warnings.push({
+        line,
+        column,
+        severity: "warning",
+        message:
+          `${what} "${name}" shadows the i18n binding from $i18n(...). Inside this scope ` +
+          `"${name}(...)" calls the ${what}, not the translator — rename it (e.g. "item").`,
+      });
+    };
+    switch (rec.kind) {
+      case "Lambda":
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+      case "HookDeclaration":
+        for (const p of (rec.params as Array<{ name?: unknown }> | undefined) ?? []) flag(p.name, "parameter");
+        break;
+      case "ForOfStatement":
+        flag(rec.item, "loop variable");
+        flag(rec.index, "loop variable");
+        for (const f of (rec.destructure as unknown[] | undefined) ?? []) flag(f, "loop variable");
+        break;
+      case "ForInStatement":
+        flag(rec.item, "loop variable");
+        break;
+    }
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+  visit(program.statements);
+  return warnings;
+}
+
+/** Names destructured from a `$i18n(...)` call (e.g. `const { t } = $i18n(...)`). */
+function collectI18nBindingNames(program: ReturnType<typeof parse>): Set<string> {
+  const names = new Set<string>();
+  const isI18nCall = (expr: unknown): boolean => {
+    if (!expr || typeof expr !== "object") return false;
+    const e = expr as Record<string, unknown>;
+    if (e.kind === "Invoke") {
+      const callee = e.callee as Record<string, unknown> | undefined;
+      return callee?.kind === "StateRef" && callee?.name === "i18n";
+    }
+    return e.kind === "BuiltinCall" && e.name === "i18n";
+  };
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (rec.kind === "DestructureStatement" && rec.patternKind === "object" && isI18nCall(rec.expression)) {
+      for (const b of (rec.bindings as Array<{ name?: unknown }> | undefined) ?? []) {
+        if (typeof b.name === "string" && b.name) names.add(b.name);
+      }
+    }
+    for (const key of Object.keys(rec)) visit(rec[key]);
+  };
+  visit(program.statements);
+  return names;
 }
 
 /**

@@ -76,10 +76,70 @@ export function validateProgramSchema(
     for (const stmt of program.statements) {
       walkStatement(stmt, library, errors);
     }
+    validateRootBinding(program, errors);
   } finally {
     currentDeclaredComponents = EMPTY_NAME_SET;
   }
   return errors;
+}
+
+/**
+ * `root-not-renderable` (issue #7). The program's UI root — the last
+ * `$app(...)` call or `aktion = …` assignment in source — must resolve to a
+ * render tree (a component call, an array, a ternary of those, …), NOT a bare
+ * value. A leftover string / number / boolean / template literal root
+ * validated clean yet rendered a blank page; this surfaces it as a fatal,
+ * actionable diagnostic instead.
+ *
+ * Only unambiguous literal roots are flagged — an identifier or computed
+ * expression can't be judged statically and renders fine when it yields a
+ * node, so it is left to the runtime.
+ */
+function validateRootBinding(program: Program, out: ParseError[]): void {
+  let root: Expression | undefined;
+  for (const stmt of program.statements) {
+    if (stmt.kind === "ExpressionStatement" && isAppCallExpr(stmt.expression)) {
+      // `$app(rootNode)` — the first argument is the UI root.
+      root = (stmt.expression as { arguments: Expression[] }).arguments[0];
+    } else if (stmt.kind === "Assignment" && !stmt.isState && stmt.identifier === "aktion") {
+      root = stmt.expression;
+    }
+  }
+  if (!root) return;
+  const bare = bareRootValueKind(root);
+  if (!bare) return;
+  out.push({
+    message:
+      `The UI root must be a component tree (e.g. \`Text(...)\`, \`Column([...])\`), ` +
+      `not a bare ${bare}. Wrap it — \`$app(Text(...))\` — or render a component. ` +
+      `(root-not-renderable)`,
+    line: root.loc?.line ?? 0,
+    column: root.loc?.column ?? 0,
+  });
+}
+
+/** `true` for a `$app(...)` call expression (StateRef callee named `app`). */
+function isAppCallExpr(expr: Expression): boolean {
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    expr.callee.name === "app"
+  );
+}
+
+/**
+ * Returns a human label when `root` is an unambiguous non-renderable bare
+ * value (a string / number / boolean literal or a template string), else null.
+ */
+function bareRootValueKind(root: Expression): string | null {
+  if (root.kind === "Template") return "string";
+  if (root.kind === "Literal") {
+    const v = (root as { value: unknown }).value;
+    if (typeof v === "string") return "string";
+    if (typeof v === "number") return "number";
+    if (typeof v === "boolean") return "boolean";
+  }
+  return null;
 }
 
 const EMPTY_NAME_SET: ReadonlySet<string> = new Set();
@@ -312,6 +372,49 @@ function subtreeCallsName(node: unknown, name: string): boolean {
   return false;
 }
 
+/** Levenshtein edit distance — inputs are short prop / enum tokens. */
+function editDistance(a: string, b: string): number {
+  const al = a.length;
+  const bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+  let prev = Array.from({ length: bl + 1 }, (_, j) => j);
+  for (let i = 1; i <= al; i += 1) {
+    const curr = [i];
+    for (let j = 1; j <= bl; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j]! + 1, curr[j - 1]! + 1, prev[j - 1]! + cost);
+    }
+    prev = curr;
+  }
+  return prev[bl]!;
+}
+
+/**
+ * The closest candidate to `input` within a small edit distance (a typo), or
+ * null when nothing is close enough. Powers the "did you mean …?" hint on
+ * invalid prop names / enum values (issue #13).
+ */
+function didYouMean(input: string, candidates: Iterable<string>): string | null {
+  const lower = input.toLowerCase();
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    const d = editDistance(lower, c.toLowerCase());
+    if (d < bestDist) { bestDist = d; best = c; }
+  }
+  if (best === null || best.toLowerCase() === lower) return null;
+  // Only genuine typos: distance ≤ 2 and strictly less than the shorter token
+  // (so unrelated words like "secondary" → "muted" don't get suggested).
+  return bestDist <= 2 && bestDist < Math.min(input.length, best.length) ? best : null;
+}
+
+/** Append a `Did you mean "X"?` hint to `base` when a close candidate exists. */
+function withSuggestion(base: string, input: string, candidates: Iterable<string>): string {
+  const guess = didYouMean(input, candidates);
+  return guess ? `${base} Did you mean "${guess}"?` : base;
+}
+
 function validateCall(
   expr: Extract<Expression, { kind: "Call" }>,
   library: ComponentLibrary,
@@ -376,7 +479,11 @@ function validateCall(
       const value = arg.value;
       if (!prop.enum.includes(value) && !prop.enum.includes(canonicalSizeToken(value))) {
         out.push({
-          message: `<${expr.callee}> ${prop.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+          message: withSuggestion(
+            `<${expr.callee}> ${prop.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+            value,
+            prop.enum,
+          ),
           line: arg.loc?.line ?? expr.loc?.line ?? 0,
           column: arg.loc?.column ?? expr.loc?.column ?? 0,
         });
@@ -413,7 +520,11 @@ function validateCall(
       // an "unknown prop" even when the spec declares no such slot.
       if (UNIVERSAL_PROP_NAMES.has(entry.name)) continue;
       out.push({
-        message: `Unknown prop "${entry.name}" on <${expr.callee}>. Known props: ${spec.props.map((p) => p.name).join(", ")}.`,
+        message: withSuggestion(
+          `Unknown prop "${entry.name}" on <${expr.callee}>. Known props: ${spec.props.map((p) => p.name).join(", ")}.`,
+          entry.name,
+          spec.props.map((p) => p.name),
+        ),
         line: entry.loc?.line ?? expr.loc?.line ?? 0,
         column: entry.loc?.column ?? expr.loc?.column ?? 0,
       });
@@ -429,7 +540,11 @@ function validateCall(
       // names are advertised in the error message.
       if (!prop.enum.includes(value) && !prop.enum.includes(canonicalSizeToken(value))) {
         out.push({
-          message: `<${expr.callee}> ${entry.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+          message: withSuggestion(
+            `<${expr.callee}> ${entry.name}="${value}" — must be one of ${prop.enum.map((v) => `"${v}"`).join(", ")}.`,
+            value,
+            prop.enum,
+          ),
           line: entry.loc?.line ?? expr.loc?.line ?? 0,
           column: entry.loc?.column ?? expr.loc?.column ?? 0,
         });

@@ -366,13 +366,20 @@ export function fillTableCell(
   rowIndex: number,
   helpers: CellRenderHelpers,
   formatValue: (value: unknown, format: string) => string,
+  /**
+   * The whole row this cell belongs to (issue #11). Passed as the 3rd arg to
+   * `render` / `onClick` so a cell renderer can read sibling-column data
+   * directly — robust to DataGrid's internal sorting, which `rowIndex` alone
+   * doesn't convey to lookups against a *display-ordered* array.
+   */
+  row?: unknown,
 ): void {
   const format = col.format ?? "text";
 
   let content: unknown = value;
   if (typeof col.render === "function") {
     try {
-      content = (col.render as (...a: unknown[]) => unknown)(value, rowIndex);
+      content = (col.render as (...a: unknown[]) => unknown)(value, rowIndex, row);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[aktion] Col render() threw", err);
@@ -405,7 +412,7 @@ export function fillTableCell(
       // Stop the event bubbling to an enclosing clickable row (DataGrid's
       // `onRowClick`) so a cell action doesn't double-fire.
       event.stopPropagation();
-      helpers.invoke(col.onClick, value, rowIndex);
+      helpers.invoke(col.onClick, value, rowIndex, row);
       return true;
     };
     td.onclick = (event) => { guardedFire(event); };

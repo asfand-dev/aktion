@@ -372,13 +372,17 @@ export const DataGrid: ComponentSpec = {
           cellTd.append(cb);
           tr.append(cellTd);
         }
+        // Reconstruct the row (header-keyed) once so each cell's `render` /
+        // `onClick` can read sibling columns regardless of the sort order (#11).
+        const rowObj: Record<string, unknown> = {};
+        for (const cc of cols) rowObj[cc.key] = cc.values[r];
         cols.forEach((col, c) => {
           const td = el("td", {
             "data-format": col.format,
             "data-align": col.align || null,
             "data-first": c === 0 ? "true" : null,
           });
-          fillTableCell(td, col, col.values[r], r, helpers, formatCellValue);
+          fillTableCell(td, col, col.values[r], r, helpers, formatCellValue, rowObj);
           tr.append(td);
         });
         if (typeof props.onRowClick === "function") {
@@ -438,13 +442,15 @@ export const DataGrid: ComponentSpec = {
             cellTd.append(cb);
             tr.append(cellTd);
           }
+          const rowObj: Record<string, unknown> = {};
+          for (const cc of cols) rowObj[cc.key] = cc.values[row];
           cols.forEach((col, c) => {
             const td = el("td", {
               "data-format": col.format,
               "data-align": col.align || null,
               "data-first": c === 0 ? "true" : null,
             });
-            fillTableCell(td, col, col.values[row], row, helpers, formatCellValue);
+            fillTableCell(td, col, col.values[row], row, helpers, formatCellValue, rowObj);
             tr.append(td);
           });
           target.append(tr);

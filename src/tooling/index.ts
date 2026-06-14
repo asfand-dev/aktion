@@ -25,6 +25,7 @@ export { inspectAST, inspectProgram } from "./inspector.js";
 export type { InspectorBinding, InspectorView } from "./inspector.js";
 export {
   getDiagnostics,
+  getLintWarnings,
   getCompletions,
   getHoverInfo,
 } from "./language-service.js";

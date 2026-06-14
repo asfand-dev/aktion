@@ -19,9 +19,11 @@ export const Col: ComponentSpec = {
     "array of component nodes — e.g. `Col(\"Status\", rows.map(r => " +
     "Badge(r.status)))` or `Col(\"Actions\", rows.map(r => Button(\"Edit\")))` " +
     "— each component renders directly in its cell. Pass " +
-    "`render: (value, index) => …` for the same effect when you prefer to " +
+    "`render: (value, index, row) => …` for the same effect when you prefer to " +
     "keep `values` as the raw row data (return a component, string, or " +
-    "array). Pass `onClick: (value, index) => …` to make the whole cell " +
+    "array). `row` is the whole row (header-keyed) and stays correct even when " +
+    "DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. " +
+    "Pass `onClick: (value, index, row) => …` to make the whole cell " +
     "clickable (pointer + keyboard). `sortable` and `filterable` only take " +
     "effect inside `DataGrid` (Table ignores them).",
   props: [
@@ -31,8 +33,8 @@ export const Col: ComponentSpec = {
     { name: "align", type: "string", optional: true, enum: COL_ALIGN, description: "Per-column horizontal alignment" },
     { name: "sortable", type: "boolean", optional: true, description: "DataGrid: enable click-to-sort on this column" },
     { name: "filterable", type: "boolean", optional: true, description: "DataGrid: enable a per-column filter chip" },
-    { name: "render", type: "callable", optional: true, aliases: ["cell"], description: "`(value, index) => Component | string | array` — map each cell to arbitrary content (buttons, badges, links)." },
-    { name: "onClick", type: "callable", optional: true, aliases: ["onclick", "cellClick"], description: "`(value, index) => void` — fired when a cell in this column is clicked or activated via keyboard." },
+    { name: "render", type: "callable", optional: true, aliases: ["cell"], description: "`(value, index, row) => Component | string | array` — map each cell to arbitrary content (buttons, badges, links). `row` is the whole row (header-keyed), so it stays correct even when DataGrid sorts internally — prefer `row.otherColumn` over an `index` lookup into a sibling array." },
+    { name: "onClick", type: "callable", optional: true, aliases: ["onclick", "cellClick"], description: "`(value, index, row) => void` — fired when a cell in this column is clicked or activated via keyboard." },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -99,8 +101,12 @@ export const Table: ComponentSpec = {
     const clicks = cols.map((col) => col.args?.[7]);
     const rowCount = Math.max(0, ...columnValues.map((c) => c.length));
 
+    const headers = cols.map((col, c) => asString(col.args?.[0]) || `col-${c}`);
     for (let r = 0; r < rowCount; r += 1) {
       const tr = el("tr");
+      // Header-keyed row so a cell `render`/`onClick` can read sibling columns (#11).
+      const rowObj: Record<string, unknown> = {};
+      columnValues.forEach((values, c) => { rowObj[headers[c]!] = values[r]; });
       columnValues.forEach((values, c) => {
         const format = formats[c] ?? "text";
         const align = aligns[c];
@@ -112,6 +118,7 @@ export const Table: ComponentSpec = {
           r,
           helpers,
           formatCell,
+          rowObj,
         );
         tr.append(td);
       });

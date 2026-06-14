@@ -3532,10 +3532,10 @@ function evaluateBinary(
     case "===": return left === right;
     case "!=":
     case "!==": return left !== right;
-    case ">": return toNumber(left) > toNumber(right);
-    case "<": return toNumber(left) < toNumber(right);
-    case ">=": return toNumber(left) >= toNumber(right);
-    case "<=": return toNumber(left) <= toNumber(right);
+    case ">":
+    case "<":
+    case ">=":
+    case "<=": return relationalCompare(op, left, right);
     // Bitwise / shift — JS coerces operands through ToInt32 / ToUint32.
     case "&": return (toInt32(left) & toInt32(right));
     case "|": return (toInt32(left) | toInt32(right));
@@ -3563,6 +3563,66 @@ function evaluateBinary(
     }
     default: return null;
   }
+}
+
+/**
+ * Relational comparison for `<`, `>`, `<=`, `>=`.
+ *
+ * Each operand is first coerced to a primitive with the "number" hint, so a
+ * `Date`, a `BigInt`-like, or any object with `valueOf` / `Symbol.toPrimitive`
+ * compares by its primitive value — `new Date(a) > new Date(b)` now works
+ * instead of silently evaluating `0 > 0` (issue #3). The primitives are then
+ * compared numerically via the lenient `toNumber`, preserving the runtime's
+ * long-standing "comparison operators coerce numerically" rule (so e.g.
+ * `"5" < "10"` stays `true`).
+ */
+function relationalCompare(op: string, left: unknown, right: unknown): boolean {
+  const ln = toNumber(toPrimitiveNumber(left));
+  const rn = toNumber(toPrimitiveNumber(right));
+  switch (op) {
+    case ">": return ln > rn;
+    case "<": return ln < rn;
+    case ">=": return ln >= rn;
+    case "<=": return ln <= rn;
+  }
+  return false;
+}
+
+/**
+ * ToPrimitive(value, "number"): try `Symbol.toPrimitive("number")`, then
+ * `valueOf()`, then `toString()`, returning the first primitive result.
+ * Non-objects pass through unchanged. Used by relational comparison so
+ * `Date` and other `valueOf`-bearing objects coerce like they do in JS.
+ */
+function toPrimitiveNumber(value: unknown): unknown {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+    return value;
+  }
+  const obj = value as {
+    [Symbol.toPrimitive]?: (hint: string) => unknown;
+    valueOf?: () => unknown;
+    toString?: () => unknown;
+  };
+  try {
+    const toPrim = obj[Symbol.toPrimitive];
+    if (typeof toPrim === "function") {
+      const r = toPrim.call(obj, "number");
+      if (r === null || typeof r !== "object") return r;
+    }
+  } catch { /* fall through to valueOf */ }
+  try {
+    if (typeof obj.valueOf === "function") {
+      const r = obj.valueOf();
+      if (r === null || typeof r !== "object") return r;
+    }
+  } catch { /* fall through to toString */ }
+  try {
+    if (typeof obj.toString === "function") {
+      const r = obj.toString();
+      if (r === null || typeof r !== "object") return r;
+    }
+  } catch { /* fall through */ }
+  return value;
 }
 
 /** Coerce to a signed 32-bit integer the way JS bitwise operators do. */
@@ -4143,15 +4203,16 @@ export function evaluateUserComponent(
   // the only caller that drives recursive expansion). See
   // `enterUserComponent` / `leaveUserComponent` and `renderer.ts`.
   const { decl, positional, named } = node;
-  const restoreLoopVars: Array<{ name: string; had: boolean; prev: unknown }> = [];
+  // Per-instance scope frame for non-`$` locals: snapshot the caller's
+  // `loopVars` and restore it wholesale when the body returns, so this
+  // component's params and body-local `const`/`let`/`var` cannot leak into or
+  // clobber a caller's same-named locals (issue #1). Deferred lambdas created
+  // inside the body capture `loopVars` by copy at creation time, so they keep
+  // working after the restore.
+  const savedLoopVars = new Map(ctx.loopVars);
   // Bind component params in declaration order, with defaults for absent
   // values. Trailing positional becomes `children`.
   const bindComponentLocal = (name: string, value: unknown) => {
-    restoreLoopVars.push({
-      name,
-      had: ctx.loopVars.has(name),
-      prev: ctx.loopVars.get(name),
-    });
     ctx.loopVars.set(name, value);
   };
   for (let i = 0; i < decl.params.length; i += 1) {
@@ -4186,11 +4247,6 @@ export function evaluateUserComponent(
   if (positional.length > decl.params.length) {
     const extras = positional.slice(decl.params.length);
     const childrenValue = extras.length === 1 ? extras[0] : extras;
-    restoreLoopVars.push({
-      name: "children",
-      had: ctx.loopVars.has("children"),
-      prev: ctx.loopVars.get("children"),
-    });
     ctx.loopVars.set("children", childrenValue);
   }
   // Named slots: declared as `slots: { name? }` on the component.
@@ -4220,11 +4276,6 @@ export function evaluateUserComponent(
     }
   }
   if (Object.keys(slotsValue).length > 0 || decl.slots.length > 0) {
-    restoreLoopVars.push({
-      name: "slots",
-      had: ctx.loopVars.has("slots"),
-      prev: ctx.loopVars.get("slots"),
-    });
     ctx.loopVars.set("slots", slotsValue);
   }
 
@@ -4270,10 +4321,8 @@ export function evaluateUserComponent(
     ctx.hookScope = prevHookScope;
     ctx.componentEffectStack.pop();
     ctx.stateAliases.pop();
-    for (const slot of restoreLoopVars) {
-      if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
-      else ctx.loopVars.delete(slot.name);
-    }
+    ctx.loopVars.clear();
+    for (const [name, value] of savedLoopVars) ctx.loopVars.set(name, value);
   }
 }
 
@@ -4393,15 +4442,17 @@ function runDeclBodySync(
   args: unknown[],
   ctx: EvaluationContext,
 ): unknown {
-  const restore: Array<{ name: string; had: boolean; prev: unknown }> = [];
-  const bindLocal = (name: string, value: unknown) => {
-    restore.push({
-      name,
-      had: ctx.loopVars.has(name),
-      prev: ctx.loopVars.get(name),
-    });
-    ctx.loopVars.set(name, value);
-  };
+  // Give this call its own scope frame for non-`$` locals. We snapshot the
+  // entire `loopVars` map now and restore it wholesale when the body returns,
+  // so a callee's parameters AND its body-local `const`/`let`/`var` can never
+  // clobber a caller's same-named local (issue #1 — the call-frame isolation
+  // bug). The callee still *reads* caller locals (the historical flat-namespace
+  // behaviour, which deferred lambdas and helpers may rely on), but its
+  // *writes* are unwound on return. `$state` atoms live in a separate store
+  // and are unaffected. This mirrors exactly what the lambda runner already
+  // does (capture-by-copy + wholesale restore), so deferred closures created
+  // inside the body keep working — they snapshot `loopVars` at creation time.
+  const savedLoopVars = new Map(ctx.loopVars);
   for (let i = 0; i < params.length; i += 1) {
     const param = params[i]!;
     let value: unknown = args[i];
@@ -4410,19 +4461,17 @@ function runDeclBodySync(
     }
     if (param.pattern) {
       for (const pair of resolvePatternBindings(param.pattern, value, ctx)) {
-        bindLocal(pair.name, pair.value);
+        ctx.loopVars.set(pair.name, pair.value);
       }
       continue;
     }
-    bindLocal(param.name, value);
+    ctx.loopVars.set(param.name, value);
   }
   try {
     return evaluateBlock(body, ctx, { stateAsDeclaration: ctx.state.isRendering() });
   } finally {
-    for (const slot of restore) {
-      if (slot.had) ctx.loopVars.set(slot.name, slot.prev);
-      else ctx.loopVars.delete(slot.name);
-    }
+    ctx.loopVars.clear();
+    for (const [name, value] of savedLoopVars) ctx.loopVars.set(name, value);
   }
 }
 

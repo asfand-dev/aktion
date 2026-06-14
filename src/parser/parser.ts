@@ -1447,6 +1447,19 @@ function parsePrimary(ctx: ParserContext): Expression {
     ctx.consume();
     return { kind: "Literal", value: tok.value };
   }
+  if (tok.type === "Regex") {
+    // Desugar `/pattern/flags` to `new RegExp("pattern", "flags")` so it reuses
+    // the runtime's existing `RegExp` global — no evaluator change needed.
+    ctx.consume();
+    const args: Expression[] = [{ kind: "Literal", value: tok.value }];
+    if (tok.flags) args.push({ kind: "Literal", value: tok.flags });
+    return {
+      kind: "New",
+      callee: { kind: "Identifier", name: "RegExp" },
+      arguments: args,
+      loc: { line: tok.line, column: tok.column },
+    };
+  }
   if (tok.type === "TemplateString") {
     ctx.consume();
     const parts = tok.parts ?? [];

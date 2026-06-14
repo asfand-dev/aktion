@@ -12,6 +12,7 @@
 
 export {
   getDiagnostics,
+  getLintWarnings,
   getCompletions,
   getHoverInfo,
   type Position,

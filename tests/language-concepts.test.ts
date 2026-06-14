@@ -677,6 +677,38 @@ describe("$i18n({...}) language construct", () => {
     `);
     expect(ctx.state.get("missing")).toBe("nope");
   });
+
+  it("#2 leaves unsupplied {placeholders} intact so .replace() still works", () => {
+    const { ctx } = harness(`
+      const { t } = $i18n({
+        defaultLanguage: "en",
+        translations: { constraint: { en: "Uppercase: min {n}" } }
+      })
+      $raw    = t("constraint")
+      $patched = t("constraint").replace("{n}", "1")
+      $direct = t("constraint", { n: 1 })
+      aktion = Text("ok")
+    `);
+    // No vars → placeholder preserved (not stripped to "Uppercase: min ").
+    expect(ctx.state.get("raw")).toBe("Uppercase: min {n}");
+    // …so the legacy .replace() idiom recovers the value.
+    expect(ctx.state.get("patched")).toBe("Uppercase: min 1");
+    // …and the canonical path still works.
+    expect(ctx.state.get("direct")).toBe("Uppercase: min 1");
+  });
+
+  it("#2 still substitutes a supplied placeholder (even when others are absent)", () => {
+    const { ctx } = harness(`
+      const { t } = $i18n({
+        defaultLanguage: "en",
+        translations: { pair: { en: "{a} and {b}" } }
+      })
+      $partial = t("pair", { a: "X" })
+      aktion = Text("ok")
+    `);
+    // `a` substituted; unsupplied `b` left intact.
+    expect(ctx.state.get("partial")).toBe("X and {b}");
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────
