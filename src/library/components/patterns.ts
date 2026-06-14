@@ -870,8 +870,13 @@ export const AppShell: ComponentSpec = {
     }
     const main = el("div", { class: "rui-app-shell-main" });
     const topbar = asArray<unknown>(props.topbar);
-    if (topbar.length > 0 || collapsible) {
+    const hasTopbarContent = topbar.length > 0;
+    if (hasTopbarContent || collapsible) {
       const bar = el("div", { class: "rui-app-shell-topbar" });
+      // A bar with no content exists only to host the mobile hamburger, so
+      // flag it: CSS hides it on wide screens (no burger, nothing to show) and
+      // reveals it only where the sidebar collapses to a drawer.
+      if (!hasTopbarContent) bar.dataset.burgerOnly = "true";
       if (collapsible) {
         const toggle = el("button", {
           class: "rui-app-shell-toggle",

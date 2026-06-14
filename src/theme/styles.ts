@@ -2609,6 +2609,10 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   min-width: 0;
 }
 .rui-app-shell-toggle { flex: 0 0 auto; }
+/* Collapsible AppShell with no topbar content: the bar only exists to host the
+   mobile hamburger, so hide it on wide screens (no burger there, no content).
+   The phone media query reveals it where the sidebar collapses to a drawer. */
+.rui-app-shell-topbar[data-burger-only="true"] { display: none; }
 .rui-app-shell-content {
   display: flex;
   flex-direction: column;
@@ -7735,6 +7739,19 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   }
   .rui-app-shell[data-collapsible="true"] .rui-app-shell-toggle {
     display: inline-flex;
+  }
+  /* Reveal a burger-only bar (no topbar content) where the sidebar collapses,
+     so the hamburger has somewhere to live on phones. */
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-topbar[data-burger-only="true"] {
+    display: flex;
+  }
+  /* Keep a topbar Row horizontal on phones — search + actions stay on one line
+     beside the hamburger instead of collapsing to a column the way ordinary
+     content rows do. Higher specificity + later source order beats the global
+     row-to-column rule. */
+  .rui-app-shell .rui-app-shell-topbar .rui-stack[data-direction="row"] {
+    flex-direction: row;
+    align-items: center;
   }
   /* Inside the off-canvas drawer the host is already a full-height fixed
      panel, so let a full-height rail fill it normally instead of sticking. */

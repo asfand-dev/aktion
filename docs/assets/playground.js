@@ -1445,7 +1445,7 @@ function initPreviewFrame() {
     // DevTools opens. Runs before the runtime module so early reads work too.
     "<script>(function(){try{var k='__AKTION_DEVTOOLS_HOOK__';Object.defineProperty(window,k,{configurable:true,get:function(){return window.parent[k];},set:function(v){window.parent[k]=v;}});}catch(e){}})();</script>",
     "<script type='module' src='" + RUNTIME_URL + "'></script>",
-    "</head><body><aktion-app id='pg-target' theme='light' margin='0'></aktion-app></body></html>",
+    "</head><body><aktion-app id='pg-target' theme='light'></aktion-app></body></html>",
   ].join("");
   const onReady = () => {
     const win = previewFrame.contentWindow;
