@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="../assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="../assets/site.css?v=2026.06.14" />
   <!-- Font Awesome (icons referenced by the apps) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
@@ -69,6 +69,14 @@
     /* Embedded preview mode (live-demos.html cards): chrome-less program only. */
     body[data-embed] .topbar { display: none; }
     main { padding: 0; }
+    /* Phones: let the runner toolbar wrap instead of overflowing; selects flex
+       to the available width. */
+    @media (max-width: 760px) {
+      .runner-bar { height: auto; flex-wrap: wrap; padding: 10px 14px; gap: 8px 12px; }
+      .runner-bar .topbar-spacer { display: none; }
+      .runner-group { flex: 1 1 auto; min-width: 0; }
+      .runner-group select { flex: 1 1 auto; min-width: 0; max-width: none; }
+    }
   </style>
 </head>
 <body>

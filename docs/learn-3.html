@@ -185,7 +185,7 @@
 
     /* ============================ TUTORIAL SHELL ============================ */
     .tut { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 26px; padding: 26px 0 90px; }
-    @media (max-width: 980px){ .tut { grid-template-columns: 1fr; } }
+    @media (max-width: 980px){ .tut { grid-template-columns: minmax(0, 1fr); } }
 
     /* --- quest rail --- */
     .rail { position: sticky; top: 86px; align-self: start; }
@@ -265,7 +265,7 @@
     /* --- playground --- */
     .play { margin-top: 22px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
     .play-grid { display: grid; grid-template-columns: minmax(0,1.08fr) minmax(0,1fr); }
-    @media (max-width: 880px){ .play-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 880px){ .play-grid { grid-template-columns: minmax(0, 1fr); } }
     .pane-bar {
       display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600;
       color: var(--text-mute); border-bottom: 1px solid var(--border); background: var(--bg-soft);
@@ -339,6 +339,12 @@
     .step-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); transition: .3s; }
     .step-dots i.on { background: var(--ak-violet); transform: scale(1.25); }
     .step-dots i.ok { background: var(--ak-emerald); }
+    /* Phones: Back/Next stay on one row (opposite ends); progress dots wrap below. */
+    @media (max-width: 560px) {
+      .step-nav { flex-wrap: wrap; justify-content: space-between; }
+      .step-nav .spacer { display: none; }
+      .step-nav .step-dots { order: 99; flex-basis: 100%; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+    }
     .btn-next.ready { background: var(--grad-emerald); box-shadow: 0 10px 28px -8px rgba(16,185,129,0.55); animation: readyPulse 1.6s var(--ease) infinite; }
     @keyframes readyPulse { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-2px);} }
 

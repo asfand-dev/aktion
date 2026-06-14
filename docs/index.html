@@ -192,6 +192,29 @@
     .btn-ghost:hover { border-color: var(--border-strong); transform: translateY(-2px); }
     .nav-burger { display: none; }
 
+    /* Mobile dropdown menu — hidden by default, shown via .is-open < 760px */
+    .mobile-menu {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--surface-solid); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); display: none; z-index: 49;
+      max-height: calc(100vh - 66px); overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .mobile-menu-inner { display: flex; flex-direction: column; gap: 4px; padding-block: 14px 18px; }
+    .mobile-menu-inner a {
+      display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600;
+      color: var(--text-soft); padding: 13px 14px; border-radius: 11px; transition: .15s;
+    }
+    .mobile-menu-inner a:hover, .mobile-menu-inner a:focus-visible { color: var(--text); background: var(--bg-soft); }
+    .mobile-menu-inner a i { width: 20px; text-align: center; color: var(--text-mute); }
+    .mobile-menu-inner .mobile-menu-cta { justify-content: center; color: #fff; margin-top: 8px; }
+    .mobile-menu-inner .mobile-menu-cta i { color: #fff; }
+    .mobile-menu-backdrop {
+      position: fixed; inset: 0; z-index: 40; background: rgba(10,8,22,0.4);
+      backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .mobile-menu-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
     /* ===================================================================
        Hero
        =================================================================== */
@@ -480,9 +503,14 @@
     .foot-bottom { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--text-mute); font-size: 13.5px; }
     .foot-social { display: flex; gap: 10px; }
 
-    @media (max-width: 760px){
+    /* Burger nav up to 1080px: the full six-link nav needs ~1037px to fit, so
+       it overflows on tablets — show the dropdown menu instead below that. */
+    @media (max-width: 1080px){
       .nav-links { display: none; }
       .nav-burger { display: grid; }
+      .mobile-menu.is-open { display: block; }
+    }
+    @media (max-width: 760px){
       .hero { padding: 48px 0 20px; }
       .section { padding: 70px 0; }
     }
@@ -524,10 +552,23 @@
             <i class="fa-brands fa-github"></i>
           </a>
           <a class="btn btn-primary btn-get-started" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
-          <button class="icon-btn nav-burger" id="burger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+          <button class="icon-btn nav-burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><i class="fa-solid fa-bars"></i></button>
         </div>
       </div>
+      <!-- Mobile dropdown menu (shown < 760px when burger is tapped) -->
+      <div class="mobile-menu" id="mobileMenu">
+        <nav class="wrap mobile-menu-inner">
+          <a href="get-started.html"><i class="fa-solid fa-book"></i> Docs</a>
+          <a href="tutorial.html"><i class="fa-solid fa-gamepad"></i> Tutorial</a>
+          <a href="components.html"><i class="fa-solid fa-shapes"></i> Components</a>
+          <a href="themes.html"><i class="fa-solid fa-palette"></i> Themes</a>
+          <a href="live-demos.html"><i class="fa-solid fa-wand-magic-sparkles"></i> Demos</a>
+          <a href="playground.html"><i class="fa-solid fa-play"></i> Playground</a>
+          <a class="btn btn-primary mobile-menu-cta" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
+        </nav>
+      </div>
     </header>
+    <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" aria-hidden="true"></div>
 
     <!-- ============================ HERO ============================ -->
     <section class="hero">
@@ -1277,10 +1318,28 @@ btn = Button("Track order", { variant: "primary", icon: "location-dot" })`;
       window.addEventListener("scroll", onScroll, { passive: true });
     })();
 
-    /* ---- mobile burger: jump to docs ---- */
+    /* ---- mobile burger: toggle dropdown menu ---- */
     (function () {
       const burger = document.getElementById("burger");
-      burger && burger.addEventListener("click", () => { window.location.href = "get-started.html"; });
+      const menu = document.getElementById("mobileMenu");
+      const backdrop = document.getElementById("mobileMenuBackdrop");
+      if (!burger || !menu) return;
+      const icon = burger.querySelector("i");
+
+      function setOpen(open) {
+        menu.classList.toggle("is-open", open);
+        if (backdrop) backdrop.classList.toggle("is-open", open);
+        burger.setAttribute("aria-expanded", String(open));
+        burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        if (icon) icon.className = open ? "fa-solid fa-xmark" : "fa-solid fa-bars";
+      }
+
+      burger.addEventListener("click", () => setOpen(!menu.classList.contains("is-open")));
+      backdrop && backdrop.addEventListener("click", () => setOpen(false));
+      menu.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => setOpen(false)));
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+      // Reset when leaving the burger breakpoint so the panel never lingers on desktop.
+      window.matchMedia("(min-width: 1081px)").addEventListener("change", (e) => { if (e.matches) setOpen(false); });
     })();
 
     /* ---- scroll reveal ---- */

@@ -239,7 +239,7 @@
     .reset-link:hover { color: #ef4444; background: rgba(239,68,68,.08); }
 
     .shell-body { display: grid; grid-template-columns: 290px minmax(0, 1fr); }
-    @media (max-width: 1020px) { .shell-body { grid-template-columns: 1fr; } }
+    @media (max-width: 1020px) { .shell-body { grid-template-columns: minmax(0, 1fr); } }
 
     /* ----------------------------- Level map ----------------------------- */
     .map { border-right: 1px solid var(--border); padding: 18px 14px 24px; background: var(--bg-2); }
@@ -361,7 +361,7 @@
 
     /* ----------------------------- Workbench ----------------------------- */
     .workbench { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 16px; margin: 22px 0 18px; }
-    @media (max-width: 1100px) { .workbench { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) { .workbench { grid-template-columns: minmax(0, 1fr); } }
     .wb-window {
       border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden;
       background: var(--surface-solid); box-shadow: var(--shadow-sm); display: flex; flex-direction: column;
@@ -566,6 +566,11 @@
     .reveal { opacity: 0; transform: translateY(34px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
     .reveal.in { opacity: 1; transform: none; }
 
+    /* The nav CTA pushes the full nav to ~915px; hide it below 920px so the
+       brand + links + icons fit on tablets without overflow. */
+    @media (max-width: 920px) {
+      .nav-right .btn { display: none; }
+    }
     @media (max-width: 760px) {
       .nav-links { display: none; }
       .hero { padding: 44px 0 16px; }

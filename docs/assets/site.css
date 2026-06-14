@@ -1179,6 +1179,10 @@ textarea.playground-input:focus {
   }
   .toc { display: none; }
   main { padding: 32px 28px 64px; }
+  /* Tablet: the full primary-tab row + search no longer fit beside the brand.
+     The sidebar is still visible here and covers navigation, so drop the tabs
+     (they return on desktop alongside the TOC). Search + icons stay. */
+  .topbar-tabs { display: none; }
 }
 
 @media (max-width: 960px) {
@@ -1195,7 +1199,7 @@ textarea.playground-input:focus {
   body { font-size: 14.5px; }
 
   .topbar { padding: 0 14px; gap: 10px; }
-  .topbar-tabs { display: none; }
+  /* .topbar-tabs already hidden at <=1024px */
   .topbar-search { display: none; }
   .topbar-version { display: none; }
   .topbar-menu-toggle {

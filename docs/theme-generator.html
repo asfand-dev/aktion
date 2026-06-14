@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* =========================================================================
@@ -40,7 +40,7 @@
       align-items: start;
     }
     @media (max-width: 1080px) {
-      .tg-grid { grid-template-columns: 1fr; }
+      .tg-grid { grid-template-columns: minmax(0, 1fr); }
     }
 
     /* ---- Controls column --------------------------------------------------- */
@@ -511,7 +511,7 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
     </main>
   </div>
 
-  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module" src="assets/site.js?v=2026.06.14"></script>
   <script type="module">
     import "../dist/aktion.js"; // registers <aktion-app>
 

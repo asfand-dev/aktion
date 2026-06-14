@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.05.13" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
@@ -23,9 +23,11 @@
     .callout.ok { border-left-color: #10b981; }
     .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
-    .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
-    @media (max-width: 760px) { .flow { grid-template-columns: 1fr 1fr; } }
-    .flow-step { border: 1px solid var(--doc-border); border-radius: 10px; padding: 12px 14px; background: var(--doc-surface-elev); }
+    /* Fluid: as many ~240px columns as fit (4-up on wide screens, fewer on
+       tablet/phone) without ever overflowing the narrowed docs main column. */
+    .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin: 18px 0; }
+    .flow-step { min-width: 0; border: 1px solid var(--doc-border); border-radius: 10px; padding: 12px 14px; background: var(--doc-surface-elev); }
+    .flow-step code { overflow-wrap: anywhere; }
     .flow-step b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--doc-text-muted); margin-bottom: 4px; }
   </style>
 </head>
@@ -302,6 +304,6 @@ async function generate(prompt) {
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.05.13"></script>
+  <script type="module" src="assets/site.js?v=2026.06.14"></script>
 </body>
 </html>

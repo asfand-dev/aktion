@@ -29,7 +29,6 @@ const NAV_GROUPS = [
   {
     label: "Getting Started",
     items: [
-      { href: "index.html", label: "Introduction" },
       { href: "get-started.html", label: "Installation" },
       { href: "frameworks.html", label: "Frameworks" },
       { href: "migration-guide.html", label: "Migration to Aktion" },

@@ -417,6 +417,11 @@
       .sq-grid { grid-template-columns: 1fr; }
       .xp-wrap { display: none; }
     }
+    @media (max-width: 640px) {
+      .nav-inner { gap: 12px; }
+      .nav-right { gap: 8px; }
+      .nav-right .docs-link { display: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
     }

@@ -7,7 +7,13 @@
    into other docs pages. Tokens come from site.css.
    ========================================================================== */
 
+   /* The settings drawer is a position:fixed panel parked off-canvas via
+      translateX(100%); clip horizontal overflow at the root so it never adds a
+      page-level horizontal scrollbar on small screens. */
+   html:has(body[data-page="chat-bot"]) { overflow-x: hidden; }
+
    body[data-page="chat-bot"] {
+    overflow-x: hidden;
     /* Mode-flavoured accent palette — overridden per mode further down. */
     --cb-accent-1: #6366f1;
     --cb-accent-2: #8b5cf6;
