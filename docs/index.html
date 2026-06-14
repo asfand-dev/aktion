@@ -352,7 +352,7 @@
     /* token stream visual */
     .stream-demo { margin-top: 26px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
     .stream-grid { display: grid; grid-template-columns: 1fr 1fr; }
-    @media (max-width: 760px){ .stream-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px){ .stream-grid { grid-template-columns: 1fr; } .btn-get-started { display: none; } }
     .stream-code { background: var(--code-bg); color: var(--code-text); font-family: var(--font-mono); font-size: 12.5px; padding: 20px; min-height: 220px; }
     .stream-code .ln { display: block; opacity: 0; transform: translateY(6px); }
     .stream-out { padding: 20px; background: var(--bg-2); border-left: 1px solid var(--border); }
@@ -506,7 +506,7 @@
         <a class="brand" href="index.html">
           <img src="assets/logo.png" alt="Aktion logo" />
           <span>Aktion</span>
-          <span class="v">v0.5.9</span>
+          <span class="v">v0.5.14</span>
         </a>
         <nav class="nav-links">
           <a href="get-started.html">Docs</a>
@@ -523,7 +523,7 @@
           <a class="icon-btn" href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
             <i class="fa-brands fa-github"></i>
           </a>
-          <a class="btn btn-primary" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
+          <a class="btn btn-primary btn-get-started" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
           <button class="icon-btn nav-burger" id="burger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
         </div>
       </div>
@@ -533,7 +533,7 @@
     <section class="hero">
       <div class="wrap">
         <span class="badge-pill">
-          <span class="tag">v0.5.9</span>
+          <span class="tag">v0.5.14</span>
           A new language for building user interfaces
           <i class="fa-solid fa-arrow-right" style="font-size:11px;color:var(--text-mute)"></i>
         </span>
@@ -1354,7 +1354,7 @@ btn = Button("Track order", { variant: "primary", icon: "location-dot" })`;
       resize();
       addEventListener("resize", resize);
 
-      const LINK = 130;
+      const LINK = 400;
       function frame() {
         ctx.clearRect(0, 0, w, h);
         for (const p of particles) {

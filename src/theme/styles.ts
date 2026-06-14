@@ -1353,6 +1353,32 @@ ${spacingAttrRules(".rui-grid", "data-column-gap", (v) => `column-gap: ${v};`)}
   }
 }
 
+/* ----- Mobile collapse: fixed-column grids stack on phones -----
+   Plain numeric Grid(columns: N) sets data-columns and previously never
+   collapsed on small screens, leaving 3-12 cramped columns at phone widths.
+   Below the sm (640px) breakpoint: collapse fixed grids of 3+ columns to 2,
+   and stack 12-column layout grids (non-responsive GridItems go full-width).
+   Untouched: data-responsive-cols / data-responsive-span (author opted into a
+   breakpoint map) and data-min-child-width grids (already auto-wrap via minmax). */
+@media (max-width: 639.98px) {
+  .rui-grid[data-columns]:not([data-columns="1"]):not([data-columns="2"]):not([data-grid-mode="12"]):not([data-min-child-width]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rui-grid[data-grid-mode="12"] > *:not(.rui-grid-item[data-responsive-span]) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ----- Tablet (640-767px): intermediate grid columns -----
+   Smooth the jump from the phone cap (2 cols) to the full count: fixed grids
+   of 4+ columns render 3-up at tablet widths. columns 2-3 already fit, and
+   responsive-cols / min-child / 12-col modes manage themselves. */
+@media (min-width: 640px) and (max-width: 767.98px) {
+  .rui-grid[data-columns]:not([data-columns="1"]):not([data-columns="2"]):not([data-columns="3"]):not([data-grid-mode="12"]):not([data-min-child-width]) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Box — spacing / surface wrapper */
 .rui-box { box-sizing: border-box; }
 ${spacingAttrRules(".rui-box", "data-padding", (v) => `padding: ${v};`)}
@@ -5910,7 +5936,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-calendar-weekrow {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   padding: 0 1px;
 }
@@ -5925,7 +5951,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   background: var(--rui-color-border);
   border: 1px solid var(--rui-color-border);
@@ -8652,4 +8678,52 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-kbd-shortcut { display: inline-flex; align-items: center; gap: 4px; }
 .rui-kbd-key { font-family: var(--rui-font-family-mono); font-size: 11px; line-height: 1; padding: 4px 6px; border-radius: var(--rui-radius-xs); border: 1px solid var(--rui-color-border); border-bottom-width: 2px; background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
 .rui-kbd-plus { color: var(--rui-color-text-muted); font-size: 11px; }
+
+/* ===== Mobile (<640px) per-component layout fixes =====
+   Desktop side-by-side / fixed-track layouts that cannot fit a phone. Placed
+   at the end of the sheet so these single-class rules win over the base
+   definitions on source order. Audited via DOM measurement at 375px;
+   intentionally-scrollable components (code / data-grid / kanban / diff) keep
+   scrolling, and off-canvas (sheet) / clipped (carousel) layouts are already
+   correct, so they are deliberately left untouched. */
+@media (max-width: 639.98px) {
+  /* SplitView: fixed 320px sidebar + content -> stack to one column */
+  .rui-split-view { grid-template-columns: 1fr !important; }
+  /* ResizablePanels: side-by-side panels -> stack; drop the drag divider */
+  .rui-resizable-panels { grid-template-columns: 1fr !important; }
+  .rui-resizable-panel { min-width: 0 !important; }
+  .rui-resizable-divider { display: none; }
+  /* MultiStepForm column layout -> single column (mirrors data-layout="row") */
+  .rui-multi-step-form[data-layout="column"] {
+    grid-template-columns: 1fr;
+    grid-template-areas: "steps" "body" "footer";
+  }
+  /* ComparisonTable: wide pricing/feature table -> scroll instead of clipping */
+  .rui-comparison-table { overflow-x: auto; }
+  /* DrawingCanvas / SignaturePad: scale the fixed-size canvas down to fit */
+  .rui-drawing-canvas, .rui-signature-pad { display: block; max-width: 100%; }
+  .rui-canvas-surface { max-width: 100%; height: auto; }
+}
+
+/* ===== Touch targets: comfortable tap sizes on touch / small screens =====
+   Applies on coarse-pointer (touch) devices and small viewports. Enlarges the
+   genuinely tappable controls toward ~44px (WCAG 2.5.5 AAA / Apple HIG).
+   Buttons get inline-flex centering since the base .rui-button has no display
+   (a bare min-height would top-align the label). Deliberately excluded, since
+   44px would break their layout: inline text links (rui-link / breadcrumb),
+   dense data-grid controls, chip/tag remove buttons, and colour swatches. */
+@media (pointer: coarse), (max-width: 767.98px) {
+  .rui-button:not([data-variant="link"]):not([data-size="xs"]) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .rui-button[data-icon-only="true"]:not([data-size="xs"]) { min-width: 44px; }
+  .rui-icon-button { min-width: 44px; min-height: 44px; }
+  .rui-input, .rui-select { min-height: 44px; }
+  .rui-sidebar-item, .rui-navbar-item, .rui-menu-item { min-height: 44px; }
+  .rui-combobox-option { display: flex; align-items: center; min-height: 44px; }
+  .rui-tab-trigger { min-height: 44px; display: inline-flex; align-items: center; }
+}
 `;
