@@ -257,13 +257,13 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
 
   it("reflects the resolved theme name as data-rui-theme on the host", async () => {
     const el = create();
-    el.setAttribute("theme", "neon");
+    el.setAttribute("theme", "modern");
     await flush();
-    expect(el.getAttribute("data-rui-theme")).toBe("neon");
+    expect(el.getAttribute("data-rui-theme")).toBe("modern");
 
-    el.setAttribute("theme", "pastel");
+    el.setAttribute("theme", "soft");
     await flush();
-    expect(el.getAttribute("data-rui-theme")).toBe("pastel");
+    expect(el.getAttribute("data-rui-theme")).toBe("soft");
 
     el.setAttribute("theme", "light");
     await flush();
@@ -276,9 +276,9 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
 
   it("applies CSS custom properties for built-in themes", () => {
     const el = create();
-    el.setAttribute("theme", "neon");
-    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#ec4899");
-    el.setAttribute("theme", "pastel");
+    el.setAttribute("theme", "modern");
+    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#111827");
+    el.setAttribute("theme", "soft");
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#a78bfa");
   });
 

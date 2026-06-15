@@ -181,8 +181,8 @@ Everything you need at runtime ships in a single bundle:
   exposes `route.path`, `route.params`, `route.query`, `route.pattern`,
   and `route.navigate("/path")`. Hash-based, framework-agnostic, always
   wired up.
-- **Seven built-in themes** (`light`, `dark`, `neon`, `pastel`, `glass`,
-  `brutalist`, `skyline`) plus full custom-token support via CSS custom
+- **Six built-in themes** (`light`, `dark`, `corporate`, `soft`, `glass`,
+  `modern`) plus full custom-token support via CSS custom
   properties. **80+ design tokens** organised into `colors`, `radius`,
   `font`, `spacing`, `shadows`, `gradients` (referenced as
   `"gradient.brand"` from `sx`/`GradientText`), `zIndex` (layer tokens
@@ -639,14 +639,23 @@ $app(pages)
   `function head([first, ...rest])`), with the same defaults / renames /
   rest support as `let`-destructuring.
 - JS expression niceties — array / object spread (`[...xs, y]`,
-  `{ ...base, k: v }`), array / object destructuring in `let` / `const`
-  / `var` (`let [a, b, ...rest] = arr`, `let { name, age = 0 } = user`),
-  computed property keys (`{ [$dynamic]: value }`), prefix and postfix
+  `{ ...base, k: v }`, `fn(...args)`), array / object destructuring in
+  `let` / `const` / `var` (`let [a, b, ...rest] = arr`,
+  `let { name, age = 0 } = user`) **including nested patterns**
+  (`let { data: { items: [first] } } = resp`), destructuring in `for-of`
+  heads (`for (const [k, v] of Object.entries(obj))`, `for (const { id } of
+  rows)`), computed property keys (`{ [$dynamic]: value }`), prefix and postfix
   `++` / `--` (with JS-accurate return semantics), `new Constructor(...)`
   with trailing member / call chains (`new Date(0).getTime()`), trailing
   commas in function params / call args / literal lists. `async function`
   is accepted as a no-op modifier; `await` is allowed in both statement
   and expression position inside action / effect bodies.
+- Equality & comparison match JavaScript — `==` / `!=` use abstract-equality
+  coercion (so `x == null` matches `null` *and* `undefined`, `1 == "1"`,
+  `0 == false`), while `===` / `!==` stay strict. Relational `<` / `>`
+  compare alphabetic strings lexicographically (alphabetical `.sort`
+  comparators work) and coerce `Date` operands via `valueOf`; two numeric
+  strings still compare numerically (`"5" < "10"`).
 - Top-level imperative statements — `if` / `for` / `while` / `try` and
   bare expression statements written at the program top level run once
   per plan (e.g. building a `$state` array with a `while` loop). Inside
@@ -1185,17 +1194,16 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 
 ## Themes
 
-Seven themes are built in. Pick one with `theme="..."` or pass a custom token map.
+Six themes are built in. Pick one with `theme="..."` or pass a custom token map.
 
 | Theme        | Vibe                                                                                              |
 | ------------ | ------------------------------------------------------------------------------------------------- |
 | `light`      | Crisp default, indigo accent.                                                                     |
 | `dark`       | Standard dark surface, indigo accent.                                                             |
-| `neon`       | Cyberpunk-inspired dark mode with magenta/cyan glow, monospace headings, sharp corners.           |
-| `pastel`     | Soft, friendly, light & rounded. Lavender + mint palette, generous radii, gentle shadows.         |
-| `glass`      | Modern glassmorphism — vivid gradient backdrop, frosted translucent surfaces, indigo→cyan accent. |
-| `brutalist`  | Neo-brutalism — hard 2px black borders, chunky offset shadows, loud primary, zero gradients.      |
-| `skyline`    | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.          |
+| `corporate`  | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.          |
+| `soft`       | Soft, friendly, light & rounded. Lavender + mint palette, generous radii, gentle shadows.         |
+| `glass`      | Light glassmorphism — frosted white surfaces over an airy pastel gradient, warm coral accent.     |
+| `modern`     | Clean modern SaaS dashboard — light, generous rounding, ink primary with pill buttons, soft shadows, vibrant charts. |
 
 ### Token groups
 
@@ -1263,7 +1271,7 @@ numbers are coerced):
 
 | Key         | Type                | Notes                                                                                                                                                                                              |
 | ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`      | `string`            | Selects a built-in theme as the base palette (`"dark"`, `"neon"`, `"pastel"`, `"glass"`, `"brutalist"`, `"skyline"`); structured overrides layer on top. Unknown names are ignored.                |
+| `name`      | `string`            | Selects a built-in theme as the base palette (`"dark"`, `"corporate"`, `"soft"`, `"glass"`, `"modern"`); structured overrides layer on top. Unknown names are ignored.                |
 | `direction` | `"ltr"` \| `"rtl"`  | Reading direction. Metadata only — not applied as a token.                                                                                                                                        |
 | `colors`    | `{ [key]: string }` | CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info`. |
 | `radius`    | `{ [key]: string }` | CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.                                                                                                                       |

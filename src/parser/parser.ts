@@ -514,6 +514,25 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
         ctx.consume();
         isRest = true;
       }
+      // Nested pattern element: `let [[a, b], { c }] = rows`.
+      if (!isRest && ctx.peek().type === "Punctuation" && (ctx.peek().value === "[" || ctx.peek().value === "{")) {
+        const nested = parseDestructuringPattern(ctx);
+        let nestedDefault: Expression | undefined;
+        if (ctx.peek().type === "Operator" && ctx.peek().value === "=") {
+          ctx.consume();
+          nestedDefault = parseExpression(ctx);
+        }
+        const nestedBinding: import("./types.js").DestructuringBinding = { name: "", pattern: nested };
+        if (nestedDefault) nestedBinding.defaultValue = nestedDefault;
+        bindings.push(nestedBinding);
+        skipWhitespace(ctx);
+        if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
+          ctx.consume();
+          skipWhitespace(ctx);
+          continue;
+        }
+        break;
+      }
       const nameTok = ctx.expect("Identifier");
       let defaultValue: Expression | undefined;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -544,20 +563,30 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
       const keyTok = ctx.expect("Identifier");
       let alias = keyTok.value;
       let sourceKey: string | undefined;
+      let nestedPattern: DestructuringPattern | undefined;
       // `{a: b}` — rename: source key `a`, local binding `b`.
+      // `{a: { b }}` / `{a: [b]}` — nested pattern under source key `a`.
       if (!isRest && ctx.peek().type === "Punctuation" && ctx.peek().value === ":") {
         ctx.consume();
-        const aliasTok = ctx.expect("Identifier");
-        sourceKey = keyTok.value;
-        alias = aliasTok.value;
+        skipWhitespace(ctx);
+        if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "{" || ctx.peek().value === "[")) {
+          sourceKey = keyTok.value;
+          nestedPattern = parseDestructuringPattern(ctx);
+        } else {
+          const aliasTok = ctx.expect("Identifier");
+          sourceKey = keyTok.value;
+          alias = aliasTok.value;
+        }
       }
       let defaultValue: Expression | undefined;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
         ctx.consume();
         defaultValue = parseExpression(ctx);
       }
-      const binding: import("./types.js").DestructuringBinding = { name: alias };
-      if (sourceKey) binding.sourceKey = sourceKey;
+      const binding: import("./types.js").DestructuringBinding = nestedPattern
+        ? { name: "", sourceKey, pattern: nestedPattern }
+        : { name: alias };
+      if (!nestedPattern && sourceKey) binding.sourceKey = sourceKey;
       if (isRest) binding.rest = true;
       if (defaultValue) binding.defaultValue = defaultValue;
       bindings.push(binding);
@@ -573,6 +602,23 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
   }
 
   return { kind: patternKind, bindings };
+}
+
+/**
+ * Flatten every variable name a destructuring pattern introduces, descending
+ * into nested patterns. Shared by the linker (scope collection) and the
+ * language service (shadowing checks) so both see the same set of names.
+ */
+export function collectPatternNames(pattern: DestructuringPattern): string[] {
+  const names: string[] = [];
+  for (const binding of pattern.bindings) {
+    if (binding.pattern) {
+      names.push(...collectPatternNames(binding.pattern));
+    } else if (binding.name) {
+      names.push(binding.name);
+    }
+  }
+  return names;
 }
 
 function parseBlock(ctx: ParserContext): BlockExpr {
@@ -1768,26 +1814,18 @@ function parseForStatement(ctx: ParserContext): Statement {
   }
   skipWhitespace(ctx);
 
-  let item: string;
-  let index: string | undefined;
-  let destructure: string[] | undefined;
+  let item = "__row";
+  let pattern: DestructuringPattern | undefined;
 
-  if (ctx.peek().type === "Punctuation" && ctx.peek().value === "[") {
-    ctx.consume();
-    item = ctx.expect("Identifier").value;
-    ctx.expect("Punctuation", ",");
-    index = ctx.expect("Identifier").value;
-    ctx.expect("Punctuation", "]");
-  } else if (ctx.peek().type === "Punctuation" && ctx.peek().value === "{") {
-    ctx.consume();
-    const fields: string[] = [];
-    while (!(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
-      fields.push(ctx.expect("Identifier").value);
-      if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") ctx.consume();
-    }
-    ctx.expect("Punctuation", "}");
-    item = "__row";
-    destructure = fields;
+  // `for (const [a, b] of pairs)` / `for (const { id, name } of rows)` —
+  // a full destructuring pattern (array by index, object by key), matching
+  // JavaScript. Reuses the same pattern parser as `let`-destructuring so
+  // defaults, renames, holes, and rest all behave identically.
+  if (
+    ctx.peek().type === "Punctuation" &&
+    (ctx.peek().value === "[" || ctx.peek().value === "{")
+  ) {
+    pattern = parseDestructuringPattern(ctx);
   } else {
     item = ctx.expect("Identifier").value;
   }
@@ -1813,8 +1851,7 @@ function parseForStatement(ctx: ParserContext): Statement {
   return {
     kind: "ForOfStatement",
     item,
-    index,
-    destructure,
+    pattern,
     iterable,
     body,
     loc: { line: start.line, column: start.column },

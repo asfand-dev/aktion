@@ -24,7 +24,7 @@
  * source into a map and use the async `linkProject` in `./project.js`.
  */
 
-import { parse } from "../parser/index.js";
+import { parse, collectPatternNames } from "../parser/index.js";
 import type {
   Program,
   Statement,
@@ -249,7 +249,9 @@ function buildSymbolTable(rec: ModuleRecord): void {
         break;
       case "DestructureStatement":
         // Top-level destructuring declares module-local (plain) bindings.
-        for (const b of stmt.bindings) if (b.name) rec.declaredPlain.add(b.name);
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) {
+          rec.declaredPlain.add(name);
+        }
         break;
       default:
         break; // Import / Effect / control-flow declare nothing importable
@@ -289,8 +291,7 @@ function makeRenamer(rec: ModuleRecord) {
     shadow.pop();
   };
 
-  const patternNames = (p: DestructuringPattern): string[] =>
-    p.bindings.map((b) => b.name).filter((n): n is string => !!n);
+  const patternNames = (p: DestructuringPattern): string[] => collectPatternNames(p);
   const paramNames = (params: ReadonlyArray<DeclParam | LambdaParam>): string[] => {
     const out: string[] = [];
     for (const p of params) {
@@ -388,7 +389,7 @@ function makeRenamer(rec: ModuleRecord) {
 
   function addBlockLocals(stmt: Statement, scope: Set<string>): void {
     if (stmt.kind === "DestructureStatement") {
-      for (const b of stmt.bindings) if (b.name) scope.add(b.name);
+      for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) scope.add(name);
     } else if (stmt.kind === "ComponentDeclaration" || stmt.kind === "ActionDeclaration") {
       scope.add(stmt.name);
     }
@@ -398,10 +399,14 @@ function makeRenamer(rec: ModuleRecord) {
   function renameTopLevel(stmt: Statement): void {
     if (stmt.kind === "DestructureStatement") {
       renameExpr(stmt.expression);
-      for (const b of stmt.bindings) {
-        if (b.defaultValue) renameExpr(b.defaultValue);
-        b.name = rPlain(b.name);
-      }
+      const renamePatternBindings = (bindings: DestructuringPattern["bindings"]): void => {
+        for (const b of bindings) {
+          if (b.defaultValue) renameExpr(b.defaultValue);
+          if (b.pattern) renamePatternBindings(b.pattern.bindings);
+          else b.name = rPlain(b.name);
+        }
+      };
+      renamePatternBindings(stmt.bindings);
       return;
     }
     renameStatement(stmt, true);
@@ -460,9 +465,7 @@ function makeRenamer(rec: ModuleRecord) {
         return;
       case "ForOfStatement": {
         renameExpr(stmt.iterable);
-        const names = [stmt.item];
-        if (stmt.index) names.push(stmt.index);
-        if (stmt.destructure) names.push(...stmt.destructure);
+        const names = stmt.pattern ? collectPatternNames(stmt.pattern) : [stmt.item];
         push(names);
         renameBlock(stmt.body);
         pop();

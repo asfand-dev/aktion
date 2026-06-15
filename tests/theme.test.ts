@@ -54,42 +54,59 @@ describe("resolveTheme", () => {
     expect(resolved.name).toBe("light");
   });
 
-  it("ships neon and pastel as built-ins", () => {
-    expect(builtInThemes.neon).toBeDefined();
-    expect(builtInThemes.pastel).toBeDefined();
+  it("ships soft and modern as built-ins", () => {
+    expect(builtInThemes.soft).toBeDefined();
+    expect(builtInThemes.modern).toBeDefined();
     // Each one must be visually distinct from light/dark to be useful.
-    expect(builtInThemes.neon.colorPrimary).not.toBe(lightTheme.colorPrimary);
-    expect(builtInThemes.pastel.colorPrimary).not.toBe(lightTheme.colorPrimary);
-    expect(builtInThemes.neon.fontFamily).not.toBe(lightTheme.fontFamily);
-    expect(builtInThemes.pastel.fontFamily).not.toBe(lightTheme.fontFamily);
+    expect(builtInThemes.soft.colorPrimary).not.toBe(lightTheme.colorPrimary);
+    expect(builtInThemes.modern.colorPrimary).not.toBe(lightTheme.colorPrimary);
+    expect(builtInThemes.soft.fontFamily).not.toBe(lightTheme.fontFamily);
+    expect(builtInThemes.modern.fontFamily).not.toBe(lightTheme.fontFamily);
   });
 
-  it("ships glass and brutalist as built-ins with their own identities", () => {
+  it("drops the retired neon and brutalist themes", () => {
+    expect(builtInThemes.neon).toBeUndefined();
+    expect(builtInThemes.brutalist).toBeUndefined();
+    // Old names fall back to light through the public resolver.
+    expect(resolveTheme("neon").name).toBe("light");
+    expect(resolveTheme("brutalist").name).toBe("light");
+  });
+
+  it("ships glass as a light glassmorphism built-in", () => {
     expect(builtInThemes.glass).toBeDefined();
-    expect(builtInThemes.brutalist).toBeDefined();
-    // Glass uses translucent surfaces and a dark backdrop.
+    // Glass uses translucent white surfaces over a light backdrop.
     expect(builtInThemes.glass.colorSurface.startsWith("rgba")).toBe(true);
     expect(builtInThemes.glass.colorBg).not.toBe(lightTheme.colorBg);
-    // Brutalist uses 0px radii and chunky offset shadows.
-    expect(builtInThemes.brutalist.radiusMd).toBe("0px");
-    expect(builtInThemes.brutalist.shadowMd).toContain("#0a0a0a");
-    // Both pick distinct fonts so the look isn't just colors.
+    // Text stays dark for contrast on the frosted surfaces.
+    expect(builtInThemes.glass.colorText).not.toBe(lightTheme.colorBg);
     expect(builtInThemes.glass.fontFamily).not.toBe(lightTheme.fontFamily);
-    expect(builtInThemes.brutalist.fontFamily).not.toBe(lightTheme.fontFamily);
   });
 
-  it("ships skyline as an enterprise-console built-in", () => {
-    const skyline = builtInThemes.skyline;
-    expect(skyline).toBeDefined();
+  it("ships corporate as an enterprise-console built-in (renamed from skyline)", () => {
+    const corporate = builtInThemes.corporate;
+    expect(corporate).toBeDefined();
     // Deep navy primary + crisp small radii are the cornerstones of the look.
-    expect(skyline.colorPrimary).toBe("#003580");
-    expect(skyline.radiusSm).toBe("4px");
-    expect(skyline.radiusMd).toBe("6px");
+    expect(corporate.colorPrimary).toBe("#003580");
+    expect(corporate.radiusSm).toBe("4px");
+    expect(corporate.radiusMd).toBe("6px");
     // Distinct from light/dark so the theme actually adds value.
-    expect(skyline.colorBg).not.toBe(lightTheme.colorBg);
-    expect(skyline.fontFamily).not.toBe(lightTheme.fontFamily);
-    // Resolves cleanly through the public resolver.
-    expect(resolveTheme("skyline").name).toBe("skyline");
+    expect(corporate.colorBg).not.toBe(lightTheme.colorBg);
+    expect(corporate.fontFamily).not.toBe(lightTheme.fontFamily);
+    // Resolves cleanly through the public resolver under its new name.
+    expect(resolveTheme("corporate").name).toBe("corporate");
+    // The old "skyline" alias is gone.
+    expect(builtInThemes.skyline).toBeUndefined();
+    expect(resolveTheme("skyline").name).toBe("light");
+  });
+
+  it("ships modern with an ink primary and pill buttons", () => {
+    const modern = builtInThemes.modern;
+    expect(modern).toBeDefined();
+    // Ink (near-black) primary rendered as pill buttons is the signature look.
+    expect(modern.colorPrimary).toBe("#111827");
+    expect(modern.radiusButton).toBe("999px");
+    expect(modern.colorBg).not.toBe(lightTheme.colorBg);
+    expect(resolveTheme("modern").name).toBe("modern");
   });
 });
 

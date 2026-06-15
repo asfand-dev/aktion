@@ -52,7 +52,7 @@ describe("getLanguageSpec", () => {
   it("exposes built-in theme names", () => {
     expect(spec.themeNames).toContain("light");
     expect(spec.themeNames).toContain("dark");
-    expect(spec.themeNames).toContain("neon");
+    expect(spec.themeNames).toContain("modern");
   });
 
   it("maps grammar token kinds to highlight tag names", () => {

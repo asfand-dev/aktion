@@ -4,11 +4,12 @@
  * Built-in themes:
  *   - "light"      (default)
  *   - "dark"
- *   - "neon"       (cyberpunk-inspired, dark with glowing accents)
- *   - "pastel"     (soft, friendly, light & rounded)
- *   - "glass"      (frosted glass, translucent surfaces, vivid gradient bg)
- *   - "brutalist"  (neo-brutalism, hard edges, thick borders, bold colors)
- *   - "skyline"    (deep navy + cyan, crisp & calm)
+ *   - "corporate"  (enterprise console: deep navy + cyan, crisp & calm)
+ *   - "soft"       (soft, friendly, light & rounded; lavender + mint)
+ *   - "glass"      (light glassmorphism: frosted white surfaces over a soft
+ *                   pastel gradient, airy and translucent)
+ *   - "modern"     (clean modern SaaS: light, generous rounding, ink primary,
+ *                   pill buttons, soft diffuse shadows, vibrant charts)
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
  * `element.setTheme({...})`, or write a bare `$theme({...})` statement
@@ -83,7 +84,7 @@ export interface ThemeTokens {
   radiusButton: string;
   /** Input-specific radius. Falls back to `radiusSm`. */
   radiusInput: string;
-  /** Width of every solid border (default 1px; brutalist uses 2px). */
+  /** Width of every solid border (default 1px). */
   borderWidth: string;
   shadowSm: string;
   shadowMd: string;
@@ -267,61 +268,10 @@ export const darkTheme: ThemeTokens = {
 };
 
 /**
- * Neon — cyberpunk-flavoured dark mode. Magenta/cyan glow, sharper corners,
- * monospace headings, and high-contrast surfaces.
+ * Soft — friendly, light and rounded. Larger paddings, big radii,
+ * lavender + mint palette, gentle shadows. (Formerly "pastel".)
  */
-export const neonTheme: ThemeTokens = {
-  ...lightTheme,
-  colorBg: "#05060f",
-  colorBgSubtle: "#0a0c1c",
-  colorSurface: "#0d1024",
-  colorSurfaceMuted: "#161a36",
-  colorBorder: "#2a2f6b",
-  colorBorderSubtle: "rgba(236, 72, 153, 0.18)",
-  colorText: "#f5f3ff",
-  colorTextMuted: "#a5b4fc",
-  colorPrimary: "#ec4899",
-  colorPrimaryHover: "#f472b6",
-  colorPrimaryText: "#05060f",
-  colorAccent: "#22d3ee",
-  colorAccentHover: "#67e8f9",
-  colorAccentText: "#05060f",
-  colorFocusRing: "#ec4899",
-  colorSuccess: "#34d399",
-  colorWarning: "#fbbf24",
-  colorDanger: "#f87171",
-  colorInfo: "#22d3ee",
-  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontFamilyHeading: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontFamilyMono: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  letterSpacingHeading: "0.02em",
-  radiusXs: "2px",
-  radiusSm: "2px",
-  radiusMd: "4px",
-  radiusLg: "6px",
-  radiusButton: "2px",
-  radiusInput: "2px",
-  shadowSm: "0 0 0 1px rgba(236, 72, 153, 0.25), 0 0 12px rgba(34, 211, 238, 0.18)",
-  shadowMd: "0 0 0 1px rgba(236, 72, 153, 0.35), 0 0 28px rgba(34, 211, 238, 0.22)",
-  shadowLg: "0 0 0 1px rgba(236, 72, 153, 0.45), 0 0 48px rgba(34, 211, 238, 0.35)",
-  spacingXs: "4px",
-  spacingS: "8px",
-  spacingM: "14px",
-  spacingL: "22px",
-  spacingXl: "36px",
-  chart1: "#ec4899",
-  chart2: "#22d3ee",
-  chart3: "#fbbf24",
-  chart4: "#a78bfa",
-  chart5: "#34d399",
-  chart6: "#f472b6",
-};
-
-/**
- * Pastel — soft, friendly, light and rounded. Larger paddings, big radii,
- * lavender + mint palette, gentle shadows.
- */
-export const pastelTheme: ThemeTokens = {
+export const softTheme: ThemeTokens = {
   ...lightTheme,
   colorBg: "#fdf6ff",
   colorBgSubtle: "#fbf2ff",
@@ -368,123 +318,72 @@ export const pastelTheme: ThemeTokens = {
 };
 
 /**
- * Glass — modern glassmorphism. Vivid gradient backdrop, frosted translucent
- * surfaces (real backdrop-filter blur applied via the stylesheet), generous
- * radii, and a cool indigo→cyan accent. Designed for hero sections and
- * marketing-style UIs.
+ * Glass — light glassmorphism. Frosted *white* translucent surfaces floating
+ * over a soft, airy pastel gradient (peach → pink → lavender → mint). Real
+ * backdrop-filter blur is applied via the stylesheet, so surfaces pick up the
+ * colourful wash behind them. Dark warm-slate text, a warm coral primary, a
+ * lavender accent, generous rounding, and feather-soft tinted shadows. The
+ * look mirrors calm, modern wellness / consumer dashboards.
  */
 export const glassTheme: ThemeTokens = {
   ...lightTheme,
-  colorBg: "#0f1730",
-  colorBgSubtle: "#13204a",
-  colorSurface: "rgba(255, 255, 255, 0.08)",
-  colorSurfaceMuted: "rgba(255, 255, 255, 0.04)",
-  colorBorder: "rgba(255, 255, 255, 0.18)",
-  colorBorderSubtle: "rgba(255, 255, 255, 0.10)",
-  colorText: "#f1f5ff",
-  colorTextMuted: "#b6c3e6",
-  colorPrimary: "#60a5fa",
-  colorPrimaryHover: "#3b82f6",
-  colorPrimaryText: "#0b132b",
-  colorAccent: "#22d3ee",
-  colorAccentHover: "#67e8f9",
-  colorAccentText: "#0b132b",
-  colorFocusRing: "#60a5fa",
-  colorSuccess: "#34d399",
-  colorWarning: "#fbbf24",
-  colorDanger: "#fb7185",
-  colorInfo: "#22d3ee",
-  fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  radiusXs: "6px",
-  radiusSm: "10px",
-  radiusMd: "16px",
-  radiusLg: "24px",
-  radiusButton: "12px",
-  radiusInput: "12px",
-  shadowSm: "0 1px 2px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
-  shadowMd: "0 18px 50px rgba(7, 14, 33, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10)",
-  shadowLg: "0 28px 80px rgba(7, 14, 33, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
-  spacingXs: "4px",
-  spacingS: "10px",
-  spacingM: "16px",
-  spacingL: "24px",
-  spacingXl: "40px",
-  chart1: "#60a5fa",
-  chart2: "#22d3ee",
-  chart3: "#a78bfa",
-  chart4: "#f472b6",
-  chart5: "#34d399",
-  chart6: "#fbbf24",
-};
-
-/**
- * Brutalist — neo-brutalism. Hard 2px black borders, chunky offset shadows,
- * loud primary colors, all-caps display type, and zero gradients. Designed
- * to look hand-built and unapologetically bold.
- */
-export const brutalistTheme: ThemeTokens = {
-  ...lightTheme,
-  colorBg: "#fef9c3",
-  colorBgSubtle: "#fde68a",
-  colorSurface: "#ffffff",
-  colorSurfaceMuted: "#fef3c7",
-  colorBorder: "#0a0a0a",
-  colorBorderSubtle: "#0a0a0a",
-  colorText: "#0a0a0a",
-  colorTextMuted: "#3f3f46",
-  colorPrimary: "#1d4ed8",
-  colorPrimaryHover: "#1e40af",
+  colorBg: "#eceef2",
+  colorBgSubtle: "#e6e8ee",
+  colorSurface: "rgba(255, 255, 255, 0.55)",
+  colorSurfaceMuted: "rgba(255, 255, 255, 0.35)",
+  colorBorder: "rgba(255, 255, 255, 0.70)",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.45)",
+  colorText: "#33303a",
+  colorTextMuted: "#7c7585",
+  colorPrimary: "#f2826a",
+  colorPrimaryHover: "#ec6c50",
   colorPrimaryText: "#ffffff",
-  colorAccent: "#dc2626",
-  colorAccentHover: "#b91c1c",
+  colorAccent: "#b58ee6",
+  colorAccentHover: "#a376e0",
   colorAccentText: "#ffffff",
-  colorFocusRing: "#0a0a0a",
-  colorSuccess: "#16a34a",
-  colorWarning: "#ea580c",
-  colorDanger: "#dc2626",
-  colorInfo: "#0891b2",
-  fontFamily: "'Space Grotesk', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif",
-  fontFamilyHeading: "'Space Grotesk', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif",
-  fontFamilyMono: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontWeightHeading: "800",
+  colorFocusRing: "#f2826a",
+  colorSuccess: "#5bbf9b",
+  colorWarning: "#f0b259",
+  colorDanger: "#ef7b86",
+  colorInfo: "#7fb0e8",
+  fontFamily: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
   letterSpacingHeading: "-0.01em",
-  headingTextTransform: "uppercase",
-  radiusXs: "0px",
-  radiusSm: "0px",
-  radiusMd: "0px",
-  radiusLg: "0px",
-  radiusPill: "0px",
-  radiusButton: "0px",
-  radiusInput: "0px",
-  borderWidth: "2px",
-  shadowSm: "3px 3px 0 0 #0a0a0a",
-  shadowMd: "6px 6px 0 0 #0a0a0a",
-  shadowLg: "10px 10px 0 0 #0a0a0a",
-  spacingXs: "4px",
-  spacingS: "10px",
-  spacingM: "16px",
-  spacingL: "22px",
-  spacingXl: "36px",
-  buttonFontWeight: "800",
-  buttonTextTransform: "uppercase",
-  buttonLetterSpacing: "0.02em",
-  chart1: "#dc2626",
-  chart2: "#1d4ed8",
-  chart3: "#16a34a",
-  chart4: "#ea580c",
-  chart5: "#7c3aed",
-  chart6: "#0a0a0a",
+  radiusXs: "8px",
+  radiusSm: "14px",
+  radiusMd: "20px",
+  radiusLg: "28px",
+  radiusButton: "16px",
+  radiusInput: "16px",
+  shadowSm: "0 2px 8px rgba(120, 110, 140, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
+  shadowMd: "0 14px 40px rgba(120, 110, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
+  shadowLg: "0 26px 70px rgba(120, 110, 140, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.60)",
+  spacingXs: "6px",
+  spacingS: "12px",
+  spacingM: "18px",
+  spacingL: "26px",
+  spacingXl: "42px",
+  gradientBrand: "linear-gradient(120deg, #f7a072 0%, #f2826a 45%, #c98bd6 100%)",
+  gradientAccent: "linear-gradient(120deg, #b58ee6 0%, #8ec5e8 100%)",
+  gradientWarm: "linear-gradient(120deg, #f9b079 0%, #f48aa6 100%)",
+  gradientCool: "linear-gradient(120deg, #8ec5e8 0%, #9fd8c6 100%)",
+  chart1: "#f2826a",
+  chart2: "#b58ee6",
+  chart3: "#8ec5e8",
+  chart4: "#5bbf9b",
+  chart5: "#f0b259",
+  chart6: "#f48aa6",
 };
 
 /**
- * Skyline — enterprise cloud-console aesthetic. Deep navy primary, calm
+ * Corporate — enterprise cloud-console aesthetic. Deep navy primary, calm
  * cyan accents, very pale blue page background, white surfaces with crisp
  * 1px borders, small radii, and a clean Inter type stack. The look should
  * feel at home in an admin panel: dense, scannable, minimal chrome.
+ * (Formerly "skyline".)
  */
-export const skylineTheme: ThemeTokens = {
+export const corporateTheme: ThemeTokens = {
   ...lightTheme,
   colorBg: "#eff2f7",
   colorBgSubtle: "#e6ecf3",
@@ -530,14 +429,75 @@ export const skylineTheme: ThemeTokens = {
   chart6: "#5a6a85",
 };
 
+/**
+ * Modern — clean, friendly SaaS dashboard. Light off-white page, crisp white
+ * surfaces, generous rounding, feather-soft diffuse shadows, an ink (near
+ * black) primary rendered as pill buttons, a violet accent, and a vibrant
+ * multi-hue chart palette. The aesthetic is the contemporary product-dashboard
+ * look: airy, rounded, low-contrast chrome with confident black call-to-actions.
+ */
+export const modernTheme: ThemeTokens = {
+  ...lightTheme,
+  colorBg: "#f4f5f7",
+  colorBgSubtle: "#eef0f3",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f6f7f9",
+  colorBorder: "#ebedf1",
+  colorBorderSubtle: "rgba(17, 24, 39, 0.06)",
+  colorText: "#111827",
+  colorTextMuted: "#6b7280",
+  colorPrimary: "#111827",
+  colorPrimaryHover: "#000000",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#7c5cfc",
+  colorAccentHover: "#6a47f5",
+  colorAccentText: "#ffffff",
+  colorFocusRing: "#7c5cfc",
+  colorSuccess: "#22c55e",
+  colorWarning: "#f59e0b",
+  colorDanger: "#f43f5e",
+  colorInfo: "#2563eb",
+  fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontWeightHeading: "700",
+  letterSpacingHeading: "-0.02em",
+  radiusXs: "8px",
+  radiusSm: "12px",
+  radiusMd: "18px",
+  radiusLg: "24px",
+  radiusButton: "999px",
+  radiusInput: "12px",
+  shadowSm: "0 1px 3px rgba(17, 24, 39, 0.05)",
+  shadowMd: "0 8px 30px rgba(17, 24, 39, 0.07)",
+  shadowLg: "0 24px 60px rgba(17, 24, 39, 0.10)",
+  spacingXs: "5px",
+  spacingS: "10px",
+  spacingM: "16px",
+  spacingL: "24px",
+  spacingXl: "40px",
+  buttonFontWeight: "600",
+  buttonPaddingY: "10px",
+  buttonPaddingX: "18px",
+  gradientBrand: "linear-gradient(120deg, #111827 0%, #4b3f72 50%, #7c5cfc 100%)",
+  gradientAccent: "linear-gradient(120deg, #7c5cfc 0%, #2563eb 100%)",
+  gradientWarm: "linear-gradient(120deg, #ff7849 0%, #f43f5e 100%)",
+  gradientCool: "linear-gradient(120deg, #2563eb 0%, #22d3ee 100%)",
+  chart1: "#7c5cfc",
+  chart2: "#ff7849",
+  chart3: "#2563eb",
+  chart4: "#22c55e",
+  chart5: "#f43f5e",
+  chart6: "#fbbf24",
+};
+
 export const builtInThemes: Record<string, ThemeTokens> = {
   light: lightTheme,
   dark: darkTheme,
-  neon: neonTheme,
-  pastel: pastelTheme,
+  corporate: corporateTheme,
+  soft: softTheme,
   glass: glassTheme,
-  brutalist: brutalistTheme,
-  skyline: skylineTheme,
+  modern: modernTheme,
 };
 
 const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {

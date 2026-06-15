@@ -1,6 +1,6 @@
 export * from "./types.js";
 export { tokenize } from "./lexer.js";
-export { parse } from "./parser.js";
+export { parse, collectPatternNames } from "./parser.js";
 export {
   computeFrontier,
   buildFrontier,

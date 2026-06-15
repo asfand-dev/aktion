@@ -71,33 +71,33 @@ aktion = Stack([Text("Hello World")])`);
 
   it("applies a built-in theme via the `name` property", async () => {
     const el = create();
-    el.setResponse(`$theme({ name: "neon" })
+    el.setResponse(`$theme({ name: "modern" })
 aktion = Stack([Text("Hello World")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
-    // The full neon palette is written as CSS custom properties on the host.
+    // The full modern palette is written as CSS custom properties on the host.
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe(
-      builtInThemes.neon.colorPrimary,
+      builtInThemes.modern.colorPrimary,
     );
     expect(el.style.getPropertyValue("--rui-color-bg")).toBe(
-      builtInThemes.neon.colorBg,
+      builtInThemes.modern.colorBg,
     );
     expect(el.style.getPropertyValue("--rui-font-family")).toBe(
-      builtInThemes.neon.fontFamily,
+      builtInThemes.modern.fontFamily,
     );
   });
 
   it("lets structured overrides layer on top of a `name` built-in theme", async () => {
     const el = create();
-    el.setResponse(`$theme({ name: "neon", colors: { primary: "#ff00ff" } })
+    el.setResponse(`$theme({ name: "modern", colors: { primary: "#ff00ff" } })
 aktion = Stack([Text("Hello World")])`);
     for (let i = 0; i < 4; i += 1) await flush();
 
     // Override wins for the primary colour...
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#ff00ff");
-    // ...while the rest of the neon palette still applies.
+    // ...while the rest of the modern palette still applies.
     expect(el.style.getPropertyValue("--rui-color-bg")).toBe(
-      builtInThemes.neon.colorBg,
+      builtInThemes.modern.colorBg,
     );
   });
 
@@ -110,7 +110,7 @@ aktion = Stack([Text("Hello World")])`);
     // Only the explicit override is written; no built-in tokens leak in.
     expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#123456");
     expect(el.style.getPropertyValue("--rui-color-bg")).not.toBe(
-      builtInThemes.neon.colorBg,
+      builtInThemes.modern.colorBg,
     );
   });
 

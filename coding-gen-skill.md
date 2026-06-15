@@ -148,8 +148,8 @@ Internalize these rules and you will write correct, polished programs:
     `Icon(name, { variant, size })` to render a standalone glyph. The CDN
     stylesheet auto-loads — **never emit raw emoji**.
 19. **Themes are runtime, not authored.** The host picks a theme via the
-    `theme` attribute (`light`, `dark`, `neon`, `pastel`, `glass`,
-    `brutalist`, `skyline`) or a partial token map. Authored programs
+    `theme` attribute (`light`, `dark`, `corporate`, `soft`, `glass`,
+    `modern`) or a partial token map. Authored programs
     **must work on every theme** — never hard-code colours. Use semantic
     props (`tone: "primary"`, `variant: "success"`) and let the theme
     resolve them.
@@ -397,8 +397,8 @@ as a wireframe.
 
 ### Theme awareness (write tone-first, never colour-first)
 
-The host page chooses one of seven built-in themes (`light`, `dark`,
-`neon`, `pastel`, `glass`, `brutalist`, `skyline`) or a partial token
+The host page chooses one of six built-in themes (`light`, `dark`,
+`corporate`, `soft`, `glass`, `modern`) or a partial token
 map. **Authored programs must work on every theme** — never hard-code
 colours, gradients, or typography. Use semantic props and let the
 runtime resolve them.
@@ -407,11 +407,10 @@ runtime resolve them.
 | ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `light`      | Crisp default, indigo accent, soft shadows.                                                       | Most business apps, dashboards, settings.                          |
 | `dark`       | Standard dark surface, indigo accent.                                                             | Night mode, code-heavy workflows, ops dashboards.                  |
-| `neon`       | Cyberpunk-inspired dark mode with magenta/cyan glow, monospace headings, sharp corners.           | Devtools, gaming, music apps, late-night dashboards.               |
-| `pastel`     | Soft, friendly, light & rounded. Lavender + mint palette, generous radii, gentle shadows.        | Onboarding, wellness, education, consumer apps.                    |
-| `glass`      | Modern glassmorphism — vivid gradient backdrop, frosted translucent surfaces, indigo→cyan accent. | Marketing, product launches, hero pages with imagery.              |
-| `brutalist`  | Neo-brutalism — hard 2 px black borders, chunky offset shadows, loud primary, zero gradients.     | Editorial sites, art portfolios, statement landing pages.          |
-| `skyline`    | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.         | Admin consoles, B2B portals, infra dashboards.                     |
+| `corporate`  | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue bg.          | Admin consoles, B2B portals, infra dashboards.                     |
+| `soft`       | Soft, friendly, light & rounded. Lavender + mint palette, generous radii, gentle shadows.         | Onboarding, wellness, education, consumer apps.                    |
+| `glass`      | Light glassmorphism — frosted white surfaces over an airy pastel gradient, warm coral accent.     | Wellness, lifestyle, consumer dashboards, calm hero pages.         |
+| `modern`     | Clean modern SaaS dashboard — light, generous rounding, ink primary with pill buttons, soft shadows, vibrant charts. | Product dashboards, project/finance tools, contemporary B2B apps.  |
 
 Rules for theme-friendly authoring:
 
@@ -425,8 +424,8 @@ Rules for theme-friendly authoring:
   adopts the surrounding tone token.
 - **Trust the chart palette.** `Series` colours come from the active
   theme (`chart1`…`chart6`). Never pass a `stroke` / `fill`.
-- **Brutalist and neon will collapse if you nest gradients.** Stay
-  declarative; the theme adds the visual personality.
+- **Let the theme own the personality.** Stay declarative — don't nest
+  gradients or hand-roll surfaces; the theme adds the visual character.
 
 ### In-script theming with `$theme({...})`
 
@@ -1837,6 +1836,8 @@ tone    = toneFor[$status] ?? "muted"
 Inside function / lambda / effect bodies the **full statement-form
 control flow** is available — exactly as in JS: `if`/`else`,
 `switch`/`case`/`break`/`default`, `for (let x of xs)`,
+`for (const [k, v] of Object.entries(obj))` (for-of with array/object
+destructuring — the loop head binds a full JS pattern),
 `for (let key in obj)`, `for (let i = 0; i < n; i += 1)`, `while`,
 `do { … } while (cond)`, `break`/`continue`,
 `try`/`catch`/`finally`, `throw`. Mutate `$state` or local `let` arrays
@@ -1905,14 +1906,24 @@ the previous statement — same as JS.)
 ### Destructuring, spread, computed keys
 
 ```javascript
-// Destructuring in let / const / var.
+// Destructuring in let / const / var — including NESTED patterns.
 let [first, second, ...rest] = arr
 let { name, role = "guest", ...other } = user
+let { data: { items: [topItem] } } = response   // nested object + array
+let [[ax, ay], [bx, by]] = segments              // nested array
+
+// for-of destructuring (array by index, object by key) — the canonical way
+// to iterate entries / Maps / pairs:
+for (const [key, value] of Object.entries(config)) { … }
+for (const { id, title } of $rows) { … }
 
 // Destructured PARAMETERS (function declarations + lambdas).
 function Card({ title, tone = "info" }) { return Badge(title, { tone }) }
 function head([first, ...rest]) { return first }
 sum = ({ a, b }) => a + b
+
+// Rest parameters gather trailing args into an array.
+function tag(label, ...values) { return label + ": " + values.join(", ") }
 
 // Spread in array / object literals and function calls.
 $cart   = [...$cart, item]
@@ -1922,6 +1933,13 @@ result  = fn(...args)
 // Computed property keys.
 $obj = { [$dynamic]: value, fixed: "ok" }
 ```
+
+> **Equality & comparison match JavaScript.** `==` / `!=` use JS
+> abstract-equality coercion, so `x == null` matches both `null` *and*
+> `undefined`; `===` / `!==` stay strict. Relational `<` / `>` compare
+> alphabetic strings lexicographically (so `arr.sort((a, b) => a.name >
+> b.name ? 1 : -1)` orders correctly) and coerce `Date` operands via
+> `valueOf`. Two numeric strings still compare numerically (`"5" < "10"`).
 
 ### Operators & JS standard-library globals
 
@@ -3032,7 +3050,7 @@ greeting = Text(t("hi"))
 
 ### Runtime themes (host-side)
 
-The host page chooses one of seven built-in themes via the `theme`
+The host page chooses one of six built-in themes via the `theme`
 attribute or `el.setTheme(...)`. Authored programs should be
 theme-neutral.
 
@@ -3074,7 +3092,7 @@ and keys are optional — pass only what you want to override.
 | `icons`        | `icons: { logo: "<path …/>" }` — register custom inline-SVG icons usable anywhere a Font Awesome name works |
 
 Plus metadata keys `name` and `direction` (`"ltr"` / `"rtl"`). `name`
-selects a built-in theme as the base palette (`"dark"`, `"neon"`, …;
+selects a built-in theme as the base palette (`"dark"`, `"modern"`, …;
 unknown names are ignored); `direction` is advisory metadata and applies
 no token.
 

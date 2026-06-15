@@ -623,7 +623,7 @@ function fullThemingI18nIcons(): string {
 A bare \`$theme({...})\` statement (near the top) brands the response. Only the **structured form** is accepted — top-level keys must be a token group (\`colors\`, \`radius\`, \`font\`, \`spacing\`, \`shadows\`, \`gradients\`, \`zIndex\`, \`motion\`, \`fonts\`, \`icons\`) or a metadata key (\`name\`, \`direction\`). Flat-shape keys like \`$theme({ colorPrimary: ... })\` raise a schema error; unknown keys inside a group are silently ignored. **Every token value is a string.** Omit the whole call to inherit the host theme. \`zIndex\` layer tokens (\`{ modal: 2000, toast: 2100, … }\`) feed \`sx.zIndex\`; \`motion\` (\`{ fast, base, slow, ease }\`) → \`--rui-motion-*\`. Gradients accept color-stop arrays (\`gradients: { brand: ["#6366f1", "#ec4899"] }\`) and are referenced as \`gradient.brand\` in \`sx\`/\`GradientText\`. Custom icons register inline SVG by name (\`icons: { logo: "<path …/>" }\`) and are then usable anywhere a Font Awesome name is — \`Icon("logo")\`. Load web fonts with \`fonts: { import: ["Inter:400,700", "JetBrains Mono"] }\` (Google Fonts shorthand) alongside the \`font.family\` token.
 
 Core group keys (all optional):
-- \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"neon"\`, …; unknown names are ignored).
+- \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"light"\`, \`"modern"\`, \`"corporate"\`, \`"soft"\`, \`"glass"\`; unknown names are ignored).
 - \`direction?: "ltr" | "rtl"\` — reading direction (metadata; not applied as a token).
 - \`colors?: { ... }\` — CSS color strings. Keys: \`bg\`, \`bgSubtle\`, \`surface\`, \`surfaceMuted\`, \`border\`, \`borderSubtle\`, \`text\`, \`textMuted\`, \`primary\`, \`primaryHover\`, \`primaryText\`, \`accent\`, \`accentHover\`, \`accentText\`, \`focusRing\`, \`success\`, \`warning\`, \`danger\`, \`info\`.
 - \`radius?: { ... }\` — CSS length strings. Keys: \`xs\`, \`sm\`, \`md\`, \`lg\`, \`pill\`, \`button\`, \`input\`.
@@ -637,7 +637,7 @@ $theme({
 })
 \`\`\`
 
-The host picks one of seven base themes (\`light\`, \`dark\`, \`neon\`, \`pastel\`, \`glass\`, \`brutalist\`, \`skyline\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours).
+The host picks one of six base themes (\`light\`, \`dark\`, \`corporate\`, \`soft\`, \`glass\`, \`modern\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours).
 
 ### i18n
 \`\`\`

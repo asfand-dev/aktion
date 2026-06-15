@@ -23,7 +23,8 @@
  * today (LSP wrapper is straightforward when needed).
  */
 
-import { parse } from "../parser/index.js";
+import { parse, collectPatternNames } from "../parser/index.js";
+import type { DestructuringPattern } from "../parser/types.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
 import { validateProgramSchema } from "../library/validate.js";
@@ -186,11 +187,15 @@ function lintProgram(program: ReturnType<typeof parse>): Diagnostic[] {
       case "HookDeclaration":
         for (const p of (rec.params as Array<{ name?: unknown }> | undefined) ?? []) flag(p.name, "parameter");
         break;
-      case "ForOfStatement":
-        flag(rec.item, "loop variable");
-        flag(rec.index, "loop variable");
-        for (const f of (rec.destructure as unknown[] | undefined) ?? []) flag(f, "loop variable");
+      case "ForOfStatement": {
+        const pat = rec.pattern as DestructuringPattern | undefined;
+        if (pat) {
+          for (const name of collectPatternNames(pat)) flag(name, "loop variable");
+        } else {
+          flag(rec.item, "loop variable");
+        }
         break;
+      }
       case "ForInStatement":
         flag(rec.item, "loop variable");
         break;

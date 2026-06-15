@@ -2020,6 +2020,11 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
         };
         for (let i = 0; i < lambdaParams.length; i += 1) {
           const param = lambdaParams[i]!;
+          // `(...rest) => …` — gather the remaining args into an array.
+          if ((param as { rest?: boolean }).rest) {
+            bindLocal(param.name, callArgs.slice(i));
+            break;
+          }
           let value: unknown = callArgs[i];
           if (value === undefined && param.defaultValue) {
             value = evaluate(param.defaultValue, ctx);
@@ -2122,8 +2127,7 @@ function runSwitchStatement(
 function runForOfStatement(
   stmt: {
     item: string;
-    index?: string;
-    destructure?: ReadonlyArray<string>;
+    pattern?: DestructuringPattern;
     iterable: Expression;
     body: BlockExpr;
   },
@@ -2133,50 +2137,39 @@ function runForOfStatement(
   if (!Array.isArray(iterableValue) && (iterableValue == null || typeof iterableValue !== "object" || !(Symbol.iterator in (iterableValue as object)))) {
     return;
   }
-  const itemHad = ctx.loopVars.has(stmt.item);
-  const itemPrev = ctx.loopVars.get(stmt.item);
-  const idxName = stmt.index;
-  const idxHad = idxName ? ctx.loopVars.has(idxName) : false;
-  const idxPrev = idxName ? ctx.loopVars.get(idxName) : undefined;
-  const destructure = stmt.destructure ?? [];
-  const destructurePrev: Array<{ name: string; had: boolean; value: unknown }> =
-    destructure.map((name) => ({
-      name,
-      had: ctx.loopVars.has(name),
-      value: ctx.loopVars.get(name),
-    }));
+  // Collect every name the loop head binds so we can snapshot + restore the
+  // surrounding scope (loop variables never leak past the loop).
+  const boundNames = stmt.pattern
+    ? stmt.pattern.bindings.map((b) => b.name).filter((n) => n !== "")
+    : [stmt.item];
+  const prev: Array<{ name: string; had: boolean; value: unknown }> = boundNames.map((name) => ({
+    name,
+    had: ctx.loopVars.has(name),
+    value: ctx.loopVars.get(name),
+  }));
   try {
-    let i = 0;
     const iter = Array.isArray(iterableValue)
       ? iterableValue
       : (iterableValue as Iterable<unknown>);
     for (const row of iter) {
       tickIterations(ctx.budget, 1, "`for…of` loop");
-      ctx.loopVars.set(stmt.item, row);
-      if (idxName) ctx.loopVars.set(idxName, i);
-      for (const field of destructure) {
-        const value = row && typeof row === "object"
-          ? (row as Record<string, unknown>)[field]
-          : undefined;
-        ctx.loopVars.set(field, value);
+      if (stmt.pattern) {
+        for (const { name, value } of resolvePatternBindings(stmt.pattern, row, ctx)) {
+          ctx.loopVars.set(name, value);
+        }
+      } else {
+        ctx.loopVars.set(stmt.item, row);
       }
       try {
         runBlockStatements(stmt.body.body, ctx);
       } catch (err) {
-        if (err instanceof ContinueSignal) { i += 1; continue; }
+        if (err instanceof ContinueSignal) { continue; }
         if (err instanceof BreakSignal) return;
         throw err;
       }
-      i += 1;
     }
   } finally {
-    if (itemHad) ctx.loopVars.set(stmt.item, itemPrev);
-    else ctx.loopVars.delete(stmt.item);
-    if (idxName) {
-      if (idxHad) ctx.loopVars.set(idxName, idxPrev);
-      else ctx.loopVars.delete(idxName);
-    }
-    for (const entry of destructurePrev) {
+    for (const entry of prev) {
       if (entry.had) ctx.loopVars.set(entry.name, entry.value);
       else ctx.loopVars.delete(entry.name);
     }
@@ -2294,7 +2287,12 @@ export function resolvePatternBindings(
       if (value === undefined && binding.defaultValue) {
         value = evaluate(binding.defaultValue, ctx);
       }
-      if (binding.name !== "") out.push({ name: binding.name, value });
+      // Nested pattern slot: `let [[a, b]] = rows`.
+      if (binding.pattern) {
+        for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
+      } else if (binding.name !== "") {
+        out.push({ name: binding.name, value });
+      }
       cursor += 1;
     }
     return out;
@@ -2318,7 +2316,12 @@ export function resolvePatternBindings(
     if (value === undefined && binding.defaultValue) {
       value = evaluate(binding.defaultValue, ctx);
     }
-    out.push({ name: binding.name, value });
+    // Nested pattern slot: `let { user: { name } } = resp`.
+    if (binding.pattern) {
+      for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
+    } else {
+      out.push({ name: binding.name, value });
+    }
   }
   return out;
 }
@@ -3161,7 +3164,7 @@ function evaluateInvoke(
           if (obj.font) loadFonts(obj.font);
         }
         // A `name` property selects a built-in theme (e.g.
-        // `$theme({ name: "neon" })`) — seed the full token set from that
+        // `$theme({ name: "modern" })`) — seed the full token set from that
         // theme so the whole palette applies, then let any structured
         // overrides (`colors`, `radius`, ...) layer on top.
         const tokens = collectThemeTokens(themeInput);
@@ -3523,15 +3526,14 @@ function evaluateBinary(
       return r === 0 ? 0 : toNumber(left) % r;
     }
     case "**": return toNumber(left) ** toNumber(right);
-    // Loose equality (`==` / `!=`) and strict equality (`===` / `!==`)
-    // both compare by identity here — the runtime stores JS primitives
-    // so the distinction collapses for the values an Aktion program can
-    // produce. Authors writing strict equality still get the same
-    // result they would in JS for primitives.
-    case "==":
+    // Strict equality (`===` / `!==`) compares by identity. Loose equality
+    // (`==` / `!=`) follows JavaScript's abstract-equality coercion so the
+    // ubiquitous `x == null` (matches `null` *and* `undefined`), `1 == "1"`,
+    // and `0 == false` idioms behave exactly as an author expects.
     case "===": return left === right;
-    case "!=":
     case "!==": return left !== right;
+    case "==": return looseEquals(left, right);
+    case "!=": return !looseEquals(left, right);
     case ">":
     case "<":
     case ">=":
@@ -3566,24 +3568,56 @@ function evaluateBinary(
 }
 
 /**
+ * Loose equality (`==` / `!=`) following JavaScript's abstract-equality
+ * algorithm. The runtime stores real JS primitives/objects, so deferring to
+ * the engine's own `==` yields exact coercion semantics — `null == undefined`
+ * is `true`, `1 == "1"` is `true`, `0 == false` is `true`, and a `Date`
+ * compares by its `valueOf`. This is the behaviour an author who writes the
+ * pervasive `x == null` guard expects.
+ */
+function looseEquals(left: unknown, right: unknown): boolean {
+  // eslint-disable-next-line eqeqeq
+  return (left as unknown) == (right as unknown);
+}
+
+/**
  * Relational comparison for `<`, `>`, `<=`, `>=`.
  *
  * Each operand is first coerced to a primitive with the "number" hint, so a
  * `Date`, a `BigInt`-like, or any object with `valueOf` / `Symbol.toPrimitive`
- * compares by its primitive value — `new Date(a) > new Date(b)` now works
- * instead of silently evaluating `0 > 0` (issue #3). The primitives are then
- * compared numerically via the lenient `toNumber`, preserving the runtime's
- * long-standing "comparison operators coerce numerically" rule (so e.g.
- * `"5" < "10"` stays `true`).
+ * compares by its primitive value — `new Date(a) > new Date(b)` works instead
+ * of silently evaluating `0 > 0` (issue #3).
+ *
+ * When BOTH operands resolve to strings the comparison branches:
+ *   - both look numeric (`"5"`, `"10"`) → compared numerically, preserving the
+ *     runtime's long-standing convenience (`"5" < "10"` stays `true`);
+ *   - otherwise → compared lexicographically like JavaScript, so alphabetical
+ *     sorts and range checks work (`"b" > "a"`, `"Z" < "a"`,
+ *     `arr.sort((a, b) => (a.name > b.name ? 1 : -1))`).
+ * Mixed / non-string operands fall back to numeric coercion.
  */
 function relationalCompare(op: string, left: unknown, right: unknown): boolean {
-  const ln = toNumber(toPrimitiveNumber(left));
-  const rn = toNumber(toPrimitiveNumber(right));
+  const lp = toPrimitiveNumber(left);
+  const rp = toPrimitiveNumber(right);
+  if (typeof lp === "string" && typeof rp === "string" && !(isNumericString(lp) && isNumericString(rp))) {
+    return orderCompare(op, lp, rp);
+  }
+  return orderCompare(op, toNumber(lp), toNumber(rp));
+}
+
+/** `true` when a string parses as a finite number (so `<`/`>` compare numerically). */
+function isNumericString(value: string): boolean {
+  if (value.trim() === "") return false;
+  return Number.isFinite(Number(value));
+}
+
+/** Apply a relational operator to two same-typed, directly-comparable operands. */
+function orderCompare(op: string, a: number | string, b: number | string): boolean {
   switch (op) {
-    case ">": return ln > rn;
-    case "<": return ln < rn;
-    case ">=": return ln >= rn;
-    case "<=": return ln <= rn;
+    case ">": return a > b;
+    case "<": return a < b;
+    case ">=": return a >= b;
+    case "<=": return a <= b;
   }
   return false;
 }
@@ -3690,6 +3724,29 @@ function evaluateMethodCall(
   }
 }
 
+/**
+ * Evaluate a call's argument list into positional values, expanding any
+ * `...spread` argument inline (arrays and other iterables) exactly like
+ * JavaScript — so `f(...[1, 2, 3])`, `f(a, ...rest)`, and `f(...new Set(s))`
+ * all forward the right positional args to a user function / lambda / action.
+ */
+function evaluateCallArgs(args: Expression[], ctx: EvaluationContext): unknown[] {
+  const out: unknown[] = [];
+  for (const arg of args) {
+    if (arg.kind === "Spread") {
+      const value = evaluate(arg.argument, ctx);
+      if (Array.isArray(value)) {
+        for (const item of value) out.push(item);
+      } else if (value != null && typeof value === "object" && Symbol.iterator in (value as object)) {
+        for (const item of value as Iterable<unknown>) out.push(item);
+      }
+      continue;
+    }
+    out.push(evaluate(arg, ctx));
+  }
+  return out;
+}
+
 function evaluateComponentCall(
   callee: string,
   args: Expression[],
@@ -3722,7 +3779,7 @@ function evaluateComponentCall(
   // makes actions composable with array helpers (`.map(save)`, etc.).
   const actionDecl = selfShadowsBuiltin ? undefined : ctx.actionDecls.get(callee);
   if (actionDecl) {
-    const evaluated = args.map((a) => evaluate(a, ctx));
+    const evaluated = evaluateCallArgs(args, ctx);
     return runActionDeclSync(actionDecl, evaluated, ctx);
   }
   // Timer builtins — `setTimeout(fn, ms)`, `setInterval(fn, ms)`,
@@ -3761,7 +3818,7 @@ function evaluateComponentCall(
   // `itemRow = (item) => Card(item.title)` evaluated by `evaluateBlock`).
   const localHelper = ctx.loopVars.get(callee);
   if (typeof localHelper === "function") {
-    const evaluated = args.map((arg) => evaluate(arg, ctx));
+    const evaluated = evaluateCallArgs(args, ctx);
     return (localHelper as (...a: unknown[]) => unknown)(...evaluated);
   }
   // Top-level lambda binding: e.g. `priorityTone = (p) => switch (p) { case ... }`.
@@ -3769,7 +3826,7 @@ function evaluateComponentCall(
   if (binding) {
     const fn = binding();
     if (typeof fn === "function") {
-      const evaluated = args.map((arg) => evaluate(arg, ctx));
+      const evaluated = evaluateCallArgs(args, ctx);
       return (fn as (...a: unknown[]) => unknown)(...evaluated);
     }
   }
@@ -4437,7 +4494,7 @@ function runOptimistic(fnExpr: Expression | undefined, ctx: EvaluationContext): 
  * handlers, value calls) the same `$x = expr` is an ordinary write.
  */
 function runDeclBodySync(
-  params: ReadonlyArray<{ name: string; defaultValue?: Expression; pattern?: DestructuringPattern }>,
+  params: ReadonlyArray<{ name: string; defaultValue?: Expression; pattern?: DestructuringPattern; rest?: boolean }>,
   body: BlockExpr,
   args: unknown[],
   ctx: EvaluationContext,
@@ -4455,6 +4512,11 @@ function runDeclBodySync(
   const savedLoopVars = new Map(ctx.loopVars);
   for (let i = 0; i < params.length; i += 1) {
     const param = params[i]!;
+    // `function f(...rest) {}` — gather the remaining args into an array.
+    if (param.rest) {
+      ctx.loopVars.set(param.name, args.slice(i));
+      break;
+    }
     let value: unknown = args[i];
     if (value === undefined && param.defaultValue) {
       value = evaluate(param.defaultValue, ctx);
@@ -4994,8 +5056,13 @@ function evaluateSyntheticAssign(
     // effort: mutate in place so the assignment is at least observable
     // to subsequent reads on the same value.
     const root = evaluate(targetExpr.object, ctx);
+    // Computed keys may be any expression (`o[k]`, `o[i + 1]`, `o[item.id]`),
+    // not just string literals — evaluate it to its runtime value so dynamic
+    // dictionary/map writes (`prodMap[meterId] = …`, `cats[category] = …`)
+    // persist. (Previously only `Literal` keys resolved; everything else
+    // silently became `null`, dropping the write.)
     const key = targetExpr.computed
-      ? (targetExpr.computed.kind === "Literal" ? targetExpr.computed.value : null)
+      ? evaluate(targetExpr.computed, ctx)
       : targetExpr.property;
     if (root && typeof root === "object" && key != null) {
       const current = (root as Record<string, unknown>)[String(key)];
@@ -5340,8 +5407,8 @@ const THEME_GROUP_PREFIX: Record<string, string> = {
 
 /**
  * Read the `name` metadata key off a `$theme({...})` config and return the
- * matching built-in theme key (`dark`, `neon`, `pastel`, `glass`,
- * `brutalist`, `skyline`, ...) when it names a real registered theme.
+ * matching built-in theme key (`dark`, `corporate`, `soft`, `glass`,
+ * `modern`, ...) when it names a real registered theme.
  * Returns `null` for an absent / unknown name so the runtime falls back to
  * the active base theme rather than wiping it.
  */

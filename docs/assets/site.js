@@ -127,7 +127,7 @@ const PAGE_KEYWORDS = {
   "routing.html": "routes navlink navigate hash router",
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit",
   "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
-  "themes.html": "built-in themes light dark neon pastel glass brutalist skyline tokens custom studio in-script Theme",
+  "themes.html": "built-in themes light dark corporate soft glass modern tokens custom studio in-script Theme",
   "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
   "playground.html": "editor preview live",
@@ -553,11 +553,10 @@ function setupCopyButtons() {
 const THEME_BG = {
   light: "#ffffff",
   dark: "#0b1220",
-  neon: "#05060f",
-  pastel: "#fdf6ff",
-  glass: "linear-gradient(135deg, #0b132b 0%, #1a2454 60%, #1f3a8a 100%)",
-  brutalist: "#fef9c3",
-  skyline: "linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%)",
+  corporate: "linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%)",
+  soft: "#fdf6ff",
+  glass: "linear-gradient(160deg, #eef0f3 0%, #e9e6ef 45%, #efe4ec 100%)",
+  modern: "#f4f5f7",
 };
 
 function paintExampleOutputs(themeName) {

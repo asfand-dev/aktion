@@ -452,12 +452,16 @@ export interface SwitchStatement {
  */
 export interface ForOfStatement {
   kind: "ForOfStatement";
-  /** Item binding name. */
+  /** Item binding name (when the loop binds a single identifier). */
   item: string;
-  /** Optional index binding via `for (let [item, i] of ...)`. */
-  index?: string;
-  /** Optional `{a, b, c}` destructuring — binds each named field of the row. */
-  destructure?: ReadonlyArray<string>;
+  /**
+   * Full destructuring pattern when the loop head binds a pattern, e.g.
+   * `for (const [k, v] of Object.entries(o))` (array, by index) or
+   * `for (const { id, name } of rows)` (object, by key). Honours defaults,
+   * renames, holes, and rest exactly like a `let`-destructuring declaration —
+   * matching JavaScript semantics. When present, `item` is ignored.
+   */
+  pattern?: DestructuringPattern;
   iterable: Expression;
   body: BlockExpr;
   loc?: SourceLocation;
@@ -527,18 +531,24 @@ export interface ThrowStatement {
 
 /**
  * Single binding produced by an `Array` / `Object` destructuring pattern.
- * Nested patterns are intentionally not modelled — authors with more
- * complex needs can destructure in two steps. `defaultValue` is JS's
- * `let {a = 1} = obj` / `let [a = 1] = arr` fallback.
+ * `defaultValue` is JS's `let {a = 1} = obj` / `let [a = 1] = arr` fallback.
+ * A `pattern` makes the slot itself a nested destructuring target, so
+ * `let { user: { name } } = resp` / `let [[a], [b]] = pairs` work.
  */
 export interface DestructuringBinding {
-  /** Variable name introduced by this slot. */
+  /** Variable name introduced by this slot (empty when `pattern` is set). */
   name: string;
   /** Optional renamed source key (object pattern only): `let {a: b} = …`. */
   sourceKey?: string;
   /** `let [a, ...rest] = …` / `let {a, ...rest} = …`. */
   rest?: boolean;
   defaultValue?: Expression;
+  /**
+   * Nested pattern for this slot: `let { user: { name } } = resp` (object,
+   * keyed by `sourceKey`) or `let [[a, b]] = rows` (array, by position). When
+   * set, this slot introduces the names inside `pattern` rather than `name`.
+   */
+  pattern?: DestructuringPattern;
 }
 
 /** `let [a, b, ...rest] = …` / `let {x, y: alias, z = 0, ...rest} = …`. */

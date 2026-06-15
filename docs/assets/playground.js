@@ -2187,7 +2187,7 @@ const THEME_CONFIG_SPEC = {
   signature: "$theme({ name?, colors?, radius?, font?, motion?, ... })",
   description: "Define / extend the active theme. Token groups flow into the CSS variable surface.",
   params: [
-    { name: "name",      type: "string", required: false, description: 'Selects a built-in base theme ("dark", "neon", …).' },
+    { name: "name",      type: "string", required: false, description: 'Selects a built-in base theme ("dark", "modern", …).' },
     { name: "direction", type: "enum",   required: false, enumValues: ["ltr", "rtl"], description: "Reading direction (metadata)." },
     { name: "colors",    type: "object", required: false, description: "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …." },
     { name: "radius",    type: "object", required: false, description: "Border-radius tokens: xs, sm, md, lg, pill, button, input." },

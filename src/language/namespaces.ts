@@ -570,7 +570,7 @@ const storeConfigKeys: readonly ConfigKey[] = [
 ];
 
 const themeConfigKeys: readonly ConfigKey[] = [
-  cfg("name", "string", 'Selects a built-in base theme ("dark", "neon", …).'),
+  cfg("name", "string", 'Selects a built-in base theme ("dark", "light", "corporate", "soft", "glass", "modern").'),
   cfg("direction", 'enum: "ltr" | "rtl"', "Reading direction (metadata)."),
   cfg("colors", "object", "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …."),
   cfg("radius", "object", "Border-radius tokens: xs, sm, md, lg, pill, button, input."),

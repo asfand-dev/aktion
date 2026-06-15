@@ -25,6 +25,7 @@
 
 import { parse } from "../parser/index.js";
 import type {
+  DestructuringPattern,
   Expression,
   ObjectProperty,
   ParseError,
@@ -36,6 +37,26 @@ import type {
 const INDENT = "  ";
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const NEEDS_DOUBLE_QUOTE = /[\\"]/;
+
+/**
+ * Render a destructuring pattern (`[a, b, ...rest]` / `{ x, y: alias }`),
+ * recursing into nested patterns (`{ user: { name } }`, `[[a], [b]]`).
+ */
+function printPattern(pattern: DestructuringPattern, indent: number): string {
+  const open = pattern.kind === "array" ? "[" : "{";
+  const close = pattern.kind === "array" ? "]" : "}";
+  const parts = pattern.bindings.map((b) => {
+    const lead = b.rest ? "..." : "";
+    const target = b.pattern
+      ? (pattern.kind === "object" && b.sourceKey
+          ? `${b.sourceKey}: ${printPattern(b.pattern, indent)}`
+          : printPattern(b.pattern, indent))
+      : (b.sourceKey ? `${b.sourceKey}: ${b.name}` : (b.name || ""));
+    const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent)}` : "";
+    return `${lead}${target}${def}`;
+  });
+  return `${open}${parts.join(", ")}${close}`;
+}
 
 export interface FormatResult {
   /** Canonical source. Equal to the input when parse errors occur. */
@@ -168,7 +189,8 @@ function printStatement(stmt: Statement, indent: number): string {
     case "ForOfStatement": {
       const iter = printExpression(stmt.iterable, indent);
       const body = `{\n${printBlock(stmt.body.body, indent + 1)}\n${pad}}`;
-      return `${pad}for (let ${stmt.item} of ${iter}) ${body}`;
+      const binding = stmt.pattern ? printPattern(stmt.pattern, indent) : stmt.item;
+      return `${pad}for (let ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
       const init = stmt.init ? printStatement(stmt.init, 0).trimStart() : "";
@@ -193,16 +215,9 @@ function printStatement(stmt: Statement, indent: number): string {
       return `${pad}for (let ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
-      const open = stmt.patternKind === "array" ? "[" : "{";
-      const close = stmt.patternKind === "array" ? "]" : "}";
-      const parts = stmt.bindings.map((b) => {
-        const lead = b.rest ? "..." : "";
-        const keyed = b.sourceKey ? `${b.sourceKey}: ${b.name}` : (b.name || "");
-        const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent)}` : "";
-        return `${lead}${keyed}${def}`;
-      });
+      const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent);
       const expr = printExpression(stmt.expression, indent);
-      return `${pad}let ${open}${parts.join(", ")}${close} = ${expr}`;
+      return `${pad}let ${pattern} = ${expr}`;
     }
     case "BreakStatement":
       return `${pad}break`;

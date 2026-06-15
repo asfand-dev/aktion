@@ -107,6 +107,38 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the Vite plugin (with `sourcesContent`) so frames resolve to the `.aktion`
   file instead of the generated JSON blob.
 
+### Fixed
+
+- **Loose equality now coerces like JavaScript.** `==` / `!=` follow JS
+  abstract-equality, so `x == null` matches both `null` *and* `undefined`,
+  and `1 == "1"` / `0 == false` behave as authors expect. `===` / `!==`
+  remain strict. (Previously `==` was treated as `===`, silently breaking the
+  pervasive `x == null` guard.)
+- **Relational `<` / `>` compare alphabetic strings lexicographically.**
+  `"b" > "a"` is `true`, so alphabetical `.sort((a, b) => a.name > b.name ? 1
+  : -1)` comparators order correctly. `Date` operands coerce via `valueOf`,
+  and two numeric strings still compare numerically (`"5" < "10"`).
+  (Previously all relational compares coerced numerically, so any string sort
+  silently returned `false`.)
+- **`for-of` destructuring binds a real JS pattern.** `for (const [k, v] of
+  Object.entries(obj))`, `for (const [i, item] of arr.entries())`, and
+  `for (const { id, name } of rows)` now bind by index / key like JavaScript.
+  (Previously `[a, b]` was misread as an `[item, index]` convenience, so the
+  second name never received its value.)
+- **Function/lambda rest parameters work.** `function sum(...ns)` /
+  `(...args) => …` now gather the trailing arguments into an array instead of
+  binding only the first.
+- **Spread in call arguments expands.** `fn(...arr)` (and `fn(a, ...rest)`)
+  now forward the spread elements as positional args to user functions,
+  lambdas, and actions — matching the behaviour array/object spread already
+  had.
+
+### Added
+
+- **Nested destructuring patterns** in `let` / `const` / `var`, function /
+  lambda parameters, and `for-of` heads:
+  `let { data: { items: [first] } } = resp`, `let [[a, b]] = pairs`.
+
 ### Changed
 
 - `cleanup` and `$emit` resolve to real bound functions, so they keep working
