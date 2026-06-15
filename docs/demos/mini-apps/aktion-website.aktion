@@ -126,7 +126,7 @@ function meh(label) { return Row([Icon("minus", { color: "var(--rui-color-warnin
 // Navigation
 // =============================================================================
 nav = NavBar({
-  brand: Brand("Aktion", { logo: "https://asfand-dev.github.io/aktion/assets/logo.png", version: "v0.5.14", href: "index.html" }),
+  brand: Brand("Aktion", { logo: "https://asfand-dev.github.io/aktion/assets/logo.png", version: "v0.5.15", href: "index.html" }),
   links: [
     Link("Docs", { href: "get-started.html" }),
     Link("Components", { href: "components.html" }),
@@ -148,7 +148,7 @@ nav = NavBar({
 hero = Section([
   Backdrop({ grid: true, blobs: ["#6366f1", "#ec4899", "#22d3ee"], particles: 70, type: "network", fixed: true }),
   Column([
-    Row([Badge("v0.5.14", { tone: "primary" }), Text("A new language for building user interfaces", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }),
+    Row([Badge("v0.5.15", { tone: "primary" }), Text("A new language for building user interfaces", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }),
     Display(["Build complex UIs in ", GradientText("a fraction of the code"), "."], { size: "hero", balance: true }),
     Text("Aktion is a reactive UI language — a strict subset of JavaScript you already know. It replaces your framework, component kit, router and i18n with one tag: 270+ built-in components, fine-grained reactivity, 6 themes, and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.", { variant: "large", tone: "muted" }),
     Row([

@@ -2,7 +2,7 @@
   "name": "aktion-vscode",
   "displayName": "Aktion",
   "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics, hover, completions, signature help, go-to-definition, find references, rename, document outline, formatting, and snippets. Covers all builtins: $http, $query/$mutation (optimistic/infinite), $socket/$sse, $script, $head, $dom, $form, $store (persist/history/undo-redo), $router (nested layouts/guards), $util (style/rules/derived/env/device/worker/PWA), sx/animate universal props, and the full 275-component library (incl. Mount / WebComponent interop). Also highlights Aktion code embedded in <aktion-app> tags inside HTML files.",
-  "version": "0.5.13",
+  "version": "0.5.15",
   "publisher": "AsfandiyarKhan",
   "license": "MIT",
   "engines": {
@@ -122,7 +122,7 @@
     "publish:ovsx": "ovsx publish"
   },
   "dependencies": {
-    "aktion-runtime": "^0.5.13"
+    "aktion-runtime": "^0.5.15"
   },
   "devDependencies": {
     "@types/vscode": "^1.75.0",
