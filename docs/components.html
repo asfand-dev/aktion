@@ -422,13 +422,18 @@ el.registerComponents([ProductCard]);</code></pre>
   AccordionItem("Open by default", { children: [Markdown("This item starts expanded.")], open: true, showArrow: true }),
   AccordionItem("Closed",          { children: [Markdown("Click to expand.")], showArrow: true })
 ]))`,
-      Modal: `$app(Modal("Modal title", { open: true, children: [
-  Text("Modal body shown when open=true."),
-  Buttons([
-    Button("Cancel", { variant: "ghost",   type: "button", size: "small" }),
-    Button("Confirm", { variant: "primary", type: "button", size: "small" })
-  ])
-] }))`,
+      Modal: `$app(model, btn)
+
+model = Modal("Modal title", { open: $isActive, children: [
+  Text("Modal body shown when open=true.")
+], size: "md", footer: [
+  Button("Cancel", { variant: "ghost", size: "sm" }),
+  Button("Save", { size: "sm" })
+]})
+
+btn = Button("Open Modal", { variant: "ghost", onClick: () => { $isActive = true } })
+
+$isActive = false`,
       Steps: `$app(Steps([
   { title: "Create account",   details: "Sign up with your email." },
   { title: "Invite teammates", details: "Share an invite link." },
@@ -1238,12 +1243,18 @@ $app(DateRangePicker("range", { from: $from, to: $to, label: "Reporting window" 
   Skeleton("card"),
   Stack([Skeleton("avatar"), Skeleton("paragraph", { count: 2 })], { direction: "row", gap: "md", align: "center" })
 ]))`,
-      Modal: `$app(Modal("Modal title", { open: true, children: [
+      Modal: `$app(model, btn)
+
+model = Modal("Modal title", { open: $isActive, children: [
   Text("Modal body shown when open=true.")
 ], size: "md", footer: [
-  Button("Cancel", { variant: "ghost",   type: "button", size: "sm" }),
-  Button("Save", { variant: "primary", type: "button", size: "sm" })
-] }))`,
+  Button("Cancel", { variant: "ghost", size: "sm" }),
+  Button("Save", { size: "sm" })
+]})
+
+btn = Button("Open Modal", { variant: "ghost", onClick: () => { $isActive = true } })
+
+$isActive = false`,
       Toolbar: `$app(Toolbar(
   [SearchBar("q", { placeholder: "Search…" })],
   { right: [Button("New", { variant: "primary", type: "button", size: "sm", icon: "plus" })],
@@ -2160,7 +2171,7 @@ $app(Stack([
 ], { gap: "sm" }))`,
 
       // ── Accessibility primitives (Part X.3) ──
-      VisuallyHidden: `$app(Button([
+      VisuallyHidden: `$app(Buttons([
   Icon("magnifying-glass"),
   VisuallyHidden([Text("Search")])
 ], { variant: "ghost" }))`,
@@ -2178,13 +2189,19 @@ $app(Stack([
   Row([Button("Save", { variant: "primary", size: "small", onClick: () => { $status = "Saved ✓" } }), Text($status)], { gap: "md", align: "center" }),
   LiveRegion($status, { politeness: "polite" })
 ], { gap: "md" }))`,
-      FocusTrap: `$app(FocusTrap([
+      FocusTrap: `$app($isActive ? focusTrap : null, btn)
+
+focusTrap = FocusTrap([
   Card([
     CardHeader("Focus is trapped here"),
     Input("name", { placeholder: "Tab cycles within this box" }),
-    Button("Submit", { variant: "primary", size: "small" })
+    Button("Submit" + $isActive, { variant: "primary", size: "small" })
   ])
-], { active: true }))`,
+], { active: true })
+
+btn = Button("Load Demo", { variant: "ghost", onClick: () => { $isActive = true } })
+
+$isActive = false`,
 
       // ── Virtualization (Part XI.3) ──
       VirtualGrid: `$app(VirtualGrid(

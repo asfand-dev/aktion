@@ -1715,6 +1715,7 @@ consumes from the CDN.
 | `language.html`                     | Full Aktion language guide — the conceptual walkthrough of syntax and semantics. |
 | `language-reference.html`           | Searchable reference of every language symbol — keywords, `$`-builtins & hooks, the `$util` namespace, JavaScript globals, and operators/literals, each with a one-line description and copy-paste example. Filter by category or type to jump straight to an entry. |
 | `http.html`                         | HTTP guide — the `$http({...})` primitive, config options, the reactive resource bag, `Async`, refetch/cancel patterns, and a full CRUD walkthrough. |
+| `sx.html`                           | The universal `sx` styling prop — a complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), plus responsive breakpoint maps, interaction-state styling, the sibling `animate` prop, and live mini-UI examples. |
 | `components.html`                   | Every built-in component with a live preview, positional signatures, prop tables, and enum values. |
 | `actions.html`                      | `function name() { … }` guide — declarative state mutations, optimistic snapshot/rollback, lambda-based click handlers, navigation, and end-to-end examples. |
 | `side-effects.html`                 | `$effect(() => { … }, [...deps])` guide — anonymous side effects, dependency entries (state, lifecycle, intervals, debounce/throttle), top-level vs. component-local scope, cleanup, and effect vs. action. |

@@ -123,6 +123,15 @@
       background-clip: text;
       color: transparent;
     }
+    @keyframes gradShift { to { background-position: 220% center; } }
+
+    /* Scroll progress indicator */
+    #scrollProgress {
+      position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 100;
+      background: var(--grad-brand); background-size: 200% auto;
+      box-shadow: 0 0 14px rgba(139,92,246,0.6); transition: width .08s linear;
+      animation: gradShift 7s linear infinite;
+    }
 
     /* ===================================================================
        Background decorations
@@ -335,6 +344,14 @@
       transition: transform .3s var(--ease), border-color .3s, box-shadow .3s;
     }
     .card:hover { transform: translateY(-5px); border-color: var(--border-strong); box-shadow: var(--shadow); }
+    /* cursor spotlight on interactive cards */
+    .card, .demo-card, .stat { --mx: 50%; --my: 50%; }
+    .card::after, .demo-card::after, .stat::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: radial-gradient(220px circle at var(--mx) var(--my), rgba(139,92,246,0.12), transparent 62%);
+      opacity: 0; transition: opacity .35s var(--ease);
+    }
+    .card:hover::after, .demo-card:hover::after, .stat:hover::after { opacity: 1; }
     .card .ic {
       width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center;
       font-size: 21px; color: #fff; margin-bottom: 18px; box-shadow: var(--shadow-sm);
@@ -382,6 +399,62 @@
     @media (max-width: 760px){ .stream-out { border-left: none; border-top: 1px solid var(--border); } }
     .cursor { display:inline-block; width:8px; height:15px; background: var(--ak-violet); margin-left:2px; animation: blink 1s steps(2) infinite; vertical-align: middle; }
     @keyframes blink { 0%,50%{ opacity:1;} 51%,100%{ opacity:0;} }
+
+    /* ===================================================================
+       Live chat streaming showcase (LLM → live UI)
+       =================================================================== */
+    .chat-stage { max-width: 1024px; margin: 0 auto; }
+    .chat-window { border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-solid); box-shadow: var(--shadow); overflow: hidden; }
+    .chat-window .window-bar .file { color: var(--text-soft); font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; }
+    .chat-body {
+      padding: 24px; display: flex; flex-direction: column; gap: 18px; min-height: 460px;
+      background:
+        radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px,
+        var(--bg-2);
+    }
+    .chat-user {
+      align-self: flex-end; max-width: 82%; padding: 13px 18px; font-size: 15px; font-weight: 600;
+      color: #2a1c02; background: linear-gradient(125deg, #fbbf24, #f59e0b);
+      border-radius: 18px 18px 5px 18px; box-shadow: 0 10px 24px -12px rgba(245,158,11,.7);
+      animation: chatIn .4s var(--ease) both;
+    }
+    .chat-reply { display: flex; gap: 12px; align-items: flex-start; animation: chatIn .4s var(--ease) .05s both; }
+    .chat-avatar {
+      flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 15px; color: #2a1c02; background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      box-shadow: var(--shadow-sm);
+    }
+    .chat-intro {
+      background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft);
+      padding: 12px 16px; border-radius: 5px 16px 16px 16px; font-size: 14.5px; line-height: 1.5;
+    }
+    .chat-render { animation: chatIn .45s var(--ease) both; margin-top: -18px;}
+    .chat-render aktion-app { display: block; }
+    .chat-typing {
+      display: inline-flex; align-items: center; gap: 5px; padding: 15px 16px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 5px 16px 16px 16px;
+    }
+    .chat-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-mute); animation: chatTyping 1.2s infinite ease-in-out; }
+    .chat-typing span:nth-child(2) { animation-delay: .15s; }
+    .chat-typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes chatTyping { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+    @keyframes chatIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    .chat-foot { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--bg-soft); }
+    .chat-arrow {
+      width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-soft);
+      cursor: pointer; transition: .2s; font-size: 13px;
+    }
+    .chat-arrow:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
+    .chat-dots { display: flex; align-items: center; gap: 8px; }
+    .chat-dots button {
+      width: 9px; height: 9px; padding: 0; border: none; border-radius: 99px; cursor: pointer;
+      background: var(--border-strong); transition: width .3s var(--ease), background .3s;
+    }
+    .chat-dots button:hover { background: var(--text-mute); }
+    .chat-dots button.active { width: 30px; background: var(--ak-amber); }
 
     /* ===================================================================
        Reactivity infographic
@@ -520,6 +593,7 @@
   </style>
 </head>
 <body>
+  <div id="scrollProgress" aria-hidden="true"></div>
   <canvas id="particles" aria-hidden="true"></canvas>
   <div class="bg-grid" aria-hidden="true"></div>
   <div class="blob b1" aria-hidden="true"></div>
@@ -635,18 +709,6 @@
           <span class="logo-chip"><i class="fa-brands fa-js"></i> Svelte</span>
           <span class="logo-chip"><i class="fa-brands fa-html5"></i> Plain HTML</span>
           <span class="logo-chip"><i class="fa-brands fa-node-js"></i> No framework</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================= STATS ========================= -->
-    <section class="section">
-      <div class="wrap">
-        <div class="stats">
-          <div class="stat reveal"><div class="num grad-text" data-count="270" data-suffix="+">270+</div><div class="lbl">Built-in components</div></div>
-          <div class="stat reveal"><div class="num grad-text" data-count="7">7</div><div class="lbl">Production themes</div></div>
-          <div class="stat reveal"><div class="num grad-text" data-count="80" data-suffix="+">80+</div><div class="lbl">Design tokens</div></div>
-          <div class="stat reveal"><div class="num grad-text" data-count="1">1</div><div class="lbl">Script tag to ship</div></div>
         </div>
       </div>
     </section>
@@ -844,6 +906,44 @@ $count = 0
                 <span class="live"><span class="dot"></span> Rendering as it streams</span>
               </div>
               <div class="preview-pane" style="border:1px solid var(--border);border-radius:12px;background:var(--bg);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== LIVE CHAT STREAMING ===================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Generative UI in chat <span class="line"></span></span>
+          <h2>Your assistant replies with <span class="grad-text">a real interface</span>.</h2>
+          <p>Instead of a wall of text, the model streams Aktion straight into the conversation — and it renders token-by-token as a live, interactive UI. Every card below is a real <code>&lt;aktion-app&gt;</code>, not a screenshot. Try the arrows.</p>
+        </div>
+
+        <div class="chat-stage reveal" id="chatStage">
+          <div class="chat-window">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file" data-chat-title>Sprint Dashboard</span>
+              <span class="live" data-chat-status><span class="dot"></span> Live</span>
+            </div>
+            <div class="chat-body">
+              <div class="chat-user" data-chat-prompt hidden>Give me a quick read on this sprint.</div>
+              <div class="chat-reply" data-chat-loader hidden>
+                <span class="chat-avatar"><i class="fa-solid fa-star"></i></span>
+                <span class="chat-typing"><span></span><span></span><span></span></span>
+              </div>
+              <div class="chat-reply" data-chat-reply hidden>
+                <span class="chat-avatar"><i class="fa-solid fa-star"></i></span>
+                <span class="chat-intro" data-chat-intro>Here's where the sprint stands right now:</span>
+              </div>
+              <div class="chat-render" data-chat-render></div>
+            </div>
+            <div class="chat-foot">
+              <button class="chat-arrow" type="button" data-chat-prev aria-label="Previous example"><i class="fa-solid fa-chevron-left"></i></button>
+              <div class="chat-dots" data-chat-dots></div>
+              <button class="chat-arrow" type="button" data-chat-next aria-label="Next example"><i class="fa-solid fa-chevron-right"></i></button>
             </div>
           </div>
         </div>
@@ -1286,6 +1386,358 @@ btn = Button("Track order", { variant: "primary", icon: "location-dot" })`;
       }, { threshold: 0.15, rootMargin: "0px 0px -10% 0px" });
       io.observe(streamSection);
     }
+
+    /* ---- live chat streaming carousel ---- */
+    const CHAT_EXAMPLES = [
+      {
+        title: "Sprint Dashboard",
+        prompt: "Give me a quick read on this sprint.",
+        intro: "Here's where the sprint stands right now:",
+        src: `$app(Column([header, stats, card], { gap: "lg" }))
+header = PageHeader("Atlas · Sprint 24", { subtitle: "6 days left", badge: Badge("On track", { tone: "success" }), breadcrumbs: [] })
+stats = Stats([
+  StatCard("Velocity", { value: "48 pts", trend: "up", delta: "+6", icon: "gauge-high" }),
+  StatCard("Done", { value: "31 / 48", trend: "up", delta: "65%", icon: "circle-check" }),
+  StatCard("Blocked", { value: "3", trend: "down", delta: "-1", icon: "ban", tone: "warning" })
+], { layout: "grid" })
+card = Card([
+  CardHeader("Burndown · points / day"),
+  BarChart(["Mon", "Tue", "Wed", "Thu", "Fri"], [Series("Remaining", [48, 41, 36, 24, 17])], { title: "Trending to zero" })
+])`
+      },
+      {
+        title: "Orders List",
+        prompt: "Show me the list of orders for today",
+        intro: "Here's the list of orders for today:",
+        src: `$app(content)
+
+content = Column([header, toolbar, banner, dataGrid], { gap: "lg", padding: "lg" })
+
+header = PageHeader("Today's Orders List", { 
+  subtitle: "Here is the list of orders happened today",
+  breadcrumbs: []
+})
+
+toolbar = Toolbar({
+  left: [
+    SearchBar("search-orders", { 
+      placeholder: "Search ID or customer...", 
+      value: $search,
+      sx: { minW: "300px" }
+    })
+  ],
+  right: [
+    SegmentedControl(["All", "Pending", "Processing", "Shipped"], { 
+      value: $statusFilter,
+      onChange: v => { $statusFilter = v }
+    })
+  ]
+})
+
+banner = Show($selectedIds.length > 0, {
+  children: Banner(\`\${$selectedIds.length} orders selected\`, {
+    tone: "primary",
+    action: Button("Mark as Shipped", { 
+      size: "sm", 
+      onClick: () => updateStatus("Shipped") 
+    })
+  })
+})
+
+dataGrid = Card([
+  DataGrid(columns, {
+    emptyLabel: "Orders list is loading...",
+    selectedIds: $selectedIds,
+    selectable: true,
+    stickyHeader: true,
+    onRowClick: row => $toast.info(\`Opening \${row.id}\`),
+  })
+])
+
+columns = [
+  Col("Order ID", filtered.map(o => Text(o.id, { variant: "body-heavy" })), { sortable: true }),
+  Col("Customer", filtered.map(o => Row([
+    Avatar(o.customer, { size: "xs" }),
+    Text(o.customer)
+  ], { gap: "sm" })), { sortable: true }),
+  Col("Status", filtered.map(o => Badge(o.status, { 
+    tone: o.status === "Shipped" ? "success" : 
+          o.status === "Processing" ? "primary" : 
+          o.status === "Cancelled" ? "danger" : "warning" 
+  }))),
+  Col("Priority", filtered.map(o => Row([
+    StatusDot(o.priority, { 
+      tone: o.priority === "High" ? "danger" : o.priority === "Medium" ? "warning" : "neutral",
+      pulse: o.priority === "High"
+    })
+  ]))),
+  Col("Total", filtered.map(o => o.total), { format: "currency", align: "right" }),
+  Col("Placed", filtered.map(o => o.time), { align: "right" }),
+  Col("", filtered.map(o => IconButton("ellipsis-vertical", { 
+    label: "Actions", 
+    variant: "ghost",
+    onClick: () => $toast.show("Action menu opened")
+  })), { align: "center" })
+]
+
+$search = ""
+$statusFilter = "All"
+$selectedIds = []
+
+filtered = $orders.filter(o => {
+  const matchesSearch = o.customer.toLowerCase().includes($search.toLowerCase()) || o.id.includes($search)
+  const matchesStatus = $statusFilter === "All" || o.status === $statusFilter
+  return matchesSearch && matchesStatus
+})
+
+function updateStatus(newStatus) {
+  if ($selectedIds.length === 0) return $toast.info("Select orders first")
+  $toast.success(\`Updated \${$selectedIds.length} orders to \${newStatus}\`)
+  $selectedIds = []
+}
+  
+$orders = [
+  { id: "ORD-7281", customer: "Alex Rivera", items: 3, total: 124.50, status: "Processing", time: "2m ago", priority: "High" },
+  { id: "ORD-7282", customer: "Sarah Chen", items: 1, total: 45.00, status: "Shipped", time: "5m ago", priority: "Medium" },
+  { id: "ORD-7283", customer: "Jordan Smyth", items: 5, total: 892.10, status: "Pending", time: "12m ago", priority: "High" },
+  { id: "ORD-7284", customer: "Maria Garcia", items: 2, total: 67.25, status: "Delivered", time: "1h ago", priority: "Low" },
+  { id: "ORD-7285", customer: "Sam Wilson", items: 1, total: 12.99, status: "Cancelled", time: "2h ago", priority: "Low" },
+  { id: "ORD-7286", customer: "Emma Vogt", items: 4, total: 210.00, status: "Processing", time: "3h ago", priority: "Medium" },
+  { id: "ORD-7287", customer: "Liam Neeson", items: 2, total: 55.40, status: "Shipped", time: "4h ago", priority: "High" }
+]`
+      },  
+      {
+        title: "Scene Controller",
+        prompt: "Set up a movie-night scene for the living room.",
+        intro: "Here's a scene you can fine-tune live:",
+        src: `$bright = 25
+$temp = 21
+$tv = true
+$ac = false
+$app(Card([
+  CardHeader("Movie Night", { subtitle: "Living room · 4 devices" }),
+  FormControl("Brightness", Slider("bright", { value: $bright, min: 0, max: 100, showValue: true })),
+  FormControl("Temperature °C", Slider("temp", { value: $temp, min: 16, max: 28, showValue: true })),
+  Row([
+    Switch("tv", { label: "TV", value: $tv }),
+    Switch("ac", { label: "AC", value: $ac })
+  ], { gap: "xl" }),
+  Button("Activate scene", { variant: "primary", icon: "play", fullWidth: true })
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Kyoto Itinerary",
+        prompt: "Plan a one-day itinerary for Kyoto, in a short summary.",
+        intro: "A relaxed one-day loop — temples to ramen:",
+        src: `$app(Card([
+  CardHeader("Kyoto · 1 day", { subtitle: "Walkable, ~14k steps" }),
+  Timeline([
+    TimelineItem("Fushimi Inari", { time: "7:00", description: "Sunrise hike through the torii gates", icon: "mountain-sun", tone: "primary" }),
+    TimelineItem("Nishiki Market", { time: "10:30", description: "Street-food brunch crawl", icon: "utensils", tone: "warning" }),
+    TimelineItem("Arashiyama", { time: "14:00", description: "Bamboo grove & river walk", icon: "tree", tone: "success" }),
+    TimelineItem("Gion", { time: "18:30", description: "Evening stroll, kaiseki dinner", icon: "moon", tone: "info" })
+  ])
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Plan Comparison",
+        prompt: "Compare your plans for a small team.",
+        intro: "Here's how the tiers stack up for ~5 seats:",
+        src: `$app(PricingTable([
+  PricingCard("Starter", "$0", { period: "/mo", description: "Kick the tyres", features: ["3 projects", "Community support", "1 GB storage"], action: Button("Choose", { variant: "secondary", fullWidth: true }) }),
+  PricingCard("Team", "$29", { period: "/seat", description: "For small squads", features: ["Unlimited projects", "Priority support", "Roles & SSO"], featured: true, badge: "Popular", action: Button("Start trial", { variant: "primary", fullWidth: true }) }),
+  PricingCard("Scale", "$79", { period: "/seat", description: "Growing orgs", features: ["Audit log", "SAML & SCIM", "99.9% SLA"], action: Button("Talk to us", { variant: "secondary", fullWidth: true }) })
+], { columns: 3 }))`
+      },
+      {
+        title: "Workout Tracker",
+        prompt: "Build me a push-day workout I can check off.",
+        intro: "Here's today's push day — tap as you go:",
+        src: `$done = { warmup: true, bench: false, ohp: false, dips: false }
+function pct() { return Math.round(Object.values($done).filter(v => v).length / 4 * 100) }
+$app(Card([
+  CardHeader("Push day", { subtitle: "Chest · shoulders · triceps" }),
+  Progress(pct(), { label: "Completed", showValue: true, tone: "success" }),
+  CheckBoxGroup("ex", { items: [
+    CheckBoxItem("Warm-up · band pull-aparts", "warmup"),
+    CheckBoxItem("Bench press · 4 × 8", "bench"),
+    CheckBoxItem("Overhead press · 3 × 10", "ohp"),
+    CheckBoxItem("Triceps dips · 3 × 12", "dips")
+  ], value: $done })
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Team Poll",
+        prompt: "Run a quick poll: where should we do the offsite?",
+        intro: "Live results — cast your vote:",
+        src: `$votes = { lisbon: 8, austin: 5, tokyo: 11 }
+function total() { return $votes.lisbon + $votes.austin + $votes.tokyo }
+function option(label, key) {
+  return Column([
+    Row([Text(label, { variant: "body-heavy" }), Text($votes[key] + " votes", { variant: "small", tone: "muted" })], { justify: "between", align: "center" }),
+    Progress(Math.round($votes[key] / total() * 100), { tone: "primary" }),
+    Button("Vote", { variant: "ghost", size: "sm", icon: "thumbs-up", onClick: () => { $votes[key] = $votes[key] + 1 } })
+  ], { gap: "xs" })
+}
+$app(Card([
+  CardHeader("Team offsite", { subtitle: total() + " votes so far" }),
+  option("Lisbon", "lisbon"),
+  option("Austin", "austin"),
+  option("Tokyo", "tokyo")
+], { sx: { gap: "lg" } }))`
+      }
+    ];
+
+    (function initChatCarousel() {
+      const stage = document.getElementById("chatStage");
+      if (!stage) return;
+      const titleEl = stage.querySelector("[data-chat-title]");
+      const promptEl = stage.querySelector("[data-chat-prompt]");
+      const introEl = stage.querySelector("[data-chat-intro]");
+      const renderEl = stage.querySelector("[data-chat-render]");
+      const statusEl = stage.querySelector("[data-chat-status]");
+      const loaderEl = stage.querySelector("[data-chat-loader]");
+      const replyEl = stage.querySelector("[data-chat-reply]");
+      const dotsWrap = stage.querySelector("[data-chat-dots]");
+      const prevBtn = stage.querySelector("[data-chat-prev]");
+      const nextBtn = stage.querySelector("[data-chat-next]");
+
+      const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // Timings — the whole sequence is deliberately snappy.
+      const USER_SPEED = 10;   // ms per token while typing the user message
+      const REPLY_SPEED = 20;  // ms per token while typing the assistant reply
+      const THINK_MS = 1500;   // loader dwell between user message and reply
+      let idx = 0, auto = !reduce, started = false, streamTimer = null, stepTimer = null, autoTimer = null;
+
+      const CHAT_EACH_EXAMPLE_DELAY = 5000;
+
+      CHAT_EXAMPLES.forEach((_, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("aria-label", "Show example " + (i + 1));
+        b.addEventListener("click", () => { auto = false; show(i); });
+        dotsWrap.appendChild(b);
+      });
+      const dots = () => Array.from(dotsWrap.children);
+
+      function clearTimers() {
+        if (streamTimer) { clearTimeout(streamTimer); streamTimer = null; }
+        if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+        if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      }
+
+      const setStatus = (label) => { statusEl.innerHTML = '<span class="dot"></span> ' + label; };
+
+      function typeText(el, text, perToken, done) {
+        const tokens = text.match(/\s+|[^\s]+/g) || [text];
+        let i = 0;
+        el.textContent = "";
+        const tick = () => {
+          if (i >= tokens.length) { done && done(); return; }
+          el.textContent += tokens[i++];
+          streamTimer = setTimeout(tick, perToken);
+        };
+        tick();
+      }
+
+      function streamSrc(app, src, done) {
+        const tokens = src.match(/\s+|[^\s]+/g) || [src];
+        let i = 0, acc = "";
+        const tick = () => {
+          if (i >= tokens.length) {
+            try { app.removeAttribute("streaming"); } catch (_) {}
+            done && done();
+            return;
+          }
+          const tok = tokens[i++];
+          acc += tok;
+          try {
+            if (typeof app.appendChunk === "function") app.appendChunk(tok);
+            else app.setAttribute("response", acc);
+          } catch (_) {}
+          streamTimer = setTimeout(tick, 2 + Math.random() * 10);
+        };
+        tick();
+      }
+
+      function renderUI(src, done) {
+        renderEl.innerHTML = "";
+        const app = document.createElement("aktion-app");
+        app.setAttribute("theme", docTheme());
+        renderEl.appendChild(app);
+        if (reduce) {
+          try {
+            if (typeof app.setResponse === "function") app.setResponse(src);
+            else app.setAttribute("response", src);
+          } catch (_) {}
+          done && done();
+          return;
+        }
+        app.setAttribute("streaming", "true");
+        try { app.clear && app.clear(); } catch (_) {}
+        streamSrc(app, src, done);
+      }
+
+      function show(i) {
+        clearTimers();
+        idx = (i + CHAT_EXAMPLES.length) % CHAT_EXAMPLES.length;
+        const ex = CHAT_EXAMPLES[idx];
+        titleEl.textContent = ex.title;
+        dots().forEach((d, j) => d.classList.toggle("active", j === idx));
+
+        // Reset the conversation to an empty slate.
+        promptEl.style.display = "none";
+        promptEl.textContent = "";
+        loaderEl.style.display = "none";
+        replyEl.style.display = "none";
+        introEl.textContent = "";
+        renderEl.innerHTML = "";
+
+        const finish = () => {
+          setStatus("Live");
+          if (auto) autoTimer = setTimeout(() => show(idx + 1), CHAT_EACH_EXAMPLE_DELAY);
+        };
+
+        if (reduce) {
+          promptEl.style.display = "flex";
+          promptEl.textContent = ex.prompt;
+          replyEl.style.display = "flex";
+          introEl.textContent = ex.intro;
+          renderUI(ex.src, finish);
+          return;
+        }
+
+        // 1 · user message types in
+        setStatus("Streaming…");
+        promptEl.style.display = "flex";
+        typeText(promptEl, ex.prompt, USER_SPEED, () => {
+          // 2 · assistant "thinking" loader
+          setStatus("Thinking…");
+          loaderEl.style.display = "flex";
+          stepTimer = setTimeout(() => {
+            loaderEl.style.display = "none";
+            // 3 · assistant reply types in
+            setStatus("Streaming…");
+            replyEl.style.display = "flex";
+            typeText(introEl, ex.intro, REPLY_SPEED, () => {
+              // 4 · the live Aktion UI streams in
+              setStatus("Generating UI…");
+              renderUI(ex.src, finish);
+            });
+          }, THINK_MS);
+        });
+      }
+
+      prevBtn.addEventListener("click", () => { auto = false; show(idx - 1); });
+      nextBtn.addEventListener("click", () => { auto = false; show(idx + 1); });
+
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting && !started) { started = true; show(0); }
+        });
+      }, { threshold: 0.2 });
+      io.observe(stage);
+    })();
   </script>
 
   <script>
@@ -1381,6 +1833,98 @@ btn = Button("Track order", { variant: "primary", icon: "location-dot" })`;
         try { await navigator.clipboard.writeText(code); } catch (_) {}
         btn.innerHTML = '<i class="fa-solid fa-check"></i>';
         setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i>'; }, 1600);
+      });
+    })();
+
+    /* ---- shared reduced-motion flag for JS-driven effects ---- */
+    const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ---- scroll progress bar ---- */
+    (function () {
+      const bar = document.getElementById("scrollProgress");
+      if (!bar) return;
+      const update = () => {
+        const h = document.documentElement;
+        const max = h.scrollHeight - h.clientHeight;
+        const pct = max > 0 ? (h.scrollTop || window.scrollY) / max : 0;
+        bar.style.width = Math.min(100, Math.max(0, pct * 100)) + "%";
+      };
+      update();
+      window.addEventListener("scroll", update, { passive: true });
+      window.addEventListener("resize", update, { passive: true });
+    })();
+
+    /* ---- rotating headline word ---- */
+    (function () {
+      const host = document.getElementById("rotator");
+      if (!host) return;
+      const WORDS = ["dashboards", "chat UIs", "forms", "charts", "anything"];
+      if (REDUCE_MOTION) { host.querySelector(".word").textContent = WORDS[0]; return; }
+      let i = 0;
+      const word = host.querySelector(".word");
+      // Sequential transition on a single element: fully animate the current word OUT,
+      // then swap the text and animate the new one IN — the two are never visible together.
+      const swap = () => {
+        word.classList.remove("in");
+        word.classList.add("out");
+        setTimeout(() => {
+          i = (i + 1) % WORDS.length;
+          word.textContent = WORDS[i];
+          host.setAttribute("aria-label", WORDS[i]);
+          word.classList.remove("out");
+          void word.offsetWidth; // restart the animation
+          word.classList.add("in");
+        }, 300);
+      };
+      setInterval(swap, 2600);
+    })();
+
+    /* ---- cursor spotlight on cards ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      const cards = document.querySelectorAll(".card, .demo-card, .stat");
+      cards.forEach((card) => {
+        card.addEventListener("pointermove", (e) => {
+          const r = card.getBoundingClientRect();
+          card.style.setProperty("--mx", (e.clientX - r.left) + "px");
+          card.style.setProperty("--my", (e.clientY - r.top) + "px");
+        });
+      });
+    })();
+
+    /* ---- 3D tilt on the hero device ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      const el = document.querySelector("[data-tilt]");
+      if (!el) return;
+      const MAX = 7; // degrees
+      let raf = null;
+      const onMove = (e) => {
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          el.style.transform = `rotateY(${px * MAX}deg) rotateX(${-py * MAX}deg) translateZ(0)`;
+        });
+      };
+      const reset = () => { if (raf) cancelAnimationFrame(raf); el.style.transform = ""; };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerleave", reset);
+    })();
+
+    /* ---- magnetic primary buttons ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      if (!window.matchMedia || !window.matchMedia("(pointer: fine)").matches) return;
+      document.querySelectorAll(".btn-primary").forEach((btn) => {
+        btn.addEventListener("pointermove", (e) => {
+          const r = btn.getBoundingClientRect();
+          const x = (e.clientX - r.left - r.width / 2) * 0.3;
+          const y = (e.clientY - r.top - r.height / 2) * 0.4;
+          btn.style.transform = `translate(${x}px, ${y}px)`;
+        });
+        btn.addEventListener("pointerleave", () => { btn.style.transform = ""; });
       });
     })();
 

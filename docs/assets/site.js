@@ -41,6 +41,7 @@ const NAV_GROUPS = [
       { href: "language-reference.html", label: "Language reference" },
       { href: "modules.html", label: "Modules" },
       { href: "layout.html", label: "Layout" },
+      { href: "sx.html", label: "Styling (sx)" },
       { href: "components.html", label: "Components" },
       { href: "hooks.html", label: "Hooks" },
       { href: "stores.html", label: "Global state" },
@@ -92,7 +93,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "sx.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-generator.html"] },
   { href: "live-demos.html", label: "Demos",       matches: ["live-demos.html"] },
@@ -116,6 +117,7 @@ const PAGE_KEYWORDS = {
   "language-reference.html": "language reference keywords builtins hooks globals operators $util namespace $state $effect $http $memo $store $router $theme $emit util storage console toast i18n reserved handles route aktion literals atoms ternary spread optional chaining nullish template literals fetch math json date intl crypto navigator settimeout setinterval cheatsheet api tailwindtosx csstosx styledtosx tailwind css styled-components emotion sx migration arbitrary values unmapped style convert",
   "modules.html": "modules import export multi-file multifile code-splitting code splitting link linker file project component reuse private scope shared state url remote dependency app.aktion entry playground zip",
   "layout.html": "layout column row center stack grid griditem box container spacer flex responsive sidebar dashboard holy grail gap align justify span",
+  "sx.html": "sx style styling prop universal padding margin gap spacing sizing width height color background bg gradient border radius shadow opacity flex grid display direction align justify wrap grow shrink basis columns position sticky absolute fixed zindex top right bottom left inset font fontsize weight textalign textdecoration typography overflow cursor backdrop blur bgimage bgoverlay hover focus active disabled checked group-hover states animate fade zoom slide pulse responsive breakpoint base sm md lg xl tokens theme-safe className class aria data tooltip hidden logical rtl safe-area inset dvh",
   "components.html": "props library catalog signatures",
   "hooks.html": "hooks $state $memo usestate usememo custom hook useeffect local state reactive per-instance setvalue setter memoize derived react",
   "stores.html": "store global state management redux zustand pinia jotai recoil mobx shared state actions getters singleton prop drilling slice selector context cart user theme",
