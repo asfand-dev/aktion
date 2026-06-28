@@ -762,11 +762,8 @@ $count = 0
 
 <span class="tk-f">$app</span>(<span class="tk-f">Card</span>([
   <span class="tk-f">CardHeader</span>(<span class="tk-s">"Counter"</span>),
-  <span class="tk-f">Text</span>(<span class="tk-s">`${$count}`</span>, { variant: <span class="tk-s">"display-heavy"</span> }),
-  <span class="tk-f">Button</span>(<span class="tk-s">"Increment"</span>, {
-    variant: <span class="tk-s">"primary"</span>,
-    onClick: () =&gt; { $count = $count + 1 }
-  })
+  <span class="tk-f">Text</span>(<span class="tk-s">`${$count}`</span>),
+  <span class="tk-f">Button</span>(<span class="tk-s">"Increment"</span>, { onClick: () =&gt; { $count = $count + 1 } })
 ]))</pre>
             </div>
           </div>
