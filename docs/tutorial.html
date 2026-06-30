@@ -822,7 +822,7 @@ $effect(() => {
 $app(Card([
   CardHeader("Time flies when you're reactive"),
   Text(`You've been on this level for ${$seconds}s`),
-  ProgressBar(Math.min($seconds * 10, 100), { label: "Patience meter" })
+  Progress(Math.min($seconds * 10, 100), { label: "Patience meter" })
 ]))
 </script>
 
