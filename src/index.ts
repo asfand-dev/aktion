@@ -24,6 +24,25 @@ export * from "./language/index.js";
 // bundle and let a host (or the playground) link a project in-page.
 export * from "./compiler/index.js";
 
+// Schema + DX tooling (browser-safe, no language-service weight): the
+// machine-readable component schema that drives external editors/design
+// tools, plus the style/markup importers and the gallery builder.
+export {
+  componentSchema,
+  suggestComponent,
+  tailwindToSx,
+  cssToSx,
+  styledToSx,
+  buildGallery,
+} from "./tooling/schema.js";
+export type {
+  LibrarySchema,
+  ComponentSchemaEntry,
+  ComponentPropSchema,
+  GalleryOptions,
+} from "./tooling/schema.js";
+export { htmlToAktion } from "./tooling/html-import.js";
+
 declare global {
   interface HTMLElementTagNameMap {
     "aktion-app": AktionElement;

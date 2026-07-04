@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5174"],
       "port": 5174
+    },
+    {
+      "name": "design-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "design"],
+      "port": 3999
     }
   ]
 }

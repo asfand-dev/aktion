@@ -1,0 +1,1 @@
+- in the `docs/index.html` page, the `And yes — an LLM can write it too.` section animating arrows are not working properly on small screens, like it's overlapping with other elements and not looks good, please fix it.

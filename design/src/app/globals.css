@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* Editor chrome design tokens — dark, Figma-like. */
+:root {
+  --bg-0: #111214;
+  --bg-1: #17181b;
+  --bg-2: #1e2024;
+  --bg-3: #26282e;
+  --border-0: #26282e;
+  --border-1: #33363d;
+  --text-1: #f4f5f7;
+  --text-2: #b6bac3;
+  --text-3: #7d828d;
+  --accent: #0d99ff;
+  --accent-hover: #3badff;
+  --accent-muted: rgba(13, 153, 255, 0.16);
+  --danger: #f24822;
+  --success: #14ae5c;
+  --warning: #ffcd29;
+  --canvas: #1e1e1e;
+  --selection: #0d99ff;
+}
+
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-border-0: var(--border-0);
+  --color-border-1: var(--border-1);
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-canvas: var(--canvas);
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-family:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-1) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-1);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Text selection inside inputs. */
+::selection {
+  background: var(--accent-muted);
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Keyboard focus ring — only for keyboard navigation. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Canvas dotted background. */
+.canvas-surface {
+  background-color: var(--canvas);
+  background-image: radial-gradient(circle, #2c2c2c 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Marching-ants style animation for drop indicators. */
+@keyframes pulse-border {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.drop-indicator {
+  animation: pulse-border 1s ease-in-out infinite;
+}
+
+/* Checkerboard swatch background for transparent colors. */
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, #3a3d44 25%, transparent 25%),
+    linear-gradient(-45deg, #3a3d44 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #3a3d44 75%),
+    linear-gradient(-45deg, transparent 75%, #3a3d44 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
+}

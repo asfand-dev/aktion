@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  projects     Project[]
+  shares       ProjectShare[]
+
+  @@map("users")
+}
+
+model Project {
+  id        String         @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// The full design document (pages, frames, nodes, symbols) as JSON.
+  document  Json
+  /// Small data-URL PNG captured from the first frame, for dashboard cards.
+  thumbnail String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  shares    ProjectShare[]
+  assets    Asset[]
+
+  @@index([ownerId])
+  @@map("projects")
+}
+
+model ProjectShare {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canEdit   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_shares")
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  mime      String
+  data      Bytes
+  size      Int
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@map("assets")
+}
