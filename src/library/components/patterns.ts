@@ -951,6 +951,62 @@ export const DescriptionItem: ComponentSpec = {
   },
 };
 
+/**
+ * `ActionStripe` is a full-width, clickable navigation row: an optional
+ * leading icon, a label with optional description, an optional trailing
+ * value/status, and a chevron affordance signalling "this row goes
+ * somewhere". Stack several to build settings screens, product menus, and
+ * drill-down lists — the row-based counterpart to a grid of `Tile`s.
+ *
+ * Unlike `ListItem` (presentational content row) an ActionStripe is always
+ * interactive and renders as a real `<button>`/`<a>`.
+ */
+export const ActionStripe: ComponentSpec = {
+  name: "ActionStripe",
+  description:
+    "Full-width clickable navigation row — leading icon, label + optional " +
+    "description, optional trailing value, and a chevron affordance. Stack " +
+    "them for settings screens, product menus, and drill-down lists. Use " +
+    "`ListItem` instead for a non-interactive content row.",
+  props: [
+    { name: "label", type: "string", positional: true },
+    { name: "description", type: "string", optional: true, aliases: ["subtitle", "meta"] },
+    { name: "icon", type: "string", optional: true, description: "Leading Font Awesome icon name" },
+    { name: "value", type: "string", optional: true, description: "Trailing value / status text shown before the chevron" },
+    { name: "href", type: "string", optional: true, description: "Render as a link instead of a button" },
+    { name: "disabled", type: "boolean", optional: true },
+    { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"] },
+  ],
+  render: (_node, props, helpers) => {
+    const href = asString(props.href);
+    const disabled = asBoolean(props.disabled);
+    const tag = href && !disabled ? "a" : "button";
+    const root = el(tag as "button", {
+      class: "rui-action-stripe",
+      type: tag === "button" ? "button" : null,
+      href: tag === "a" ? sanitiseCssUrl(href) || href : null,
+      disabled: tag === "button" && disabled ? true : null,
+      "data-disabled": disabled ? "true" : null,
+    });
+    const iconNode = renderIcon(props.icon, { className: "rui-action-stripe-icon" });
+    if (iconNode) root.append(iconNode);
+    const body = el("span", { class: "rui-action-stripe-body" });
+    body.append(el("span", { class: "rui-action-stripe-label" }, [asString(props.label)]));
+    const description = asString(props.description);
+    if (description) {
+      body.append(el("span", { class: "rui-action-stripe-description" }, [description]));
+    }
+    root.append(body);
+    const value = asString(props.value);
+    if (value) root.append(el("span", { class: "rui-action-stripe-value" }, [value]));
+    root.append(el("span", { class: "rui-action-stripe-chevron", "aria-hidden": "true" }));
+    if (!disabled && typeof props.onClick === "function") {
+      root.onclick = () => helpers.invoke(props.onClick);
+    }
+    return root;
+  },
+};
+
 export const DescriptionList: ComponentSpec = {
   name: "DescriptionList",
   description:

@@ -4,7 +4,8 @@
  * Built-in themes:
  *   - "light"      (default)
  *   - "dark"
- *   - "corporate"  (enterprise console: deep navy + cyan, crisp & calm)
+ *   - "corporate"  (navy + cyan, flat white surfaces,
+ *                   pill buttons, tinted status pills — an admin-console look)
  *   - "soft"       (soft, friendly, light & rounded; lavender + mint)
  *   - "glass"      (light glassmorphism: frosted white surfaces over a soft
  *                   pastel gradient, airy and translucent)
@@ -385,48 +386,88 @@ export const glassTheme: ThemeTokens = {
  */
 export const corporateTheme: ThemeTokens = {
   ...lightTheme,
-  colorBg: "#eff2f7",
-  colorBgSubtle: "#e6ecf3",
-  colorSurface: "#ffffff",
-  colorSurfaceMuted: "#f4f7fb",
-  colorBorder: "#d6deea",
-  colorBorderSubtle: "rgba(13, 27, 58, 0.08)",
-  colorText: "#0d1b3a",
-  colorTextMuted: "#5a6a85",
-  colorPrimary: "#003580",
-  colorPrimaryHover: "#002a66",
+  /* Surface & semantic — palette */
+  colorBg: "#f4f7fa", // neutral-1 · --default-background-color
+  colorBgSubtle: "#eaeff4", // neutral-1 → neutral-2 blend
+  colorSurface: "#ffffff", // white · cards / tables / sheets / panels
+  colorSurfaceMuted: "#f4f7fa", // neutral-1 · muted fills, hovered neutrals
+  colorBorder: "#bcc8d4", // neutral-3 · --tertiary-shape-color (hairlines, dividers, table rows)
+  colorBorderSubtle: "#dbe2e8", // neutral-2
+  colorText: "#001b41", // corporate-8 · --default-text-color
+  colorTextMuted: "#465a75", // neutral-6 · --secondary-text-color
+  colorPrimary: "#0b2a63", // corporate-7 · --primary-button-background-color
+  colorPrimaryHover: "#1474c4", // corporate-4 · primaries BRIGHTEN on hover
   colorPrimaryText: "#ffffff",
-  colorAccent: "#0095d6",
-  colorAccentHover: "#0078ad",
+  colorAccent: "#1474c4", // corporate-4 · --interactive-text-color (links)
+  colorAccentHover: "#095bb1", // corporate-5 · --hovered-interactive-text-color
   colorAccentText: "#ffffff",
-  colorFocusRing: "#0095d6",
-  colorSuccess: "#1b8f4f",
-  colorWarning: "#c47e00",
-  colorDanger: "#c8362b",
-  colorInfo: "#0095d6",
-  fontFamily: "'Inter', 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Inter', 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  colorFocusRing: "#1474c4", // corporate-4 · --interactive-shape-color
+  colorSuccess: "#0fa954", // success-4 · --success-shape-color
+  colorWarning: "#ef8300", // warning-4 · accessible amber (badges use -3 #ffaa00)
+  colorDanger: "#c80a00", // critical-5 · --critical-text-color
+  colorInfo: "#08a5c5", // activating-4 · cyan --activating-shape-color
+  /* Typography — Open Sans body, Overpass display, 14px/20px */
+  fontFamily:
+    "'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  fontFamilyHeading:
+    "'Overpass', 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  radiusXs: "3px",
-  radiusSm: "4px",
-  radiusMd: "6px",
-  radiusLg: "10px",
-  radiusButton: "4px",
-  radiusInput: "4px",
-  shadowSm: "0 1px 0 rgba(13, 27, 58, 0.04), 0 1px 3px rgba(13, 27, 58, 0.06)",
-  shadowMd: "0 4px 16px rgba(13, 27, 58, 0.08), 0 1px 3px rgba(13, 27, 58, 0.04)",
-  shadowLg: "0 16px 40px rgba(13, 27, 58, 0.12), 0 2px 6px rgba(13, 27, 58, 0.06)",
+  fontSizeBase: "14px", // --default-text-size
+  fontSizeSm: "12px", // --small-text-size
+  fontSizeLg: "16px", // --large-text-size
+  fontSizeHeading: "16px", // --third-level-headline-size
+  fontSizeTitle: "22px", // --second-level-headline-size
+  fontWeightBody: "400",
+  fontWeightHeading: "600", // Open Sans Semibold / Overpass Semibold
+  lineHeightBody: "1.4286", // 20/14 · --default-text-line-height
+  lineHeightHeading: "1.3",
+  letterSpacingHeading: "0",
+  headingTextTransform: "none",
+  /* Shape — radii scale */
+  radiusXs: "4px", // --xsmall-border-radius
+  radiusSm: "8px", // --small-border-radius (inputs, list items)
+  radiusMd: "12px", // --medium-border-radius
+  radiusLg: "16px", // --default-border-radius (cards, tables, alerts)
+  radiusPill: "999px",
+  radiusButton: "24px", // --button-border-radius (pill buttons)
+  radiusInput: "8px", // --small-border-radius
+  borderWidth: "1px", // --default-border-width
+  /* Shadows — is deliberately flat; shadows only on floating layers */
+  shadowSm: "0 1px 2px 0 rgba(113, 128, 149, 0.5)", // --default-shadow (exact alpha)
+  shadowMd: "0 2px 8px 0 rgba(113, 128, 149, 0.5)", // --primary-shadow (exact alpha)
+  shadowLg: "0 12px 32px rgba(2, 16, 43, 0.16)", // floating overlays / modals
+  /* Spacing — 4 / 8 / 12 / 20 / 32 rhythm */
   spacingXs: "4px",
   spacingS: "8px",
-  spacingM: "14px",
+  spacingM: "12px",
   spacingL: "20px",
   spacingXl: "32px",
-  chart1: "#003580",
-  chart2: "#0095d6",
-  chart3: "#1b8f4f",
-  chart4: "#c47e00",
-  chart5: "#d43594",
-  chart6: "#5a6a85",
+  /* Gradients — advertising gradient is corporate-6 → corporate-4 */
+  gradientBrand: "linear-gradient(120deg, #003d8f 0%, #1474c4 100%)",
+  gradientAccent: "linear-gradient(120deg, #1474c4 0%, #11c7e6 100%)",
+  gradientWarm: "linear-gradient(120deg, #ffaa00 0%, #ff6159 100%)",
+  gradientCool: "linear-gradient(120deg, #0b2a63 0%, #08a5c5 100%)",
+  gradientSuccess: "linear-gradient(120deg, #0fa954 0%, #11c7e6 100%)",
+  gradientDanger: "linear-gradient(120deg, #ff6159 0%, #c80a00 100%)",
+  /* Buttons — semibold, pill, 20px horizontal padding */
+  buttonFontWeight: "600",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0",
+  buttonPaddingY: "4px", // --button-padding: 4px 20px
+  buttonPaddingX: "20px",
+  /* Motion — uses snappy 0.1s ease-out transitions */
+  transitionDuration: "100ms",
+  motionFast: "80ms",
+  motionBase: "120ms",
+  motionSlow: "240ms",
+  motionEase: "ease-out",
+  /* Chart palette — brand hues */
+  chart1: "#1474c4", // corporate-4 (blue)
+  chart2: "#08a5c5", // activating-4 (cyan)
+  chart3: "#0fa954", // success-4 (green)
+  chart4: "#ffaa00", // warning-3 (amber)
+  chart5: "#b410e7", // promoting-5 (magenta)
+  chart6: "#0b2a63", // corporate-7 (navy)
 };
 
 /**
@@ -489,6 +530,25 @@ export const modernTheme: ThemeTokens = {
   chart4: "#22c55e",
   chart5: "#f43f5e",
   chart6: "#fbbf24",
+};
+
+/**
+ * Web fonts a built-in theme needs in order to look like itself.
+ *
+ * Selecting a theme by name (`theme="corporate"` or `$theme({ name: ... })`)
+ * previously loaded no fonts at all — only a program that spelled out
+ * `$theme({ fonts: { import: [...] } })` triggered `loadFonts`. For the
+ * corporate theme that meant every page rendered in `system-ui` instead of the
+ * UI block typefaces, so the whole UI block type ladder (and every font-weight
+ * correction in the theme) was invisible outside the parity harnesses, which
+ * load the fonts themselves.
+ *
+ * UI block self-hosts OpenSansRegular / OpenSansSemibold / OverpassRegular /
+ * OverpassSemibold and always asks for weight 400, taking its boldness from the
+ * font FILE. The closest equivalent here is the same two families at 400 and 600.
+ */
+export const builtInThemeFonts: Record<string, { import: string[] }> = {
+  corporate: { import: ["Open Sans:400,600", "Overpass:400,600"] },
 };
 
 export const builtInThemes: Record<string, ThemeTokens> = {

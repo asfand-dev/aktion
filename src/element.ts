@@ -79,6 +79,7 @@ import {
   type ThemeInput,
   type ThemeTokens,
 } from "./theme/index.js";
+import { loadBuiltInThemeFonts } from "./theme/fonts.js";
 import { componentStyles } from "./theme/styles.js";
 import { getResponsiveSheet } from "./library/responsive-style.js";
 import { ensureFontAwesomeLoaded, registerIcons } from "./icons/index.js";
@@ -1082,6 +1083,10 @@ export class AktionElement extends HTMLElement {
 
   private applyThemeFromAttribute(): void {
     const attr = this.getAttribute(ATTRIBUTE_THEME);
+    // A theme selected by NAME must also pull in the web fonts it needs, or the
+    // corporate theme silently renders in system-ui and its whole type
+    // ladder is lost. Idempotent: loadFonts de-duplicates by URL.
+    loadBuiltInThemeFonts(attr);
     applyTheme(this, resolveTheme(attr));
     // Reapplying the base theme wipes every token CSS variable, so the
     // tracker for in-script overrides has to start fresh — the variables

@@ -85,10 +85,20 @@ describe("resolveTheme", () => {
   it("ships corporate as an enterprise-console built-in (renamed from skyline)", () => {
     const corporate = builtInThemes.corporate;
     expect(corporate).toBeDefined();
-    // Deep navy primary + crisp small radii are the cornerstones of the look.
-    expect(corporate.colorPrimary).toBe("#003580");
-    expect(corporate.radiusSm).toBe("4px");
-    expect(corporate.radiusMd).toBe("6px");
+    // Corporate is a faithful re-creation of the UI block framework, so every
+    // token below is an UI block value rather than a hand-picked one:
+    //   primary  = corporate-7 navy (--primary-button-background-color)
+    //   radii    = UI block small / medium / default border-radius scale
+    //   button   = --button-border-radius (the 24px pill)
+    // These replaced the pre-UI block values (#003580 / 4px / 6px) when the theme
+    // was rewritten against the real framework.
+    expect(corporate.colorPrimary).toBe("#0b2a63");
+    expect(corporate.radiusSm).toBe("8px");
+    expect(corporate.radiusMd).toBe("12px");
+    expect(corporate.radiusLg).toBe("16px");
+    expect(corporate.radiusButton).toBe("24px");
+    // Primary brightens (not darkens) on hover — an UI block signature.
+    expect(corporate.colorPrimaryHover).toBe("#1474c4");
     // Distinct from light/dark so the theme actually adds value.
     expect(corporate.colorBg).not.toBe(lightTheme.colorBg);
     expect(corporate.fontFamily).not.toBe(lightTheme.fontFamily);

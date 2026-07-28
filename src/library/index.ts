@@ -8,18 +8,18 @@
 import { assertOnePositionalMax } from "./types.js";
 import type { ComponentLibrary, ComponentSpec, ComponentGroup } from "./types.js";
 import {
-  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, Separator,
+  Stack, StackItem, Row, Column, Center, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, CardSection, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea,
 } from "./components/layout.js";
 import {
-  Text, TextContent, Image, Badge, BadgeList,
+  Text, TextContent, Image, Badge, BadgeList, Pill,
   Callout, CodeBlock, Skeleton, Markdown,
-  Container, Spacer, Quote, Icon, Spinner,
+  Container, Spacer, Quote, Icon, Spinner, LoadingDots,
 } from "./components/content.js";
 import {
   Form, FormControl, Input, TextArea, Select, SelectItem, Checkbox,
-  CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, SearchBar,
+  CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, ButtonGroup, InputGroup, SearchBar,
   Slider, NumberInput, DatePicker, FileUpload, Combobox,
   MultiSelect, DateRangePicker,
 } from "./components/forms.js";
@@ -48,7 +48,7 @@ import {
   SectionHeader, Toolbar, Sidebar, SidebarSection, SidebarItem,
   AppShell, SplitView, DescriptionList, DescriptionItem,
   StatusDot, PricingTable, PricingCard,
-  MediaCard, Stats, Tile, Notification, PersonChip,
+  MediaCard, Stats, Tile, Notification, PersonChip, ActionStripe,
 } from "./components/patterns.js";
 import {
   DataGrid, CalendarView, ActivityLog, ComparisonTable, InfiniteList,
@@ -73,7 +73,7 @@ import {
 } from "./components/advanced-patterns.js";
 import { NavLink } from "./components/router.js";
 import {
-  IconButton, CommandPalette, FilterChips, FieldRepeater,
+  IconButton, CommandPalette, FilterChips, FilterPill, FieldRepeater,
   VirtualList, VirtualGrid, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
 } from "./components/new-components.js";
@@ -119,13 +119,13 @@ export * from "./registry.js";
 export { validateProgramSchema, validateProgram } from "./validate.js";
 
 const components: ComponentSpec[] = [
-  Row, Column, Center, Stack, StackItem, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, Separator,
+  Row, Column, Center, Stack, StackItem, Grid, GridItem, Box, Fragment, Card, CardHeader, CardFooter, CardSection, Separator,
   Tabs, TabItem, Accordion, AccordionItem, Modal, Steps,
   AspectRatio, ScrollArea, Container, Spacer,
-  Text, TextContent, Image, Link, Badge, BadgeList,
-  Callout, CodeBlock, Skeleton, Markdown, Quote, Icon, Spinner,
+  Text, TextContent, Image, Link, Badge, BadgeList, Pill,
+  Callout, CodeBlock, Skeleton, Markdown, Quote, Icon, Spinner, LoadingDots,
   Form, FormControl, Input, TextArea, Select, SelectItem, Checkbox,
-  CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, SearchBar,
+  CheckBoxGroup, CheckBoxItem, Radio, Button, Buttons, ButtonGroup, InputGroup, SearchBar,
   Slider, NumberInput, DatePicker, FileUpload, Combobox,
   MultiSelect, DateRangePicker,
   Table, Col, List, ListItem, StatCard, Sparkline, Tree, TreeNode,
@@ -137,7 +137,7 @@ const components: ComponentSpec[] = [
   DropdownMenu, MenuItem, MenuSeparator, MenuLabel,
   Hero, PageHeader, Stats, Tile, EmptyState,
   Timeline, TimelineItem, FeatureGrid, FeatureItem,
-  Testimonial, ProfileCard, PersonChip, Comment, Banner, Notification,
+  Testimonial, ProfileCard, PersonChip, Comment, Banner, Notification, ActionStripe,
   MediaCard, KanbanBoard, KanbanColumn, KanbanCard,
   SectionHeader, Toolbar, Sidebar, SidebarSection, SidebarItem,
   AppShell, SplitView, DescriptionList, DescriptionItem,
@@ -158,7 +158,7 @@ const components: ComponentSpec[] = [
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
   NavLink,
-  IconButton, CommandPalette, FilterChips, FieldRepeater,
+  IconButton, CommandPalette, FilterChips, FilterPill, FieldRepeater,
   VirtualList, VirtualGrid, QueryBuilder, DiffViewer, JsonTree, Gantt,
   Truncate, InlineEdit, NotificationBell,
   // Aktion 0.5 standard helpers
@@ -200,7 +200,7 @@ const componentGroups: ComponentGroup[] = [
     components: [
       "Column", "Row", "Center", "Stack", "StackItem", "Grid", "GridItem",
       "Box", "Container", "Spacer",
-      "Card", "CardHeader", "CardFooter", "Separator", "Tabs", "TabItem",
+      "Card", "CardHeader", "CardFooter", "CardSection", "Separator", "Tabs", "TabItem",
       "Accordion", "AccordionItem", "Modal", "Drawer", "Steps",
       "AspectRatio", "ScrollArea", "Sticky", "ResizablePanels", "MasonryGrid",
     ],
@@ -223,8 +223,8 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Content",
     components: [
-      "Text", "Image", "Badge", "BadgeList",
-      "Callout", "Quote", "CodeBlock", "Skeleton", "Spinner",
+      "Text", "Image", "Badge", "BadgeList", "Pill",
+      "Callout", "Quote", "CodeBlock", "Skeleton", "Spinner", "LoadingDots",
       "Markdown", "Kbd", "Icon",
     ],
     notes: [
@@ -233,8 +233,9 @@ const componentGroups: ComponentGroup[] = [
       "- Use `Quote(text, cite?)` for inline pull-quotes inside articles and marketing sections (use `Testimonial` when you also have author/role/rating).",
       "- Use `CodeBlock(language, codeString, showLineNumbers?, highlightLines?)` for read-only code snippets. The header always renders a copy-to-clipboard button.",
       "- Use `Badge(label, variant?, icon?, size?)` for a single pill and `BadgeList([\"a\",\"b\",\"c\"], variant?, size?)` to render an array of strings as Badge pills.",
+      "- `Badge` vs `Pill`: `Badge` is a SOLID high-attention chip (\"Recommended\", \"Save 50 %\"); `Pill(label, tone?, icon?)` is the softer tinted STATE label for the current status of a thing (\"SSL active\", \"pending\", \"broken\"). Pill tones: neutral, activating, success, warning, critical, promoting, corporate.",
       "- Use `Skeleton(variant?, lines?, height?, shape?, width?)` for loading placeholders; `variant` accepts `paragraph` (default), `card`, `table-row`, `avatar`, `image`.",
-      "- Use `Spinner(size?, label?, tone?)` for tiny inline loading indicators inside buttons, toolbars, or table cells.",
+      "- Use `Spinner(size?, label?, tone?)` for tiny inline loading indicators inside buttons, toolbars, or table cells; `LoadingDots(label?, size?, tone?)` is the quieter three-dot pulse alternative.",
       "- Use `Image(src, alt?, caption?, ratio?, fit?, fallback?)` — `ratio` (e.g. `\"16:9\"`) makes the image self-constrain so you do not need an outer `AspectRatio`.",
       "- Use `Kbd([\"Cmd\", \"K\"])` when referring to keyboard shortcuts.",
       "- Use `Icon(name, variant?, size?)` to render a standalone Font Awesome icon (`name` is the FA name without the `fa-` prefix, e.g. `\"house\"`, `\"chart-line\"`, `\"regular:star\"`, `\"brands:github\"`).",
@@ -248,7 +249,7 @@ const componentGroups: ComponentGroup[] = [
       "Input", "TextArea", "PasswordInput", "MaskedInput", "MentionInput", "TagInput",
       "Select", "SelectItem", "Combobox", "MultiSelect",
       "Checkbox", "CheckBoxGroup", "CheckBoxItem", "Radio", "Switch",
-      "ToggleGroup", "Button", "Buttons", "SearchBar",
+      "ToggleGroup", "Button", "Buttons", "ButtonGroup", "InputGroup", "SearchBar",
       "Slider", "NumberInput", "ColorPicker",
       "DatePicker", "DateRangePicker", "TimePicker", "DateTimePicker",
       "FileUpload", "PinInput",
@@ -365,7 +366,7 @@ const componentGroups: ComponentGroup[] = [
       "InboxPanel", "OnboardingChecklist",
       "MediaCard", "TopBar",
       "KanbanBoard", "KanbanColumn", "KanbanCard",
-      "SectionHeader", "Toolbar", "DescriptionList", "DescriptionItem",
+      "SectionHeader", "Toolbar", "DescriptionList", "DescriptionItem", "ActionStripe",
       "StatusDot", "PricingTable", "PricingCard",
       "LoadingState", "ErrorState", "SuccessState",
       "Tour", "Spotlight",
@@ -418,7 +419,7 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Advanced UI",
     components: [
-      "IconButton", "CommandPalette", "FilterChips", "FieldRepeater",
+      "IconButton", "CommandPalette", "FilterChips", "FilterPill", "FieldRepeater",
       "VirtualList", "QueryBuilder", "DiffViewer", "JsonTree", "Gantt",
       "Truncate", "InlineEdit", "NotificationBell",
     ],

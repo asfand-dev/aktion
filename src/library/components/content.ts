@@ -267,6 +267,55 @@ export const Badge: ComponentSpec = {
 };
 
 /**
+ * UI block parity status label. Where `Badge` is a *solid* attention chip
+ * ("Recommended", "Save 50 %"), `Pill` is the softer, tinted **state**
+ * label used for things like "SSL active" / "pending" / "broken" — a pale
+ * semantic background with dark semantic text, regular weight, fully
+ * rounded. Mirrors the UI block `.pill` block, whose tone vocabulary
+ * (activating / success / warning / critical / promoting / neutral) is
+ * accepted here alongside the Aktion synonyms (info / danger / primary).
+ */
+const PILL_TONES = [
+  "neutral", "activating", "success", "warning", "critical", "promoting", "corporate",
+] as const;
+
+/** Map Aktion's generic tone synonyms onto the UI block pill vocabulary. */
+function normalisePillTone(value: unknown): string {
+  const raw = asString(value, "neutral").toLowerCase();
+  if (raw === "danger" || raw === "error") return "critical";
+  if (raw === "info") return "activating";
+  if (raw === "primary") return "corporate";
+  return (PILL_TONES as readonly string[]).includes(raw) ? raw : "neutral";
+}
+
+export const Pill: ComponentSpec = {
+  name: "Pill",
+  description:
+    "Soft, tinted **state** label — pale semantic background with dark " +
+    "semantic text, regular weight, fully rounded. Use for the current " +
+    "state of a thing (\"SSL active\", \"pending\", \"broken\", \"open ticket\"). " +
+    "For a solid, high-attention marketing/status chip use `Badge` instead. " +
+    "Tones: neutral, activating, success, warning, critical, promoting, " +
+    "corporate (danger/error/info/primary are accepted as synonyms).",
+  props: [
+    { name: "label", type: "string", positional: true },
+    { name: "tone", type: "string", optional: true, enum: PILL_TONES, aliases: ["variant", "status"], description: "Semantic state tone" },
+    { name: "icon", type: "string", optional: true, description: "Optional leading Font Awesome icon name" },
+  ],
+  render: (_node, props) => {
+    const root = el("span", {
+      class: "rui-pill",
+      "data-tone": normalisePillTone(props.tone),
+    });
+    const iconNode = renderIcon(props.icon, { className: "rui-pill-icon" });
+    if (iconNode) root.append(iconNode);
+    const label = asString(props.label);
+    if (label) root.append(el("span", { class: "rui-pill-label" }, [label]));
+    return root;
+  },
+};
+
+/**
  * `BadgeList` renders an array of string labels as a row of Badge pills.
  * Replaces the legacy `TagBlock` component.
  */
@@ -310,8 +359,15 @@ export const Callout: ComponentSpec = {
     { name: "description", type: "string", optional: true, aliases: ["text"], description: "Body text" },
     { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
     { name: "compact", type: "boolean", optional: true, description: "Render with the dense, one-line note shape." },
+    {
+      name: "actions",
+      type: "Node[]",
+      optional: true,
+      aliases: ["footer"],
+      description: "Optional action row (buttons/links) rendered under the body",
+    },
   ],
-  render: (_node, props) => {
+  render: (_node, props, helpers) => {
     const variant = asString(props.tone, "info");
     const compact = asBoolean(props.compact);
     const root = el("div", {
@@ -319,14 +375,32 @@ export const Callout: ComponentSpec = {
       "data-variant": variant,
       "data-compact": compact ? "true" : "false",
     });
+    // UI block splits a Message into an OUTER element that draws the chrome (border,
+    // radius, `overflow: hidden`) and an INNER section that carries the padding and
+    // the semantic bar:
+    //   .message         { border; border-radius: 16px; overflow: hidden }
+    //   .message__section{ padding: 28px 30px; margin-left: -1px;
+    //                      box-shadow: inset 9px 0 0 -1px <tone> }
+    // The split is what makes the bar look right: because the bar lives on the inner
+    // element and the outer one clips, the bar's ends are cut straight by the corner
+    // arc instead of curling around the radius, and the -1px pull lets it cover the
+    // outer border. A single element cannot do both, so the section is real markup.
+    const section = el("div", { class: "rui-callout-section" });
     const iconName = asString(props.icon) || defaultCalloutIcon(variant);
     const iconNode = renderIcon(iconName, { className: "rui-callout-icon" });
-    if (iconNode) root.append(iconNode);
+    if (iconNode) section.append(iconNode);
     const body = el("div", { class: "rui-callout-body" });
     body.append(el("div", { class: "rui-callout-title" }, [asString(props.title)]));
     const desc = asString(props.description);
     if (desc) body.append(el("div", { class: "rui-callout-description" }, [desc]));
-    root.append(body);
+    const actions = asArray(props.actions);
+    if (actions.length > 0 && helpers) {
+      const footer = el("div", { class: "rui-callout-footer" });
+      for (const action of actions) footer.append(helpers.renderNode(action));
+      body.append(footer);
+    }
+    section.append(body);
+    root.append(section);
     return root;
   },
 };
@@ -634,14 +708,51 @@ export const Spacer: ComponentSpec = {
   },
 };
 
+/**
+ * `LoadingDots` is the sequenced three-dot loader — a row of dots that pulse in
+ * turn. A different visual metaphor from `Spinner`'s rotating ring, and the one
+ * UI block uses for inline "working on it" feedback (its `loading-circle`
+ * block). Use it where a ring would feel heavy: inside buttons, beside a label,
+ * or in a table cell.
+ */
+export const LoadingDots: ComponentSpec = {
+  name: "LoadingDots",
+  description:
+    "Three dots that pulse in sequence — an inline indeterminate loader. " +
+    "Lighter and quieter than `Spinner`'s rotating ring; use inside buttons, " +
+    "beside labels, or in table cells. Pass `label` for an announced caption.",
+  props: [
+    { name: "label", type: "string", optional: true, positional: true, description: "Caption rendered beside the dots (also announced)" },
+    { name: "size", type: "string", optional: true, enum: SIZE_ENUM, description: "Default `md`" },
+    { name: "tone", type: "string", optional: true, enum: TONE_ENUM, description: "Visual accent (default `primary`)" },
+  ],
+  render: (_node, props) => {
+    const label = asString(props.label);
+    const root = el("span", {
+      class: "rui-loading-dots",
+      "data-size": normaliseSize(props.size, "md"),
+      "data-tone": asString(props.tone, "primary"),
+      role: "status",
+      "aria-live": "polite",
+      "aria-label": label || "Loading",
+    });
+    const dots = el("span", { class: "rui-loading-dots-track", "aria-hidden": "true" });
+    for (let i = 0; i < 3; i += 1) dots.append(el("span", { class: "rui-loading-dots-dot" }));
+    root.append(dots);
+    if (label) root.append(el("span", { class: "rui-loading-dots-label" }, [label]));
+    return root;
+  },
+};
+
 export const Spinner: ComponentSpec = {
   name: "Spinner",
   description:
-    "Indeterminate inline loader. Use for tiny loading states inside " +
-    "buttons, toolbars, table cells, or chat bubbles where `Skeleton` " +
-    "and `Progress(indeterminate=true)` are too heavy. Pass `label` to " +
-    "render an inline caption beside the spinner (also announced via " +
-    "`aria-label`).",
+    "Indeterminate inline loader (a rotating ring). Use for tiny loading " +
+    "states inside buttons, toolbars, table cells, or chat bubbles where " +
+    "`Skeleton` and `Progress(indeterminate=true)` are too heavy. For a " +
+    "quieter three-dot pulse instead of a ring use `LoadingDots`. Pass " +
+    "`label` to render an inline caption beside the spinner (also announced " +
+    "via `aria-label`).",
   props: [
     { name: "size", type: "string", optional: true, enum: SIZE_ENUM, description: "Default `md`" },
     { name: "label", type: "string", optional: true, description: "Caption rendered beside the spinner (also announced)" },

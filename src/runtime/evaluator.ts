@@ -41,7 +41,7 @@ import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
 import { Style, Rules } from "./namespaces-extra.js";
 import { registerIcons } from "../icons/index.js";
-import { loadFonts } from "../theme/fonts.js";
+import { loadBuiltInThemeFonts, loadFonts } from "../theme/fonts.js";
 import { builtInThemes } from "../theme/index.js";
 import { matchRoute, matchRoutePrefix, type Router, type NavigationGuard } from "./router.js";
 import { findComponent } from "../library/registry.js";
@@ -3169,6 +3169,9 @@ function evaluateInvoke(
         // overrides (`colors`, `radius`, ...) layer on top.
         const tokens = collectThemeTokens(themeInput);
         const themeName = resolveBuiltInThemeName(themeInput);
+        // `$theme({ name: "corporate" })` must load that theme's web fonts too,
+        // exactly as the `theme="..."` attribute path does.
+        if (themeName) loadBuiltInThemeFonts(themeName);
         const baseTokens = themeName ? builtInThemes[themeName] : null;
         const merged = baseTokens ? { ...baseTokens, ...tokens } : tokens;
         return { kind: "Theme", tokens: merged } satisfies ThemeNode;

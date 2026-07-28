@@ -384,13 +384,25 @@ export const Card: ComponentSpec = {
 
 export const CardHeader: ComponentSpec = {
   name: "CardHeader",
-  description: "Card header with title and optional subtitle.",
+  description:
+    "Card header with title, an optional `eyebrow` line rendered ABOVE the " +
+    "title (category / kicker / pre-headline), and an optional `subtitle` " +
+    "rendered below it.",
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true },
+    {
+      name: "eyebrow",
+      type: "string",
+      optional: true,
+      aliases: ["preheadline", "kicker"],
+      description: "Short line shown above the title",
+    },
   ],
   render: (_node, props) => {
     const root = el("header", { class: "rui-card-header" });
+    const eyebrow = asString(props.eyebrow);
+    if (eyebrow) root.append(el("p", { class: "rui-card-eyebrow" }, [eyebrow]));
     root.append(el("h3", { class: "rui-card-title" }, [asString(props.title)]));
     const subtitle = asString(props.subtitle);
     if (subtitle) root.append(el("p", { class: "rui-card-subtitle" }, [subtitle]));
@@ -404,6 +416,42 @@ export const CardFooter: ComponentSpec = {
   props: [{ name: "children", type: "Node[]" }],
   render: (_node, props, helpers) => {
     const root = el("footer", { class: "rui-card-footer" });
+    for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
+    return root;
+  },
+};
+
+const CARD_SECTION_TONES = [
+  "default", "activating", "success", "warning", "critical", "neutral", "corporate", "promoting",
+] as const;
+
+/**
+ * `CardSection` is a full-bleed horizontal band *inside* a Card that
+ * colour-codes a chunk of its content — the status band pattern (an inline
+ * "this is activating / succeeded / needs attention" stripe that spans the
+ * card's full width, edge to edge, with a tinted background and a rule above
+ * and below). Distinct from `Callout`, which is a self-contained bordered
+ * notice box; a CardSection is part of the card's own body flow.
+ */
+export const CardSection: ComponentSpec = {
+  name: "CardSection",
+  description:
+    "Full-bleed, colour-coded band inside a `Card` that groups and " +
+    "semantically tints a chunk of the card's content (edge-to-edge tinted " +
+    "background with a rule above/below). Use to mark a region of a card as " +
+    "activating / success / warning / critical / neutral. For a standalone " +
+    "bordered notice use `Callout` instead.",
+  props: [
+    { name: "children", type: "Node[]", positional: true },
+    { name: "tone", type: "string", optional: true, enum: CARD_SECTION_TONES, aliases: ["variant", "status"] },
+    { name: "align", type: "string", optional: true, enum: ["left", "center", "right"] },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("section", {
+      class: "rui-card-section",
+      "data-tone": asString(props.tone, "default"),
+      "data-align": asString(props.align) || null,
+    });
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
     return root;
   },

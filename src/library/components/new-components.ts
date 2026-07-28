@@ -334,6 +334,49 @@ export const CommandPalette: ComponentSpec = {
   },
 };
 
+/**
+ * `FilterPill` is the *toggleable* filter control — a pill you click to switch
+ * a filter on and off, reflecting state via `aria-pressed` and `data-active`.
+ * Complements `FilterChips`, which shows filters that are ALREADY applied and
+ * can be individually removed (each chip carries an ✕). Use `FilterPill` for
+ * the filter bar itself, `FilterChips` for the applied-filter summary.
+ */
+export const FilterPill: ComponentSpec = {
+  name: "FilterPill",
+  description:
+    "Toggleable filter pill — click to switch a filter on/off. Reflects " +
+    "state through `active` (and `aria-pressed` for assistive tech), with an " +
+    "optional leading `icon` and trailing `count`. Use for filter bars; use " +
+    "`FilterChips` to show already-applied filters that can be removed.",
+  props: [
+    { name: "label", type: "string", positional: true },
+    { name: "active", type: "boolean", optional: true, aliases: ["selected", "pressed"] },
+    { name: "count", type: "number", optional: true, description: "Optional trailing match count" },
+    { name: "icon", type: "string", optional: true },
+    { name: "disabled", type: "boolean", optional: true },
+    { name: "onToggle", type: "callable", optional: true, aliases: ["onClick", "action"], description: "Receives the next active state" },
+  ],
+  render: (_node, props, helpers) => {
+    const active = asBoolean(props.active);
+    const disabled = asBoolean(props.disabled);
+    const root = el("button", {
+      type: "button",
+      class: "rui-filter-pill",
+      "data-active": active ? "true" : "false",
+      "aria-pressed": active ? "true" : "false",
+      disabled: disabled ? true : null,
+    });
+    const iconNode = renderIcon(props.icon, { className: "rui-filter-pill-icon" });
+    if (iconNode) root.append(iconNode);
+    root.append(el("span", { class: "rui-filter-pill-label" }, [asString(props.label)]));
+    if (props.count !== null && props.count !== undefined && asString(props.count) !== "") {
+      root.append(el("span", { class: "rui-filter-pill-count" }, [asString(asNumber(props.count, 0))]));
+    }
+    if (!disabled) root.onclick = () => helpers.invoke(props.onToggle, !active);
+    return root;
+  },
+};
+
 export const FilterChips: ComponentSpec = {
   name: "FilterChips",
   description: "Removable filter chips with an optional clear-all control.",

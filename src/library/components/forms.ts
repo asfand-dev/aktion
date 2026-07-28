@@ -113,6 +113,95 @@ export const Buttons: ComponentSpec = {
   },
 };
 
+/**
+ * `ButtonGroup` is the *segmented* sibling of `Buttons`: instead of separate
+ * buttons with a gap, the items butt directly against each other into one
+ * continuous control, with only the outer corners rounded and shared
+ * 1px dividers between items. Distinct from `SegmentedControl`/`ToggleGroup`,
+ * which render a padded track with a floating "active" chip.
+ *
+ * Each child is marked with `data-pos` (start / middle / end) so the theme can
+ * round the right corners and collapse the adjoining borders.
+ */
+export const ButtonGroup: ComponentSpec = {
+  name: "ButtonGroup",
+  description:
+    "Row of buttons joined edge-to-edge into a single continuous control — " +
+    "only the outer corners are rounded and adjoining borders are shared. " +
+    "Use for related actions that form one unit (segmented actions, " +
+    "split/paired buttons, view switchers with real actions). For a " +
+    "single-select pill track use `SegmentedControl`; for spaced-out " +
+    "independent actions use `Buttons`.",
+  props: [
+    { name: "items", type: "Button[]", positional: true },
+    { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
+    { name: "fullWidth", type: "boolean", optional: true, aliases: ["full"], description: "Stretch the group to fill its container, dividing width evenly" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", {
+      class: "rui-button-group",
+      "data-size": asString(props.size, "md"),
+      "data-full-width": asBoolean(props.fullWidth) ? "true" : null,
+      role: "group",
+    });
+    const items = asArray(props.items);
+    items.forEach((child, i) => {
+      const node = helpers.renderNode(child);
+      if (node instanceof HTMLElement) {
+        const pos = items.length === 1 ? "only" : i === 0 ? "start" : i === items.length - 1 ? "end" : "middle";
+        node.setAttribute("data-pos", pos);
+        node.classList.add("rui-button-group-item");
+      }
+      root.append(node);
+    });
+    return root;
+  },
+};
+
+/**
+ * `InputGroup` wraps a single field with an optional leading icon and an
+ * optional trailing action (a button or icon-button), all inside one shared
+ * bordered shell — the pattern behind search fields, password reveal,
+ * copy-to-clipboard inputs, and unit-suffixed numeric fields.
+ *
+ * The nested control keeps its own behaviour (binding, validation); the group
+ * only owns the shell, so the border/focus ring is drawn once around the whole
+ * composite instead of around the bare input.
+ */
+export const InputGroup: ComponentSpec = {
+  name: "InputGroup",
+  description:
+    "Single field wrapped in a shared bordered shell with an optional " +
+    "leading `icon` and an optional trailing `action` node (button / " +
+    "IconButton / short text suffix). The focus ring is drawn around the " +
+    "whole composite. Use for search fields, password reveal, " +
+    "copy-to-clipboard rows, and unit-suffixed inputs.",
+  props: [
+    { name: "field", type: "Node", positional: true, description: "The Input/Select/etc. to wrap" },
+    { name: "icon", type: "string", optional: true, description: "Leading Font Awesome icon name" },
+    { name: "action", type: "Node", optional: true, aliases: ["trailing"], description: "Trailing action node (Button / IconButton)" },
+    { name: "suffix", type: "string", optional: true, description: "Short trailing text (e.g. a unit like \"GB\")" },
+  ],
+  render: (_node, props, helpers) => {
+    const root = el("div", { class: "rui-input-group" });
+    const iconNode = renderIcon(props.icon, { className: "rui-input-group-icon" });
+    if (iconNode) root.append(iconNode);
+    if (props.field) {
+      const body = el("div", { class: "rui-input-group-field" });
+      body.append(helpers.renderNode(props.field));
+      root.append(body);
+    }
+    const suffix = asString(props.suffix);
+    if (suffix) root.append(el("span", { class: "rui-input-group-suffix" }, [suffix]));
+    if (props.action) {
+      const act = el("div", { class: "rui-input-group-action" });
+      act.append(helpers.renderNode(props.action));
+      root.append(act);
+    }
+    return root;
+  },
+};
+
 export const Input: ComponentSpec = {
   name: "Input",
   description: "Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string. Pass `label`/`hint`/`error`/`required` to render a labelled field shell with validation messaging.",
