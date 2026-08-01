@@ -4,7 +4,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "vitest": "^2.1.4",
-    "happy-dom": "^15.7.4"
+    "vitest": "^3.2.7",
+    "happy-dom": "^20.11.1"
   }
 }
